@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/hellopro/mcp-gateway/internal/api"
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/config"
@@ -19,9 +21,10 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/health"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
-	"github.com/hellopro/mcp-gateway/internal/ui"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/transport"
+	"github.com/hellopro/mcp-gateway/internal/ui"
 )
 
 func main() {
@@ -35,9 +38,11 @@ func main() {
 	// Connexion MySQL et initialisation du repository
 	var repo *repository.ServerRepo
 	var healthChecker *health.Checker
+	var database *gorm.DB
 
 	if cfg.MySQLDSN != "" {
-		database, err := db.Connect(cfg.MySQLDSN)
+		var err error
+		database, err = db.Connect(cfg.MySQLDSN)
 		if err != nil {
 			log.Fatalf("[main] failed to connect to MySQL: %v", err)
 		}
@@ -92,9 +97,15 @@ func main() {
 		log.Println("[main] authentication enabled — login at /login")
 	}
 
+	// Scope token cache + middleware
+	tokenCache := scopetoken.NewCache(60 * time.Second)
+	var tokenRepo *repository.TokenRepo
+
 	// Monte les routes REST API si le repository est disponible
-	if repo != nil {
+	if repo != nil && database != nil {
+		tokenRepo = repository.NewTokenRepo(database)
 		apiHandler := api.NewHandler(repo, gw, registry)
+		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
 	}
@@ -103,13 +114,26 @@ func main() {
 	ui.Register(mux)
 	log.Println("[main] UI mounted at /ui/")
 
-	// Monte les routes MCP SSE (inchangées)
-	sseServer := transport.NewSSEServer(gw)
-	sseServer.Register(mux)
+	// Scope handler factory: creates a ScopedGateway for filtered access
+	scopeFactory := func(allowedIDs map[string]bool) transport.Handler {
+		return gateway.NewScopedGateway(gw, allowedIDs)
+	}
 
-	// Monte le transport streamable HTTP (POST /mcp)
+	// MCP transport mux (SSE + streamable HTTP) with scope filtering
+	mcpMux := http.NewServeMux()
+	sseServer := transport.NewSSEServer(gw)
+	sseServer.SetScopeFactory(scopeFactory)
+	sseServer.Register(mcpMux)
 	streamableServer := transport.NewStreamableHTTPServer(gw)
-	streamableServer.Register(mux)
+	streamableServer.SetScopeFactory(scopeFactory)
+	streamableServer.Register(mcpMux)
+
+	// Wrap MCP routes with scope token middleware
+	scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, cfg.ScopeTokenRequired)
+	mux.Handle("/sse", scopeMW(mcpMux))
+	mux.Handle("/message", scopeMW(mcpMux))
+	mux.Handle("/mcp", scopeMW(mcpMux))
+	mux.Handle("/mcp/", scopeMW(mcpMux))
 	log.Println("[main] streamable HTTP mounted at /mcp")
 
 	// Wrap entire mux with auth middleware

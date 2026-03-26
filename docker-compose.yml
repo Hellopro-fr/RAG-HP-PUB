@@ -2129,6 +2129,8 @@ services:
       - JWT_ALGO=${JWT_ALGO}
       - JWT_AUDIENCE=${JWT_AUDIENCE}
       - AUTH_URL=${AUTH_URL}
+      - SCOPE_TOKEN_REQUIRED=${MCP_SCOPE_TOKEN_REQUIRED}
+      - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
     # depends_on:
     #   mysql:
     #     condition: service_healthy

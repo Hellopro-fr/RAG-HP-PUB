@@ -20,6 +20,9 @@ type Config struct {
 	JWTAudience string
 	AuthURL     string // hellopro.fr auth endpoint
 	AuthEnabled bool   // set AUTH_ENABLED=true to require login
+	// Scope tokens
+	ScopeTokenRequired bool   // SCOPE_TOKEN_REQUIRED — require scope token on /mcp, /sse
+	GatewayPublicURL   string // GATEWAY_PUBLIC_URL — for .mcp.json snippets
 }
 
 func Load() *Config {
@@ -59,6 +62,8 @@ func Load() *Config {
 		JWTAudience:         getEnv("JWT_AUDIENCE", "https://www.hellopro.fr"),
 		AuthURL:             getEnv("AUTH_URL", "https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php"),
 		AuthEnabled:         authEnabled,
+		ScopeTokenRequired:  strings.EqualFold(os.Getenv("SCOPE_TOKEN_REQUIRED"), "true"),
+		GatewayPublicURL:    getEnv("GATEWAY_PUBLIC_URL", ""),
 	}
 }
 

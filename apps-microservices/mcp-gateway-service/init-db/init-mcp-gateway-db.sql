@@ -1,6 +1,5 @@
--- Crée la base de données mcp_gateway si elle n'existe pas
-CREATE DATABASE IF NOT EXISTS mcp_gateway;
-
--- Donne les droits à l'utilisateur gateway
-GRANT ALL PRIVILEGES ON mcp_gateway.* TO 'gateway_user'@'%';
+-- gateway_user already gets full privileges on MYSQL_DATABASE (gateway_db)
+-- via Docker's MYSQL_USER / MYSQL_DATABASE env vars.
+-- This script is kept as a safety net for custom setups.
+GRANT ALL PRIVILEGES ON `gateway_db`.* TO 'gateway_user'@'%';
 FLUSH PRIVILEGES;

@@ -148,3 +148,108 @@ func (r *Registry) MergedPrompts() []mcp.Prompt {
 	}
 	return prompts
 }
+
+// ── Filtered variants (for scope tokens) ─────────────────────────────────────
+
+// MergedCapabilitiesFiltered returns merged capabilities from allowed servers only.
+func (r *Registry) MergedCapabilitiesFiltered(allowed map[string]bool) mcp.ServerCapabilities {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	caps := make([]mcp.ServerCapabilities, 0)
+	for _, s := range r.servers {
+		if allowed[s.ID] {
+			caps = append(caps, s.Capabilities)
+		}
+	}
+	return mcp.AggregateCapabilities(caps)
+}
+
+// MergedToolsFiltered returns tools from allowed servers only.
+func (r *Registry) MergedToolsFiltered(allowed map[string]bool) []mcp.Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var tools []mcp.Tool
+	for _, s := range r.servers {
+		if allowed[s.ID] {
+			tools = append(tools, s.Tools...)
+		}
+	}
+	return tools
+}
+
+// FindByToolFiltered returns the backend owning the tool, only if it's in the allowed set.
+func (r *Registry) FindByToolFiltered(name string, allowed map[string]bool) *BackendServer {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, s := range r.servers {
+		if !allowed[s.ID] {
+			continue
+		}
+		for _, t := range s.Tools {
+			if t.Name == name {
+				return s
+			}
+		}
+	}
+	return nil
+}
+
+// MergedResourcesFiltered returns resources from allowed servers only.
+func (r *Registry) MergedResourcesFiltered(allowed map[string]bool) []mcp.Resource {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var resources []mcp.Resource
+	for _, s := range r.servers {
+		if allowed[s.ID] {
+			resources = append(resources, s.Resources...)
+		}
+	}
+	return resources
+}
+
+// FindByResourceFiltered returns the backend owning the resource, only if allowed.
+func (r *Registry) FindByResourceFiltered(uri string, allowed map[string]bool) *BackendServer {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, s := range r.servers {
+		if !allowed[s.ID] {
+			continue
+		}
+		for _, res := range s.Resources {
+			if res.URI == uri {
+				return s
+			}
+		}
+	}
+	return nil
+}
+
+// MergedPromptsFiltered returns prompts from allowed servers only.
+func (r *Registry) MergedPromptsFiltered(allowed map[string]bool) []mcp.Prompt {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var prompts []mcp.Prompt
+	for _, s := range r.servers {
+		if allowed[s.ID] {
+			prompts = append(prompts, s.Prompts...)
+		}
+	}
+	return prompts
+}
+
+// FindByPromptFiltered returns the backend owning the prompt, only if allowed.
+func (r *Registry) FindByPromptFiltered(name string, allowed map[string]bool) *BackendServer {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, s := range r.servers {
+		if !allowed[s.ID] {
+			continue
+		}
+		for _, p := range s.Prompts {
+			if p.Name == name {
+				return s
+			}
+		}
+	}
+	return nil
+}

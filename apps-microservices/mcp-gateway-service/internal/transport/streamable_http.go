@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -8,14 +9,31 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 )
 
+// AllowedServersFromContext retrieves the set of allowed server IDs
+// stored by the scope token middleware. Uses the same plain string key.
+func AllowedServersFromContext(ctx context.Context) (map[string]bool, bool) {
+	ids, ok := ctx.Value("scope_allowed_servers").(map[string]bool)
+	return ids, ok
+}
+
+// ScopeHandlerFactory creates a scoped handler for the given allowed server IDs.
+// If nil, no scope filtering is applied.
+type ScopeHandlerFactory func(allowedIDs map[string]bool) Handler
+
 // StreamableHTTPServer exposes a POST /mcp endpoint that handles
 // JSON-RPC requests synchronously (streamable HTTP transport).
 type StreamableHTTPServer struct {
-	handler Handler
+	handler      Handler
+	scopeFactory ScopeHandlerFactory
 }
 
 func NewStreamableHTTPServer(h Handler) *StreamableHTTPServer {
 	return &StreamableHTTPServer{handler: h}
+}
+
+// SetScopeFactory sets the factory for creating scoped handlers.
+func (s *StreamableHTTPServer) SetScopeFactory(f ScopeHandlerFactory) {
+	s.scopeFactory = f
 }
 
 // Register attaches the streamable HTTP route to the given mux.
@@ -49,7 +67,15 @@ func (s *StreamableHTTPServer) handleMCP(w http.ResponseWriter, r *http.Request)
 
 	log.Printf("[streamable-http] %s id=%s", req.Method, string(req.ID))
 
-	resp := s.handler.Handle(r.Context(), &req)
+	// Use scoped handler if allowed server IDs were injected by scope token middleware
+	handler := s.handler
+	if s.scopeFactory != nil {
+		if allowedIDs, ok := AllowedServersFromContext(r.Context()); ok {
+			handler = s.scopeFactory(allowedIDs)
+		}
+	}
+
+	resp := handler.Handle(r.Context(), &req)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {

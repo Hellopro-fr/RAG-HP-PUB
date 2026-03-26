@@ -86,6 +86,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		h.handleListAllPrompts(w, r)
 	})
 
+	// ── Token routes ─────────────────────────────────────────────────────────
+	if h.tokenRepo != nil {
+		apiMux.HandleFunc("/api/v1/tokens", h.handleTokens)
+		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
+	}
+
 	// Routes avec {id} — on utilise un handler prefix pour capturer le pattern
 	apiMux.HandleFunc("/api/v1/servers/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")

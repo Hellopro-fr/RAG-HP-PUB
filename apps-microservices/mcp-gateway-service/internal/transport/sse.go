@@ -20,8 +20,9 @@ type Handler interface {
 
 // session holds a single client's SSE response channel.
 type session struct {
-	id string
-	ch chan *mcp.Response
+	id      string
+	ch      chan *mcp.Response
+	handler Handler // scoped handler if scope token was present at connection time
 }
 
 // SSEServer exposes three HTTP endpoints:
@@ -30,7 +31,8 @@ type session struct {
 //	POST /message — send a JSON-RPC request (sessionId query param required)
 //	GET  /health  — liveness probe
 type SSEServer struct {
-	handler Handler
+	handler      Handler
+	scopeFactory ScopeHandlerFactory
 
 	mu       sync.RWMutex
 	sessions map[string]*session
@@ -41,6 +43,11 @@ func NewSSEServer(h Handler) *SSEServer {
 		handler:  h,
 		sessions: make(map[string]*session),
 	}
+}
+
+// SetScopeFactory sets the factory for creating scoped handlers.
+func (s *SSEServer) SetScopeFactory(f ScopeHandlerFactory) {
+	s.scopeFactory = f
 }
 
 // Register attaches the HTTP routes to the given mux.
@@ -59,7 +66,14 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := newSessionID()
-	sess := &session{id: sessionID, ch: make(chan *mcp.Response, 16)}
+	sessHandler := s.handler
+	// If a scope token was validated by middleware, use a scoped handler for this session
+	if s.scopeFactory != nil {
+		if allowedIDs, ok := AllowedServersFromContext(r.Context()); ok {
+			sessHandler = s.scopeFactory(allowedIDs)
+		}
+	}
+	sess := &session{id: sessionID, ch: make(chan *mcp.Response, 16), handler: sessHandler}
 
 	s.mu.Lock()
 	s.sessions[sessionID] = sess
@@ -136,8 +150,9 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dispatch asynchronously so the POST returns immediately.
+	// Use the session's handler (may be scoped if token was present at /sse connect time)
 	go func() {
-		resp := s.handler.Handle(r.Context(), &req)
+		resp := sess.handler.Handle(r.Context(), &req)
 		select {
 		case sess.ch <- resp:
 		default:

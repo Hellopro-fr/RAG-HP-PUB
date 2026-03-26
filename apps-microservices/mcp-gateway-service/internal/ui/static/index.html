@@ -112,36 +112,29 @@
       </div>
     </main>
 
-    <!-- Page: MCP Config -->
+    <!-- Page: MCP Config / Scope Tokens -->
     <main id="page-mcp-config" class="hidden flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div class="mb-6">
-        <h1 class="text-2xl font-bold">MCP Configuration</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Copy the global <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">.mcp.json</code> or per-server configs for your MCP clients</p>
-      </div>
-
-      <!-- Global config -->
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
-        <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <div class="flex items-center gap-2">
-            <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-brand-100 text-brand-700">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            </span>
-            <span class="font-semibold text-sm">Global .mcp.json</span>
-            <span class="text-xs text-gray-400">— All active servers</span>
-          </div>
-          <button onclick="copyJSON('global-json')" class="copy-btn inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100 transition-colors">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-            Copy
-          </button>
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold">Scope Tokens</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Create tokens with scoped server access. Each token generates a ready-to-paste <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">.mcp.json</code></p>
         </div>
-        <pre id="global-json" class="json-view px-5 py-4 text-xs font-mono text-gray-700 bg-gray-50 rounded-b-xl max-h-96 overflow-auto"></pre>
+        <button onclick="openTokenModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+          Create Token
+        </button>
       </div>
 
-      <!-- Per-server configs -->
-      <h2 class="text-lg font-semibold mb-3">Per-Server Configs</h2>
-      <div id="per-server-configs" class="space-y-4">
-        <!-- populated by JS -->
+      <!-- Token list -->
+      <div id="token-list" class="space-y-4">
+        <p class="text-sm text-gray-400 py-12 text-center">Loading...</p>
       </div>
+
+      <!-- Legacy: Per-server configs (collapsible) -->
+      <details class="mt-8">
+        <summary class="text-sm font-medium text-gray-500 cursor-pointer hover:text-gray-700 mb-3">Per-Server Configs (legacy)</summary>
+        <div id="per-server-configs" class="space-y-4"></div>
+      </details>
     </main>
   </div>
 
@@ -205,8 +198,14 @@
             </div>
           </div>
           <div class="mt-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Headers <span class="text-xs text-gray-400">(JSON object, optional)</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Auth Headers <span class="text-xs text-gray-400">(sent by gateway to backend, optional)</span></label>
+            <input id="form-auth-headers" type="text" placeholder='{"X-MCP-Token": "Bearer xxx"}' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            <p class="text-xs text-gray-400 mt-1">Headers the gateway forwards when connecting to this server</p>
+          </div>
+          <div class="mt-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">MCP Client Headers <span class="text-xs text-gray-400">(for .mcp.json export, optional)</span></label>
             <input id="form-mcp-headers" type="text" placeholder='{"Authorization": "Bearer xxx"}' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            <p class="text-xs text-gray-400 mt-1">Headers included in per-server .mcp.json config for direct client access</p>
           </div>
         </div>
 
@@ -325,6 +324,82 @@
         <button type="button" onclick="doImport()" id="import-submit" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm inline-flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
           Import
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Scope Token -->
+  <div id="token-backdrop" class="hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onclick="closeTokenModal()"></div>
+  <div id="token-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg fade-in" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Create Scope Token</h2>
+        <button onclick="closeTokenModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Token Name <span class="text-red-400">*</span></label>
+          <input id="token-name" type="text" required placeholder="e.g. dev-rag-only" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <input id="token-desc" type="text" placeholder="Optional description" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Server Name in Config</label>
+          <input id="token-server-name" type="text" value="hellopro-gateway" placeholder="hellopro-gateway" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <p class="text-xs text-gray-400 mt-1">Name used as the key in the generated .mcp.json</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Server Access <span class="text-red-400">*</span></label>
+          <p class="text-xs text-gray-400 mb-2">Select which servers this token can access</p>
+          <div id="token-server-list" class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-100">
+            <p class="text-xs text-gray-400 p-3">Loading servers...</p>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Expiration</label>
+          <div class="flex items-center gap-3 mb-2">
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="token_expiry_type" value="permanent" checked onchange="document.getElementById('token-expires').disabled=true;document.getElementById('token-expires').value=''" class="text-brand-600 focus:ring-brand-500">
+              <span class="text-sm text-gray-700">Permanent</span>
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="token_expiry_type" value="custom" onchange="document.getElementById('token-expires').disabled=false;document.getElementById('token-expires').focus()" class="text-brand-600 focus:ring-brand-500">
+              <span class="text-sm text-gray-700">Custom expiry</span>
+            </label>
+          </div>
+          <input id="token-expires" type="datetime-local" disabled class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-400">
+        </div>
+        <div>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input id="token-allow-http" type="checkbox" checked class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+            <span class="text-sm font-medium text-gray-700">Allow HTTP</span>
+            <span class="text-xs text-gray-400">(required for non-HTTPS gateway URLs)</span>
+          </label>
+        </div>
+        <!-- Result area (hidden initially) -->
+        <div id="token-created-result" class="hidden">
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+            <p class="text-sm font-medium text-amber-800">Copy this token now — it won't be shown again!</p>
+            <div class="mt-2 flex items-center gap-2">
+              <code id="token-raw-value" class="flex-1 bg-white border border-amber-300 rounded px-3 py-2 text-sm font-mono break-all select-all"></code>
+              <button onclick="navigator.clipboard.writeText(document.getElementById('token-raw-value').textContent).then(()=>toast('Token copied!','info'))" class="px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700">Copy</button>
+            </div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p class="text-xs font-medium text-gray-600 mb-1">.mcp.json — ready to paste</p>
+            <pre id="token-mcp-json" class="text-xs font-mono text-gray-700 max-h-48 overflow-auto select-all"></pre>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('token-mcp-json').textContent).then(()=>toast('Config copied!','info'))" class="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">Copy .mcp.json</button>
+          </div>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+        <button type="button" onclick="closeTokenModal()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+        <button type="button" onclick="createScopeToken()" id="token-submit-btn" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 inline-flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+          Generate Token
         </button>
       </div>
     </div>
@@ -585,6 +660,7 @@
       document.getElementById('form-command').value = '';
       document.getElementById('form-args').value = '';
       document.getElementById('form-env').value = '';
+      document.getElementById('form-auth-headers').value = '';
       document.getElementById('form-mcp-headers').value = '';
       setMCPTransport('http');
       document.getElementById('form-discover-row').classList.remove('hidden');
@@ -605,6 +681,7 @@
         document.getElementById('form-command').value = s.mcp_command || '';
         document.getElementById('form-args').value = (s.mcp_args || []).join('\n');
         document.getElementById('form-env').value = s.mcp_env ? JSON.stringify(s.mcp_env) : '';
+        document.getElementById('form-auth-headers').value = s.auth_headers ? JSON.stringify(s.auth_headers) : '';
         document.getElementById('form-mcp-headers').value = s.mcp_headers ? JSON.stringify(s.mcp_headers) : '';
         setMCPTransport(s.mcp_transport || 'http');
         document.getElementById('form-discover-row').classList.add('hidden');
@@ -636,8 +713,10 @@
         body.url = document.getElementById('form-url').value;
         body.transport_preference = document.getElementById('form-transport').value;
         body.connect_timeout_ms = parseInt(document.getElementById('form-timeout').value);
+        const authHeadersText = document.getElementById('form-auth-headers').value.trim();
+        if (authHeadersText) { try { body.auth_headers = JSON.parse(authHeadersText); } catch { toast('Invalid JSON in Auth Headers', 'error'); return; } }
         const headersText = document.getElementById('form-mcp-headers').value.trim();
-        if (headersText) { try { body.mcp_headers = JSON.parse(headersText); } catch { toast('Invalid JSON in Headers', 'error'); return; } }
+        if (headersText) { try { body.mcp_headers = JSON.parse(headersText); } catch { toast('Invalid JSON in MCP Client Headers', 'error'); return; } }
       }
 
       try {
@@ -781,47 +860,200 @@
       document.getElementById('detail-modal').classList.add('hidden');
     }
 
-    // ── MCP Config page ──────────────────────────────────────────────────
+    // ── MCP Config / Scope Tokens page ─────────────────────────────────
+    let allServers = []; // cached for token modal
+
     async function loadMCPConfig() {
       try {
-        const data = await api('/servers?is_active=true');
-        const activeServers = data.servers || [];
+        // Load tokens and servers in parallel
+        const [tokenData, serverData] = await Promise.all([
+          api('/tokens').catch(() => ({ tokens: [] })),
+          api('/servers?is_active=true')
+        ]);
+        const tokens = tokenData.tokens || [];
+        allServers = serverData.servers || [];
 
-        // Global .mcp.json
-        const globalConfig = { mcpServers: {} };
-        for (const s of activeServers) {
-          const key = s.name.replace(/[^a-zA-Z0-9_-]/g, '-');
-          globalConfig.mcpServers[key] = buildServerMCPEntry(s);
-        }
-        document.getElementById('global-json').textContent = JSON.stringify(globalConfig, null, 2);
+        const gatewayURL = window.location.origin + '/mcp';
 
-        // Per-server configs
-        const container = document.getElementById('per-server-configs');
-        if (activeServers.length === 0) {
-          container.innerHTML = '<p class="text-sm text-gray-400 py-8 text-center">No active servers</p>';
-          return;
-        }
-        container.innerHTML = activeServers.map(s => {
-          const mcpJSON = buildServerMCPJSON(s);
-          const jsonStr = JSON.stringify(mcpJSON, null, 2);
-          const elId = 'srv-json-' + s.id.replace(/-/g, '');
-          const healthDot = { healthy: 'bg-emerald-400', unhealthy: 'bg-red-400', unknown: 'bg-gray-300' }[s.health_status] || 'bg-gray-300';
-          return `
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full ${healthDot}"></span>
-                  <span class="font-medium text-sm">${esc(s.name)}</span>
-                  <span class="text-xs text-gray-400 font-mono">${esc(s.url)}</span>
+        // Token list
+        const container = document.getElementById('token-list');
+        if (tokens.length === 0) {
+          container.innerHTML = `<div class="text-center py-12">
+            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+            <p class="text-sm text-gray-500">No scope tokens yet</p>
+            <p class="text-xs text-gray-400 mt-1">Create a token to generate a scoped .mcp.json config</p>
+          </div>`;
+        } else {
+          container.innerHTML = tokens.map(t => {
+            const serverNames = allServers.filter(s => t.server_ids.includes(s.id)).map(s => s.name);
+            const statusBadge = t.is_active
+              ? '<span class="px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full">Active</span>'
+              : '<span class="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 rounded-full">Revoked</span>';
+            const isHttp = gatewayURL.startsWith('http://');
+            const mcpArgs = ["-y", "mcp-remote", gatewayURL];
+            if (isHttp) mcpArgs.push("--allow-http");
+            mcpArgs.push("--header", "X-MCP-Scope-Token: " + t.token_prefix + "...");
+            const mcpConfig = {
+              mcpServers: {
+                "hellopro-gateway": {
+                  command: "npx",
+                  args: mcpArgs
+                }
+              }
+            };
+            const jsonElId = 'token-cfg-' + t.id.replace(/-/g, '');
+            const expiresStr = t.expires_at ? new Date(t.expires_at).toLocaleDateString() : '<span class="text-emerald-600 font-medium">Permanent</span>';
+            return `
+              <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="px-5 py-3 border-b border-gray-100">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                      <span class="font-semibold text-sm">${esc(t.name)}</span>
+                      <code class="text-xs text-gray-400 font-mono">${esc(t.token_prefix)}...</code>
+                      ${statusBadge}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <button onclick="copyJSON('${jsonElId}')" class="copy-btn inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Copy
+                      </button>
+                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100">Revoke</button>` : ''}
+                      <button onclick="deleteToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-md hover:bg-red-100">Delete</button>
+                    </div>
+                  </div>
+                  <div class="mt-2 flex items-center gap-4 text-xs text-gray-500">
+                    <span>Servers: ${serverNames.length > 0 ? serverNames.map(n => '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">' + esc(n) + '</code>').join(' ') : '<em class="text-gray-400">none</em>'}</span>
+                    <span>Expires: ${expiresStr}</span>
+                    ${t.created_by ? '<span>By: ' + esc(t.created_by) + '</span>' : ''}
+                  </div>
                 </div>
-                <button onclick="copyJSON('${elId}')" class="copy-btn inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100 transition-colors">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                  Copy
-                </button>
+                <pre id="${jsonElId}" class="json-view px-5 py-3 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto">${esc(JSON.stringify(mcpConfig, null, 2))}</pre>
+              </div>`;
+          }).join('');
+        }
+
+        // Legacy per-server configs
+        const legacyContainer = document.getElementById('per-server-configs');
+        if (allServers.length === 0) {
+          legacyContainer.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">No active servers</p>';
+        } else {
+          legacyContainer.innerHTML = allServers.map(s => {
+            const mcpJSON = buildServerMCPJSON(s);
+            const jsonStr = JSON.stringify(mcpJSON, null, 2);
+            const elId = 'srv-json-' + s.id.replace(/-/g, '');
+            return `<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div class="flex items-center justify-between px-5 py-2 border-b border-gray-100">
+                <span class="font-medium text-sm">${esc(s.name)}</span>
+                <button onclick="copyJSON('${elId}')" class="copy-btn text-xs text-brand-700 bg-brand-50 px-2.5 py-1 rounded-md hover:bg-brand-100">Copy</button>
               </div>
-              <pre id="${elId}" class="json-view px-5 py-3 text-xs font-mono text-gray-700 bg-gray-50 max-h-48 overflow-auto">${esc(jsonStr)}</pre>
+              <pre id="${elId}" class="json-view px-5 py-2 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto">${esc(jsonStr)}</pre>
             </div>`;
-        }).join('');
+          }).join('');
+        }
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ── Scope Token modal ────────────────────────────────────────────────
+    function openTokenModal() {
+      document.getElementById('token-name').value = '';
+      document.getElementById('token-desc').value = '';
+      document.getElementById('token-server-name').value = 'hellopro-gateway';
+      document.getElementById('token-expires').value = '';
+      document.getElementById('token-expires').disabled = true;
+      document.querySelector('input[name="token_expiry_type"][value="permanent"]').checked = true;
+      document.getElementById('token-allow-http').checked = true;
+      document.getElementById('token-created-result').classList.add('hidden');
+      document.getElementById('token-submit-btn').disabled = false;
+      document.getElementById('token-submit-btn').classList.remove('hidden');
+      document.getElementById('token-backdrop').classList.remove('hidden');
+      document.getElementById('token-modal').classList.remove('hidden');
+
+      // Populate server checkboxes
+      const listEl = document.getElementById('token-server-list');
+      if (allServers.length === 0) {
+        listEl.innerHTML = '<p class="text-xs text-gray-400 p-3">No active servers — add servers first</p>';
+      } else {
+        listEl.innerHTML = allServers.map(s => `
+          <label class="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" value="${s.id}" class="token-server-cb rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+            <div class="flex-1 min-w-0">
+              <span class="text-sm font-medium">${esc(s.name)}</span>
+              <span class="text-xs text-gray-400 ml-2">${s.tools_count || 0} tools</span>
+            </div>
+          </label>`).join('');
+      }
+      document.getElementById('token-name').focus();
+    }
+
+    function closeTokenModal() {
+      document.getElementById('token-backdrop').classList.add('hidden');
+      document.getElementById('token-modal').classList.add('hidden');
+    }
+
+    async function createScopeToken() {
+      const name = document.getElementById('token-name').value.trim();
+      const description = document.getElementById('token-desc').value.trim();
+      const expiresRaw = document.getElementById('token-expires').value;
+      const serverIDs = [...document.querySelectorAll('.token-server-cb:checked')].map(cb => cb.value);
+
+      if (!name) { toast('Token name is required', 'error'); return; }
+      if (serverIDs.length === 0) { toast('Select at least one server', 'error'); return; }
+
+      const body = { name, server_ids: serverIDs };
+      if (description) body.description = description;
+      if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
+
+      const btn = document.getElementById('token-submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Generating...';
+
+      try {
+        const result = await api('/tokens', { method: 'POST', body: JSON.stringify(body) });
+
+        // Show the raw token and .mcp.json
+        document.getElementById('token-raw-value').textContent = result.token;
+        const gatewayURL = window.location.origin + '/mcp';
+        const allowHttp = document.getElementById('token-allow-http').checked;
+        const mcpArgs = ["-y", "mcp-remote", gatewayURL];
+        if (allowHttp) mcpArgs.push("--allow-http");
+        mcpArgs.push("--header", "X-MCP-Scope-Token: " + result.token);
+        const serverName = document.getElementById('token-server-name').value.trim() || 'hellopro-gateway';
+        const mcpConfig = {
+          mcpServers: {
+            [serverName]: {
+              command: "npx",
+              args: mcpArgs
+            }
+          }
+        };
+        document.getElementById('token-mcp-json').textContent = JSON.stringify(mcpConfig, null, 2);
+        document.getElementById('token-created-result').classList.remove('hidden');
+        btn.classList.add('hidden');
+
+        toast('Scope token created!', 'success');
+        loadMCPConfig(); // refresh token list in background
+      } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Generate Token';
+      }
+    }
+
+    async function revokeToken(id) {
+      if (!confirm('Revoke this token? Clients using it will lose access.')) return;
+      try {
+        await api(`/tokens/${id}/revoke`, { method: 'POST' });
+        toast('Token revoked', 'info');
+        loadMCPConfig();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteToken(id) {
+      if (!confirm('Delete this token permanently?')) return;
+      try {
+        await api(`/tokens/${id}`, { method: 'DELETE' });
+        toast('Token deleted', 'info');
+        loadMCPConfig();
       } catch (e) { toast(e.message, 'error'); }
     }
 

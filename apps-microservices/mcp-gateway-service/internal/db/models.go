@@ -95,3 +95,30 @@ type ServerTag struct {
 }
 
 func (ServerTag) TableName() string { return "server_tags" }
+
+// ScopeToken is the GORM model for the scope_tokens table.
+type ScopeToken struct {
+	ID          string     `gorm:"type:char(36);primaryKey" json:"id"`
+	Name        string     `gorm:"type:varchar(255);not null" json:"name"`
+	Description string     `gorm:"type:text" json:"description,omitempty"`
+	TokenHash   string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_token_hash" json:"-"`
+	TokenPrefix string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
+	CreatedBy   string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	ExpiresAt   *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
+	IsActive    bool       `gorm:"not null;default:true;index:idx_scope_active" json:"is_active"`
+	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Association
+	Servers []ScopeTokenServer `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
+}
+
+func (ScopeToken) TableName() string { return "scope_tokens" }
+
+// ScopeTokenServer is the join table between scope_tokens and mcp_servers.
+type ScopeTokenServer struct {
+	TokenID  string `gorm:"type:char(36);not null;primaryKey" json:"token_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+}
+
+func (ScopeTokenServer) TableName() string { return "scope_token_servers" }

@@ -14,14 +14,27 @@ import (
 
 // Handler holds dependencies for the REST API.
 type Handler struct {
-	repo     *repository.ServerRepo
-	gw       *gateway.Gateway
-	registry *gateway.Registry
+	repo       *repository.ServerRepo
+	tokenRepo  *repository.TokenRepo
+	tokenCache TokenCache
+	gw         *gateway.Gateway
+	registry   *gateway.Registry
+}
+
+// TokenCache is an interface for scope token cache operations.
+type TokenCache interface {
+	InvalidateAll()
 }
 
 // NewHandler creates a new API handler.
 func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry) *Handler {
 	return &Handler{repo: repo, gw: gw, registry: registry}
+}
+
+// SetTokenRepo sets the token repository for token CRUD operations.
+func (h *Handler) SetTokenRepo(repo *repository.TokenRepo, cache TokenCache) {
+	h.tokenRepo = repo
+	h.tokenCache = cache
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
