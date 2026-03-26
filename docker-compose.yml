@@ -846,7 +846,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G # Plafond dur RAM — ajuster selon la RAM disponible sur le serveur
+          memory: 16G # Plafond dur RAM — ajuster selon la RAM disponible sur le serveur
         reservations:
           devices:
             - driver: nvidia
