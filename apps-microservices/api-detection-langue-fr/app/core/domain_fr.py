@@ -38,18 +38,20 @@ class DomainCache:
     def __init__(self) -> None:
         self._client = None
         self._initialized = False
+        self._init_lock = asyncio.Lock()
 
-    def _get_client(self):
-        if not self._initialized:
-            self._initialized = True
-            redis_url = settings.REDIS_URL
-            if redis_url:
-                try:
-                    import redis.asyncio as aioredis
-                    self._client = aioredis.from_url(redis_url, decode_responses=True)
-                    logger.info("Redis cache initialisé")
-                except Exception as e:
-                    logger.warning(f"Redis cache indisponible : {e}")
+    async def _get_client(self):
+        async with self._init_lock:
+            if not self._initialized:
+                self._initialized = True
+                redis_url = settings.REDIS_URL
+                if redis_url:
+                    try:
+                        import redis.asyncio as aioredis
+                        self._client = aioredis.from_url(redis_url, decode_responses=True)
+                        logger.info("Redis cache initialisé (connexion différée)")
+                    except Exception as e:
+                        logger.warning(f"Redis cache indisponible : {e}")
         return self._client
 
     @staticmethod
@@ -65,7 +67,7 @@ class DomainCache:
         return f"fr_detect:{domain}"
 
     async def get(self, url: str) -> Optional[dict]:
-        client = self._get_client()
+        client = await self._get_client()
         if not client:
             return None
         try:
@@ -79,7 +81,7 @@ class DomainCache:
 
     async def set(self, input_url: str, result_url: str, result: dict) -> None:
         """Stocke le résultat pour input_url ET result_url (si redirection)."""
-        client = self._get_client()
+        client = await self._get_client()
         if not client:
             return
         if result.get('method') in self._ERROR_METHODS:

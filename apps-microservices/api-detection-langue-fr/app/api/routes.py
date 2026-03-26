@@ -38,6 +38,12 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
     - `forced_method`: Force une méthode de détection spécifique
     - `use_nlp_detection`: Active/désactive la détection NLP par contenu textuel
     """
+    if request.mode == DetectionMode.FIRST_MATCH:
+        raise HTTPException(
+            status_code=422,
+            detail="Le mode 'first_match' n'est disponible que sur /detect-batch"
+        )
+
     try:
         # Récupérer le HTML si non fourni
         html_content = request.html_content
@@ -146,10 +152,17 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     # Sémaphore pour limiter la concurrence
     semaphore = asyncio.Semaphore(request.max_concurrency)
     processed_count = 0
+    count_lock = asyncio.Lock()
+
+    async def _increment_count() -> int:
+        """Incrémente processed_count de façon thread-safe et retourne la valeur."""
+        nonlocal processed_count
+        async with count_lock:
+            processed_count += 1
+            return processed_count
 
     async def _process_item_core(item: BatchItem) -> DetectionResponse:
         """Traitement d'un item sans stagger delay (logique partagée)."""
-        nonlocal processed_count
         url = item.url
         item_start = time.time()
 
@@ -162,14 +175,14 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 cached = await domain_cache.get(url)
                 if cached:
                     logger.info(f"[BATCH] Cache HIT {url}")
-                    processed_count += 1
+                    await _increment_count()
                     return DetectionResponse(**cached)
 
                 fetch_result = await fetch_html(url, request.proxy_url)
                 if not fetch_result:
-                    processed_count += 1
+                    count = await _increment_count()
                     duration_ms = round((time.time() - item_start) * 1000)
-                    logger.warning(f"[BATCH] [{processed_count}/{total_items}] FETCH_FAILED {url} ({duration_ms}ms)")
+                    logger.warning(f"[BATCH] [{count}/{total_items}] FETCH_FAILED {url} ({duration_ms}ms)")
                     return DetectionResponse(
                         ok=False,
                         url=url,
@@ -184,9 +197,9 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             # Vérifier si le contenu est une page de challenge ou block
             challenge = detect_challenge_page(html_content)
             if challenge:
-                processed_count += 1
+                count = await _increment_count()
                 duration_ms = round((time.time() - item_start) * 1000)
-                logger.warning(f"[BATCH] [{processed_count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
+                logger.warning(f"[BATCH] [{count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
                 if challenge == 'Cloudflare_blocked':
                     error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
                 elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
@@ -216,17 +229,17 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             if not item.html_content:
                 await domain_cache.set(url, effective_url, result.model_dump())
 
-            processed_count += 1
+            count = await _increment_count()
             duration_ms = round((time.time() - item_start) * 1000)
             status = "OK" if result.ok else "NOK"
-            logger.info(f"[BATCH] [{processed_count}/{total_items}] {status} {url} method={result.method} ({duration_ms}ms)")
+            logger.info(f"[BATCH] [{count}/{total_items}] {status} {url} method={result.method} ({duration_ms}ms)")
 
             return result
 
         except Exception as e:
-            processed_count += 1
+            count = await _increment_count()
             duration_ms = round((time.time() - item_start) * 1000)
-            logger.error(f"[BATCH] [{processed_count}/{total_items}] ERROR {url}: {e} ({duration_ms}ms)")
+            logger.error(f"[BATCH] [{count}/{total_items}] ERROR {url}: {e} ({duration_ms}ms)")
             return DetectionResponse(
                 ok=False,
                 url=url,
@@ -311,6 +324,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                         break
                     if retry_result.method not in ('fetch_failed', 'challenge_page'):
                         group_results[i] = DetectionResponse(**{**retry_result.model_dump(), 'group': group_key})
+                        break
                 except Exception as e:
                     logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
 
