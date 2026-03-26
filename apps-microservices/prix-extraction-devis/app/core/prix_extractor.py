@@ -143,7 +143,7 @@ class PrixExtractor:
         Returns:
             Le prompt final à envoyer au LLM
         """
-        # prompt_text = self.prompt_config.get("contenu_prompt", "")
+        prompt_text = self.prompt_config.get("contenu_prompt", "")
 
         # Remplacer les placeholders si présents
         # prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
@@ -152,7 +152,7 @@ class PrixExtractor:
         prompt_text = prompt_text.replace("{json_devis_pdf}", item_content)
         prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
         prompt_text = prompt_text.replace("{nom_categorie}", category_name)
-        self._log(f"prompt_text = {prompt_text}")
+        self._log(f"prompt_text ok = {prompt_text}")
 
         return prompt_text
 
