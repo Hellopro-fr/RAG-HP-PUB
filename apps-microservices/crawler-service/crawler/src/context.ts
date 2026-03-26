@@ -19,6 +19,7 @@ export const context = {
         maxRedirects: 0,
         maxNewUrls: 0,
         domain: "",
+        siteHostname: "",
         baseUrl: "",
         crawleeStorageName: "",
         // Filtering
