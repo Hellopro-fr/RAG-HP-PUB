@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
 
     # API HelloPro
-    HP_TOKEN: str = "GQr3DiVJGPIxO9o7mp5FNHXsk8Ak4fZ8x8X/732mVcUY9kyOhvo79EpFYM9GplusZO/54dvfTKZF5YNSpFNEGiRvyYZkKplusmftUpAJXoEXq45aVVSKxjpiiMzrrToEYplusziMjI3Megal"  #prod
+    HP_TOKEN: str
 
     # Prompt par défaut pour l'identification des caractéristiques
     PROMPT_ID_CARAC_PRIX: str = "113"
