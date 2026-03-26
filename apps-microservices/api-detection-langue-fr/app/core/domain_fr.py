@@ -49,7 +49,7 @@ class DomainCache:
                     try:
                         import redis.asyncio as aioredis
                         self._client = aioredis.from_url(redis_url, decode_responses=True)
-                        logger.info("Redis cache initialisé (connexion différée)")
+                        logger.info("Redis cache client créé (connexion au premier appel)")
                     except Exception as e:
                         logger.warning(f"Redis cache indisponible : {e}")
         return self._client

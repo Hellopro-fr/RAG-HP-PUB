@@ -23,15 +23,89 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# =============================================================================
+# Helpers partagés (S1 — Strategy pattern : logique unique pour /detect + batch)
+# =============================================================================
+
+def _build_challenge_error_msg(challenge: str) -> str:
+    """Construit le message d'erreur pour une page de challenge/block."""
+    if challenge == 'Cloudflare_blocked':
+        return 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+    if challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
+        error_code = challenge.split('_')[1]
+        return f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
+    return f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+
+
+async def _detect_single_url(
+    url: str,
+    html_content: Optional[str] = None,
+    proxy_url: Optional[str] = None,
+    mode: DetectionMode = DetectionMode.COMPLETE,
+    use_nlp_detection: bool = True,
+    forced_method: Optional[str] = None,
+) -> DetectionResponse:
+    """
+    Pipeline de détection FR pour une URL unique (logique partagée /detect + batch).
+
+    Gère : cache lookup/store, HTML fetch, challenge detection, DomainFR pipeline.
+    Skip le cache si html_content est fourni (résultat page-level, pas domain-level).
+    """
+    effective_url = url
+    html_was_provided = html_content is not None
+
+    if not html_was_provided:
+        cached = await domain_cache.get(url)
+        if cached:
+            logger.info(f"Cache HIT {url}")
+            return DetectionResponse(**cached)
+
+        fetch_result = await fetch_html(url, proxy_url)
+        if not fetch_result:
+            return DetectionResponse(
+                ok=False, url=url, method='fetch_failed',
+                error='Impossible de récupérer le contenu HTML'
+            )
+        html_content, final_url = fetch_result
+        if final_url and final_url != url:
+            logger.info(f"Redirection: {url} → {final_url}")
+            effective_url = final_url
+
+    challenge = detect_challenge_page(html_content)
+    if challenge:
+        logger.warning(f"Challenge/block {challenge} pour {effective_url}")
+        return DetectionResponse(
+            ok=False, url=effective_url, method='challenge_page',
+            error=_build_challenge_error_msg(challenge)
+        )
+
+    detector = DomainFR(
+        homepage=effective_url,
+        forced_method=forced_method,
+        use_nlp_detection=use_nlp_detection,
+        original_homepage=url if effective_url != url else None
+    )
+    result = await detector.check_page_if_french(html_content, mode)
+
+    if not html_was_provided:
+        await domain_cache.set(url, effective_url, result.model_dump())
+
+    return result
+
+
+# =============================================================================
+# Routes
+# =============================================================================
+
 @router.post("/detect", response_model=DetectionResponse)
 async def detect_french(request: DetectionRequest) -> DetectionResponse:
     """
     Détecte si un site est en français ou dispose d'une version française.
-    
+
     **Modes:**
     - `simple`: Vérifie URL + attribut lang HTML uniquement (comportement TypeScript)
     - `complete`: + recherche de liens alternatifs hreflang, options, etc. (comportement PHP)
-    
+
     **Paramètres optionnels:**
     - `html_content`: Si le HTML est déjà disponible, évite une requête HTTP
     - `proxy_url`: Proxy à utiliser pour les requêtes
@@ -45,74 +119,17 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
         )
 
     try:
-        # Récupérer le HTML si non fourni
-        html_content = request.html_content
-        effective_url = request.url
-
-        if not html_content:
-            # Vérification cache (seulement quand l'API récupère elle-même le HTML)
-            cached = await domain_cache.get(request.url)
-            if cached:
-                logger.info(f"Cache HIT {request.url}")
-                return DetectionResponse(**cached)
-
-            fetch_result = await fetch_html(request.url, request.proxy_url)
-            if not fetch_result:
-                return DetectionResponse(
-                    ok=False,
-                    url=request.url,
-                    method='fetch_failed',
-                    error='Impossible de récupérer le contenu HTML'
-                )
-            html_content, final_url = fetch_result
-            # Mettre à jour l'URL si Playwright a suivi une redirection
-            if final_url and final_url != request.url:
-                logger.info(f"Redirection détectée: {request.url} → {final_url}")
-                effective_url = final_url
-
-        # Vérifier si le contenu est une page de challenge ou block (Cloudflare, etc.)
-        challenge = detect_challenge_page(html_content)
-        if challenge:
-            if challenge == 'Cloudflare_blocked':
-                error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
-            elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
-                error_code = challenge.split('_')[1]
-                error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
-            else:
-                error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
-            logger.warning(f"Page de challenge/block {challenge} détectée pour {effective_url}")
-            return DetectionResponse(
-                ok=False,
-                url=effective_url,
-                method='challenge_page',
-                error=error_msg
-            )
-
-        # Créer le détecteur avec l'URL finale (après redirection éventuelle)
-        # original_homepage conserve l'URL d'origine pour accepter les alternatives
-        # qui pointent vers le domaine d'avant redirection (ex: trojanuv.com → trojantechnologies.com)
-        detector = DomainFR(
-            homepage=effective_url,
-            forced_method=request.forced_method,
+        return await _detect_single_url(
+            url=request.url,
+            html_content=request.html_content,
+            proxy_url=request.proxy_url,
+            mode=request.mode,
             use_nlp_detection=request.use_nlp_detection,
-            original_homepage=request.url if effective_url != request.url else None
+            forced_method=request.forced_method,
         )
-
-        # Lancer la détection
-        result = await detector.check_page_if_french(html_content, request.mode)
-
-        # Stocker en cache (seulement si l'API a récupéré le HTML elle-même)
-        if not request.html_content:
-            await domain_cache.set(request.url, effective_url, result.model_dump())
-
-        return result
-
     except Exception as e:
         return DetectionResponse(
-            ok=False,
-            url=request.url,
-            method='error',
-            error=str(e)
+            ok=False, url=request.url, method='error', error=str(e)
         )
 
 
@@ -120,30 +137,30 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
 async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionResponse:
     """
     Traitement par lot : détecte plusieurs URLs en parallèle.
-    
+
     **Paramètres:**
     - `urls`: [DEPRECATED] Liste d'URLs simples (max 100)
     - `items`: Liste d'objets contenant 'url' et optionnellement 'html_content' (recommandé)
     - `mode`: simple ou complete (appliqué à tous)
     - `max_concurrency`: Nombre de requêtes parallèles (1-50, défaut: 10)
-    
+
     **Retourne** les résultats dans le même ordre que les données fournies.
     """
     # Unification des entrées (support rétro-compatible)
     items_to_process: list[BatchItem] = []
-    
+
     if request.items:
         items_to_process.extend(request.items)
-        
+
     if request.urls:
         items_to_process.extend([BatchItem(url=u, html_content=None) for u in request.urls])
 
     if not items_to_process:
         raise HTTPException(status_code=400, detail="La liste d'URLs/items ne peut pas être vide")
-    
+
     if len(items_to_process) > 100:
         raise HTTPException(status_code=400, detail="Maximum 100 items par requête")
-    
+
     total_items = len(items_to_process)
     start_time = time.time()
 
@@ -162,72 +179,19 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             return processed_count
 
     async def _process_item_core(item: BatchItem) -> DetectionResponse:
-        """Traitement d'un item sans stagger delay (logique partagée)."""
+        """Traitement d'un item avec logging batch (délègue la détection à _detect_single_url)."""
         url = item.url
         item_start = time.time()
 
         try:
-            html_content = item.html_content
-            effective_url = url
-
-            if not html_content:
-                # Vérification cache (seulement quand l'API récupère elle-même le HTML)
-                cached = await domain_cache.get(url)
-                if cached:
-                    logger.info(f"[BATCH] Cache HIT {url}")
-                    await _increment_count()
-                    return DetectionResponse(**cached)
-
-                fetch_result = await fetch_html(url, request.proxy_url)
-                if not fetch_result:
-                    count = await _increment_count()
-                    duration_ms = round((time.time() - item_start) * 1000)
-                    logger.warning(f"[BATCH] [{count}/{total_items}] FETCH_FAILED {url} ({duration_ms}ms)")
-                    return DetectionResponse(
-                        ok=False,
-                        url=url,
-                        method='fetch_failed',
-                        error='Impossible de récupérer le contenu HTML'
-                    )
-                html_content, final_url = fetch_result
-                if final_url and final_url != url:
-                    logger.info(f"[BATCH] Redirection: {url} → {final_url}")
-                    effective_url = final_url
-
-            # Vérifier si le contenu est une page de challenge ou block
-            challenge = detect_challenge_page(html_content)
-            if challenge:
-                count = await _increment_count()
-                duration_ms = round((time.time() - item_start) * 1000)
-                logger.warning(f"[BATCH] [{count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
-                if challenge == 'Cloudflare_blocked':
-                    error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
-                elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
-                    error_code = challenge.split('_')[1]
-                    error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
-                else:
-                    error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
-                return DetectionResponse(
-                    ok=False,
-                    url=effective_url,
-                    method='challenge_page',
-                    error=error_msg
-                )
-
-            # Mode de détection : first_match utilise complete en interne par URL
             detection_mode = request.mode if request.mode != DetectionMode.FIRST_MATCH else DetectionMode.COMPLETE
-
-            detector = DomainFR(
-                homepage=effective_url,
+            result = await _detect_single_url(
+                url=url,
+                html_content=item.html_content,
+                proxy_url=request.proxy_url,
+                mode=detection_mode,
                 use_nlp_detection=request.use_nlp_detection,
-                original_homepage=url if effective_url != url else None
             )
-
-            result = await detector.check_page_if_french(html_content, detection_mode)
-
-            # Stocker en cache (seulement si l'API a récupéré le HTML elle-même)
-            if not item.html_content:
-                await domain_cache.set(url, effective_url, result.model_dump())
 
             count = await _increment_count()
             duration_ms = round((time.time() - item_start) * 1000)
@@ -241,17 +205,14 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             duration_ms = round((time.time() - item_start) * 1000)
             logger.error(f"[BATCH] [{count}/{total_items}] ERROR {url}: {e} ({duration_ms}ms)")
             return DetectionResponse(
-                ok=False,
-                url=url,
-                method='error',
-                error=str(e)
+                ok=False, url=url, method='error', error=str(e)
             )
 
     async def process_single(index: int, item: BatchItem) -> DetectionResponse:
-        # Stagger delay : évite que tous les navigateurs frappent le proxy simultanément
-        # Réduit la pression sur le proxy et le risque de déclencher des protections anti-bot
+        # W5 : stagger plafonné à une « vague » de concurrence (évite 49.5s pour item 99)
         if index > 0:
-            await asyncio.sleep(index * 0.5)
+            max_stagger = request.max_concurrency * 0.5
+            await asyncio.sleep(min(index * 0.5, max_stagger))
         async with semaphore:
             return await _process_item_core(item)
 
@@ -259,19 +220,21 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     # Mode first_match : traitement groupé (séquentiel intra-groupe, concurrent inter-groupes)
     # =========================================================================
     if request.mode == DetectionMode.FIRST_MATCH:
-        # Partitionner items en groupes nommés et items sans groupe
+        # W1 : tous les items reçoivent un groupe (implicite si absent)
+        # pour garantir que chaque résultat a un champ group non-null
         grouped: dict[str, list[BatchItem]] = {}
-        ungrouped: list[BatchItem] = []
-        group_order: list[str] = []  # ordre de première apparition des groupes
+        group_order: list[str] = []
 
-        for item in items_to_process:
+        for idx, item in enumerate(items_to_process):
             if item.group is not None:
                 if item.group not in grouped:
                     grouped[item.group] = []
                     group_order.append(item.group)
                 grouped[item.group].append(item)
             else:
-                ungrouped.append(item)
+                implicit_key = f"_ungrouped_{idx}"
+                grouped[implicit_key] = [item]
+                group_order.append(implicit_key)
 
         # failed_by_group : items fetch_failed/challenge_page par groupe (pour Pass 2)
         failed_by_group: dict[str, list[BatchItem]] = {}
@@ -293,12 +256,9 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             failed_by_group[group_key] = failed
             return DetectionResponse(**{**last_result.model_dump(), 'group': group_key})
 
-        # Pass 1 : groupes en parallèle, items sans groupe en parallèle indépendant
+        # Pass 1 : tous les groupes en parallèle
         group_results: list[DetectionResponse] = list(await asyncio.gather(*[
             process_group(key, grouped[key]) for key in group_order
-        ]))
-        ungrouped_results: list[DetectionResponse] = list(await asyncio.gather(*[
-            process_single(i, item) for i, item in enumerate(ungrouped)
         ]))
 
         pass1_duration = round((time.time() - start_time) * 1000)
@@ -328,7 +288,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 except Exception as e:
                     logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
 
-        results = group_results + ungrouped_results
+        results = group_results
         success_count = sum(1 for r in results if r.ok)
         error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
         failed_count = len(results) - success_count - error_count
@@ -427,9 +387,9 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 async def check_url_only(url: str, track_redirect: bool = False) -> UrlCheckResponse:
     """
     Vérifie rapidement si une URL indique une version française.
-    
+
     Analyse uniquement l'URL (TLD, path, query params) sans récupérer le contenu HTML.
-    
+
     **Critères vérifiés:**
     - TLD `.fr`
     - Sous-domaine `fr.`
@@ -437,7 +397,7 @@ async def check_url_only(url: str, track_redirect: bool = False) -> UrlCheckResp
     - Paramètre `lang=fr` dans la query string
     """
     result = await DomainFR.check_url(url, track_redirect=track_redirect)
-    
+
     return UrlCheckResponse(
         ok=result.get('ok', False),
         method=result.get('method', 'unknown'),
@@ -550,7 +510,7 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
 async def health_check() -> dict:
     """
     Endpoint de santé pour monitoring.
-    
+
     Retourne le statut de l'API et des informations de version.
     """
     return {
