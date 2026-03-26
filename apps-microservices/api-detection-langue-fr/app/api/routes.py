@@ -145,34 +145,13 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     Traitement par lot : détecte plusieurs URLs en parallèle.
 
     **Paramètres:**
-    - `urls`: [DEPRECATED] Liste d'URLs simples (max 100)
-    - `items`: Liste d'objets contenant 'url' et optionnellement 'html_content' (recommandé)
+    - `items`: Liste d'objets contenant 'url' et optionnellement 'html_content' (max 100)
     - `mode`: simple, complete ou first_match (appliqué à tous)
     - `max_concurrency`: Nombre de requêtes parallèles (1-50, défaut: 10)
 
     **Retourne** les résultats dans le même ordre que les données fournies.
     """
-    # W1 : interdire l'envoi simultané de urls et items
-    if request.items and request.urls:
-        raise HTTPException(
-            status_code=400,
-            detail="Fournir 'items' ou 'urls', pas les deux. 'urls' est déprécié, utilisez 'items'."
-        )
-
-    # Unification des entrées (support rétro-compatible)
-    items_to_process: list[BatchItem] = []
-
-    if request.items:
-        items_to_process.extend(request.items)
-
-    if request.urls:
-        items_to_process.extend([BatchItem(url=u, html_content=None) for u in request.urls])
-
-    if not items_to_process:
-        raise HTTPException(status_code=400, detail="La liste d'URLs/items ne peut pas être vide")
-
-    if len(items_to_process) > 100:
-        raise HTTPException(status_code=400, detail="Maximum 100 items par requête")
+    items_to_process = request.items
 
     total_items = len(items_to_process)
     start_time = time.time()
