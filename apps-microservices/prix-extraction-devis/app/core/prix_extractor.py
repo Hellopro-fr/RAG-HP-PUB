@@ -2,6 +2,7 @@
 Module principal de traitement: extraction de prix depuis les données devis via LLM.
 Traitement parallèle asynchrone avec asyncio.
 """
+import re
 import time
 import logging
 import asyncio
@@ -151,6 +152,7 @@ class PrixExtractor:
         prompt_text = prompt_text.replace("{json_devis_pdf}", item_content)
         prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
         prompt_text = prompt_text.replace("{nom_categorie}", category_name)
+        self._log(f"prompt_text ok = {prompt_text}")
 
         return prompt_text
 
@@ -312,7 +314,7 @@ class PrixExtractor:
         """
         async with self._semaphore:
             item_id = str(item.get("id", item.get("item_id", f"item_{item_index}")))
-            item_content = str(item.get("content", item.get("text", item.get("data", ""))))
+            item_content = json.dumps(item, ensure_ascii=False)
             source_chunk_id = str(item.get("source_chunk_id", item.get("id", f"item_{item_index}")))
 
             # Activer le contexte item pour bufferiser les logs
@@ -320,9 +322,21 @@ class PrixExtractor:
 
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
 
+            # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
+            if not re.search(r'€|\beuros?\b|\bEUR\b', item_content, re.IGNORECASE):
+                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
+                return ItemResult(
+                    item_id=item_id,
+                    source="devis",
+                    content=item_content,
+                    prix_data=None,
+                    status="skipped"
+                )
+
             # 1. Construire le prompt avec le contenu de l'item
             prompt_text = self._build_prompt(item_content, category_name)
-            self._log(f"prompt_text = {prompt_text}")
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
 
@@ -432,8 +446,7 @@ class PrixExtractor:
             ]
         """
         # Valeurs par défaut depuis les settings
-        # logger.info(f"Prompt Recherche de prix: '{self.prompt_config}'")
-        self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
+        # self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
         
         if not self.prompt_config:
             logger.warning(f"Prompt ID {self.PROMPT_ID} non trouvé, "

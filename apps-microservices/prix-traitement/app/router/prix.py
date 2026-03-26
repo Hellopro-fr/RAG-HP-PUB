@@ -75,7 +75,8 @@ async def questionnaire_prix(request: QuestionnaireRequest = Body(...)):
         result = await run_questionnaire(
             texte_recherche=request.texte_recherche,
             id_categorie=request.id_categorie,
-            nom_categorie=request.nom_categorie
+            nom_categorie=request.nom_categorie,
+            texte_prompt=request.texte_prompt
         )
         
         response = QuestionnaireResponse(

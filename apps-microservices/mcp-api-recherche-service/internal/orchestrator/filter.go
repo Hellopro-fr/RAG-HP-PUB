@@ -96,7 +96,7 @@ func NewFilterBuilder(dbClient databasepb.DatabaseSearchServiceClient, cache *Sc
 
 // Build constructs filter clauses for a given source and filters.
 func (fb *FilterBuilder) Build(ctx context.Context, filtre map[string]any, source string) (string, error) {
-	fieldTypes, err := fb.getFieldTypes(ctx, source)
+	fieldTypes, err := fb.GetFieldTypes(ctx, source)
 	if err != nil {
 		log.Printf("[filter] could not get schema for %s: %v", source, err)
 		return "", nil
@@ -143,7 +143,8 @@ func (fb *FilterBuilder) Build(ctx context.Context, filtre map[string]any, sourc
 	return strings.Join(clauses, " and "), nil
 }
 
-func (fb *FilterBuilder) getFieldTypes(ctx context.Context, collection string) (map[string]string, error) {
+// GetFieldTypes returns the field name→type map for a collection, using cache.
+func (fb *FilterBuilder) GetFieldTypes(ctx context.Context, collection string) (map[string]string, error) {
 	if fields, ok := fb.schemaCache.Get(collection); ok {
 		return fields, nil
 	}

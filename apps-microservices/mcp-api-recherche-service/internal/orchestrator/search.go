@@ -55,6 +55,7 @@ type SearchOrchestrator struct {
 	databaseClient  databasepb.DatabaseSearchServiceClient
 	rerankingClient rerankingpb.RerankingServiceClient
 	filterBuilder   *FilterBuilder
+	embeddingCache  *EmbeddingCache
 }
 
 func NewSearchOrchestrator(
@@ -68,6 +69,7 @@ func NewSearchOrchestrator(
 		databaseClient:  database,
 		rerankingClient: reranking,
 		filterBuilder:   filterBuilder,
+		embeddingCache:  NewEmbeddingCache(1000, 1*time.Hour),
 	}
 }
 
@@ -95,23 +97,35 @@ func (so *SearchOrchestrator) Search(ctx context.Context, params *SearchParams) 
 		}
 	}
 
-	// Step 1: Get embedding (if not keyword search)
+	// Step 1: Get embedding (if not keyword search) — with cache
 	var queryVector []float32
 	if params.SearchType != "keyword" {
 		startEmbed := time.Now()
-		resp, err := so.embeddingClient.GetEmbeddings(ctx, &embeddingpb.EmbeddingsRequest{
-			Texts:         []string{params.Query},
-			SourceService: strPtr("mcp-api-recherche"),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("embedding failed: %w", err)
+
+		// Check cache first
+		if cached := so.embeddingCache.Get(params.Query); cached != nil {
+			queryVector = cached
+			embedDuration = time.Since(startEmbed)
+			log.Printf("[search] embedding cache hit for query (%.1fms)", float64(embedDuration.Microseconds())/1000)
+		} else {
+			resp, err := so.embeddingClient.GetEmbeddings(ctx, &embeddingpb.EmbeddingsRequest{
+				Texts:         []string{params.Query},
+				SourceService: strPtr("mcp-api-recherche"),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("embedding failed: %w", err)
+			}
+			embeddings := resp.GetEmbeddings()
+			if len(embeddings) == 0 || len(embeddings[0].GetVector()) == 0 {
+				return nil, fmt.Errorf("empty embedding response")
+			}
+			queryVector = embeddings[0].GetVector()
+			embedDuration = time.Since(startEmbed)
+			log.Printf("[search] embedding cache miss (%.0fms), caching result", float64(embedDuration.Milliseconds()))
+
+			// Store in cache
+			so.embeddingCache.Set(params.Query, queryVector)
 		}
-		embeddings := resp.GetEmbeddings()
-		if len(embeddings) == 0 || len(embeddings[0].GetVector()) == 0 {
-			return nil, fmt.Errorf("empty embedding response")
-		}
-		queryVector = embeddings[0].GetVector()
-		embedDuration = time.Since(startEmbed)
 	}
 
 	// Step 2: Search each source in parallel
@@ -134,8 +148,15 @@ func (so *SearchOrchestrator) Search(ctx context.Context, params *SearchParams) 
 				log.Printf("[search] filter build error for %s: %v", sf.Source, err)
 			}
 
+			// Auto-upgrade semantic to hybrid if collection supports sparse embeddings
+			searchType := params.SearchType
+			if searchType == "semantic" && so.collectionSupportsHybrid(ctx, sf.Source) {
+				searchType = "hybrid"
+				log.Printf("[search] auto-upgraded to hybrid search for %s (sparse_embedding detected)", sf.Source)
+			}
+
 			results, err := so.executeSearch(ctx, sf.Source, queryVector, params.Query,
-				topKRetrieval, filterExpr, params.OutputFields, params.SearchType)
+				topKRetrieval, filterExpr, params.OutputFields, searchType)
 			if err != nil {
 				log.Printf("[search] search error for %s: %v", sf.Source, err)
 				mu.Lock()
@@ -336,6 +357,17 @@ func truncate(matches []map[string]any, topK int) []map[string]any {
 		return matches
 	}
 	return matches[:topK]
+}
+
+// collectionSupportsHybrid checks if a collection has a sparse_embedding field,
+// which indicates it supports hybrid (dense + BM25) search.
+func (so *SearchOrchestrator) collectionSupportsHybrid(ctx context.Context, collection string) bool {
+	fields, err := so.filterBuilder.GetFieldTypes(ctx, collection)
+	if err != nil || len(fields) == 0 {
+		return false
+	}
+	_, hasSparse := fields["sparse_embedding"]
+	return hasSparse
 }
 
 func mergeFilters(global, source map[string]any) map[string]any {
