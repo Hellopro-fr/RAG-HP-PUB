@@ -314,6 +314,19 @@ class PrixExtractor:
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
             self._log(f"[{chunk_index + 1}/{total_chunks}] chunk_metadata: ({chunk_metadata})")
 
+            # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
+            if not re.search(r'€|\beuros?\b|\bEUR\b', chunk_content, re.IGNORECASE):
+                self._log(f"[{chunk_index + 1}/{total_chunks}] ⏭️ Chunk {chunk_id} — aucune mention de prix (€/euro/EUR) → skip")
+                self._flush_chunk_logs(chunk_id)
+                self._current_chunk_id.reset(token)
+                return ItemResult(
+                    item_id=chunk_id,
+                    source=settings.MILVUS_SOURCE,
+                    content=chunk_content,
+                    prix_data=None,
+                    status="skipped"
+                )
+
             # 1. Construire le prompt avec le contenu du chunk
             prompt_text = self._build_prompt(chunk_metadata, category_name)
 
