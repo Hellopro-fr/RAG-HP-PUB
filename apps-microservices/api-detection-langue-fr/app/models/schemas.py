@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 from typing import Optional
 
 
@@ -112,14 +112,19 @@ class BatchDetectionRequest(BaseModel):
     """Requête de détection pour plusieurs URLs"""
     urls: list[str] | None = Field(
         default=None,
-        max_length=100,
         description="[DEPRECATED] Liste d'URLs simples à analyser"
     )
     items: list[BatchItem] | None = Field(
         default=None,
-        max_length=100,
         description="Liste d'items contenant l'URL et le HTML optionnel"
     )
+
+    @model_validator(mode='after')
+    def validate_total_item_count(self) -> 'BatchDetectionRequest':
+        total = len(self.urls or []) + len(self.items or [])
+        if total > 100:
+            raise ValueError(f"Maximum 100 items par requête (reçu : {total})")
+        return self
     mode: DetectionMode = Field(
         default=DetectionMode.COMPLETE,
         description="Mode de détection appliqué à toutes les URLs"

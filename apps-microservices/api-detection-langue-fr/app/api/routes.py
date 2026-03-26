@@ -15,6 +15,7 @@ from app.models.schemas import (
     DebugDetectionResponse
 )
 from app.core.domain_fr import DomainFR, domain_cache
+from app.core.config import settings
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
 
@@ -24,7 +25,7 @@ router = APIRouter()
 
 
 # =============================================================================
-# Helpers partagés (S1 — Strategy pattern : logique unique pour /detect + batch)
+# Helpers partagés
 # =============================================================================
 
 def _build_challenge_error_msg(challenge: str) -> str:
@@ -35,6 +36,11 @@ def _build_challenge_error_msg(challenge: str) -> str:
         error_code = challenge.split('_')[1]
         return f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
     return f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+
+
+def _with_group(result: DetectionResponse, group_key: str) -> DetectionResponse:
+    """Clone un DetectionResponse en ajoutant/remplaçant le champ group."""
+    return DetectionResponse(**{**result.model_dump(), 'group': group_key})
 
 
 async def _detect_single_url(
@@ -141,11 +147,18 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     **Paramètres:**
     - `urls`: [DEPRECATED] Liste d'URLs simples (max 100)
     - `items`: Liste d'objets contenant 'url' et optionnellement 'html_content' (recommandé)
-    - `mode`: simple ou complete (appliqué à tous)
+    - `mode`: simple, complete ou first_match (appliqué à tous)
     - `max_concurrency`: Nombre de requêtes parallèles (1-50, défaut: 10)
 
     **Retourne** les résultats dans le même ordre que les données fournies.
     """
+    # W1 : interdire l'envoi simultané de urls et items
+    if request.items and request.urls:
+        raise HTTPException(
+            status_code=400,
+            detail="Fournir 'items' ou 'urls', pas les deux. 'urls' est déprécié, utilisez 'items'."
+        )
+
     # Unification des entrées (support rétro-compatible)
     items_to_process: list[BatchItem] = []
 
@@ -184,7 +197,11 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
         item_start = time.time()
 
         try:
-            detection_mode = request.mode if request.mode != DetectionMode.FIRST_MATCH else DetectionMode.COMPLETE
+            detection_mode = request.mode
+            if detection_mode == DetectionMode.FIRST_MATCH:
+                detection_mode = DetectionMode.COMPLETE
+                logger.debug(f"[BATCH] Mode first_match → complete pour détection individuelle de {url}")
+
             result = await _detect_single_url(
                 url=url,
                 html_content=item.html_content,
@@ -209,7 +226,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             )
 
     async def process_single(index: int, item: BatchItem) -> DetectionResponse:
-        # W5 : stagger plafonné à une « vague » de concurrence (évite 49.5s pour item 99)
+        # Stagger plafonné à une « vague » de concurrence (évite 49.5s pour item 99)
         if index > 0:
             max_stagger = request.max_concurrency * 0.5
             await asyncio.sleep(min(index * 0.5, max_stagger))
@@ -220,8 +237,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     # Mode first_match : traitement groupé (séquentiel intra-groupe, concurrent inter-groupes)
     # =========================================================================
     if request.mode == DetectionMode.FIRST_MATCH:
-        # W1 : tous les items reçoivent un groupe (implicite si absent)
-        # pour garantir que chaque résultat a un champ group non-null
+        # Tous les items reçoivent un groupe (implicite si absent)
         grouped: dict[str, list[BatchItem]] = {}
         group_order: list[str] = []
 
@@ -236,11 +252,19 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 grouped[implicit_key] = [item]
                 group_order.append(implicit_key)
 
-        # failed_by_group : items fetch_failed/challenge_page par groupe (pour Pass 2)
-        failed_by_group: dict[str, list[BatchItem]] = {}
+        # W3 : process_group retourne un tuple (résultat, items échoués)
+        # au lieu d'écrire dans un dict partagé — élimine le risque de concurrence
+        async def process_group(
+            group_key: str, group_items: list[BatchItem]
+        ) -> tuple[DetectionResponse, list[BatchItem]]:
+            """Séquentiel intra-groupe, stop au premier FR. Retourne (résultat, items échoués)."""
+            # R1 : guard contre group_items vide
+            if not group_items:
+                return (
+                    DetectionResponse(ok=False, url='', method='error', error='Empty group', group=group_key),
+                    []
+                )
 
-        async def process_group(group_key: str, group_items: list[BatchItem]) -> DetectionResponse:
-            """Traitement séquentiel : stop au premier FR. Concurrent avec autres groupes via semaphore."""
             failed: list[BatchItem] = []
             last_result: Optional[DetectionResponse] = None
 
@@ -249,17 +273,18 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                     result = await _process_item_core(item)
                 last_result = result
                 if result.ok:
-                    return DetectionResponse(**{**result.model_dump(), 'group': group_key})
+                    return (_with_group(result, group_key), [])
                 if result.method in ('fetch_failed', 'challenge_page'):
                     failed.append(item)
 
-            failed_by_group[group_key] = failed
-            return DetectionResponse(**{**last_result.model_dump(), 'group': group_key})
+            return (_with_group(last_result, group_key), failed)
 
         # Pass 1 : tous les groupes en parallèle
-        group_results: list[DetectionResponse] = list(await asyncio.gather(*[
+        raw_results = await asyncio.gather(*[
             process_group(key, grouped[key]) for key in group_order
-        ]))
+        ])
+        group_results = [r for r, _ in raw_results]
+        group_failed = {group_order[i]: f for i, (_, f) in enumerate(raw_results)}
 
         pass1_duration = round((time.time() - start_time) * 1000)
         logger.info(f"[BATCH][first_match] Pass 1 termine en {pass1_duration}ms")
@@ -268,7 +293,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
         for i, group_key in enumerate(group_order):
             if group_results[i].ok:
                 continue
-            retry_items = failed_by_group.get(group_key, [])
+            retry_items = group_failed.get(group_key, [])
             if not retry_items:
                 continue
 
@@ -279,11 +304,11 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                     async with semaphore:
                         retry_result = await _process_item_core(item)
                     if retry_result.ok:
-                        group_results[i] = DetectionResponse(**{**retry_result.model_dump(), 'group': group_key})
+                        group_results[i] = _with_group(retry_result, group_key)
                         logger.info(f"[BATCH][first_match] Pass 2 OK groupe '{group_key}' via {item.url}")
                         break
                     if retry_result.method not in ('fetch_failed', 'challenge_page'):
-                        group_results[i] = DetectionResponse(**{**retry_result.model_dump(), 'group': group_key})
+                        group_results[i] = _with_group(retry_result, group_key)
                         break
                 except Exception as e:
                     logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
@@ -515,6 +540,6 @@ async def health_check() -> dict:
     """
     return {
         "status": "healthy",
-        "version": "1.0.0",
+        "version": settings.APP_VERSION,
         "service": "detection-langue-api"
     }

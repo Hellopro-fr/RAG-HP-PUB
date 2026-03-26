@@ -7,6 +7,11 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
+try:
+    import redis.asyncio as aioredis
+except ImportError:
+    aioredis = None
+
 from app.models.schemas import (
     DetectionMode, DetectionResponse, AlternativeUrl,
     DebugDetectionResponse, DebugInfo, DebugFetchInfo, DebugCleaningInfo,
@@ -45,9 +50,8 @@ class DomainCache:
             if not self._initialized:
                 self._initialized = True
                 redis_url = settings.REDIS_URL
-                if redis_url:
+                if redis_url and aioredis:
                     try:
-                        import redis.asyncio as aioredis
                         self._client = aioredis.from_url(redis_url, decode_responses=True)
                         logger.info("Redis cache client créé (connexion au premier appel)")
                     except Exception as e:
@@ -55,12 +59,13 @@ class DomainCache:
         return self._client
 
     @staticmethod
-    def _normalize_domain(url: str) -> str:
+    def _normalize_domain(url: str) -> Optional[str]:
         try:
             hostname = (urlparse(url).hostname or '').lower()
-            return hostname.removeprefix('www.')
+            domain = hostname.removeprefix('www.')
+            return domain if domain else None
         except Exception:
-            return url
+            return None
 
     @staticmethod
     def _cache_key(domain: str) -> str:
@@ -71,8 +76,10 @@ class DomainCache:
         if not client:
             return None
         try:
-            key = self._cache_key(self._normalize_domain(url))
-            data = await client.get(key)
+            domain = self._normalize_domain(url)
+            if not domain:
+                return None
+            data = await client.get(self._cache_key(domain))
             if data:
                 return json.loads(data)
         except Exception as e:
@@ -87,12 +94,14 @@ class DomainCache:
         if result.get('method') in self._ERROR_METHODS:
             return
         try:
+            input_domain = self._normalize_domain(input_url)
+            if not input_domain:
+                return
             ttl = self.TTL_OK if result.get('ok') else self.TTL_NOK
             data = json.dumps(result)
-            input_domain = self._normalize_domain(input_url)
-            result_domain = self._normalize_domain(result_url)
             await client.setex(self._cache_key(input_domain), ttl, data)
-            if result_domain != input_domain:
+            result_domain = self._normalize_domain(result_url)
+            if result_domain and result_domain != input_domain:
                 await client.setex(self._cache_key(result_domain), ttl, data)
         except Exception as e:
             logger.debug(f"Cache set error ({input_url}): {e}")
