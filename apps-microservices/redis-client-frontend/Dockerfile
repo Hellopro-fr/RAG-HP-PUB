@@ -29,10 +29,6 @@ RUN pnpm install
 # Copy the rest of the application source code
 COPY . .
 
-# Set build-time environment variables if needed
-# ARG NEXT_PUBLIC_SOME_VAR
-# ENV NEXT_PUBLIC_SOME_VAR=$NEXT_PUBLIC_SOME_VAR
-
 # Build the Next.js application
 RUN pnpm build
 
@@ -40,9 +36,9 @@ RUN pnpm build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Create a non-root user for security
-RUN addgroup --system --gid 1001 nextjs
-RUN adduser --system --uid 1001 nextjs
+# S5: combine addgroup and adduser into a single RUN to reduce image layers
+RUN addgroup --system --gid 1001 nextjs && \
+    adduser --system --uid 1001 nextjs
 
 # Copy production artifacts from the builder stage
 # The `standalone` output mode bundles only what's necessary to run

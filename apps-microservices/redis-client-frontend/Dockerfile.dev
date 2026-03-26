@@ -8,15 +8,15 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Copy only the package manifest and lockfile to leverage Docker's build cache.
-# This step will only be re-run if these files change.
+# S4: copy manifests first, install, THEN copy source — preserves Docker layer cache
 COPY package.json pnpm-lock.yaml ./
-
-COPY . .
 
 # Install dependencies. `pnpm install` will use the lockfile to ensure
 # consistent dependency versions.
 RUN pnpm install
+
+# Copy the rest of the application source code
+COPY . .
 
 # The source code will be mounted via a volume in docker-compose.
 # This CMD will be executed when the container starts.

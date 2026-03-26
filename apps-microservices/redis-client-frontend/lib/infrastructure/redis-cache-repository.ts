@@ -1,15 +1,20 @@
 // Infrastructure layer: Redis repository
 import { createClient, type RedisClientType } from "redis"
 
-// Singleton pattern to manage the Redis client connection
+// Singleton pattern with connection-promise guard to prevent race conditions (W1)
 let redisClient: RedisClientType | null = null
+let connectingPromise: Promise<RedisClientType> | null = null
 
 async function getRedisClient(): Promise<RedisClientType> {
   if (redisClient && redisClient.isOpen) {
     return redisClient
   }
 
-  // Ensure required environment variables are set
+  // Guard: if a connection attempt is already in flight, await it instead of creating a second one
+  if (connectingPromise) {
+    return connectingPromise
+  }
+
   const host = process.env.REDIS_HOST
   const port = process.env.REDIS_PORT
   const password = process.env.REDIS_SECRET
@@ -18,21 +23,30 @@ async function getRedisClient(): Promise<RedisClientType> {
     throw new Error("Redis connection details (HOST, PORT, PASSWORD) are not configured in environment variables.")
   }
 
-  const client = createClient({
-    url: `redis://:${password}@${host}:${port}`,
-  })
+  // W5: pass password as a separate config field to avoid URL-encoding issues
+  connectingPromise = (async () => {
+    const client = createClient({
+      socket: { host, port: Number(port) },
+      password,
+    })
 
-  client.on("error", (err) => console.error("[v0] Redis Client Background Error:", err))
+    client.on("error", (err: Error) => console.error("[redis-client] Redis Client Background Error:", err))
 
-  try {
+    try {
       await client.connect()
-  } catch (err) {
-      console.error("[v0] FAILED TO CONNECT TO REDIS:", err)
-      redisClient = null // Reset client on connection failure to force re-initialization
-      throw err // Re-throw the original error
-  }
-  redisClient = client as RedisClientType
-  return redisClient
+    } catch (err) {
+      console.error("[redis-client] FAILED TO CONNECT TO REDIS:", err)
+      redisClient = null
+      connectingPromise = null
+      throw err
+    }
+
+    redisClient = client as RedisClientType
+    connectingPromise = null
+    return redisClient
+  })()
+
+  return connectingPromise
 }
 
 export class RedisCacheRepository {
@@ -40,14 +54,22 @@ export class RedisCacheRepository {
     return getRedisClient()
   }
 
+  // C2: use SCAN instead of KEYS * to avoid blocking the Redis event loop
   async getAllKeys(): Promise<string[]> {
     try {
       const client = await this.getClient()
-      const keys = await client.keys("*")
+      const keys: string[] = []
+      let cursor = 0
+
+      do {
+        const result = await client.scan(cursor, { COUNT: 100 })
+        cursor = result.cursor
+        keys.push(...result.keys)
+      } while (cursor !== 0)
+
       return keys
     } catch (error) {
-      console.error("[v0] Error fetching keys:", error)
-      // Throw a more specific error to be handled by the application layer
+      console.error("[redis-client] Error fetching keys:", error)
       throw new Error("Could not fetch keys from Redis.")
     }
   }
@@ -57,7 +79,7 @@ export class RedisCacheRepository {
       const client = await this.getClient()
       return await client.get(key)
     } catch (error) {
-      console.error(`[v0] Error fetching entry for key "${key}":`, error)
+      console.error(`[redis-client] Error fetching entry for key "${key}":`, error)
       return null
     }
   }
@@ -68,7 +90,7 @@ export class RedisCacheRepository {
       const result = await client.del(key)
       return result > 0
     } catch (error) {
-      console.error(`[v0] Error deleting entry for key "${key}":`, error)
+      console.error(`[redis-client] Error deleting entry for key "${key}":`, error)
       return false
     }
   }
@@ -79,7 +101,7 @@ export class RedisCacheRepository {
       await client.flushDb()
       return true
     } catch (error) {
-      console.error("[v0] Error clearing cache:", error)
+      console.error("[redis-client] Error clearing cache:", error)
       return false
     }
   }
@@ -87,17 +109,15 @@ export class RedisCacheRepository {
   async getSize(key: string): Promise<number> {
     try {
       const client = await this.getClient()
-      // MEMORY USAGE provides the most accurate size in bytes.
       const size = await client.memoryUsage(key)
       return size || 0
     } catch (error) {
-      // Fallback for Redis versions or services where MEMORY USAGE is not available.
-      console.warn(`[v0] Could not get memory usage for key "${key}", falling back to string length. Error:`, error)
+      console.warn(`[redis-client] Could not get memory usage for key "${key}", falling back to string length. Error:`, error)
       try {
         const value = await this.getEntry(key)
         return value ? new Blob([value]).size : 0
       } catch (fallbackError) {
-        console.error(`[v0] Error getting size with fallback for key "${key}":`, fallbackError)
+        console.error(`[redis-client] Error getting size with fallback for key "${key}":`, fallbackError)
         return 0
       }
     }
@@ -107,10 +127,9 @@ export class RedisCacheRepository {
     try {
       const client = await this.getClient()
       const ttl = await client.ttl(key)
-      // node-redis returns -1 for no expiry and -2 if the key doesn't exist.
       return ttl > 0 ? ttl : null
     } catch (error) {
-      console.error(`[v0] Error getting TTL for key "${key}":`, error)
+      console.error(`[redis-client] Error getting TTL for key "${key}":`, error)
       return null
     }
   }

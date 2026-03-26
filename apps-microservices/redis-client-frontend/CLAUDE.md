@@ -5,9 +5,8 @@ Web UI for browsing and managing Redis cache entries.
 ## Tech Stack
 
 - **Framework:** Next.js 16 (React 19, TypeScript)
-- **UI:** Radix UI, Tailwind CSS 4, shadcn/ui
+- **UI:** Radix UI (alert-dialog, slot, toast), Tailwind CSS 4, shadcn/ui
 - **Redis:** `redis` npm package (v4)
-- **Forms:** React Hook Form + Zod
 - **Package Manager:** pnpm
 
 ## Commands
@@ -29,23 +28,41 @@ Web UI for browsing and managing Redis cache entries.
 
 ```
 app/
-  page.tsx                    # Main Redis browser page
+  page.tsx                    # Main Redis browser page (Server Component)
   layout.tsx
   globals.css
+  login/
+    page.tsx                  # Token-based login page
   actions/
-    cache-actions.ts          # Server actions for Redis operations
-components/                   # UI components
+    cache-actions.ts          # Server actions for Redis mutations
+middleware.ts                 # Auth middleware (ADMIN_TOKEN env var)
+components/                   # UI components (cache-header, cache-table, confirm-dialog)
 hooks/
 lib/
-styles/
+  domain/cache-entry.ts      # CacheEntry + CacheMetadata interfaces
+  infrastructure/             # Redis repository (Singleton + SCAN)
+  application/                # getCachedData use case (parallel fetches)
+  utils.ts                    # cn(), formatBytes()
 public/
 ```
 
 ## Conventions
 
 - `output: 'standalone'` in next.config.mjs
-- Server actions (`cache-actions.ts`) connect directly to Redis
-- TypeScript build errors ignored (`ignoreBuildErrors: true`)
+- TypeScript build errors are enforced (`ignoreBuildErrors: false`)
+- Redis uses `SCAN` (not `KEYS *`) for non-blocking key enumeration
+- Authentication via `ADMIN_TOKEN` env var (middleware-based, cookie or Bearer header)
+- Server actions validate key format before Redis operations
+- Shared `formatBytes()` utility in `lib/utils.ts`
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `REDIS_HOST` | Yes | Redis server hostname |
+| `REDIS_PORT` | Yes | Redis server port |
+| `REDIS_SECRET` | Yes | Redis password |
+| `ADMIN_TOKEN` | No | Auth token (if unset, auth is disabled — dev mode) |
 
 ## Dependencies
 

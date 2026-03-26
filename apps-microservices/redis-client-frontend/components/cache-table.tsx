@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Trash2, Copy, ChevronDown, ChevronUp } from "lucide-react"
 import { invalidateCacheEntry } from "@/app/actions/cache-actions"
 import { useToast } from "@/hooks/use-toast"
+import { formatBytes } from "@/lib/utils"
 
 type SortField = "key" | "size" | "ttl"
 type SortOrder = "asc" | "desc"
@@ -29,17 +30,17 @@ export function CacheTable({ entries, onDelete }: CacheTableProps) {
     const filtered = entries.filter((entry) => entry.key.toLowerCase().includes(searchTerm.toLowerCase()))
 
     filtered.sort((a, b) => {
-      const aVal: any = a[sortField]
-      const bVal: any = b[sortField]
-
       if (sortField === "key") {
         return sortOrder === "asc" ? a.key.localeCompare(b.key) : b.key.localeCompare(a.key)
       }
 
+      const aVal = a[sortField]
+      const bVal = b[sortField]
+
       if (aVal === undefined || aVal === null) return 1
       if (bVal === undefined || bVal === null) return -1
 
-      if (typeof aVal === "number") {
+      if (typeof aVal === "number" && typeof bVal === "number") {
         return sortOrder === "asc" ? aVal - bVal : bVal - aVal
       }
 
@@ -88,14 +89,6 @@ export function CacheTable({ entries, onDelete }: CacheTableProps) {
     })
   }
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return "0 B"
-    const k = 1024
-    const sizes = ["B", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
-  }
-
   const formatTTL = (ttl?: number) => {
     if (!ttl) return "No expiry"
     if (ttl < 60) return `${ttl}s`
@@ -130,7 +123,7 @@ export function CacheTable({ entries, onDelete }: CacheTableProps) {
       </div>
 
       {filteredAndSortedEntries.length === 0 ? (
-        <div className="py-8 text-center text-muted-foreground">No results matching "{searchTerm}"</div>
+        <div className="py-8 text-center text-muted-foreground">No results matching &quot;{searchTerm}&quot;</div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <Table>
