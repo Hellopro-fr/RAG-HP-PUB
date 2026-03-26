@@ -143,7 +143,7 @@ class PrixExtractor:
         Returns:
             Le prompt final à envoyer au LLM
         """
-        prompt_text = self.prompt_config.get("contenu_prompt", "")
+        # prompt_text = self.prompt_config.get("contenu_prompt", "")
 
         # Remplacer les placeholders si présents
         # prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
@@ -313,7 +313,7 @@ class PrixExtractor:
         """
         async with self._semaphore:
             item_id = str(item.get("id", item.get("item_id", f"item_{item_index}")))
-            item_content = str(item.get("content", item.get("text", item.get("data", ""))))
+            item_content = json.dumps(item, ensure_ascii=False)
             source_chunk_id = str(item.get("source_chunk_id", item.get("id", f"item_{item_index}")))
 
             # Activer le contexte item pour bufferiser les logs
@@ -446,8 +446,7 @@ class PrixExtractor:
             ]
         """
         # Valeurs par défaut depuis les settings
-        # logger.info(f"Prompt Recherche de prix: '{self.prompt_config}'")
-        self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
+        # self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
         
         if not self.prompt_config:
             logger.warning(f"Prompt ID {self.PROMPT_ID} non trouvé, "
