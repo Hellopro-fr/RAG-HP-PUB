@@ -1,0 +1,525 @@
+package api
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/hellopro/mcp-gateway/internal/db"
+	"github.com/hellopro/mcp-gateway/internal/gateway"
+	"github.com/hellopro/mcp-gateway/internal/repository"
+)
+
+// Handler holds dependencies for the REST API.
+type Handler struct {
+	repo     *repository.ServerRepo
+	gw       *gateway.Gateway
+	registry *gateway.Registry
+}
+
+// NewHandler creates a new API handler.
+func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry) *Handler {
+	return &Handler{repo: repo, gw: gw, registry: registry}
+}
+
+// ── Create Server ─────────────────────────────────────────────────────────────
+
+func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
+	var req CreateServerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON body"})
+		return
+	}
+	if req.Name == "" || req.URL == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "name and url are required"})
+		return
+	}
+
+	pref := req.TransportPreference
+	if pref == "" {
+		pref = "auto"
+	}
+	if pref != "auto" && pref != "sse" && pref != "streamable-http" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "transport_preference must be auto, sse, or streamable-http"})
+		return
+	}
+
+	mcpTransport := req.MCPTransport
+	if mcpTransport == "" {
+		mcpTransport = "http"
+	}
+	if mcpTransport != "http" && mcpTransport != "sse" && mcpTransport != "stdio" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "mcp_transport must be http, sse, or stdio"})
+		return
+	}
+
+	id := uuid.New().String()
+	srv := db.MCPServer{
+		ID:                  id,
+		Name:                req.Name,
+		URL:                 strings.TrimRight(req.URL, "/"),
+		TransportPreference: pref,
+		ConnectTimeoutMs:    10000,
+		IsActive:            true,
+		HealthStatus:        "unknown",
+		MCPTransport:        mcpTransport,
+		MCPCommand:          req.MCPCommand,
+	}
+	if req.ConnectTimeoutMs != nil {
+		srv.ConnectTimeoutMs = *req.ConnectTimeoutMs
+	}
+	if len(req.MCPArgs) > 0 {
+		srv.MCPArgs, _ = json.Marshal(req.MCPArgs)
+	}
+	if len(req.MCPEnv) > 0 {
+		srv.MCPEnv, _ = json.Marshal(req.MCPEnv)
+	}
+	if len(req.MCPHeaders) > 0 {
+		srv.MCPHeaders, _ = json.Marshal(req.MCPHeaders)
+	}
+
+	// Encode auth headers as JSON bytes for encryption
+	if len(req.AuthHeaders) > 0 {
+		b, _ := json.Marshal(req.AuthHeaders)
+		srv.AuthHeaders = b
+	}
+
+	if err := h.repo.Create(&srv); err != nil {
+		if strings.Contains(err.Error(), "Duplicate") {
+			writeJSON(w, http.StatusConflict, ErrorResponse{Error: "a server with this URL already exists"})
+			return
+		}
+		log.Printf("[api] create server error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to create server"})
+		return
+	}
+
+	// Sauvegarde les tags
+	if len(req.Tags) > 0 {
+		if err := h.repo.SaveTags(id, req.Tags); err != nil {
+			log.Printf("[api] save tags error: %v", err)
+		}
+	}
+
+	// Découverte automatique
+	if req.AutoDiscover {
+		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, parseAuthHeaders(srv.AuthHeaders)); err != nil {
+			log.Printf("[api] auto-discover failed for %s: %v", srv.URL, err)
+			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
+		} else {
+			// Récupère le serveur mis à jour pour sauvegarder les capabilities
+			if backend := h.registry.FindByID(id); backend != nil {
+				h.saveBackendCapabilities(id, backend)
+			}
+		}
+	}
+
+	// Récupère le serveur complet pour la réponse
+	created, err := h.repo.GetByID(id)
+	if err != nil {
+		log.Printf("[api] get created server error: %v", err)
+		writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+		return
+	}
+	writeJSON(w, http.StatusCreated, toServerResponse(created))
+}
+
+// ── List Servers ──────────────────────────────────────────────────────────────
+
+func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
+	var isActive *bool
+	if v := r.URL.Query().Get("is_active"); v != "" {
+		b := v == "true"
+		isActive = &b
+	}
+	tag := r.URL.Query().Get("tag")
+
+	servers, err := h.repo.ListAll(isActive, tag)
+	if err != nil {
+		log.Printf("[api] list servers error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
+		return
+	}
+
+	resp := ListServersResponse{
+		Servers: make([]ServerResponse, 0, len(servers)),
+		Total:   len(servers),
+	}
+	for i := range servers {
+		resp.Servers = append(resp.Servers, toServerResponse(&servers[i]))
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── Get Server ────────────────────────────────────────────────────────────────
+
+func (h *Handler) handleGetServer(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r)
+	srv, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, toServerDetailResponse(srv))
+}
+
+// ── Update Server ─────────────────────────────────────────────────────────────
+
+func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r)
+
+	existing, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+
+	var req UpdateServerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON body"})
+		return
+	}
+
+	updates := make(map[string]interface{})
+	urlChanged := false
+	authChanged := false
+
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.URL != nil {
+		updates["url"] = strings.TrimRight(*req.URL, "/")
+		urlChanged = true
+	}
+	if len(req.AuthHeaders) > 0 {
+		b, _ := json.Marshal(req.AuthHeaders)
+		tmpSrv := &db.MCPServer{AuthHeaders: b}
+		if err := h.repo.EncryptAuthHeaders(tmpSrv); err == nil {
+			updates["auth_headers"] = tmpSrv.AuthHeaders
+		} else {
+			updates["auth_headers"] = b
+		}
+		authChanged = true
+	}
+	if req.TransportPreference != nil {
+		updates["transport_preference"] = *req.TransportPreference
+	}
+	if req.ConnectTimeoutMs != nil {
+		updates["connect_timeout_ms"] = *req.ConnectTimeoutMs
+	}
+	if req.MCPTransport != nil {
+		updates["mcp_transport"] = *req.MCPTransport
+	}
+	if req.MCPCommand != nil {
+		updates["mcp_command"] = *req.MCPCommand
+	}
+	if req.MCPArgs != nil {
+		b, _ := json.Marshal(*req.MCPArgs)
+		updates["mcp_args"] = b
+	}
+	if len(req.MCPEnv) > 0 {
+		b, _ := json.Marshal(req.MCPEnv)
+		updates["mcp_env"] = b
+	}
+	if len(req.MCPHeaders) > 0 {
+		b, _ := json.Marshal(req.MCPHeaders)
+		updates["mcp_headers"] = b
+	}
+
+	if len(updates) > 0 {
+		if err := h.repo.Update(id, updates); err != nil {
+			log.Printf("[api] update server error: %v", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to update server"})
+			return
+		}
+	}
+
+	if req.Tags != nil {
+		if err := h.repo.SaveTags(id, *req.Tags); err != nil {
+			log.Printf("[api] save tags error: %v", err)
+		}
+	}
+
+	// Re-discover if URL or auth headers changed
+	if (urlChanged || authChanged) && existing.IsActive {
+		h.registry.Unregister(id)
+		// Re-read from DB to get the fully updated record
+		refreshed, _ := h.repo.GetByID(id)
+		if err := h.gw.DiscoverAndRegister(r.Context(), id, refreshed.URL, parseAuthHeaders(refreshed.AuthHeaders)); err != nil {
+			log.Printf("[api] re-discover failed for %s: %v", refreshed.URL, err)
+			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
+		} else {
+			if backend := h.registry.FindByID(id); backend != nil {
+				h.saveBackendCapabilities(id, backend)
+			}
+		}
+	}
+
+	updated, _ := h.repo.GetByID(id)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
+// ── Delete Server ─────────────────────────────────────────────────────────────
+
+func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r)
+	h.registry.Unregister(id)
+	if err := h.repo.Delete(id); err != nil {
+		log.Printf("[api] delete server error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Enable / Disable ──────────────────────────────────────────────────────────
+
+func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r)
+	srv, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+
+	if err := h.repo.SetActive(id, true); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to enable server"})
+		return
+	}
+
+	// Découvrir et enregistrer
+	if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, parseAuthHeaders(srv.AuthHeaders)); err != nil {
+		log.Printf("[api] discover on enable failed for %s: %v", srv.URL, err)
+		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
+	} else {
+		if backend := h.registry.FindByID(id); backend != nil {
+			h.saveBackendCapabilities(id, backend)
+		}
+	}
+
+	updated, _ := h.repo.GetByID(id)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
+func (h *Handler) handleDisableServer(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r)
+	if err := h.repo.SetActive(id, false); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable server"})
+		return
+	}
+	h.registry.Unregister(id)
+
+	updated, _ := h.repo.GetByID(id)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
+// ── Discover ──────────────────────────────────────────────────────────────────
+
+func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r)
+	srv, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+
+	h.registry.Unregister(id)
+	if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, parseAuthHeaders(srv.AuthHeaders)); err != nil {
+		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "discovery failed: " + err.Error()})
+		return
+	}
+
+	if backend := h.registry.FindByID(id); backend != nil {
+		h.saveBackendCapabilities(id, backend)
+	}
+
+	updated, _ := h.repo.GetByID(id)
+	writeJSON(w, http.StatusOK, toServerDetailResponse(updated))
+}
+
+// ── Aggregated listings ───────────────────────────────────────────────────────
+
+func (h *Handler) handleListAllTools(w http.ResponseWriter, r *http.Request) {
+	tools := h.registry.MergedTools()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"tools": tools, "total": len(tools)})
+}
+
+func (h *Handler) handleListAllResources(w http.ResponseWriter, r *http.Request) {
+	resources := h.registry.MergedResources()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"resources": resources, "total": len(resources)})
+}
+
+func (h *Handler) handleListAllPrompts(w http.ResponseWriter, r *http.Request) {
+	prompts := h.registry.MergedPrompts()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"prompts": prompts, "total": len(prompts)})
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendServer) {
+	capsRaw, _ := json.Marshal(backend.Capabilities)
+	dbSrv := &db.MCPServer{
+		ID:            id,
+		MessageURL:    backend.MessageURL,
+		TransportType: backend.TransportType,
+		ServerName:    backend.Name,
+		ServerVersion: backend.Version,
+		CapabilitiesRaw: capsRaw,
+	}
+	for _, t := range backend.Tools {
+		dbSrv.Tools = append(dbSrv.Tools, db.ServerTool{
+			Name:        t.Name,
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+		})
+	}
+	for _, res := range backend.Resources {
+		dbSrv.Resources = append(dbSrv.Resources, db.ServerResource{
+			URI:         res.URI,
+			Name:        res.Name,
+			Description: res.Description,
+			MimeType:    res.MimeType,
+		})
+	}
+	for _, p := range backend.Prompts {
+		sp := db.ServerPrompt{
+			Name:        p.Name,
+			Description: p.Description,
+		}
+		for _, a := range p.Arguments {
+			sp.Arguments = append(sp.Arguments, db.PromptArgument{
+				Name:        a.Name,
+				Description: a.Description,
+				IsRequired:  a.Required,
+			})
+		}
+		dbSrv.Prompts = append(dbSrv.Prompts, sp)
+	}
+
+	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
+		log.Printf("[api] save capabilities error for %s: %v", id, err)
+	}
+}
+
+func extractID(r *http.Request) string {
+	// URL pattern: /api/v1/servers/{id} or /api/v1/servers/{id}/action
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return ""
+}
+
+func toServerResponse(srv *db.MCPServer) ServerResponse {
+	tags := make([]string, 0, len(srv.Tags))
+	for _, t := range srv.Tags {
+		tags = append(tags, t.Tag)
+	}
+
+	// Decode MCP JSON fields
+	var mcpArgs []string
+	if len(srv.MCPArgs) > 0 {
+		json.Unmarshal(srv.MCPArgs, &mcpArgs)
+	}
+	var mcpEnv map[string]string
+	if len(srv.MCPEnv) > 0 {
+		json.Unmarshal(srv.MCPEnv, &mcpEnv)
+	}
+	var mcpHeaders map[string]string
+	if len(srv.MCPHeaders) > 0 {
+		json.Unmarshal(srv.MCPHeaders, &mcpHeaders)
+	}
+
+	return ServerResponse{
+		ID:                  srv.ID,
+		Name:                srv.Name,
+		URL:                 srv.URL,
+		MessageURL:          srv.MessageURL,
+		TransportType:       srv.TransportType,
+		ServerName:          srv.ServerName,
+		ServerVersion:       srv.ServerVersion,
+		TransportPreference: srv.TransportPreference,
+		ConnectTimeoutMs:    srv.ConnectTimeoutMs,
+		IsActive:            srv.IsActive,
+		HealthStatus:        srv.HealthStatus,
+		LastHealthCheck:     srv.LastHealthCheck,
+		LastError:           srv.LastError,
+		LastDiscoveredAt:    srv.LastDiscoveredAt,
+		ToolsCount:          len(srv.Tools),
+		ResourcesCount:      len(srv.Resources),
+		PromptsCount:        len(srv.Prompts),
+		MCPTransport:        srv.MCPTransport,
+		MCPCommand:          srv.MCPCommand,
+		MCPArgs:             mcpArgs,
+		MCPEnv:              mcpEnv,
+		MCPHeaders:          mcpHeaders,
+		Tags:                tags,
+		CreatedAt:           srv.CreatedAt,
+		UpdatedAt:           srv.UpdatedAt,
+	}
+}
+
+func toServerDetailResponse(srv *db.MCPServer) ServerDetailResponse {
+	resp := ServerDetailResponse{
+		ServerResponse: toServerResponse(srv),
+		Tools:          make([]ToolResponse, 0, len(srv.Tools)),
+		Resources:      make([]ResourceResponse, 0, len(srv.Resources)),
+		Prompts:        make([]PromptResponse, 0, len(srv.Prompts)),
+	}
+	for _, t := range srv.Tools {
+		resp.Tools = append(resp.Tools, ToolResponse{
+			Name:        t.Name,
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+		})
+	}
+	for _, res := range srv.Resources {
+		resp.Resources = append(resp.Resources, ResourceResponse{
+			URI:         res.URI,
+			Name:        res.Name,
+			Description: res.Description,
+			MimeType:    res.MimeType,
+		})
+	}
+	for _, p := range srv.Prompts {
+		pr := PromptResponse{
+			Name:        p.Name,
+			Description: p.Description,
+			Arguments:   make([]PromptArgumentResponse, 0, len(p.Arguments)),
+		}
+		for _, a := range p.Arguments {
+			pr.Arguments = append(pr.Arguments, PromptArgumentResponse{
+				Name:        a.Name,
+				Description: a.Description,
+				IsRequired:  a.IsRequired,
+			})
+		}
+		resp.Prompts = append(resp.Prompts, pr)
+	}
+	return resp
+}
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
+// parseAuthHeaders extracts auth headers from the DB model's encrypted []byte field.
+func parseAuthHeaders(raw []byte) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var headers map[string]string
+	if err := json.Unmarshal(raw, &headers); err != nil {
+		return nil
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
+}

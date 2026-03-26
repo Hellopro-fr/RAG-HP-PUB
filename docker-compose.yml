@@ -633,7 +633,7 @@ services:
   mysql:
     image: mysql:8.0
     container_name: mysql
-    profiles: ["app"]
+    profiles: ["app", "mcp"]
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=${GATEWAY_MYSQL_ROOT_PASSWORD:-gateway_root_pass}
@@ -645,6 +645,7 @@ services:
       - "${GATEWAY_MYSQL_PORT:-3306}:${GATEWAY_MYSQL_PORT:-3306}"
     volumes:
       - gateway_mysql_data:/var/lib/mysql
+      - ./apps-microservices/mcp-gateway-service/init-db:/docker-entrypoint-initdb.d:ro
     networks:
       - services-net
     healthcheck:
@@ -1165,7 +1166,7 @@ services:
     profiles: ["disabled"]
     restart: unless-stopped
     ports:
-      - "8585:8560"
+      - "8560:8560"
     env_file:
       - .env
     environment:
@@ -2091,6 +2092,34 @@ services:
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - LLM_SERVICE_URL=llm-service:50051
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Gateway Service ──────────────────────────────────────────────
+  mcp-gateway-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-gateway-service/Dockerfile
+    container_name: mcp-gateway-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "${MCP_GATEWAY_PORT:-8581}:${MCP_GATEWAY_PORT:-8581}"
+    environment:
+      - MCP_GATEWAY_PORT=${MCP_GATEWAY_PORT:-8581}
+      - MCP_GATEWAY_NAME=${MCP_GATEWAY_NAME:-hellopro-mcp-gateway}
+      - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/mcp_gateway?parseTime=true&multiStatements=true
+      - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
+      - HEALTH_CHECK_INTERVAL=${MCP_HEALTH_CHECK_INTERVAL:-30}
+      - AUTH_ENABLED=${MCP_AUTH_ENABLED}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGO=${JWT_ALGO}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+      - AUTH_URL=${AUTH_URL}
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
     networks:
       - services-net
     logging: *logging_defaults
