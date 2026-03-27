@@ -61,8 +61,7 @@ class ImageProcessor:
             except Exception as pil_error:
                 # If SVG, it might start with <svg
                 if b'<svg' in header_bytes or b'<?xml' in header_bytes:
-                     logger.warning(f"SVG detected for {product_id}, skipping (PIL does not support SVG).")
-                     return None
+                     raise ValueError(f"SVG détecté pour le produit {product_id} — format non supporté (PIL ne supporte pas SVG)")
                 raise pil_error
 
             original_format = image.format.upper() if image.format else "JPEG"
