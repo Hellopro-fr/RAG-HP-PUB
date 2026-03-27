@@ -305,8 +305,21 @@ class PrixExtractor:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
             # Les données Milvus sont dans metadata.entity
             metadata = chunk.get("metadata", {})
+
             chunk_metadata = metadata.get("entity", metadata)
             chunk_content = chunk_metadata.get("text", "")
+
+            # verification s'il y a context_pre et context_post dans metadata ajouter dans avant / apres chunk_content
+            # possible null
+            # maj metadata.entity.text avec chunk_content
+            if "context_pre" in metadata and "context_post" in metadata:
+                self._log(f"[{chunk_index + 1}/{total_chunks}] context_pre: {metadata['context_pre']}")
+                self._log(f"[{chunk_index + 1}/{total_chunks}] context_post: {metadata['context_post']}")
+                chunk_metadata["text"] = metadata["context_pre"] + "  " + chunk_content + "  " + metadata["context_post"]
+                chunk_metadata["context_pre"] = metadata["context_pre"]
+                chunk_metadata["context_post"] = metadata["context_post"]
+                chunk_content = chunk_metadata["text"]
+
 
             # Activer le contexte chunk pour bufferiser les logs
             token = self._current_chunk_id.set(chunk_id)
@@ -546,10 +559,6 @@ class PrixExtractor:
                 source=settings.MILVUS_SOURCE,
                 filtre=filtre_page_type
             )
-
-            self._log(f"Chunks trouvés: {chunks}")
-            raise Exception("Chunks trouvés")
-            return None
 
             if not chunks:
                 self._log(f"⚠️ Aucun résultat Milvus pour Q1[{idx_q1}]")
