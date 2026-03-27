@@ -15,11 +15,11 @@ class DetectionRequest(BaseModel):
     url: str = Field(..., description="URL du site à analyser")
     mode: DetectionMode = Field(
         default=DetectionMode.COMPLETE,
-        description="Mode de détection: simple ou complete"
+        description="Mode de détection: simple (URL + HTML lang), complete (+ NLP + alternatives), first_match (batch uniquement)"
     )
     html_content: Optional[str] = Field(
         default=None,
-        description="Contenu HTML déjà récupéré (optionnel)"
+        description="Contenu HTML déjà récupéré (skip fetch + skip cache)"
     )
     proxy_url: Optional[str] = Field(
         default=None,

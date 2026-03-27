@@ -115,15 +115,23 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
     """
     Détecte si un site est en français ou dispose d'une version française.
 
-    **Modes:**
-    - `simple`: Vérifie URL + attribut lang HTML uniquement (comportement TypeScript)
-    - `complete`: + recherche de liens alternatifs hreflang, options, etc. (comportement PHP)
+    **Pipeline :** Cache Redis → Fetch HTML (Playwright + proxy) → Détection challenge →
+    Analyse URL → Balises HTML → NLP (fastText + langdetect/langid) → Liens alternatifs →
+    Matrice de décision (9 cas).
 
-    **Paramètres optionnels:**
-    - `html_content`: Si le HTML est déjà disponible, évite une requête HTTP
-    - `proxy_url`: Proxy à utiliser pour les requêtes
-    - `forced_method`: Force une méthode de détection spécifique
-    - `use_nlp_detection`: Active/désactive la détection NLP par contenu textuel
+    **Modes :**
+    - `simple` : URL + attribut lang HTML uniquement (rapide)
+    - `complete` : + NLP + recherche liens alternatifs hreflang, data-lang, options (complet)
+
+    **Cache :** Résultat caché par domaine (30j ok, 7j nok, 6h transitoire).
+    Bypass via `force_refresh=true`. Skip automatique si `html_content` fourni.
+
+    **Paramètres optionnels :**
+    - `html_content` : HTML déjà disponible → skip fetch + skip cache
+    - `proxy_url` : Proxy personnalisé (défaut: APIFY_PROXY)
+    - `force_refresh` : Ignorer le cache et forcer une nouvelle détection
+    - `forced_method` : Forcer une méthode de détection spécifique
+    - `use_nlp_detection` : Active/désactive la détection NLP
     """
     if request.mode == DetectionMode.FIRST_MATCH:
         raise HTTPException(
@@ -152,10 +160,21 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     """
     Traitement par lot : détecte plusieurs URLs en parallèle.
 
-    **Paramètres:**
-    - `items`: Liste d'objets contenant 'url' et optionnellement 'html_content' (max 100)
-    - `mode`: simple, complete ou first_match (appliqué à tous)
-    - `max_concurrency`: Nombre de requêtes parallèles (1-50, défaut: 10)
+    **Traitement 2-pass :**
+    1. **Pass 1** — Traitement parallèle avec stagger (0.5s/item, plafonné à une vague de concurrence)
+    2. **Pass 2** — Retry séquentiel (2s entre chaque) pour les `fetch_failed` et `challenge_page`
+
+    **Mode `first_match` :** Traitement groupé — séquentiel intra-groupe (stop au premier FR),
+    concurrent inter-groupes. Utile pour tester plusieurs URLs d'un même fournisseur.
+
+    **Cache :** Chaque URL est vérifiée/stockée individuellement en cache Redis.
+    `force_refresh=true` bypass le cache pour toutes les URLs du lot.
+
+    **Paramètres :**
+    - `items` : Liste d'objets {url, html_content?, group?} (max 100)
+    - `mode` : simple, complete ou first_match
+    - `max_concurrency` : Requêtes parallèles (1-50, défaut: 10)
+    - `force_refresh` : Ignorer le cache pour toutes les URLs
 
     **Retourne** les résultats dans le même ordre que les données fournies.
     """
