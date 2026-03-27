@@ -294,6 +294,9 @@ class PrixExtractor:
         """
         async with self._semaphore:
             item_id = str(item.get("id_lead", item.get("id", f"item_{item_index}")))
+            #Ajouter id_fournisseur sur id_lead si n'est pas vide
+            if item.get("id_fournisseur") and item.get("id_fournisseur") != "" and item.get("id_fournisseur") is not None:
+                item_id = f"{item_id}_{item.get('id_fournisseur')}"
             item_content = utils.to_json_string(item)
 
             # Activer le contexte item pour bufferiser les logs
