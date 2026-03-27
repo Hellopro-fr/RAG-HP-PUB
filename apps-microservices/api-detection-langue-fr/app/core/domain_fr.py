@@ -1073,7 +1073,9 @@ class DomainFR:
 
             for alt_candidate in reliable_alternatives:
                 try:
-                    alt_content_result = await fetch_html(alt_candidate.url)
+                    alt_content_result = await asyncio.wait_for(
+                        fetch_html(alt_candidate.url), timeout=120
+                    )
                     if not alt_content_result:
                         logger.warning(f"Impossible de récupérer le contenu de l'alternative {alt_candidate.url}")
                         fetch_failed_count += 1
@@ -1143,6 +1145,10 @@ class DomainFR:
                         )
                         continue
 
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout fetch alternative {alt_candidate.url} (120s)")
+                    fetch_failed_count += 1
+                    continue
                 except Exception as alt_e:
                     logger.warning(f"Erreur vérification alternative {alt_candidate.url}: {alt_e}")
                     fetch_failed_count += 1

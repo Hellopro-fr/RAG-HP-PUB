@@ -238,7 +238,15 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             max_stagger = request.max_concurrency * 0.5
             await asyncio.sleep(min(index * 0.5, max_stagger))
         async with semaphore:
-            return await _process_item_core(item)
+            try:
+                return await asyncio.wait_for(_process_item_core(item), timeout=300)
+            except asyncio.TimeoutError:
+                count = await _increment_count()
+                logger.error(f"[BATCH] [{count}/{total_items}] TIMEOUT {item.url} après 300s")
+                return DetectionResponse(
+                    ok=False, url=item.url, method='error',
+                    error='Timeout global item (300s)'
+                )
 
     # =========================================================================
     # Mode first_match : traitement groupé (séquentiel intra-groupe, concurrent inter-groupes)
