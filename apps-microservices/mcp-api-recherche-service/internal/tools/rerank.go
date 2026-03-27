@@ -8,21 +8,21 @@ import (
 	rerankingpb "github.com/hellopro/mcp-api-recherche/proto/gen/reranking"
 )
 
-const rerankDescription = "Re-rank a list of text documents by relevance to a query using a cross-encoder model (BAAI/bge-reranker-v2-m3). " +
-	"Returns documents sorted by relevance with scores. " +
-	"Useful when you have search results and want to re-order them by relevance to a refined query."
+const rerankDescription = "Re-classer une liste de documents textuels par pertinence par rapport à une requête à l'aide d'un modèle cross-encoder (BAAI/bge-reranker-v2-m3). " +
+	"Retourne les documents triés par pertinence avec leurs scores. " +
+	"Utile lorsque vous avez des résultats de recherche et souhaitez les réordonner par pertinence par rapport à une requête affinée."
 
 const rerankInputSchema = `{
 	"type": "object",
 	"properties": {
 		"query": {
 			"type": "string",
-			"description": "The query to rank documents against"
+			"description": "La requête par rapport à laquelle classer les documents"
 		},
 		"documents": {
 			"type": "array",
 			"items": { "type": "string" },
-			"description": "List of text documents to re-rank"
+			"description": "Liste de documents textuels à re-classer"
 		}
 	},
 	"required": ["query", "documents"]

@@ -10,25 +10,25 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-const llmChatDescription = "Send a prompt to the internal LLM service (vLLM-hosted models). " +
-	"Use this only when you need a response from a specific model hosted in the HelloPro infrastructure, " +
-	"not for general-purpose chat."
+const llmChatDescription = "Envoyer un prompt au service LLM interne (modèles hébergés via vLLM). " +
+	"À utiliser uniquement lorsque vous avez besoin d'une réponse d'un modèle spécifique hébergé dans l'infrastructure HelloPro, " +
+	"pas pour du chat généraliste."
 
 const llmChatInputSchema = `{
 	"type": "object",
 	"properties": {
 		"message": {
 			"type": "string",
-			"description": "The prompt message to send to the LLM"
+			"description": "Le message prompt à envoyer au LLM"
 		},
 		"temperature": {
 			"type": "number",
-			"description": "Sampling temperature (0.0 = deterministic, 1.0 = creative)",
+			"description": "Température d'échantillonnage (0.0 = déterministe, 1.0 = créatif)",
 			"default": 0.0
 		},
 		"max_tokens": {
 			"type": "integer",
-			"description": "Maximum tokens in the response",
+			"description": "Nombre maximum de tokens dans la réponse",
 			"default": 4096
 		}
 	},
