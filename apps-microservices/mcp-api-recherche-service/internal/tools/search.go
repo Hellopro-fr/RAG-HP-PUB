@@ -9,6 +9,8 @@ import (
 )
 
 const searchDescription = "Rechercher dans la base de connaissances HelloPro à travers les catalogues produits, sites web, devis, échanges et bases de données de prix. " +
+	"IMPORTANT : avant d'utiliser cet outil, appelez d'abord get_collection_schema pour découvrir les champs disponibles de chaque collection, " +
+	"puis spécifiez uniquement les champs nécessaires via output_fields au lieu de récupérer tous les champs. " +
 	"Supporte la recherche sémantique vectorielle, la recherche par mots-clés/filtres, et la recherche hybride (vecteur + BM25). " +
 	"Les résultats sont optionnellement re-classés par pertinence à l'aide d'un modèle cross-encoder. " +
 	"Retourne des correspondances structurées regroupées par collection source avec métadonnées et scores de pertinence."
@@ -51,7 +53,7 @@ const searchInputSchema = `{
 		"output_fields": {
 			"type": "array",
 			"items": { "type": "string" },
-			"description": "Champs spécifiques à inclure dans les résultats. Utilisez get_collection_schema pour découvrir les champs disponibles. Vide signifie tous les champs."
+			"description": "Champs spécifiques à inclure dans les résultats (obligatoire : appelez get_collection_schema au préalable pour connaître les champs disponibles, puis ne demandez que ceux dont vous avez besoin). Ne pas renseigner ce champ retourne tous les champs, ce qui est déconseillé."
 		},
 		"search_type": {
 			"type": "string",
