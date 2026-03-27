@@ -43,7 +43,9 @@ export interface PrixReponse {
 export interface PrixApiResponse {
   success: boolean;
   reponse: PrixReponse;
-  api_response?: any; // Debug Gemini — ignoré côté frontend
+  api_response?: any;      // Debug Gemini — ignoré côté frontend
+  time_elapsed?: number;   // secondes (ex: 6.101902)
+  message?: string;        // ex: "50 chunks traités en 6.1s"
 }
 
 /** État de l'estimation de prix dans le flow-store */

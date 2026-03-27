@@ -5,6 +5,7 @@ import { useFlowStore } from '@/lib/stores/flow-store';
 import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
 import { buildTexteRecherchePrix } from '@/lib/utils/build-texte-recherche-prix';
 import { basePath } from '@/lib/utils';
+import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import type { PrixApiResponse } from '@/types/prix';
 
 const getApiBasePath = () => {
@@ -25,6 +26,8 @@ export function usePriceEstimation() {
     characteristicsMap,
     setPriceEstimation,
   } = useFlowStore();
+
+  const { trackDbEvent } = useDbTracking();
 
   const fetchPriceEstimation = useCallback(async () => {
     // 1. Consolider les équivalences du questionnaire
@@ -61,37 +64,60 @@ export function usePriceEstimation() {
         return;
       }
 
-      console.log('[usePriceEstimation] Calling prix API with:', {
+      const requestPayload = {
         id_categorie: categoryId,
         texte_recherche: texteRecherche,
         nom_categorie: categoryName,
-      });
+      };
+
+      console.log('[usePriceEstimation] Calling prix API with:', requestPayload);
 
       // 5. Appeler l'API prix
       const apiBase = getApiBasePath();
+      const startTime = performance.now();
       const res = await fetch(`${apiBase}/api/prix`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id_categorie: categoryId,
-          texte_recherche: texteRecherche,
-          nom_categorie: categoryName,
-        }),
+        body: JSON.stringify(requestPayload),
       });
+      const durationUtilisateur = Math.round(performance.now() - startTime);
 
       if (!res.ok) throw new Error(`Prix API error: ${res.status}`);
 
       const data: PrixApiResponse = await res.json();
 
+      // Données de tracking communes (requête + temps)
+      const trackingRequest = {
+        id_categorie: categoryId,
+        texte_recherche: texteRecherche,
+        nom_categorie: categoryName,
+        equivalences_count: consolidated.length,
+        prix_caracs_count: caracsPrixIds.length,
+      };
+
       // 6. Validation : borne_basse === 0 → erreur backend silencieuse
       if (!data.success || !data.reponse) {
         console.warn('[usePriceEstimation] API returned success=false or no reponse');
+        trackDbEvent('pricing', 'estimation_empty', {
+          request: trackingRequest,
+          reason: 'api_returned_no_data',
+          duration_utilisateur: durationUtilisateur,
+          time_elapsed: data.time_elapsed,
+          message: data.message,
+        }, categoryId);
         setPriceEstimation({ data: null, error: 'No price data' });
         return;
       }
 
       if (data.reponse.fourchette.borne_basse === 0) {
         console.warn('[usePriceEstimation] borne_basse === 0, treating as backend error');
+        trackDbEvent('pricing', 'estimation_empty', {
+          request: trackingRequest,
+          reason: 'borne_basse_zero',
+          duration_utilisateur: durationUtilisateur,
+          time_elapsed: data.time_elapsed,
+          message: data.message,
+        }, categoryId);
         setPriceEstimation({ data: null, error: 'borne_basse is 0' });
         return;
       }
@@ -104,10 +130,43 @@ export function usePriceEstimation() {
         exemples: data.reponse.exemples_produits.length,
       });
 
+      // Tracking DB — estimation réussie
+      trackDbEvent('pricing', 'estimation_success', {
+        request: trackingRequest,
+        response: {
+          fourchette: data.reponse.fourchette,
+          exemples_produits: data.reponse.exemples_produits.map(p => ({
+            nom: p.nom,
+            fournisseur: p.fournisseur,
+            prix: p.prix,
+            date: p.date,
+            tva: p.tva,
+          })),
+          phrase_prix: data.reponse.phrase_prix,
+          model_version: data.api_response?.model_version,
+          usage_metadata: data.api_response?.usage_metadata ? {
+            prompt_token_count: data.api_response.usage_metadata.prompt_token_count,
+            candidates_token_count: data.api_response.usage_metadata.candidates_token_count,
+            total_token_count: data.api_response.usage_metadata.total_token_count,
+          } : undefined,
+        },
+        duration_utilisateur: durationUtilisateur,
+        time_elapsed: data.time_elapsed,
+        message: data.message,
+      }, categoryId);
+
       setPriceEstimation({ data: data.reponse, error: null });
 
     } catch (err) {
       console.error('[usePriceEstimation] Error:', err);
+      trackDbEvent('pricing', 'estimation_error', {
+        request: {
+          id_categorie: categoryId,
+          nom_categorie: categoryName,
+        },
+        duration_utilisateur: null,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }, categoryId);
       setPriceEstimation({
         data: null,
         error: err instanceof Error ? err.message : 'Unknown error',
@@ -121,6 +180,7 @@ export function usePriceEstimation() {
     caracteristiquesPrix,
     characteristicsMap,
     setPriceEstimation,
+    trackDbEvent,
   ]);
 
   return { fetchPriceEstimation };
