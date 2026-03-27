@@ -2,19 +2,28 @@ import asyncio
 import httpx
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 from app.core.config import settings
 
-# Erreurs non-retryables (échecs permanents — inutile de réessayer)
-# ignore_https_errors=True gère la plupart des erreurs SSL, mais si elles
-# apparaissent malgré tout, c'est un problème permanent côté serveur.
-_NON_RETRYABLE_ERRORS = (
-    'ERR_NAME_NOT_RESOLVED',     # Le domaine n'existe pas
-    'ERR_CERT_DATE_INVALID',     # Certificat SSL expiré (permanent malgré ignore_https_errors)
-    'ERR_SSL_PROTOCOL_ERROR',    # Protocole SSL incompatible (permanent)
+# Erreurs non-retryables pour la MÊME URL (inutile de réessayer la même URL)
+# mais qui DOIVENT déclencher Phase 2 (variantes http/https, www/sans-www).
+# Ex: ERR_NAME_NOT_RESOLVED sur www.example.com → essayer example.com
+# Ex: ERR_SSL_PROTOCOL_ERROR sur https → essayer http
+_VARIANT_ELIGIBLE_ERRORS = (
+    'ERR_NAME_NOT_RESOLVED',     # DNS échoue — le sous-domaine www peut ne pas exister
+    'ERR_CERT_DATE_INVALID',     # Certificat SSL expiré — http pourrait fonctionner
+    'ERR_SSL_PROTOCOL_ERROR',    # Protocole SSL incompatible — http pourrait fonctionner
+)
+
+# Erreurs fatales — arrêt immédiat, Phase 2 inutile (problème de configuration)
+_FATAL_ERRORS = (
     'Proxy non configuré',       # Erreur de configuration
     'Proxy obligatoire',         # Erreur de configuration
     'Proxy invalide',            # Erreur de configuration
 )
+
+# Union des deux pour la fonction _is_retryable_error (rétrocompatibilité)
+_NON_RETRYABLE_ERRORS = _VARIANT_ELIGIBLE_ERRORS + _FATAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -153,9 +162,11 @@ def _generate_url_variants(url: str) -> list[str]:
         port_str = f':{parsed.port}' if parsed.port and parsed.port not in (80, 443) else ''
 
         # Générer les 3 variantes (excluant l'originale)
+        # Ordre optimisé : www toggle d'abord (cause #1 de DNS failure sur .fr),
+        # puis scheme toggle (SSL mal configuré), puis les deux combinés.
         variants = [
-            f'{alt_scheme}://{hostname}{port_str}{path}{query}',          # Même host, autre scheme
-            f'{scheme}://{alt_hostname}{port_str}{path}{query}',          # Même scheme, autre host
+            f'{scheme}://{alt_hostname}{port_str}{path}{query}',          # Même scheme, autre host (www toggle)
+            f'{alt_scheme}://{hostname}{port_str}{path}{query}',          # Même host, autre scheme (http/https)
             f'{alt_scheme}://{alt_hostname}{port_str}{path}{query}',      # Autre scheme + autre host
         ]
 
@@ -226,10 +237,15 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
         except Exception as e:
             last_error = str(e)
 
-            # Vérifier si l'erreur est permanente
-            if not _is_retryable_error(last_error):
-                logger.error(f"Erreur non-retryable pour {url}: {last_error}")
+            # Erreur fatale (config proxy) → arrêt immédiat, Phase 2 inutile
+            if any(fatal in last_error for fatal in _FATAL_ERRORS):
+                logger.error(f"Erreur fatale pour {url}: {last_error}")
                 return None
+
+            # Erreur non-retryable sur la même URL (DNS, SSL) → skip retries, passer à Phase 2
+            if any(err in last_error for err in _VARIANT_ELIGIBLE_ERRORS):
+                logger.warning(f"Erreur non-retryable pour {url}: {last_error} — passage aux variantes")
+                break
 
         if attempt < max_retries:
             wait_time = attempt * 2  # 2s, 4s entre les tentatives
