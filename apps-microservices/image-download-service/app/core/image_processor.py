@@ -114,7 +114,8 @@ class ImageProcessor:
                  save_kwargs["save_all"] = True # Preserve frames if possible, though thumbnail might flatten
             
             main_image.save(main_file_path, output_format, **save_kwargs)
-            
+            logger.info(f"✅ PIL: Main image saved for {product_id}: {main_file_path}")
+
             # --- 3. Thumbnail Creation (110x110) ---
             thumb_max_size = (110, 110)
             thumb_image = image.copy()
@@ -125,7 +126,8 @@ class ImageProcessor:
             # So we stick to the determined output_format.
             
             thumb_image.save(thumb_file_path, output_format, **save_kwargs)
-            
+            logger.info(f"✅ PIL: Thumbnail saved for {product_id}: {thumb_file_path}")
+
             return {
                 "main_path": main_file_path,
                 "thumb_path": thumb_file_path,
@@ -177,7 +179,7 @@ class ImageProcessor:
                 # pyvips gif support: save as png if gif causes issues
                 main_vips.pngsave(main_file_path)
             
-            logger.info(f"✅ pyvips: Main image saved for {product_id}: {filename}")
+            logger.info(f"✅ pyvips: Main image saved for {product_id}: {main_file_path}")
             
             # --- Thumbnail (110x110) using shrink-on-load ---
             thumb_vips = pyvips.Image.thumbnail_buffer(content, 110, height=110)
@@ -189,7 +191,7 @@ class ImageProcessor:
             elif output_format_suffix == '.gif':
                 thumb_vips.pngsave(thumb_file_path)
             
-            logger.info(f"✅ pyvips: Thumbnail saved for {product_id}: {filename}")
+            logger.info(f"✅ pyvips: Thumbnail saved for {product_id}: {thumb_file_path}")
             
             return {
                 "main_path": main_file_path,

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="fr" class="h-full">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP Server Manager</title>
+  <title>Gestionnaire de Serveurs MCP</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -46,13 +46,13 @@
             <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
               <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
             </div>
-            <span class="font-semibold text-lg">MCP Server Manager</span>
+            <span class="font-semibold text-lg">Gestionnaire de Serveurs MCP</span>
           </div>
           <div class="flex items-center gap-1">
-            <button onclick="showPage('servers')" id="nav-servers" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Servers</button>
-            <button onclick="showPage('mcp-config')" id="nav-mcp-config" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">MCP Config</button>
+            <button onclick="showPage('servers')" id="nav-servers" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Serveurs</button>
+            <button onclick="showPage('mcp-config')" id="nav-mcp-config" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Config MCP</button>
             <div class="w-px h-6 bg-gray-200 mx-2"></div>
-            <a href="/logout" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Se deconnecter">
+            <a href="/logout" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Se déconnecter">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
             </a>
           </div>
@@ -67,17 +67,17 @@
     <main id="page-servers" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-2xl font-bold">MCP Servers</h1>
-          <p class="text-sm text-gray-500 mt-0.5">Manage your Model Context Protocol backend servers</p>
+          <h1 class="text-2xl font-bold">Serveurs MCP</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Gérez vos serveurs backend Model Context Protocol</p>
         </div>
         <div class="flex gap-2">
           <button onclick="openImportModal()" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-brand-700 border border-brand-300 text-sm font-medium rounded-lg hover:bg-brand-50 transition-colors shadow-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-            Import .mcp.json
+            Importer .mcp.json
           </button>
           <button onclick="openCreateModal()" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors shadow-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 4v16m8-8H4"/></svg>
-            Add Server
+            Ajouter un serveur
           </button>
         </div>
       </div>
@@ -85,19 +85,19 @@
       <!-- Filters -->
       <div class="flex gap-3 mb-4">
         <select id="filter-status" onchange="loadServers()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-          <option value="">All statuses</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
+          <option value="">Tous les statuts</option>
+          <option value="true">Actif</option>
+          <option value="false">Inactif</option>
         </select>
         <div class="relative w-48">
           <select id="filter-tag" onchange="loadServers()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 w-full appearance-none pr-8">
-            <option value="">All tags</option>
+            <option value="">Tous les tags</option>
           </select>
           <svg class="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
         </div>
         <button onclick="discoverAll()" class="ml-auto text-sm text-brand-600 hover:text-brand-800 font-medium flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          Discover All
+          Tout découvrir
         </button>
       </div>
 
@@ -107,8 +107,8 @@
       </div>
       <div id="empty-state" class="hidden text-center py-16 text-gray-400">
         <svg class="mx-auto w-12 h-12 mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
-        <p class="text-lg font-medium">No servers yet</p>
-        <p class="text-sm mt-1">Add your first MCP server to get started</p>
+        <p class="text-lg font-medium">Aucun serveur pour le moment</p>
+        <p class="text-sm mt-1">Ajoutez votre premier serveur MCP pour commencer</p>
       </div>
     </main>
 
@@ -116,23 +116,23 @@
     <main id="page-mcp-config" class="hidden flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-2xl font-bold">Scope Tokens</h1>
-          <p class="text-sm text-gray-500 mt-0.5">Create tokens with scoped server access. Each token generates a ready-to-paste <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">.mcp.json</code></p>
+          <h1 class="text-2xl font-bold">Jetons d'accès</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Créez des jetons avec un accès limité aux serveurs. Chaque jeton génère un <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">.mcp.json</code> prêt à coller</p>
         </div>
         <button onclick="openTokenModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors shadow-sm">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-          Create Token
+          Créer un jeton
         </button>
       </div>
 
       <!-- Token list -->
       <div id="token-list" class="space-y-4">
-        <p class="text-sm text-gray-400 py-12 text-center">Loading...</p>
+        <p class="text-sm text-gray-400 py-12 text-center">Chargement...</p>
       </div>
 
       <!-- Legacy: Per-server configs (collapsible) -->
       <details class="mt-8">
-        <summary class="text-sm font-medium text-gray-500 cursor-pointer hover:text-gray-700 mb-3">Per-Server Configs (legacy)</summary>
+        <summary class="text-sm font-medium text-gray-500 cursor-pointer hover:text-gray-700 mb-3">Configs par serveur (ancien)</summary>
         <div id="per-server-configs" class="space-y-4"></div>
       </details>
     </main>
@@ -143,7 +143,7 @@
   <div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg fade-in" onclick="event.stopPropagation()">
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 id="modal-title" class="text-lg font-semibold">Add Server</h2>
+        <h2 id="modal-title" class="text-lg font-semibold">Ajouter un serveur</h2>
         <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
@@ -151,13 +151,13 @@
       <form id="server-form" onsubmit="handleSubmit(event)" class="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
         <input type="hidden" id="form-id">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-400">*</span></label>
-          <input id="form-name" type="text" required placeholder="e.g. neo4j-cypher" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom <span class="text-red-400">*</span></label>
+          <input id="form-name" type="text" required placeholder="ex. neo4j-cypher" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
 
         <!-- MCP Transport Type -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">MCP Transport <span class="text-xs text-gray-400">— how clients connect</span></label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Transport MCP <span class="text-xs text-gray-400">— mode de connexion des clients</span></label>
           <div class="grid grid-cols-3 gap-2">
             <label class="relative flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg cursor-pointer text-sm transition-colors has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-700 hover:border-gray-400">
               <input type="radio" name="mcp_transport" value="http" checked class="sr-only" onchange="onTransportChange()">
@@ -185,7 +185,7 @@
           </div>
           <div class="mt-3 grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Discovery Transport</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Transport de découverte</label>
               <select id="form-transport" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
                 <option value="auto">Auto</option>
                 <option value="sse">SSE</option>
@@ -193,44 +193,44 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Timeout (ms)</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Délai d'attente (ms)</label>
               <input id="form-timeout" type="number" value="10000" min="1000" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
             </div>
           </div>
           <div class="mt-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Auth Headers <span class="text-xs text-gray-400">(sent by gateway to backend, optional)</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">En-têtes d'auth <span class="text-xs text-gray-400">(envoyés par la gateway au backend, optionnel)</span></label>
             <input id="form-auth-headers" type="text" placeholder='{"X-MCP-Token": "Bearer xxx"}' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-            <p class="text-xs text-gray-400 mt-1">Headers the gateway forwards when connecting to this server</p>
+            <p class="text-xs text-gray-400 mt-1">En-têtes transmis par la gateway lors de la connexion à ce serveur</p>
           </div>
           <div class="mt-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">MCP Client Headers <span class="text-xs text-gray-400">(for .mcp.json export, optional)</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">En-têtes client MCP <span class="text-xs text-gray-400">(pour l'export .mcp.json, optionnel)</span></label>
             <input id="form-mcp-headers" type="text" placeholder='{"Authorization": "Bearer xxx"}' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-            <p class="text-xs text-gray-400 mt-1">Headers included in per-server .mcp.json config for direct client access</p>
+            <p class="text-xs text-gray-400 mt-1">En-têtes inclus dans le .mcp.json par serveur pour l'accès direct du client</p>
           </div>
         </div>
 
         <!-- stdio fields -->
         <div id="stdio-fields" class="hidden space-y-3">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Command <span class="text-red-400">*</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Commande <span class="text-red-400">*</span></label>
             <input id="form-command" type="text" placeholder="npx, python, node..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Arguments <span class="text-xs text-gray-400">(one per line)</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Arguments <span class="text-xs text-gray-400">(un par ligne)</span></label>
             <textarea id="form-args" rows="3" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500"></textarea>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Environment <span class="text-xs text-gray-400">(JSON object, optional)</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Environnement <span class="text-xs text-gray-400">(objet JSON, optionnel)</span></label>
             <input id="form-env" type="text" placeholder='{"API_KEY": "xxx"}' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           </div>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Étiquettes</label>
           <div class="tag-selector" id="tag-selector">
             <div class="flex flex-wrap gap-1.5 min-h-[38px] p-1.5 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 cursor-text" onclick="document.getElementById('tag-input').focus()">
               <div id="tag-chips" class="contents"></div>
-              <input id="tag-input" type="text" placeholder="Type to search or create..." class="flex-1 min-w-[120px] border-none outline-none text-sm px-1 py-0.5 bg-transparent" autocomplete="off"
+              <input id="tag-input" type="text" placeholder="Rechercher ou créer..." class="flex-1 min-w-[120px] border-none outline-none text-sm px-1 py-0.5 bg-transparent" autocomplete="off"
                 onfocus="showTagDropdown()" oninput="filterTags()" onkeydown="handleTagKeydown(event)">
             </div>
             <div id="tag-dropdown" class="tag-dropdown hidden"></div>
@@ -238,11 +238,11 @@
         </div>
         <div id="form-discover-row" class="flex items-center gap-2">
           <input id="form-discover" type="checkbox" checked class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
-          <label for="form-discover" class="text-sm text-gray-700">Auto-discover capabilities on create</label>
+          <label for="form-discover" class="text-sm text-gray-700">Découverte automatique des capacités à la création</label>
         </div>
         <div class="flex justify-end gap-3 pt-2">
-          <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
-          <button type="submit" id="form-submit" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm">Create</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Annuler</button>
+          <button type="submit" id="form-submit" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm">Créer</button>
         </div>
       </form>
     </div>
@@ -268,8 +268,8 @@
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col fade-in" onclick="event.stopPropagation()">
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
         <div>
-          <h2 class="text-lg font-semibold">Import .mcp.json</h2>
-          <p class="text-xs text-gray-400 mt-0.5">Paste JSON or drag & drop a file — all formats supported</p>
+          <h2 class="text-lg font-semibold">Importer .mcp.json</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Collez du JSON ou glissez-déposez un fichier — tous les formats supportés</p>
         </div>
         <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -293,7 +293,7 @@
           <div id="import-drop-overlay" class="hidden absolute inset-0 bg-brand-50/80 rounded-xl flex items-center justify-center pointer-events-none">
             <div class="text-brand-600 font-medium text-sm flex items-center gap-2">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-              Drop .mcp.json here
+              Déposez .mcp.json ici
             </div>
           </div>
         </div>
@@ -302,28 +302,28 @@
         <div class="flex items-center gap-3">
           <label class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors cursor-pointer">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-            Choose file
+            Choisir un fichier
             <input type="file" id="import-file" accept=".json,.mcp.json" class="sr-only" onchange="handleImportFile(event)">
           </label>
           <span id="import-filename" class="text-xs text-gray-400"></span>
           <div class="ml-auto flex items-center gap-2">
             <input id="import-auto-discover" type="checkbox" checked class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
-            <label for="import-auto-discover" class="text-xs text-gray-600">Auto-discover after import</label>
+            <label for="import-auto-discover" class="text-xs text-gray-600">Découverte automatique après import</label>
           </div>
         </div>
 
         <!-- Import results -->
         <div id="import-results" class="hidden space-y-2">
-          <h3 class="text-sm font-semibold text-gray-700">Import Results</h3>
+          <h3 class="text-sm font-semibold text-gray-700">Résultats de l'import</h3>
           <div id="import-results-list" class="space-y-1.5"></div>
         </div>
       </div>
 
       <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
-        <button type="button" onclick="closeImportModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+        <button type="button" onclick="closeImportModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Annuler</button>
         <button type="button" onclick="doImport()" id="import-submit" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm inline-flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-          Import
+          Importer
         </button>
       </div>
     </div>
@@ -334,28 +334,28 @@
   <div id="token-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg fade-in" onclick="event.stopPropagation()">
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Create Scope Token</h2>
+        <h2 class="text-lg font-semibold">Créer un jeton d'accès</h2>
         <button onclick="closeTokenModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
       <div class="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Token Name <span class="text-red-400">*</span></label>
-          <input id="token-name" type="text" required placeholder="e.g. dev-rag-only" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom du jeton <span class="text-red-400">*</span></label>
+          <input id="token-name" type="text" required placeholder="ex. dev-rag-only" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <input id="token-desc" type="text" placeholder="Optional description" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <input id="token-desc" type="text" placeholder="Description optionnelle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Server Name in Config</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom du serveur dans la config</label>
           <input id="token-server-name" type="text" value="hellopro-gateway" placeholder="hellopro-gateway" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-          <p class="text-xs text-gray-400 mt-1">Name used as the key in the generated .mcp.json</p>
+          <p class="text-xs text-gray-400 mt-1">Nom utilisé comme clé dans le .mcp.json généré</p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Server Access <span class="text-red-400">*</span></label>
-          <p class="text-xs text-gray-400 mb-2">Select which servers this token can access</p>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Accès serveurs <span class="text-red-400">*</span></label>
+          <p class="text-xs text-gray-400 mb-2">Sélectionnez les serveurs auxquels ce jeton peut accéder</p>
           <div id="token-server-list" class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-100">
-            <p class="text-xs text-gray-400 p-3">Loading servers...</p>
+            <p class="text-xs text-gray-400 p-3">Chargement des serveurs...</p>
           </div>
         </div>
         <div>
@@ -367,7 +367,7 @@
             </label>
             <label class="inline-flex items-center gap-2 cursor-pointer">
               <input type="radio" name="token_expiry_type" value="custom" onchange="document.getElementById('token-expires').disabled=false;document.getElementById('token-expires').focus()" class="text-brand-600 focus:ring-brand-500">
-              <span class="text-sm text-gray-700">Custom expiry</span>
+              <span class="text-sm text-gray-700">Expiration personnalisée</span>
             </label>
           </div>
           <input id="token-expires" type="datetime-local" disabled class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-400">
@@ -375,31 +375,31 @@
         <div>
           <label class="inline-flex items-center gap-2 cursor-pointer">
             <input id="token-allow-http" type="checkbox" checked class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
-            <span class="text-sm font-medium text-gray-700">Allow HTTP</span>
-            <span class="text-xs text-gray-400">(required for non-HTTPS gateway URLs)</span>
+            <span class="text-sm font-medium text-gray-700">Autoriser HTTP</span>
+            <span class="text-xs text-gray-400">(requis pour les URLs de gateway non-HTTPS)</span>
           </label>
         </div>
         <!-- Result area (hidden initially) -->
         <div id="token-created-result" class="hidden">
           <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
-            <p class="text-sm font-medium text-amber-800">Copy this token now — it won't be shown again!</p>
+            <p class="text-sm font-medium text-amber-800">Copiez ce jeton maintenant — il ne sera plus affiché !</p>
             <div class="mt-2 flex items-center gap-2">
               <code id="token-raw-value" class="flex-1 bg-white border border-amber-300 rounded px-3 py-2 text-sm font-mono break-all select-all"></code>
-              <button onclick="navigator.clipboard.writeText(document.getElementById('token-raw-value').textContent).then(()=>toast('Token copied!','info'))" class="px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700">Copy</button>
+              <button onclick="navigator.clipboard.writeText(document.getElementById('token-raw-value').textContent).then(()=>toast('Jeton copié !','info'))" class="px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700">Copier</button>
             </div>
           </div>
           <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <p class="text-xs font-medium text-gray-600 mb-1">.mcp.json — ready to paste</p>
+            <p class="text-xs font-medium text-gray-600 mb-1">.mcp.json — prêt à coller</p>
             <pre id="token-mcp-json" class="text-xs font-mono text-gray-700 max-h-48 overflow-auto select-all"></pre>
-            <button onclick="navigator.clipboard.writeText(document.getElementById('token-mcp-json').textContent).then(()=>toast('Config copied!','info'))" class="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">Copy .mcp.json</button>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('token-mcp-json').textContent).then(()=>toast('Config copiée !','info'))" class="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">Copier .mcp.json</button>
           </div>
         </div>
       </div>
       <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
-        <button type="button" onclick="closeTokenModal()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+        <button type="button" onclick="closeTokenModal()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Annuler</button>
         <button type="button" onclick="createScopeToken()" id="token-submit-btn" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 inline-flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-          Generate Token
+          Générer le jeton
         </button>
       </div>
     </div>
@@ -482,10 +482,10 @@
       const dot = healthColors[s.health_status] || healthColors.unknown;
       const tags = (s.tags || []).map(t => `<span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">${esc(t)}</span>`).join(' ');
       const stats = [
-        s.tools_count ? `${s.tools_count} tool${s.tools_count>1?'s':''}` : null,
-        s.resources_count ? `${s.resources_count} resource${s.resources_count>1?'s':''}` : null,
+        s.tools_count ? `${s.tools_count} outil${s.tools_count>1?'s':''}` : null,
+        s.resources_count ? `${s.resources_count} ressource${s.resources_count>1?'s':''}` : null,
         s.prompts_count ? `${s.prompts_count} prompt${s.prompts_count>1?'s':''}` : null,
-      ].filter(Boolean).join(' · ') || 'No capabilities';
+      ].filter(Boolean).join(' · ') || 'Aucune capacité';
 
       return `
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow fade-in">
@@ -497,20 +497,20 @@
               </div>
               <div class="flex items-center gap-1 shrink-0 ml-2">
                 ${s.is_active
-                  ? `<button onclick="toggleServer('${s.id}', false)" title="Disable" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-yellow-600 transition-colors">
+                  ? `<button onclick="toggleServer('${s.id}', false)" title="Désactiver" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-yellow-600 transition-colors">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                      </button>`
-                  : `<button onclick="toggleServer('${s.id}', true)" title="Enable" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-emerald-600 transition-colors">
+                  : `<button onclick="toggleServer('${s.id}', true)" title="Activer" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-emerald-600 transition-colors">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                      </button>`
                 }
-                <button onclick="openEditModal('${s.id}')" title="Edit" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors">
+                <button onclick="openEditModal('${s.id}')" title="Modifier" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                 </button>
-                <button onclick="discoverServer('${s.id}')" title="Discover" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-purple-600 transition-colors">
+                <button onclick="discoverServer('${s.id}')" title="Découvrir" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-purple-600 transition-colors">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 </button>
-                <button onclick="deleteServer('${s.id}','${esc(s.name)}')" title="Delete" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors">
+                <button onclick="deleteServer('${s.id}','${esc(s.name)}')" title="Supprimer" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                 </button>
               </div>
@@ -522,9 +522,9 @@
             <p class="text-xs text-gray-500 mb-2">${stats}</p>
             <div class="flex items-center justify-between">
               <div class="flex flex-wrap gap-1">${tags}</div>
-              <button onclick="showDetail('${s.id}')" class="text-xs text-brand-600 hover:text-brand-800 font-medium">Details →</button>
+              <button onclick="showDetail('${s.id}')" class="text-xs text-brand-600 hover:text-brand-800 font-medium">Détails →</button>
             </div>
-            ${!s.is_active ? '<div class="mt-2 text-xs text-yellow-600 bg-yellow-50 rounded px-2 py-1 inline-block">Disabled</div>' : ''}
+            ${!s.is_active ? '<div class="mt-2 text-xs text-yellow-600 bg-yellow-50 rounded px-2 py-1 inline-block">Désactivé</div>' : ''}
             ${s.last_error && s.health_status === 'unhealthy' ? `<div class="mt-2 text-xs text-red-500 truncate" title="${esc(s.last_error)}">⚠ ${esc(s.last_error.substring(0, 80))}${s.last_error.length > 80 ? '...' : ''}</div>` : ''}
           </div>
         </div>`;
@@ -542,7 +542,7 @@
         // Update filter dropdown
         const filterSel = document.getElementById('filter-tag');
         const currentVal = filterSel.value;
-        filterSel.innerHTML = '<option value="">All tags</option>' +
+        filterSel.innerHTML = '<option value="">Tous les tags</option>' +
           allKnownTags.map(t => `<option value="${esc(t)}" ${t === currentVal ? 'selected' : ''}>${esc(t)}</option>`).join('');
       } catch {}
     }
@@ -598,9 +598,9 @@
         `<div class="tag-dropdown-item" data-idx="${i}" onmousedown="addTag('${esc(t)}')">${esc(t)}</div>`
       ).join('');
       if (q && !allKnownTags.includes(q) && !selectedTags.includes(q)) {
-        html += `<div class="tag-dropdown-item create" data-idx="${available.length}" onmousedown="addTag('${esc(q)}')">+ Create "${esc(q)}"</div>`;
+        html += `<div class="tag-dropdown-item create" data-idx="${available.length}" onmousedown="addTag('${esc(q)}')">+ Créer "${esc(q)}"</div>`;
       }
-      if (!html) html = '<div class="px-3 py-2 text-xs text-gray-400">No tags available</div>';
+      if (!html) html = '<div class="px-3 py-2 text-xs text-gray-400">Aucun tag disponible</div>';
       dd.innerHTML = html;
       dd.classList.remove('hidden');
     }
@@ -647,8 +647,8 @@
 
     // ── CRUD actions ─────────────────────────────────────────────────────
     function openCreateModal() {
-      document.getElementById('modal-title').textContent = 'Add Server';
-      document.getElementById('form-submit').textContent = 'Create';
+      document.getElementById('modal-title').textContent = 'Ajouter un serveur';
+      document.getElementById('form-submit').textContent = 'Créer';
       document.getElementById('form-id').value = '';
       document.getElementById('form-name').value = '';
       document.getElementById('form-url').value = '';
@@ -670,8 +670,8 @@
     async function openEditModal(id) {
       try {
         const s = await api('/servers/' + id);
-        document.getElementById('modal-title').textContent = 'Edit Server';
-        document.getElementById('form-submit').textContent = 'Save';
+        document.getElementById('modal-title').textContent = 'Modifier le serveur';
+        document.getElementById('form-submit').textContent = 'Enregistrer';
         document.getElementById('form-id').value = s.id;
         document.getElementById('form-name').value = s.name;
         document.getElementById('form-url').value = s.url || '';
@@ -708,25 +708,25 @@
         const argsText = document.getElementById('form-args').value.trim();
         if (argsText) body.mcp_args = argsText.split('\n').map(a => a.trim()).filter(Boolean);
         const envText = document.getElementById('form-env').value.trim();
-        if (envText) { try { body.mcp_env = JSON.parse(envText); } catch { toast('Invalid JSON in Environment', 'error'); return; } }
+        if (envText) { try { body.mcp_env = JSON.parse(envText); } catch { toast('JSON invalide dans Environnement', 'error'); return; } }
       } else {
         body.url = document.getElementById('form-url').value;
         body.transport_preference = document.getElementById('form-transport').value;
         body.connect_timeout_ms = parseInt(document.getElementById('form-timeout').value);
         const authHeadersText = document.getElementById('form-auth-headers').value.trim();
-        if (authHeadersText) { try { body.auth_headers = JSON.parse(authHeadersText); } catch { toast('Invalid JSON in Auth Headers', 'error'); return; } }
+        if (authHeadersText) { try { body.auth_headers = JSON.parse(authHeadersText); } catch { toast('JSON invalide dans En-têtes d\'auth', 'error'); return; } }
         const headersText = document.getElementById('form-mcp-headers').value.trim();
-        if (headersText) { try { body.mcp_headers = JSON.parse(headersText); } catch { toast('Invalid JSON in MCP Client Headers', 'error'); return; } }
+        if (headersText) { try { body.mcp_headers = JSON.parse(headersText); } catch { toast('JSON invalide dans En-têtes client MCP', 'error'); return; } }
       }
 
       try {
         if (id) {
           await api('/servers/' + id, { method: 'PUT', body: JSON.stringify(body) });
-          toast('Server updated');
+          toast('Serveur mis à jour');
         } else {
           if (mcpTransport !== 'stdio') body.auto_discover = document.getElementById('form-discover').checked;
           await api('/servers', { method: 'POST', body: JSON.stringify(body) });
-          toast('Server created');
+          toast('Serveur créé');
         }
         closeModal();
         loadAllTags();
@@ -735,10 +735,10 @@
     }
 
     async function deleteServer(id, name) {
-      if (!confirm(`Delete server "${name}"? This will remove all its capabilities.`)) return;
+      if (!confirm(`Supprimer le serveur "${name}" ? Toutes ses capacités seront supprimées.`)) return;
       try {
         await api('/servers/' + id, { method: 'DELETE' });
-        toast('Server deleted');
+        toast('Serveur supprimé');
         loadAllTags();
         loadServers();
       } catch (e) { toast(e.message, 'error'); }
@@ -747,7 +747,7 @@
     async function toggleServer(id, enable) {
       try {
         await api(`/servers/${id}/${enable ? 'enable' : 'disable'}`, { method: 'POST' });
-        toast(enable ? 'Server enabled' : 'Server disabled');
+        toast(enable ? 'Serveur activé' : 'Serveur désactivé');
         loadServers();
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -755,7 +755,7 @@
     async function discoverServer(id) {
       try {
         await api('/servers/' + id + '/discover', { method: 'POST' });
-        toast('Discovery complete');
+        toast('Découverte terminée');
         loadServers();
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -765,7 +765,7 @@
         const result = await api('/servers/discover-all', { method: 'POST' });
         const ok = (result.results || []).filter(r => r.status === 'discovered').length;
         const fail = (result.results || []).filter(r => r.status === 'failed').length;
-        toast(`Discovered: ${ok} OK, ${fail} failed`, fail > 0 ? 'info' : 'success');
+        toast(`Découverte : ${ok} OK, ${fail} échoué${fail > 1 ? 's' : ''}`, fail > 0 ? 'info' : 'success');
         loadServers();
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -787,16 +787,16 @@
           <div class="space-y-4">
             <div class="grid grid-cols-2 gap-3 text-sm">
               <div><span class="text-gray-400">ID</span><p class="font-mono text-xs mt-0.5">${esc(s.id)}</p></div>
-              <div><span class="text-gray-400">Status</span>
+              <div><span class="text-gray-400">Statut</span>
                 <p class="mt-0.5"><span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full ${healthBadge}">${esc(s.health_status)}</span>
-                ${s.is_active ? '<span class="ml-1 text-xs text-emerald-600">Active</span>' : '<span class="ml-1 text-xs text-yellow-600">Disabled</span>'}</p>
+                ${s.is_active ? '<span class="ml-1 text-xs text-emerald-600">Actif</span>' : '<span class="ml-1 text-xs text-yellow-600">Désactivé</span>'}</p>
               </div>
               <div><span class="text-gray-400">URL</span><p class="font-mono text-xs mt-0.5 break-all">${esc(s.url)}</p></div>
-              <div><span class="text-gray-400">Message URL</span><p class="font-mono text-xs mt-0.5 break-all">${esc(s.message_url || '—')}</p></div>
+              <div><span class="text-gray-400">URL de message</span><p class="font-mono text-xs mt-0.5 break-all">${esc(s.message_url || '—')}</p></div>
               <div><span class="text-gray-400">Transport</span><p class="mt-0.5">${esc(s.transport_type || '—')} <span class="text-gray-400">(pref: ${esc(s.transport_preference)})</span></p></div>
-              <div><span class="text-gray-400">Server</span><p class="mt-0.5">${esc(s.server_name || '—')} ${s.server_version ? 'v' + esc(s.server_version) : ''}</p></div>
+              <div><span class="text-gray-400">Serveur</span><p class="mt-0.5">${esc(s.server_name || '—')} ${s.server_version ? 'v' + esc(s.server_version) : ''}</p></div>
             </div>
-            ${s.last_error ? `<div class="bg-red-50 rounded-lg p-3 text-xs text-red-600"><strong>Last error:</strong> ${esc(s.last_error)}</div>` : ''}
+            ${s.last_error ? `<div class="bg-red-50 rounded-lg p-3 text-xs text-red-600"><strong>Dernière erreur :</strong> ${esc(s.last_error)}</div>` : ''}
         `;
 
         // MCP JSON for this server
@@ -804,8 +804,8 @@
         html += `
           <div class="border border-gray-200 rounded-lg overflow-hidden">
             <div class="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
-              <span class="text-xs font-semibold text-gray-600">MCP Server JSON</span>
-              <button onclick="copyJSON('detail-mcp-json')" class="copy-btn text-xs text-brand-600 hover:text-brand-800 font-medium">Copy</button>
+              <span class="text-xs font-semibold text-gray-600">JSON du serveur MCP</span>
+              <button onclick="copyJSON('detail-mcp-json')" class="copy-btn text-xs text-brand-600 hover:text-brand-800 font-medium">Copier</button>
             </div>
             <pre id="detail-mcp-json" class="json-view px-4 py-3 text-xs font-mono text-gray-700 max-h-40 overflow-auto">${esc(JSON.stringify(mcpJSON, null, 2))}</pre>
           </div>
@@ -813,7 +813,7 @@
 
         // Tools
         if (s.tools && s.tools.length > 0) {
-          html += `<div><h3 class="text-sm font-semibold mb-2">Tools (${s.tools.length})</h3><div class="space-y-2">`;
+          html += `<div><h3 class="text-sm font-semibold mb-2">Outils (${s.tools.length})</h3><div class="space-y-2">`;
           for (const t of s.tools) {
             html += `<div class="bg-gray-50 rounded-lg p-3">
               <p class="font-medium text-sm">${esc(t.name)}</p>
@@ -825,7 +825,7 @@
 
         // Resources
         if (s.resources && s.resources.length > 0) {
-          html += `<div><h3 class="text-sm font-semibold mb-2">Resources (${s.resources.length})</h3><div class="space-y-2">`;
+          html += `<div><h3 class="text-sm font-semibold mb-2">Ressources (${s.resources.length})</h3><div class="space-y-2">`;
           for (const r of s.resources) {
             html += `<div class="bg-gray-50 rounded-lg p-3">
               <p class="font-medium text-sm">${esc(r.name)}</p>
@@ -880,15 +880,15 @@
         if (tokens.length === 0) {
           container.innerHTML = `<div class="text-center py-12">
             <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-            <p class="text-sm text-gray-500">No scope tokens yet</p>
-            <p class="text-xs text-gray-400 mt-1">Create a token to generate a scoped .mcp.json config</p>
+            <p class="text-sm text-gray-500">Aucun jeton d'accès pour le moment</p>
+            <p class="text-xs text-gray-400 mt-1">Créez un jeton pour générer une config .mcp.json avec accès limité</p>
           </div>`;
         } else {
           container.innerHTML = tokens.map(t => {
             const serverNames = allServers.filter(s => t.server_ids.includes(s.id)).map(s => s.name);
             const statusBadge = t.is_active
-              ? '<span class="px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full">Active</span>'
-              : '<span class="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 rounded-full">Revoked</span>';
+              ? '<span class="px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full">Actif</span>'
+              : '<span class="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 rounded-full">Révoqué</span>';
             const isHttp = gatewayURL.startsWith('http://');
             const mcpArgs = ["-y", "mcp-remote", gatewayURL];
             if (isHttp) mcpArgs.push("--allow-http");
@@ -902,7 +902,7 @@
               }
             };
             const jsonElId = 'token-cfg-' + t.id.replace(/-/g, '');
-            const expiresStr = t.expires_at ? new Date(t.expires_at).toLocaleDateString() : '<span class="text-emerald-600 font-medium">Permanent</span>';
+            const expiresStr = t.expires_at ? new Date(t.expires_at).toLocaleDateString('fr-FR') : '<span class="text-emerald-600 font-medium">Permanent</span>';
             return `
               <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div class="px-5 py-3 border-b border-gray-100">
@@ -915,16 +915,16 @@
                     </div>
                     <div class="flex items-center gap-1">
                       <button onclick="copyJSON('${jsonElId}')" class="copy-btn inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Copy
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Copier
                       </button>
-                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100">Revoke</button>` : ''}
-                      <button onclick="deleteToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-md hover:bg-red-100">Delete</button>
+                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100">Révoquer</button>` : ''}
+                      <button onclick="deleteToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-md hover:bg-red-100">Supprimer</button>
                     </div>
                   </div>
                   <div class="mt-2 flex items-center gap-4 text-xs text-gray-500">
-                    <span>Servers: ${serverNames.length > 0 ? serverNames.map(n => '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">' + esc(n) + '</code>').join(' ') : '<em class="text-gray-400">none</em>'}</span>
-                    <span>Expires: ${expiresStr}</span>
-                    ${t.created_by ? '<span>By: ' + esc(t.created_by) + '</span>' : ''}
+                    <span>Serveurs : ${serverNames.length > 0 ? serverNames.map(n => '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">' + esc(n) + '</code>').join(' ') : '<em class="text-gray-400">aucun</em>'}</span>
+                    <span>Expire : ${expiresStr}</span>
+                    ${t.created_by ? '<span>Par : ' + esc(t.created_by) + '</span>' : ''}
                   </div>
                 </div>
                 <pre id="${jsonElId}" class="json-view px-5 py-3 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto">${esc(JSON.stringify(mcpConfig, null, 2))}</pre>
@@ -935,7 +935,7 @@
         // Legacy per-server configs
         const legacyContainer = document.getElementById('per-server-configs');
         if (allServers.length === 0) {
-          legacyContainer.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">No active servers</p>';
+          legacyContainer.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">Aucun serveur actif</p>';
         } else {
           legacyContainer.innerHTML = allServers.map(s => {
             const mcpJSON = buildServerMCPJSON(s);
@@ -944,7 +944,7 @@
             return `<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div class="flex items-center justify-between px-5 py-2 border-b border-gray-100">
                 <span class="font-medium text-sm">${esc(s.name)}</span>
-                <button onclick="copyJSON('${elId}')" class="copy-btn text-xs text-brand-700 bg-brand-50 px-2.5 py-1 rounded-md hover:bg-brand-100">Copy</button>
+                <button onclick="copyJSON('${elId}')" class="copy-btn text-xs text-brand-700 bg-brand-50 px-2.5 py-1 rounded-md hover:bg-brand-100">Copier</button>
               </div>
               <pre id="${elId}" class="json-view px-5 py-2 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto">${esc(jsonStr)}</pre>
             </div>`;
@@ -971,14 +971,14 @@
       // Populate server checkboxes
       const listEl = document.getElementById('token-server-list');
       if (allServers.length === 0) {
-        listEl.innerHTML = '<p class="text-xs text-gray-400 p-3">No active servers — add servers first</p>';
+        listEl.innerHTML = '<p class="text-xs text-gray-400 p-3">Aucun serveur actif — ajoutez d\'abord des serveurs</p>';
       } else {
         listEl.innerHTML = allServers.map(s => `
           <label class="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
             <input type="checkbox" value="${s.id}" class="token-server-cb rounded border-gray-300 text-brand-600 focus:ring-brand-500">
             <div class="flex-1 min-w-0">
               <span class="text-sm font-medium">${esc(s.name)}</span>
-              <span class="text-xs text-gray-400 ml-2">${s.tools_count || 0} tools</span>
+              <span class="text-xs text-gray-400 ml-2">${s.tools_count || 0} outil${(s.tools_count||0)>1?'s':''}</span>
             </div>
           </label>`).join('');
       }
@@ -996,8 +996,8 @@
       const expiresRaw = document.getElementById('token-expires').value;
       const serverIDs = [...document.querySelectorAll('.token-server-cb:checked')].map(cb => cb.value);
 
-      if (!name) { toast('Token name is required', 'error'); return; }
-      if (serverIDs.length === 0) { toast('Select at least one server', 'error'); return; }
+      if (!name) { toast('Le nom du jeton est requis', 'error'); return; }
+      if (serverIDs.length === 0) { toast('Sélectionnez au moins un serveur', 'error'); return; }
 
       const body = { name, server_ids: serverIDs };
       if (description) body.description = description;
@@ -1005,7 +1005,7 @@
 
       const btn = document.getElementById('token-submit-btn');
       btn.disabled = true;
-      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Generating...';
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Génération...';
 
       try {
         const result = await api('/tokens', { method: 'POST', body: JSON.stringify(body) });
@@ -1030,29 +1030,29 @@
         document.getElementById('token-created-result').classList.remove('hidden');
         btn.classList.add('hidden');
 
-        toast('Scope token created!', 'success');
+        toast('Jeton d\'accès créé !', 'success');
         loadMCPConfig(); // refresh token list in background
       } catch (e) {
         toast(e.message, 'error');
         btn.disabled = false;
-        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Generate Token';
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
       }
     }
 
     async function revokeToken(id) {
-      if (!confirm('Revoke this token? Clients using it will lose access.')) return;
+      if (!confirm('Révoquer ce jeton ? Les clients qui l\'utilisent perdront l\'accès.')) return;
       try {
         await api(`/tokens/${id}/revoke`, { method: 'POST' });
-        toast('Token revoked', 'info');
+        toast('Jeton révoqué', 'info');
         loadMCPConfig();
       } catch (e) { toast(e.message, 'error'); }
     }
 
     async function deleteToken(id) {
-      if (!confirm('Delete this token permanently?')) return;
+      if (!confirm('Supprimer définitivement ce jeton ?')) return;
       try {
         await api(`/tokens/${id}`, { method: 'DELETE' });
-        toast('Token deleted', 'info');
+        toast('Jeton supprimé', 'info');
         loadMCPConfig();
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -1098,7 +1098,7 @@
     // ── Clipboard ────────────────────────────────────────────────────────
     function copyJSON(elId) {
       const text = document.getElementById(elId).textContent;
-      navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard', 'info'));
+      navigator.clipboard.writeText(text).then(() => toast('Copié dans le presse-papiers', 'info'));
     }
 
     // ── Utils ────────────────────────────────────────────────────────────
@@ -1161,15 +1161,15 @@
 
     async function doImport() {
       const jsonText = document.getElementById('import-json').value.trim();
-      if (!jsonText) { toast('Paste or load a .mcp.json file first', 'error'); return; }
+      if (!jsonText) { toast('Collez ou chargez d\'abord un fichier .mcp.json', 'error'); return; }
       let parsed;
       try { parsed = JSON.parse(jsonText); }
-      catch { toast('Invalid JSON — check syntax', 'error'); return; }
+      catch { toast('JSON invalide — vérifiez la syntaxe', 'error'); return; }
 
       const autoDiscover = document.getElementById('import-auto-discover').checked;
       const btn = document.getElementById('import-submit');
       btn.disabled = true;
-      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Importing...';
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Import en cours...';
 
       try {
         const result = await api(`/servers/import?auto_discover=${autoDiscover}`, { method: 'POST', body: JSON.stringify(parsed) });
@@ -1186,9 +1186,9 @@
 
         listDiv.innerHTML = `
           <div class="flex gap-4 mb-2 text-xs font-medium">
-            <span class="text-emerald-600">${result.imported} imported</span>
-            <span class="text-yellow-600">${result.skipped} skipped</span>
-            <span class="text-red-600">${result.errors} errors</span>
+            <span class="text-emerald-600">${result.imported} importé${result.imported>1?'s':''}</span>
+            <span class="text-yellow-600">${result.skipped} ignoré${result.skipped>1?'s':''}</span>
+            <span class="text-red-600">${result.errors} erreur${result.errors>1?'s':''}</span>
           </div>
           ${(result.results||[]).map(r => `
             <div class="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${colors[r.status]||'bg-gray-50 border-gray-200'}">
@@ -1197,12 +1197,12 @@
               <span class="text-xs text-gray-400 ml-auto">${r.status}${r.error ? ' — '+esc(r.error) : ''}</span>
             </div>`).join('')}`;
 
-        toast(`Imported ${result.imported} server${result.imported!==1?'s':''}`, result.errors > 0 ? 'info' : 'success');
+        toast(`${result.imported} serveur${result.imported!==1?'s':''} importé${result.imported!==1?'s':''}`, result.errors > 0 ? 'info' : 'success');
         loadServers();
       } catch (e) { toast(e.message, 'error'); }
       finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Import';
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Importer';
       }
     }
 

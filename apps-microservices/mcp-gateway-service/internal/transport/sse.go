@@ -150,9 +150,11 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dispatch asynchronously so the POST returns immediately.
-	// Use the session's handler (may be scoped if token was present at /sse connect time)
+	// Use the session's handler (may be scoped if token was present at /sse connect time).
+	// Use context.WithoutCancel because r.Context() is cancelled when the HTTP handler
+	// returns — the goroutine outlives the request.
 	go func() {
-		resp := sess.handler.Handle(r.Context(), &req)
+		resp := sess.handler.Handle(context.WithoutCancel(r.Context()), &req)
 		select {
 		case sess.ch <- resp:
 		default:

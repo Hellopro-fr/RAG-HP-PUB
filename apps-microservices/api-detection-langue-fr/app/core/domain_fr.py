@@ -950,10 +950,32 @@ class DomainFR:
             
             # Sous-cas 2b : NLP soft-confirme, ou NLP indisponible, ou NLP faiblement contredit
             # → Le TLD .fr est un signal suffisamment fort pour valider
+
+            # Guard : si NLP est indisponible PARCE QUE le contenu est vide/trop court,
+            # c'est un signe que le site est inaccessible (502, erreur proxy, etc.).
+            # Ne PAS faire confiance au TLD dans ce cas.
+            if not nlp_available:
+                try:
+                    soup_check = BeautifulSoup(content, 'lxml')
+                    for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                        el.decompose()
+                    visible_text = soup_check.get_text(separator=' ', strip=True)
+                except Exception:
+                    visible_text = ''
+
+                if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                    return DetectionResponse(
+                        ok=False,
+                        url=url,
+                        method='fetch_empty_content',
+                        alternative_urls=alternatives,
+                        error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — site probablement inaccessible"
+                    )
+
             methods = [url_method]
             if html_indicates_french:
                 methods.append(html_method)
-            
+
             if nlp_soft_french:
                 methods.append('nlp_soft_confirmed')
                 confidence = nlp_confidence
