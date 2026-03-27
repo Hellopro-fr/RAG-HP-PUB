@@ -294,6 +294,9 @@ class PrixExtractor:
         """
         async with self._semaphore:
             item_id = str(item.get("id_lead", item.get("id", f"item_{item_index}")))
+            #Ajouter id_fournisseur sur id_lead si n'est pas vide
+            if item.get("id_fournisseur") and item.get("id_fournisseur") != "" and item.get("id_fournisseur") is not None:
+                item_id = f"{item_id}_{item.get('id_fournisseur')}"
             item_content = utils.to_json_string(item)
 
             # Activer le contexte item pour bufferiser les logs
@@ -303,7 +306,7 @@ class PrixExtractor:
             self._log(f"[{item_index + 1}/{total_items}] item_content: {item_content}")
 
             # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
-            if not re.search(r'€|\beuros?\b|\bEUR\b', item_content, re.IGNORECASE):
+            if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', item_content, re.IGNORECASE):
                 self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
                 self._flush_item_logs(item_id)
                 self._current_item_id.reset(token)

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/repository"
@@ -79,6 +80,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		HealthStatus:        "unknown",
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
+		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 	if req.ConnectTimeoutMs != nil {
 		srv.ConnectTimeoutMs = *req.ConnectTimeoutMs
@@ -150,8 +152,9 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		isActive = &b
 	}
 	tag := r.URL.Query().Get("tag")
+	userEmail := auth.UserEmailFromContext(r.Context())
 
-	servers, err := h.repo.ListAll(isActive, tag)
+	servers, err := h.repo.ListAll(isActive, tag, userEmail)
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
@@ -177,6 +180,9 @@ func (h *Handler) handleGetServer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
 		return
 	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 	writeJSON(w, http.StatusOK, toServerDetailResponse(srv))
 }
 
@@ -188,6 +194,9 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, existing, w) {
 		return
 	}
 
@@ -280,6 +289,14 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 	id := extractID(r)
+	srv, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 	h.registry.Unregister(id)
 	if err := h.repo.Delete(id); err != nil {
 		log.Printf("[api] delete server error: %v", err)
@@ -296,6 +313,9 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 	srv, err := h.repo.GetByID(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
 		return
 	}
 
@@ -320,6 +340,14 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleDisableServer(w http.ResponseWriter, r *http.Request) {
 	id := extractID(r)
+	srv, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 	if err := h.repo.SetActive(id, false); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable server"})
 		return
@@ -337,6 +365,9 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	srv, err := h.repo.GetByID(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
 		return
 	}
 
@@ -419,6 +450,22 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 	}
 }
 
+// checkOwnership verifies the current user owns the server.
+// If auth is disabled (no user in context), access is allowed.
+// Returns false and writes a 403 response if ownership check fails.
+func checkOwnership(r *http.Request, srv *db.MCPServer, w http.ResponseWriter) bool {
+	userEmail := auth.UserEmailFromContext(r.Context())
+	if userEmail == "" {
+		// Auth disabled — no ownership filtering
+		return true
+	}
+	if srv.CreatedBy != "" && srv.CreatedBy != userEmail {
+		writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "you do not have access to this server"})
+		return false
+	}
+	return true
+}
+
 func extractID(r *http.Request) string {
 	// URL pattern: /api/v1/servers/{id} or /api/v1/servers/{id}/action
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")
@@ -472,6 +519,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		MCPArgs:             mcpArgs,
 		MCPEnv:              mcpEnv,
 		MCPHeaders:          mcpHeaders,
+		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,
 		UpdatedAt:           srv.UpdatedAt,

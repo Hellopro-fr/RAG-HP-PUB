@@ -356,7 +356,7 @@ class Downloader:
                 
             result = await self.download_and_process(url, domain, product_id, product_name, index=img_index)
             
-            if result["status"] == "ok":
+            if result["status"] == "ok" and result["paths"] is not None:
                 processed_images.append(result["paths"])
             else:
                 # Erreur précise remontée par download_and_process

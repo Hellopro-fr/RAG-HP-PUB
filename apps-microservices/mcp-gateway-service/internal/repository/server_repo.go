@@ -48,7 +48,8 @@ func (r *ServerRepo) GetByID(id string) (*db.MCPServer, error) {
 }
 
 // ListAll returns all servers with tags preloaded. Supports optional filters.
-func (r *ServerRepo) ListAll(isActive *bool, tag string) ([]db.MCPServer, error) {
+// If createdBy is non-empty, only servers created by that user are returned.
+func (r *ServerRepo) ListAll(isActive *bool, tag string, createdBy string) ([]db.MCPServer, error) {
 	q := r.db.Preload("Tags")
 	if isActive != nil {
 		q = q.Where("is_active = ?", *isActive)
@@ -56,6 +57,9 @@ func (r *ServerRepo) ListAll(isActive *bool, tag string) ([]db.MCPServer, error)
 	if tag != "" {
 		q = q.Where("id IN (?)",
 			r.db.Model(&db.ServerTag{}).Select("server_id").Where("tag = ?", tag))
+	}
+	if createdBy != "" {
+		q = q.Where("created_by = ? OR created_by = ''", createdBy)
 	}
 
 	var servers []db.MCPServer

@@ -36,16 +36,21 @@ class ImageProcessor:
             header_bytes = content[:10]
             logger.info(f"Processing image {product_id} - Size: {len(content)} bytes - Header: {header_bytes}")
 
+            # --- SVG: Detect early and delegate to pyvips (librsvg) ---
+            if b'<svg' in header_bytes or b'<?xml' in header_bytes:
+                logger.info(f"🔄 SVG detected for product {product_id} ({len(content)} bytes). Rasterizing via pyvips/librsvg.")
+                return self._process_with_vips(content, 'SVG', domain, product_id, product_name, base_storage_dir, index)
+
             try:
                 # Suppress DecompressionBombWarning as we handle it manually
-                Image.MAX_IMAGE_PIXELS = None 
-                
+                Image.MAX_IMAGE_PIXELS = None
+
                 image = Image.open(image_stream)
-                
+
                 width, height = image.size
                 total_pixels = width * height
                 original_format = image.format.upper() if image.format else "JPEG"
-                
+
                 # --- LARGE IMAGE: Delegate to pyvips (shrink-on-load, ~2-5MB RAM) ---
                 if total_pixels > LARGE_IMAGE_THRESHOLD:
                     logger.info(f"🔄 Large image detected ({width}x{height} = {total_pixels} px, format={original_format}). Using pyvips shrink-on-load.")
@@ -59,10 +64,6 @@ class ImageProcessor:
 
                 image.load() # Force load (or load draft)
             except Exception as pil_error:
-                # If SVG, it might start with <svg
-                if b'<svg' in header_bytes or b'<?xml' in header_bytes:
-                     logger.warning(f"SVG detected for {product_id}, skipping (PIL does not support SVG).")
-                     return None
                 raise pil_error
 
             original_format = image.format.upper() if image.format else "JPEG"

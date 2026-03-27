@@ -64,6 +64,7 @@ type ServerResponse struct {
 	MCPArgs             []string          `json:"mcp_args,omitempty"`
 	MCPEnv              map[string]string `json:"mcp_env,omitempty"`
 	MCPHeaders          map[string]string `json:"mcp_headers,omitempty"`
+	CreatedBy           string            `json:"created_by,omitempty"`
 	CreatedAt           time.Time         `json:"created_at"`
 	UpdatedAt           time.Time         `json:"updated_at"`
 }

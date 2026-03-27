@@ -59,7 +59,7 @@ func (c *Checker) run() {
 
 func (c *Checker) checkAll() {
 	active := true
-	servers, err := c.repo.ListAll(&active, "")
+	servers, err := c.repo.ListAll(&active, "", "")
 	if err != nil {
 		log.Printf("[health] failed to list active servers: %v", err)
 		return
