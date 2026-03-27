@@ -30,9 +30,13 @@ func (r *TokenRepo) GetByID(id string) (*db.ScopeToken, error) {
 }
 
 // ListAll returns all scope tokens with server associations.
-func (r *TokenRepo) ListAll() ([]db.ScopeToken, error) {
+func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
+	q := r.db.Preload("Servers").Order("created_at DESC")
+	if createdBy != "" {
+		q = q.Where("created_by = ? OR created_by = ''", createdBy)
+	}
 	var tokens []db.ScopeToken
-	err := r.db.Preload("Servers").Order("created_at DESC").Find(&tokens).Error
+	err := q.Find(&tokens).Error
 	return tokens, err
 }
 
