@@ -97,7 +97,7 @@ export function useProcessMatching(): UseProcessMatchingResult {
 
       const formData = new FormData();
       formData.append('id_categorie', categoryId?.toString() || '');
-      formData.append('top_k', '12');
+      formData.append('top_k', '30');
       formData.append('champs_sortie', JSON.stringify(["url"]));
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
@@ -118,7 +118,8 @@ export function useProcessMatching(): UseProcessMatchingResult {
       const rerankPayload = {
         use_rerank: useRerank,
         parcours: buildParcours(userQuestionAnswers),
-        top_k: 24,
+        top_k: 30,
+        id_prompt: 118,
       };
       formData.append('rerank', JSON.stringify(rerankPayload));
 
