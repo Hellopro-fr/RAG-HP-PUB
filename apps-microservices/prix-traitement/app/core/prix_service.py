@@ -396,6 +396,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         }
 
         if type_source == "other":
+            logger.info(f"[{id_categorie}] Type source: messages, devis, site_web")
             filtre_page_type["source"] = [
                 "devis",
                 "messages",
