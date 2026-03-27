@@ -305,7 +305,6 @@ class PrixExtractor:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
             # Les données Milvus sont dans metadata.entity
             metadata = chunk.get("metadata", {})
-            self._log(f"[{chunk_index + 1}/{total_chunks}] metadata: {metadata}")
             context_pre = metadata.get("context_pre") or ""
             context_post = metadata.get("context_post") or ""
 
