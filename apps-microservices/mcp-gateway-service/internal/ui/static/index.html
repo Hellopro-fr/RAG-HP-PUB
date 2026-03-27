@@ -1058,7 +1058,7 @@
       const isHttp = gatewayURL.startsWith('http://');
       const mcpArgs = [...cfg.argsPrefix, gatewayURL];
       if (isHttp) mcpArgs.push("--allow-http");
-      mcpArgs.push("--header", "X-MCP-Scope-Token: " + tokenPrefix + "...");
+      mcpArgs.push("--header", "X-MCP-Scope-Token: <YOUR_TOKEN>");
       const mcpConfig = {
         mcpServers: {
           "hellopro-gateway": {

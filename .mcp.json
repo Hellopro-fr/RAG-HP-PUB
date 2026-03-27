@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "hellopro": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-remote",
+                "https://mcp.hellopro.eu/mcp",
+                "--header",
+                "X-MCP-Scope-Token: mcp_95d8f11aacacd6519b2afb3008fb6ecad52ceb1509d7031b"
+            ]
+        }
+    }
+}

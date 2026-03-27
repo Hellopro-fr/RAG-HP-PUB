@@ -1,0 +1,15 @@
+{
+    "mcpServers": {
+        "hellopro-gateway": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-remote",
+                "http://172.20.13.43:8581/mcp",
+                "--allow-http",
+                "--header",
+                "X-MCP-Scope-Token: mcp_eec14723a809ed351074403c5d78bdcc144978a131b4288a"
+            ]
+        }
+    }
+}

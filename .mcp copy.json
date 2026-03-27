@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mcp-api-recherche": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://35.245.31.1:8582/mcp", "--allow-http"]
+    }
+  }
+}
