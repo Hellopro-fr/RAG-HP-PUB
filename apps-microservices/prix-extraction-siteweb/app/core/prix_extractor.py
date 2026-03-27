@@ -507,7 +507,8 @@ class PrixExtractor:
             "page_type": [
                 "article", "blog", "ecommerce", "faq", "home",
                 "landing", "listing_produit", "Page_local", "fiche_produit"
-            ]
+            ],
+            "autre_chunks": "adjacent"
         }
 
         # Compteurs globaux sur toutes les boucles Q1
