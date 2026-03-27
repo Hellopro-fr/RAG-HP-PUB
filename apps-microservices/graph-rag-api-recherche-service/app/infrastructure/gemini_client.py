@@ -118,7 +118,7 @@ class GeminiClient:
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             temperature=effective_temperature,
-                            response_mime_type="application/json",
+                            # response_mime_type="application/json",
                             # thinking_config=thinking_config,
                         ),
                     )
