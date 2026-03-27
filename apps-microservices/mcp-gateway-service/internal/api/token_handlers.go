@@ -78,6 +78,10 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "server_ids is required (at least one)"})
 		return
 	}
+	if req.MCPCommand == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mcp_command is required"})
+		return
+	}
 
 	rawToken, hash, prefix, err := scopetoken.Generate()
 	if err != nil {
@@ -91,6 +95,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		TokenHash:   hash,
 		TokenPrefix: prefix,
+		MCPCommand:  req.MCPCommand,
 		IsActive:    true,
 	}
 
@@ -133,6 +138,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		Token:       rawToken,
 		TokenPrefix: token.TokenPrefix,
 		ServerIDs:   req.ServerIDs,
+		MCPCommand:  token.MCPCommand,
 		IsActive:    token.IsActive,
 		CreatedAt:   token.CreatedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:   expiresStr,
@@ -278,6 +284,7 @@ func toTokenResponse(t db.ScopeToken) TokenResponse {
 		Description: t.Description,
 		TokenPrefix: t.TokenPrefix,
 		ServerIDs:   serverIDs,
+		MCPCommand:  t.MCPCommand,
 		IsActive:    t.IsActive,
 		CreatedBy:   t.CreatedBy,
 		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
