@@ -399,9 +399,21 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             logger.info(f"[{id_categorie}] Type source: messages, devis, site_web")
             filtre_page_type["source"] = [
                 "devis",
-                "messages",
-                "site_web"
+                "message",
+                "siteweb"
             ]
+        elif type_source == "produit":
+            logger.info(f"[{id_categorie}] Type source: produits")
+            filtre_page_type["source"] = "produit"
+        elif type_source == "message":
+            logger.info(f"[{id_categorie}] Type source: message")
+            filtre_page_type["source"] = "message"
+        elif type_source == "devis":
+            logger.info(f"[{id_categorie}] Type source: devis")
+            filtre_page_type["source"] = "devis"
+        elif type_source == "siteweb":
+            logger.info(f"[{id_categorie}] Type source: siteweb")
+            filtre_page_type["source"] = "siteweb"
 
         chunks, prompt_config = await asyncio.gather(
             call_search_api_async(
