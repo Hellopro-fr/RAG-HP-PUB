@@ -322,7 +322,7 @@ class PrixExtractor:
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
 
             # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
-            if not re.search(r'€|\beuros?\b|\bEUR\b', item_content, re.IGNORECASE):
+            if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', item_content, re.IGNORECASE):
                 self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
                 self._flush_item_logs(item_id)
                 self._current_item_id.reset(token)
