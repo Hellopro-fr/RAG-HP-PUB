@@ -547,6 +547,10 @@ class PrixExtractor:
                 filtre=filtre_page_type
             )
 
+            self._log(f"Chunks trouvés: {chunks}")
+            raise Exception("Chunks trouvés")
+            return None
+
             if not chunks:
                 self._log(f"⚠️ Aucun résultat Milvus pour Q1[{idx_q1}]")
                 continue
