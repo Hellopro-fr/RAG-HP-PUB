@@ -50,22 +50,27 @@ async def _detect_single_url(
     mode: DetectionMode = DetectionMode.COMPLETE,
     use_nlp_detection: bool = True,
     forced_method: Optional[str] = None,
+    force_refresh: bool = False,
 ) -> DetectionResponse:
     """
     Pipeline de détection FR pour une URL unique (logique partagée /detect + batch).
 
     Gère : cache lookup/store, HTML fetch, challenge detection, DomainFR pipeline.
-    Skip le cache si html_content est fourni (résultat page-level, pas domain-level).
+    Skip le cache si html_content est fourni (résultat page-level, pas domain-level)
+    ou si force_refresh est True.
     """
     effective_url = url
     html_was_provided = html_content is not None
 
     if not html_was_provided:
-        cached = await domain_cache.get(url)
-        if cached:
-            logger.info(f"Cache HIT {url}")
-            return DetectionResponse(**cached)
+        # Check cache (skip if force_refresh)
+        if not force_refresh:
+            cached = await domain_cache.get(url)
+            if cached:
+                logger.info(f"Cache HIT {url}")
+                return DetectionResponse(**cached)
 
+        # Fetch HTML
         fetch_result = await fetch_html(url, proxy_url)
         if not fetch_result:
             return DetectionResponse(
@@ -93,6 +98,8 @@ async def _detect_single_url(
     )
     result = await detector.check_page_if_french(html_content, mode)
 
+    # Write to cache: skip only if html_content was provided (page-level result)
+    # force_refresh should still write to cache (overwrite stale data)
     if not html_was_provided:
         await domain_cache.set(url, effective_url, result.model_dump())
 
@@ -132,6 +139,7 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
             mode=request.mode,
             use_nlp_detection=request.use_nlp_detection,
             forced_method=request.forced_method,
+            force_refresh=request.force_refresh,
         )
     except Exception as e:
         return DetectionResponse(
@@ -187,6 +195,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 proxy_url=request.proxy_url,
                 mode=detection_mode,
                 use_nlp_detection=request.use_nlp_detection,
+                force_refresh=request.force_refresh,
             )
 
             count = await _increment_count()

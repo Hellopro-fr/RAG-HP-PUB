@@ -33,6 +33,10 @@ class DetectionRequest(BaseModel):
         default=True,
         description="Activer la détection NLP par contenu textuel"
     )
+    force_refresh: bool = Field(
+        default=False,
+        description="Ignorer le cache et forcer une nouvelle détection"
+    )
     include_full_content: bool = Field(
         default=False,
         description="(Debug uniquement) Inclure le contenu HTML complet et le texte nettoye complet dans la reponse debug"
@@ -126,6 +130,10 @@ class BatchDetectionRequest(BaseModel):
     use_nlp_detection: bool = Field(
         default=True,
         description="Activer la détection NLP"
+    )
+    force_refresh: bool = Field(
+        default=False,
+        description="Ignorer le cache et forcer une nouvelle détection pour toutes les URLs"
     )
     max_concurrency: int = Field(
         default=10,

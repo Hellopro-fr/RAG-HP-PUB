@@ -30,15 +30,28 @@ class DomainCache:
 
     Règles :
     - Skip si html_content fourni (résultat page-level, pas domain-level)
+    - Skip si force_refresh=True (bypass cache en lecture, écrit quand même)
     - Clé : fr_detect:{normalized_domain} (www. supprimé)
     - TTL ok=True → 30 jours, ok=False → 7 jours
-    - Erreurs (fetch_failed, challenge_page, error) → jamais cachées
+    - Échecs transitoires (challenge_page, fetch_empty_content, etc.) → 6 heures
+    - Erreurs critiques (fetch_failed, error) → jamais cachées
     - En cas d'indisponibilité Redis, dégrade silencieusement (pas d'exception)
     """
 
-    TTL_OK = 30 * 24 * 3600   # 30 jours
-    TTL_NOK = 7 * 24 * 3600   # 7 jours
-    _ERROR_METHODS = frozenset({'error', 'fetch_failed', 'challenge_page'})
+    TTL_OK = 30 * 24 * 3600          # 30 jours — résultats définitifs positifs
+    TTL_NOK = 7 * 24 * 3600          # 7 jours — résultats définitifs négatifs
+    TTL_TRANSIENT = 6 * 3600          # 6 heures — échecs transitoires (retry automatique)
+
+    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques)
+    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed'})
+
+    # Méthodes transitoires : cachées avec TTL court (le site était peut-être temporairement down)
+    _TRANSIENT_METHODS = frozenset({
+        'challenge_page',               # Cloudflare/WAF — peut se résoudre
+        'fetch_empty_content',           # Contenu vide — proxy ou site down
+        'all_redirections_failed',       # Redirections échouées
+        'info_vide',                     # URL ou contenu absent
+    })
 
     def __init__(self) -> None:
         self._client = None
@@ -91,13 +104,24 @@ class DomainCache:
         client = await self._get_client()
         if not client:
             return
-        if result.get('method') in self._ERROR_METHODS:
+        method = result.get('method', '')
+        if method in self._NEVER_CACHE_METHODS:
             return
         try:
             input_domain = self._normalize_domain(input_url)
             if not input_domain:
                 return
-            ttl = self.TTL_OK if result.get('ok') else self.TTL_NOK
+
+            # TTL basé sur la qualité du résultat
+            if method in self._TRANSIENT_METHODS or any(
+                method.startswith(prefix) for prefix in ('HTTP_',)
+            ):
+                ttl = self.TTL_TRANSIENT
+            elif result.get('ok'):
+                ttl = self.TTL_OK
+            else:
+                ttl = self.TTL_NOK
+
             data = json.dumps(result)
             await client.setex(self._cache_key(input_domain), ttl, data)
             result_domain = self._normalize_domain(result_url)
