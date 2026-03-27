@@ -223,8 +223,8 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
             await api_client.log_llm_usage(
                 type_ia=3,  # Gemini
                 model=settings.GEMINI_MODEL_NAME,
-                input_token=usage_metadata.get("prompt_token_count", 0),
-                output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+                input_token=usage_metadata.get("prompt_token_count") or 0,
+                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
                 id_process=ID_PROCESS,
                 origine="prix-extraction-devis",
                 etat=1 if "error" not in llm_result else 2,
@@ -359,7 +359,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         await api_client.close()
 
 
-async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
+async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None, type_source: Optional[str] = None) -> Dict[str, Any]:
     """
     Recherche RAG sur la source "prix" filtrée par id_categorie, 
     formate les chunks et les envoie au LLM (Gemini) avec le prompt 114.
@@ -390,12 +390,24 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # =====================================================================
         logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG + prompt en parallèle: texte='{texte_recherche}...', source=prix, top_k=50")
 
+        # Filtre page_type pour la recherche RAG
+        filtre_page_type: Dict[str, Any] = {            
+            "id_categorie": id_categorie
+        }
+
+        if type_source == "other":
+            filtre_page_type["source"] = [
+                "devis",
+                "messages",
+                "site_web"
+            ]
+
         chunks, prompt_config = await asyncio.gather(
             call_search_api_async(
                 prompt=texte_recherche,
                 num_results=100,
                 source="prix",
-                filtre={"id_categorie": id_categorie}
+                filtre=filtre_page_type
             ),
             get_prompt_cached(prompt_id)
         )
@@ -501,8 +513,8 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         asyncio.create_task(api_client.log_llm_usage(
             type_ia=3,  # Gemini
             model=gemini_model,
-            input_token=usage_metadata.get("prompt_token_count", 0),
-            output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+            input_token=usage_metadata.get("prompt_token_count") or 0,
+            output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
             id_process=ID_PROCESS,
             origine="prix-traitement-questionnaire",
             etat=1 if "error" not in llm_result else 2,
