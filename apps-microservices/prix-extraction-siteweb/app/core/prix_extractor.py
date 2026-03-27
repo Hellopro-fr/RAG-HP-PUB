@@ -305,6 +305,9 @@ class PrixExtractor:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
             # Les données Milvus sont dans metadata.entity
             metadata = chunk.get("metadata", {})
+            self._log(f"[{chunk_index + 1}/{total_chunks}] metadata: {metadata}")
+            context_pre = metadata.get("context_pre", "")
+            context_post = metadata.get("context_post", "")
 
             chunk_metadata = metadata.get("entity", metadata)
             chunk_content = chunk_metadata.get("text", "")
@@ -312,14 +315,16 @@ class PrixExtractor:
             # verification s'il y a context_pre et context_post dans metadata ajouter dans avant / apres chunk_content
             # possible null
             # maj metadata.entity.text avec chunk_content
-            if "context_pre" in metadata and "context_post" in metadata:
-                self._log(f"[{chunk_index + 1}/{total_chunks}] context_pre: {metadata['context_pre']}")
-                self._log(f"[{chunk_index + 1}/{total_chunks}] context_post: {metadata['context_post']}")
-                chunk_metadata["text"] = metadata["context_pre"] + "  " + chunk_content + "  " + metadata["context_post"]
-                chunk_metadata["context_pre"] = metadata["context_pre"]
-                chunk_metadata["context_post"] = metadata["context_post"]
+            if context_pre or context_post:
+                self._log(f"[{chunk_index + 1}/{total_chunks}] context_pre: {context_pre}")
+                self._log(f"[{chunk_index + 1}/{total_chunks}] context_post: {context_post}")
+                chunk_metadata["text"] = context_pre + "  " + chunk_content + "  " + context_post
+                chunk_metadata["context_pre"] = context_pre
+                chunk_metadata["context_post"] = context_post
                 chunk_content = chunk_metadata["text"]
 
+            raise Exception("Test")
+            return None
 
             # Activer le contexte chunk pour bufferiser les logs
             token = self._current_chunk_id.set(chunk_id)
@@ -599,6 +604,8 @@ class PrixExtractor:
             ]
 
             results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+            raise Exception("Test")
+            return None
 
             # Flush les logs bufferisés des chunks
             for chunk_id_key in list(self._chunk_log_buffers.keys()):
