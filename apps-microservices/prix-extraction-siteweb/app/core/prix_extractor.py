@@ -443,6 +443,7 @@ class PrixExtractor:
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
         self._log(f"Provider LLM: {self.LLM_PROVIDER}")
+        self._log(f"Model LLM: {self.GEMINI_MODEL}")
         self._log(f"Source Milvus: {settings.MILVUS_SOURCE}")
         self._log(f"Top K: {settings.MILVUS_TOP_K}")
         self._log("=" * 60)
