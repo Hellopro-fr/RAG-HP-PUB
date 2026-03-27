@@ -1023,7 +1023,7 @@ class CrawlerManager:
             
             # 2. Update state in Redis
             job_info = await cache_service.get_json(job_key)
-            if job_info and job_info.get("status") == "running":
+            if job_info and job_info.get("status") in ("running", "restarting_oom"):
                 job_info["status"] = "failed"
                 job_info["shutdown_reason"] = "Service instance terminated" # V3 Logic
                 if "last_heartbeat" in job_info:
@@ -1223,13 +1223,10 @@ class CrawlerManager:
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
 
-                # Jobs in restarting_oom hold a real concurrency slot
-                if status == "restarting_oom":
-                    true_running_count += 1
-                    continue
-
-                if status == "running":
-                    # Check for staleness
+                if status in ("running", "restarting_oom"):
+                    # Check for staleness — applies to both running and restarting_oom jobs.
+                    # A restarting_oom job holds a concurrency slot but may be orphaned
+                    # if the replica that owned it crashed without cleanup.
                     last_heartbeat_str = job_data.get("last_heartbeat")
                     start_time_str = job_data.get("start_time")
 
@@ -1244,12 +1241,10 @@ class CrawlerManager:
                         time_since_activity = (datetime.utcnow() - last_activity_time).total_seconds()
                         if time_since_activity > STALE_JOB_THRESHOLD_SECONDS:
                             is_stale = True
-                            logger.warning(f"Job '{crawl_id}' is stale! Last activity: {time_since_activity:.0f}s ago. Marking as failed.")
+                            logger.warning(f"Job '{crawl_id}' (status: {status}) is stale! Last activity: {time_since_activity:.0f}s ago. Marking as failed.")
                     else:
-                        # No timestamps at all? Should not happen for valid running jobs.
-                        # Assume stale if it's been "running" with no time data.
                         is_stale = True
-                        logger.warning(f"Job '{crawl_id}' has no time data. Marking as stale/failed.")
+                        logger.warning(f"Job '{crawl_id}' (status: {status}) has no time data. Marking as stale/failed.")
 
                     if is_stale:
                         # Mark as failed
