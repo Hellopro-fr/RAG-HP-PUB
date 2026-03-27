@@ -16,10 +16,11 @@ import SupplierCard from "./SupplierCard";
 import WarningBanner from "./WarningBanner";
 import ContactForm from "./ContactForm";
 import ModifyCriteriaForm from "./ModifyCriteriaForm";
-import CustomNeedForm from "./CustomNeedForm";
+import CustomNeedForm, { CustomNeedVariant } from "./CustomNeedForm";
 import ProductDetailModal from "./ProductDetailModal";
 import ProductComparisonModal from "./ProductComparisonModal";
 import CriteriaChangedBanner from "./CriteriaChangedBanner";
+import BudgetEstimate from "./BudgetEstimate";
 import {
   trackComparisonModalView,
   trackProductSelectionChange,
@@ -54,7 +55,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     orphanedSelectedSuppliers,
     criteriaHaveChanged,
     removedCritiqueCriteriaIds,
-    removedSecondaireCriteriaIds
+    removedSecondaireCriteriaIds,
+    priceEstimation
   } = useFlowStore();
 
   // Utiliser uniquement les résultats dynamiques du matching (pas de fallback statique)
@@ -102,6 +104,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const [isExpanded, setIsExpanded] = useState(false);
   const [animatingCount, setAnimatingCount] = useState(false);
   const [viewState, setViewState] = useState<ViewState>("selection");
+  const [customNeedVariant, setCustomNeedVariant] = useState<CustomNeedVariant>('initial');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showComparison, setShowComparison] = useState(false);
@@ -306,6 +309,34 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                 }}
               />
 
+              {/* Budget Estimate — affiché seulement si données prix valides */}
+              {priceEstimation?.data && priceEstimation.data.fourchette.borne_basse !== 0 && (() => {
+                const { fourchette, exemples_produits, phrase_prix } = priceEstimation.data!;
+                const fmtPrice = (n: number) =>
+                  new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
+
+                const priceItems = (exemples_produits || []).map((ex) => ({
+                  price: `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(ex.prix)} € ${ex.tva || "HT"}`,
+                  equipment: `${ex.nom}${ex.fournisseur ? ` — ${ex.fournisseur}` : ""}`,
+                  date: ex.date || "",
+                }));
+
+                return (
+                  <BudgetEstimate
+                    priceMin={fmtPrice(fourchette.borne_basse)}
+                    priceMax={fmtPrice(fourchette.borne_haute)}
+                    priceMoy={fmtPrice(fourchette.prix_median)}
+                    priceCount={priceItems.length}
+                    priceItems={priceItems.length > 0 ? priceItems : undefined}
+                    detailDescription={phrase_prix}
+                    handleClickNeCorrespondPas={() => {
+                      setCustomNeedVariant('budget');
+                      setViewState("custom-need");
+                    }}
+                  />
+                );
+              })()}
+
               {/* Criteria Changed Banner */}
               {criteriaHaveChanged && selectedSupplierIds.length > 0 && (
                 <CriteriaChangedBanner
@@ -505,6 +536,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
           {viewState === "custom-need" && (
             <CustomNeedForm
+              variant={customNeedVariant}
               onBack={() => {
                 // Remettre flowType à 'principal' quand l'utilisateur annule
                 // depuis le formulaire "pas trouvé ce que vous cherchez"
@@ -575,6 +607,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   // Définir flowType = 'pas_trouve_recherchez' car l'utilisateur a cliqué "pas trouvé"
                   setStoreFlowType('pas_trouve_recherchez');
                   setFlowType('pas_trouve_recherchez');
+                  setCustomNeedVariant('initial');
                   setViewState("custom-need");
                 }}
                 className="flex-1 min-w-[200px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"

@@ -149,6 +149,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           type_societe       : data.profile?.type_societe || '',
         },
         message               : data.contact.message || '',
+        budget                : data.contact.budget || '',
         produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data): [],
         criteres              : data.answers,
         souhait_devis         : data.source === 2,

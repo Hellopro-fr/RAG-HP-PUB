@@ -13,7 +13,7 @@ const getApiBasePath = () => {
 // Route renommée pour éviter blocage WAF Imperva (mot "tracking" détecté)
 const TRACKING_API_URL = '/api/tck';
 
-type EventType = 'questionnaire' | 'profile' | 'selection' | 'contact' | 'conversion' | 'matching';
+type EventType = 'questionnaire' | 'profile' | 'selection' | 'contact' | 'conversion' | 'matching' | 'pricing';
 
 interface TrackingEvent {
   event_type: string;

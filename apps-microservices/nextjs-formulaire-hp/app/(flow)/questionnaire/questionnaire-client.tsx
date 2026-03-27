@@ -8,6 +8,7 @@ import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type Matc
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
+import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
 
 // Interface pour les données URL (réponse Q1 pré-remplie)
 interface UrlData {
@@ -33,6 +34,7 @@ export default function QuestionnaireClient({
   const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setUseRerank } = useFlowStore();
   const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
+  const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
 
@@ -42,6 +44,7 @@ export default function QuestionnaireClient({
 
   // État pour le loader de matching et la destination après
   const [showLoader, setShowLoader] = useState(false);
+  const [loaderProgress, setLoaderProgress] = useState(0);
   const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
@@ -215,24 +218,39 @@ export default function QuestionnaireClient({
   }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
 
   const handleComplete = async () => {
-    // Afficher le loader et lancer le matching
+    // Afficher le loader et lancer matching + prix en parallèle
     setShowLoader(true);
-    const destination = await processMatching();
+
+    // Promise.all : attendre matching ET prix
+    // L'échec du prix ne bloque PAS (catch silencieux)
+    // onProgress met à jour la barre (0→25→50→75 via matching, 100 après prix)
+    const [destination] = await Promise.all([
+      processMatching(setLoaderProgress),
+      fetchPriceEstimation().catch((err) => {
+        console.error('[Prix] Error (non-blocking):', err);
+      }),
+    ]);
+
+    setLoaderProgress(100);
+    // Attendre que la barre anime jusqu'à 100% avant de naviguer
+    await new Promise(resolve => setTimeout(resolve, 1500));
     setRedirectDestination(destination);
   };
 
-  const handleLoaderComplete = () => {
-    // Navigation après le loader
-    if (redirectDestination === 'something-to-add') {
-      goToSomethingToAdd();
-    } else {
-      goToSelection();
+  // Navigation dès que les données sont prêtes (matching + prix terminés)
+  useEffect(() => {
+    if (redirectDestination) {
+      if (redirectDestination === 'something-to-add') {
+        goToSomethingToAdd();
+      } else {
+        goToSelection();
+      }
     }
-  };
+  }, [redirectDestination, goToSelection, goToSomethingToAdd]);
 
   // Afficher le loader pendant le matching
   if (showLoader) {
-    return <MatchingLoader onComplete={handleLoaderComplete} duration={5000} />;
+    return <MatchingLoader externalProgress={loaderProgress} />;
   }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire
