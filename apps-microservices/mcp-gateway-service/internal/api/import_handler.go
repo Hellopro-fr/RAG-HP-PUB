@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 )
 
@@ -155,8 +156,8 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 		dbURL = "stdio://" + mcpCommand
 	}
 
-	// Check for duplicate URL
-	existing, _ := h.repo.ListAll(nil, "")
+	// Check for duplicate URL (check across all users)
+	existing, _ := h.repo.ListAll(nil, "", "")
 	for _, s := range existing {
 		if s.URL == dbURL || s.Name == name {
 			result.Status = "skipped"
@@ -177,6 +178,7 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 		HealthStatus:        "unknown",
 		MCPTransport:        mcpTransport,
 		MCPCommand:          mcpCommand,
+		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 
 	if entry.Disabled != nil && *entry.Disabled {

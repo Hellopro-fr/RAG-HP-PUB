@@ -31,6 +31,7 @@ type MCPServer struct {
 	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
 	LastError           string          `gorm:"type:text" json:"last_error,omitempty"`
 	LastDiscoveredAt    *time.Time      `gorm:"type:datetime(3)" json:"last_discovered_at,omitempty"`
+	CreatedBy           string          `gorm:"type:varchar(255);not null;default:'';index:idx_created_by" json:"created_by"`
 	CreatedAt           time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt           time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 
