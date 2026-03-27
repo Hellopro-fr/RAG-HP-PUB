@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { useFlowStore } from '@/lib/stores/flow-store';
-import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
 import { normalizeMatchingToSuppliers, enrichSuppliersWithProductInfo } from '@/lib/utils/matching-normalizer';
 import type { MatchingResponse, ProductInfoResponse } from '@/types/matching';
@@ -87,7 +86,7 @@ export function useProcessMatching(): UseProcessMatchingResult {
       const consolidatedEquivalences = consolidateEquivalences(dynamicEquivalences);
 
       // Données depuis le store pour Rerank
-      const { useRerank, userQuestionAnswers } = useFlowStore.getState();
+      const { userQuestionAnswers } = useFlowStore.getState();
 
       // Sauvegarder les équivalences consolidées dans le store pour ModifyCriteriaForm
       setEquivalenceCaracteristique(consolidatedEquivalences);
@@ -116,7 +115,7 @@ export function useProcessMatching(): UseProcessMatchingResult {
 
       // Bloc Rerank
       const rerankPayload = {
-        use_rerank: useRerank,
+        use_rerank: true,
         parcours: buildParcours(userQuestionAnswers),
         top_k: 30,
         id_prompt: 118,
