@@ -93,6 +93,7 @@ context.config = {
     maxRedirects,
     maxNewUrls,
     domain: domain || "",
+    siteHostname: site ? new URL(site).hostname : "",
     baseUrl: site || "",
     crawleeStorageName: domain ? domain.replace('.', '-') : "",
     // Filtering

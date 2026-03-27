@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 CRAWL_JOB_PREFIX = "crawl_job:"
 # The global counter for running jobs
 CRAWL_RUNNING_COUNT_KEY = "crawl_jobs:running_count"
+# The dynamic global max crawls key in Redis
+CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 
 CRAWL_UPDATES_CHANNEL = "crawl_updates"
 STALE_JOB_THRESHOLD_SECONDS = 180  # 3 minutes without heartbeat = dead
@@ -136,7 +138,7 @@ class CrawlerManager:
         # Check dynamic global limit (V3 Logic)
         # If is_restart=True, we skip this because we already consumed a slot.
         if not is_restart:
-            redis_max_global_str = await cache_service.get_key("crawl_jobs:max_global_crawls")
+            redis_max_global_str = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)
             current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
 
             # Optimistic increment: atomically claim a slot, then check the limit.
@@ -146,7 +148,7 @@ class CrawlerManager:
 
             if new_count > current_max_global:
                 # Over limit — roll back the optimistic increment and reject
-                await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
                 logger.warning(f"Global concurrency limit reached ({new_count - 1}/{current_max_global}). Rejecting '{crawl_id}'.")
                 detail_payload = {
                 "error_code": "GLOBAL_CAPACITY_EXCEEDED",
@@ -164,7 +166,9 @@ class CrawlerManager:
         # in local_processes until relaunch completes.
         active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
         if not is_restart and active_local >= settings.MAX_CONCURRENT_CRAWLS:
-            logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'.")
+            # Roll back the global INCR we claimed above before rejecting
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'. Global counter rolled back.")
             detail_payload = {
                 "error_code": "REPLICA_CAPACITY_EXCEEDED",
                 "message": "This service instance is at its maximum capacity.",
@@ -233,13 +237,12 @@ class CrawlerManager:
         """
         crawl_id = job_info["crawl_id"]
         restart_count = int(job_info.get("oom_restart_count", 0))
-        MAX_RESTARTS = 2 # Configurable limit
-        
-        if restart_count >= MAX_RESTARTS:
-            logger.error(f"Maximum OOM restarts ({MAX_RESTARTS}) reached for '{crawl_id}'. Failing job.")
+
+        if restart_count >= settings.MAX_OOM_RESTARTS:
+            logger.error(f"Maximum OOM restarts ({settings.MAX_OOM_RESTARTS}) reached for '{crawl_id}'. Failing job.")
             
             # Manually clean up since we skipped the normal failure step
-            await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
             
             job_info["status"] = "failed"
             job_info["isError"] = "OOM_MAX_RESTARTS"
@@ -256,7 +259,7 @@ class CrawlerManager:
                 ))
             return
 
-        logger.info(f"Relaunching OOM Job '{crawl_id}' (Attempt {restart_count + 1}/{MAX_RESTARTS+1})")
+        logger.info(f"Relaunching OOM Job '{crawl_id}' (Attempt {restart_count + 1}/{settings.MAX_OOM_RESTARTS + 1})")
         
         # Ensure we don't drop data on restart!
         params = job_info.get("params", {})
@@ -277,9 +280,9 @@ class CrawlerManager:
                 oom_restart_count=restart_count + 1
             )
         except Exception as e:
-            logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}")
+            logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}", exc_info=True)
             # Ensure we clean up the slot if relaunch fails
-            await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
     async def _send_success_webhook(self, job_info: dict):
         callback_url = job_info.get("callback_url")
@@ -519,7 +522,7 @@ class CrawlerManager:
                  return # EXIT FUNCTION EARLY - NO WEBHOOKS
 
             # Non-OOM path: release the global counter slot
-            await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
             final_status = "finished" if is_success else "failed"
             job_info["status"] = final_status
@@ -598,11 +601,16 @@ class CrawlerManager:
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
         
         old_status = job_info.get("status")
-        
+
         # Validate target status
         if target_status not in ("finished", "failed"):
             target_status = "finished"
-        
+
+        # Release the global concurrency slot if the job was holding one
+        if old_status in ("running", "restarting_oom"):
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{old_status}').")
+
         # Update status
         job_info["status"] = target_status
         job_info["pid"] = None
@@ -632,17 +640,30 @@ class CrawlerManager:
 
     async def get_all_statuses(self, status_filter: Optional[str] = None) -> Dict[str, CrawlStatus]:
         all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
-        statuses = {}
+        if not all_job_keys:
+            return {}
+
+        # Batch-fetch all jobs in a single Redis round-trip (pipeline)
+        pipe = cache_service.redis_client.pipeline()
         for key in all_job_keys:
-            crawl_id = key.replace(CRAWL_JOB_PREFIX, "")
-            job_info = await cache_service.get_json(key)
-            if job_info:
-                # Apply filter before computing full status (avoids unnecessary disk I/O)
-                if status_filter and job_info.get("status") != status_filter:
-                    continue
-                status_data = await self.get_status(job_info)
-                if status_data:
-                    statuses[crawl_id] = status_data
+            pipe.get(key)
+        all_jobs_raw = await pipe.execute()
+
+        statuses = {}
+        for i, job_raw in enumerate(all_jobs_raw):
+            if not job_raw:
+                continue
+            try:
+                job_info = json.loads(job_raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            # Apply filter before computing full status (avoids unnecessary disk I/O)
+            if status_filter and job_info.get("status") != status_filter:
+                continue
+            crawl_id = all_job_keys[i].replace(CRAWL_JOB_PREFIX, "")
+            status_data = await self.get_status(job_info)
+            if status_data:
+                statuses[crawl_id] = status_data
         return statuses
 
     async def get_status(self, job_info: dict) -> CrawlStatus:
@@ -1002,7 +1023,7 @@ class CrawlerManager:
             
             # 2. Update state in Redis
             job_info = await cache_service.get_json(job_key)
-            if job_info and job_info.get("status") == "running":
+            if job_info and job_info.get("status") in ("running", "restarting_oom"):
                 job_info["status"] = "failed"
                 job_info["shutdown_reason"] = "Service instance terminated" # V3 Logic
                 if "last_heartbeat" in job_info:
@@ -1012,7 +1033,7 @@ class CrawlerManager:
                 logger.info(f"Marked job '{crawl_id}' as 'failed' in Redis.")
 
                 # 3. Decrement the global running counter
-                await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
                 await self._publish_update(crawl_id, "failed")
 
@@ -1184,7 +1205,7 @@ class CrawlerManager:
 
         if not all_job_keys:
             logger.info("No jobs found in Redis during reconciliation.")
-            await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, 0)
+            await cache_service.set_key(CRAWL_RUNNING_COUNT_KEY, 0)
             return
 
         # Use a pipeline to fetch all jobs at once for performance
@@ -1202,8 +1223,10 @@ class CrawlerManager:
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
 
-                if status == "running":
-                    # Check for staleness
+                if status in ("running", "restarting_oom"):
+                    # Check for staleness — applies to both running and restarting_oom jobs.
+                    # A restarting_oom job holds a concurrency slot but may be orphaned
+                    # if the replica that owned it crashed without cleanup.
                     last_heartbeat_str = job_data.get("last_heartbeat")
                     start_time_str = job_data.get("start_time")
 
@@ -1218,12 +1241,10 @@ class CrawlerManager:
                         time_since_activity = (datetime.utcnow() - last_activity_time).total_seconds()
                         if time_since_activity > STALE_JOB_THRESHOLD_SECONDS:
                             is_stale = True
-                            logger.warning(f"Job '{crawl_id}' is stale! Last activity: {time_since_activity:.0f}s ago. Marking as failed.")
+                            logger.warning(f"Job '{crawl_id}' (status: {status}) is stale! Last activity: {time_since_activity:.0f}s ago. Marking as failed.")
                     else:
-                        # No timestamps at all? Should not happen for valid running jobs.
-                        # Assume stale if it's been "running" with no time data.
                         is_stale = True
-                        logger.warning(f"Job '{crawl_id}' has no time data. Marking as stale/failed.")
+                        logger.warning(f"Job '{crawl_id}' (status: {status}) has no time data. Marking as stale/failed.")
 
                     if is_stale:
                         # Mark as failed
@@ -1258,7 +1279,10 @@ class CrawlerManager:
 
         # Correct the global counter
         counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
-        counter_value = int(counter_value_raw) if counter_value_raw and counter_value_raw.isdigit() else 0
+        try:
+            counter_value = int(counter_value_raw) if counter_value_raw else 0
+        except (ValueError, TypeError):
+            counter_value = 0
 
         if true_running_count != counter_value:
             logger.warning(
@@ -1266,7 +1290,7 @@ class CrawlerManager:
                 f"Counter value: {counter_value}, Actual running jobs: {true_running_count}. "
                 f"Resetting counter."
             )
-            await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, true_running_count)
+            await cache_service.set_key(CRAWL_RUNNING_COUNT_KEY, true_running_count)
         else:
             logger.info(f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
 

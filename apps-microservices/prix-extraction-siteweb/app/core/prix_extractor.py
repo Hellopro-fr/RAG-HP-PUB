@@ -2,6 +2,7 @@
 Module principal de traitement: extraction de prix depuis les chunks Milvus via LLM.
 Traitement parallèle asynchrone avec asyncio.
 """
+import re
 import time
 import logging
 import asyncio
@@ -39,6 +40,9 @@ class PrixExtractor:
 
     # Type extraction (4 = siteweb)
     TYPE_EXTRACTION = "4"
+
+    # Provider LLM forcé (ne dépend pas de la variable d'env globale LLM_PROVIDER)
+    LLM_PROVIDER = "gemini"
 
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
@@ -154,7 +158,7 @@ class PrixExtractor:
         Returns:
             Dict avec le résultat du LLM
         """
-        provider = settings.LLM_PROVIDER.lower()
+        provider = self.LLM_PROVIDER.lower()
         
         if provider == "gemini":
             gemini = GeminiProvider(
@@ -169,8 +173,8 @@ class PrixExtractor:
             await self.api_client.log_llm_usage(
                 type_ia=3,  # Gemini
                 model=self.GEMINI_MODEL,
-                input_token=usage_metadata.get("prompt_token_count", 0),
-                output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+                input_token=usage_metadata.get("prompt_token_count") or 0,
+                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
                 id_process=self.ID_PROCESS,
                 origine="prix-extraction-siteweb",
                 etat=1 if "code" not in result else 2,
@@ -308,12 +312,23 @@ class PrixExtractor:
             token = self._current_chunk_id.set(chunk_id)
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
-            self._log(f"[{chunk_index + 1}/{total_chunks}] Chunk : {chunk}")
+            self._log(f"[{chunk_index + 1}/{total_chunks}] chunk_metadata: ({chunk_metadata})")
+
+            # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
+            if not re.search(r'€|\beuros?\b|\bEUR\b', chunk_content, re.IGNORECASE):
+                self._log(f"[{chunk_index + 1}/{total_chunks}] ⏭️ Chunk {chunk_id} — aucune mention de prix (€/euro/EUR) → skip")
+                self._flush_chunk_logs(chunk_id)
+                self._current_chunk_id.reset(token)
+                return ItemResult(
+                    item_id=chunk_id,
+                    source=settings.MILVUS_SOURCE,
+                    content=chunk_content,
+                    prix_data=None,
+                    status="skipped"
+                )
 
             # 1. Construire le prompt avec le contenu du chunk
             prompt_text = self._build_prompt(chunk_metadata, category_name)
-
-            self._log(f"[{chunk_index + 1}/{total_chunks}] Prompt: ({prompt_text})")
 
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
@@ -363,23 +378,30 @@ class PrixExtractor:
                     status="skipped"
                 )
 
-            # 3b. Valider et construire le payload structuré
-            payload = self._validate_and_build_payload(
-                prix_data=prix_data_raw,
-                chunk_id=chunk_id,
-                id_categorie=id_categorie,
-                category_name=category_name,
-                chunk_metadata=chunk_metadata
-            )
-            if payload is None:
-                self._flush_chunk_logs(chunk_id)
-                self._current_chunk_id.reset(token)
-                raise ValueError(
-                    f"Validation du payload échouée (champs obligatoires manquants) : "
-                    f"Catégorie {id_categorie} - Chunk {chunk_id} - Data : {prix_data_raw}"
-                )
+            # Normaliser en liste (le LLM peut retourner un dict ou une liste)
+            if isinstance(prix_data_raw, dict):
+                prix_data_raw = [prix_data_raw]
 
-            prix_data = payload.dict()
+            # 3b. Valider et construire les payloads pour chaque produit
+            payloads = []
+            for single_prix in prix_data_raw:
+                payload = self._validate_and_build_payload(
+                    prix_data=single_prix,
+                    chunk_id=chunk_id,
+                    id_categorie=id_categorie,
+                    category_name=category_name,
+                    chunk_metadata=chunk_metadata
+                )
+                if payload is None:
+                    self._flush_chunk_logs(chunk_id)
+                    self._current_chunk_id.reset(token)
+                    raise ValueError(
+                        f"Validation du payload échouée (champs obligatoires manquants) : "
+                        f"Catégorie {id_categorie} - Chunk {chunk_id} - Data : {single_prix}"
+                    )
+                payloads.append(payload)
+
+            prix_data = [p.dict() for p in payloads]
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] ✅ Chunk {chunk_id} validé")
             self._flush_chunk_logs(chunk_id)
@@ -420,7 +442,8 @@ class PrixExtractor:
         self._log("EXTRACTION PRIX SITE WEB")
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
-        self._log(f"Provider LLM: {settings.LLM_PROVIDER}")
+        self._log(f"Provider LLM: {self.LLM_PROVIDER}")
+        self._log(f"Model LLM: {self.GEMINI_MODEL}")
         self._log(f"Source Milvus: {settings.MILVUS_SOURCE}")
         self._log(f"Top K: {settings.MILVUS_TOP_K}")
         self._log("=" * 60)
@@ -472,126 +495,163 @@ class PrixExtractor:
         self.info_q1 = utils.to_json_string(self._clean_q1_data(q1_raw))
         self._log(f"Question 1 chargée: {self.info_q1}")
 
-        # Recherche RAG dans Milvus
-        self._log(f"\n--- Recherche Milvus (source={settings.MILVUS_SOURCE}, top_k={settings.MILVUS_TOP_K}) ---")
-        chunks = await call_search_api_async(
-            prompt=category_name,
-            num_results=5,
-            source=settings.MILVUS_SOURCE
-        )
-        
-        if not chunks:
-            self._log("⚠️ Aucun résultat de recherche Milvus")
-            return PrixExtractionResult(
-                id_categorie=id_categorie,
-                total_chunks=0,
-                processed=0,
-                success=0,
-                errors=0,
-                status="completed"
-            )
-        
-        total_chunks = len(chunks)
-        self._log(f"📊 {total_chunks} chunks trouvés dans Milvus")
+        # Extraire les réponses Q1 pour la boucle de recherche
+        q1_data = q1_raw.get("response", q1_raw)
+        reponses_q1 = q1_data.get("reponses", [])
+        if not reponses_q1:
+            self._log("ERREUR: Aucune réponse dans Question 1")
+            raise Exception(f"Aucune réponse Q1 pour la catégorie {id_categorie}")
 
-        # Recupérer les list ids chunks deja traiter        
-        self._log("Récupération des ids chunks deja traiter...")
+        # Filtre page_type pour la recherche RAG
+        filtre_page_type = {
+            "page_type": [
+                "article", "blog", "ecommerce", "faq", "home",
+                "landing", "listing_produit", "Page_local", "fiche_produit"
+            ]
+        }
+
+        # Compteurs globaux sur toutes les boucles Q1
+        total_success = 0
+        total_skipped = 0
+        total_error = 0
+        total_chunks_global = 0
+        all_item_results: List[ItemResult] = []
+        start_time_global = time.time()
+
+        # Récupérer les ids chunks déjà traités (partagé entre toutes les boucles Q1)
+        self._log("Récupération des ids chunks déjà traités...")
         ids_chunks_traites = await self.api_client.post(
             "prix",
             "process",
             "get",
             {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
         )
+        ids_chunks_traites = set(ids_chunks_traites) if ids_chunks_traites else set()
 
-        # Filtrer les chunks déjà traités
-        if ids_chunks_traites:
+        # Boucle sur chaque réponse Q1
+        for idx_q1, rep_q1 in enumerate(reponses_q1, 1):
+            reponse_text = rep_q1.get("reponse", "")
+            self._log(f"\n{'='*60}")
+            self._log(f"BOUCLE Q1 [{idx_q1}/{len(reponses_q1)}] : {reponse_text}")
+            self._log(f"{'='*60}")
+
+            # Recherche RAG avec prompt enrichi par la réponse Q1
+            reponse_clean = re.sub(r'\s*\(.*?\)', '', reponse_text).strip()
+            search_prompt = f"prix {category_name} {reponse_clean} €"
+            self._log(f"\n--- Recherche Milvus: '{search_prompt}' (top_k=30) ---")
+            chunks = await call_search_api_async(
+                prompt=search_prompt,
+                num_results=settings.MILVUS_TOP_K,
+                source=settings.MILVUS_SOURCE,
+                filtre=filtre_page_type
+            )
+
+            if not chunks:
+                self._log(f"⚠️ Aucun résultat Milvus pour Q1[{idx_q1}]")
+                continue
+
+            self._log(f"📊 {len(chunks)} chunks trouvés dans Milvus")
+
+            # Filtrer les chunks déjà traités (dédoublonnage cross-boucles Q1)
             chunks_filtres = []
             for chunk in chunks:
-                if chunk["id"] in ids_chunks_traites:
-                    self._log(f"Chunk {chunk['id']} déjà traité")
+                chunk_id = str(chunk.get("id", ""))
+                if chunk_id in ids_chunks_traites:
+                    self._log(f"Chunk {chunk_id} déjà traité")
                 else:
                     chunks_filtres.append(chunk)
             chunks = chunks_filtres
-        
-        # Traitement parallèle de tous les chunks
-        self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_CHUNKS} max simultanés) ---")
-        start_time = time.time()
-        
-        tasks = [
-            self._process_single_chunk(
-                chunk=chunk,
-                chunk_index=i,
-                total_chunks=total_chunks,
-                id_categorie=id_categorie,
-                category_name=category_name
-            )
-            for i, chunk in enumerate(chunks)
-        ]
-        
-        results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Flush tous les logs bufferisés des chunks (écriture groupée par chunk)
-        for chunk_id_key in list(self._chunk_log_buffers.keys()):
-            self._flush_chunk_logs(chunk_id_key)
+            if not chunks:
+                self._log(f"⚠️ Tous les chunks déjà traités pour Q1[{idx_q1}]")
+                continue
 
-        elapsed = time.time() - start_time
+            total_chunks = len(chunks)
+            total_chunks_global += total_chunks
+            self._log(f"📊 {total_chunks} chunks à traiter après dédoublonnage")
 
-        # Collecter et compter les résultats — toute exception lève immédiatement
-        success_count = 0
-        skipped_count = 0
-        error_count = 0
-        item_results: List[ItemResult] = []
-        for r in results:
-            if isinstance(r, Exception):
-                # Propager l'exception : arrêt immédiat du traitement de la catégorie
-                self._log(f"❌ Exception critique: {r}")
-                raise r
-            elif isinstance(r, ItemResult):
-                item_results.append(r)                
-                if r.status == "success":
-                    success_count += 1
-                elif r.status == "skipped":
-                    skipped_count += 1
+            # Traitement parallèle des chunks
+            self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_CHUNKS} max simultanés) ---")
+
+            tasks = [
+                self._process_single_chunk(
+                    chunk=chunk,
+                    chunk_index=i,
+                    total_chunks=total_chunks,
+                    id_categorie=id_categorie,
+                    category_name=category_name
+                )
+                for i, chunk in enumerate(chunks)
+            ]
+
+            results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Flush les logs bufferisés des chunks
+            for chunk_id_key in list(self._chunk_log_buffers.keys()):
+                self._flush_chunk_logs(chunk_id_key)
+
+            # Collecter les résultats
+            batch_item_results: List[ItemResult] = []
+            for r in results:
+                if isinstance(r, Exception):
+                    self._log(f"❌ Exception critique: {r}")
+                    raise r
+                elif isinstance(r, ItemResult):
+                    batch_item_results.append(r)
+                    if r.status == "success":
+                        total_success += 1
+                    elif r.status == "skipped":
+                        total_skipped += 1
+                    else:
+                        total_error += 1
+                        self._log(f"❌ Chunk en erreur: {r.item_id} — {r.error_message}")
+                        raise Exception(f"Chunk {r.item_id} en erreur: {r.error_message}")
                 else:
-                    error_count += 1
-                    self._log(f"❌ Chunk en erreur: {r.item_id} — {r.error_message}")
-                    raise Exception(f"Chunk {r.item_id} en erreur: {r.error_message}")
-            else:
-                raise Exception(f"Résultat inattendu: {type(r)} — {r}")
+                    raise Exception(f"Résultat inattendu: {type(r)} — {r}")
 
-        # Sauvegarde batch des IDs traités avec succès ou skipped
-        # type_extraction = 4 pour le siteweb
-        successful_ids = [r.item_id for r in item_results if r.status == "success" or r.status == "skipped"]
+            all_item_results.extend(batch_item_results)
 
-        if successful_ids:
-            self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) siteweb ---")
-            save_result = await self.api_client.post(
-                "prix",
-                "process",
-                "save",
-                {
-                    "id_categorie":    id_categorie,
-                    "type_extraction": self.TYPE_EXTRACTION,    
-                    "id_cibles":       successful_ids  # liste d'IDs (batch)
-                }
-            )
-            if save_result and not save_result.get("erreur"):
-                nb = save_result.get("nb_insere", len(successful_ids))
-                self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s) dans extraction_prix_ia")
+            # Sauvegarde batch des IDs traités avec succès ou skipped
+            successful_ids = [r.item_id for r in batch_item_results if r.status in ("success", "skipped")]
+
+            if successful_ids:
+                self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) siteweb ---")
+                save_result = await self.api_client.post(
+                    "prix",
+                    "process",
+                    "save",
+                    {
+                        "id_categorie":    id_categorie,
+                        "type_extraction": self.TYPE_EXTRACTION,
+                        "id_cibles":       successful_ids
+                    }
+                )
+
+                if save_result and not save_result.get("erreur"):
+                    nb = save_result.get("nb_insere", len(successful_ids))
+                    self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s)")
+                else:
+                    self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                    raise Exception(f"Batch save: réponse inattendue: {save_result}")
+
+                # Ajouter les IDs traités au set global pour dédoublonnage des prochaines boucles
+                ids_chunks_traites.update(successful_ids)
             else:
-                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
-                raise Exception(f"Batch save: réponse inattendue: {save_result}")
-        else:
-            self._log("ℹ️ Aucun ID siteweb à sauvegarder (aucun succès)")
-        
+                self._log(f"ℹ️ Aucun ID à sauvegarder pour Q1[{idx_q1}]")
+
+        # Fin de toutes les boucles Q1
+        elapsed_global = time.time() - start_time_global
+
         self._log("\n" + "=" * 60)
         self._log("EXTRACTION TERMINÉE")
-        self._log(f"Total chunks: {total_chunks}")
-        self._log(f"Succès: {success_count}")
-        self._log(f"Erreurs: {error_count}")
-        self._log(f"Durée: {elapsed:.1f}s")
+        self._log(f"Réponses Q1 traitées: {len(reponses_q1)}")
+        self._log(f"Total chunks: {total_chunks_global}")
+        self._log(f"Succès: {total_success}")
+        self._log(f"Skipped: {total_skipped}")
+        self._log(f"Erreurs: {total_error}")
+        self._log(f"Durée: {elapsed_global:.1f}s")
         self._log("=" * 60)
-
+        
         await self.api_client.post(
             "prix",
             "mail",
@@ -602,15 +662,15 @@ class PrixExtractor:
                 "tracking_file": self.tracking_file
             }
         )
-        
+
         return PrixExtractionResult(
             id_categorie=id_categorie,
-            total_chunks=total_chunks,
-            processed=success_count + error_count,
-            success=success_count,
-            errors=error_count,
-            status="completed" if error_count == 0 else "completed_with_errors",
-            item_results=item_results
+            total_chunks=total_chunks_global,
+            processed=total_success + total_error,
+            success=total_success,
+            errors=total_error,
+            status="completed" if total_error == 0 else "completed_with_errors",
+            item_results=all_item_results
         )
     
     async def close(self):

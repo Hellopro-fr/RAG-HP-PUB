@@ -1,10 +1,16 @@
 import re
+import json
 import asyncio
 import logging
 import httpx
 from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
+
+try:
+    import redis.asyncio as aioredis
+except ImportError:
+    aioredis = None
 
 from app.models.schemas import (
     DetectionMode, DetectionResponse, AlternativeUrl,
@@ -16,6 +22,92 @@ from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class DomainCache:
+    """
+    Cache Redis optionnel pour les résultats de détection FR par domaine.
+
+    Règles :
+    - Skip si html_content fourni (résultat page-level, pas domain-level)
+    - Clé : fr_detect:{normalized_domain} (www. supprimé)
+    - TTL ok=True → 30 jours, ok=False → 7 jours
+    - Erreurs (fetch_failed, challenge_page, error) → jamais cachées
+    - En cas d'indisponibilité Redis, dégrade silencieusement (pas d'exception)
+    """
+
+    TTL_OK = 30 * 24 * 3600   # 30 jours
+    TTL_NOK = 7 * 24 * 3600   # 7 jours
+    _ERROR_METHODS = frozenset({'error', 'fetch_failed', 'challenge_page'})
+
+    def __init__(self) -> None:
+        self._client = None
+        self._initialized = False
+        self._init_lock = asyncio.Lock()
+
+    async def _get_client(self):
+        async with self._init_lock:
+            if not self._initialized:
+                self._initialized = True
+                redis_url = settings.REDIS_URL
+                if redis_url and aioredis:
+                    try:
+                        self._client = aioredis.from_url(redis_url, decode_responses=True)
+                        logger.info("Redis cache client créé (connexion au premier appel)")
+                    except Exception as e:
+                        logger.warning(f"Redis cache indisponible : {e}")
+        return self._client
+
+    @staticmethod
+    def _normalize_domain(url: str) -> Optional[str]:
+        try:
+            hostname = (urlparse(url).hostname or '').lower()
+            domain = hostname.removeprefix('www.')
+            return domain if domain else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _cache_key(domain: str) -> str:
+        return f"fr_detect:{domain}"
+
+    async def get(self, url: str) -> Optional[dict]:
+        client = await self._get_client()
+        if not client:
+            return None
+        try:
+            domain = self._normalize_domain(url)
+            if not domain:
+                return None
+            data = await client.get(self._cache_key(domain))
+            if data:
+                return json.loads(data)
+        except Exception as e:
+            logger.debug(f"Cache get error ({url}): {e}")
+        return None
+
+    async def set(self, input_url: str, result_url: str, result: dict) -> None:
+        """Stocke le résultat pour input_url ET result_url (si redirection)."""
+        client = await self._get_client()
+        if not client:
+            return
+        if result.get('method') in self._ERROR_METHODS:
+            return
+        try:
+            input_domain = self._normalize_domain(input_url)
+            if not input_domain:
+                return
+            ttl = self.TTL_OK if result.get('ok') else self.TTL_NOK
+            data = json.dumps(result)
+            await client.setex(self._cache_key(input_domain), ttl, data)
+            result_domain = self._normalize_domain(result_url)
+            if result_domain and result_domain != input_domain:
+                await client.setex(self._cache_key(result_domain), ttl, data)
+        except Exception as e:
+            logger.debug(f"Cache set error ({input_url}): {e}")
+
+
+domain_cache = DomainCache()
 
 
 class DomainFR:

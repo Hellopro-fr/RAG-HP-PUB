@@ -610,6 +610,8 @@ services:
       - "8999:8999"
     env_file:
       - .env
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     logging: *logging_defaults
     networks:
       - services-net
@@ -633,7 +635,7 @@ services:
   mysql:
     image: mysql:8.0
     container_name: mysql
-    profiles: ["app"]
+    profiles: ["app", "mcp"]
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=${GATEWAY_MYSQL_ROOT_PASSWORD:-gateway_root_pass}
@@ -645,6 +647,7 @@ services:
       - "${GATEWAY_MYSQL_PORT:-3306}:${GATEWAY_MYSQL_PORT:-3306}"
     volumes:
       - gateway_mysql_data:/var/lib/mysql
+      - ./apps-microservices/mcp-gateway-service/init-db:/docker-entrypoint-initdb.d:ro
     networks:
       - services-net
     healthcheck:
@@ -846,7 +849,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G # Plafond dur RAM — ajuster selon la RAM disponible sur le serveur
+          memory: 16G # Plafond dur RAM — ajuster selon la RAM disponible sur le serveur
         reservations:
           devices:
             - driver: nvidia
@@ -1165,7 +1168,7 @@ services:
     profiles: ["disabled"]
     restart: unless-stopped
     ports:
-      - "8585:8560"
+      - "8560:8560"
     env_file:
       - .env
     environment:
@@ -1859,6 +1862,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking
     deploy:
@@ -1876,6 +1880,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking
     deploy:
@@ -1893,6 +1898,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking
     deploy:
@@ -1910,6 +1916,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking
     deploy:
@@ -1927,6 +1934,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking
     deploy:
@@ -1944,6 +1952,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking
     deploy:
@@ -1961,6 +1970,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
     deploy:
@@ -1985,6 +1995,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking
@@ -2005,6 +2016,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     env_file:
       - .env
@@ -2027,6 +2039,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking
@@ -2047,6 +2060,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking
@@ -2067,9 +2081,61 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       SERVICE_NAME: prix-traitement
     env_file:
       - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  mcp-api-recherche-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-api-recherche-service/Dockerfile
+    container_name: mcp-api-recherche-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8582:8582"
+    environment:
+      - MCP_PORT=8582
+      - MCP_SERVICE_NAME=mcp-api-recherche
+      - MCP_SERVICE_VERSION=0.1.0
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - RERANKING_SERVICE_URL=reranking-model-service:50053
+      - LLM_SERVICE_URL=llm-service:50051
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Gateway Service ──────────────────────────────────────────────
+  mcp-gateway-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-gateway-service/Dockerfile
+    container_name: mcp-gateway-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "${MCP_GATEWAY_PORT:-8581}:${MCP_GATEWAY_PORT:-8581}"
+    environment:
+      - MCP_GATEWAY_PORT=${MCP_GATEWAY_PORT:-8581}
+      - MCP_GATEWAY_NAME=${MCP_GATEWAY_NAME:-hellopro-mcp-gateway}
+      - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/${GATEWAY_MYSQL_DB:-gateway_db}?parseTime=true&multiStatements=true
+      - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
+      - HEALTH_CHECK_INTERVAL=${MCP_HEALTH_CHECK_INTERVAL:-30}
+      - AUTH_ENABLED=${MCP_AUTH_ENABLED}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGO=${JWT_ALGO}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+      - AUTH_URL=${AUTH_URL}
+      - SCOPE_TOKEN_REQUIRED=${MCP_SCOPE_TOKEN_REQUIRED}
+      - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
     networks:
       - services-net
     logging: *logging_defaults

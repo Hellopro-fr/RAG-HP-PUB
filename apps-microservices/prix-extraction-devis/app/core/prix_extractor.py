@@ -2,6 +2,7 @@
 Module principal de traitement: extraction de prix depuis les données devis via LLM.
 Traitement parallèle asynchrone avec asyncio.
 """
+import re
 import time
 import logging
 import asyncio
@@ -52,6 +53,9 @@ class PrixExtractor:
 
     # Type extraction (1 = devis)
     TYPE_EXTRACTION = "1"
+
+    # Provider LLM forcé (ne dépend pas de la variable d'env globale LLM_PROVIDER)
+    LLM_PROVIDER = "gemini"
 
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
@@ -148,6 +152,7 @@ class PrixExtractor:
         prompt_text = prompt_text.replace("{json_devis_pdf}", item_content)
         prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
         prompt_text = prompt_text.replace("{nom_categorie}", category_name)
+        self._log(f"prompt_text ok = {prompt_text}")
 
         return prompt_text
 
@@ -162,7 +167,7 @@ class PrixExtractor:
         Returns:
             Dict avec le résultat du LLM
         """
-        provider = settings.LLM_PROVIDER.lower()
+        provider = self.LLM_PROVIDER.lower()
 
         if provider == "gemini":
             gemini = GeminiProvider(
@@ -177,8 +182,8 @@ class PrixExtractor:
             await self.api_client.log_llm_usage(
                 type_ia=3,  # Gemini
                 model=self.GEMINI_MODEL,
-                input_token=usage_metadata.get("prompt_token_count", 0),
-                output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+                input_token=usage_metadata.get("prompt_token_count") or 0,
+                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
                 id_process=self.ID_PROCESS,
                 origine="prix-extraction-devis",
                 etat=1 if "code" not in result else 2,
@@ -309,7 +314,7 @@ class PrixExtractor:
         """
         async with self._semaphore:
             item_id = str(item.get("id", item.get("item_id", f"item_{item_index}")))
-            item_content = str(item.get("content", item.get("text", item.get("data", ""))))
+            item_content = json.dumps(item, ensure_ascii=False)
             source_chunk_id = str(item.get("source_chunk_id", item.get("id", f"item_{item_index}")))
 
             # Activer le contexte item pour bufferiser les logs
@@ -317,9 +322,21 @@ class PrixExtractor:
 
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
 
+            # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
+            if not re.search(r'€|\beuros?\b|\bEUR\b', item_content, re.IGNORECASE):
+                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
+                return ItemResult(
+                    item_id=item_id,
+                    source="devis",
+                    content=item_content,
+                    prix_data=None,
+                    status="skipped"
+                )
+
             # 1. Construire le prompt avec le contenu de l'item
             prompt_text = self._build_prompt(item_content, category_name)
-            self._log(f"prompt_text = {prompt_text}")
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
 
@@ -338,7 +355,7 @@ class PrixExtractor:
 
             # Tenter d'extraire le JSON de la réponse
             prix_data_raw = utils.extract_json_from_text(response_text)
-            if not prix_data_raw:
+            if prix_data_raw is None:
                 self._log("ERREUR: Impossible d'extraire le JSON")
                 await self.api_client.post(
                     "prix",
@@ -356,24 +373,44 @@ class PrixExtractor:
                 self._current_item_id.reset(token)
                 raise Exception(f"Impossible d'extraire le JSON de la réponse LLM pour item {item_id}")
 
-            # 3b. Valider et construire le payload structuré
-            payload = self._validate_and_build_payload(
-                prix_data=prix_data_raw,
-                item_id=item_id,
-                source_chunk_id=source_chunk_id,
-                id_categorie=id_categorie,
-                category_name=category_name,
-                item_metadata=item.get("metadata", {})
-            )
-            if payload is None:
+            # Liste vide = le LLM n'a trouvé aucun prix dans cet item → skip
+            if isinstance(prix_data_raw, list) and len(prix_data_raw) == 0:
+                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucun prix trouvé par le LLM")
                 self._flush_item_logs(item_id)
                 self._current_item_id.reset(token)
-                raise Exception(
-                    f"Validation du payload échouée (champs obligatoires manquants) : "
-                    f"Catégorie {id_categorie} - Item {item_id} - Data : {prix_data_raw}"
+                return ItemResult(
+                    item_id=item_id,
+                    source="devis",
+                    content=item_content,
+                    prix_data=None,
+                    status="skipped"
                 )
 
-            prix_data = payload.dict()
+            # Normaliser en liste (le LLM peut retourner un dict ou une liste)
+            if isinstance(prix_data_raw, dict):
+                prix_data_raw = [prix_data_raw]
+
+            # 3b. Valider et construire les payloads pour chaque produit
+            payloads = []
+            for single_prix in prix_data_raw:
+                payload = self._validate_and_build_payload(
+                    prix_data=single_prix,
+                    item_id=item_id,
+                    source_chunk_id=source_chunk_id,
+                    id_categorie=id_categorie,
+                    category_name=category_name,
+                    item_metadata=item.get("metadata", {})
+                )
+                if payload is None:
+                    self._flush_item_logs(item_id)
+                    self._current_item_id.reset(token)
+                    raise Exception(
+                        f"Validation du payload échouée (champs obligatoires manquants) : "
+                        f"Catégorie {id_categorie} - Item {item_id} - Data : {single_prix}"
+                    )
+                payloads.append(payload)
+
+            prix_data = [p.dict() for p in payloads]
 
             self._log(f"[{item_index + 1}/{total_items}] ✅ Item {item_id} validé")
             self._flush_item_logs(item_id)
@@ -409,8 +446,7 @@ class PrixExtractor:
             ]
         """
         # Valeurs par défaut depuis les settings
-        # logger.info(f"Prompt Recherche de prix: '{self.prompt_config}'")
-        self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
+        # self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
         
         if not self.prompt_config:
             logger.warning(f"Prompt ID {self.PROMPT_ID} non trouvé, "
@@ -553,7 +589,8 @@ class PrixExtractor:
         self._log("EXTRACTION PRIX DEVIS")
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
-        self._log(f"Provider LLM: {settings.LLM_PROVIDER}")
+        self._log(f"Provider LLM: {self.LLM_PROVIDER}")
+        self._log(f"Model LLM: {self.GEMINI_MODEL}")
         self._log("=" * 60)
 
         # Vérifier le stopper manuel
@@ -656,7 +693,7 @@ class PrixExtractor:
                 id_categorie=id_categorie,
                 category_name=category_name
             )
-            for i, item in enumerate(items)#TODO: à enlever après test
+            for i, item in enumerate(items)
         ]
         self._log(f"tasks: {tasks}")
         # raise Exception("Test")
@@ -672,6 +709,7 @@ class PrixExtractor:
 
         # Collecter et compter les résultats — toute exception lève immédiatement
         success_count = 0
+        skipped_count = 0
         error_count = 0
         item_results: List[ItemResult] = []
         for r in results:
@@ -683,6 +721,8 @@ class PrixExtractor:
                 item_results.append(r)
                 if r.status == "success":
                     success_count += 1
+                elif r.status == "skipped":
+                    skipped_count += 1
                 else:
                     error_count += 1
                     self._log(f"❌ Item en erreur: {r.item_id} — {r.error_message}")
@@ -690,9 +730,11 @@ class PrixExtractor:
             else:
                 raise Exception(f"Résultat inattendu: {type(r)} — {r}")
 
-        # Sauvegarde batch des IDs traités avec succès
-        # type_extraction = 2 pour les devis
-        successful_ids = [r.item_id for r in item_results if r.status == "success"]
+        # Sauvegarde batch des IDs traités avec succès ou skipped
+        successful_ids = [r.item_id for r in item_results if r.status in ("success", "skipped")]
+
+        self._log(f"\n--- TYPE_EXTRACTION {self.TYPE_EXTRACTION} ---")
+
 
         if successful_ids:
             self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) devis ---")
@@ -719,6 +761,7 @@ class PrixExtractor:
         self._log("EXTRACTION TERMINÉE")
         self._log(f"Total items: {total_items}")
         self._log(f"Succès: {success_count}")
+        self._log(f"Skipped: {skipped_count}")
         self._log(f"Erreurs: {error_count}")
         self._log(f"Durée: {elapsed:.1f}s")
         self._log("=" * 60)

@@ -91,7 +91,7 @@ class MilvusPrixProduitsCrud:
                     name="nom_categorie", dtype=DataType.VARCHAR, max_length=65535
                 ),
                 FieldSchema(name="date_prix", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="id_lead", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="id_lead", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="id_produit", dtype=DataType.VARCHAR, max_length=255),
                 FieldSchema(name="domaine", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(
@@ -120,7 +120,7 @@ class MilvusPrixProduitsCrud:
                     name="fournisseur", dtype=DataType.VARCHAR, max_length=65535
                 ),
                 FieldSchema(
-                    name="source_chunk_id", dtype=DataType.VARCHAR, max_length=255
+                    name="source_chunk_id", dtype=DataType.VARCHAR, max_length=65535
                 ),
                 # --- Champs chunking ---
                 FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=255),
