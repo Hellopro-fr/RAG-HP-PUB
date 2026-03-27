@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 )
@@ -48,7 +49,8 @@ func (h *Handler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
-	tokens, err := h.tokenRepo.ListAll()
+	userEmail := auth.UserEmailFromContext(r.Context())
+	tokens, err := h.tokenRepo.ListAll(userEmail)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -102,10 +104,8 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		token.ExpiresAt = &t
 	}
 
-	// Get created_by from session if available
-	if sess := sessionFromRequest(r); sess != nil {
-		token.CreatedBy = sess.DisplayName
-	}
+	// Get created_by from session (use email for ownership checks)
+	token.CreatedBy = auth.UserEmailFromContext(r.Context())
 
 	// Build server associations
 	for _, sid := range req.ServerIDs {
@@ -145,10 +145,24 @@ func (h *Handler) getToken(w http.ResponseWriter, r *http.Request, id string) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
 		return
 	}
+	if !h.isTokenOwner(r, token) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your token"})
+		return
+	}
 	writeJSON(w, http.StatusOK, toTokenResponse(*token))
 }
 
 func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string) {
+	existing, err := h.tokenRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		return
+	}
+	if !h.isTokenOwner(r, existing) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your token"})
+		return
+	}
+
 	var req UpdateTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -191,6 +205,15 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 }
 
 func (h *Handler) deleteToken(w http.ResponseWriter, r *http.Request, id string) {
+	existing, err := h.tokenRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		return
+	}
+	if !h.isTokenOwner(r, existing) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your token"})
+		return
+	}
 	if err := h.tokenRepo.Delete(id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -202,6 +225,15 @@ func (h *Handler) deleteToken(w http.ResponseWriter, r *http.Request, id string)
 }
 
 func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request, id string) {
+	existing, err := h.tokenRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		return
+	}
+	if !h.isTokenOwner(r, existing) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your token"})
+		return
+	}
 	if err := h.tokenRepo.SetActive(id, false); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -218,6 +250,15 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request, id string)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+// isTokenOwner checks if the current user owns the token (or if the token has no owner).
+func (h *Handler) isTokenOwner(r *http.Request, token *db.ScopeToken) bool {
+	if token.CreatedBy == "" {
+		return true // legacy tokens with no owner are accessible to everyone
+	}
+	userEmail := auth.UserEmailFromContext(r.Context())
+	return userEmail == token.CreatedBy
+}
 
 func toTokenResponse(t db.ScopeToken) TokenResponse {
 	serverIDs := make([]string, len(t.Servers))
@@ -245,12 +286,4 @@ func toTokenResponse(t db.ScopeToken) TokenResponse {
 	}
 }
 
-func sessionFromRequest(r *http.Request) *struct{ DisplayName string } {
-	// Extract display name from session cookie if available
-	// This is a simplified version — the auth middleware already validates
-	cookie, err := r.Cookie("mcp_session")
-	if err != nil || cookie.Value == "" {
-		return nil
-	}
-	return &struct{ DisplayName string }{DisplayName: ""}
-}
+

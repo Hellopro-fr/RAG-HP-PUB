@@ -3,6 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { useEffect, useState } from 'react';
 import type { ContactFormData, ProfileData, UserAnswers, Supplier } from '@/types';
 import type { CharacteristicsMap } from '@/types/characteristics';
+import type { PriceEstimationState } from '@/types/prix';
 
 // =============================================================================
 // STORAGE WRAPPER - Gère le reset sur reload (F5) et changement manuel d'URL
@@ -263,6 +264,12 @@ export interface FlowState {
   // IDs des produits à soumettre (pour le devis unique vs sélection multiple)
   supplierIdsToSubmit: string[] | null;
 
+  // Caractéristiques prix (prefetched au chargement Q1)
+  caracteristiquesPrix: any[];
+
+  // Résultat de l'estimation de prix
+  priceEstimation: PriceEstimationState | null;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
@@ -313,6 +320,8 @@ export interface FlowState {
   reset: () => void;
   setEntryUrl: (url: string) => void;
   setFlowType: (flowType: FlowType) => void;
+  setCaracteristiquesPrix: (data: any[]) => void;
+  setPriceEstimation: (estimation: PriceEstimationState | null) => void;
 }
 
 const initialState = {
@@ -343,6 +352,8 @@ const initialState = {
   useRerank: false,
   ddc: "",
   supplierIdsToSubmit: null,
+  caracteristiquesPrix: [],
+  priceEstimation: null,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -424,6 +435,10 @@ export const useFlowStore = create<FlowState>()(
       setSelectedSupplierIds: (ids) => set({ selectedSupplierIds: ids }),
 
       setSupplierIdsToSubmit: (ids) => set({ supplierIdsToSubmit: ids }),
+
+      setCaracteristiquesPrix: (data) => set({ caracteristiquesPrix: data }),
+
+      setPriceEstimation: (estimation) => set({ priceEstimation: estimation }),
 
       toggleSupplier: (supplierId) =>
         set((state) => {

@@ -88,6 +88,8 @@ export interface DemandeInfoPayload {
   // Message
   message: string;
 
+  budget: string;
+
   // Produits sélectionnés (1 produit = 1 demande)
   produits: ProduitSelection[];
 
