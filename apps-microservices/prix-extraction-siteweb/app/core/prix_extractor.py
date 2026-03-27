@@ -315,7 +315,7 @@ class PrixExtractor:
             self._log(f"[{chunk_index + 1}/{total_chunks}] chunk_metadata: ({chunk_metadata})")
 
             # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
-            if not re.search(r'€|\beuros?\b|\bEUR\b', chunk_content, re.IGNORECASE):
+            if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', chunk_content, re.IGNORECASE):
                 self._log(f"[{chunk_index + 1}/{total_chunks}] ⏭️ Chunk {chunk_id} — aucune mention de prix (€/euro/EUR) → skip")
                 self._flush_chunk_logs(chunk_id)
                 self._current_chunk_id.reset(token)
