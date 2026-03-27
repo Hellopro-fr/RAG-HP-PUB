@@ -205,15 +205,12 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
     last_error = None
 
     for attempt in range(1, max_retries + 1):
-        # Stratégie : auto → country-FR → auto
-        # Tentative 2 utilise country-FR, les autres utilisent auto (pool large)
-        use_country = 'FR' if attempt == 2 else None
-        attempt_proxy = build_proxy_url(effective_proxy, country=use_country)
+        # Toutes les tentatives utilisent auto (rotation intelligente Apify, pool large)
+        # country-FR retiré : pool plus petit, risque d'épuisement (erreur "no usable proxies"),
+        # et inutile car Accept-Language + hreflang/NLP détectent le français sans IP française.
+        attempt_proxy = build_proxy_url(effective_proxy, country=None)
 
-        if use_country:
-            logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy country-{use_country}")
-        else:
-            logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy auto (rotation intelligente)")
+        logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy auto (rotation intelligente)")
 
         try:
             result = await scrape_html(url, proxy=attempt_proxy)
