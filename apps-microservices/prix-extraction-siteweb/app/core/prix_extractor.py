@@ -306,8 +306,8 @@ class PrixExtractor:
             # Les données Milvus sont dans metadata.entity
             metadata = chunk.get("metadata", {})
             self._log(f"[{chunk_index + 1}/{total_chunks}] metadata: {metadata}")
-            context_pre = metadata.get("context_pre", "")
-            context_post = metadata.get("context_post", "")
+            context_pre = metadata.get("context_pre") or ""
+            context_post = metadata.get("context_post") or ""
 
             chunk_metadata = metadata.get("entity", metadata)
             chunk_content = chunk_metadata.get("text", "")
@@ -322,9 +322,6 @@ class PrixExtractor:
                 chunk_metadata["context_pre"] = context_pre
                 chunk_metadata["context_post"] = context_post
                 chunk_content = chunk_metadata["text"]
-
-            raise Exception("Test")
-            return None
 
             # Activer le contexte chunk pour bufferiser les logs
             token = self._current_chunk_id.set(chunk_id)
@@ -603,9 +600,7 @@ class PrixExtractor:
                 for i, chunk in enumerate(chunks)
             ]
 
-            results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
-            raise Exception("Test")
-            return None
+            results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)            
 
             # Flush les logs bufferisés des chunks
             for chunk_id_key in list(self._chunk_log_buffers.keys()):
