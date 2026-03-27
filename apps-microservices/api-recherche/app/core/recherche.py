@@ -493,6 +493,9 @@ class SearchOrchestrator:
                     filtre, source_name
                 )
                 final_filter_expr_str = final_filter_expr
+                context_mode = filtre.get("autre_chunks", None)
+                if context_mode == "none":
+                    context_mode = None
 
                 # source_results = await database_client.search_vector(
                 #     collection=source_name,
@@ -518,6 +521,7 @@ class SearchOrchestrator:
                             else None
                         ),
                         **self.request.hybrid_options.model_dump(),
+                        context_mode=context_mode,
                     )
                     if self.request.hybrid
                     else await database_client.search_vector(
@@ -530,6 +534,7 @@ class SearchOrchestrator:
                             if self.request.fields and self.request.action == 1
                             else None
                         ),
+                        context_mode=context_mode,
                     )
                 )
                 all_results[source_name] = [

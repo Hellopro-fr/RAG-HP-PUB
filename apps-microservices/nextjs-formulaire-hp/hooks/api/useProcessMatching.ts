@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { useFlowStore } from '@/lib/stores/flow-store';
-import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
 import { normalizeMatchingToSuppliers, enrichSuppliersWithProductInfo } from '@/lib/utils/matching-normalizer';
 import type { MatchingResponse, ProductInfoResponse } from '@/types/matching';
@@ -87,7 +86,7 @@ export function useProcessMatching(): UseProcessMatchingResult {
       const consolidatedEquivalences = consolidateEquivalences(dynamicEquivalences);
 
       // Données depuis le store pour Rerank
-      const { useRerank, userQuestionAnswers } = useFlowStore.getState();
+      const { userQuestionAnswers } = useFlowStore.getState();
 
       // Sauvegarder les équivalences consolidées dans le store pour ModifyCriteriaForm
       setEquivalenceCaracteristique(consolidatedEquivalences);
@@ -97,7 +96,7 @@ export function useProcessMatching(): UseProcessMatchingResult {
 
       const formData = new FormData();
       formData.append('id_categorie', categoryId?.toString() || '');
-      formData.append('top_k', '12');
+      formData.append('top_k', '30');
       formData.append('champs_sortie', JSON.stringify(["url"]));
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
@@ -116,9 +115,10 @@ export function useProcessMatching(): UseProcessMatchingResult {
 
       // Bloc Rerank
       const rerankPayload = {
-        use_rerank: useRerank,
+        use_rerank: true,
         parcours: buildParcours(userQuestionAnswers),
-        top_k: 24,
+        top_k: 30,
+        id_prompt: 118,
       };
       formData.append('rerank', JSON.stringify(rerankPayload));
 

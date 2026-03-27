@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
 
     # Prompt statique - Devis
-    PROMPT_ID: str = "119"
+    # PROMPT_ID: str = "119" #Briefing Prix - Prompt extraction prix devis pdf
+    PROMPT_ID: str = "121" #Briefing Prix - Prompt2 extraction prix devis pdf
 
     MILVUS_SOURCE: str = "pjechanges"  # Collection source dans Milvus
     MILVUS_PAGE_TYPE: str = "devis"

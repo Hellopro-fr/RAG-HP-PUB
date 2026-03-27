@@ -5,7 +5,8 @@ type CreateTokenRequest struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
 	ServerIDs   []string `json:"server_ids"`
-	ExpiresAt   *string  `json:"expires_at,omitempty"` // RFC3339
+	MCPCommand  string   `json:"mcp_command"`           // npx, bunx, deno, uvx, docker, custom
+	ExpiresAt   *string  `json:"expires_at,omitempty"`  // RFC3339
 }
 
 // CreateTokenResponse is returned once on creation (includes raw token).
@@ -16,6 +17,7 @@ type CreateTokenResponse struct {
 	Token       string   `json:"token"`        // raw token, shown ONCE
 	TokenPrefix string   `json:"token_prefix"`  // "mcp_xxxx..." for display
 	ServerIDs   []string `json:"server_ids"`
+	MCPCommand  string   `json:"mcp_command"`
 	IsActive    bool     `json:"is_active"`
 	CreatedAt   string   `json:"created_at"`
 	ExpiresAt   *string  `json:"expires_at,omitempty"`
@@ -26,8 +28,10 @@ type TokenResponse struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
+	Token       string   `json:"token,omitempty"`  // decrypted token (if available)
 	TokenPrefix string   `json:"token_prefix"`
 	ServerIDs   []string `json:"server_ids"`
+	MCPCommand  string   `json:"mcp_command"`
 	IsActive    bool     `json:"is_active"`
 	CreatedBy   string   `json:"created_by,omitempty"`
 	CreatedAt   string   `json:"created_at"`

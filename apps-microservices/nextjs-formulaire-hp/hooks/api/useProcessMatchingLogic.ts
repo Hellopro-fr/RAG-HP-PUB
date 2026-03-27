@@ -318,7 +318,7 @@ export function useProcessMatchingLogic() {
 
       // Bloc Rerank
       const rerankPayload = {
-        use_rerank: useRerank,
+        use_rerank: true,
         parcours: buildParcours(userQuestionAnswers),
         top_k: 24,
       };

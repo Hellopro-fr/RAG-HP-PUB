@@ -323,17 +323,17 @@ class PrixExtractor:
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
 
             # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
-            if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', item_content, re.IGNORECASE):
-                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
-                self._flush_item_logs(item_id)
-                self._current_item_id.reset(token)
-                return ItemResult(
-                    item_id=item_id,
-                    source="devis",
-                    content=item_content,
-                    prix_data=None,
-                    status="skipped"
-                )
+            # if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', item_content, re.IGNORECASE):
+            #     self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
+            #     self._flush_item_logs(item_id)
+            #     self._current_item_id.reset(token)
+            #     return ItemResult(
+            #         item_id=item_id,
+            #         source="devis",
+            #         content=item_content,
+            #         prix_data=None,
+            #         status="skipped"
+            #     )
 
             # 1. Construire le prompt avec le contenu de l'item
             prompt_text = self._build_prompt(item_content, category_name)
