@@ -1,22 +1,44 @@
 package repository
 
 import (
+	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"gorm.io/gorm"
 )
 
 // TokenRepo handles CRUD for scope tokens.
 type TokenRepo struct {
-	db *gorm.DB
+	db        *gorm.DB
+	encryptor *crypto.Encryptor // nil if encryption key not set
 }
 
-func NewTokenRepo(d *gorm.DB) *TokenRepo {
-	return &TokenRepo{db: d}
+func NewTokenRepo(d *gorm.DB, encryptor *crypto.Encryptor) *TokenRepo {
+	return &TokenRepo{db: d, encryptor: encryptor}
 }
 
 // Create persists a new scope token with its server associations.
+// If an encryptor is configured, encrypts the token before storing.
 func (r *TokenRepo) Create(token *db.ScopeToken) error {
+	if r.encryptor != nil && len(token.EncryptedToken) > 0 {
+		encrypted, err := r.encryptor.Encrypt(token.EncryptedToken)
+		if err != nil {
+			return err
+		}
+		token.EncryptedToken = encrypted
+	}
 	return r.db.Create(token).Error
+}
+
+// DecryptToken decrypts the stored token. Returns empty string if not available.
+func (r *TokenRepo) DecryptToken(token *db.ScopeToken) string {
+	if r.encryptor == nil || len(token.EncryptedToken) == 0 {
+		return ""
+	}
+	plaintext, err := r.encryptor.Decrypt(token.EncryptedToken)
+	if err != nil {
+		return ""
+	}
+	return string(plaintext)
 }
 
 // GetByID returns a token with its server associations.

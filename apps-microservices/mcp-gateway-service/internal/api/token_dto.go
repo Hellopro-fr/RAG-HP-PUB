@@ -28,6 +28,7 @@ type TokenResponse struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
+	Token       string   `json:"token,omitempty"`  // decrypted token (if available)
 	TokenPrefix string   `json:"token_prefix"`
 	ServerIDs   []string `json:"server_ids"`
 	MCPCommand  string   `json:"mcp_command"`

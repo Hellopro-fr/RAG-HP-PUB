@@ -924,6 +924,7 @@
     let allServers = []; // cached for token modal
     let _fullToken = '';  // full token for clipboard (never displayed)
     let _fullMcpJson = ''; // full .mcp.json for clipboard (never displayed)
+    const _tokenCardJsonMap = {}; // elId -> full JSON for clipboard
 
     async function loadMCPConfig() {
       try {
@@ -981,10 +982,10 @@
                 <pre id="${jsonElId}" class="json-view px-5 py-3 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto"></pre>
               </div>`;
           }).join('');
-          // Initialize all token card JSONs with their persisted command
+          // Initialize all token card JSONs with their persisted command and decrypted token
           tokens.forEach(t => {
             const elId = 'token-cfg-' + t.id.replace(/-/g, '');
-            updateTokenCardJSON(elId, t.token_prefix, t.mcp_command || 'npx');
+            updateTokenCardJSON(elId, t.token || '', t.mcp_command || 'npx');
           });
         }
 
@@ -1051,24 +1052,29 @@
       document.getElementById('token-modal').classList.add('hidden');
     }
 
-    function updateTokenCardJSON(elId, tokenPrefix, cmdKey) {
+    function updateTokenCardJSON(elId, token, cmdKey) {
       const cfg = MCP_COMMANDS[cmdKey];
       if (!cfg) return;
       const gatewayURL = window.location.origin + '/mcp';
       const isHttp = gatewayURL.startsWith('http://');
-      const mcpArgs = [...cfg.argsPrefix, gatewayURL];
-      if (isHttp) mcpArgs.push("--allow-http");
-      mcpArgs.push("--header", "X-MCP-Scope-Token: <YOUR_TOKEN>");
-      const mcpConfig = {
-        mcpServers: {
-          "hellopro-gateway": {
-            command: cfg.command,
-            args: mcpArgs
-          }
-        }
-      };
+      const hasToken = token && token.length > 12;
+
+      // Full version for clipboard
+      const fullArgs = [...cfg.argsPrefix, gatewayURL];
+      if (isHttp) fullArgs.push("--allow-http");
+      fullArgs.push("--header", "X-MCP-Scope-Token: " + (token || '<YOUR_TOKEN>'));
+      const fullConfig = { mcpServers: { "hellopro-gateway": { command: cfg.command, args: fullArgs } } };
+      _tokenCardJsonMap[elId] = JSON.stringify(fullConfig, null, 2);
+
+      // Masked version for display
+      const maskedArgs = [...cfg.argsPrefix, gatewayURL];
+      if (isHttp) maskedArgs.push("--allow-http");
+      const maskedToken = hasToken ? token.slice(0, 8) + '\u2022'.repeat(12) + token.slice(-4) : '<YOUR_TOKEN>';
+      maskedArgs.push("--header", "X-MCP-Scope-Token: " + maskedToken);
+      const maskedConfig = { mcpServers: { "hellopro-gateway": { command: cfg.command, args: maskedArgs } } };
+
       const el = document.getElementById(elId);
-      if (el) el.textContent = JSON.stringify(mcpConfig, null, 2);
+      if (el) el.textContent = JSON.stringify(maskedConfig, null, 2);
     }
 
     async function createScopeToken() {
@@ -1194,7 +1200,7 @@
 
     // ── Clipboard ────────────────────────────────────────────────────────
     function copyJSON(elId) {
-      const text = document.getElementById(elId).textContent;
+      const text = _tokenCardJsonMap[elId] || document.getElementById(elId).textContent;
       navigator.clipboard.writeText(text).then(() => toast('Copié dans le presse-papiers', 'info'));
     }
 

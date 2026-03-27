@@ -58,7 +58,7 @@ func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
 
 	resp := make([]TokenResponse, len(tokens))
 	for i, t := range tokens {
-		resp[i] = toTokenResponse(t)
+		resp[i] = toTokenResponse(t, h.tokenRepo.DecryptToken(&t))
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"tokens": resp})
 }
@@ -90,13 +90,14 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := db.ScopeToken{
-		ID:          uuid.New().String(),
-		Name:        req.Name,
-		Description: req.Description,
-		TokenHash:   hash,
-		TokenPrefix: prefix,
-		MCPCommand:  req.MCPCommand,
-		IsActive:    true,
+		ID:             uuid.New().String(),
+		Name:           req.Name,
+		Description:    req.Description,
+		TokenHash:      hash,
+		TokenPrefix:    prefix,
+		MCPCommand:     req.MCPCommand,
+		EncryptedToken: []byte(rawToken),
+		IsActive:       true,
 	}
 
 	// Parse optional expiry
@@ -155,7 +156,7 @@ func (h *Handler) getToken(w http.ResponseWriter, r *http.Request, id string) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your token"})
 		return
 	}
-	writeJSON(w, http.StatusOK, toTokenResponse(*token))
+	writeJSON(w, http.StatusOK, toTokenResponse(*token, h.tokenRepo.DecryptToken(token)))
 }
 
 func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string) {
@@ -207,7 +208,7 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, toTokenResponse(*token))
+	writeJSON(w, http.StatusOK, toTokenResponse(*token, h.tokenRepo.DecryptToken(token)))
 }
 
 func (h *Handler) deleteToken(w http.ResponseWriter, r *http.Request, id string) {
@@ -252,7 +253,7 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request, id string)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, toTokenResponse(*token))
+	writeJSON(w, http.StatusOK, toTokenResponse(*token, h.tokenRepo.DecryptToken(token)))
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -266,7 +267,7 @@ func (h *Handler) isTokenOwner(r *http.Request, token *db.ScopeToken) bool {
 	return userEmail == token.CreatedBy
 }
 
-func toTokenResponse(t db.ScopeToken) TokenResponse {
+func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 	serverIDs := make([]string, len(t.Servers))
 	for i, s := range t.Servers {
 		serverIDs[i] = s.ServerID
@@ -282,6 +283,7 @@ func toTokenResponse(t db.ScopeToken) TokenResponse {
 		ID:          t.ID,
 		Name:        t.Name,
 		Description: t.Description,
+		Token:       decryptedToken,
 		TokenPrefix: t.TokenPrefix,
 		ServerIDs:   serverIDs,
 		MCPCommand:  t.MCPCommand,

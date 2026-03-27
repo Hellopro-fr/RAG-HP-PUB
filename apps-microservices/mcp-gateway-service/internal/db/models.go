@@ -105,8 +105,9 @@ type ScopeToken struct {
 	TokenHash   string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_token_hash" json:"-"`
 	TokenPrefix string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
 	CreatedBy   string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
-	MCPCommand  string     `gorm:"type:varchar(64);not null;default:'npx'" json:"mcp_command"`
-	ExpiresAt   *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
+	MCPCommand     string     `gorm:"type:varchar(64);not null;default:'npx'" json:"mcp_command"`
+	EncryptedToken []byte     `gorm:"type:blob" json:"-"`
+	ExpiresAt      *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
 	IsActive    bool       `gorm:"not null;default:true;index:idx_scope_active" json:"is_active"`
 	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`

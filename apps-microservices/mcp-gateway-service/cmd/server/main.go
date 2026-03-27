@@ -39,6 +39,7 @@ func main() {
 	var repo *repository.ServerRepo
 	var healthChecker *health.Checker
 	var database *gorm.DB
+	var encryptor *crypto.Encryptor
 
 	if cfg.MySQLDSN != "" {
 		var err error
@@ -48,7 +49,6 @@ func main() {
 		}
 
 		// Initialise l'encryptor si la clé est fournie
-		var encryptor *crypto.Encryptor
 		if cfg.EncryptionKey != "" {
 			encryptor, err = crypto.NewEncryptor(cfg.EncryptionKey)
 			if err != nil {
@@ -103,7 +103,7 @@ func main() {
 
 	// Monte les routes REST API si le repository est disponible
 	if repo != nil && database != nil {
-		tokenRepo = repository.NewTokenRepo(database)
+		tokenRepo = repository.NewTokenRepo(database, encryptor)
 		apiHandler := api.NewHandler(repo, gw, registry)
 		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
 		apiHandler.Register(mux)
