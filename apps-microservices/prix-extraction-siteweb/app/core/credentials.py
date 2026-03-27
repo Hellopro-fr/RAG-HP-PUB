@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     MAX_CONCURRENCY: int = 10  # Nombre de messages traités en parallèle
     
     # Milvus RAG Search
-    MILVUS_SOURCE: str = "siteweb"  # Collection source dans Milvus
+    MILVUS_SOURCE: str = "siteweb_2"  # Collection source dans Milvus
     MILVUS_TOP_K: int = 30  # Nombre de résultats à récupérer
     
     # LLM Provider selection - "gemini" ou "deepseek"
