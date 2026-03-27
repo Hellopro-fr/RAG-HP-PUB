@@ -119,6 +119,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	// Découverte automatique
 	// Use req.AuthHeaders directly because repo.Create() encrypted srv.AuthHeaders in-place
 	if req.AutoDiscover {
+		log.Printf("[api] auto-discover for %s with %d auth headers", srv.URL, len(req.AuthHeaders))
 		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, req.AuthHeaders); err != nil {
 			log.Printf("[api] auto-discover failed for %s: %v", srv.URL, err)
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
