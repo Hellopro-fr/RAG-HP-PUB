@@ -126,7 +126,7 @@ def detect_challenge_page(html: str) -> Optional[str]:
     import re as _re_err
 
     http_error_title_pattern = _re_err.search(
-        r'<title>\s*(403|401|406|429|503)\s*[-–—]?\s*(forbidden|unauthorized|not acceptable|too many requests|service unavailable|access denied|error)?\s*</title>',
+        r'<title>\s*([45]\d{2})\s*[-–—]?\s*\w*\s*</title>',
         html_lower
     )
 
