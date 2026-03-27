@@ -590,6 +590,7 @@ class PrixExtractor:
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
         self._log(f"Provider LLM: {self.LLM_PROVIDER}")
+        self._log(f"Model LLM: {self.GEMINI_MODEL}")
         self._log("=" * 60)
 
         # Vérifier le stopper manuel
