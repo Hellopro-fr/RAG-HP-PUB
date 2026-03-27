@@ -8,16 +8,16 @@ import (
 	databasepb "github.com/hellopro/mcp-api-recherche/proto/gen/database"
 )
 
-const schemaDescription = "Retrieve the schema (field names and types) of a Milvus collection. " +
-	"Use this to discover which fields are available for filtering and what output_fields can be requested in a search. " +
-	"Available collections: produits_3 (products), siteweb_2 (websites), devis (quotes), echanges (conversations), prix (pricing)."
+const schemaDescription = "Récupérer le schéma (noms et types des champs) d'une collection Milvus. " +
+	"Utilisez cet outil pour découvrir les champs disponibles pour le filtrage et les output_fields pouvant être demandés lors d'une recherche. " +
+	"Collections disponibles : produits_3 (produits), siteweb_2 (sites web), devis (devis), echanges (conversations), prix (tarifs)."
 
 const schemaInputSchema = `{
 	"type": "object",
 	"properties": {
 		"collection": {
 			"type": "string",
-			"description": "Name of the Milvus collection (e.g. produits_3, siteweb_2, devis, echanges, prix)"
+			"description": "Nom de la collection Milvus (ex. produits_3, siteweb_2, devis, echanges, prix)"
 		}
 	},
 	"required": ["collection"]
