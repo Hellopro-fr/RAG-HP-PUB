@@ -403,7 +403,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
                 "siteweb"
             ]
         elif type_source == "produit":
-            logger.info(f"[{id_categorie}] Type source: produits")
+            logger.info(f"[{id_categorie}] Type source: produit")
             filtre_page_type["source"] = "produit"
         elif type_source == "message":
             logger.info(f"[{id_categorie}] Type source: message")
