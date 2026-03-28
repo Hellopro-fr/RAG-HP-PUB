@@ -181,7 +181,8 @@ def _generate_url_variants(url: str) -> list[str]:
                 unique_variants.append(v)
 
         return unique_variants
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Erreur génération variantes pour {url}: {e}")
         return []
 
 

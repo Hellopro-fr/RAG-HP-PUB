@@ -1,6 +1,8 @@
 import pytest
+from unittest.mock import AsyncMock, patch
 from app.core.domain_fr import DomainFR
 from app.services.language_detector import LanguageDetector
+from app.services.redirect_tracker import fetch_html, _generate_url_variants
 from app.models.schemas import DetectionMode
 
 
@@ -297,6 +299,97 @@ class TestLanguageDetector:
         
         # Le texte avec mots exclusifs devrait avoir un score plus élevé
         assert score_fr > score_shared
+
+
+class TestUrlVariants:
+    """Tests pour _generate_url_variants"""
+
+    def test_variants_https_www(self):
+        """https://www.X.fr → 3 variantes (www toggle, scheme toggle, both)"""
+        variants = _generate_url_variants("https://www.usinage-cn.fr")
+        assert len(variants) == 3
+        assert "https://usinage-cn.fr/" in variants
+        assert "http://www.usinage-cn.fr/" in variants
+        assert "http://usinage-cn.fr/" in variants
+
+    def test_variants_http_no_www(self):
+        """http://example.com → 3 variantes"""
+        variants = _generate_url_variants("http://example.com")
+        assert len(variants) == 3
+        assert "http://www.example.com/" in variants
+        assert "https://example.com/" in variants
+        assert "https://www.example.com/" in variants
+
+
+class TestFetchHtmlVariantFallback:
+    """Tests pour le fallback Phase 2 (variantes URL) dans fetch_html"""
+
+    @pytest.mark.asyncio
+    async def test_ssl_error_triggers_variant_fallback(self):
+        """ERR_SSL_PROTOCOL_ERROR doit déclencher Phase 2 (variantes URL) sans 3 retries"""
+        call_log = []
+
+        async def mock_scrape_html(url, **kwargs):
+            call_log.append(url)
+            if url.startswith("https://www.usinage-cn.fr"):
+                raise Exception(
+                    "Page.goto: net::ERR_SSL_PROTOCOL_ERROR at https://www.usinage-cn.fr/"
+                )
+            if url.startswith("http://www.usinage-cn.fr"):
+                return ("<html lang='fr'><body>Contenu français</body></html>", "https://www.usinagecn.fr/")
+            return None
+
+        with patch("app.services.scraper.scrape_html", side_effect=mock_scrape_html), \
+             patch("app.services.scraper.build_proxy_url", return_value="http://auto:test@proxy.apify.com:8000"), \
+             patch("app.services.redirect_tracker.settings") as mock_settings:
+            mock_settings.APIFY_PROXY = "http://auto:test@proxy.apify.com:8000"
+            mock_settings.HTTP_MAX_RETRIES = 3
+
+            result = await fetch_html("https://www.usinage-cn.fr")
+
+        assert result is not None, "fetch_html should succeed via http variant"
+        content, final_url = result
+        assert "Contenu français" in content
+        assert final_url == "https://www.usinagecn.fr/"
+
+        # Phase 1 should break after 1 attempt (not retry 3 times)
+        https_attempts = [u for u in call_log if u == "https://www.usinage-cn.fr"]
+        assert len(https_attempts) == 1, f"SSL error should not retry same URL, got {len(https_attempts)} attempts"
+
+        # Phase 2 should have tried http variant
+        http_attempts = [u for u in call_log if u.startswith("http://www.usinage-cn.fr")]
+        assert len(http_attempts) >= 1, "Should have tried http:// variant"
+
+    @pytest.mark.asyncio
+    async def test_dns_error_triggers_variant_fallback(self):
+        """ERR_NAME_NOT_RESOLVED doit déclencher Phase 2 (variantes URL) sans 3 retries"""
+        call_log = []
+
+        async def mock_scrape_html(url, **kwargs):
+            call_log.append(url)
+            if "www.example.fr" in url:
+                raise Exception(
+                    "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.example.fr/"
+                )
+            if url == "https://example.fr/":
+                return ("<html lang='fr'><body>Site français</body></html>", "https://example.fr/")
+            return None
+
+        with patch("app.services.scraper.scrape_html", side_effect=mock_scrape_html), \
+             patch("app.services.scraper.build_proxy_url", return_value="http://auto:test@proxy.apify.com:8000"), \
+             patch("app.services.redirect_tracker.settings") as mock_settings:
+            mock_settings.APIFY_PROXY = "http://auto:test@proxy.apify.com:8000"
+            mock_settings.HTTP_MAX_RETRIES = 3
+
+            result = await fetch_html("https://www.example.fr")
+
+        assert result is not None
+        content, final_url = result
+        assert "Site français" in content
+
+        # Should not retry same URL
+        www_attempts = [u for u in call_log if u == "https://www.example.fr"]
+        assert len(www_attempts) == 1
 
 
 class TestDetectAlternativeLanguages:
