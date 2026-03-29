@@ -63,6 +63,102 @@ class TestDomainFR:
         assert DomainFR.resolve_url(base, url) == url
 
 
+class TestForcedMethod:
+    """Tests pour le chemin forced_method dans check_page_if_french"""
+
+    HTML_FR = '<html lang="fr"><body><p>Contenu de test</p></body></html>'
+    HTML_EN = '<html lang="en"><body><p>Test content</p></body></html>'
+
+    @pytest.mark.asyncio
+    async def test_forced_method_html_matches_nlp_confirms(self):
+        """forced_method: HTML confirme + NLP confirme → ok=True, nlp_confirmed"""
+        detector = DomainFR("https://example.com/fr/page", forced_method="langHtml")
+        with patch.object(detector.language_detector, 'detect_from_html_tags',
+                          return_value={'method': 'langHtml', 'value': 'fr'}), \
+             patch.object(detector.language_detector, 'detect_from_text_content_fasttext',
+                          return_value={'lang': 'fr', 'confidence': 0.92, 'method': 'nlp_detection_fasttext'}):
+            result = await detector.check_page_if_french(self.HTML_FR, DetectionMode.SIMPLE)
+        assert result.ok is True
+        assert 'langHtml+nlp_confirmed' == result.method
+        assert result.confidence >= 0.75
+
+    @pytest.mark.asyncio
+    async def test_forced_method_html_matches_nlp_soft_fr(self):
+        """forced_method: HTML confirme + NLP soft FR (< 0.75) → ok=True, nlp_soft_confirmed"""
+        detector = DomainFR("https://example.com/fr/page", forced_method="langHtml")
+        with patch.object(detector.language_detector, 'detect_from_html_tags',
+                          return_value={'method': 'langHtml', 'value': 'fr'}), \
+             patch.object(detector.language_detector, 'detect_from_text_content_fasttext',
+                          return_value={'lang': 'fr', 'confidence': 0.55, 'method': 'nlp_detection_fasttext'}):
+            result = await detector.check_page_if_french(self.HTML_FR, DetectionMode.SIMPLE)
+        assert result.ok is True
+        assert 'nlp_soft_confirmed' in result.method
+
+    @pytest.mark.asyncio
+    async def test_forced_method_html_matches_nlp_unavailable(self):
+        """forced_method: HTML confirme + NLP indisponible → ok=True, nlp_skipped, confidence 0.6"""
+        detector = DomainFR("https://example.com/fr/page", forced_method="langHtml")
+        with patch.object(detector.language_detector, 'detect_from_html_tags',
+                          return_value={'method': 'langHtml', 'value': 'fr'}), \
+             patch.object(detector.language_detector, 'detect_from_text_content_fasttext',
+                          return_value=None), \
+             patch.object(detector.language_detector, 'detect_from_text_content',
+                          return_value=None):
+            result = await detector.check_page_if_french(self.HTML_FR, DetectionMode.SIMPLE)
+        assert result.ok is True
+        assert 'nlp_skipped' in result.method
+        assert result.confidence == 0.6
+
+    @pytest.mark.asyncio
+    async def test_forced_method_html_matches_nlp_weakly_disagrees(self):
+        """forced_method: HTML confirme + NLP faiblement contredit (it, 0.7) → ok=True, confidence 0.6"""
+        detector = DomainFR("https://example.com/fr/page", forced_method="langHtml")
+        with patch.object(detector.language_detector, 'detect_from_html_tags',
+                          return_value={'method': 'langHtml', 'value': 'fr'}), \
+             patch.object(detector.language_detector, 'detect_from_text_content_fasttext',
+                          return_value={'lang': 'it', 'confidence': 0.70, 'method': 'nlp_detection_fasttext'}):
+            result = await detector.check_page_if_french(self.HTML_FR, DetectionMode.SIMPLE)
+        assert result.ok is True
+        assert 'nlp_weak_disagree_it' in result.method
+        assert result.confidence == 0.6
+
+    @pytest.mark.asyncio
+    async def test_forced_method_html_matches_nlp_strongly_contradicts(self):
+        """forced_method: HTML confirme + NLP contredit fortement (en, 0.95) → ok=False"""
+        detector = DomainFR("https://example.com/fr/page", forced_method="langHtml")
+        with patch.object(detector.language_detector, 'detect_from_html_tags',
+                          return_value={'method': 'langHtml', 'value': 'fr'}), \
+             patch.object(detector.language_detector, 'detect_from_text_content_fasttext',
+                          return_value={'lang': 'en', 'confidence': 0.95, 'method': 'nlp_detection_fasttext'}):
+            result = await detector.check_page_if_french(self.HTML_FR, DetectionMode.SIMPLE)
+        assert result.ok is False
+        assert result.method == 'Check_nok_forced'
+
+    @pytest.mark.asyncio
+    async def test_forced_method_html_mismatch(self):
+        """forced_method: HTML ne correspond pas → ok=False, Check_nok_forced"""
+        detector = DomainFR("https://example.com/page", forced_method="langHtml")
+        with patch.object(detector.language_detector, 'detect_from_html_tags',
+                          return_value={'method': 'langHtml', 'value': 'en'}):
+            result = await detector.check_page_if_french(self.HTML_EN, DetectionMode.SIMPLE)
+        assert result.ok is False
+        assert result.method == 'Check_nok_forced'
+
+    @pytest.mark.asyncio
+    async def test_forced_method_crosscheck_rescues(self):
+        """forced_method: fastText dit non-FR (faible) mais langdetect+langid confirme FR → ok=True"""
+        detector = DomainFR("https://example.com/fr/page", forced_method="langHtml")
+        with patch.object(detector.language_detector, 'detect_from_html_tags',
+                          return_value={'method': 'langHtml', 'value': 'fr'}), \
+             patch.object(detector.language_detector, 'detect_from_text_content_fasttext',
+                          return_value={'lang': 'it', 'confidence': 0.60, 'method': 'nlp_detection_fasttext'}), \
+             patch.object(detector.language_detector, 'detect_from_text_content',
+                          return_value={'lang': 'fr', 'confidence': 0.80, 'method': 'nlp_detection'}):
+            result = await detector.check_page_if_french(self.HTML_FR, DetectionMode.SIMPLE)
+        assert result.ok is True
+        assert 'nlp_confirmed' in result.method or 'nlp_soft_confirmed' in result.method
+
+
 class TestLanguageDetector:
     """Tests unitaires pour LanguageDetector"""
     

@@ -865,20 +865,75 @@ class DomainFR:
         is_strong_url = self._is_strong_french_url(url)
         
         # Étape 2 : Méthode forcée (si définie)
+        # Logique alignée sur le pipeline normal (Cases 2a/2b/4/5) :
+        # - HTML tag confirme FR → signal fort (comme TLD .fr dans Case 2)
+        # - NLP confirme → ACCEPT (Case 1)
+        # - NLP soft/indisponible/faible contradiction → ACCEPT avec confiance réduite
+        # - NLP contredit fortement (>0.9) → REJECT (Case 2a)
         if self.forced_method:
             lang_check = self.language_detector.detect_from_html_tags(content)
             if lang_check and lang_check.get('method') == self.forced_method and lang_check.get('value') == 'fr':
-                # Confirmation NLP obligatoire même avec méthode forcée
+                # NLP avec cross-check (même logique que le pipeline normal, lignes 897-918)
                 nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
+
                 if nlp_result is None:
                     nlp_result = self.language_detector.detect_from_text_content(content)
+                elif nlp_result.get('lang') != 'fr' and nlp_result.get('confidence', 0) < 0.75:
+                    secondary = self.language_detector.detect_from_text_content(content)
+                    if secondary and secondary.get('lang') == 'fr':
+                        logger.info(
+                            f"[forced_method] Cross-check langdetect+langid confirme FR "
+                            f"(confiance={secondary.get('confidence', 0):.3f}) — "
+                            f"fastText avait détecté {nlp_result.get('lang')}"
+                        )
+                        nlp_result = secondary
 
-                if nlp_result and nlp_result.get('lang') == 'fr':
+                nlp_lang = nlp_result.get('lang') if nlp_result else None
+                nlp_confidence = nlp_result.get('confidence', 0) if nlp_result else 0.0
+
+                if nlp_result and nlp_lang == 'fr' and nlp_confidence >= settings.NLP_MIN_CONFIDENCE:
                     return DetectionResponse(
                         ok=True,
                         url=url,
                         method=f"{self.forced_method}+nlp_confirmed",
-                        confidence=nlp_result.get('confidence')
+                        confidence=nlp_confidence
+                    )
+                elif nlp_result and nlp_lang == 'fr':
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method=f"{self.forced_method}+nlp_soft_confirmed",
+                        confidence=nlp_confidence
+                    )
+                elif nlp_result is None:
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method=f"{self.forced_method}+nlp_skipped",
+                        confidence=0.6
+                    )
+                elif nlp_lang != 'fr' and nlp_confidence >= 0.9:
+                    logger.info(
+                        f"[forced_method] HTML {self.forced_method}=fr mais NLP détecte "
+                        f"{nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
+                    )
+                    return DetectionResponse(
+                        ok=False,
+                        url=url,
+                        method='Check_nok_forced',
+                        confidence=nlp_confidence,
+                        error=f"HTML {self.forced_method} indique FR mais contenu détecté comme {nlp_lang} ({nlp_confidence:.0%})"
+                    )
+                else:
+                    logger.info(
+                        f"[forced_method] HTML {self.forced_method}=fr, NLP faiblement contredit "
+                        f"({nlp_lang}={nlp_confidence:.3f}) — accepté avec confiance réduite"
+                    )
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method=f"{self.forced_method}+nlp_weak_disagree_{nlp_lang}",
+                        confidence=0.6
                     )
             return DetectionResponse(
                 ok=False,

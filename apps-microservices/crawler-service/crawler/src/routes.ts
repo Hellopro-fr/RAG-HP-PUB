@@ -451,11 +451,11 @@ router.addDefaultHandler(
                         if (detectResult.ok) {
                             isEnqueuingLinks = true;
                         } else if (!needsNlp) {
-                            // Fallback: URL-only check with method match
-                            // Only relevant for HTML-based methods where forced_method
-                            // might fail but URL pattern still matches.
+                            // Fallback: URL-only check (no method match required).
+                            // The stored method describes how the *homepage* was detected,
+                            // not which URL patterns are valid for internal pages.
                             const checkUrlResult = await detectionClient.checkUrl(url);
-                            if (checkUrlResult.ok && checkUrlResult.method === frenchDetectionMethod) {
+                            if (checkUrlResult.ok) {
                                 isEnqueuingLinks = true;
                             }
                         }
