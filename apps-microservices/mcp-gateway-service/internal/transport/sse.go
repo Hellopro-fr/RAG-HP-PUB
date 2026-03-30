@@ -70,7 +70,8 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	// If a scope token was validated by middleware, use a scoped handler for this session
 	if s.scopeFactory != nil {
 		if allowedIDs, ok := AllowedServersFromContext(r.Context()); ok {
-			sessHandler = s.scopeFactory(allowedIDs)
+			allowedTools := AllowedToolsFromContext(r.Context())
+			sessHandler = s.scopeFactory(allowedIDs, allowedTools)
 		}
 	}
 	sess := &session{id: sessionID, ch: make(chan *mcp.Response, 16), handler: sessHandler}

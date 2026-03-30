@@ -496,6 +496,11 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		json.Unmarshal(srv.MCPHeaders, &mcpHeaders)
 	}
 
+	toolNames := make([]ToolSummary, 0, len(srv.Tools))
+	for _, t := range srv.Tools {
+		toolNames = append(toolNames, ToolSummary{Name: t.Name, Description: t.Description})
+	}
+
 	return ServerResponse{
 		ID:                  srv.ID,
 		Name:                srv.Name,
@@ -512,6 +517,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
 		ToolsCount:          len(srv.Tools),
+		ToolNames:           toolNames,
 		ResourcesCount:      len(srv.Resources),
 		PromptsCount:        len(srv.Prompts),
 		MCPTransport:        srv.MCPTransport,

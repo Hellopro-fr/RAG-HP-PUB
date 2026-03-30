@@ -115,8 +115,8 @@ func main() {
 	log.Println("[main] UI mounted at /ui/")
 
 	// Scope handler factory: creates a ScopedGateway for filtered access
-	scopeFactory := func(allowedIDs map[string]bool) transport.Handler {
-		return gateway.NewScopedGateway(gw, allowedIDs)
+	scopeFactory := func(allowedIDs map[string]bool, allowedTools map[string]map[string]bool) transport.Handler {
+		return gateway.NewScopedGateway(gw, allowedIDs, allowedTools)
 	}
 
 	// MCP transport mux (SSE + streamable HTTP) with scope filtering

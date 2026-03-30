@@ -40,6 +40,12 @@ type UpdateServerRequest struct {
 
 // ── Response DTOs ───────────────────────────────────────────────────────────────
 
+// ToolSummary is a lightweight tool reference (name + description) for list views.
+type ToolSummary struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 type ServerResponse struct {
 	ID                  string     `json:"id"`
 	Name                string     `json:"name"`
@@ -56,6 +62,7 @@ type ServerResponse struct {
 	LastError           string     `json:"last_error,omitempty"`
 	LastDiscoveredAt    *time.Time `json:"last_discovered_at,omitempty"`
 	ToolsCount          int               `json:"tools_count"`
+	ToolNames           []ToolSummary     `json:"tool_names"`
 	ResourcesCount      int               `json:"resources_count"`
 	PromptsCount        int               `json:"prompts_count"`
 	Tags                []string          `json:"tags"`

@@ -7,11 +7,12 @@ import (
 
 // CachedToken holds the resolved scope for a token hash.
 type CachedToken struct {
-	ID        string
-	ServerIDs map[string]bool // set of allowed server IDs
-	ExpiresAt *time.Time
-	IsActive  bool
-	FetchedAt time.Time
+	ID           string
+	ServerIDs    map[string]bool            // set of allowed server IDs
+	AllowedTools map[string]map[string]bool // server_id → tool_name → true; nil map for a server = all tools
+	ExpiresAt    *time.Time
+	IsActive     bool
+	FetchedAt    time.Time
 }
 
 // Cache provides an in-memory TTL cache for scope token lookups.

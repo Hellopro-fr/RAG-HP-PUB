@@ -16,9 +16,17 @@ func AllowedServersFromContext(ctx context.Context) (map[string]bool, bool) {
 	return ids, ok
 }
 
-// ScopeHandlerFactory creates a scoped handler for the given allowed server IDs.
-// If nil, no scope filtering is applied.
-type ScopeHandlerFactory func(allowedIDs map[string]bool) Handler
+// AllowedToolsFromContext retrieves the per-server tool whitelist
+// stored by the scope token middleware. Returns nil if not set (= all tools).
+func AllowedToolsFromContext(ctx context.Context) map[string]map[string]bool {
+	tools, _ := ctx.Value("scope_allowed_tools").(map[string]map[string]bool)
+	return tools
+}
+
+// ScopeHandlerFactory creates a scoped handler for the given allowed server IDs
+// and optional per-server tool whitelist.
+// If allowedTools is nil, all tools from allowed servers are exposed.
+type ScopeHandlerFactory func(allowedIDs map[string]bool, allowedTools map[string]map[string]bool) Handler
 
 // StreamableHTTPServer exposes a POST /mcp endpoint that handles
 // JSON-RPC requests synchronously (streamable HTTP transport).
@@ -71,7 +79,8 @@ func (s *StreamableHTTPServer) handleMCP(w http.ResponseWriter, r *http.Request)
 	handler := s.handler
 	if s.scopeFactory != nil {
 		if allowedIDs, ok := AllowedServersFromContext(r.Context()); ok {
-			handler = s.scopeFactory(allowedIDs)
+			allowedTools := AllowedToolsFromContext(r.Context())
+			handler = s.scopeFactory(allowedIDs, allowedTools)
 		}
 	}
 
