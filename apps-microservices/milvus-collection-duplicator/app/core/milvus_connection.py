@@ -307,7 +307,7 @@ def duplicate_collection(
             f"Please drop it manually or choose a different target name."
         )
 
-    target = Collection(name=target_name, schema=schema)
+    target = Collection(name=target_name, schema=schema, consistency_level="Strong")
     logger.info(f"✅  Created collection '{target_name}'")
 
     # ── 4. Recreate indexes ──
