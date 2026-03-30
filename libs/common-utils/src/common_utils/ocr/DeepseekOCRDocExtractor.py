@@ -1,5 +1,6 @@
 import httpx
 import logging
+logger = logging.getLogger(__name__)
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import mimetypes
@@ -144,9 +145,9 @@ class DeepseekOCRDocExtractor:
                 
                 # Vérifier si le format est supporté
                 if not self._is_supported_format(filename):
-                    print(f"⚠️  {filename} n'est pas un PDF/image - conversion en PDF...")
+                    logger.warning(f"{filename} n'est pas un PDF/image - conversion en PDF...")
                     file_content, filename = await self._convert_to_pdf(file_content, filename)
-                    print(f"✓ Converti en {filename}")
+                    logger.info(f"Converti en {filename}")
                 
                 # Réinitialiser la position pour la lecture
                 file_content.seek(0)
@@ -432,7 +433,7 @@ class DeepseekOCRDocExtractor:
                         pdf_content = BytesIO(pdf_file.read())
                     
                     new_filename = Path(filename).stem + '.pdf'
-                    print(f"✓ Converti avec LibreOffice: {filename} -> {new_filename}")
+                    logger.info(f"Converti avec LibreOffice: {filename} -> {new_filename}")
                     
                     return pdf_content, new_filename
                 else:
@@ -459,7 +460,7 @@ class DeepseekOCRDocExtractor:
                 if temp_input and os.path.exists(temp_input.name):
                     os.unlink(temp_input.name)
             except Exception as e:
-                print(f"⚠️ Impossible de supprimer {temp_input.name}: {e}")
+                logger.warning(f"Impossible de supprimer {temp_input.name}: {e}")
             
             try:
                 if temp_output_dir and os.path.exists(temp_output_dir):
@@ -472,4 +473,4 @@ class DeepseekOCRDocExtractor:
                     # Supprimer le répertoire
                     os.rmdir(temp_output_dir)
             except Exception as e:
-                print(f"⚠️ Impossible de supprimer le répertoire temporaire: {e}")
+                logger.warning(f"Impossible de supprimer le répertoire temporaire: {e}")

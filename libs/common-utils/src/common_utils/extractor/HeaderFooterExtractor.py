@@ -3,6 +3,8 @@ import logging
 from difflib import SequenceMatcher
 from bs4 import BeautifulSoup, Comment, Tag
 
+logger = logging.getLogger(__name__)
+
 class HeaderFooterExtractor:
     """
     A class to extract header and footer text from HTML content.
@@ -34,7 +36,7 @@ class HeaderFooterExtractor:
             for comment in self.soup.find_all(string=lambda text: isinstance(text, Comment)):
                 comment.extract()
         except Exception as e:
-            print(f"Erreur lors de l'analyse HTML: {e}")
+            logger.error(f"Erreur lors de l'analyse HTML: {e}", exc_info=True)
             self.soup = None
             return
         

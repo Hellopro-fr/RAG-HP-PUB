@@ -10,6 +10,8 @@ from tempfile import NamedTemporaryFile
 
 from common_utils.ocr.OCRDocExtractor import OCRDocExtractor
 
+logger = logging.getLogger(__name__)
+
 # Import des bibliothèques nécessaires
 try:
     from PIL import Image
@@ -25,9 +27,8 @@ try:
     import tempfile
     import requests
 except ImportError as e:
-    print(f"Erreur d'import: {e}")
-    print("Installez les dépendances manquantes avec:")
-    print("pip install Pillow PyMuPDF python-docx openpyxl python-pptx mammoth odfpy requests")
+    logging.error(f"Erreur d'import: {e}")
+    logging.error("Installez les dépendances manquantes avec: pip install Pillow PyMuPDF python-docx openpyxl python-pptx mammoth odfpy requests")
     sys.exit(1)
 
 class DocumentTextExtractor:
@@ -59,8 +60,6 @@ class DocumentTextExtractor:
         self.ocr_supported = {'.png', '.bmp', '.pdf', '.gif', '.jpg', '.jpeg'}
         self.document_formats = {'.doc', '.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.odt'}
         
-        # Configuration du logging
-        logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
     
     def is_url(self, path_or_url: str) -> bool:
@@ -592,17 +591,19 @@ class DocumentTextExtractor:
         results = []
         
         for i, path_or_url in enumerate(paths_or_urls, 1):
-            print(f"Traitement {i}/{len(paths_or_urls)}: {path_or_url}")
-            
+            logger.info(f"Traitement {i}/{len(paths_or_urls)}: {path_or_url}")
+
             result = self.process_single_file(path_or_url)
             results.append(result)
-            
+
             # Affichage du progrès
-            status_symbol = "✓" if result['status'] == 'success' else "✗"
             file_name = Path(result['file_path']).name if result['file_path'] else "Unknown"
-            print(f"{status_symbol} {file_name} - {result['method']}")
-            
+            if result['status'] == 'success':
+                logger.info(f"{file_name} - {result['method']}")
+            else:
+                logger.error(f"{file_name} - {result['method']}")
+
             if result['status'] == 'error':
-                print(f"  Erreur: {result['error']}")
+                logger.error(f"  Erreur: {result['error']}")
         
         return results

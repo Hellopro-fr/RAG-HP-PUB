@@ -1,10 +1,13 @@
 import pika
 import json
+import logging
 from product_database_qdrant_service.messaging.publisher import Publisher  # Importe notre publisher local
 from product_database_qdrant_service.core.processor import insertion_data # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 from common_utils.autres.DLQProperties import DLQProperties
 from common_utils.metrics.prometheus import measure_processing_time
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
@@ -29,7 +32,7 @@ class Consumer:
 
         self.rabbitmq_connection = RabbitMQConnection()
         self.connect()
-        print("✅ Consumer initialisé.")
+        logger.info("Consumer initialisé.")
     
     def connect(self):
         """
@@ -76,7 +79,7 @@ class Consumer:
         """
         try:
             produits_data = json.loads(body)
-            print(f"\n📥 Database-Produits-Processor: Message reçu.")
+            logger.debug("Database-Produits-Processor: Message reçu.")
 
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(produits_data)
@@ -90,7 +93,7 @@ class Consumer:
 
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message est invalide.
-            print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+            logger.error("Erreur permanente. Message envoyé à la DLQ finale. Erreur: %s", e, exc_info=True)
             dlq_props = DLQProperties.create_dlq_properties(e, 'product-database-qdrant-service', 0, method)
             ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
             ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -99,10 +102,10 @@ class Consumer:
             # Erreur potentiellement transitoire (ex: BDD indisponible).
             retry_count = self._get_retry_count(properties)
             if retry_count < MAX_RETRIES:
-                print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                logger.warning("Erreur transitoire (essai %s/%s). Message renvoyé pour une nouvelle tentative. Erreur: %s", retry_count + 1, MAX_RETRIES + 1, e, exc_info=True)
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             else:
-                print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                logger.error("Échec après %s tentatives. Message envoyé à la DLQ finale. Erreur: %s", MAX_RETRIES + 1, e, exc_info=True)
                 dlq_props = DLQProperties.create_dlq_properties(e, 'product-database-qdrant-service', MAX_RETRIES, method)
                 ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -114,9 +117,9 @@ class Consumer:
                 Démarre la boucle d'écoute des messages.
                 """
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-                print("👂 Database-Produit-Processor: En attente de messages...")
+                logger.info("Database-Produit-Processor: En attente de messages...")
                 self.channel.start_consuming()
                 break  # Si start_consuming se termine normalement, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                logger.warning("Connexion perdue: %s, tentative de reconnexion...", e)
                 self.connect()

@@ -1,6 +1,9 @@
 import pika
 import json
+import logging
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
+
+logger = logging.getLogger(__name__)
 
 class Publisher:
     def __init__(self, connection: pika.BlockingConnection):
@@ -21,7 +24,7 @@ class Publisher:
             exchange_type='topic', 
             durable=True
         )
-        print("✅ Publisher initialisé.")
+        logger.info("Publisher initialisé.")
 
     def publish_message(self, message_dict: dict):
         for i in range(3):  # Essaye de se reconnecter 3 fois
@@ -37,9 +40,9 @@ class Publisher:
                 )
                 
                 url = message_dict.get('url', 'URL inconnue')
-                print(f"   📤 Message pour l'URL '{url}' traité et publié vers le webhook.")
+                logger.debug(f"Message pour l'URL '{url}' traité et publié vers le webhook.")
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                logger.warning(f"Connexion perdue: {e}, tentative de reconnexion...", exc_info=True)
                 self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
                 self.channel = self.connection.channel()

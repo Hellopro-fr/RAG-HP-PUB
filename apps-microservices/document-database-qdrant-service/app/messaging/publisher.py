@@ -1,5 +1,8 @@
 import aio_pika
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Publisher:
     def __init__(self, connection: aio_pika.RobustConnection):
@@ -9,7 +12,7 @@ class Publisher:
         self.connection = connection
         self.exchange_name = 'inserted_data_exchange'
         self.routing_key = 'data.ready_for_webhook'
-        print(f"✅ Publisher initialisé (vers exchange '{self.exchange_name}').")
+        logger.info(f"Publisher initialisé (vers exchange '{self.exchange_name}').")
 
     async def publish_message(self, message_dict: dict, channel: aio_pika.abc.AbstractChannel):
         """
@@ -26,4 +29,4 @@ class Publisher:
             ),
             routing_key=routing_key
         )
-        print(f"   📤 Message traité et publié avec la clé '{routing_key}'.")
+        logger.debug(f"Message traité et publié avec la clé '{routing_key}'.")

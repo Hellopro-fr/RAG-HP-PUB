@@ -1,7 +1,11 @@
+import logging
 import pika
 import time
 import os
-    
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
+
 from echange_database_qdrant_service.messaging.consumer import Consumer
 from echange_database_qdrant_service.messaging.publisher import Publisher
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
@@ -21,14 +25,14 @@ def main():
     for i in range(10):
         try:
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ Database-Echange-Processor: Connecté à RabbitMQ.")
+            logger.info("Database-Echange-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Database-Echange-Processor: En attente de RabbitMQ... {i+1}s")
+            logger.warning(f"Database-Echange-Processor: En attente de RabbitMQ... {i+1}s")
             time.sleep(1)
 
     if not connection:
-        print("❌ Database-Echange-Processor: Impossible de se connecter, arrêt du service.")
+        logger.error("Database-Echange-Processor: Impossible de se connecter, arrêt du service.")
         exit(1)
 
     try:
@@ -42,11 +46,11 @@ def main():
         consumer.start_consuming()
 
     except KeyboardInterrupt:
-        print("\n🛑 Database-Echange-Processor: Arrêt demandé.")
+        logger.info("Database-Echange-Processor: Arrêt demandé.")
     finally:
         if connection and not connection.is_closed:
             connection.close()
-            print("✅ Database-Echange-Processor: Connexion RabbitMQ fermée.")
+            logger.info("Database-Echange-Processor: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
     main()

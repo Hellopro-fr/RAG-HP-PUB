@@ -1,7 +1,10 @@
+import logging
 from common_utils.database.QdrantWebsiteCrud import QdrantWebsiteCrud
 from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
 
 from common_utils.autres.CollectionName import CollectionName
+
+logger = logging.getLogger(__name__)
 
 def insertion_data(website_data: dict) -> dict:
     """
@@ -40,12 +43,12 @@ def insertion_data(website_data: dict) -> dict:
     if not domaine:
         raise ValueError("Le domaine est manquant dans les données du site web.")
 
-    print(f"Début du traitement pour l'URL: {url}")
+    logger.debug(f"Début du traitement pour l'URL: {url}")
 
     try:
         collection_enum = CollectionName(collection)
     except ValueError:
-        print("'%s' n'est pas un nom de collection valide.", collection)
+        logger.warning("'%s' n'est pas un nom de collection valide.", collection)
         raise ValueError(f"Nom de collection invalide: {collection}")
 
     # Initialisation du client de base de données
@@ -58,25 +61,25 @@ def insertion_data(website_data: dict) -> dict:
     try:
         if page_type in ["header", "footer"]:
             # Headers/Footers : supprimer par domaine + page_type
-            print(f"🔄 Upsert {page_type}: Suppression des anciens chunks pour domaine '{domaine}'...")
+            logger.debug(f"Upsert {page_type}: Suppression des anciens chunks pour domaine '{domaine}'...")
             base_vectorielle.delete_website_by_domain_and_page_type(domaine=domaine, page_type=page_type)
         else:
             # Pages standard : supprimer par URL
-            print(f"🔄 Upsert: Suppression des anciens chunks pour l'URL '{url}'...")
+            logger.debug(f"Upsert: Suppression des anciens chunks pour l'URL '{url}'...")
             base_vectorielle.delete_website_by_url(url=url)
     except Exception as e:
-        print(f"⚠️ Avertissement lors de la suppression pré-upsert pour '{url}': {e}. Poursuite avec l'insertion...")
+        logger.warning(f"Avertissement lors de la suppression pré-upsert pour '{url}': {e}. Poursuite avec l'insertion...", exc_info=True)
 
     # --- Étape 2: Insérer les nouvelles données ---
     try:
-        print(f"Insertion de {len(websites)} chunk(s) pour l'URL {url} dans {bdd}...")
+        logger.debug(f"Insertion de {len(websites)} chunk(s) pour l'URL {url} dans {bdd}...")
         func = base_vectorielle.insert_website
         result = func(websites)
 
         if not result or result.get("status") != "success":
             raise Exception(f"L'insertion a échoué pour l'URL {url}. Réponse de la BDD: {result}")
 
-        print(f"✓ Upsert réussi pour l'URL {url}.")
+        logger.info(f"Upsert réussi pour l'URL {url}.")
         
         return {
             "status": "success",
@@ -87,5 +90,5 @@ def insertion_data(website_data: dict) -> dict:
             "already_in_bdd": False
         }
     except Exception as e:
-        print(f"Échec de l'insertion pour l'URL {url}: {e}")
+        logger.error(f"Échec de l'insertion pour l'URL {url}: {e}", exc_info=True)
         raise # Propage l'exception pour que le consumer la gère (retry/DLQ)
