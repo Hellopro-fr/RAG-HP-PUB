@@ -4,7 +4,8 @@ import { X, GripVertical, Sparkles, Target, Gift, Check, Loader2, AlertCircle, P
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { trackModifyCriteriaModalView, trackCriteriaModified } from "@/lib/analytics";
 import { useFlowStore } from "@/lib/stores/flow-store";
-import { useProcessMatchingLogic } from "@/hooks/api/useProcessMatchingLogic";
+// import { useProcessMatchingLogic } from "@/hooks/api/useProcessMatchingLogic";
+import { useProcessMatching } from "@/hooks/api/useProcessMatching";
 import type {
   ConsolidatedCharacteristic,
   PoidsCaracteristique,
@@ -369,7 +370,8 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
     setRemovedCritiqueCriteriaIds,
     setRemovedSecondaireCriteriaIds,
   } = useFlowStore();
-  const { refetchMatchingWithUpdatedCriteria, showLoader } = useProcessMatchingLogic();
+  // const { refetchMatchingWithUpdatedCriteria, isRefetching } = useProcessMatchingLogic();
+  const { refetchMatchingWithUpdatedCriteria, isRefetching } = useProcessMatching();
 
   const [critiqueCriteria, setCritiqueCriteria] = useState<CriterionFormState[]>([]);
   const [secondaireCriteria, setSecondaireCriteria] = useState<CriterionFormState[]>([]);
@@ -852,10 +854,10 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
             </button>
             <button
               onClick={handleApply}
-              disabled={!hasCriteria || showLoader || hasNumericValidationErrors}
+              disabled={!hasCriteria || isRefetching || hasNumericValidationErrors}
               className="order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg bg-accent px-8 py-2.5 text-base font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {showLoader ? (
+              {isRefetching ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
                   Recherche en cours...

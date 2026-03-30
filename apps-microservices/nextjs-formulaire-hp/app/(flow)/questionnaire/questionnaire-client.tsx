@@ -212,15 +212,19 @@ export default function QuestionnaireClient({
     // Afficher le loader et lancer matching + prix en parallèle
     setShowLoader(true);
 
-    // Promise.all : attendre matching ET prix
-    // L'échec du prix ne bloque PAS (catch silencieux)
-    // onProgress met à jour la barre (0→25→50→75 via matching, 100 après prix)
-    const [destination] = await Promise.all([
-      processMatching(setLoaderProgress),
-      fetchPriceEstimation().catch((err) => {
+    // Lancer prix et matching en parallèle
+    // Le prix répond plus vite → met à jour le progress à 25%
+    // Le matching prend le relais (50→65→75) via onProgress
+    const prixPromise = fetchPriceEstimation()
+      .then(() => { setLoaderProgress(25); })
+      .catch((err) => {
         console.error('[Prix] Error (non-blocking):', err);
-      }),
-    ]);
+        setLoaderProgress(25); // Même en erreur, on avance
+      });
+
+    const matchingPromise = processMatching(setLoaderProgress); // progress interne : 50→65→75
+
+    const [, destination] = await Promise.all([prixPromise, matchingPromise]);
 
     setLoaderProgress(100);
     // Attendre que la barre anime jusqu'à 100% avant de naviguer
