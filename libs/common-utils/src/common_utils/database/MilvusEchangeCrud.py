@@ -1,5 +1,4 @@
 import logging
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,8 +16,7 @@ from pymilvus import (
     MilvusException,
 )
 
-
-_milvus_connection_lock = threading.Lock()
+from common_utils.database.milvus_lock import milvus_connection_lock
 
 
 @dataclass
@@ -44,26 +42,29 @@ class MilvusEchangeCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            self.logger.info("Connexion sur Zilliz cloud...")
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
-            self.logger.info("Connexion sur Zilliz cloud avec succès.")
+        # Called with milvus_connection_lock already held
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        self.logger.info("Connexion sur Zilliz cloud...")
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
+        self.logger.info("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(ModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -220,13 +221,14 @@ class MilvusEchangeCrud:
             self.logger.error(
                 f"[{model_key}][Echange] Erreur Milvus lors de l'insertion : {e}"
             )
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Echange] insertion de batch : {e}", exc_info=True
             )
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
             raise
 
     def update_echange(
@@ -379,6 +381,7 @@ class MilvusEchangeCrud:
             )
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Echange] Mise à jour : {e}", exc_info=True
             )
@@ -421,6 +424,7 @@ class MilvusEchangeCrud:
             )
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Echange] Suppression : {e}", exc_info=True
             )
@@ -465,6 +469,7 @@ class MilvusEchangeCrud:
             )
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}",
                 exc_info=True,
@@ -519,6 +524,7 @@ class MilvusEchangeCrud:
             )
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Echange] Suppression : {e}", exc_info=True
             )

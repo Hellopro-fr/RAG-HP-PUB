@@ -34,8 +34,8 @@ class DeepseekOCRDocExtractor:
         self.download_timeout = download_timeout
         self.max_pdf_pages = max_pdf_pages
         self.endpoint = f"{self.base_url}/ocr/batch"
-        logging.info(f"URL ocr : {self.base_url}")
-        logging.info(f"Limite de pages PDF : {self.max_pdf_pages}")
+        logger.info(f"URL ocr : {self.base_url}")
+        logger.info(f"Limite de pages PDF : {self.max_pdf_pages}")
     
     def _is_supported_format(self, filename: str) -> bool:
         """
@@ -101,17 +101,17 @@ class DeepseekOCRDocExtractor:
             return
         
         page_count = self._count_pdf_pages(content)
-        logging.info(f"Nombre de pages du PDF: {page_count}")
+        logger.info(f"Nombre de pages du PDF: {page_count}")
         
         if page_count > self.max_pdf_pages:
             error_msg = (
                 f"Le fichier '{filename}' contient {page_count} pages, "
                 f"ce qui dépasse la limite autorisée de {self.max_pdf_pages} pages."
             )
-            logging.warning(error_msg)
+            logger.warning(error_msg)
             raise ValueError(error_msg)
         
-        logging.info(f"Validation réussie pour '{filename}': {page_count} page(s)")
+        logger.info(f"Validation réussie pour '{filename}': {page_count} page(s)")
     
     async def _download_file(self, url: str) -> tuple[BytesIO, str]:
         """

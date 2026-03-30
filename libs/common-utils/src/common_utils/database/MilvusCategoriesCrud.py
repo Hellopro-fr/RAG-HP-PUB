@@ -1,10 +1,10 @@
 import logging
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.milvus_lock import milvus_connection_lock
 from common_utils.database.Utils import Utils
 
 
@@ -26,9 +26,6 @@ class ModelConfig:
     dimension: int = 1024
 
 
-_milvus_connection_lock = threading.Lock()
-
-
 class MilvusCategoriesCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
@@ -45,26 +42,28 @@ class MilvusCategoriesCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            self.logger.info("Connexion sur Zilliz cloud...")
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
-            self.logger.info("Connexion sur Zilliz cloud avec succès.")
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        self.logger.info("Connexion sur Zilliz cloud...")
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
+        self.logger.info("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(ModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -224,6 +223,7 @@ class MilvusCategoriesCrud:
                 f"[{model_key}][categories] insertion de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
 
     def update_categories(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -280,6 +280,7 @@ class MilvusCategoriesCrud:
                 f"[{model_key}][categories] Mise à jour de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
 
     def delete_categories(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -322,6 +323,7 @@ class MilvusCategoriesCrud:
             self.logger.error(
                 f"[{model_key}][categories] Suppression : {e}", exc_info=True
             )
+            self.collection = None
             raise
 
     def get_categories(self, id_categorie: str) -> Dict[str, Any]:
@@ -367,4 +369,5 @@ class MilvusCategoriesCrud:
                 f"[{model_key}][Categorie] Erreur de Récupèration de Categorie : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise

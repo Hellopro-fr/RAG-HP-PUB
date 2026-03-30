@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Union
 import logging
@@ -28,8 +27,12 @@ try:
     import requests
 except ImportError as e:
     logging.error(f"Erreur d'import: {e}")
-    logging.error("Installez les dépendances manquantes avec: pip install Pillow PyMuPDF python-docx openpyxl python-pptx mammoth odfpy requests")
-    sys.exit(1)
+    logging.error("Installez les dépendances manquantes avec:")
+    logging.error("pip install Pillow PyMuPDF python-docx openpyxl python-pptx mammoth odfpy requests")
+    raise RuntimeError(
+        "Missing required dependencies for DocumentTextExtractor. "
+        "Install with: pip install Pillow PyMuPDF python-docx openpyxl python-pptx mammoth odfpy requests"
+    ) from e
 
 class DocumentTextExtractor:
     """

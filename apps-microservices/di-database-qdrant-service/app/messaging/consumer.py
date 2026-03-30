@@ -19,9 +19,8 @@ class Consumer:
         Initialise le consumer.
         Il a besoin d'une connexion ET d'une instance du publisher.
         """
-        self.channel = connection.channel()
         self.publisher = publisher
-        
+
         # Noms des composants RabbitMQ
         self.exchange_name = 'devis_embedded_data_exchange'
         self.routing_key = 'data.devis.ready_for_insertion'
@@ -127,3 +126,4 @@ class Consumer:
                 logger.warning(f"Connexion perdue: {e}, tentative de reconnexion dans {wait_time}s...")
                 time.sleep(wait_time)
                 self.connect()
+                attempt = 0

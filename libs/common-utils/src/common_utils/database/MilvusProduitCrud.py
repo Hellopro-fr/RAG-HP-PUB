@@ -1,11 +1,11 @@
 import logging
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
 from common_utils.database.Utils import Utils
+from common_utils.database.milvus_lock import milvus_connection_lock
 
 from pymilvus import (
     connections,
@@ -18,9 +18,6 @@ from pymilvus import (
     FunctionType,
     MilvusException,
 )
-
-
-_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -46,26 +43,28 @@ class MilvusProduitsCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            self.logger.info("Connexion sur Zilliz cloud...")
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
-            self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        self.logger.info("Connexion sur Zilliz cloud...")
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
+        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(ModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -449,7 +448,7 @@ class MilvusProduitsCrud:
 
             return {
                 "status": "success",
-                "message": f"Echange avec ID {id_entity_milvus} supprimé.",
+                "message": f"Produit avec ID {id_entity_milvus} supprimé.",
             }
 
         except MilvusException as e:
@@ -635,12 +634,25 @@ class MilvusProduitsCrud:
     def get_produit_by_field(
         self, field_name: str, search_value: str
     ) -> Dict[str, Any]:
+        ALLOWED_FIELDS = {
+            "id_produit", "nom_produit", "categorie", "id_categorie",
+            "fournisseur", "id_fournisseur", "domaine", "source", "sku",
+            "ean", "reference", "marque", "type_produit", "url",
+            "page_type", "fichier_source", "etat", "affichage",
+            "date_ajout", "date_maj", "text", "url_images", "prix_ht",
+            "prix_ttc", "statut", "remise", "stock", "delai_livraison",
+            "fabricant", "garantie", "normes", "frais_de_port",
+            "caracteristique", "montant_eco_participation",
+            "source_produits", "chunk_id",
+        }
+        if not field_name:
+            field_name = "nom_produit"
+        if field_name not in ALLOWED_FIELDS:
+            raise ValueError(f"Invalid field name: {field_name}. Allowed: {ALLOWED_FIELDS}")
+
         list_search_value = [search_value]
         model_config = ModelConfig()
         model_key = model_config.model_id
-
-        if not field_name:
-            field_name = "nom_produit"
 
         try:
             self._ensure_connected()

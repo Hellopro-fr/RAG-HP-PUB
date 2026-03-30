@@ -1,11 +1,11 @@
 import logging
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
 from common_utils.database.Utils import Utils
+from common_utils.database.milvus_lock import milvus_connection_lock
 
 
 from pymilvus import (
@@ -17,9 +17,6 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
-
-
-_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -45,26 +42,28 @@ class MilvusDevisCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            self.logger.info("Connexion sur Zilliz cloud...")
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
-            self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        self.logger.info("Connexion sur Zilliz cloud...")
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
+        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(ModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -231,14 +230,14 @@ class MilvusDevisCrud:
             self.logger.error(
                 f"[{model_key}][Demande de devis] Erreur Milvus lors de l'insertion : {e}"
             )
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Demande de devis] insertion de batch : {e}",
                 exc_info=True,
             )
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
             raise
 
     def update_devis(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -379,12 +378,12 @@ class MilvusDevisCrud:
         except MilvusException as e:
             self.collection = None  # Force reconnection on next call
             self.logger.error(
-                f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}"
+                f"[{model_key}][Devis] Erreur Milvus lors de la récupération : {e}"
             )
             raise
         except Exception as e:
             self.logger.error(
-                f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}",
+                f"[{model_key}][Devis] Erreur de Récupèration du devis : {e}",
                 exc_info=True,
             )
             raise

@@ -27,11 +27,11 @@ class Publisher:
         logger.info("Publisher initialisé.")
 
     def publish_message(self, message_dict: dict):
+        """
+        Publie un message (dictionnaire) sur le topic configuré.
+        """
         for i in range(3):  # Essaye de se reconnecter 3 fois
             try:
-                """
-                Publie un message (dictionnaire) sur le topic configuré.
-                """
                 self.channel.basic_publish(
                     exchange=self.exchange_name,
                     routing_key=self.routing_key,
@@ -46,3 +46,4 @@ class Publisher:
                 logger.warning("Connexion perdue: %s, tentative de reconnexion...", e)
                 self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
                 self.channel = self.connection.channel()
+        raise RuntimeError(f"Failed to publish message after 3 attempts")

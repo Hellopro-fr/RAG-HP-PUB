@@ -1,11 +1,11 @@
 import logging
-import threading
 import time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.milvus_lock import milvus_connection_lock
 from common_utils.database.Utils import Utils
 
 from pymilvus import (
@@ -17,9 +17,6 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
-
-
-_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -43,21 +40,24 @@ class MilvusEchangeInserer:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
 
     def _ensure_connected(self):
-        if self.collection is None:
+        if self.collection is not None:
+            return
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(ModelConfig())
 

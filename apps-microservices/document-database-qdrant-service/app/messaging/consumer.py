@@ -126,6 +126,6 @@ class Consumer:
                     await message.nack(requeue=True)
         
         # 4. Commence à consommer les messages
-        logger.warning("Database-Document-Processor: En attente de messages...")
+        logger.info("Database-Document-Processor: En attente de messages...")
         await queue.consume(lambda message: asyncio.create_task(safe_process(message)))
 

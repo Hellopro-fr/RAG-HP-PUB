@@ -1,11 +1,11 @@
 import logging
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
 from common_utils.database.Utils import Utils
+from common_utils.database.milvus_lock import milvus_connection_lock
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,6 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
-
-
-_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -47,27 +44,29 @@ class MilvusWebsiteCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            logger.debug("Connexion sur Zilliz cloud...")
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            connections.connect(
-                alias="default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-                timeout=10,  # Add a 10-second timeout to prevent indefinite hanging
-            )
-            logger.info("Connexion sur Zilliz cloud avec succès.")
+        logger.debug("Connexion sur Zilliz cloud...")
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        connections.connect(
+            alias="default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+            timeout=10,  # Add a 10-second timeout to prevent indefinite hanging
+        )
+        logger.info("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(ModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name

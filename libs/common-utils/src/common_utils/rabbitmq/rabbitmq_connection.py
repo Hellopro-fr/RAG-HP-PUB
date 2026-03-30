@@ -25,7 +25,10 @@ class RabbitMQConnection:
         attempts = 0
         while attempts < max_retries:
             try:
-                logger.warning(f"Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
+                if attempts == 0:
+                    logger.info(f"Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
+                else:
+                    logger.warning(f"Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
 
                 self.connection = pika.BlockingConnection(pika.URLParameters(self.host))
 
@@ -36,4 +39,4 @@ class RabbitMQConnection:
                 logger.error(f"Échec de connexion ({e}), nouvelle tentative dans {retry_delay}s...")
                 time.sleep(retry_delay)
 
-        raise Exception(f"❌ Impossible de se connecter à RabbitMQ après {max_retries} tentatives.")
+        raise Exception(f"Impossible de se connecter à RabbitMQ après {max_retries} tentatives.")

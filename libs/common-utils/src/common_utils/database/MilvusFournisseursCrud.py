@@ -1,10 +1,10 @@
 import logging
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.milvus_lock import milvus_connection_lock
 from common_utils.database.Utils import Utils
 
 
@@ -26,9 +26,6 @@ class ModelConfig:
     dimension: int = 1024
 
 
-_milvus_connection_lock = threading.Lock()
-
-
 class MilvusFournisseursCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
@@ -45,26 +42,28 @@ class MilvusFournisseursCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            self.logger.info("Connexion sur Zilliz cloud...")
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
-            self.logger.info("Connexion sur Zilliz cloud avec succès.")
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        self.logger.info("Connexion sur Zilliz cloud...")
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
+        self.logger.info("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(ModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -259,6 +258,7 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][fournisseurs] insertion de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
 
     def update_fournisseurs(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -315,6 +315,7 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][fournisseurs] Mise à jour de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
 
     def delete_fournisseurs(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -344,7 +345,7 @@ class MilvusFournisseursCrud:
 
             return {
                 "status": "success",
-                "message": f"categories avec ID {id_entity_milvus} supprimé.",
+                "message": f"fournisseur avec ID {id_entity_milvus} supprimé.",
             }
 
         except MilvusException as e:
@@ -357,6 +358,7 @@ class MilvusFournisseursCrud:
             self.logger.error(
                 f"[{model_key}][fournisseurs] Suppression : {e}", exc_info=True
             )
+            self.collection = None
             raise
 
     def get_fournisseurs(self, id_fournisseur: str) -> Dict[str, Any]:
@@ -402,7 +404,18 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][Fournisseur] Erreur de Récupèration de Fournisseur : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise
+
+    ALLOWED_FIELDS = {
+        "url", "page_type", "domaine", "domaine2", "domaine3",
+        "domaine4", "domaine5", "domaine6", "fournisseur",
+        "id_fournisseur", "source", "fichier_source", "etat",
+        "affichage", "nom_categorie_phare_1", "id_categorie_phare_1",
+        "nom_categorie_phare_2", "id_categorie_phare_2",
+        "nom_categorie_phare_3", "id_categorie_phare_3",
+        "text", "chunk_id", "date_ajout", "date_maj",
+    }
 
     def get_fournisseur_by_field(
         self, field_name: str, search_value: str
@@ -413,6 +426,9 @@ class MilvusFournisseursCrud:
 
         if not field_name:
             field_name = "fournisseur"
+
+        if field_name not in self.ALLOWED_FIELDS:
+            raise ValueError(f"Invalid field name: {field_name}. Allowed: {self.ALLOWED_FIELDS}")
 
         try:
             self._ensure_connected()
@@ -452,4 +468,5 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][Fournisseur] Erreur de Récupèration Fournisseur : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise

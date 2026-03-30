@@ -1,10 +1,10 @@
 import logging
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.milvus_lock import milvus_connection_lock
 from common_utils.database.Utils import Utils
 
 from pymilvus import (
@@ -27,9 +27,6 @@ class PrixModelConfig:
     dimension: int = 1024
 
 
-_milvus_connection_lock = threading.Lock()
-
-
 class MilvusPrixProduitsCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
@@ -46,26 +43,28 @@ class MilvusPrixProduitsCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            self.logger.info("Connexion sur Zilliz cloud...")
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
-            self.logger.info("Connexion sur Zilliz cloud avec succès.")
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        self.logger.info("Connexion sur Zilliz cloud...")
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
+        self.logger.info("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(PrixModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(PrixModelConfig())
 
     def _get_or_create_collection(self, model_config: PrixModelConfig) -> Collection:
         collection_name = model_config.collection_name
@@ -293,6 +292,7 @@ class MilvusPrixProduitsCrud:
                 f"[{model_key}][PrixProduits] insertion de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {datas}")
+            self.collection = None
             raise
 
     def get_prix_produit(self, id_produit: int) -> Dict[str, Any]:
@@ -355,4 +355,5 @@ class MilvusPrixProduitsCrud:
                 f"[{model_key}][PrixProduit] Erreur de Récupération du prix produit : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise

@@ -1,6 +1,5 @@
 import logging
 import asyncio
-import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,8 +18,7 @@ from pymilvus import (
     MilvusException,
 )
 
-
-_milvus_connection_lock = threading.Lock()
+from common_utils.database.milvus_lock import milvus_connection_lock
 
 
 @dataclass
@@ -46,26 +44,29 @@ class MilvusDocumentCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        with _milvus_connection_lock:
-            try:
-                connections.disconnect("default")
-            except Exception:
-                pass
-            self.logger.info("Connexion sur Zilliz cloud...")
-            connections.connect(
-                "default",
-                host=self.config.ZILLIZ_URI,
-                port=self.config.ZILLIZ_PORT,
-                user=self.config.ZILLIZ_USER,
-                password=self.config.ZILLIZ_PASSWORD,
-            )
-            self.logger.info("Connexion sur Zilliz cloud avec succès.")
+        # Called with milvus_connection_lock already held
+        try:
+            connections.disconnect("default")
+        except Exception:
+            pass
+        self.logger.info("Connexion sur Zilliz cloud...")
+        connections.connect(
+            "default",
+            host=self.config.ZILLIZ_URI,
+            port=self.config.ZILLIZ_PORT,
+            user=self.config.ZILLIZ_USER,
+            password=self.config.ZILLIZ_PASSWORD,
+        )
+        self.logger.info("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None:
             return
-        self._connect_to_milvus()
-        self.collection = self._get_or_create_collection(ModelConfig())
+        with milvus_connection_lock:
+            if self.collection is not None:
+                return
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -207,6 +208,7 @@ class MilvusDocumentCrud:
             )
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][document] insertion de batch : {e}", exc_info=True
             )
@@ -253,6 +255,7 @@ class MilvusDocumentCrud:
             self.logger.error(f"Data : {datas}")
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][document] Mise à jour de batch : {e}", exc_info=True
             )
@@ -297,6 +300,7 @@ class MilvusDocumentCrud:
             )
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][document] Suppression : {e}", exc_info=True
             )
@@ -355,6 +359,7 @@ class MilvusDocumentCrud:
             )
             raise
         except Exception as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][document] Erreur de Récupèration de document : {e}",
                 exc_info=True,
