@@ -1,10 +1,19 @@
 import os
 import asyncio
 import json
+import logging
 import aio_pika
 import aiohttp
 import aiormq
 from common_utils.autres.DLQProperties import DLQProperties
+
+# --- Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
@@ -95,7 +104,7 @@ class MetricsConsumer:
             await msg.ack()
             return True
         except (aiormq.exceptions.ChannelInvalidStateError, RuntimeError) as e:
-            print(f"      ⚠️  ACK échoué (tag: {msg.delivery_tag}): {e}")
+            logger.warning("ACK échoué (tag: %s): %s", msg.delivery_tag, e)
             return False
 
     async def _safe_nack(self, msg: aio_pika.abc.AbstractIncomingMessage, requeue: bool = False) -> bool:
@@ -104,7 +113,7 @@ class MetricsConsumer:
             await msg.nack(requeue=requeue)
             return True
         except (aiormq.exceptions.ChannelInvalidStateError, RuntimeError) as e:
-            print(f"      ⚠️  NACK échoué (tag: {msg.delivery_tag}): {e}")
+            logger.warning("NACK échoué (tag: %s): %s", msg.delivery_tag, e)
             return False
 
     def stop(self):
@@ -117,7 +126,7 @@ class MetricsConsumer:
 
     async def batch_sender(self):
         """Tâche de fond qui envoie les métriques avec une taille de batch adaptative."""
-        print(f"⚙️  Expéditeur de batch démarré. Taille initiale: {self.current_batch_size}, Max: {MAX_BATCH_SIZE}.")
+        logger.info("Expéditeur de batch démarré. Taille initiale: %d, Max: %d.", self.current_batch_size, MAX_BATCH_SIZE)
         while not self._shutdown.is_set():
             try:
                 await asyncio.sleep(BATCH_TIMEOUT_SECONDS)
@@ -144,22 +153,22 @@ class MetricsConsumer:
                     metrics_to_send.append(json.loads(msg.body))
                     valid_messages_in_batch.append(msg)
                 except json.JSONDecodeError:
-                    print(f"   -> ERREUR: Impossible de décoder le message métrique: {msg.body}. Le message sera ignoré et ack.")
+                    logger.warning("Impossible de décoder le message métrique: %s. Le message sera ignoré et ack.", msg.body)
                     await self._safe_ack(msg)
 
             if not metrics_to_send:
                 continue # Le batch ne contenait que des messages invalides
 
-            print(f"   -> Tentative d'envoi d'un batch de {len(metrics_to_send)} métriques (Taille adaptative: {self.current_batch_size})...")
+            logger.info("Tentative d'envoi d'un batch de %d métriques (Taille adaptative: %d)...", len(metrics_to_send), self.current_batch_size)
             try:
                 async with aiohttp.ClientSession(headers=HTTP_HEADERS) as session:
                     async with session.post(DEEPSEEK_METRICS_COLLECTOR_URL, json=metrics_to_send) as resp:
                         if resp.status != 200:
                             body = await resp.text()
-                            print(f"      ⚠️  HTTP {resp.status} — Response body: {body[:500]}")
+                            logger.warning("HTTP %d — Response body: %s", resp.status, body[:500])
                             resp.raise_for_status()
 
-                        print(f"      • [SUCCESS] Batch envoyé. ACK des {len(valid_messages_in_batch)} messages.")
+                        logger.info("[SUCCESS] Batch envoyé. ACK des %d messages.", len(valid_messages_in_batch))
                         for msg in valid_messages_in_batch:
                             await self._safe_ack(msg)
 
@@ -169,19 +178,19 @@ class MetricsConsumer:
                             new_size = self.current_batch_size + (MAX_BATCH_SIZE // 10) # Augmente de 10% du max
                             self.current_batch_size = min(MAX_BATCH_SIZE, new_size)
                             self.successful_sends_in_a_row = 0
-                            print(f"      📈 Succès consécutifs. Augmentation de la taille du batch à {self.current_batch_size}.")
+                            logger.info("Succès consécutifs. Augmentation de la taille du batch à %d.", self.current_batch_size)
 
             except aiohttp.ClientError as e:
                 # Logique adaptative en cas d'échec
                 if isinstance(e, aiohttp.ClientResponseError) and e.status == 403:
                     new_size = self.current_batch_size // 2
                     self.current_batch_size = max(MIN_BATCH_SIZE, new_size)
-                    print(f"      📉 ERREUR 403 (WAF Block) détectée! Réduction drastique de la taille du batch à {self.current_batch_size}.")
+                    logger.warning("ERREUR 403 (WAF Block) détectée! Réduction drastique de la taille du batch à %d.", self.current_batch_size)
 
                 # Pour toute erreur, on reset le compteur de succès
                 self.successful_sends_in_a_row = 0
 
-                print(f"      • [FAILURE] Erreur lors de l'envoi du batch: {e}. Lancement de la procédure de retry/DLQ.")
+                logger.error("[FAILURE] Erreur lors de l'envoi du batch: %s. Lancement de la procédure de retry/DLQ.", e)
                 await self._handle_failed_batch(valid_messages_in_batch, e)
 
     async def _handle_failed_batch(self, messages: list, error: Exception):
@@ -189,10 +198,10 @@ class MetricsConsumer:
         for msg in messages:
             retry_count = self._get_retry_count(msg)
             if retry_count < MAX_RETRIES:
-                print(f"         - NACK du message (tag: {msg.delivery_tag}) pour nouvelle tentative ({retry_count + 1}/{MAX_RETRIES}).")
+                logger.warning("NACK du message (tag: %s) pour nouvelle tentative (%d/%d).", msg.delivery_tag, retry_count + 1, MAX_RETRIES)
                 await self._safe_nack(msg, requeue=False)
             else:
-                print(f"         - Échec final pour le message (tag: {msg.delivery_tag}). Envoi à la DLQ finale.")
+                logger.error("Échec final pour le message (tag: %s). Envoi à la DLQ finale.", msg.delivery_tag)
                 try:
                     async with self.connection.channel() as channel:
                         dlx = await channel.declare_exchange(
@@ -211,21 +220,21 @@ class MetricsConsumer:
                         )
                         await self._safe_ack(msg)
                 except Exception as dlq_err:
-                    print(f"         ⚠️  Impossible de publier vers la DLQ: {dlq_err}. Le message sera redelivré par RabbitMQ.")
+                    logger.error("Impossible de publier vers la DLQ: %s. Le message sera redelivré par RabbitMQ.", dlq_err)
                     await self._safe_nack(msg, requeue=False)
 
 async def main():
     if not RABBITMQ_URL or not DEEPSEEK_METRICS_COLLECTOR_URL:
-        print("❌ ERREUR: RABBITMQ_URL et DEEPSEEK_METRICS_COLLECTOR_URL doivent être définis.")
+        logger.critical("RABBITMQ_URL et DEEPSEEK_METRICS_COLLECTOR_URL doivent être définis.")
         exit(1)
 
-    print("🚀 deepseek-metrics-collector-service: Démarrage...")
+    logger.info("deepseek-metrics-collector-service: Démarrage...")
 
     while True:
         sender_task = None
         try:
             connection = await aio_pika.connect_robust(RABBITMQ_URL)
-            print("✅ Connecté à RabbitMQ.")
+            logger.info("Connecté à RabbitMQ.")
 
             async with connection:
                 channel = await connection.channel()
@@ -239,15 +248,15 @@ async def main():
 
                 await queue.consume(consumer.on_message)
 
-                print("👂 En attente de messages de métriques...")
+                logger.info("En attente de messages de métriques...")
                 # Si le sender crashe, on sort de la boucle pour reconnecter
                 await sender_task
 
         except (aiormq.exceptions.AMQPConnectionError, ConnectionError) as e:
-            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
+            logger.error("Erreur de connexion RabbitMQ: %s. Tentative de reconnexion dans 10 secondes...", e)
             await asyncio.sleep(10)
         except Exception as e:
-            print(f"❌ Erreur inattendue: {e}. Redémarrage dans 10 secondes...")
+            logger.error("Erreur inattendue: %s. Redémarrage dans 10 secondes...", e)
             await asyncio.sleep(10)
         finally:
             if sender_task and not sender_task.done():
