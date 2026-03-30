@@ -359,7 +359,7 @@
   <div id="token-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full fade-in" style="max-width:1024px" onclick="event.stopPropagation()">
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Créer un jeton d'accès</h2>
+        <h2 id="token-modal-title" class="text-lg font-semibold">Créer un jeton d'accès</h2>
         <button onclick="closeTokenModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
       <div class="px-6 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
@@ -976,6 +976,7 @@
     let _fullToken = '';  // full token for clipboard (never displayed)
     let _fullMcpJson = ''; // full .mcp.json for clipboard (never displayed)
     const _tokenCardJsonMap = {}; // elId -> full JSON for clipboard
+    let _editingTokenId = null; // non-null when editing an existing token
 
     async function loadMCPConfig() {
       try {
@@ -1016,11 +1017,18 @@
                       ${statusBadge}
                     </div>
                     <div class="flex items-center gap-1">
-                      <button onclick="copyJSON('${jsonElId}')" class="copy-btn inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Copier
+                      <button onclick="copyJSON('${jsonElId}')" class="copy-btn inline-flex items-center justify-center w-7 h-7 text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100" title="Copier">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                       </button>
-                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100">Révoquer</button>` : ''}
-                      <button onclick="deleteToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-md hover:bg-red-100">Supprimer</button>
+                      ${t.is_active ? `<button onclick="openEditTokenModal('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100" title="Modifier">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>` : ''}
+                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100" title="Révoquer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                      </button>` : ''}
+                      <button onclick="deleteToken('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-red-700 bg-red-50 rounded-md hover:bg-red-100" title="Supprimer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
                     </div>
                   </div>
                   <div class="mt-2 flex items-center gap-4 text-xs text-gray-500">
@@ -1063,6 +1071,8 @@
 
     // ── Scope Token modal ────────────────────────────────────────────────
     function openTokenModal() {
+      _editingTokenId = null;
+      document.getElementById('token-modal-title').textContent = "Créer un jeton d'accès";
       document.getElementById('token-name').value = '';
       document.getElementById('token-desc').value = '';
       document.getElementById('token-server-name').value = 'hellopro-gateway';
@@ -1076,14 +1086,91 @@
       document.getElementById('token-custom-args-prefix').value = '';
       document.getElementById('token-command-doc-link').classList.add('hidden');
       document.getElementById('token-created-result').classList.add('hidden');
-      document.getElementById('token-submit-btn').disabled = false;
-      document.getElementById('token-submit-btn').classList.remove('hidden');
+      const btn = document.getElementById('token-submit-btn');
+      btn.disabled = false;
+      btn.classList.remove('hidden');
+      btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
       document.getElementById('token-backdrop').classList.remove('hidden');
       document.getElementById('token-modal').classList.remove('hidden');
 
       // Populate drag-and-drop panels
       dndPopulate();
       document.getElementById('token-name').focus();
+    }
+
+    async function openEditTokenModal(tokenId) {
+      try {
+        const token = await api(`/tokens/${tokenId}`);
+        _editingTokenId = tokenId;
+        document.getElementById('token-modal-title').textContent = "Modifier le jeton d'accès";
+        document.getElementById('token-name').value = token.name || '';
+        document.getElementById('token-desc').value = token.description || '';
+        document.getElementById('token-server-name').value = 'hellopro-gateway';
+        document.getElementById('token-mcp-command').value = token.mcp_command || 'npx';
+        updateCommandDoc();
+
+        // Expiration
+        if (token.expires_at) {
+          document.querySelector('input[name="token_expiry_type"][value="custom"]').checked = true;
+          document.getElementById('token-expires').disabled = false;
+          // Convert RFC3339 to datetime-local format
+          const d = new Date(token.expires_at);
+          document.getElementById('token-expires').value = d.toISOString().slice(0, 16);
+        } else {
+          document.querySelector('input[name="token_expiry_type"][value="permanent"]').checked = true;
+          document.getElementById('token-expires').disabled = true;
+          document.getElementById('token-expires').value = '';
+        }
+
+        document.getElementById('token-allow-http').checked = true;
+        document.getElementById('token-created-result').classList.add('hidden');
+        const btn = document.getElementById('token-submit-btn');
+        btn.disabled = false;
+        btn.classList.remove('hidden');
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications';
+
+        document.getElementById('token-backdrop').classList.remove('hidden');
+        document.getElementById('token-modal').classList.remove('hidden');
+
+        // Populate drag-and-drop panels then move selected servers/tools to the right panel
+        dndPopulate();
+        dndRestoreSelection(token.server_ids || [], token.server_tools || []);
+
+        document.getElementById('token-name').focus();
+      } catch (e) {
+        toast('Erreur lors du chargement du jeton: ' + e.message, 'error');
+      }
+    }
+
+    /** Restore the drag-and-drop selection from a token's server_ids and server_tools */
+    function dndRestoreSelection(serverIds, serverTools) {
+      // Build a map: server_id -> [tool_names] (null means all tools)
+      const toolMap = {};
+      for (const st of serverTools) {
+        toolMap[st.server_id] = st.tool_names || [];
+      }
+
+      for (const sid of serverIds) {
+        const srv = allServers.find(s => s.id === sid);
+        if (!srv) continue;
+        const allToolNames = (srv.tool_names || []).map(t => t.name);
+
+        if (toolMap[sid]) {
+          // Partial selection: move only specified tools
+          // First, need to apply prefix to compare with UI tool names
+          const selectedToolNames = toolMap[sid];
+          const prefix = srv.tool_prefix || '';
+          const prefixedSelected = selectedToolNames.map(n => prefix ? prefix + '_' + n : n);
+
+          for (const toolName of prefixedSelected) {
+            dndTransferTool(sid, toolName, true);
+          }
+        } else {
+          // All tools selected: move entire server
+          dndTransferServer(sid, true);
+        }
+      }
+      dndUpdateCount();
     }
 
     function closeTokenModal() {
@@ -1362,6 +1449,7 @@
       const name = document.getElementById('token-name').value.trim();
       const description = document.getElementById('token-desc').value.trim();
       const expiresRaw = document.getElementById('token-expires').value;
+      const isEditing = !!_editingTokenId;
 
       // Collect from drag-and-drop selected panel (hierarchical)
       const selectedServerIds = new Set();
@@ -1378,12 +1466,7 @@
 
       if (!name) { toast('Le nom du jeton est requis', 'error'); return; }
       if (serverIDs.length === 0) { toast('Sélectionnez au moins un serveur ou outil', 'error'); return; }
-      if (!document.getElementById('token-mcp-command').value) { toast('Sélectionnez une commande MCP', 'error'); return; }
-
-      const mcpCommandSel = document.getElementById('token-mcp-command').value;
-      const body = { name, server_ids: serverIDs, mcp_command: mcpCommandSel };
-      if (description) body.description = description;
-      if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
+      if (!isEditing && !document.getElementById('token-mcp-command').value) { toast('Sélectionnez une commande MCP', 'error'); return; }
 
       // Build per-server tool selections (only when a subset is selected)
       const serverTools = [];
@@ -1391,59 +1474,78 @@
         const srv = allServers.find(s => s.id === sid);
         const totalTools = (srv?.tool_names || []).length;
         const pickedTools = selectedToolsByServer[sid] || [];
-        if (totalTools === 0) continue; // server has no tools
-        if (pickedTools.length === totalTools) continue; // all tools selected — no restriction
+        if (totalTools === 0) continue;
+        if (pickedTools.length === totalTools) continue; // all tools — no restriction needed
         serverTools.push({ server_id: sid, tool_names: pickedTools });
       }
-      if (serverTools.length > 0) body.server_tools = serverTools;
 
       const btn = document.getElementById('token-submit-btn');
       btn.disabled = true;
-      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Génération...';
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> ' + (isEditing ? 'Mise à jour...' : 'Génération...');
 
       try {
-        const result = await api('/tokens', { method: 'POST', body: JSON.stringify(body) });
+        if (isEditing) {
+          // ── UPDATE existing token ──
+          const body = { name, description, server_ids: serverIDs };
+          if (serverTools.length > 0) body.server_tools = serverTools;
+          else body.server_tools = []; // clear all tool restrictions
 
-        // Show the raw token and .mcp.json
-        _fullToken = result.token;
-        const maskedToken = result.token.slice(0, 8) + '\u2022'.repeat(12) + result.token.slice(-4);
-        document.getElementById('token-raw-value').textContent = maskedToken;
-        const gatewayURL = window.location.origin + '/mcp';
-        const allowHttp = document.getElementById('token-allow-http').checked;
-        const cmdCfg = getMCPCommandConfig();
-        const mcpArgs = [...cmdCfg.argsPrefix, gatewayURL];
-        if (allowHttp) mcpArgs.push("--allow-http");
-        mcpArgs.push("--header", "X-MCP-Scope-Token: " + result.token);
-        const serverName = document.getElementById('token-server-name').value.trim() || 'hellopro-gateway';
-        const mcpConfig = {
-          mcpServers: {
-            [serverName]: {
-              command: cmdCfg.command,
-              args: mcpArgs
-            }
-          }
-        };
-        _fullMcpJson = JSON.stringify(mcpConfig, null, 2);
-        // Display anonymized version
-        const maskedArgs = mcpArgs.map(a => a.startsWith('X-MCP-Scope-Token: ') ? 'X-MCP-Scope-Token: ' + maskedToken : a);
-        const maskedConfig = {
-          mcpServers: {
-            [serverName]: {
-              command: cmdCfg.command,
-              args: maskedArgs
-            }
-          }
-        };
-        document.getElementById('token-mcp-json').textContent = JSON.stringify(maskedConfig, null, 2);
-        document.getElementById('token-created-result').classList.remove('hidden');
-        btn.classList.add('hidden');
+          await api(`/tokens/${_editingTokenId}`, { method: 'PUT', body: JSON.stringify(body) });
+          toast('Jeton mis à jour !', 'success');
+          closeTokenModal();
+          loadMCPConfig();
+        } else {
+          // ── CREATE new token ──
+          const mcpCommandSel = document.getElementById('token-mcp-command').value;
+          const body = { name, server_ids: serverIDs, mcp_command: mcpCommandSel };
+          if (description) body.description = description;
+          if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
+          if (serverTools.length > 0) body.server_tools = serverTools;
 
-        toast('Jeton d\'accès créé !', 'success');
-        loadMCPConfig(); // refresh token list in background
+          const result = await api('/tokens', { method: 'POST', body: JSON.stringify(body) });
+
+          // Show the raw token and .mcp.json
+          _fullToken = result.token;
+          const maskedToken = result.token.slice(0, 8) + '\u2022'.repeat(12) + result.token.slice(-4);
+          document.getElementById('token-raw-value').textContent = maskedToken;
+          const gatewayURL = window.location.origin + '/mcp';
+          const allowHttp = document.getElementById('token-allow-http').checked;
+          const cmdCfg = getMCPCommandConfig();
+          const mcpArgs = [...cmdCfg.argsPrefix, gatewayURL];
+          if (allowHttp) mcpArgs.push("--allow-http");
+          mcpArgs.push("--header", "X-MCP-Scope-Token: " + result.token);
+          const serverName = document.getElementById('token-server-name').value.trim() || 'hellopro-gateway';
+          const mcpConfig = {
+            mcpServers: {
+              [serverName]: {
+                command: cmdCfg.command,
+                args: mcpArgs
+              }
+            }
+          };
+          _fullMcpJson = JSON.stringify(mcpConfig, null, 2);
+          const maskedArgs = mcpArgs.map(a => a.startsWith('X-MCP-Scope-Token: ') ? 'X-MCP-Scope-Token: ' + maskedToken : a);
+          const maskedConfig = {
+            mcpServers: {
+              [serverName]: {
+                command: cmdCfg.command,
+                args: maskedArgs
+              }
+            }
+          };
+          document.getElementById('token-mcp-json').textContent = JSON.stringify(maskedConfig, null, 2);
+          document.getElementById('token-created-result').classList.remove('hidden');
+          btn.classList.add('hidden');
+
+          toast('Jeton d\'accès créé !', 'success');
+          loadMCPConfig();
+        }
       } catch (e) {
         toast(e.message, 'error');
         btn.disabled = false;
-        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
+        btn.innerHTML = isEditing
+          ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications'
+          : '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
       }
     }
 
