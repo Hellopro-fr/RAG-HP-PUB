@@ -29,6 +29,8 @@ class ModelConfig:
 
 
 class MilvusWebsiteCrud:
+    _CONNECTION_ALIAS = "milvus_siteweb"
+
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -46,11 +48,11 @@ class MilvusWebsiteCrud:
     def _connect_to_milvus(self):
         logger.debug("Connexion sur Zilliz cloud...")
         try:
-            connections.disconnect("default")
+            connections.disconnect(self._CONNECTION_ALIAS)
         except Exception:
             pass
         connections.connect(
-            alias="default",
+            alias=self._CONNECTION_ALIAS,
             host=self.config.ZILLIZ_URI,
             port=self.config.ZILLIZ_PORT,
             user=self.config.ZILLIZ_USER,
@@ -60,10 +62,10 @@ class MilvusWebsiteCrud:
         logger.info("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
-        if self.collection is not None and connections.has_connection("default"):
+        if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
             return
         with milvus_connection_lock:
-            if self.collection is not None and connections.has_connection("default"):
+            if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
                 return
             self.collection = None
             self._connect_to_milvus()
@@ -78,7 +80,7 @@ class MilvusWebsiteCrud:
                 f"Vérification de l'existence de la collection '{collection_name}'..."
             )
             collection_exists = utility.has_collection(
-                collection_name, using="default", timeout=20
+                collection_name, using=self._CONNECTION_ALIAS, timeout=20
             )
             logger.debug(f"La collection '{collection_name}' existe: {collection_exists}")
         except Exception as e:
@@ -89,7 +91,7 @@ class MilvusWebsiteCrud:
             logger.debug(
                 f"[{model_key}] Collection '{collection_name}' existante -> suppression en cours..."
             )
-            utility.drop_collection(collection_name, using="default", timeout=20)
+            utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS, timeout=20)
             collection_exists = False
 
         if not collection_exists:
@@ -144,6 +146,7 @@ class MilvusWebsiteCrud:
                     name=collection_name,
                     schema=schema,
                     consistency_level="Bounded",
+                    using=self._CONNECTION_ALIAS,
                 )
                 logger.info(
                     f"[{model_key}] Collection '{collection_name}' créée avec succès."
@@ -187,7 +190,7 @@ class MilvusWebsiteCrud:
             logger.debug(
                 f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
             )
-            collection = Collection(name=collection_name, using="default")
+            collection = Collection(name=collection_name, using=self._CONNECTION_ALIAS)
 
         logger.debug(f"Chargement de la collection '{collection_name}' en mémoire...")
         collection.load(timeout=60)
