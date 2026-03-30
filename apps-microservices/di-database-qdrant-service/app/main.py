@@ -49,8 +49,11 @@ def main():
         logger.info("Database-Devis-Processor: Arret demande.")
     finally:
         if connection and not connection.is_closed:
-            connection.close()
-            logger.info("Database-Devis-Processor: Connexion RabbitMQ fermee.")
+            try:
+                connection.close()
+                logger.info("Database-Devis-Processor: Connexion RabbitMQ fermee.")
+            except Exception:
+                pass
 
 if __name__ == '__main__':
     main()

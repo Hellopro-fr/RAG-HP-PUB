@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +16,9 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
+
+
+_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -41,14 +45,24 @@ class MilvusProduitInserer:
 
     def _connect_to_milvus(self):
         self.logger.info("Connexion sur Zilliz cloud...")
-        connections.connect(
-            "default",
-            host=self.config.ZILLIZ_URI,
-            port=self.config.ZILLIZ_PORT,
-            user=self.config.ZILLIZ_USER,
-            password=self.config.ZILLIZ_PASSWORD,
-        )
+        with _milvus_connection_lock:
+            try:
+                connections.disconnect("default")
+            except Exception:
+                pass
+            connections.connect(
+                "default",
+                host=self.config.ZILLIZ_URI,
+                port=self.config.ZILLIZ_PORT,
+                user=self.config.ZILLIZ_USER,
+                password=self.config.ZILLIZ_PASSWORD,
+            )
         self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+
+    def _ensure_connected(self):
+        if self.collection is None:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -90,7 +104,7 @@ class MilvusProduitInserer:
                 fields, description=f"Collection de chunks de Produit pour {model_key}"
             )
 
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded")
 
             index_params = {
                 "metric_type": "COSINE",
@@ -114,13 +128,11 @@ class MilvusProduitInserer:
     def insert_correpondance_produit(
         self, datas: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        model_config = ModelConfig()
-        model_key = model_config.model_id
+        model_key = ModelConfig().model_id
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -162,6 +174,7 @@ class MilvusProduitInserer:
                 f"[{model_key}][Correspondance produits BO-Milvus] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {datas}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
@@ -181,11 +194,9 @@ class MilvusProduitInserer:
         Returns:
             Dict avec status et data ou message d'erreur
         """
-        model_config = ModelConfig()
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -210,6 +221,7 @@ class MilvusProduitInserer:
                     "date_ajout",
                     "date_maj",
                 ],
+                consistency_level="Bounded",
             )
 
             if not result or len(result) == 0:
@@ -233,6 +245,7 @@ class MilvusProduitInserer:
             self.logger.error(
                 f"[Correspondance Produit BO-Milvus] Erreur Milvus lors de la récupération : {e}"
             )
+            self.collection = None
             return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
         except Exception as e:
             self.logger.error(
@@ -255,13 +268,11 @@ class MilvusProduitInserer:
         Returns:
             Dict avec status success ou error
         """
-        model_config = ModelConfig()
         max_retries = 3
         retry_delay = 0.5  # 500ms
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -305,12 +316,14 @@ class MilvusProduitInserer:
             self.logger.error(
                 f"[Correspondance Produit BO-Milvus] Erreur Milvus lors de la suppression : {e}"
             )
+            self.collection = None
             return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
         except Exception as e:
             self.logger.error(
                 f"[Correspondance Produit BO-Milvus] Erreur de suppression : {e}",
                 exc_info=True,
             )
+            self.collection = None
             return {"status": "error", "message": f"Erreur: {str(e)}"}
 
     def delete_correspondance_by_id_produit(self, id_produit: str) -> Dict[str, Any]:
@@ -323,13 +336,11 @@ class MilvusProduitInserer:
         Returns:
             Dict avec status success ou error
         """
-        model_config = ModelConfig()
         max_retries = 3
         retry_delay = 0.5  # 500ms
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -373,10 +384,12 @@ class MilvusProduitInserer:
             self.logger.error(
                 f"[Correspondance Produit BO-Milvus] Erreur Milvus lors de la suppression : {e}"
             )
+            self.collection = None
             return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
         except Exception as e:
             self.logger.error(
                 f"[Correspondance Produit BO-Milvus] Erreur de suppression : {e}",
                 exc_info=True,
             )
+            self.collection = None
             return {"status": "error", "message": f"Erreur: {str(e)}"}

@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -16,6 +17,9 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
+
+
+_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -39,13 +43,23 @@ class MilvusEchangeInserer:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        connections.connect(
-            "default",
-            host=self.config.ZILLIZ_URI,
-            port=self.config.ZILLIZ_PORT,
-            user=self.config.ZILLIZ_USER,
-            password=self.config.ZILLIZ_PASSWORD,
-        )
+        with _milvus_connection_lock:
+            try:
+                connections.disconnect("default")
+            except Exception:
+                pass
+            connections.connect(
+                "default",
+                host=self.config.ZILLIZ_URI,
+                port=self.config.ZILLIZ_PORT,
+                user=self.config.ZILLIZ_USER,
+                password=self.config.ZILLIZ_PASSWORD,
+            )
+
+    def _ensure_connected(self):
+        if self.collection is None:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -80,7 +94,7 @@ class MilvusEchangeInserer:
                 description=f"Collection de correspondance Milvus - BO Echange MCF/MCA",
             )
 
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded")
 
             index_params = {
                 "metric_type": "COSINE",
@@ -103,12 +117,10 @@ class MilvusEchangeInserer:
     def insert_correspondance_echange(
         self, datas: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        model_config = ModelConfig()
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -139,6 +151,7 @@ class MilvusEchangeInserer:
                 f"[Correspondace Echange BO-Milvus] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {datas}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
@@ -160,11 +173,9 @@ class MilvusEchangeInserer:
         Returns:
             Dict avec status et data ou message d'erreur
         """
-        model_config = ModelConfig()
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -188,6 +199,7 @@ class MilvusEchangeInserer:
                     "date_ajout",
                     "date_maj",
                 ],
+                consistency_level="Bounded",
             )
 
             if not result or len(result) == 0:
@@ -211,6 +223,7 @@ class MilvusEchangeInserer:
             self.logger.error(
                 f"[Correspondance Echange BO-Milvus] Erreur Milvus lors de la récupération : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
@@ -231,13 +244,11 @@ class MilvusEchangeInserer:
         Returns:
             Dict avec status success ou error
         """
-        model_config = ModelConfig()
         max_retries = 3
         retry_delay = 0.5  # 500ms
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -278,6 +289,7 @@ class MilvusEchangeInserer:
                         self.logger.error(
                             f"[Correspondance Echange BO-Milvus] Erreur Milvus après {max_retries} tentatives : {e}"
                         )
+                        self.collection = None
                         raise
 
         except Exception as e:
@@ -285,4 +297,5 @@ class MilvusEchangeInserer:
                 f"[Correspondance Echange BO-Milvus] Erreur de suppression : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise

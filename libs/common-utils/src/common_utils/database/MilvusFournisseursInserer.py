@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +16,9 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
+
+
+_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -38,13 +42,23 @@ class MilvusFournisseursInserer:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        connections.connect(
-            "default",
-            host=self.config.ZILLIZ_URI,
-            port=self.config.ZILLIZ_PORT,
-            user=self.config.ZILLIZ_USER,
-            password=self.config.ZILLIZ_PASSWORD,
-        )
+        with _milvus_connection_lock:
+            try:
+                connections.disconnect("default")
+            except Exception:
+                pass
+            connections.connect(
+                "default",
+                host=self.config.ZILLIZ_URI,
+                port=self.config.ZILLIZ_PORT,
+                user=self.config.ZILLIZ_USER,
+                password=self.config.ZILLIZ_PASSWORD,
+            )
+
+    def _ensure_connected(self):
+        if self.collection is None:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -81,7 +95,7 @@ class MilvusFournisseursInserer:
                 description=f"Collection de correspondance Milvus - BO Fournisseurs",
             )
 
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded")
 
             index_params = {
                 "metric_type": "COSINE",
@@ -104,12 +118,10 @@ class MilvusFournisseursInserer:
     def insert_correspondance_fournisseurs(
         self, datas: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        model_config = ModelConfig()
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -140,6 +152,7 @@ class MilvusFournisseursInserer:
                 f"[Correspondace Fournisseurs BO-Milvus] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {datas}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(

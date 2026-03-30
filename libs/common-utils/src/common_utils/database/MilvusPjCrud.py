@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,6 +18,9 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
+
+
+_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -42,15 +46,26 @@ class MilvusPjCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
-        connections.connect(
-            "default",
-            host=self.config.ZILLIZ_URI,
-            port=self.config.ZILLIZ_PORT,
-            user=self.config.ZILLIZ_USER,
-            password=self.config.ZILLIZ_PASSWORD,
-        )
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        with _milvus_connection_lock:
+            try:
+                connections.disconnect("default")
+            except Exception:
+                pass
+            self.logger.info("Connexion sur Zilliz cloud...")
+            connections.connect(
+                "default",
+                host=self.config.ZILLIZ_URI,
+                port=self.config.ZILLIZ_PORT,
+                user=self.config.ZILLIZ_USER,
+                password=self.config.ZILLIZ_PASSWORD,
+            )
+            self.logger.info("Connexion sur Zilliz cloud avec succès.")
+
+    def _ensure_connected(self):
+        if self.collection is not None:
+            return
+        self._connect_to_milvus()
+        self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -116,7 +131,7 @@ class MilvusPjCrud:
                 fields, description=f"Collection de chunks de pj pour {model_key}"
             )
 
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded")
 
             # # Exemple d'indexation HNSW pour les embeddings
             index_params = {
@@ -158,10 +173,7 @@ class MilvusPjCrud:
 
         try:
 
-            await asyncio.to_thread(self._connect_to_milvus)
-            self.collection = await asyncio.to_thread(
-                self._get_or_create_collection, model_config
-            )
+            await asyncio.to_thread(self._ensure_connected)
 
             if not datas or self.collection is None:
                 return {
@@ -203,6 +215,7 @@ class MilvusPjCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][pj] Erreur Milvus lors de l'insertion : {e}"
             )
@@ -219,10 +232,7 @@ class MilvusPjCrud:
 
         try:
 
-            await asyncio.to_thread(self._connect_to_milvus)
-            self.collection = await asyncio.to_thread(
-                self._get_or_create_collection, model_config
-            )
+            await asyncio.to_thread(self._ensure_connected)
 
             if not datas or self.collection is None:
                 return {
@@ -249,6 +259,7 @@ class MilvusPjCrud:
             return {"status": "success", "data": result}
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][pj] Erreur Milvus lors de mise à jour : {e}"
             )
@@ -267,10 +278,7 @@ class MilvusPjCrud:
         id_entity_milvus = data.get("id")
 
         try:
-            await asyncio.to_thread(self._connect_to_milvus)
-            self.collection = await asyncio.to_thread(
-                self._get_or_create_collection, model_config
-            )
+            await asyncio.to_thread(self._ensure_connected)
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -296,6 +304,7 @@ class MilvusPjCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][pj] Erreur Milvus lors de la suppression : {e}"
             )
@@ -310,10 +319,7 @@ class MilvusPjCrud:
         model_key = model_config.model_id
 
         try:
-            await asyncio.to_thread(self._connect_to_milvus)
-            self.collection = await asyncio.to_thread(
-                self._get_or_create_collection, model_config
-            )
+            await asyncio.to_thread(self._ensure_connected)
 
             if not self.collection:
                 return {
@@ -333,6 +339,7 @@ class MilvusPjCrud:
                 self.collection.query,
                 expr=f"fichier_source in {list_fichier_source}",
                 output_fields=["id"],
+                consistency_level="Bounded",
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
@@ -353,6 +360,7 @@ class MilvusPjCrud:
             return {"status": "success", "data": data}
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][pj] Erreur Milvus lors de la récupération : {e}"
             )

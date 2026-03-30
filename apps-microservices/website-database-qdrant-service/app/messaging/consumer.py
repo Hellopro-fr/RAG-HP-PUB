@@ -1,6 +1,7 @@
 import pika
 import json
 import logging
+import time
 from website_database_qdrant_service.messaging.publisher import Publisher  # Importe notre publisher local
 from website_database_qdrant_service.core.processor import insertion_data # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
@@ -109,15 +110,18 @@ class Consumer:
                 ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def start_consuming(self):
-        for i in range(3):
-            try: 
-                """
-                Démarre la boucle d'écoute des messages.
-                """
+        """
+        Démarre la boucle d'écoute des messages.
+        """
+        attempt = 0
+        while True:
+            try:
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
                 logger.info("Database-Website-Processor: En attente de messages...")
                 self.channel.start_consuming()
-                break  # Si start_consuming se termine normalement, on sort de la boucle
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
-                logger.warning(f"Connexion perdue: {e}, tentative de reconnexion...", exc_info=True)
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker, pika.exceptions.StreamLostError) as e:
+                attempt += 1
+                wait_time = min(5 * attempt, 30)
+                logger.warning(f"Connexion perdue: {e}, tentative de reconnexion dans {wait_time}s...")
+                time.sleep(wait_time)
                 self.connect()

@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +19,9 @@ from pymilvus import (
     Collection,
     MilvusException,
 )
+
+
+_milvus_connection_lock = threading.Lock()
 
 
 @dataclass
@@ -43,9 +47,12 @@ class MilvusWebsiteCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        # Check if a connection with the alias 'default' already exists.
-        if not connections.has_connection("default"):
+        with _milvus_connection_lock:
             logger.debug("Connexion sur Zilliz cloud...")
+            try:
+                connections.disconnect("default")
+            except Exception:
+                pass
             connections.connect(
                 alias="default",
                 host=self.config.ZILLIZ_URI,
@@ -55,6 +62,12 @@ class MilvusWebsiteCrud:
                 timeout=10,  # Add a 10-second timeout to prevent indefinite hanging
             )
             logger.info("Connexion sur Zilliz cloud avec succès.")
+
+    def _ensure_connected(self):
+        if self.collection is not None:
+            return
+        self._connect_to_milvus()
+        self.collection = self._get_or_create_collection(ModelConfig())
 
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
@@ -130,7 +143,7 @@ class MilvusWebsiteCrud:
                 collection = Collection(
                     name=collection_name,
                     schema=schema,
-                    consistency_level="Strong",
+                    consistency_level="Bounded",
                 )
                 logger.info(
                     f"[{model_key}] Collection '{collection_name}' créée avec succès."
@@ -187,8 +200,7 @@ class MilvusWebsiteCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -225,6 +237,7 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de l'insertion : {e}", exc_info=True)
             logger.debug(f"Data : {datas}")
             raise
@@ -241,8 +254,7 @@ class MilvusWebsiteCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not data or self.collection is None:
                 return {
@@ -279,6 +291,7 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de mise à jour : {e}", exc_info=True)
             logger.debug(f"Data : {data}")
             raise
@@ -295,8 +308,7 @@ class MilvusWebsiteCrud:
         id_entity_milvus = data.get("id")
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -321,6 +333,7 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression : {e}", exc_info=True)
             raise
         except Exception as e:
@@ -344,8 +357,7 @@ class MilvusWebsiteCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -372,6 +384,7 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             logger.error(
                 f"[{model_key}][siteweb] Erreur Milvus lors de la suppression par URL : {e}", exc_info=True
             )
@@ -400,8 +413,7 @@ class MilvusWebsiteCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -430,6 +442,7 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             logger.error(
                 f"[{model_key}][siteweb] Erreur Milvus lors de la suppression par domaine/page_type : {e}", exc_info=True
             )
@@ -446,8 +459,7 @@ class MilvusWebsiteCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {
@@ -486,6 +498,7 @@ class MilvusWebsiteCrud:
                     expr=f'url == "{url}"',
                     output_fields=["id", "page_type"],
                     timeout=20,
+                    consistency_level="Bounded",
                 )
             else:
                 # Sinon, on check si le type de page existe déjà pour le domaine
@@ -493,6 +506,7 @@ class MilvusWebsiteCrud:
                     expr=f'domaine == "{domaine}" && page_type == "{page_type}"',
                     output_fields=["id"],
                     timeout=20,
+                    consistency_level="Bounded",
                 )
 
             logger.info(f"[{model_key}] Récupèration terminée avec succès.")
@@ -500,6 +514,7 @@ class MilvusWebsiteCrud:
             return {"status": "success", "data": result}
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             logger.error(f"[{model_key}][Website] Erreur Milvus lors de la récupération : {e}", exc_info=True)
             raise
         except Exception as e:

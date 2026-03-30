@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,6 +26,9 @@ class ModelConfig:
     dimension: int = 1024
 
 
+_milvus_connection_lock = threading.Lock()
+
+
 class MilvusFournisseursCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
@@ -41,15 +45,26 @@ class MilvusFournisseursCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
-        connections.connect(
-            "default",
-            host=self.config.ZILLIZ_URI,
-            port=self.config.ZILLIZ_PORT,
-            user=self.config.ZILLIZ_USER,
-            password=self.config.ZILLIZ_PASSWORD,
-        )
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        with _milvus_connection_lock:
+            try:
+                connections.disconnect("default")
+            except Exception:
+                pass
+            self.logger.info("Connexion sur Zilliz cloud...")
+            connections.connect(
+                "default",
+                host=self.config.ZILLIZ_URI,
+                port=self.config.ZILLIZ_PORT,
+                user=self.config.ZILLIZ_USER,
+                password=self.config.ZILLIZ_PASSWORD,
+            )
+            self.logger.info("Connexion sur Zilliz cloud avec succès.")
+
+    def _ensure_connected(self):
+        if self.collection is not None:
+            return
+        self._connect_to_milvus()
+        self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
@@ -140,7 +155,7 @@ class MilvusFournisseursCrud:
                 fields,
                 description=f"Collection de chunks de categories pour {model_key}",
             )
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded")
 
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
@@ -191,8 +206,7 @@ class MilvusFournisseursCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -238,6 +252,7 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][fournisseurs] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
@@ -252,8 +267,7 @@ class MilvusFournisseursCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not data or self.collection is None:
                 return {
@@ -294,6 +308,7 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][fournisseurs] Erreur Milvus lors de mise à jour : {e}"
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
@@ -308,8 +323,7 @@ class MilvusFournisseursCrud:
         id_entity_milvus = data.get("id")
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -337,6 +351,7 @@ class MilvusFournisseursCrud:
             self.logger.error(
                 f"[{model_key}][fournisseurs] Erreur Milvus lors de la suppression : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
@@ -350,8 +365,7 @@ class MilvusFournisseursCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {
@@ -368,7 +382,9 @@ class MilvusFournisseursCrud:
                 }
 
             result = self.collection.query(
-                expr=f"id_fournisseur in {list_id_fournisseur}", output_fields=["id"]
+                expr=f"id_fournisseur in {list_id_fournisseur}",
+                output_fields=["id"],
+                consistency_level="Bounded",
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
@@ -379,6 +395,7 @@ class MilvusFournisseursCrud:
             self.logger.error(
                 f"[{model_key}][Fournisseur] Erreur Milvus lors de la récupération : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
@@ -398,8 +415,7 @@ class MilvusFournisseursCrud:
             field_name = "fournisseur"
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {
@@ -416,7 +432,9 @@ class MilvusFournisseursCrud:
                 }
 
             result = self.collection.query(
-                expr=f"{field_name} in {list_search_value}", output_fields=["id"]
+                expr=f"{field_name} in {list_search_value}",
+                output_fields=["id"],
+                consistency_level="Bounded",
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
@@ -427,6 +445,7 @@ class MilvusFournisseursCrud:
             self.logger.error(
                 f"[{model_key}][Fournisseur] Erreur Milvus lors de la récupération : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(

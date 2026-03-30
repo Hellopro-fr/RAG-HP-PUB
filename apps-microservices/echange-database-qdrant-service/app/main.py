@@ -49,8 +49,11 @@ def main():
         logger.info("Database-Echange-Processor: Arrêt demandé.")
     finally:
         if connection and not connection.is_closed:
-            connection.close()
-            logger.info("Database-Echange-Processor: Connexion RabbitMQ fermée.")
+            try:
+                connection.close()
+                logger.info("Database-Echange-Processor: Connexion RabbitMQ fermée.")
+            except Exception:
+                pass
 
 if __name__ == '__main__':
     main()
