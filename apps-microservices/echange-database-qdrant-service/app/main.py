@@ -24,7 +24,10 @@ def main():
     # Boucle de connexion robuste
     for i in range(10):
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
+            params = pika.URLParameters(rabbitmq_url)
+            params.heartbeat = 600
+            params.blocked_connection_timeout = 300
+            connection = pika.BlockingConnection(params)
             logger.info("Database-Echange-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:

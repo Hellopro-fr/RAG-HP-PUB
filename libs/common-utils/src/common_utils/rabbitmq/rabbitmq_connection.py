@@ -30,7 +30,10 @@ class RabbitMQConnection:
                 else:
                     logger.warning(f"Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
 
-                self.connection = pika.BlockingConnection(pika.URLParameters(self.host))
+                params = pika.URLParameters(self.host)
+                params.heartbeat = 600
+                params.blocked_connection_timeout = 300
+                self.connection = pika.BlockingConnection(params)
 
                 logger.info("Connexion RabbitMQ établie.")
                 return self.connection
