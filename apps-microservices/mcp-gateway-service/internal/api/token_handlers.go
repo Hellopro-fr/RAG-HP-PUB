@@ -121,6 +121,28 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Build tool associations from server_tools
+	// Index request tool selections by server_id for quick lookup
+	toolSelectionByServer := make(map[string][]string)
+	for _, st := range req.ServerTools {
+		toolSelectionByServer[st.ServerID] = st.ToolNames
+	}
+
+	for _, sid := range req.ServerIDs {
+		toolNames, hasSelection := toolSelectionByServer[sid]
+		if !hasSelection || len(toolNames) == 0 {
+			// No explicit selection → all tools allowed (no rows = all)
+			continue
+		}
+		for _, toolName := range toolNames {
+			token.Tools = append(token.Tools, db.ScopeTokenTool{
+				TokenID:  token.ID,
+				ServerID: sid,
+				ToolName: toolName,
+			})
+		}
+	}
+
 	if err := h.tokenRepo.Create(&token); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -139,6 +161,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		Token:       rawToken,
 		TokenPrefix: token.TokenPrefix,
 		ServerIDs:   req.ServerIDs,
+		ServerTools: buildServerToolsResponse(token.Tools),
 		MCPCommand:  token.MCPCommand,
 		IsActive:    token.IsActive,
 		CreatedAt:   token.CreatedAt.UTC().Format(time.RFC3339),
@@ -193,6 +216,28 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 
 	if len(req.ServerIDs) > 0 {
 		if err := h.tokenRepo.UpdateServers(id, req.ServerIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	// Update tool selections if provided
+	if req.ServerTools != nil {
+		var tools []db.ScopeTokenTool
+		for _, st := range req.ServerTools {
+			if len(st.ToolNames) == 0 {
+				// No explicit selection → all tools (no rows)
+				continue
+			}
+			for _, toolName := range st.ToolNames {
+				tools = append(tools, db.ScopeTokenTool{
+					TokenID:  id,
+					ServerID: st.ServerID,
+					ToolName: toolName,
+				})
+			}
+		}
+		if err := h.tokenRepo.UpdateTools(id, tools); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -267,6 +312,26 @@ func (h *Handler) isTokenOwner(r *http.Request, token *db.ScopeToken) bool {
 	return userEmail == token.CreatedBy
 }
 
+// buildServerToolsResponse converts db tool rows into the API response format.
+func buildServerToolsResponse(tools []db.ScopeTokenTool) []ServerToolSelection {
+	if len(tools) == 0 {
+		return nil
+	}
+	// Group tools by server_id
+	grouped := make(map[string][]string)
+	for _, t := range tools {
+		grouped[t.ServerID] = append(grouped[t.ServerID], t.ToolName)
+	}
+	result := make([]ServerToolSelection, 0, len(grouped))
+	for sid, names := range grouped {
+		result = append(result, ServerToolSelection{
+			ServerID:  sid,
+			ToolNames: names,
+		})
+	}
+	return result
+}
+
 func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 	serverIDs := make([]string, len(t.Servers))
 	for i, s := range t.Servers {
@@ -286,6 +351,7 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		Token:       decryptedToken,
 		TokenPrefix: t.TokenPrefix,
 		ServerIDs:   serverIDs,
+		ServerTools: buildServerToolsResponse(t.Tools),
 		MCPCommand:  t.MCPCommand,
 		IsActive:    t.IsActive,
 		CreatedBy:   t.CreatedBy,
@@ -294,5 +360,3 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		ExpiresAt:   expiresStr,
 	}
 }
-
-

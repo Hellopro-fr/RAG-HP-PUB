@@ -9,23 +9,26 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
 
-// ScopedGateway wraps a Gateway but filters results to only the allowed server IDs.
+// ScopedGateway wraps a Gateway but filters results to only the allowed server IDs
+// and optionally to specific tools per server.
 // It implements the transport.Handler interface.
 type ScopedGateway struct {
-	name       string
-	version    string
-	registry   *Registry
-	allowedIDs map[string]bool
+	name         string
+	version      string
+	registry     *Registry
+	allowedIDs   map[string]bool
+	allowedTools map[string]map[string]bool // server_id → tool_name → true; nil = all tools
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
-// from the given server IDs.
-func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool) *ScopedGateway {
+// from the given server IDs, optionally filtered to specific tools per server.
+func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTools map[string]map[string]bool) *ScopedGateway {
 	return &ScopedGateway{
-		name:       gw.name,
-		version:    gw.version,
-		registry:   gw.registry,
-		allowedIDs: allowedServerIDs,
+		name:         gw.name,
+		version:      gw.version,
+		registry:     gw.registry,
+		allowedIDs:   allowedServerIDs,
+		allowedTools: allowedTools,
 	}
 }
 
@@ -65,7 +68,7 @@ func (sg *ScopedGateway) handleInitialize(req *mcp.Request) *mcp.Response {
 }
 
 func (sg *ScopedGateway) handleToolsList(req *mcp.Request) *mcp.Response {
-	tools := sg.registry.MergedToolsFiltered(sg.allowedIDs)
+	tools := sg.registry.MergedToolsFilteredWithTools(sg.allowedIDs, sg.allowedTools)
 	if tools == nil {
 		tools = []mcp.Tool{}
 	}
@@ -78,7 +81,7 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		return errorResp(req.ID, mcp.ErrInvalidParams, "invalid params")
 	}
 
-	backend := sg.registry.FindByToolFiltered(params.Name, sg.allowedIDs)
+	backend := sg.registry.FindByToolFilteredWithTools(params.Name, sg.allowedIDs, sg.allowedTools)
 	if backend == nil {
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
 	}

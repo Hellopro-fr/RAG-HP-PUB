@@ -41,19 +41,19 @@ func (r *TokenRepo) DecryptToken(token *db.ScopeToken) string {
 	return string(plaintext)
 }
 
-// GetByID returns a token with its server associations.
+// GetByID returns a token with its server and tool associations.
 func (r *TokenRepo) GetByID(id string) (*db.ScopeToken, error) {
 	var token db.ScopeToken
-	err := r.db.Preload("Servers").Where("id = ?", id).First(&token).Error
+	err := r.db.Preload("Servers").Preload("Tools").Where("id = ?", id).First(&token).Error
 	if err != nil {
 		return nil, err
 	}
 	return &token, nil
 }
 
-// ListAll returns all scope tokens with server associations.
+// ListAll returns all scope tokens with server and tool associations.
 func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
-	q := r.db.Preload("Servers").Order("created_at DESC")
+	q := r.db.Preload("Servers").Preload("Tools").Order("created_at DESC")
 	if createdBy != "" {
 		q = q.Where("created_by = ? OR created_by = ''", createdBy)
 	}
@@ -65,7 +65,7 @@ func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
 // FindByHash looks up a token by its SHA-256 hash. This is the hot-path lookup.
 func (r *TokenRepo) FindByHash(hash string) (*db.ScopeToken, error) {
 	var token db.ScopeToken
-	err := r.db.Preload("Servers").Where("token_hash = ?", hash).First(&token).Error
+	err := r.db.Preload("Servers").Preload("Tools").Where("token_hash = ?", hash).First(&token).Error
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,24 @@ func (r *TokenRepo) UpdateServers(tokenID string, serverIDs []string) error {
 	})
 }
 
-// Delete removes a scope token by ID (CASCADE deletes server associations).
+// UpdateTools replaces the tool associations for a token.
+func (r *TokenRepo) UpdateTools(tokenID string, tools []db.ScopeTokenTool) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Delete existing tool associations
+		if err := tx.Where("token_id = ?", tokenID).Delete(&db.ScopeTokenTool{}).Error; err != nil {
+			return err
+		}
+		// Insert new ones
+		for _, t := range tools {
+			if err := tx.Create(&t).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// Delete removes a scope token by ID (CASCADE deletes server and tool associations).
 func (r *TokenRepo) Delete(id string) error {
 	return r.db.Delete(&db.ScopeToken{}, "id = ?", id).Error
 }
