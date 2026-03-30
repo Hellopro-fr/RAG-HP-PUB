@@ -358,6 +358,7 @@ def duplicate_collection(
         expr="",
         output_fields=field_names,
         batch_size=batch_size,
+        consistency_level="Bounded",
     )
 
     # ── Thread-safe counters ──
