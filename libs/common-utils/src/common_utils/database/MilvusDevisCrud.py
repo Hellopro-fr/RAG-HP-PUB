@@ -212,7 +212,6 @@ class MilvusDevisCrud:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
-            self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}")
             self.logger.info(f"Clé primaire : {result.primary_keys}")

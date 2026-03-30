@@ -228,7 +228,6 @@ class MilvusWebsiteCrud:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch, timeout=30)
-            self.collection.flush()
 
             logger.debug(f"Résultat insertion : {result}")
             logger.debug(f"Clé primaire : {result.primary_keys}")

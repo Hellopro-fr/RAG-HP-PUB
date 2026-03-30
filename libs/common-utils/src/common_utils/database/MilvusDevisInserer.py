@@ -137,7 +137,6 @@ class MilvusDevisInserer:
                 sanitized_batch.append(data)
 
             self.collection.insert(sanitized_batch)
-            self.collection.flush()
 
             return {
                 "status": "success",

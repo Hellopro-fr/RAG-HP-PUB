@@ -194,7 +194,6 @@ class MilvusDocumentCrud:
                 sanitized_batch.append(data)
 
             result = await asyncio.to_thread(self.collection.insert, sanitized_batch)
-            self.collection.flush()
 
             self.logger.info(f"Clé primaire : {result.primary_keys}")
 
@@ -245,7 +244,6 @@ class MilvusDocumentCrud:
                 sanitized_batch.append(data)
 
             result = await asyncio.to_thread(self.collection.upsert, sanitized_batch)
-            self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             # self.logger.info(f"✓ Résultat : {result}.")
 
