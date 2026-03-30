@@ -41,7 +41,7 @@ class Publisher:
                 
                 logger.debug("Output Message '%s'", message_dict)
                 logger.debug("Message traité et publié.")
-                break  # Si la publication réussit, on sort de la boucle
+                return  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
                 logger.warning("Connexion perdue: %s, tentative de reconnexion...", e)
                 self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
