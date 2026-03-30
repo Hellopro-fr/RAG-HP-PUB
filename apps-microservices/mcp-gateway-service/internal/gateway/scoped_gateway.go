@@ -81,13 +81,15 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		return errorResp(req.ID, mcp.ErrInvalidParams, "invalid params")
 	}
 
-	backend := sg.registry.FindByToolFilteredWithTools(params.Name, sg.allowedIDs, sg.allowedTools)
+	backend, originalName := sg.registry.FindByToolFilteredWithTools(params.Name, sg.allowedIDs, sg.allowedTools)
 	if backend == nil {
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
 	}
 
+	// Forward with the original (unprefixed) tool name to the backend
+	backendParams := mcp.CallToolParams{Name: originalName, Arguments: params.Arguments}
 	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)
-	result, err := client.CallTool(ctx, params)
+	result, err := client.CallTool(ctx, backendParams)
 	if err != nil {
 		return errorResp(req.ID, mcp.ErrInternalError, err.Error())
 	}

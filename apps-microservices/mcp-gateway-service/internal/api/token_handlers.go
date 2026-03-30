@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -121,8 +122,10 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Build tool associations from server_tools
-	// Index request tool selections by server_id for quick lookup
+	// Build tool associations from server_tools.
+	// The UI sends prefixed tool names (e.g. "zoho_search") but the registry
+	// stores original names (e.g. "search"), so we must strip the prefix before saving.
+	serverPrefixes := h.loadServerPrefixes(req.ServerIDs)
 	toolSelectionByServer := make(map[string][]string)
 	for _, st := range req.ServerTools {
 		toolSelectionByServer[st.ServerID] = st.ToolNames
@@ -134,11 +137,12 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 			// No explicit selection → all tools allowed (no rows = all)
 			continue
 		}
+		prefix := serverPrefixes[sid]
 		for _, toolName := range toolNames {
 			token.Tools = append(token.Tools, db.ScopeTokenTool{
 				TokenID:  token.ID,
 				ServerID: sid,
-				ToolName: toolName,
+				ToolName: stripToolPrefix(prefix, toolName),
 			})
 		}
 	}
@@ -223,17 +227,24 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 
 	// Update tool selections if provided
 	if req.ServerTools != nil {
+		// Collect all server IDs to look up prefixes
+		sids := make([]string, 0, len(req.ServerTools))
+		for _, st := range req.ServerTools {
+			sids = append(sids, st.ServerID)
+		}
+		prefixes := h.loadServerPrefixes(sids)
+
 		var tools []db.ScopeTokenTool
 		for _, st := range req.ServerTools {
 			if len(st.ToolNames) == 0 {
-				// No explicit selection → all tools (no rows)
 				continue
 			}
+			prefix := prefixes[st.ServerID]
 			for _, toolName := range st.ToolNames {
 				tools = append(tools, db.ScopeTokenTool{
 					TokenID:  id,
 					ServerID: st.ServerID,
-					ToolName: toolName,
+					ToolName: stripToolPrefix(prefix, toolName),
 				})
 			}
 		}
@@ -330,6 +341,33 @@ func buildServerToolsResponse(tools []db.ScopeTokenTool) []ServerToolSelection {
 		})
 	}
 	return result
+}
+
+// stripToolPrefix removes the "{prefix}_" from a tool name if present.
+// If the name doesn't start with the prefix, it is returned as-is.
+func stripToolPrefix(prefix, toolName string) string {
+	if prefix == "" {
+		return toolName
+	}
+	pfx := prefix + "_"
+	if strings.HasPrefix(toolName, pfx) {
+		return toolName[len(pfx):]
+	}
+	return toolName
+}
+
+// loadServerPrefixes fetches the ToolPrefix for the given server IDs from the DB.
+func (h *Handler) loadServerPrefixes(serverIDs []string) map[string]string {
+	prefixes := make(map[string]string, len(serverIDs))
+	for _, sid := range serverIDs {
+		srv, err := h.repo.GetByID(sid)
+		if err != nil {
+			log.Printf("[api] loadServerPrefixes: server %s not found: %v", sid, err)
+			continue
+		}
+		prefixes[sid] = srv.ToolPrefix
+	}
+	return prefixes
 }
 
 func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {

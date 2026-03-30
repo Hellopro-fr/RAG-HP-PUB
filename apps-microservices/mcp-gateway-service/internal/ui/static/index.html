@@ -256,6 +256,11 @@
             <div id="tag-dropdown" class="tag-dropdown hidden"></div>
           </div>
         </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Préfixe des outils <span class="text-xs text-gray-400">(optionnel, alphanumérique uniquement)</span></label>
+          <input id="form-tool-prefix" type="text" placeholder="ex. rag, crm, bdd" pattern="[a-zA-Z0-9]*" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <p class="text-xs text-gray-400 mt-1">Si renseigné, les outils seront exposés comme <code>{préfixe}_{nom_outil}</code></p>
+        </div>
         <div id="form-discover-row" class="flex items-center gap-2">
           <input id="form-discover" type="checkbox" checked class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
           <label for="form-discover" class="text-sm text-gray-700">Découverte automatique des capacités à la création</label>
@@ -764,6 +769,7 @@
       document.getElementById('form-env').value = '';
       document.getElementById('form-auth-headers').value = '';
       document.getElementById('form-mcp-headers').value = '';
+      document.getElementById('form-tool-prefix').value = '';
       setMCPTransport('http');
       document.getElementById('form-discover-row').classList.remove('hidden');
       openModal();
@@ -785,6 +791,7 @@
         document.getElementById('form-env').value = s.mcp_env ? JSON.stringify(s.mcp_env) : '';
         document.getElementById('form-auth-headers').value = s.auth_headers ? JSON.stringify(s.auth_headers) : '';
         document.getElementById('form-mcp-headers').value = s.mcp_headers ? JSON.stringify(s.mcp_headers) : '';
+        document.getElementById('form-tool-prefix').value = s.tool_prefix || '';
         setMCPTransport(s.mcp_transport || 'http');
         document.getElementById('form-discover-row').classList.add('hidden');
         openModal();
@@ -802,7 +809,9 @@
       const mcpTransport = getFormMCPTransport();
 
       // Build request body
-      const body = { name: document.getElementById('form-name').value, tags, mcp_transport: mcpTransport };
+      const toolPrefix = document.getElementById('form-tool-prefix').value.trim();
+      if (toolPrefix && !/^[a-zA-Z0-9]+$/.test(toolPrefix)) { toast('Le préfixe doit être alphanumérique (a-z, A-Z, 0-9)', 'error'); return; }
+      const body = { name: document.getElementById('form-name').value, tags, mcp_transport: mcpTransport, tool_prefix: toolPrefix };
 
       if (mcpTransport === 'stdio') {
         body.url = 'stdio://' + (document.getElementById('form-command').value || 'local');
