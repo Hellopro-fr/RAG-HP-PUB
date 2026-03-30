@@ -53,11 +53,12 @@ class MilvusEchangeInserer:
         )
 
     def _ensure_connected(self):
-        if self.collection is not None:
+        if self.collection is not None and connections.has_connection("default"):
             return
         with milvus_connection_lock:
-            if self.collection is not None:
+            if self.collection is not None and connections.has_connection("default"):
                 return
+            self.collection = None
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(ModelConfig())
 

@@ -41,7 +41,7 @@ class Publisher:
                 
                 url = message_dict.get('url', 'URL inconnue')
                 logger.debug(f"Message pour l'URL '{url}' traité et publié vers le webhook.")
-                break  # Si la publication réussit, on sort de la boucle
+                return  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
                 logger.warning(f"Connexion perdue: {e}, tentative de reconnexion...", exc_info=True)
                 self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
