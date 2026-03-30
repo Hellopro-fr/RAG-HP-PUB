@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     BATCH_DEFAULT_CONCURRENCY: int = 10
     BATCH_MAX_CONCURRENCY: int = 50
     
+    # Redis cache
+    REDIS_URL: Optional[str] = None
+
     # Proxy (optionnel)
     # APIFY_PROXY env var contains the password, not the full URL
     DEFAULT_PROXY_URL: Optional[str] = None
@@ -40,7 +43,7 @@ class Settings(BaseSettings):
             )
     
     # Pemavor API (fallback pour redirections)
-    PEMAVOR_API_URL: Optional[str] = "https://europe-west1-pemavor-free-tools.cloudfunctions.net/HttpStatusCodeChecker"
+    PEMAVOR_API_URL: str = "https://europe-west1-pemavor-free-tools.cloudfunctions.net/HttpStatusCodeChecker"
     PEMAVOR_API_KEY: Optional[str] = None
     
     # User-Agent

@@ -51,12 +51,14 @@ class PrixExtractor:
 
     ETAPE = "9"
 
-    def __init__(self, api_client: Optional[HelloProAPIClient] = None):
+    def __init__(self, api_client: Optional[HelloProAPIClient] = None, on_batch_publish=None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
         self.prompt_config = None  # Sera chargé lors du premier traitement
         self.info_q1 = ""  # Sera chargé lors du traitement (Question 1)
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL_ITEMS)
+        # Callback pour publier les résultats après chaque batch
+        self._on_batch_publish = on_batch_publish
         # Buffer de logs par item pour éviter l'entrelacement en mode parallèle
         self._item_log_buffers: Dict[str, List[str]] = {}
 
@@ -294,6 +296,9 @@ class PrixExtractor:
         """
         async with self._semaphore:
             item_id = str(item.get("id_lead", item.get("id", f"item_{item_index}")))
+            #Ajouter id_fournisseur sur id_lead si n'est pas vide
+            if item.get("id_fournisseur") and item.get("id_fournisseur") != "" and item.get("id_fournisseur") is not None:
+                item_id = f"{item_id}_{item.get('id_fournisseur')}"
             item_content = utils.to_json_string(item)
 
             # Activer le contexte item pour bufferiser les logs
@@ -303,7 +308,7 @@ class PrixExtractor:
             self._log(f"[{item_index + 1}/{total_items}] item_content: {item_content}")
 
             # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
-            if not re.search(r'€|\beuros?\b|\bEUR\b', item_content, re.IGNORECASE):
+            if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', item_content, re.IGNORECASE):
                 self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
                 self._flush_item_logs(item_id)
                 self._current_item_id.reset(token)
@@ -452,6 +457,7 @@ class PrixExtractor:
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
         self._log(f"Provider LLM: {self.LLM_PROVIDER}")
+        self._log(f"Model LLM: {self.GEMINI_MODEL}")
         self._log("=" * 60)
 
         # Vérifier le stopper manuel
@@ -519,76 +525,92 @@ class PrixExtractor:
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
 
-        # Traitement parallèle de tous les items
-        self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
+        BATCH_SIZE = 50
         start_time = time.time()
-
-        tasks = [
-            self._process_single_item(
-                item=item,
-                item_index=i,
-                total_items=total_items,
-                id_categorie=id_categorie,
-                category_name=category_name
-            )
-            for i, item in enumerate(items)
-        ]
-
-        results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Flush tous les logs bufferisés des items (écriture groupée par item)
-        for item_id_key in list(self._item_log_buffers.keys()):
-            self._flush_item_logs(item_id_key)
-
-        elapsed = time.time() - start_time
-
-        # Collecter et compter les résultats — toute exception lève immédiatement
         success_count = 0
         skipped_count = 0
         error_count = 0
-        item_results: List[ItemResult] = []
-        for r in results:
-            if isinstance(r, Exception):
-                # Propager l'exception : arrêt immédiat du traitement de la catégorie
-                self._log(f"❌ Exception critique: {r}")
-                raise r
-            elif isinstance(r, ItemResult):
-                item_results.append(r)
-                if r.status == "success":
-                    success_count += 1
-                elif r.status == "skipped":
-                    skipped_count += 1
+        all_item_results: List[ItemResult] = []
+
+        # Traitement par lot de 50 items
+        for batch_start in range(0, total_items, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, total_items)
+            batch_items = items[batch_start:batch_end]
+            batch_num = (batch_start // BATCH_SIZE) + 1
+            total_batches = (total_items + BATCH_SIZE - 1) // BATCH_SIZE
+
+            self._log(f"\n--- Lot [{batch_num}/{total_batches}] items {batch_start + 1}-{batch_end}/{total_items} ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
+
+            tasks = [
+                self._process_single_item(
+                    item=item,
+                    item_index=batch_start + i,
+                    total_items=total_items,
+                    id_categorie=id_categorie,
+                    category_name=category_name
+                )
+                for i, item in enumerate(batch_items)
+            ]
+
+            results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Flush tous les logs bufferisés des items
+            for item_id_key in list(self._item_log_buffers.keys()):
+                self._flush_item_logs(item_id_key)
+
+            # Collecter les résultats du lot
+            batch_item_results: List[ItemResult] = []
+            for r in results:
+                if isinstance(r, Exception):
+                    self._log(f"❌ Exception critique: {r}")
+                    raise r
+                elif isinstance(r, ItemResult):
+                    batch_item_results.append(r)
+                    if r.status == "success":
+                        success_count += 1
+                    elif r.status == "skipped":
+                        skipped_count += 1
+                    else:
+                        error_count += 1
+                        self._log(f"❌ Item en erreur: {r.item_id} — {r.error_message}")
+                        raise Exception(f"Item {r.item_id} en erreur: {r.error_message}")
                 else:
-                    error_count += 1
-                    self._log(f"❌ Item en erreur: {r.item_id} — {r.error_message}")
-                    raise Exception(f"Item {r.item_id} en erreur: {r.error_message}")
-            else:
-                raise Exception(f"Résultat inattendu: {type(r)} — {r}")
+                    raise Exception(f"Résultat inattendu: {type(r)} — {r}")
 
-        # Sauvegarde batch des IDs traités avec succès ou skipped
-        successful_ids = [r.item_id for r in item_results if r.status in ("success", "skipped")]
+            all_item_results.extend(batch_item_results)
 
-        if successful_ids:
-            self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) message ---")
-            save_result = await self.api_client.post(
-                "prix",
-                "process",
-                "save",
-                {
-                    "id_categorie":    id_categorie,
-                    "type_extraction": self.TYPE_EXTRACTION,
-                    "id_cibles":       successful_ids  # liste d'IDs (batch)
-                }
-            )
-            
-            if save_result and not save_result.get("erreur"):
-                nb = save_result.get("nb_insere", len(successful_ids))
-                self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s) dans extraction_prix_ia")
+            # Sauvegarde batch des IDs traités avec succès ou skipped
+            successful_ids = [r.item_id for r in batch_item_results if r.status in ("success", "skipped")]
+
+            if successful_ids:
+                self._log(f"--- Sauvegarde batch de {len(successful_ids)} ID(s) message ---")
+                save_result = await self.api_client.post(
+                    "prix",
+                    "process",
+                    "save",
+                    {
+                        "id_categorie":    id_categorie,
+                        "type_extraction": self.TYPE_EXTRACTION,
+                        "id_cibles":       successful_ids
+                    }
+                )
+
+                if save_result and not save_result.get("erreur"):
+                    nb = save_result.get("nb_insere", len(successful_ids))
+                    self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s)")
+                else:
+                    self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                    raise Exception(f"Batch save: réponse inattendue: {save_result}")
+
+                # Publier les résultats du batch vers embedding
+                if self._on_batch_publish:
+                    published = await self._on_batch_publish(batch_item_results, id_categorie)
+                    self._log(f"📤 {published} message(s) publié(s) vers embedding")
             else:
-                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
-                raise Exception(f"Batch save: réponse inattendue: {save_result}")
-        else:
-            self._log("ℹ️ Aucun ID message à sauvegarder (aucun succès)")
+                self._log(f"ℹ️ Aucun ID à sauvegarder pour lot [{batch_num}/{total_batches}]")
+
+        elapsed = time.time() - start_time
+        item_results = all_item_results
 
         self._log("\n" + "=" * 60)
         self._log("EXTRACTION TERMINÉE")

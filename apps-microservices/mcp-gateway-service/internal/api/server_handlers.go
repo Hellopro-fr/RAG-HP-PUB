@@ -4,24 +4,41 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 )
 
+var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+
 // Handler holds dependencies for the REST API.
 type Handler struct {
-	repo     *repository.ServerRepo
-	gw       *gateway.Gateway
-	registry *gateway.Registry
+	repo       *repository.ServerRepo
+	tokenRepo  *repository.TokenRepo
+	tokenCache TokenCache
+	gw         *gateway.Gateway
+	registry   *gateway.Registry
+}
+
+// TokenCache is an interface for scope token cache operations.
+type TokenCache interface {
+	InvalidateAll()
 }
 
 // NewHandler creates a new API handler.
 func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry) *Handler {
 	return &Handler{repo: repo, gw: gw, registry: registry}
+}
+
+// SetTokenRepo sets the token repository for token CRUD operations.
+func (h *Handler) SetTokenRepo(repo *repository.TokenRepo, cache TokenCache) {
+	h.tokenRepo = repo
+	h.tokenCache = cache
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -55,6 +72,12 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate tool prefix: must be alphanumeric if provided
+	if req.ToolPrefix != "" && !alphanumericRe.MatchString(req.ToolPrefix) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "tool_prefix must contain only alphanumeric characters (a-z, A-Z, 0-9)"})
+		return
+	}
+
 	id := uuid.New().String()
 	srv := db.MCPServer{
 		ID:                  id,
@@ -66,6 +89,8 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		HealthStatus:        "unknown",
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
+		ToolPrefix:          req.ToolPrefix,
+		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 	if req.ConnectTimeoutMs != nil {
 		srv.ConnectTimeoutMs = *req.ConnectTimeoutMs
@@ -104,11 +129,17 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Découverte automatique
+	// Use req.AuthHeaders directly because repo.Create() encrypted srv.AuthHeaders in-place
 	if req.AutoDiscover {
-		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, parseAuthHeaders(srv.AuthHeaders)); err != nil {
+		log.Printf("[api] auto-discover for %s with %d auth headers", srv.URL, len(req.AuthHeaders))
+		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, req.AuthHeaders); err != nil {
 			log.Printf("[api] auto-discover failed for %s: %v", srv.URL, err)
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
+			// Set the tool prefix on the registered backend
+			if req.ToolPrefix != "" {
+				h.registry.SetToolPrefix(id, req.ToolPrefix)
+			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
@@ -135,8 +166,9 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		isActive = &b
 	}
 	tag := r.URL.Query().Get("tag")
+	userEmail := auth.UserEmailFromContext(r.Context())
 
-	servers, err := h.repo.ListAll(isActive, tag)
+	servers, err := h.repo.ListAll(isActive, tag, userEmail)
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
@@ -162,6 +194,9 @@ func (h *Handler) handleGetServer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
 		return
 	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 	writeJSON(w, http.StatusOK, toServerDetailResponse(srv))
 }
 
@@ -173,6 +208,9 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.repo.GetByID(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, existing, w) {
 		return
 	}
 
@@ -227,6 +265,13 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(req.MCPHeaders)
 		updates["mcp_headers"] = b
 	}
+	if req.ToolPrefix != nil {
+		if *req.ToolPrefix != "" && !alphanumericRe.MatchString(*req.ToolPrefix) {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "tool_prefix must contain only alphanumeric characters (a-z, A-Z, 0-9)"})
+			return
+		}
+		updates["tool_prefix"] = *req.ToolPrefix
+	}
 
 	if len(updates) > 0 {
 		if err := h.repo.Update(id, updates); err != nil {
@@ -242,6 +287,11 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Update tool prefix on the in-memory registry if changed (even without re-discovery)
+	if req.ToolPrefix != nil {
+		h.registry.SetToolPrefix(id, *req.ToolPrefix)
+	}
+
 	// Re-discover if URL or auth headers changed
 	if (urlChanged || authChanged) && existing.IsActive {
 		h.registry.Unregister(id)
@@ -251,6 +301,7 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[api] re-discover failed for %s: %v", refreshed.URL, err)
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
+			h.registry.SetToolPrefix(id, refreshed.ToolPrefix)
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
 			}
@@ -265,6 +316,14 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 	id := extractID(r)
+	srv, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 	h.registry.Unregister(id)
 	if err := h.repo.Delete(id); err != nil {
 		log.Printf("[api] delete server error: %v", err)
@@ -283,6 +342,9 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
 		return
 	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 
 	if err := h.repo.SetActive(id, true); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to enable server"})
@@ -294,6 +356,7 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] discover on enable failed for %s: %v", srv.URL, err)
 		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 	} else {
+		h.registry.SetToolPrefix(id, srv.ToolPrefix)
 		if backend := h.registry.FindByID(id); backend != nil {
 			h.saveBackendCapabilities(id, backend)
 		}
@@ -305,6 +368,14 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleDisableServer(w http.ResponseWriter, r *http.Request) {
 	id := extractID(r)
+	srv, err := h.repo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 	if err := h.repo.SetActive(id, false); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable server"})
 		return
@@ -324,6 +395,9 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
 		return
 	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
 
 	h.registry.Unregister(id)
 	if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, parseAuthHeaders(srv.AuthHeaders)); err != nil {
@@ -332,6 +406,7 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.registry.SetToolPrefix(id, srv.ToolPrefix)
 	if backend := h.registry.FindByID(id); backend != nil {
 		h.saveBackendCapabilities(id, backend)
 	}
@@ -404,6 +479,22 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 	}
 }
 
+// checkOwnership verifies the current user owns the server.
+// If auth is disabled (no user in context), access is allowed.
+// Returns false and writes a 403 response if ownership check fails.
+func checkOwnership(r *http.Request, srv *db.MCPServer, w http.ResponseWriter) bool {
+	userEmail := auth.UserEmailFromContext(r.Context())
+	if userEmail == "" {
+		// Auth disabled — no ownership filtering
+		return true
+	}
+	if srv.CreatedBy != "" && srv.CreatedBy != userEmail {
+		writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "you do not have access to this server"})
+		return false
+	}
+	return true
+}
+
 func extractID(r *http.Request) string {
 	// URL pattern: /api/v1/servers/{id} or /api/v1/servers/{id}/action
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")
@@ -434,6 +525,14 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		json.Unmarshal(srv.MCPHeaders, &mcpHeaders)
 	}
 
+	toolNames := make([]ToolSummary, 0, len(srv.Tools))
+	for _, t := range srv.Tools {
+		toolNames = append(toolNames, ToolSummary{
+			Name:        gateway.PrefixedToolName(srv.ToolPrefix, t.Name),
+			Description: t.Description,
+		})
+	}
+
 	return ServerResponse{
 		ID:                  srv.ID,
 		Name:                srv.Name,
@@ -449,7 +548,9 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastHealthCheck:     srv.LastHealthCheck,
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
+		ToolPrefix:          srv.ToolPrefix,
 		ToolsCount:          len(srv.Tools),
+		ToolNames:           toolNames,
 		ResourcesCount:      len(srv.Resources),
 		PromptsCount:        len(srv.Prompts),
 		MCPTransport:        srv.MCPTransport,
@@ -457,6 +558,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		MCPArgs:             mcpArgs,
 		MCPEnv:              mcpEnv,
 		MCPHeaders:          mcpHeaders,
+		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,
 		UpdatedAt:           srv.UpdatedAt,

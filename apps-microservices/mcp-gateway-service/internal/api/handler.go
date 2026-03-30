@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"strings"
+
+	"github.com/hellopro/mcp-gateway/internal/auth"
 )
 
 // Register mounts all REST API routes on the given mux under /api/v1/.
@@ -86,6 +88,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		h.handleListAllPrompts(w, r)
 	})
 
+	// ── Token routes ─────────────────────────────────────────────────────────
+	if h.tokenRepo != nil {
+		apiMux.HandleFunc("/api/v1/tokens", h.handleTokens)
+		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
+	}
+
 	// Routes avec {id} — on utilise un handler prefix pour capturer le pattern
 	apiMux.HandleFunc("/api/v1/servers/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")
@@ -155,7 +163,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 // handleDiscoverAll re-discovers all active servers.
 func (h *Handler) handleDiscoverAll(w http.ResponseWriter, r *http.Request) {
 	active := true
-	servers, err := h.repo.ListAll(&active, "")
+	userEmail := auth.UserEmailFromContext(r.Context())
+	servers, err := h.repo.ListAll(&active, "", userEmail)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
 		return

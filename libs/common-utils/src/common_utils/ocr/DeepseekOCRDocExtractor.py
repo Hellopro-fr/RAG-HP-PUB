@@ -1,5 +1,6 @@
 import httpx
 import logging
+logger = logging.getLogger(__name__)
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import mimetypes
@@ -33,8 +34,8 @@ class DeepseekOCRDocExtractor:
         self.download_timeout = download_timeout
         self.max_pdf_pages = max_pdf_pages
         self.endpoint = f"{self.base_url}/ocr/batch"
-        logging.info(f"URL ocr : {self.base_url}")
-        logging.info(f"Limite de pages PDF : {self.max_pdf_pages}")
+        logger.info(f"URL ocr : {self.base_url}")
+        logger.info(f"Limite de pages PDF : {self.max_pdf_pages}")
     
     def _is_supported_format(self, filename: str) -> bool:
         """
@@ -100,17 +101,17 @@ class DeepseekOCRDocExtractor:
             return
         
         page_count = self._count_pdf_pages(content)
-        logging.info(f"Nombre de pages du PDF: {page_count}")
+        logger.info(f"Nombre de pages du PDF: {page_count}")
         
         if page_count > self.max_pdf_pages:
             error_msg = (
                 f"Le fichier '{filename}' contient {page_count} pages, "
                 f"ce qui dépasse la limite autorisée de {self.max_pdf_pages} pages."
             )
-            logging.warning(error_msg)
+            logger.warning(error_msg)
             raise ValueError(error_msg)
         
-        logging.info(f"Validation réussie pour '{filename}': {page_count} page(s)")
+        logger.info(f"Validation réussie pour '{filename}': {page_count} page(s)")
     
     async def _download_file(self, url: str) -> tuple[BytesIO, str]:
         """
@@ -144,9 +145,9 @@ class DeepseekOCRDocExtractor:
                 
                 # Vérifier si le format est supporté
                 if not self._is_supported_format(filename):
-                    print(f"⚠️  {filename} n'est pas un PDF/image - conversion en PDF...")
+                    logger.warning(f"{filename} n'est pas un PDF/image - conversion en PDF...")
                     file_content, filename = await self._convert_to_pdf(file_content, filename)
-                    print(f"✓ Converti en {filename}")
+                    logger.info(f"Converti en {filename}")
                 
                 # Réinitialiser la position pour la lecture
                 file_content.seek(0)
@@ -432,7 +433,7 @@ class DeepseekOCRDocExtractor:
                         pdf_content = BytesIO(pdf_file.read())
                     
                     new_filename = Path(filename).stem + '.pdf'
-                    print(f"✓ Converti avec LibreOffice: {filename} -> {new_filename}")
+                    logger.info(f"Converti avec LibreOffice: {filename} -> {new_filename}")
                     
                     return pdf_content, new_filename
                 else:
@@ -459,7 +460,7 @@ class DeepseekOCRDocExtractor:
                 if temp_input and os.path.exists(temp_input.name):
                     os.unlink(temp_input.name)
             except Exception as e:
-                print(f"⚠️ Impossible de supprimer {temp_input.name}: {e}")
+                logger.warning(f"Impossible de supprimer {temp_input.name}: {e}")
             
             try:
                 if temp_output_dir and os.path.exists(temp_output_dir):
@@ -472,4 +473,4 @@ class DeepseekOCRDocExtractor:
                     # Supprimer le répertoire
                     os.rmdir(temp_output_dir)
             except Exception as e:
-                print(f"⚠️ Impossible de supprimer le répertoire temporaire: {e}")
+                logger.warning(f"Impossible de supprimer le répertoire temporaire: {e}")

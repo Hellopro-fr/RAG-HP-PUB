@@ -104,6 +104,15 @@ _BLOCKED_RESOURCE_EXTENSIONS = (
 )
 
 
+# Erreurs de navigation permanentes — extraction partielle inutile (aucun contenu chargé).
+# Re-raise vers fetch_html pour classification (variant-eligible vs fatal) et fallback Phase 2.
+_PERMANENT_NAV_ERRORS = (
+    'ERR_CONNECTION_REFUSED',
+    'ERR_NAME_NOT_RESOLVED',
+    'ERR_SSL_PROTOCOL_ERROR',
+    'ERR_CERT_DATE_INVALID',
+)
+
 # Import de la détection de challenge centralisée (évite la duplication)
 from app.services.language_detector import detect_challenge_page as _detect_challenge_page
 
@@ -269,12 +278,13 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
                 except Exception as nav_e:
                     err_str = str(nav_e)
-                    # Erreurs permanentes — inutile de continuer
-                    if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
-                        logger.error(f"Site inaccessible (Refused/DNS): {url}")
+                    # Erreurs permanentes — re-raise pour que fetch_html puisse
+                    # classifier l'erreur et basculer vers les variantes URL (Phase 2)
+                    if any(err in err_str for err in _PERMANENT_NAV_ERRORS):
+                        logger.error(f"Erreur navigation permanente pour {url}: {err_str.splitlines()[0]}")
                         await context.close()
                         await browser.close()
-                        return None
+                        raise
 
                     # Erreurs transitoires (proxy, timeout) — on tente l'extraction partielle
                     logger.warning(f"Timeout/Erreur navigation pour {url} (extraction partielle tentée): {nav_e}")

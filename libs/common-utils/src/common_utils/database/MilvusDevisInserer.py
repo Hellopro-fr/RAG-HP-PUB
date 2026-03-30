@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.milvus_lock import milvus_connection_lock
 from common_utils.database.Utils import Utils
 
 from pymilvus import (
@@ -23,6 +24,8 @@ class ModelConfig:
 
 
 class MilvusDevisInserer:
+    _CONNECTION_ALIAS = "milvus_correspondance_devis"
+
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -38,22 +41,36 @@ class MilvusDevisInserer:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
+        try:
+            connections.disconnect(self._CONNECTION_ALIAS)
+        except Exception:
+            pass
         connections.connect(
-            "default",
+            self._CONNECTION_ALIAS,
             host=self.config.ZILLIZ_URI,
             port=self.config.ZILLIZ_PORT,
             user=self.config.ZILLIZ_USER,
             password=self.config.ZILLIZ_PASSWORD,
         )
 
+    def _ensure_connected(self):
+        if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+            return
+        with milvus_connection_lock:
+            if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+                return
+            self.collection = None
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
+
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
 
-        if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
-            utility.drop_collection(collection_name)
+        if utility.has_collection(collection_name, using=self._CONNECTION_ALIAS) and self.config.RECREATE_COLLECTIONS:
+            utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS)
 
-        if not utility.has_collection(collection_name):
+        if not utility.has_collection(collection_name, using=self._CONNECTION_ALIAS):
             # Définition du schéma détaillé
             fields = [
                 # Todo : ce clé doit être unique
@@ -73,7 +90,7 @@ class MilvusDevisInserer:
                 description=f"Collection de correspondance Milvus - BO Demande de devis",
             )
 
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded", using=self._CONNECTION_ALIAS)
 
             index_params = {
                 "metric_type": "COSINE",
@@ -88,7 +105,7 @@ class MilvusDevisInserer:
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
             # collection.create_index(field_name="conversation_id", index_name="idx_conversation_id")
         else:
-            collection = Collection(collection_name)
+            collection = Collection(collection_name, using=self._CONNECTION_ALIAS)
 
         collection.load()
         return collection
@@ -96,12 +113,10 @@ class MilvusDevisInserer:
     def insert_correspondance_devis(
         self, datas: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        model_config = ModelConfig()
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -132,6 +147,7 @@ class MilvusDevisInserer:
                 f"[Correspondace Devis BO-Milvus] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {datas}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(

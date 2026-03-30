@@ -59,7 +59,7 @@ func (c *Checker) run() {
 
 func (c *Checker) checkAll() {
 	active := true
-	servers, err := c.repo.ListAll(&active, "")
+	servers, err := c.repo.ListAll(&active, "", "")
 	if err != nil {
 		log.Printf("[health] failed to list active servers: %v", err)
 		return
@@ -68,19 +68,19 @@ func (c *Checker) checkAll() {
 	var wg sync.WaitGroup
 	for _, srv := range servers {
 		wg.Add(1)
-		go func(id, url, prevStatus string, authHeadersRaw []byte) {
+		go func(id, url, prevStatus, toolPrefix string, authHeadersRaw []byte) {
 			defer wg.Done()
 			var authHeaders map[string]string
 			if len(authHeadersRaw) > 0 {
 				_ = json.Unmarshal(authHeadersRaw, &authHeaders)
 			}
-			c.checkOne(id, url, prevStatus, authHeaders)
-		}(srv.ID, srv.URL, srv.HealthStatus, srv.AuthHeaders)
+			c.checkOne(id, url, prevStatus, toolPrefix, authHeaders)
+		}(srv.ID, srv.URL, srv.HealthStatus, srv.ToolPrefix, srv.AuthHeaders)
 	}
 	wg.Wait()
 }
 
-func (c *Checker) checkOne(id, url, prevStatus string, authHeaders map[string]string) {
+func (c *Checker) checkOne(id, url, prevStatus, toolPrefix string, authHeaders map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -94,6 +94,11 @@ func (c *Checker) checkOne(id, url, prevStatus string, authHeaders map[string]st
 		}
 		_ = c.repo.UpdateHealth(id, "unhealthy", err.Error())
 		return
+	}
+
+	// Restore tool prefix after re-discovery
+	if toolPrefix != "" {
+		c.registry.SetToolPrefix(id, toolPrefix)
 	}
 
 	// Le serveur est joignable

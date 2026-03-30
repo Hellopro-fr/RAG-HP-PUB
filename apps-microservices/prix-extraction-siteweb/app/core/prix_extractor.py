@@ -305,8 +305,22 @@ class PrixExtractor:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
             # Les données Milvus sont dans metadata.entity
             metadata = chunk.get("metadata", {})
+            context_pre = metadata.get("context_pre") or ""
+            context_post = metadata.get("context_post") or ""
+
             chunk_metadata = metadata.get("entity", metadata)
             chunk_content = chunk_metadata.get("text", "")
+
+            # verification s'il y a context_pre et context_post dans metadata ajouter dans avant / apres chunk_content
+            # possible null
+            # maj metadata.entity.text avec chunk_content
+            if context_pre or context_post:
+                self._log(f"[{chunk_index + 1}/{total_chunks}] context_pre: {context_pre}")
+                self._log(f"[{chunk_index + 1}/{total_chunks}] context_post: {context_post}")
+                chunk_metadata["text"] = context_pre + "  " + chunk_content + "  " + context_post
+                chunk_metadata["context_pre"] = context_pre
+                chunk_metadata["context_post"] = context_post
+                chunk_content = chunk_metadata["text"]
 
             # Activer le contexte chunk pour bufferiser les logs
             token = self._current_chunk_id.set(chunk_id)
@@ -315,7 +329,7 @@ class PrixExtractor:
             self._log(f"[{chunk_index + 1}/{total_chunks}] chunk_metadata: ({chunk_metadata})")
 
             # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
-            if not re.search(r'€|\beuros?\b|\bEUR\b', chunk_content, re.IGNORECASE):
+            if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', chunk_content, re.IGNORECASE):
                 self._log(f"[{chunk_index + 1}/{total_chunks}] ⏭️ Chunk {chunk_id} — aucune mention de prix (€/euro/EUR) → skip")
                 self._flush_chunk_logs(chunk_id)
                 self._current_chunk_id.reset(token)
@@ -443,6 +457,7 @@ class PrixExtractor:
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
         self._log(f"Provider LLM: {self.LLM_PROVIDER}")
+        self._log(f"Model LLM: {self.GEMINI_MODEL}")
         self._log(f"Source Milvus: {settings.MILVUS_SOURCE}")
         self._log(f"Top K: {settings.MILVUS_TOP_K}")
         self._log("=" * 60)
@@ -506,7 +521,8 @@ class PrixExtractor:
             "page_type": [
                 "article", "blog", "ecommerce", "faq", "home",
                 "landing", "listing_produit", "Page_local", "fiche_produit"
-            ]
+            ],
+            "autre_chunks": "adjacent"
         }
 
         # Compteurs globaux sur toutes les boucles Q1
@@ -583,7 +599,7 @@ class PrixExtractor:
                 for i, chunk in enumerate(chunks)
             ]
 
-            results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+            results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)            
 
             # Flush les logs bufferisés des chunks
             for chunk_id_key in list(self._chunk_log_buffers.keys()):

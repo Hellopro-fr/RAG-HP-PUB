@@ -34,6 +34,9 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&ServerPrompt{},
 		&PromptArgument{},
 		&ServerTag{},
+		&ScopeToken{},
+		&ScopeTokenServer{},
+		&ScopeTokenTool{},
 	); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}

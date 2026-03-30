@@ -37,6 +37,9 @@ async def init_redis_pool():
         logging.info(f"Connecting to Redis at {redis_url.split('@')[-1]}...") # Avoid logging password
         redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
         await redis_client.ping()
+        # Register Lua scripts for EVALSHA-based execution (avoids sending raw Lua on every call)
+        global _safe_decr_script
+        _safe_decr_script = redis_client.register_script(_SAFE_DECR_LUA)
         logger.info("Successfully connected to Redis.")
     except redis.RedisError as e:
         logger.warning(f"Could not connect to Redis: {e}. Caching will be unavailable.")
@@ -75,6 +78,15 @@ async def get_json(key: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Failed to get JSON for key '{key}' from Redis: {e}", exc_info=True)
     return None
+
+async def set_key(key: str, value: Any, ttl: Optional[int] = None):
+    """Sets a raw value for a key."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        await redis_client.set(key, value, ex=ttl)
+    except Exception as e:
+        logger.error(f"Failed to set key '{key}' in Redis: {e}", exc_info=True)
 
 async def get_key(key: str) -> Optional[str]:
     """Gets the raw string value of a key."""
@@ -118,7 +130,11 @@ async def increment_key(key: str) -> int:
         return 0
 
 async def decrement_key(key: str) -> int:
-    """Atomically decrements a key's value by 1."""
+    """Atomically decrements a key's value by 1.
+
+    WARNING: This function can drive the counter below zero. For counters that
+    must never go negative (e.g. running-job counts), use safe_decrement_key() instead.
+    """
     if not redis_client:
         raise ConnectionError("Redis is not connected.")
     try:
@@ -126,7 +142,38 @@ async def decrement_key(key: str) -> int:
     except Exception as e:
         logger.error(f"Failed to decrement key '{key}' in Redis: {e}", exc_info=True)
         return 0
-        
+
+# Lua script: atomically decrement only if current value > 0, else return 0.
+_SAFE_DECR_LUA = """
+local current = tonumber(redis.call('GET', KEYS[1])) or 0
+if current > 0 then
+    return redis.call('DECR', KEYS[1])
+else
+    return 0
+end
+"""
+# Registered script handle — set by init_redis_pool(), used by safe_decrement_key().
+_safe_decr_script = None
+
+async def safe_decrement_key(key: str) -> int:
+    """Atomically decrements a key's value by 1, with a floor of 0 (never goes negative).
+
+    Returns the new value after decrement, or 0 if the key was already at 0.
+    On Redis error, returns 0 and logs — callers cannot distinguish floor from failure
+    without inspecting logs.
+    """
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        if _safe_decr_script is not None:
+            result = await _safe_decr_script(keys=[key])
+        else:
+            result = await redis_client.eval(_SAFE_DECR_LUA, 1, key)
+        return int(result)
+    except Exception as e:
+        logger.error(f"Failed to safe-decrement key '{key}' in Redis: {e}", exc_info=True)
+        return 0
+
 
 async def publish(channel: str, message: str):
     """Publishes a message to a specific Redis channel."""

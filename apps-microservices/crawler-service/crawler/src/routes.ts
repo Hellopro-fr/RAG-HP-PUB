@@ -106,18 +106,22 @@ router.addDefaultHandler(
 
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
-        const targetDomain = context.config.domain; 
+        const targetDomain = context.config.domain;
+        const siteHostname = context.config.siteHostname;
 
         // Local buffer for blocked URLs to handle async Redis logging
         const blockedBuffer: { reason: string, url: string }[] = [];
         const logBlocked = (reason: string, url: string) => {
             blockedBuffer.push({ reason, url });
-        }; 
+        };
 
-        // Check if hostname ends with the target domain (handles subdomains too)
-        // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
-        // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
-        if (!targetDomain || !urlObj.hostname.includes(targetDomain)) {
+        // Check if hostname belongs to either the target domain or the site hostname.
+        // This handles cases where domain and site have different hosts
+        // (e.g. domain="pmd-materiel.com", site="https://www.pmd-location.com/")
+        const hostname = urlObj.hostname;
+        const isInternal = (targetDomain && hostname.includes(targetDomain))
+            || (siteHostname && hostname.includes(siteHostname));
+        if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
             // Set structured error message for "1 seul URL crawlé" case: domain change
             if (request.url === site) {
@@ -447,11 +451,11 @@ router.addDefaultHandler(
                         if (detectResult.ok) {
                             isEnqueuingLinks = true;
                         } else if (!needsNlp) {
-                            // Fallback: URL-only check with method match
-                            // Only relevant for HTML-based methods where forced_method
-                            // might fail but URL pattern still matches.
+                            // Fallback: URL-only check (no method match required).
+                            // The stored method describes how the *homepage* was detected,
+                            // not which URL patterns are valid for internal pages.
                             const checkUrlResult = await detectionClient.checkUrl(url);
-                            if (checkUrlResult.ok && checkUrlResult.method === frenchDetectionMethod) {
+                            if (checkUrlResult.ok) {
                                 isEnqueuingLinks = true;
                             }
                         }
@@ -673,8 +677,11 @@ router.addDefaultHandler(
                                 return false;
                             }
 
-                            // External Domain Check
-                            if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
+                            // External Domain Check: allow URLs matching either domain or site hostname
+                            const reqHost = reqUrlObj.hostname;
+                            const isReqInternal = (targetDomain && reqHost.includes(targetDomain))
+                                || (siteHostname && reqHost.includes(siteHostname));
+                            if (!isReqInternal) {
                                 logBlocked('external-domain', request.url);
                                 return false;
                             }

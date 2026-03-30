@@ -14,6 +14,9 @@ class Settings:
     # This should ideally be set to the default number of replicas.
     DEFAULT_MAX_GLOBAL_CRAWLS: int = int(os.getenv("DEFAULT_MAX_GLOBAL_CRAWLS", "3"))
 
+    # Maximum number of OOM restarts before a crawl job is marked as failed.
+    MAX_OOM_RESTARTS: int = int(os.getenv("MAX_OOM_RESTARTS", "2"))
+
     # Interval in seconds for the background task to reconcile the running jobs counter.
     RECONCILIATION_INTERVAL_SECONDS: int = int(os.getenv("RECONCILIATION_INTERVAL_SECONDS", "300"))
 

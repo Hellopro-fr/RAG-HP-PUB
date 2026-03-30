@@ -1,0 +1,122 @@
+package repository
+
+import (
+	"github.com/hellopro/mcp-gateway/internal/crypto"
+	"github.com/hellopro/mcp-gateway/internal/db"
+	"gorm.io/gorm"
+)
+
+// TokenRepo handles CRUD for scope tokens.
+type TokenRepo struct {
+	db        *gorm.DB
+	encryptor *crypto.Encryptor // nil if encryption key not set
+}
+
+func NewTokenRepo(d *gorm.DB, encryptor *crypto.Encryptor) *TokenRepo {
+	return &TokenRepo{db: d, encryptor: encryptor}
+}
+
+// Create persists a new scope token with its server associations.
+// If an encryptor is configured, encrypts the token before storing.
+func (r *TokenRepo) Create(token *db.ScopeToken) error {
+	if r.encryptor != nil && len(token.EncryptedToken) > 0 {
+		encrypted, err := r.encryptor.Encrypt(token.EncryptedToken)
+		if err != nil {
+			return err
+		}
+		token.EncryptedToken = encrypted
+	}
+	return r.db.Create(token).Error
+}
+
+// DecryptToken decrypts the stored token. Returns empty string if not available.
+func (r *TokenRepo) DecryptToken(token *db.ScopeToken) string {
+	if r.encryptor == nil || len(token.EncryptedToken) == 0 {
+		return ""
+	}
+	plaintext, err := r.encryptor.Decrypt(token.EncryptedToken)
+	if err != nil {
+		return ""
+	}
+	return string(plaintext)
+}
+
+// GetByID returns a token with its server and tool associations.
+func (r *TokenRepo) GetByID(id string) (*db.ScopeToken, error) {
+	var token db.ScopeToken
+	err := r.db.Preload("Servers").Preload("Tools").Where("id = ?", id).First(&token).Error
+	if err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+// ListAll returns all scope tokens with server and tool associations.
+func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
+	q := r.db.Preload("Servers").Preload("Tools").Order("created_at DESC")
+	if createdBy != "" {
+		q = q.Where("created_by = ? OR created_by = ''", createdBy)
+	}
+	var tokens []db.ScopeToken
+	err := q.Find(&tokens).Error
+	return tokens, err
+}
+
+// FindByHash looks up a token by its SHA-256 hash. This is the hot-path lookup.
+func (r *TokenRepo) FindByHash(hash string) (*db.ScopeToken, error) {
+	var token db.ScopeToken
+	err := r.db.Preload("Servers").Preload("Tools").Where("token_hash = ?", hash).First(&token).Error
+	if err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+// Update updates the specified fields of a token.
+func (r *TokenRepo) Update(id string, updates map[string]interface{}) error {
+	return r.db.Model(&db.ScopeToken{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// UpdateServers replaces the server associations for a token.
+func (r *TokenRepo) UpdateServers(tokenID string, serverIDs []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Delete existing associations
+		if err := tx.Where("token_id = ?", tokenID).Delete(&db.ScopeTokenServer{}).Error; err != nil {
+			return err
+		}
+		// Insert new ones
+		for _, sid := range serverIDs {
+			if err := tx.Create(&db.ScopeTokenServer{TokenID: tokenID, ServerID: sid}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// UpdateTools replaces the tool associations for a token.
+func (r *TokenRepo) UpdateTools(tokenID string, tools []db.ScopeTokenTool) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Delete existing tool associations
+		if err := tx.Where("token_id = ?", tokenID).Delete(&db.ScopeTokenTool{}).Error; err != nil {
+			return err
+		}
+		// Insert new ones
+		for _, t := range tools {
+			if err := tx.Create(&t).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// Delete removes a scope token by ID (CASCADE deletes server and tool associations).
+func (r *TokenRepo) Delete(id string) error {
+	return r.db.Delete(&db.ScopeToken{}, "id = ?", id).Error
+}
+
+// SetActive updates the is_active flag of a token.
+func (r *TokenRepo) SetActive(id string, active bool) error {
+	return r.db.Model(&db.ScopeToken{}).Where("id = ?", id).Update("is_active", active).Error
+}

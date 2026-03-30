@@ -10,16 +10,13 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query, De
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
+from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY
 from common_utils.redis import cache_service
 from app.core.config import settings
 from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Centralized key for storing the dynamic global max crawls value in Redis
-CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 
 
 async def get_job_or_recover(crawl_id: str) -> dict:
@@ -132,7 +129,11 @@ async def get_capacity():
             raise HTTPException(status_code=503, detail="Redis connection not available.")
 
         running_jobs_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
-        running_jobs = int(running_jobs_raw) if running_jobs_raw else 0
+        try:
+            running_jobs = max(0, int(running_jobs_raw)) if running_jobs_raw else 0
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid running_jobs counter value in Redis: '{running_jobs_raw}'. Defaulting to 0.")
+            running_jobs = 0
         
         # Read the max global jobs value from the central Redis key.
         max_global_raw = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)

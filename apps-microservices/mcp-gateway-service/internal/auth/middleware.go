@@ -1,10 +1,30 @@
 package auth
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
 )
+
+// contextKey is an unexported type for context keys in this package.
+type contextKey string
+
+const (
+	// ContextKeyUserEmail is the context key for the authenticated user's email.
+	ContextKeyUserEmail contextKey = "user_email"
+	// ContextKeyUserName is the context key for the authenticated user's display name.
+	ContextKeyUserName contextKey = "user_display_name"
+)
+
+// UserEmailFromContext extracts the authenticated user's email from the request context.
+// Returns empty string if not set (e.g., auth disabled).
+func UserEmailFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(ContextKeyUserEmail).(string); ok {
+		return v
+	}
+	return ""
+}
 
 // Config holds JWT/auth configuration.
 type Config struct {
@@ -70,7 +90,11 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			// Inject user identity into request context
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, ContextKeyUserEmail, session.Email)
+			ctx = context.WithValue(ctx, ContextKeyUserName, session.DisplayName)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

@@ -26,11 +26,15 @@ type MCPServer struct {
 	MCPEnv       json.RawMessage `gorm:"type:json" json:"mcp_env,omitempty"`                           // for stdio: e.g. {"KEY": "val"}
 	MCPHeaders   json.RawMessage `gorm:"type:json" json:"mcp_headers,omitempty"`                       // for http/sse: e.g. {"Authorization": "Bearer xxx"}
 
+	// ToolPrefix is an optional alphanumeric prefix prepended to all tool names as {prefix}_{tool_name}.
+	ToolPrefix string `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
+
 	IsActive            bool            `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
 	HealthStatus        string          `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
 	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
 	LastError           string          `gorm:"type:text" json:"last_error,omitempty"`
 	LastDiscoveredAt    *time.Time      `gorm:"type:datetime(3)" json:"last_discovered_at,omitempty"`
+	CreatedBy           string          `gorm:"type:varchar(255);not null;default:'';index:idx_created_by" json:"created_by"`
 	CreatedAt           time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt           time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 
@@ -95,3 +99,43 @@ type ServerTag struct {
 }
 
 func (ServerTag) TableName() string { return "server_tags" }
+
+// ScopeToken is the GORM model for the scope_tokens table.
+type ScopeToken struct {
+	ID          string     `gorm:"type:char(36);primaryKey" json:"id"`
+	Name        string     `gorm:"type:varchar(255);not null" json:"name"`
+	Description string     `gorm:"type:text" json:"description,omitempty"`
+	TokenHash   string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_token_hash" json:"-"`
+	TokenPrefix string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
+	CreatedBy   string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	MCPCommand     string     `gorm:"type:varchar(64);not null;default:'npx'" json:"mcp_command"`
+	EncryptedToken []byte     `gorm:"type:blob" json:"-"`
+	ExpiresAt      *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
+	IsActive    bool       `gorm:"not null;default:true;index:idx_scope_active" json:"is_active"`
+	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Associations
+	Servers []ScopeTokenServer `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
+	Tools   []ScopeTokenTool   `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+}
+
+func (ScopeToken) TableName() string { return "scope_tokens" }
+
+// ScopeTokenServer is the join table between scope_tokens and mcp_servers.
+type ScopeTokenServer struct {
+	TokenID  string `gorm:"type:char(36);not null;primaryKey" json:"token_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+}
+
+func (ScopeTokenServer) TableName() string { return "scope_token_servers" }
+
+// ScopeTokenTool records which tools are allowed for a token+server pair.
+// If no rows exist for a (token_id, server_id), ALL tools of that server are allowed.
+type ScopeTokenTool struct {
+	TokenID  string `gorm:"type:char(36);not null;primaryKey" json:"token_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+	ToolName string `gorm:"type:varchar(255);not null;primaryKey" json:"tool_name"`
+}
+
+func (ScopeTokenTool) TableName() string { return "scope_token_tools" }

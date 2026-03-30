@@ -8,9 +8,9 @@ import (
 	embeddingpb "github.com/hellopro/mcp-api-recherche/proto/gen/embedding"
 )
 
-const embedDescription = "Convert text into 1024-dimensional embedding vectors using the CamemBERT-large model. " +
-	"Useful for computing similarity between texts or for custom search workflows. " +
-	"Supports batch processing of multiple texts."
+const embedDescription = "Convertir du texte en vecteurs d'embedding de 1024 dimensions à l'aide du modèle CamemBERT-large. " +
+	"Utile pour calculer la similarité entre des textes ou pour des flux de recherche personnalisés. " +
+	"Supporte le traitement par lots de plusieurs textes."
 
 const embedInputSchema = `{
 	"type": "object",
@@ -18,7 +18,7 @@ const embedInputSchema = `{
 		"texts": {
 			"type": "array",
 			"items": { "type": "string" },
-			"description": "List of texts to embed (batch processing supported)"
+			"description": "Liste de textes à convertir en embeddings (traitement par lots supporté)"
 		}
 	},
 	"required": ["texts"]

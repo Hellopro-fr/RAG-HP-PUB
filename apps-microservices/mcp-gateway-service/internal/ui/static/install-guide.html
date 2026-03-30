@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guide d'installation des commandes MCP</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#f0f7ff', 100:'#e0effe', 200:'#bae0fd', 300:'#7ccbfc', 400:'#36b2f8', 500:'#0c96e9', 600:'#0078c7', 700:'#005fa1', 800:'#035185', 900:'#07446e' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .tab-active { border-color: #0078c7; color: #005fa1; background: #f0f7ff; }
+    .os-active { border-color: #0078c7; color: #005fa1; background: #f0f7ff; font-weight: 600; }
+    code { font-size: 0.85em; }
+    pre code { font-size: 0.82em; }
+    .copy-btn:active { transform: scale(0.95); }
+    .prose h3 { scroll-margin-top: 80px; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-full">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+    <div class="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
+      <a href="index.html" class="text-gray-400 hover:text-brand-600 transition-colors" title="Retour au gestionnaire">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 19l-7-7 7-7"/></svg>
+      </a>
+      <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold">Guide d'installation des commandes MCP</h1>
+        <p class="text-xs text-gray-500">Instructions pour chaque runtime et chaque OS</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-8">
+
+    <!-- Command tabs -->
+    <div class="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-4" id="command-tabs">
+      <button onclick="showCommand('npx')" class="cmd-tab tab-active px-4 py-2 text-sm font-medium rounded-lg border transition-colors" data-cmd="npx">npx <span class="text-xs text-gray-400">(Node.js)</span></button>
+      <button onclick="showCommand('bunx')" class="cmd-tab px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-cmd="bunx">bunx <span class="text-xs text-gray-400">(Bun)</span></button>
+      <button onclick="showCommand('deno')" class="cmd-tab px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-cmd="deno">deno <span class="text-xs text-gray-400">(Deno)</span></button>
+      <button onclick="showCommand('uvx')" class="cmd-tab px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-cmd="uvx">uvx <span class="text-xs text-gray-400">(Python / uv)</span></button>
+      <button onclick="showCommand('docker')" class="cmd-tab px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-cmd="docker">docker</button>
+    </div>
+
+    <!-- Command content sections -->
+    <div id="cmd-npx" class="cmd-content">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h2 class="text-xl font-bold">npx <span class="text-base font-normal text-gray-500">- Node.js Package Executor</span></h2>
+          <p class="text-sm text-gray-600 mt-1"><code class="bg-gray-100 px-1.5 py-0.5 rounded">npx</code> est inclus avec npm (Node.js). Il permet d'exécuter des paquets npm sans installation globale. C'est la commande par défaut et la plus courante pour les clients MCP.</p>
+        </div>
+        <div class="px-6 py-4">
+          <!-- OS tabs -->
+          <div class="flex gap-2 mb-4">
+            <button onclick="showOS(this,'npx')" class="os-tab-npx os-active px-3 py-1.5 text-xs font-medium rounded-md border transition-colors" data-os="windows">Windows</button>
+            <button onclick="showOS(this,'npx')" class="os-tab-npx px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="linux">Linux</button>
+            <button onclick="showOS(this,'npx')" class="os-tab-npx px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="macos">macOS</button>
+          </div>
+
+          <div class="os-content-npx" data-os="windows">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Windows</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 1 :</strong> Via winget (recommandé)</p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>winget install OpenJS.NodeJS.LTS</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 2 :</strong> Via Chocolatey</p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>choco install nodejs-lts</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 3 :</strong> Installeur officiel</p>
+                <p class="text-sm text-gray-500">Téléchargez le <code class="bg-gray-100 px-1 rounded">.msi</code> depuis <a href="https://nodejs.org" target="_blank" class="text-brand-600 underline hover:text-brand-800">nodejs.org</a></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-npx hidden" data-os="linux">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Linux</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 1 :</strong> Via NodeSource (recommandé)</p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 2 :</strong> Via nvm (Node Version Manager)</p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.bashrc
+nvm install --lts</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 3 :</strong> Via Snap</p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>sudo snap install node --classic</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-npx hidden" data-os="macos">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur macOS</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 1 :</strong> Via Homebrew (recommandé)</p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>brew install node</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 2 :</strong> Via nvm</p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.zshrc
+nvm install --lts</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Option 3 :</strong> Installeur officiel</p>
+                <p class="text-sm text-gray-500">Téléchargez le <code class="bg-gray-100 px-1 rounded">.pkg</code> depuis <a href="https://nodejs.org" target="_blank" class="text-brand-600 underline hover:text-brand-800">nodejs.org</a></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Verification -->
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Vérification</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>node --version   # v18+ requis
+npx --version</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+          </div>
+
+          <!-- Usage -->
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Utilisation avec MCP Gateway</h3>
+            <p class="text-sm text-gray-600 mb-2">Ajoutez cette configuration dans votre fichier <code class="bg-gray-100 px-1.5 py-0.5 rounded">.mcp.json</code> :</p>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>{
+  "mcpServers": {
+    "hellopro-gateway": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://&lt;gateway-url&gt;/mcp",
+        "--header",
+        "X-MCP-Scope-Token: &lt;votre-token&gt;"
+      ]
+    }
+  }
+}</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+            <div class="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+              <strong>Note :</strong> Le flag <code class="bg-amber-100 px-1 rounded">-y</code> accepte automatiquement l'installation du paquet <code class="bg-amber-100 px-1 rounded">mcp-remote</code> sans confirmation. Ajoutez <code class="bg-amber-100 px-1 rounded">--allow-http</code> si votre gateway utilise HTTP (non-HTTPS).
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cmd-bunx" class="cmd-content hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h2 class="text-xl font-bold">bunx <span class="text-base font-normal text-gray-500">- Bun Package Executor</span></h2>
+          <p class="text-sm text-gray-600 mt-1"><code class="bg-gray-100 px-1.5 py-0.5 rounded">bunx</code> est l'équivalent de npx pour le runtime <a href="https://bun.sh" target="_blank" class="text-brand-600 underline">Bun</a>. Plus rapide que npx, il est compatible avec les paquets npm.</p>
+        </div>
+        <div class="px-6 py-4">
+          <div class="flex gap-2 mb-4">
+            <button onclick="showOS(this,'bunx')" class="os-tab-bunx os-active px-3 py-1.5 text-xs font-medium rounded-md border transition-colors" data-os="windows">Windows</button>
+            <button onclick="showOS(this,'bunx')" class="os-tab-bunx px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="linux">Linux</button>
+            <button onclick="showOS(this,'bunx')" class="os-tab-bunx px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="macos">macOS</button>
+          </div>
+
+          <div class="os-content-bunx" data-os="windows">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Windows</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via PowerShell (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>irm bun.sh/install.ps1 | iex</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via npm</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>npm install -g bun</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-bunx hidden" data-os="linux">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Linux</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via script officiel (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -fsSL https://bun.sh/install | bash</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via npm</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>npm install -g bun</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-bunx hidden" data-os="macos">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur macOS</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via Homebrew (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>brew install oven-sh/bun/bun</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via script</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -fsSL https://bun.sh/install | bash</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Vérification</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>bun --version
+bunx --version</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Utilisation avec MCP Gateway</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>{
+  "mcpServers": {
+    "hellopro-gateway": {
+      "command": "bunx",
+      "args": [
+        "mcp-remote",
+        "https://&lt;gateway-url&gt;/mcp",
+        "--header",
+        "X-MCP-Scope-Token: &lt;votre-token&gt;"
+      ]
+    }
+  }
+}</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+            <div class="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-800">
+              <strong>Avantage :</strong> bunx ne nécessite pas le flag <code class="bg-emerald-100 px-1 rounded">-y</code> — il installe automatiquement les paquets manquants.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cmd-deno" class="cmd-content hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h2 class="text-xl font-bold">deno <span class="text-base font-normal text-gray-500">- Deno Runtime</span></h2>
+          <p class="text-sm text-gray-600 mt-1"><a href="https://deno.com" target="_blank" class="text-brand-600 underline">Deno</a> est un runtime JavaScript/TypeScript sécurisé par défaut, avec support natif des paquets npm via le préfixe <code class="bg-gray-100 px-1.5 py-0.5 rounded">npm:</code>.</p>
+        </div>
+        <div class="px-6 py-4">
+          <div class="flex gap-2 mb-4">
+            <button onclick="showOS(this,'deno')" class="os-tab-deno os-active px-3 py-1.5 text-xs font-medium rounded-md border transition-colors" data-os="windows">Windows</button>
+            <button onclick="showOS(this,'deno')" class="os-tab-deno px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="linux">Linux</button>
+            <button onclick="showOS(this,'deno')" class="os-tab-deno px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="macos">macOS</button>
+          </div>
+
+          <div class="os-content-deno" data-os="windows">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Windows</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via PowerShell (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>irm https://deno.land/install.ps1 | iex</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via winget</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>winget install DenoLand.Deno</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via Chocolatey</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>choco install deno</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-deno hidden" data-os="linux">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Linux</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via script officiel (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -fsSL https://deno.land/install.sh | sh</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via Snap</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>sudo snap install deno</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-deno hidden" data-os="macos">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur macOS</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via Homebrew (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>brew install deno</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via script</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -fsSL https://deno.land/install.sh | sh</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Vérification</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>deno --version</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Utilisation avec MCP Gateway</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>{
+  "mcpServers": {
+    "hellopro-gateway": {
+      "command": "deno",
+      "args": [
+        "run",
+        "--allow-all",
+        "npm:mcp-remote",
+        "https://&lt;gateway-url&gt;/mcp",
+        "--header",
+        "X-MCP-Scope-Token: &lt;votre-token&gt;"
+      ]
+    }
+  }
+}</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+            <div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+              <strong>Note :</strong> Le flag <code class="bg-blue-100 px-1 rounded">--allow-all</code> accorde toutes les permissions au script. Pour plus de sécurité, utilisez <code class="bg-blue-100 px-1 rounded">--allow-net --allow-read --allow-env</code>.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cmd-uvx" class="cmd-content hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h2 class="text-xl font-bold">uvx <span class="text-base font-normal text-gray-500">- Python Package Executor (uv)</span></h2>
+          <p class="text-sm text-gray-600 mt-1"><code class="bg-gray-100 px-1.5 py-0.5 rounded">uvx</code> est l'exécuteur de paquets de <a href="https://docs.astral.sh/uv/" target="_blank" class="text-brand-600 underline">uv</a>, le gestionnaire Python ultra-rapide d'Astral. Il utilise le paquet <code class="bg-gray-100 px-1.5 py-0.5 rounded">mcp-proxy</code> pour se connecter au gateway.</p>
+        </div>
+        <div class="px-6 py-4">
+          <div class="flex gap-2 mb-4">
+            <button onclick="showOS(this,'uvx')" class="os-tab-uvx os-active px-3 py-1.5 text-xs font-medium rounded-md border transition-colors" data-os="windows">Windows</button>
+            <button onclick="showOS(this,'uvx')" class="os-tab-uvx px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="linux">Linux</button>
+            <button onclick="showOS(this,'uvx')" class="os-tab-uvx px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="macos">macOS</button>
+          </div>
+
+          <div class="os-content-uvx" data-os="windows">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Windows</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via PowerShell (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>irm https://astral.sh/uv/install.ps1 | iex</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via winget</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>winget install astral-sh.uv</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via pip</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>pip install uv</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-uvx hidden" data-os="linux">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Linux</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via script officiel (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -LsSf https://astral.sh/uv/install.sh | sh</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via pip</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>pip install uv</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-uvx hidden" data-os="macos">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur macOS</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via Homebrew (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>brew install uv</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via script</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -LsSf https://astral.sh/uv/install.sh | sh</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Vérification</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>uv --version
+uvx --version</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Utilisation avec MCP Gateway</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>{
+  "mcpServers": {
+    "hellopro-gateway": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "https://&lt;gateway-url&gt;/mcp",
+        "--header",
+        "X-MCP-Scope-Token: &lt;votre-token&gt;"
+      ]
+    }
+  }
+}</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+            <div class="mt-3 bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-800">
+              <strong>Note :</strong> uvx utilise le paquet Python <code class="bg-purple-100 px-1 rounded">mcp-proxy</code> (et non <code class="bg-purple-100 px-1 rounded">mcp-remote</code> qui est un paquet npm). L'API est compatible.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cmd-docker" class="cmd-content hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h2 class="text-xl font-bold">docker <span class="text-base font-normal text-gray-500">- Conteneur isolé</span></h2>
+          <p class="text-sm text-gray-600 mt-1">Exécute le client MCP dans un conteneur Docker isolé. Aucune dépendance locale (Node.js, Python, etc.) n'est requise — seul Docker doit être installé.</p>
+        </div>
+        <div class="px-6 py-4">
+          <div class="flex gap-2 mb-4">
+            <button onclick="showOS(this,'docker')" class="os-tab-docker os-active px-3 py-1.5 text-xs font-medium rounded-md border transition-colors" data-os="windows">Windows</button>
+            <button onclick="showOS(this,'docker')" class="os-tab-docker px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="linux">Linux</button>
+            <button onclick="showOS(this,'docker')" class="os-tab-docker px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors" data-os="macos">macOS</button>
+          </div>
+
+          <div class="os-content-docker" data-os="windows">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Windows</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Docker Desktop (recommandé)</strong></p>
+                <p class="text-sm text-gray-500 mb-1">Téléchargez depuis <a href="https://docs.docker.com/desktop/install/windows-install/" target="_blank" class="text-brand-600 underline">docker.com</a></p>
+                <p class="text-xs text-gray-400">Prérequis : WSL 2 activé</p>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via winget</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>winget install Docker.DockerDesktop</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-docker hidden" data-os="linux">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur Linux</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via script officiel (recommandé)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via apt (Ubuntu/Debian)</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>sudo apt-get update
+sudo apt-get install -y docker.io
+sudo systemctl enable --now docker</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="os-content-docker hidden" data-os="macos">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Installation sur macOS</h3>
+            <div class="space-y-3">
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Docker Desktop (recommandé)</strong></p>
+                <p class="text-sm text-gray-500 mb-1">Téléchargez depuis <a href="https://docs.docker.com/desktop/install/mac-install/" target="_blank" class="text-brand-600 underline">docker.com</a></p>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600 mb-1"><strong>Via Homebrew</strong></p>
+                <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>brew install --cask docker</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Vérification</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>docker --version
+docker run hello-world</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Utilisation avec MCP Gateway</h3>
+            <div class="relative"><pre class="bg-gray-900 text-green-400 rounded-lg px-4 py-3 overflow-x-auto"><code>{
+  "mcpServers": {
+    "hellopro-gateway": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "ghcr.io/anthropics/mcp-remote",
+        "https://&lt;gateway-url&gt;/mcp",
+        "--header",
+        "X-MCP-Scope-Token: &lt;votre-token&gt;"
+      ]
+    }
+  }
+}</code></pre><button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600">Copier</button></div>
+            <div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+              <strong>Flags importants :</strong>
+              <ul class="mt-1 list-disc list-inside space-y-0.5">
+                <li><code class="bg-blue-100 px-1 rounded">-i</code> : mode interactif (requis pour stdin/stdout MCP)</li>
+                <li><code class="bg-blue-100 px-1 rounded">--rm</code> : supprime le conteneur après l'arrêt</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    function showCommand(cmd) {
+      document.querySelectorAll('.cmd-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById('cmd-' + cmd).classList.remove('hidden');
+      document.querySelectorAll('.cmd-tab').forEach(t => {
+        t.classList.remove('tab-active');
+        t.classList.add('border-gray-200', 'text-gray-600');
+      });
+      const active = document.querySelector(`.cmd-tab[data-cmd="${cmd}"]`);
+      active.classList.add('tab-active');
+      active.classList.remove('border-gray-200', 'text-gray-600');
+    }
+
+    function showOS(btn, cmd) {
+      const os = btn.dataset.os;
+      document.querySelectorAll(`.os-content-${cmd}`).forEach(el => el.classList.add('hidden'));
+      document.querySelector(`.os-content-${cmd}[data-os="${os}"]`).classList.remove('hidden');
+      document.querySelectorAll(`.os-tab-${cmd}`).forEach(t => {
+        t.classList.remove('os-active');
+        t.classList.add('border-gray-200', 'text-gray-600');
+      });
+      btn.classList.add('os-active');
+      btn.classList.remove('border-gray-200', 'text-gray-600');
+    }
+
+    function copyCode(btn) {
+      const pre = btn.previousElementSibling || btn.closest('.relative').querySelector('pre');
+      const code = pre.querySelector('code') || pre;
+      navigator.clipboard.writeText(code.textContent).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Copié !';
+        btn.classList.add('bg-emerald-600', 'text-white');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('bg-emerald-600', 'text-white'); }, 1500);
+      });
+    }
+
+    // Auto-select command from URL hash
+    const hash = window.location.hash.replace('#', '');
+    if (['npx','bunx','deno','uvx','docker'].includes(hash)) {
+      showCommand(hash);
+    }
+  </script>
+</body>
+</html>

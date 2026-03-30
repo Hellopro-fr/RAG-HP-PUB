@@ -1,7 +1,11 @@
 import pika
 import time
 import os
-    
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
+
 from di_database_qdrant_service.messaging.consumer import Consumer
 from di_database_qdrant_service.messaging.publisher import Publisher
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
@@ -20,15 +24,18 @@ def main():
     # Boucle de connexion robuste
     for i in range(10):
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ Database-Devis-Processor: Connecté à RabbitMQ.")
+            params = pika.URLParameters(rabbitmq_url)
+            params.heartbeat = 600
+            params.blocked_connection_timeout = 300
+            connection = pika.BlockingConnection(params)
+            logger.info("Database-Devis-Processor: Connecte a RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Database-Devis-Processor: En attente de RabbitMQ... {i+1}s")
+            logger.warning("Database-Devis-Processor: En attente de RabbitMQ... %ss", i+1)
             time.sleep(1)
 
     if not connection:
-        print("❌ Database-Devis-Processor: Impossible de se connecter, arrêt du service.")
+        logger.error("Database-Devis-Processor: Impossible de se connecter, arret du service.")
         exit(1)
 
     try:
@@ -42,11 +49,14 @@ def main():
         consumer.start_consuming()
 
     except KeyboardInterrupt:
-        print("\n🛑 Database-Devis-Processor: Arrêt demandé.")
+        logger.info("Database-Devis-Processor: Arret demande.")
     finally:
         if connection and not connection.is_closed:
-            connection.close()
-            print("✅ Database-Devis-Processor: Connexion RabbitMQ fermée.")
+            try:
+                connection.close()
+                logger.info("Database-Devis-Processor: Connexion RabbitMQ fermee.")
+            except Exception:
+                pass
 
 if __name__ == '__main__':
     main()

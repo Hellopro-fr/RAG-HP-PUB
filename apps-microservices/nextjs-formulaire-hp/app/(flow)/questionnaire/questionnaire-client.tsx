@@ -8,6 +8,7 @@ import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type Matc
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
+import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
 
 // Interface pour les données URL (réponse Q1 pré-remplie)
 interface UrlData {
@@ -30,9 +31,10 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setUseRerank } = useFlowStore();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
   const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
+  const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
 
@@ -42,6 +44,7 @@ export default function QuestionnaireClient({
 
   // État pour le loader de matching et la destination après
   const [showLoader, setShowLoader] = useState(false);
+  const [loaderProgress, setLoaderProgress] = useState(0);
   const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
@@ -118,16 +121,7 @@ export default function QuestionnaireClient({
       console.log('[QuestionnaireClient] No scoring params found in URL');
     }
 
-    // Lire le paramètre rerank (activation du rerank LLM)
-    const rerankValue = searchParams.get('rerank');
-    if (rerankValue === '1' || rerankValue === 'true') {
-      setUseRerank(true);
-      console.log('[QuestionnaireClient] Rerank activated from URL');
-    } else {
-      setUseRerank(false); // Reset au cas où l'utilisateur supprime de l'URL
-    }
-
-  }, [searchParams, setMatchingTestParams, setUseRerank]);
+  }, [searchParams, setMatchingTestParams]);
 
   // Traiter les données URL (réponse Q1 pré-remplie depuis le token)
   // Doit s'exécuter AVANT que le questionnaire ne soit rendu
@@ -215,24 +209,43 @@ export default function QuestionnaireClient({
   }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
 
   const handleComplete = async () => {
-    // Afficher le loader et lancer le matching
+    // Afficher le loader et lancer matching + prix en parallèle
     setShowLoader(true);
-    const destination = await processMatching();
+
+    // Lancer prix et matching en parallèle
+    // Le prix répond plus vite → met à jour le progress à 25%
+    // Le matching prend le relais (50→65→75) via onProgress
+    const prixPromise = fetchPriceEstimation()
+      .then(() => { setLoaderProgress(25); })
+      .catch((err) => {
+        console.error('[Prix] Error (non-blocking):', err);
+        setLoaderProgress(25); // Même en erreur, on avance
+      });
+
+    const matchingPromise = processMatching(setLoaderProgress); // progress interne : 50→65→75
+
+    const [, destination] = await Promise.all([prixPromise, matchingPromise]);
+
+    setLoaderProgress(100);
+    // Attendre que la barre anime jusqu'à 100% avant de naviguer
+    await new Promise(resolve => setTimeout(resolve, 1500));
     setRedirectDestination(destination);
   };
 
-  const handleLoaderComplete = () => {
-    // Navigation après le loader
-    if (redirectDestination === 'something-to-add') {
-      goToSomethingToAdd();
-    } else {
-      goToSelection();
+  // Navigation dès que les données sont prêtes (matching + prix terminés)
+  useEffect(() => {
+    if (redirectDestination) {
+      if (redirectDestination === 'something-to-add') {
+        goToSomethingToAdd();
+      } else {
+        goToSelection();
+      }
     }
-  };
+  }, [redirectDestination, goToSelection, goToSomethingToAdd]);
 
   // Afficher le loader pendant le matching
   if (showLoader) {
-    return <MatchingLoader onComplete={handleLoaderComplete} duration={5000} />;
+    return <MatchingLoader externalProgress={loaderProgress} />;
   }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire

@@ -133,8 +133,10 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Use context.WithoutCancel because r.Context() is cancelled when the HTTP
+	// handler returns — the goroutine outlives the request.
 	go func() {
-		resp := s.handler.Handle(r.Context(), &req)
+		resp := s.handler.Handle(context.WithoutCancel(r.Context()), &req)
 		if resp == nil {
 			return // Notifications don't produce responses
 		}

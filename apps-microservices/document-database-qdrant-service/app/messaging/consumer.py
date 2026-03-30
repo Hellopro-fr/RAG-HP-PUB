@@ -1,11 +1,14 @@
 import aio_pika
 import json
 import asyncio
+import logging
 import traceback
 
 from document_database_qdrant_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_database_qdrant_service.core.processor import insertion_data # Importe la logique métier
 from common_utils.autres.DLQProperties import DLQProperties
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
@@ -25,7 +28,7 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
-        print("✅ Consumer initialisé.")
+        logger.info("Consumer initialisé.")
 
     async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
         dlx = await channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -71,7 +74,7 @@ class Consumer:
 
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message ne sera jamais valide.
-            print(f"❌ Database-Document-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+            logger.error(f"Database-Document-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
             await self._send_to_dlq(message, e, 0)
             await message.ack()
 
@@ -79,10 +82,10 @@ class Consumer:
             retry_count = self._get_retry_count(message)
             stack = traceback.format_exc()
             if retry_count < MAX_RETRIES:
-                print(f"❌ Database-Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}",stack)
+                logger.error(f"Database-Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}\n{stack}")
                 await message.nack(requeue=False)
             else:
-                print(f"❌ Database-Document-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                logger.error(f"Database-Document-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
                 await self._send_to_dlq(message, e, MAX_RETRIES)
                 await message.ack()
 
@@ -118,11 +121,11 @@ class Consumer:
                 try:
                     await self._process_message_task(message)
                 except Exception as e:
-                    print(f"⚠️ Erreur lors du traitement du message: {e}")
+                    logger.error(f"Erreur lors du traitement du message: {e}", exc_info=True)
                     # NACK pour remettre le message en queue
                     await message.nack(requeue=True)
         
         # 4. Commence à consommer les messages
-        print("👂 Database-Document-Processor: En attente de messages...")
+        logger.info("Database-Document-Processor: En attente de messages...")
         await queue.consume(lambda message: asyncio.create_task(safe_process(message)))
 

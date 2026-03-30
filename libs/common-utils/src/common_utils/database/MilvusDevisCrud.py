@@ -5,6 +5,7 @@ from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
 from common_utils.database.Utils import Utils
+from common_utils.database.milvus_lock import milvus_connection_lock
 
 
 from pymilvus import (
@@ -26,6 +27,8 @@ class ModelConfig:
 
 
 class MilvusDevisCrud:
+    _CONNECTION_ALIAS = "milvus_devis"
+
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -42,8 +45,12 @@ class MilvusDevisCrud:
 
     def _connect_to_milvus(self):
         self.logger.info("Connexion sur Zilliz cloud...")
+        try:
+            connections.disconnect(self._CONNECTION_ALIAS)
+        except Exception:
+            pass
         connections.connect(
-            "default",
+            self._CONNECTION_ALIAS,
             host=self.config.ZILLIZ_URI,
             port=self.config.ZILLIZ_PORT,
             user=self.config.ZILLIZ_USER,
@@ -51,18 +58,28 @@ class MilvusDevisCrud:
         )
         self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
 
+    def _ensure_connected(self):
+        if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+            return
+        with milvus_connection_lock:
+            if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+                return
+            self.collection = None
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
+
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
-        if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
+        if utility.has_collection(collection_name, using=self._CONNECTION_ALIAS) and self.config.RECREATE_COLLECTIONS:
             logging.warning(
                 f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'"
             )
-            utility.drop_collection(collection_name)
+            utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS)
 
-        if not utility.has_collection(collection_name):
+        if not utility.has_collection(collection_name, using=self._CONNECTION_ALIAS):
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
@@ -128,7 +145,7 @@ class MilvusDevisCrud:
                 description=f"Collection de chunks de demande de devis pour {model_key}",
             )
 
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded", using=self._CONNECTION_ALIAS)
 
             # self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
@@ -155,7 +172,7 @@ class MilvusDevisCrud:
             self.logger.info(
                 f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
             )
-            collection = Collection(collection_name)
+            collection = Collection(collection_name, using=self._CONNECTION_ALIAS)
 
         collection.load()
         self.logger.info(
@@ -170,8 +187,7 @@ class MilvusDevisCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -196,7 +212,6 @@ class MilvusDevisCrud:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
-            # self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}")
             self.logger.info(f"Clé primaire : {result.primary_keys}")
@@ -213,17 +228,18 @@ class MilvusDevisCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Demande de devis] Erreur Milvus lors de l'insertion : {e}"
             )
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Demande de devis] insertion de batch : {e}",
                 exc_info=True,
             )
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
             raise
 
     def update_devis(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -232,8 +248,7 @@ class MilvusDevisCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not data or self.collection is None:
                 return {
@@ -272,6 +287,7 @@ class MilvusDevisCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Demande de devis] Erreur Milvus lors de mise à jour : {e}"
             )
@@ -291,8 +307,7 @@ class MilvusDevisCrud:
         id_entity_milvus = data.get("id")
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -319,6 +334,7 @@ class MilvusDevisCrud:
             }
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
                 f"[{model_key}][Demande de devis] Erreur Milvus lors de la suppression : {e}"
             )
@@ -335,8 +351,7 @@ class MilvusDevisCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {
@@ -353,7 +368,9 @@ class MilvusDevisCrud:
                 }
 
             result = self.collection.query(
-                expr=f"lead_id in {list_lead_id}", output_fields=["id"]
+                expr=f"lead_id in {list_lead_id}",
+                output_fields=["id"],
+                consistency_level="Bounded",
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
@@ -361,13 +378,14 @@ class MilvusDevisCrud:
             return {"status": "success", "data": result}
 
         except MilvusException as e:
+            self.collection = None  # Force reconnection on next call
             self.logger.error(
-                f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}"
+                f"[{model_key}][Devis] Erreur Milvus lors de la récupération : {e}"
             )
             raise
         except Exception as e:
             self.logger.error(
-                f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}",
+                f"[{model_key}][Devis] Erreur de Récupèration du devis : {e}",
                 exc_info=True,
             )
             raise

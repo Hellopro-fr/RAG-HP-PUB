@@ -1,10 +1,16 @@
 import re
+import json
 import asyncio
 import logging
 import httpx
 from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
+
+try:
+    import redis.asyncio as aioredis
+except ImportError:
+    aioredis = None
 
 from app.models.schemas import (
     DetectionMode, DetectionResponse, AlternativeUrl,
@@ -16,6 +22,116 @@ from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class DomainCache:
+    """
+    Cache Redis optionnel pour les résultats de détection FR par domaine.
+
+    Règles :
+    - Skip si html_content fourni (résultat page-level, pas domain-level)
+    - Skip si force_refresh=True (bypass cache en lecture, écrit quand même)
+    - Clé : fr_detect:{normalized_domain} (www. supprimé)
+    - TTL ok=True → 30 jours, ok=False → 7 jours
+    - Échecs transitoires (challenge_page, fetch_empty_content, etc.) → 6 heures
+    - Erreurs critiques (fetch_failed, error) → jamais cachées
+    - En cas d'indisponibilité Redis, dégrade silencieusement (pas d'exception)
+    """
+
+    TTL_OK = 30 * 24 * 3600          # 30 jours — résultats définitifs positifs
+    TTL_NOK = 7 * 24 * 3600          # 7 jours — résultats définitifs négatifs
+    TTL_TRANSIENT = 6 * 3600          # 6 heures — échecs transitoires (retry automatique)
+
+    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques)
+    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed'})
+
+    # Méthodes transitoires : cachées avec TTL court (le site était peut-être temporairement down)
+    _TRANSIENT_METHODS = frozenset({
+        'challenge_page',               # Cloudflare/WAF — peut se résoudre
+        'fetch_empty_content',           # Contenu vide — proxy ou site down
+        'all_redirections_failed',       # Redirections échouées
+        'info_vide',                     # URL ou contenu absent
+    })
+
+    def __init__(self) -> None:
+        self._client = None
+        self._initialized = False
+        self._init_lock = asyncio.Lock()
+
+    async def _get_client(self):
+        async with self._init_lock:
+            if not self._initialized:
+                self._initialized = True
+                redis_url = settings.REDIS_URL
+                if redis_url and aioredis:
+                    try:
+                        self._client = aioredis.from_url(redis_url, decode_responses=True)
+                        logger.info("Redis cache client créé (connexion au premier appel)")
+                    except Exception as e:
+                        logger.warning(f"Redis cache indisponible : {e}")
+        return self._client
+
+    @staticmethod
+    def _normalize_domain(url: str) -> Optional[str]:
+        try:
+            hostname = (urlparse(url).hostname or '').lower()
+            domain = hostname.removeprefix('www.')
+            return domain if domain else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _cache_key(domain: str) -> str:
+        return f"fr_detect:{domain}"
+
+    async def get(self, url: str) -> Optional[dict]:
+        client = await self._get_client()
+        if not client:
+            return None
+        try:
+            domain = self._normalize_domain(url)
+            if not domain:
+                return None
+            data = await client.get(self._cache_key(domain))
+            if data:
+                return json.loads(data)
+        except Exception as e:
+            logger.debug(f"Cache get error ({url}): {e}")
+        return None
+
+    async def set(self, input_url: str, result_url: str, result: dict) -> None:
+        """Stocke le résultat pour input_url ET result_url (si redirection)."""
+        client = await self._get_client()
+        if not client:
+            return
+        method = result.get('method', '')
+        if method in self._NEVER_CACHE_METHODS:
+            return
+        try:
+            input_domain = self._normalize_domain(input_url)
+            if not input_domain:
+                return
+
+            # TTL basé sur la qualité du résultat
+            if method in self._TRANSIENT_METHODS or any(
+                method.startswith(prefix) for prefix in ('HTTP_',)
+            ):
+                ttl = self.TTL_TRANSIENT
+            elif result.get('ok'):
+                ttl = self.TTL_OK
+            else:
+                ttl = self.TTL_NOK
+
+            data = json.dumps(result)
+            await client.setex(self._cache_key(input_domain), ttl, data)
+            result_domain = self._normalize_domain(result_url)
+            if result_domain and result_domain != input_domain:
+                await client.setex(self._cache_key(result_domain), ttl, data)
+        except Exception as e:
+            logger.debug(f"Cache set error ({input_url}): {e}")
+
+
+domain_cache = DomainCache()
 
 
 class DomainFR:
@@ -749,20 +865,75 @@ class DomainFR:
         is_strong_url = self._is_strong_french_url(url)
         
         # Étape 2 : Méthode forcée (si définie)
+        # Logique alignée sur le pipeline normal (Cases 2a/2b/4/5) :
+        # - HTML tag confirme FR → signal fort (comme TLD .fr dans Case 2)
+        # - NLP confirme → ACCEPT (Case 1)
+        # - NLP soft/indisponible/faible contradiction → ACCEPT avec confiance réduite
+        # - NLP contredit fortement (>0.9) → REJECT (Case 2a)
         if self.forced_method:
             lang_check = self.language_detector.detect_from_html_tags(content)
             if lang_check and lang_check.get('method') == self.forced_method and lang_check.get('value') == 'fr':
-                # Confirmation NLP obligatoire même avec méthode forcée
+                # NLP avec cross-check (même logique que le pipeline normal, lignes 897-918)
                 nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
+
                 if nlp_result is None:
                     nlp_result = self.language_detector.detect_from_text_content(content)
+                elif nlp_result.get('lang') != 'fr' and nlp_result.get('confidence', 0) < 0.75:
+                    secondary = self.language_detector.detect_from_text_content(content)
+                    if secondary and secondary.get('lang') == 'fr':
+                        logger.info(
+                            f"[forced_method] Cross-check langdetect+langid confirme FR "
+                            f"(confiance={secondary.get('confidence', 0):.3f}) — "
+                            f"fastText avait détecté {nlp_result.get('lang')}"
+                        )
+                        nlp_result = secondary
 
-                if nlp_result and nlp_result.get('lang') == 'fr':
+                nlp_lang = nlp_result.get('lang') if nlp_result else None
+                nlp_confidence = nlp_result.get('confidence', 0) if nlp_result else 0.0
+
+                if nlp_result and nlp_lang == 'fr' and nlp_confidence >= settings.NLP_MIN_CONFIDENCE:
                     return DetectionResponse(
                         ok=True,
                         url=url,
                         method=f"{self.forced_method}+nlp_confirmed",
-                        confidence=nlp_result.get('confidence')
+                        confidence=nlp_confidence
+                    )
+                elif nlp_result and nlp_lang == 'fr':
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method=f"{self.forced_method}+nlp_soft_confirmed",
+                        confidence=nlp_confidence
+                    )
+                elif nlp_result is None:
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method=f"{self.forced_method}+nlp_skipped",
+                        confidence=0.6
+                    )
+                elif nlp_lang != 'fr' and nlp_confidence >= 0.9:
+                    logger.info(
+                        f"[forced_method] HTML {self.forced_method}=fr mais NLP détecte "
+                        f"{nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
+                    )
+                    return DetectionResponse(
+                        ok=False,
+                        url=url,
+                        method='Check_nok_forced',
+                        confidence=nlp_confidence,
+                        error=f"HTML {self.forced_method} indique FR mais contenu détecté comme {nlp_lang} ({nlp_confidence:.0%})"
+                    )
+                else:
+                    logger.info(
+                        f"[forced_method] HTML {self.forced_method}=fr, NLP faiblement contredit "
+                        f"({nlp_lang}={nlp_confidence:.3f}) — accepté avec confiance réduite"
+                    )
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method=f"{self.forced_method}+nlp_weak_disagree_{nlp_lang}",
+                        confidence=0.6
                     )
             return DetectionResponse(
                 ok=False,
@@ -858,10 +1029,32 @@ class DomainFR:
             
             # Sous-cas 2b : NLP soft-confirme, ou NLP indisponible, ou NLP faiblement contredit
             # → Le TLD .fr est un signal suffisamment fort pour valider
+
+            # Guard : si NLP est indisponible PARCE QUE le contenu est vide/trop court,
+            # c'est un signe que le site est inaccessible (502, erreur proxy, etc.).
+            # Ne PAS faire confiance au TLD dans ce cas.
+            if not nlp_available:
+                try:
+                    soup_check = BeautifulSoup(content, 'lxml')
+                    for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                        el.decompose()
+                    visible_text = soup_check.get_text(separator=' ', strip=True)
+                except Exception:
+                    visible_text = ''
+
+                if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                    return DetectionResponse(
+                        ok=False,
+                        url=url,
+                        method='fetch_empty_content',
+                        alternative_urls=alternatives,
+                        error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — site probablement inaccessible"
+                    )
+
             methods = [url_method]
             if html_indicates_french:
                 methods.append(html_method)
-            
+
             if nlp_soft_french:
                 methods.append('nlp_soft_confirmed')
                 confidence = nlp_confidence
@@ -935,7 +1128,9 @@ class DomainFR:
 
             for alt_candidate in reliable_alternatives:
                 try:
-                    alt_content_result = await fetch_html(alt_candidate.url)
+                    alt_content_result = await asyncio.wait_for(
+                        fetch_html(alt_candidate.url), timeout=120
+                    )
                     if not alt_content_result:
                         logger.warning(f"Impossible de récupérer le contenu de l'alternative {alt_candidate.url}")
                         fetch_failed_count += 1
@@ -1005,6 +1200,10 @@ class DomainFR:
                         )
                         continue
 
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout fetch alternative {alt_candidate.url} (120s)")
+                    fetch_failed_count += 1
+                    continue
                 except Exception as alt_e:
                     logger.warning(f"Erreur vérification alternative {alt_candidate.url}: {alt_e}")
                     fetch_failed_count += 1

@@ -6,6 +6,8 @@ from common_utils.autres.CollectionName import CollectionName
 import logging
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 
 def insertion_data(devis_data: dict) -> dict:
     """
@@ -21,7 +23,7 @@ def insertion_data(devis_data: dict) -> dict:
     try:
         collection_enum = CollectionName(collection)
     except ValueError:
-        logging.error("'%s' n'est pas un nom de collection valide.", collection)
+        logger.error("'%s' n'est pas un nom de collection valide.", collection)
         raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
     if bdd.lower() == "milvus":
@@ -78,12 +80,12 @@ def insertion_data(devis_data: dict) -> dict:
             error_message = (
                 f"Erreur lors de la vérification de Lead ID {lead_id} : {message}"
             )
-            logging.error(error_message)
+            logger.error(error_message)
             raise Exception(error_message)
 
     elif status == "success":
         if len(data) > 0:
-            logging.info(
+            logger.info(
                 "La lead_id %s existe déjà dans la base de données. Insertion ignorée.",
                 lead_id,
             )

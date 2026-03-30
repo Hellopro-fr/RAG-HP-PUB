@@ -5,8 +5,12 @@ import { Search, Package, Truck, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MatchingLoaderProps {
-  onComplete: () => void;
-  duration?: number; // in milliseconds
+  /** Progression externe (0-100) pilotée par les appels API */
+  externalProgress?: number;
+  /** @deprecated Utilisé seulement si externalProgress n'est pas fourni */
+  onComplete?: () => void;
+  /** @deprecated Utilisé seulement si externalProgress n'est pas fourni */
+  duration?: number;
 }
 
 const STEPS = [
@@ -32,44 +36,58 @@ const STEPS = [
   },
 ];
 
-const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) => {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [isComplete, setIsComplete] = useState(false);
+const MatchingLoader = ({ externalProgress, onComplete, duration = 5000 }: MatchingLoaderProps) => {
+  const useExternal = externalProgress !== undefined;
 
-  const stepDuration = duration / STEPS.length;
+  // displayProgress anime en smooth vers la cible (externalProgress ou timer interne)
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [internalTarget, setInternalTarget] = useState(0);
 
+  const targetProgress = useExternal ? (externalProgress ?? 0) : internalTarget;
+
+  // Dériver le step depuis displayProgress
+  const currentStep = displayProgress >= 75 ? 3
+    : displayProgress >= 50 ? 2
+    : displayProgress >= 25 ? 1
+    : 0;
+
+  // Animation smooth : incrémente displayProgress vers targetProgress
   useEffect(() => {
-    // Progress bar animation
+    const interval = setInterval(() => {
+      setDisplayProgress((prev) => {
+        if (targetProgress === 0) {
+          // Pas encore de réponse API : animer lentement vers 20% max (~5s)
+          if (prev >= 20) return prev;
+          return prev + 0.2;
+        }
+        // Réponse API reçue : animer vers la cible
+        if (prev >= targetProgress) return prev;
+        return Math.min(prev + 1, targetProgress);
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, [targetProgress]);
+
+  // Fallback interne (si externalProgress non fourni) : timer classique
+  useEffect(() => {
+    if (useExternal) return;
+
     const progressInterval = setInterval(() => {
-      setProgress((prev) => {
+      setInternalTarget((prev) => {
         const newProgress = prev + (100 / (duration / 50));
         return Math.min(newProgress, 100);
       });
     }, 50);
 
-    // Step transitions
-    const stepTimer = setInterval(() => {
-      setCurrentStep((prev) => {
-        if (prev < STEPS.length - 1) {
-          return prev + 1;
-        }
-        return prev;
-      });
-    }, stepDuration);
-
-    // Complete after duration
     const completeTimer = setTimeout(() => {
-      setIsComplete(true);
-      setTimeout(onComplete, 500); // Small delay for exit animation
+      onComplete?.();
     }, duration);
 
     return () => {
       clearInterval(progressInterval);
-      clearInterval(stepTimer);
       clearTimeout(completeTimer);
     };
-  }, [duration, stepDuration, onComplete]);
+  }, [duration, onComplete, useExternal]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -97,7 +115,7 @@ const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) =>
       <div
         className={cn(
           "relative z-10 w-full max-w-lg px-6 transition-all duration-500",
-          isComplete ? "opacity-0 scale-95" : "opacity-100 scale-100"
+          "opacity-100 scale-100"
         )}
       >
         {/* Logo / Brand icon */}
@@ -188,12 +206,12 @@ const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) =>
         <div className="space-y-2">
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-100 ease-linear rounded-full"
-              style={{ width: `${progress}%` }}
+              className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
+              style={{ width: `${displayProgress}%` }}
             />
           </div>
           <p className="text-center text-sm text-muted-foreground">
-            {Math.round(progress)}% complété
+            {Math.round(displayProgress)}% complété
           </p>
         </div>
       </div>

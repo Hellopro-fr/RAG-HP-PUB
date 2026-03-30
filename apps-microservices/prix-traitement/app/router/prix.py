@@ -76,7 +76,9 @@ async def questionnaire_prix(request: QuestionnaireRequest = Body(...)):
             texte_recherche=request.texte_recherche,
             id_categorie=request.id_categorie,
             nom_categorie=request.nom_categorie,
-            texte_prompt=request.texte_prompt
+            texte_prompt=request.texte_prompt,
+            model=request.model,
+            type_source=request.type_source
         )
         
         response = QuestionnaireResponse(

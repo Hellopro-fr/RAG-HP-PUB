@@ -1,7 +1,11 @@
 import pika
 import time
 import os
-    
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
+
 from website_database_qdrant_service.messaging.consumer import Consumer
 from website_database_qdrant_service.messaging.publisher import Publisher
 
@@ -21,15 +25,18 @@ def main():
     # Boucle de connexion robuste
     for i in range(10):
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ Database-Website-Processor: Connecté à RabbitMQ.")
+            params = pika.URLParameters(rabbitmq_url)
+            params.heartbeat = 600
+            params.blocked_connection_timeout = 300
+            connection = pika.BlockingConnection(params)
+            logger.info("Database-Website-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Database-Website-Processor: En attente de RabbitMQ... {i+1}s")
+            logger.warning(f"Database-Website-Processor: En attente de RabbitMQ... {i+1}s")
             time.sleep(1)
 
     if not connection:
-        print("❌ Database-Website-Processor: Impossible de se connecter, arrêt du service.")
+        logger.error("Database-Website-Processor: Impossible de se connecter, arrêt du service.")
         exit(1)
 
     try:
@@ -43,11 +50,14 @@ def main():
         consumer.start_consuming()
 
     except KeyboardInterrupt:
-        print("\n🛑 Database-Website-Processor: Arrêt demandé.")
+        logger.info("Database-Website-Processor: Arrêt demandé.")
     finally:
         if connection and not connection.is_closed:
-            connection.close()
-            print("✅ Database-Website-Processor: Connexion RabbitMQ fermée.")
+            try:
+                connection.close()
+                logger.info("Database-Website-Processor: Connexion RabbitMQ fermée.")
+            except Exception:
+                pass
 
 if __name__ == '__main__':
     main()

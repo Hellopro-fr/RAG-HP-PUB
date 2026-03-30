@@ -1,9 +1,12 @@
+import logging
 import pika
 import time
 import os
 
 from dotenv import load_dotenv
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 class RabbitMQConnection:
     def __init__(self, host="localhost"):
@@ -22,15 +25,21 @@ class RabbitMQConnection:
         attempts = 0
         while attempts < max_retries:
             try:
-                print(f"🔄 Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
-           
-                self.connection = pika.BlockingConnection(pika.URLParameters(self.host))
-        
-                print("✅ Connexion RabbitMQ établie.")
+                if attempts == 0:
+                    logger.info(f"Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
+                else:
+                    logger.warning(f"Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
+
+                params = pika.URLParameters(self.host)
+                params.heartbeat = 600
+                params.blocked_connection_timeout = 300
+                self.connection = pika.BlockingConnection(params)
+
+                logger.info("Connexion RabbitMQ établie.")
                 return self.connection
             except Exception as e:
                 attempts += 1
-                print(f"❌ Échec de connexion ({e}), nouvelle tentative dans {retry_delay}s...")
+                logger.error(f"Échec de connexion ({e}), nouvelle tentative dans {retry_delay}s...")
                 time.sleep(retry_delay)
 
-        raise Exception(f"❌ Impossible de se connecter à RabbitMQ après {max_retries} tentatives.")
+        raise Exception(f"Impossible de se connecter à RabbitMQ après {max_retries} tentatives.")

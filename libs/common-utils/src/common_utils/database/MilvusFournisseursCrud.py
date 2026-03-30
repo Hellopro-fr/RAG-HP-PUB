@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.milvus_lock import milvus_connection_lock
 from common_utils.database.Utils import Utils
 
 
@@ -26,6 +27,8 @@ class ModelConfig:
 
 
 class MilvusFournisseursCrud:
+    _CONNECTION_ALIAS = "milvus_fournisseurs"
+
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -41,28 +44,42 @@ class MilvusFournisseursCrud:
         self.logger = kwargs.get("logger", logging)
 
     def _connect_to_milvus(self):
+        try:
+            connections.disconnect(self._CONNECTION_ALIAS)
+        except Exception:
+            pass
         self.logger.info("Connexion sur Zilliz cloud...")
         connections.connect(
-            "default",
+            self._CONNECTION_ALIAS,
             host=self.config.ZILLIZ_URI,
             port=self.config.ZILLIZ_PORT,
             user=self.config.ZILLIZ_USER,
             password=self.config.ZILLIZ_PASSWORD,
         )
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        self.logger.info("Connexion sur Zilliz cloud avec succès.")
+
+    def _ensure_connected(self):
+        if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+            return
+        with milvus_connection_lock:
+            if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+                return
+            self.collection = None
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(ModelConfig())
 
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
-        if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
+        if utility.has_collection(collection_name, using=self._CONNECTION_ALIAS) and self.config.RECREATE_COLLECTIONS:
             logging.warning(
                 f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'"
             )
-            utility.drop_collection(collection_name)
+            utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS)
 
-        if not utility.has_collection(collection_name):
+        if not utility.has_collection(collection_name, using=self._CONNECTION_ALIAS):
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
@@ -140,7 +157,7 @@ class MilvusFournisseursCrud:
                 fields,
                 description=f"Collection de chunks de categories pour {model_key}",
             )
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded", using=self._CONNECTION_ALIAS)
 
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
@@ -176,7 +193,7 @@ class MilvusFournisseursCrud:
             self.logger.info(
                 f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
             )
-            collection = Collection(collection_name)
+            collection = Collection(collection_name, using=self._CONNECTION_ALIAS)
 
         collection.load()
         self.logger.info(
@@ -191,8 +208,7 @@ class MilvusFournisseursCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -217,7 +233,6 @@ class MilvusFournisseursCrud:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
-            # self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}")
             self.logger.info(f"Clé primaire : {result.primary_keys}")
@@ -238,12 +253,14 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][fournisseurs] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][fournisseurs] insertion de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
 
     def update_fournisseurs(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -252,8 +269,7 @@ class MilvusFournisseursCrud:
 
         try:
 
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not data or self.collection is None:
                 return {
@@ -294,12 +310,14 @@ class MilvusFournisseursCrud:
                 f"[{model_key}][fournisseurs] Erreur Milvus lors de mise à jour : {e}"
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][fournisseurs] Mise à jour de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {data}")
+            self.collection = None
             raise
 
     def delete_fournisseurs(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -308,8 +326,7 @@ class MilvusFournisseursCrud:
         id_entity_milvus = data.get("id")
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {"status": "error", "message": "Collection non initialisée."}
@@ -330,18 +347,20 @@ class MilvusFournisseursCrud:
 
             return {
                 "status": "success",
-                "message": f"categories avec ID {id_entity_milvus} supprimé.",
+                "message": f"fournisseur avec ID {id_entity_milvus} supprimé.",
             }
 
         except MilvusException as e:
             self.logger.error(
                 f"[{model_key}][fournisseurs] Erreur Milvus lors de la suppression : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][fournisseurs] Suppression : {e}", exc_info=True
             )
+            self.collection = None
             raise
 
     def get_fournisseurs(self, id_fournisseur: str) -> Dict[str, Any]:
@@ -350,8 +369,7 @@ class MilvusFournisseursCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {
@@ -368,7 +386,9 @@ class MilvusFournisseursCrud:
                 }
 
             result = self.collection.query(
-                expr=f"id_fournisseur in {list_id_fournisseur}", output_fields=["id"]
+                expr=f"id_fournisseur in {list_id_fournisseur}",
+                output_fields=["id"],
+                consistency_level="Bounded",
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
@@ -379,13 +399,25 @@ class MilvusFournisseursCrud:
             self.logger.error(
                 f"[{model_key}][Fournisseur] Erreur Milvus lors de la récupération : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Fournisseur] Erreur de Récupèration de Fournisseur : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise
+
+    ALLOWED_FIELDS = {
+        "url", "page_type", "domaine", "domaine2", "domaine3",
+        "domaine4", "domaine5", "domaine6", "fournisseur",
+        "id_fournisseur", "source", "fichier_source", "etat",
+        "affichage", "nom_categorie_phare_1", "id_categorie_phare_1",
+        "nom_categorie_phare_2", "id_categorie_phare_2",
+        "nom_categorie_phare_3", "id_categorie_phare_3",
+        "text", "chunk_id", "date_ajout", "date_maj",
+    }
 
     def get_fournisseur_by_field(
         self, field_name: str, search_value: str
@@ -397,9 +429,11 @@ class MilvusFournisseursCrud:
         if not field_name:
             field_name = "fournisseur"
 
+        if field_name not in self.ALLOWED_FIELDS:
+            raise ValueError(f"Invalid field name: {field_name}. Allowed: {self.ALLOWED_FIELDS}")
+
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {
@@ -416,7 +450,9 @@ class MilvusFournisseursCrud:
                 }
 
             result = self.collection.query(
-                expr=f"{field_name} in {list_search_value}", output_fields=["id"]
+                expr=f"{field_name} in {list_search_value}",
+                output_fields=["id"],
+                consistency_level="Bounded",
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
@@ -427,10 +463,12 @@ class MilvusFournisseursCrud:
             self.logger.error(
                 f"[{model_key}][Fournisseur] Erreur Milvus lors de la récupération : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Fournisseur] Erreur de Récupèration Fournisseur : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise

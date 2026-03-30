@@ -8,21 +8,23 @@ import (
 	"github.com/hellopro/mcp-api-recherche/internal/orchestrator"
 )
 
-const searchDescription = "Search the HelloPro knowledge base across product catalogs, websites, quotes, exchanges, and pricing databases. " +
-	"Supports semantic vector search, keyword/filter search, and hybrid search (vector + BM25). " +
-	"Results are optionally re-ranked for relevance using a cross-encoder model. " +
-	"Returns structured matches grouped by source collection with metadata and relevance scores."
+const searchDescription = "Rechercher dans la base de connaissances HelloPro à travers les catalogues produits, sites web, devis, échanges et bases de données de prix. " +
+	"IMPORTANT : avant d'utiliser cet outil, appelez d'abord get_collection_schema pour découvrir les champs disponibles de chaque collection, " +
+	"puis spécifiez uniquement les champs nécessaires via output_fields au lieu de récupérer tous les champs. " +
+	"Supporte la recherche sémantique vectorielle, la recherche par mots-clés/filtres, et la recherche hybride (vecteur + BM25). " +
+	"Les résultats sont optionnellement re-classés par pertinence à l'aide d'un modèle cross-encoder. " +
+	"Retourne des correspondances structurées regroupées par collection source avec métadonnées et scores de pertinence."
 
 const searchInputSchema = `{
 	"type": "object",
 	"properties": {
 		"query": {
 			"type": "string",
-			"description": "The search query in natural language (French or English)"
+			"description": "La requête de recherche en langage naturel (français ou anglais)"
 		},
 		"sources": {
 			"type": "array",
-			"description": "Collections to search. Each entry specifies a source name and optional filters. Available sources: produits_3 (products), siteweb_2 (websites), devis (quotes), echanges (conversations), prix (pricing)",
+			"description": "Collections à rechercher. Chaque entrée spécifie un nom de source et des filtres optionnels. Sources disponibles : produits_3 (produits), siteweb_2 (sites web), devis (devis), echanges (conversations), prix (tarifs)",
 			"items": {
 				"type": "object",
 				"properties": {
@@ -32,7 +34,7 @@ const searchInputSchema = `{
 					},
 					"filters": {
 						"type": "object",
-						"description": "Key-value filters applied to this source (e.g. {\"fournisseur\": \"ACME\"})"
+						"description": "Filtres clé-valeur appliqués à cette source (ex. {\"fournisseur\": \"ACME\"})"
 					}
 				},
 				"required": ["source"]
@@ -41,27 +43,27 @@ const searchInputSchema = `{
 		},
 		"top_k": {
 			"type": "integer",
-			"description": "Maximum number of results to return per source",
+			"description": "Nombre maximum de résultats à retourner par source",
 			"default": 10
 		},
 		"filters": {
 			"type": "object",
-			"description": "Global filters applied to all sources (e.g. {\"fournisseur\": \"ACME\", \"avec_prix\": true})"
+			"description": "Filtres globaux appliqués à toutes les sources (ex. {\"fournisseur\": \"ACME\", \"avec_prix\": true})"
 		},
 		"output_fields": {
 			"type": "array",
 			"items": { "type": "string" },
-			"description": "Specific fields to include in results. Use get_collection_schema to discover available fields. Empty means all fields."
+			"description": "Champs spécifiques à inclure dans les résultats (obligatoire : appelez get_collection_schema au préalable pour connaître les champs disponibles, puis ne demandez que ceux dont vous avez besoin). Ne pas renseigner ce champ retourne tous les champs, ce qui est déconseillé."
 		},
 		"search_type": {
 			"type": "string",
 			"enum": ["semantic", "keyword", "hybrid"],
-			"description": "Search mode: 'semantic' (embedding + vector similarity), 'keyword' (filter-only, no embeddings), 'hybrid' (dense vector + BM25 full-text)",
+			"description": "Mode de recherche : 'semantic' (embedding + similarité vectorielle), 'keyword' (filtres uniquement, sans embeddings), 'hybrid' (vecteur dense + BM25 plein texte)",
 			"default": "semantic"
 		},
 		"use_reranker": {
 			"type": "boolean",
-			"description": "Whether to re-rank results using a cross-encoder model (BAAI/bge-reranker-v2-m3) for improved relevance ordering",
+			"description": "Indique s'il faut re-classer les résultats à l'aide d'un modèle cross-encoder (BAAI/bge-reranker-v2-m3) pour un meilleur classement par pertinence",
 			"default": true
 		}
 	},
