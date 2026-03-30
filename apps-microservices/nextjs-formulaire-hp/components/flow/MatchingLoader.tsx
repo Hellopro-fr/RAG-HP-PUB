@@ -56,9 +56,9 @@ const MatchingLoader = ({ externalProgress, onComplete, duration = 5000 }: Match
     const interval = setInterval(() => {
       setDisplayProgress((prev) => {
         if (targetProgress === 0) {
-          // Pas encore de réponse API : animer lentement vers 20% max
+          // Pas encore de réponse API : animer lentement vers 20% max (~5s)
           if (prev >= 20) return prev;
-          return prev + 0.5;
+          return prev + 0.2;
         }
         // Réponse API reçue : animer vers la cible
         if (prev >= targetProgress) return prev;
