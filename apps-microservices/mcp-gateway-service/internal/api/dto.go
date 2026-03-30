@@ -15,6 +15,7 @@ type CreateServerRequest struct {
 	ConnectTimeoutMs    *uint             `json:"connect_timeout_ms,omitempty"`
 	Tags                []string          `json:"tags,omitempty"`
 	AutoDiscover        bool              `json:"auto_discover"`
+	ToolPrefix          string            `json:"tool_prefix,omitempty"` // alphanumeric prefix for tool names: {prefix}_{tool_name}
 	// MCP client config
 	MCPTransport string            `json:"mcp_transport,omitempty"` // "http", "sse", "stdio"
 	MCPCommand   string            `json:"mcp_command,omitempty"`   // stdio: command to run
@@ -30,6 +31,7 @@ type UpdateServerRequest struct {
 	TransportPreference *string           `json:"transport_preference,omitempty"`
 	ConnectTimeoutMs    *uint             `json:"connect_timeout_ms,omitempty"`
 	Tags                *[]string         `json:"tags,omitempty"`
+	ToolPrefix          *string           `json:"tool_prefix,omitempty"` // alphanumeric prefix for tool names
 	// MCP client config
 	MCPTransport *string           `json:"mcp_transport,omitempty"`
 	MCPCommand   *string           `json:"mcp_command,omitempty"`
@@ -61,6 +63,7 @@ type ServerResponse struct {
 	LastHealthCheck     *time.Time `json:"last_health_check,omitempty"`
 	LastError           string     `json:"last_error,omitempty"`
 	LastDiscoveredAt    *time.Time `json:"last_discovered_at,omitempty"`
+	ToolPrefix          string            `json:"tool_prefix"`
 	ToolsCount          int               `json:"tools_count"`
 	ToolNames           []ToolSummary     `json:"tool_names"`
 	ResourcesCount      int               `json:"resources_count"`

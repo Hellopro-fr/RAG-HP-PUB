@@ -14,11 +14,37 @@ type BackendServer struct {
 	TransportType string // "sse" or "streamable-http"
 	Name          string
 	Version       string
+	ToolPrefix    string // optional alphanumeric prefix for tool names: {prefix}_{tool_name}
 	Capabilities  mcp.ServerCapabilities
 	Tools         []mcp.Tool
 	Resources     []mcp.Resource
 	Prompts       []mcp.Prompt
 	AuthHeaders   map[string]string // extra headers forwarded to this backend
+}
+
+// PrefixedToolName returns the tool name with the server prefix applied.
+// If prefix is empty, returns the original name.
+func PrefixedToolName(prefix, name string) string {
+	if prefix == "" {
+		return name
+	}
+	return prefix + "_" + name
+}
+
+// prefixedTools returns a copy of tools with the prefix applied to their names.
+func prefixedTools(prefix string, tools []mcp.Tool) []mcp.Tool {
+	if prefix == "" {
+		return tools
+	}
+	out := make([]mcp.Tool, len(tools))
+	for i, t := range tools {
+		out[i] = mcp.Tool{
+			Name:        prefix + "_" + t.Name,
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+		}
+	}
+	return out
 }
 
 // Registry manages the set of active backend MCP servers.
@@ -36,6 +62,15 @@ func (r *Registry) Register(srv *BackendServer) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.servers[srv.ID] = srv
+}
+
+// SetToolPrefix updates the tool prefix for a registered backend server.
+func (r *Registry) SetToolPrefix(id, prefix string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.servers[id]; ok {
+		s.ToolPrefix = prefix
+	}
 }
 
 // Unregister removes a backend server by ID.
@@ -63,18 +98,19 @@ func (r *Registry) All() []*BackendServer {
 	return out
 }
 
-// FindByTool returns the backend that owns the named tool, or nil if not found.
-func (r *Registry) FindByTool(name string) *BackendServer {
+// FindByTool returns the backend that owns the named tool (with prefix matching), or nil.
+// It also returns the original (unprefixed) tool name for forwarding to the backend.
+func (r *Registry) FindByTool(name string) (*BackendServer, string) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, s := range r.servers {
 		for _, t := range s.Tools {
-			if t.Name == name {
-				return s
+			if PrefixedToolName(s.ToolPrefix, t.Name) == name {
+				return s, t.Name
 			}
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 // FindByResource returns the backend that owns the given resource URI, or nil.
@@ -116,13 +152,13 @@ func (r *Registry) MergedCapabilities() mcp.ServerCapabilities {
 	return mcp.AggregateCapabilities(caps)
 }
 
-// MergedTools returns the combined tool list from all backends.
+// MergedTools returns the combined tool list from all backends, with prefixes applied.
 func (r *Registry) MergedTools() []mcp.Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var tools []mcp.Tool
 	for _, s := range r.servers {
-		tools = append(tools, s.Tools...)
+		tools = append(tools, prefixedTools(s.ToolPrefix, s.Tools)...)
 	}
 	return tools
 }
@@ -164,14 +200,14 @@ func (r *Registry) MergedCapabilitiesFiltered(allowed map[string]bool) mcp.Serve
 	return mcp.AggregateCapabilities(caps)
 }
 
-// MergedToolsFiltered returns tools from allowed servers only.
+// MergedToolsFiltered returns tools from allowed servers only, with prefixes applied.
 func (r *Registry) MergedToolsFiltered(allowed map[string]bool) []mcp.Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var tools []mcp.Tool
 	for _, s := range r.servers {
 		if allowed[s.ID] {
-			tools = append(tools, s.Tools...)
+			tools = append(tools, prefixedTools(s.ToolPrefix, s.Tools)...)
 		}
 	}
 	return tools
@@ -179,7 +215,7 @@ func (r *Registry) MergedToolsFiltered(allowed map[string]bool) []mcp.Tool {
 
 // MergedToolsFilteredWithTools returns tools from allowed servers, further filtered
 // by per-server tool whitelist. If allowedTools is nil or a server has no entry,
-// all tools from that server are included.
+// all tools from that server are included. Tool names are returned with prefixes applied.
 func (r *Registry) MergedToolsFilteredWithTools(allowed map[string]bool, allowedTools map[string]map[string]bool) []mcp.Tool {
 	if allowedTools == nil {
 		return r.MergedToolsFiltered(allowed)
@@ -194,15 +230,20 @@ func (r *Registry) MergedToolsFilteredWithTools(allowed map[string]bool, allowed
 		serverToolSet := allowedTools[s.ID]
 		for _, t := range s.Tools {
 			if serverToolSet == nil || serverToolSet[t.Name] {
-				tools = append(tools, t)
+				tools = append(tools, mcp.Tool{
+					Name:        PrefixedToolName(s.ToolPrefix, t.Name),
+					Description: t.Description,
+					InputSchema: t.InputSchema,
+				})
 			}
 		}
 	}
 	return tools
 }
 
-// FindByToolFiltered returns the backend owning the tool, only if it's in the allowed set.
-func (r *Registry) FindByToolFiltered(name string, allowed map[string]bool) *BackendServer {
+// FindByToolFiltered returns the backend owning the tool (matching prefixed name),
+// only if it's in the allowed set. Also returns the original unprefixed tool name.
+func (r *Registry) FindByToolFiltered(name string, allowed map[string]bool) (*BackendServer, string) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, s := range r.servers {
@@ -210,17 +251,18 @@ func (r *Registry) FindByToolFiltered(name string, allowed map[string]bool) *Bac
 			continue
 		}
 		for _, t := range s.Tools {
-			if t.Name == name {
-				return s
+			if PrefixedToolName(s.ToolPrefix, t.Name) == name {
+				return s, t.Name
 			}
 		}
 	}
-	return nil
+	return nil, ""
 }
 
-// FindByToolFilteredWithTools returns the backend owning the tool, only if
-// the server is allowed AND the tool is in the per-server whitelist.
-func (r *Registry) FindByToolFilteredWithTools(name string, allowed map[string]bool, allowedTools map[string]map[string]bool) *BackendServer {
+// FindByToolFilteredWithTools returns the backend owning the tool (matching prefixed name),
+// only if the server is allowed AND the tool is in the per-server whitelist.
+// Also returns the original unprefixed tool name.
+func (r *Registry) FindByToolFilteredWithTools(name string, allowed map[string]bool, allowedTools map[string]map[string]bool) (*BackendServer, string) {
 	if allowedTools == nil {
 		return r.FindByToolFiltered(name, allowed)
 	}
@@ -232,15 +274,15 @@ func (r *Registry) FindByToolFilteredWithTools(name string, allowed map[string]b
 		}
 		serverToolSet := allowedTools[s.ID]
 		for _, t := range s.Tools {
-			if t.Name == name {
-				if serverToolSet == nil || serverToolSet[name] {
-					return s
+			if PrefixedToolName(s.ToolPrefix, t.Name) == name {
+				if serverToolSet == nil || serverToolSet[t.Name] {
+					return s, t.Name
 				}
-				return nil // tool exists but not whitelisted
+				return nil, "" // tool exists but not whitelisted
 			}
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 // MergedResourcesFiltered returns resources from allowed servers only.

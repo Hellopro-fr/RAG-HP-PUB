@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,6 +13,8 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 )
+
+var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 // Handler holds dependencies for the REST API.
 type Handler struct {
@@ -69,6 +72,12 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate tool prefix: must be alphanumeric if provided
+	if req.ToolPrefix != "" && !alphanumericRe.MatchString(req.ToolPrefix) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "tool_prefix must contain only alphanumeric characters (a-z, A-Z, 0-9)"})
+		return
+	}
+
 	id := uuid.New().String()
 	srv := db.MCPServer{
 		ID:                  id,
@@ -80,6 +89,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		HealthStatus:        "unknown",
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
+		ToolPrefix:          req.ToolPrefix,
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 	if req.ConnectTimeoutMs != nil {
@@ -126,6 +136,10 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[api] auto-discover failed for %s: %v", srv.URL, err)
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
+			// Set the tool prefix on the registered backend
+			if req.ToolPrefix != "" {
+				h.registry.SetToolPrefix(id, req.ToolPrefix)
+			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
@@ -251,6 +265,13 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.Marshal(req.MCPHeaders)
 		updates["mcp_headers"] = b
 	}
+	if req.ToolPrefix != nil {
+		if *req.ToolPrefix != "" && !alphanumericRe.MatchString(*req.ToolPrefix) {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "tool_prefix must contain only alphanumeric characters (a-z, A-Z, 0-9)"})
+			return
+		}
+		updates["tool_prefix"] = *req.ToolPrefix
+	}
 
 	if len(updates) > 0 {
 		if err := h.repo.Update(id, updates); err != nil {
@@ -266,6 +287,11 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Update tool prefix on the in-memory registry if changed (even without re-discovery)
+	if req.ToolPrefix != nil {
+		h.registry.SetToolPrefix(id, *req.ToolPrefix)
+	}
+
 	// Re-discover if URL or auth headers changed
 	if (urlChanged || authChanged) && existing.IsActive {
 		h.registry.Unregister(id)
@@ -275,6 +301,7 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[api] re-discover failed for %s: %v", refreshed.URL, err)
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
+			h.registry.SetToolPrefix(id, refreshed.ToolPrefix)
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
 			}
@@ -329,6 +356,7 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] discover on enable failed for %s: %v", srv.URL, err)
 		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 	} else {
+		h.registry.SetToolPrefix(id, srv.ToolPrefix)
 		if backend := h.registry.FindByID(id); backend != nil {
 			h.saveBackendCapabilities(id, backend)
 		}
@@ -378,6 +406,7 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.registry.SetToolPrefix(id, srv.ToolPrefix)
 	if backend := h.registry.FindByID(id); backend != nil {
 		h.saveBackendCapabilities(id, backend)
 	}
@@ -498,7 +527,10 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 
 	toolNames := make([]ToolSummary, 0, len(srv.Tools))
 	for _, t := range srv.Tools {
-		toolNames = append(toolNames, ToolSummary{Name: t.Name, Description: t.Description})
+		toolNames = append(toolNames, ToolSummary{
+			Name:        gateway.PrefixedToolName(srv.ToolPrefix, t.Name),
+			Description: t.Description,
+		})
 	}
 
 	return ServerResponse{
@@ -516,6 +548,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastHealthCheck:     srv.LastHealthCheck,
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
+		ToolPrefix:          srv.ToolPrefix,
 		ToolsCount:          len(srv.Tools),
 		ToolNames:           toolNames,
 		ResourcesCount:      len(srv.Resources),

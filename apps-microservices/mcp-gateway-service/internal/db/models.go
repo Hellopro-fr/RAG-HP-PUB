@@ -26,6 +26,9 @@ type MCPServer struct {
 	MCPEnv       json.RawMessage `gorm:"type:json" json:"mcp_env,omitempty"`                           // for stdio: e.g. {"KEY": "val"}
 	MCPHeaders   json.RawMessage `gorm:"type:json" json:"mcp_headers,omitempty"`                       // for http/sse: e.g. {"Authorization": "Bearer xxx"}
 
+	// ToolPrefix is an optional alphanumeric prefix prepended to all tool names as {prefix}_{tool_name}.
+	ToolPrefix string `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
+
 	IsActive            bool            `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
 	HealthStatus        string          `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
 	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
