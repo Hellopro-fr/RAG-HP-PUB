@@ -307,7 +307,7 @@ def duplicate_collection(
             f"Please drop it manually or choose a different target name."
         )
 
-    target = Collection(name=target_name, schema=schema, consistency_level="Strong")
+    target = Collection(name=target_name, schema=schema)
     logger.info(f"✅  Created collection '{target_name}'")
 
     # ── 4. Recreate indexes ──
@@ -358,7 +358,6 @@ def duplicate_collection(
         expr="",
         output_fields=field_names,
         batch_size=batch_size,
-        consistency_level="Eventually",
     )
 
     # ── Thread-safe counters ──
