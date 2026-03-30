@@ -98,7 +98,7 @@ async def insertion_data(document_data: dict) -> dict:
                             }
                         }
                     )
-                res = await MilvusDocumentCrud().insert_document(documents_bis)
+                res = await base_vectorielle.insert_document(documents_bis)
                 if not res or res.get("status") == "error":
                     raise Exception(f"L'insertion a échoué. Résultat: {res}")
                 logger.debug("Res insert: %s", res)

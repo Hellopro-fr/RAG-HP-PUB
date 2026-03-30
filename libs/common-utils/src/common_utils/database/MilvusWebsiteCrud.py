@@ -228,6 +228,7 @@ class MilvusWebsiteCrud:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch, timeout=30)
+            self.collection.flush()
 
             logger.debug(f"Résultat insertion : {result}")
             logger.debug(f"Clé primaire : {result.primary_keys}")
@@ -378,6 +379,7 @@ class MilvusWebsiteCrud:
             )
 
             self.collection.delete(expr, timeout=30)
+            self.collection.flush()
 
             logger.info(f"[{model_key}] Suppression par URL terminée avec succès.")
 
@@ -434,6 +436,7 @@ class MilvusWebsiteCrud:
             )
 
             self.collection.delete(expr, timeout=30)
+            self.collection.flush()
 
             logger.info(
                 f"[{model_key}] Suppression {page_type} pour domaine {domaine} terminée avec succès."

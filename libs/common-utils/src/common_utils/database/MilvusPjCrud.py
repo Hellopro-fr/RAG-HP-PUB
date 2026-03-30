@@ -208,6 +208,7 @@ class MilvusPjCrud:
                 sanitized_batch.append(data)
 
             result = await asyncio.to_thread(self.collection.insert, sanitized_batch)
+            self.collection.flush()
 
             self.logger.info(f"Clé primaire : {result.primary_keys}")
 
@@ -258,7 +259,7 @@ class MilvusPjCrud:
                 sanitized_batch.append(data)
 
             result = await asyncio.to_thread(self.collection.upsert, sanitized_batch)
-            # self.collection.flush()
+            self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
 
             return {"status": "success", "data": result}
@@ -302,6 +303,7 @@ class MilvusPjCrud:
             result = await asyncio.to_thread(
                 self.collection.delete, f"id == {id_entity_milvus}"
             )
+            self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
             return {

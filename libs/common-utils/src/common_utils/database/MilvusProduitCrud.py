@@ -263,7 +263,7 @@ class MilvusProduitsCrud:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
-            # self.collection.flush()
+            self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}")
             self.logger.info(f"Clé primaire : {result.primary_keys}")
@@ -501,7 +501,7 @@ class MilvusProduitsCrud:
             expr = f"id in [{ids_str}]"
 
             self.collection.delete(expr)
-            # self.collection.flush()
+            self.collection.flush()
 
             self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
@@ -559,7 +559,7 @@ class MilvusProduitsCrud:
             )
 
             self.collection.delete(expr)
-            # self.collection.flush()
+            self.collection.flush()
 
             self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
