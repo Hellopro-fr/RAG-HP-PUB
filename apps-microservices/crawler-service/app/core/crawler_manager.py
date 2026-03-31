@@ -689,7 +689,7 @@ class CrawlerManager:
         logger.info(f"Force-finished job '{crawl_id}': {old_status} -> {target_status}")
         return {"crawl_id": crawl_id, "old_status": old_status, "new_status": target_status}
 
-    async def get_all_statuses(self, status_filter: Optional[str] = None) -> Dict[str, CrawlStatus]:
+    async def get_all_statuses(self, status_filter: Optional[list] = None) -> Dict[str, CrawlStatus]:
         all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
         if not all_job_keys:
             return {}
@@ -709,7 +709,7 @@ class CrawlerManager:
             except (json.JSONDecodeError, TypeError):
                 continue
             # Apply filter before computing full status (avoids unnecessary disk I/O)
-            if status_filter and job_info.get("status") != status_filter:
+            if status_filter and job_info.get("status") not in status_filter:
                 continue
             crawl_id = all_job_keys[i].replace(CRAWL_JOB_PREFIX, "")
             status_data = await self.get_status(job_info)
