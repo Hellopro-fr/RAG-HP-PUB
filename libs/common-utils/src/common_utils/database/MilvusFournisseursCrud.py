@@ -41,14 +41,14 @@ class MilvusFournisseursCrud:
             raise ValueError(
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
-        self.logger = kwargs.get("logger", logging)
+        self.logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _connect_to_milvus(self):
         try:
             connections.disconnect(self._CONNECTION_ALIAS)
         except Exception:
             pass
-        self.logger.info("Connexion sur Zilliz cloud...")
+        self.logger.debug("Connexion sur Zilliz cloud...")
         connections.connect(
             self._CONNECTION_ALIAS,
             host=self.config.ZILLIZ_URI,
@@ -56,7 +56,7 @@ class MilvusFournisseursCrud:
             user=self.config.ZILLIZ_USER,
             password=self.config.ZILLIZ_PASSWORD,
         )
-        self.logger.info("Connexion sur Zilliz cloud avec succès.")
+        self.logger.debug("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
@@ -74,13 +74,13 @@ class MilvusFournisseursCrud:
         model_key = model_config.model_id
 
         if utility.has_collection(collection_name, using=self._CONNECTION_ALIAS) and self.config.RECREATE_COLLECTIONS:
-            logging.warning(
-                f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'"
+            self.logger.warning(
+                f"[{model_key}] Collection déjà existante, suppression en cours : '{collection_name}'"
             )
             utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS)
 
         if not utility.has_collection(collection_name, using=self._CONNECTION_ALIAS):
-            self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
+            self.logger.debug(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
                 # Todo : ce clé doit être unique
@@ -188,16 +188,16 @@ class MilvusFournisseursCrud:
             # collection.create_index(field_name="domaine5", index_name="idx_domaine5")
             # collection.create_index(field_name="domaine6", index_name="idx_domaine6")
 
-            self.logger.info(f"[{model_key}] ✓ Index créés.")
+            self.logger.info(f"[{model_key}] Index créés.")
         else:
-            self.logger.info(
+            self.logger.debug(
                 f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
             )
             collection = Collection(collection_name, using=self._CONNECTION_ALIAS)
 
         collection.load()
-        self.logger.info(
-            f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête."
+        self.logger.debug(
+            f"[{model_key}] Collection '{collection_name}' chargée et prête."
         )
         return collection
 
@@ -234,10 +234,10 @@ class MilvusFournisseursCrud:
 
             result = self.collection.insert(sanitized_batch)
 
-            self.logger.info(f"Résultat insertion : {result}")
-            self.logger.info(f"Clé primaire : {result.primary_keys}")
+            self.logger.debug(f"Résultat insertion : {result}")
+            self.logger.debug(f"Clé primaire : {result.primary_keys}")
 
-            self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
+            self.logger.info(f"[{model_key}] Insertion terminée avec succès.")
 
             return {
                 "ids": (
@@ -298,7 +298,7 @@ class MilvusFournisseursCrud:
 
             result = self.collection.upsert(data)
             self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
+            self.logger.info(f"[{model_key}] Mise à jour terminée avec succès.")
 
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
@@ -343,7 +343,7 @@ class MilvusFournisseursCrud:
             )
             result = self.collection.delete(f"id == {id_entity_milvus}")
             self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
+            self.logger.info(f"[{model_key}] Suppression terminée avec succès.")
 
             return {
                 "status": "success",
@@ -391,7 +391,7 @@ class MilvusFournisseursCrud:
                 consistency_level="Bounded",
             )
             # self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+            self.logger.info(f"[{model_key}] Récupèration terminée avec succès.")
 
             return {"status": "success", "data": result}
 
@@ -455,7 +455,7 @@ class MilvusFournisseursCrud:
                 consistency_level="Bounded",
             )
             # self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+            self.logger.info(f"[{model_key}] Récupèration terminée avec succès.")
 
             return {"status": "success", "data": result}
 

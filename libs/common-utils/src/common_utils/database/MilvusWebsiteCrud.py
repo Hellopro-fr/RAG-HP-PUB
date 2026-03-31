@@ -43,7 +43,7 @@ class MilvusWebsiteCrud:
             raise ValueError(
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
-        self.logger = kwargs.get("logger", logging)
+        self.logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _connect_to_milvus(self):
         logger.debug("Connexion sur Zilliz cloud...")
@@ -59,7 +59,7 @@ class MilvusWebsiteCrud:
             password=self.config.ZILLIZ_PASSWORD,
             timeout=10,  # Add a 10-second timeout to prevent indefinite hanging
         )
-        logger.info("Connexion sur Zilliz cloud avec succès.")
+        logger.debug("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
@@ -194,7 +194,7 @@ class MilvusWebsiteCrud:
 
         logger.debug(f"Chargement de la collection '{collection_name}' en mémoire...")
         collection.load(timeout=60)
-        logger.info(f"[{model_key}] Collection '{collection_name}' chargée et prête.")
+        logger.debug(f"[{model_key}] Collection '{collection_name}' chargée et prête.")
         return collection
 
     def insert_website(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:

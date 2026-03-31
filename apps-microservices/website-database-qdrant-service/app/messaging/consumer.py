@@ -77,7 +77,7 @@ class Consumer:
     def _on_message_callback(self, ch, method, properties, body):
         try:
             website_data = json.loads(body)
-            logger.debug(f"Database-Website-Processor: Message reçu pour URL: {website_data.get('data', [{}])[0].get('url', 'URL inconnue')}")
+            logger.info("Processing website url=%s", website_data.get("data", [{}])[0].get("url", "unknown"))
 
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(website_data)

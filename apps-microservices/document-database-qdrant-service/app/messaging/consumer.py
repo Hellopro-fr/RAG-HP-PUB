@@ -61,6 +61,7 @@ class Consumer:
         """Tâche pour traiter un seul message, y compris la logique de retry/dlq."""
         try:
             document_data = json.loads(message.body)
+            logger.info("Processing document fichier_source=%s", document_data.get("data", [{}])[0].get("fichier_source", "unknown"))
 
             if not document_data:
                 raise ValueError("Données invalides (contenu vide ou 'document_data' manquant).")

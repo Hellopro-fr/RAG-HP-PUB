@@ -8,6 +8,11 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# Module-level singletons — persist across messages, reuse cached connections
+_milvus_devis_crud = MilvusDevisCrud()
+_qdrant_devis_crud = QdrantDevisCrud()
+_correspondance_devis = MilvusDevisInserer()
+
 
 def insertion_data(devis_data: dict) -> dict:
     """
@@ -27,9 +32,9 @@ def insertion_data(devis_data: dict) -> dict:
         raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
     if bdd.lower() == "milvus":
-        base_vectorielle = MilvusDevisCrud()
+        base_vectorielle = _milvus_devis_crud
     else:
-        base_vectorielle = QdrantDevisCrud()
+        base_vectorielle = _qdrant_devis_crud
 
     processing_functions = {
         CollectionName.DEVIS: base_vectorielle.insert_devis,
@@ -45,7 +50,7 @@ def insertion_data(devis_data: dict) -> dict:
 
     lead_id = devis[0].get("lead_id", "lead_id inconnu")
     res = base_vectorielle.get_devis(lead_id=lead_id)
-    correspondance_devis = MilvusDevisInserer()
+    correspondance_devis = _correspondance_devis
 
     status = res.get("status")
     data = res.get("data", [])

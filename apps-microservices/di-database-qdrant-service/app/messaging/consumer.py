@@ -79,7 +79,7 @@ class Consumer:
         """
         try:
             devis_data = json.loads(body)
-            logger.debug("Database-Devis-Processor: Message recu.")
+            logger.info("Processing devis lead_id=%s", devis_data.get("data", [{}])[0].get("lead_id", "unknown"))
 
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(devis_data)

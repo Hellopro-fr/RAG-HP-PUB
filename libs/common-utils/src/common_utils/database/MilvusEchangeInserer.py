@@ -39,7 +39,7 @@ class MilvusEchangeInserer:
             raise ValueError(
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
-        self.logger = kwargs.get("logger", logging)
+        self.logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _connect_to_milvus(self):
         try:
@@ -212,7 +212,7 @@ class MilvusEchangeInserer:
                 }
 
             self.logger.info(
-                f"[Correspondance Echange BO-Milvus] ✓ Récupération terminée avec succès."
+                f"[Correspondance Echange BO-Milvus] Récupération terminée avec succès."
             )
 
             return {
@@ -273,7 +273,7 @@ class MilvusEchangeInserer:
                     self.collection.flush()
 
                     self.logger.info(
-                        f"[Correspondance Echange BO-Milvus] ✓ Suppression terminée avec succès."
+                        f"[Correspondance Echange BO-Milvus] Suppression terminée avec succès."
                     )
 
                     return {

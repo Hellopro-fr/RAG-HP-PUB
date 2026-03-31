@@ -8,6 +8,11 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# Module-level singletons — persist across messages, reuse cached connections
+_milvus_echange_crud = MilvusEchangeCrud()
+_qdrant_echange_crud = QdrantEchangeCrud()
+_correspondance_echange = MilvusEchangeInserer()
+
 
 def insertion_data(echange_data: dict) -> dict:
     """
@@ -27,9 +32,9 @@ def insertion_data(echange_data: dict) -> dict:
         raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
     if bdd.lower() == "milvus":
-        base_vectorielle = MilvusEchangeCrud()
+        base_vectorielle = _milvus_echange_crud
     else:
-        base_vectorielle = QdrantEchangeCrud()
+        base_vectorielle = _qdrant_echange_crud
 
     processing_functions = {
         CollectionName.ECHANGE: base_vectorielle.insert_echange,
@@ -45,7 +50,7 @@ def insertion_data(echange_data: dict) -> dict:
 
     conversation_id = echanges[0].get("conversation_id", "conversation_id inconnu")
     res = base_vectorielle.get_echange(conversation_id=conversation_id)
-    correspondance_echange = MilvusEchangeInserer()
+    correspondance_echange = _correspondance_echange
 
     status = res.get("status")
     data = res.get("data", [])

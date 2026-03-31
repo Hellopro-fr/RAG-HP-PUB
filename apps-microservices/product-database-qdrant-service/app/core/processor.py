@@ -8,6 +8,14 @@ from datetime import datetime
 import difflib
 
 
+logger = logging.getLogger(__name__)
+
+# Module-level singletons — persist across messages, reuse cached connections
+_milvus_produit_crud = MilvusProduitsCrud()
+_qdrant_produit_crud = QdrantProduitsCrud()
+_correspondance_produit = MilvusProduitInserer()
+
+
 def insertion_data(produits_data: dict) -> dict:
     """
     Prend toutes les resultats de l'embedding puis ensuite inserer les chunk sur bdd vectoriel
@@ -40,9 +48,9 @@ def insertion_data(produits_data: dict) -> dict:
         raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
     if bdd.lower() == "milvus":
-        base_vectorielle = MilvusProduitsCrud()
+        base_vectorielle = _milvus_produit_crud
     else:
-        base_vectorielle = QdrantProduitsCrud()
+        base_vectorielle = _qdrant_produit_crud
 
     processing_functions = {
         CollectionName.PRODUIT: base_vectorielle.insert_produits,
@@ -60,7 +68,7 @@ def insertion_data(produits_data: dict) -> dict:
     # print(f"📦 Produit ID: {id_produit} | Nombre de chunks: {len(produits)}")
 
     res = base_vectorielle.get_produit(id_produit=id_produit)
-    correspondance_produit = MilvusProduitInserer()
+    correspondance_produit = _correspondance_produit
 
     status = res.get("status")
     data = res.get("data", [])
