@@ -41,10 +41,10 @@ class MilvusProduitInserer:
             raise ValueError(
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
-        self.logger = kwargs.get("logger", logging)
+        self.logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
+        self.logger.debug("Connexion sur Zilliz cloud...")
         try:
             connections.disconnect(self._CONNECTION_ALIAS)
         except Exception:
@@ -56,7 +56,7 @@ class MilvusProduitInserer:
             user=self.config.ZILLIZ_USER,
             password=self.config.ZILLIZ_PASSWORD,
         )
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        self.logger.debug("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
         if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
@@ -74,13 +74,13 @@ class MilvusProduitInserer:
         model_key = model_config.model_id
 
         if utility.has_collection(collection_name, using=self._CONNECTION_ALIAS) and self.config.RECREATE_COLLECTIONS:
-            logging.warning(
-                f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'"
+            self.logger.warning(
+                f"[{model_key}] Collection déjà existante, suppression en cours : '{collection_name}'"
             )
             utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS)
 
         if not utility.has_collection(collection_name, using=self._CONNECTION_ALIAS):
-            self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
+            self.logger.debug(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
                 # TODO a completer / verifier
@@ -121,7 +121,7 @@ class MilvusProduitInserer:
             collection.create_index(field_name="embedding", index_params=index_params)
 
         else:
-            self.logger.info(
+            self.logger.debug(
                 f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
             )
             collection = Collection(collection_name, using=self._CONNECTION_ALIAS)
@@ -162,10 +162,10 @@ class MilvusProduitInserer:
 
             result = self.collection.insert(sanitized_batch)
 
-            self.logger.info(f"Résultat insertion : {result}")
-            self.logger.info(f"Clé primaire : {result.primary_keys}")
+            self.logger.debug(f"Résultat insertion : {result}")
+            self.logger.debug(f"Clé primaire : {result.primary_keys}")
 
-            self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
+            self.logger.info(f"[{model_key}] Insertion terminée avec succès.")
 
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
@@ -234,7 +234,7 @@ class MilvusProduitInserer:
                 }
 
             self.logger.info(
-                f"[Correspondance Produit BO-Milvus] ✓ Récupération terminée avec succès."
+                f"[Correspondance Produit BO-Milvus] Récupération terminée avec succès."
             )
 
             return {
@@ -297,7 +297,7 @@ class MilvusProduitInserer:
                     self.collection.flush()
 
                     self.logger.info(
-                        f"[Correspondance Produit BO-Milvus] ✓ Suppression terminée avec succès."
+                        f"[Correspondance Produit BO-Milvus] Suppression terminée avec succès."
                     )
 
                     return {
@@ -363,7 +363,7 @@ class MilvusProduitInserer:
                     self.collection.flush()
 
                     self.logger.info(
-                        f"[Correspondance Produit BO-Milvus] ✓ Suppression terminée avec succès."
+                        f"[Correspondance Produit BO-Milvus] Suppression terminée avec succès."
                     )
 
                     return {

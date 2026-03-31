@@ -79,7 +79,7 @@ class Consumer:
         """
         try:
             produits_data = json.loads(body)
-            logger.debug("Database-Produits-Processor: Message reçu.")
+            logger.info("Processing produit id_produit=%s", produits_data.get("data", [{}])[0].get("id_produit", "unknown"))
 
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(produits_data)

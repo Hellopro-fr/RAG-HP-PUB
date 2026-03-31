@@ -38,7 +38,7 @@ class MilvusDevisInserer:
             raise ValueError(
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
-        self.logger = kwargs.get("logger", logging)
+        self.logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _connect_to_milvus(self):
         try:

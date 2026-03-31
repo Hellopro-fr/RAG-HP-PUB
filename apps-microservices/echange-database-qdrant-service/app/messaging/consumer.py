@@ -79,7 +79,7 @@ class Consumer:
         """
         try:
             echange_data = json.loads(body)
-            logger.debug("Database-Echange-Processor: Message reçu.")
+            logger.info("Processing echange conversation_id=%s", echange_data.get("data", [{}])[0].get("conversation_id", "unknown"))
 
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(echange_data)

@@ -6,6 +6,10 @@ from common_utils.autres.CollectionName import CollectionName
 
 logger = logging.getLogger(__name__)
 
+# Module-level singletons — persist across messages, reuse cached connections
+base_vectorielle = MilvusDocumentCrud()
+pj_crud = MilvusPjCrud()
+
 
 async def insertion_data(document_data: dict) -> dict:
     """
@@ -31,8 +35,6 @@ async def insertion_data(document_data: dict) -> dict:
     except ValueError:
         logger.error("'%s' n'est pas un nom de collection valide.", collection)
         return None
-
-    base_vectorielle = MilvusDocumentCrud()
 
     processing_functions = {
         # CollectionName.DOCUMENT: base_vectorielle.insert_document
@@ -105,7 +107,6 @@ async def insertion_data(document_data: dict) -> dict:
 
             return res
 
-        pj_crud = MilvusPjCrud()
         res = await pj_crud.get_pj(fichier_source=fichier_source)
 
         logger.debug("Document-database-service: Ajout data")
