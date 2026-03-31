@@ -21,7 +21,6 @@ type CreateServerRequest struct {
 	MCPCommand   string            `json:"mcp_command,omitempty"`   // stdio: command to run
 	MCPArgs      []string          `json:"mcp_args,omitempty"`      // stdio: command arguments
 	MCPEnv       map[string]string `json:"mcp_env,omitempty"`       // stdio: environment variables
-	MCPHeaders   map[string]string `json:"mcp_headers,omitempty"`   // http/sse: extra headers
 }
 
 type UpdateServerRequest struct {
@@ -37,7 +36,6 @@ type UpdateServerRequest struct {
 	MCPCommand   *string           `json:"mcp_command,omitempty"`
 	MCPArgs      *[]string         `json:"mcp_args,omitempty"`
 	MCPEnv       map[string]string `json:"mcp_env,omitempty"`
-	MCPHeaders   map[string]string `json:"mcp_headers,omitempty"`
 }
 
 // ── Response DTOs ───────────────────────────────────────────────────────────────
@@ -73,7 +71,7 @@ type ServerResponse struct {
 	MCPCommand          string            `json:"mcp_command,omitempty"`
 	MCPArgs             []string          `json:"mcp_args,omitempty"`
 	MCPEnv              map[string]string `json:"mcp_env,omitempty"`
-	MCPHeaders          map[string]string `json:"mcp_headers,omitempty"`
+	HasAuthHeaders      bool              `json:"has_auth_headers"`
 	CreatedBy           string            `json:"created_by,omitempty"`
 	CreatedAt           time.Time         `json:"created_at"`
 	UpdatedAt           time.Time         `json:"updated_at"`

@@ -193,8 +193,10 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 	if len(mcpEnv) > 0 {
 		srv.MCPEnv, _ = json.Marshal(mcpEnv)
 	}
+	// Merge imported headers into auth_headers (encrypted at rest)
 	if len(mcpHeaders) > 0 {
-		srv.MCPHeaders, _ = json.Marshal(mcpHeaders)
+		b, _ := json.Marshal(mcpHeaders)
+		srv.AuthHeaders = b
 	}
 
 	if err := h.repo.Create(&srv); err != nil {
@@ -212,8 +214,9 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 	result.Status = "created"
 
 	// Auto-discover for remote servers only
+	// Use mcpHeaders directly because repo.Create() encrypted srv.AuthHeaders in-place
 	if autoDiscover && mcpTransport != "stdio" && serverURL != "" {
-		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, parseAuthHeaders(srv.AuthHeaders)); err != nil {
+		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, mcpHeaders); err != nil {
 			log.Printf("[api] import auto-discover failed for %s (%s): %v", name, srv.URL, err)
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {

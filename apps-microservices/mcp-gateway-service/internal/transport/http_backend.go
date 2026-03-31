@@ -48,13 +48,15 @@ func NewBackendClient(sseURL string, headers map[string]string) *BackendClient {
 
 // NewBackendClientWithEndpoint creates a client with an already-known message
 // endpoint URL. Defaults to streamable-http transport.
+// Uses a longer timeout (120s) for tool calls since backends like external APIs
+// may need more time to execute queries.
 func NewBackendClientWithEndpoint(messageURL string, headers map[string]string) *BackendClient {
 	return &BackendClient{
 		messageURL:   messageURL,
 		extraHeaders: headers,
 		transport:    transportStreamableHTTP,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 	}
 }

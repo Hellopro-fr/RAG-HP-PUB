@@ -101,9 +101,6 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	if len(req.MCPEnv) > 0 {
 		srv.MCPEnv, _ = json.Marshal(req.MCPEnv)
 	}
-	if len(req.MCPHeaders) > 0 {
-		srv.MCPHeaders, _ = json.Marshal(req.MCPHeaders)
-	}
 
 	// Encode auth headers as JSON bytes for encryption
 	if len(req.AuthHeaders) > 0 {
@@ -260,10 +257,6 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	if len(req.MCPEnv) > 0 {
 		b, _ := json.Marshal(req.MCPEnv)
 		updates["mcp_env"] = b
-	}
-	if len(req.MCPHeaders) > 0 {
-		b, _ := json.Marshal(req.MCPHeaders)
-		updates["mcp_headers"] = b
 	}
 	if req.ToolPrefix != nil {
 		if *req.ToolPrefix != "" && !alphanumericRe.MatchString(*req.ToolPrefix) {
@@ -526,10 +519,6 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 	if len(srv.MCPEnv) > 0 {
 		json.Unmarshal(srv.MCPEnv, &mcpEnv)
 	}
-	var mcpHeaders map[string]string
-	if len(srv.MCPHeaders) > 0 {
-		json.Unmarshal(srv.MCPHeaders, &mcpHeaders)
-	}
 
 	toolNames := make([]ToolSummary, 0, len(srv.Tools))
 	for _, t := range srv.Tools {
@@ -563,7 +552,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		MCPCommand:          srv.MCPCommand,
 		MCPArgs:             mcpArgs,
 		MCPEnv:              mcpEnv,
-		MCPHeaders:          mcpHeaders,
+		HasAuthHeaders:      len(srv.AuthHeaders) > 0,
 		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,
