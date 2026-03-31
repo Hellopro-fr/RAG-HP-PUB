@@ -2,9 +2,12 @@
 QC Tracking Service - Interface de visualisation des fichiers tracking
 """
 import os
-from fastapi import FastAPI, HTTPException
+import io
+import zipfile
+from datetime import datetime, date
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
@@ -217,6 +220,48 @@ async def search_files(query: str, max_results: int = 50) -> List[SearchResult]:
             break
     
     return results
+
+
+@app.get("/api/download-by-date")
+async def download_files_by_date(
+    target_date: str = Query(..., description="Date au format YYYY-MM-DD"),
+):
+    """Download all tracking files modified on a given date as a ZIP archive"""
+    try:
+        parsed_date = date.fromisoformat(target_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Format de date invalide. Utilisez YYYY-MM-DD")
+
+    matched_files = []
+    for root, dirs, files in os.walk(TRACKING_BASE_PATH):
+        for filename in files:
+            full_path = os.path.join(root, filename)
+            try:
+                mtime = datetime.fromtimestamp(os.path.getmtime(full_path)).date()
+                if mtime == parsed_date:
+                    rel_path = os.path.relpath(full_path, TRACKING_BASE_PATH)
+                    matched_files.append((full_path, rel_path))
+            except Exception as e:
+                logger.warning(f"Error reading mtime for {full_path}: {e}")
+
+    if not matched_files:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Aucun fichier trouvé pour la date {target_date}"
+        )
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for full_path, rel_path in matched_files:
+            zf.write(full_path, rel_path)
+    zip_buffer.seek(0)
+
+    filename = f"tracking_{target_date}.zip"
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 if __name__ == "__main__":

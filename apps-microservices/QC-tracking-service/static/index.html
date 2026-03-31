@@ -94,6 +94,78 @@
             color: var(--text-secondary);
         }
 
+        /* Download by date */
+        .download-date-container {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .download-date-container label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .download-date-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .date-input {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .date-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn-download-date {
+            padding: 8px 14px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .btn-download-date:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-download-date:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .download-date-status {
+            font-size: 0.75rem;
+            margin-top: 6px;
+            min-height: 1.1em;
+        }
+
+        .download-date-status.error {
+            color: #f87171;
+        }
+
+        .download-date-status.success {
+            color: var(--success);
+        }
+
         /* Breadcrumb */
         .breadcrumb {
             padding: 12px 20px;
@@ -389,6 +461,15 @@
             <div class="search-container">
                 <input type="text" class="search-input" id="searchInput" placeholder="🔍 Rechercher dans les fichiers...">
             </div>
+
+            <div class="download-date-container">
+                <label>📦 Télécharger les trackings d'une date</label>
+                <div class="download-date-row">
+                    <input type="date" class="date-input" id="dateInput">
+                    <button class="btn-download-date" id="downloadDateBtn" disabled>Télécharger</button>
+                </div>
+                <div class="download-date-status" id="downloadDateStatus"></div>
+            </div>
             
             <div class="search-results" id="searchResults" style="display: none;"></div>
             
@@ -640,6 +721,57 @@
         });
 
         document.getElementById('downloadBtn').addEventListener('click', downloadFile);
+
+        // Download by date
+        const dateInput = document.getElementById('dateInput');
+        const downloadDateBtn = document.getElementById('downloadDateBtn');
+        const downloadDateStatus = document.getElementById('downloadDateStatus');
+
+        // Set default date to today
+        dateInput.value = new Date().toISOString().split('T')[0];
+        downloadDateBtn.disabled = false;
+
+        dateInput.addEventListener('change', () => {
+            downloadDateBtn.disabled = !dateInput.value;
+            downloadDateStatus.textContent = '';
+            downloadDateStatus.className = 'download-date-status';
+        });
+
+        downloadDateBtn.addEventListener('click', async () => {
+            const targetDate = dateInput.value;
+            if (!targetDate) return;
+
+            downloadDateBtn.disabled = true;
+            downloadDateStatus.textContent = 'Préparation du ZIP...';
+            downloadDateStatus.className = 'download-date-status';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/download-by-date?target_date=${encodeURIComponent(targetDate)}`);
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Erreur serveur');
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `tracking_${targetDate}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                downloadDateStatus.textContent = 'Téléchargement lancé !';
+                downloadDateStatus.className = 'download-date-status success';
+            } catch (error) {
+                downloadDateStatus.textContent = error.message;
+                downloadDateStatus.className = 'download-date-status error';
+            } finally {
+                downloadDateBtn.disabled = false;
+            }
+        });
 
         // Initial load
         navigateTo('');
