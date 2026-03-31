@@ -2,7 +2,7 @@ import json
 from common_utils.cleaner.CleanHTML import CleanHTML
 from common_utils.autres.CollectionName import CollectionName
 
-def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",origin: str = "bo") -> dict:
+def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",origin: str = "bo", mode: str = "default") -> dict:
     """
     Prend un dictionnaire de produit, le nettoie et prépare le message
     pour l’étape d’embedding.
@@ -35,7 +35,8 @@ def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",or
         },
         "collection": CollectionName.PRODUIT,
         "database": bdd,
-        "origin": origin
+        "origin": origin,
+        "mode": mode
     }
     
     # Afficher le message de sortie pour débogage
