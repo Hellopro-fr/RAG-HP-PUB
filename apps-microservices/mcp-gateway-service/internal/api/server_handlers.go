@@ -402,7 +402,13 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	h.registry.Unregister(id)
 	if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, parseAuthHeaders(srv.AuthHeaders)); err != nil {
 		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
-		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "discovery failed: " + err.Error()})
+		// Clear stale tools/resources/prompts so UI doesn't show outdated data
+		_ = h.repo.ClearCapabilities(id)
+		updated, _ := h.repo.GetByID(id)
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"error":  "discovery failed: " + err.Error(),
+			"server": toServerDetailResponse(updated),
+		})
 		return
 	}
 
