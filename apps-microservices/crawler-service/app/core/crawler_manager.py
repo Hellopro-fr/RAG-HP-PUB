@@ -281,8 +281,21 @@ class CrawlerManager:
             )
         except Exception as e:
             logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}", exc_info=True)
-            # Ensure we clean up the slot if relaunch fails
+            # Release the reserved slot since relaunch failed
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            # Mark job as failed
+            job_info["status"] = "failed"
+            job_info["isError"] = "OOM_RELAUNCH_FAILED"
+            await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
+            await self._publish_update(crawl_id, "failed")
+            if job_info.get("failure_callback_url"):
+                asyncio.create_task(self._send_failure_webhook(
+                    str(job_info["failure_callback_url"]),
+                    crawl_id,
+                    job_info["domain"],
+                    -1,
+                    job_info.get("crawl_mode", "standard")
+                ))
 
     async def _send_success_webhook(self, job_info: dict):
         callback_url = job_info.get("callback_url")
@@ -453,6 +466,11 @@ class CrawlerManager:
         job_info_initial = await cache_service.get_json(job_key)
         if not job_info_initial:
             logger.error(f"Cannot monitor process for '{crawl_id}': job info vanished immediately after start.")
+            # Clean up: decrement counter and remove from local processes
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            if crawl_id in self.local_processes:
+                del self.local_processes[crawl_id]
+            self._kill_process_group(process.pid)
             return
 
         log_path = os.path.join(job_info_initial['storage_path'], 'crawler.log')
@@ -602,12 +620,19 @@ class CrawlerManager:
         
         old_status = job_info.get("status")
 
+        # Kill the actual OS process if running on this replica
+        if crawl_id in self.local_processes:
+            proc = self.local_processes[crawl_id]
+            if proc.returncode is None:
+                self._kill_process_group(proc.pid)
+                logger.info(f"Force-finish: killed process for '{crawl_id}' (PID {proc.pid}).")
+
         # Validate target status
         if target_status not in ("finished", "failed"):
             target_status = "finished"
 
         # Release the global concurrency slot if the job was holding one
-        if old_status in ("running", "restarting_oom"):
+        if old_status in ("running", "restarting_oom", "stopping"):
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
             logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{old_status}').")
 
@@ -620,8 +645,17 @@ class CrawlerManager:
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, target_status)
         
-        # Send force-finish notification callback
-        asyncio.create_task(self._send_stop_webhook(job_info, target_status))
+        # Use appropriate webhook based on target status
+        if target_status == "failed" and job_info.get("failure_callback_url"):
+            asyncio.create_task(self._send_failure_webhook(
+                str(job_info["failure_callback_url"]),
+                crawl_id,
+                job_info.get("domain", "unknown"),
+                -1,  # Force-finish exit code
+                job_info.get("crawl_mode", "standard")
+            ))
+        else:
+            asyncio.create_task(self._send_stop_webhook(job_info, target_status))
         
         # Write completion marker
         marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
@@ -999,9 +1033,12 @@ class CrawlerManager:
                     "crawl_id": crawl_id, "status": final_status, "domain": domain,
                     "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
                     "storage_path": job_storage_path,
-                    "failure_callback_url": None, "pid": None
+                    "callback_url": None, "failure_callback_url": None, "pid": None
                 }
-                
+
+                if final_status in ("running", "stopping"):
+                    logger.warning(f"Recovered job '{crawl_id}' has no callback_url. Webhooks will not fire for this job.")
+
                 await cache_service.set_json(job_key, reindexed_data)
                 summary["reindexed_jobs"] += 1
         
@@ -1100,76 +1137,92 @@ class CrawlerManager:
         archives_dir = settings.ARCHIVES_SHARED_PATH
         target_archive_path = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
 
-        # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
-        if os.path.exists(target_archive_path):
-            archive_size = os.path.getsize(target_archive_path)
-            logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
-            await self._mark_as_archived(crawl_id, job_info)
-            return {
-                "crawl_id": crawl_id,
-                "archive_status": "pending_upload",
-                "archive_size_bytes": archive_size,
-            }
-
-        # Save current status snapshot before archiving (critical: dataset files will be deleted)
-        try:
-            current_status = await self.get_status(job_info)
-            snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
-            snapshot_data = current_status.model_dump(mode='json')
-
-            async with aiofiles.open(snapshot_path, 'w') as f:
-                await f.write(json.dumps(snapshot_data, indent=2, default=str))
-
-            logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
-        except Exception as e:
-            logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
-
-        logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
-
-        try:
-            def _archive_and_cleanup():
-                """Synchronous archive creation + local cleanup, run in a worker thread."""
-                os.makedirs(archives_dir, exist_ok=True)
-
-                # Create tar.gz archive in the shared volume
-                base_name = os.path.join(archives_dir, crawl_id)
-                final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
-
-                # Cleanup local data files (preserve logs, markers, and status snapshot)
-                files_to_keep = {'crawler.log', '_callback_payload.json',
-                                 '_completion_marker.json', '_status_snapshot.json',
-                                 '_exit_reason.json', '_update_report.json',
-                                 'update_stats.json'}
-                for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                    for name in files:
-                        if name not in files_to_keep:
-                            os.remove(os.path.join(root, name))
-                    for name in dirs:
-                        try:
-                            os.rmdir(os.path.join(root, name))
-                        except OSError:
-                            pass
-
-                archive_size = os.path.getsize(final_path)
-                return final_path, archive_size
-
-            final_path, archive_size = await anyio.to_thread.run_sync(_archive_and_cleanup)
-
-            logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes). Local storage cleaned up.")
-
-            # Mark job as 'archived' to prevent double-archiving
-            await self._mark_as_archived(crawl_id, job_info)
-
-            return {
-                "crawl_id": crawl_id,
-                "archive_status": "pending_upload",
-                "archive_size_bytes": archive_size,
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+        # Acquire a Redis lock to prevent concurrent archiving of the same crawl
+        lock_key = f"archive_lock:{crawl_id}"
+        lock_acquired = await cache_service.redis_client.set(lock_key, "1", nx=True, ex=300)  # 5 min TTL
+        if not lock_acquired:
             raise HTTPException(
-                status_code=500, detail=f"Archiving failed: {str(e)}")
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Archiving for crawl '{crawl_id}' is already in progress."
+            )
+
+        try:
+            # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
+            if os.path.exists(target_archive_path):
+                archive_size = os.path.getsize(target_archive_path)
+                logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
+                await self._mark_as_archived(crawl_id, job_info)
+                return {
+                    "crawl_id": crawl_id,
+                    "archive_status": "pending_upload",
+                    "archive_size_bytes": archive_size,
+                }
+
+            # Save current status snapshot before archiving (critical: dataset files will be deleted)
+            try:
+                current_status = await self.get_status(job_info)
+                snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
+                snapshot_data = current_status.model_dump(mode='json')
+
+                async with aiofiles.open(snapshot_path, 'w') as f:
+                    await f.write(json.dumps(snapshot_data, indent=2, default=str))
+
+                logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
+            except Exception as e:
+                logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
+
+            logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
+
+            try:
+                def _archive_and_cleanup():
+                    """Synchronous archive creation + local cleanup, run in a worker thread."""
+                    os.makedirs(archives_dir, exist_ok=True)
+
+                    # Create tar.gz archive in the shared volume
+                    base_name = os.path.join(archives_dir, crawl_id)
+                    final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
+
+                    # Verify archive integrity
+                    archive_size = os.path.getsize(final_path)
+                    if archive_size == 0:
+                        raise RuntimeError(f"Archive created at '{final_path}' is empty (0 bytes).")
+
+                    # Cleanup local data files (preserve logs, markers, and status snapshot)
+                    files_to_keep = {'crawler.log', '_callback_payload.json',
+                                     '_completion_marker.json', '_status_snapshot.json',
+                                     '_exit_reason.json', '_update_report.json',
+                                     'update_stats.json'}
+                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                        for name in files:
+                            if name not in files_to_keep:
+                                os.remove(os.path.join(root, name))
+                        for name in dirs:
+                            try:
+                                os.rmdir(os.path.join(root, name))
+                            except OSError:
+                                pass
+
+                    return final_path, archive_size
+
+                final_path, archive_size = await anyio.to_thread.run_sync(_archive_and_cleanup)
+
+                logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes). Local storage cleaned up.")
+
+                # Mark job as 'archived' to prevent double-archiving
+                await self._mark_as_archived(crawl_id, job_info)
+
+                return {
+                    "crawl_id": crawl_id,
+                    "archive_status": "pending_upload",
+                    "archive_size_bytes": archive_size,
+                }
+
+            except Exception as e:
+                logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500, detail=f"Archiving failed: {str(e)}")
+        finally:
+            await cache_service.redis_client.delete(lock_key)
 
     async def _mark_as_archived(self, crawl_id: str, job_info: dict):
         """Updates job status to 'archived' in Redis to prevent double-archiving."""
@@ -1223,7 +1276,7 @@ class CrawlerManager:
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
 
-                if status in ("running", "restarting_oom"):
+                if status in ("running", "restarting_oom", "stopping"):
                     # Check for staleness — applies to both running and restarting_oom jobs.
                     # A restarting_oom job holds a concurrency slot but may be orphaned
                     # if the replica that owned it crashed without cleanup.

@@ -58,7 +58,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         # Heuristic: if storage was modified recently (< 2 hours), assume running
         try:
             storage_mtime = os.path.getmtime(job_storage_path)
-            age_hours = (datetime.now().timestamp() - storage_mtime) / 3600
+            age_hours = (datetime.utcnow().timestamp() - storage_mtime) / 3600
             if age_hours < 2:
                 final_status = "running"
                 logger.info(f"No completion marker for '{crawl_id}', but storage modified {age_hours:.1f}h ago. Assuming RUNNING.")

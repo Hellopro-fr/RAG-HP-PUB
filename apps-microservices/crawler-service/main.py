@@ -101,7 +101,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.on_event("startup")
 async def startup_event():
-    global reconciliation_task
+    global reconciliation_task, archive_cleanup_task
     logger.info("Crawler Service starting up.")
     await init_redis_pool()
 
@@ -122,7 +122,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    global reconciliation_task
+    global reconciliation_task, archive_cleanup_task
     logger.info("Crawler Service shutting down. Stopping all active crawls and disconnecting from Redis.")
     
     # Cancel the reconciliation task

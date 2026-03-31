@@ -10,6 +10,7 @@ import zipfile
 import shutil
 import tempfile
 import time
+import anyio
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -284,8 +285,8 @@ async def upload_migration_archive(
     if domain_name:
         domain_name = sanitize_path_component(domain_name, "domain_name")
 
-    # Cleanup stale chunks from previous failed uploads
-    cleanup_stale_chunks()
+    # Cleanup stale chunks from previous failed uploads (run in thread to avoid blocking event loop)
+    await anyio.to_thread.run_sync(cleanup_stale_chunks)
 
     # Determine file format and effective filename
     filename_to_use = original_filename or archive.filename or "archive.tar.gz"
@@ -320,7 +321,8 @@ async def upload_migration_archive(
             os.makedirs(chunk_dir, exist_ok=True)
             
             # Save the chunk
-            chunk_path = os.path.join(chunk_dir, archive.filename)
+            safe_chunk_name = sanitize_path_component(archive.filename or f"chunk_{total_parts}", "chunk_filename")
+            chunk_path = os.path.join(chunk_dir, safe_chunk_name)
             with open(chunk_path, "wb") as f:
                 shutil.copyfileobj(archive.file, f)
             
