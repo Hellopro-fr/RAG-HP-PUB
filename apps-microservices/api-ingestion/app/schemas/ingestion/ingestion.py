@@ -31,6 +31,13 @@ class BaseIngestion(BaseModel):
             description="Indique l'origine ou la source des données produits uniquement. Champ non obligatoire.",
         ),
     ] = None
+    mode: Annotated[
+        Optional[str],
+        Field(
+            title="Mode update ou insert",
+            description="Indique le mode de publication des données. Champ non obligatoire.",
+        ),
+    ] = "default"
 
 
 class BaseIngestionGraph(BaseModel):
