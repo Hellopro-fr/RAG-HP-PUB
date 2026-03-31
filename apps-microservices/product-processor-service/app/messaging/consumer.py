@@ -80,6 +80,7 @@ class Consumer:
             product_data = data.get('data', {})
             bdd = data.get('database', "qdrant")
             origin = data.get('origin', 'bo')
+            mode = data.get('mode', 'default')
 
             if not product_data:
                 raise ValueError("Aucune donnée de produit trouvée dans le message.")
@@ -88,7 +89,7 @@ class Consumer:
             print(f"\n📥 Product-Processor: Message reçu pour '{product_id}'.")
 
             # 1. Appelle la logique métier PURE
-            output_message = process_product_data_for_embedding(product_data,bdd,origin)
+            output_message = process_product_data_for_embedding(product_data,bdd,origin,mode)
             
             # 2. Utilise le publisher pour envoyer le résultat
             self.publisher.publish_message(output_message)

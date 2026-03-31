@@ -35,7 +35,8 @@ async def embed_input_data(input_data: dict, **kwargs) -> dict:
             "collection": collection,
             "data": result_embedding,
             "database": input_data.get("database", "qdrant"),
-            "origin": input_data.get('origin', "")
+            "origin": input_data.get('origin', ""),
+            "mode": input_data.get('mode', "default")
         }
         
         logging.info(f"✓ Embedding réussi pour la collection '{collection}'. {len(result_embedding)} chunk(s) traité(s).")
