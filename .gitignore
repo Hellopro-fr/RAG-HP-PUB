@@ -115,6 +115,9 @@ local/*
 
 triton-model-repo
 
+# Secrets (GCP credentials, etc.)
+secrets/
+
 # Docker compose override file
 docker-compose.override.yml
 
