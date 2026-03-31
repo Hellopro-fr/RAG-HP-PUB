@@ -212,17 +212,20 @@ export default function QuestionnaireClient({
     // Afficher le loader et lancer matching + prix en parallèle
     setShowLoader(true);
 
+    // Wrapper monotone : le progress ne recule jamais (protection contre les réponses tardives)
+    const safeProgress = (value: number) => setLoaderProgress(prev => Math.max(prev, value));
+
     // Lancer prix et matching en parallèle
     // Le prix répond plus vite → met à jour le progress à 25%
-    // Le matching prend le relais (50→65→75) via onProgress
+    // Le matching prend le relais (50→65→75) via safeProgress
     const prixPromise = fetchPriceEstimation()
-      .then(() => { setLoaderProgress(25); })
+      .then(() => { safeProgress(25); })
       .catch((err) => {
         console.error('[Prix] Error (non-blocking):', err);
-        setLoaderProgress(25); // Même en erreur, on avance
+        safeProgress(25); // Même en erreur, on avance
       });
 
-    const matchingPromise = processMatching(setLoaderProgress); // progress interne : 50→65→75
+    const matchingPromise = processMatching(safeProgress); // progress interne : 50→65→75
 
     const [, destination] = await Promise.all([prixPromise, matchingPromise]);
 
