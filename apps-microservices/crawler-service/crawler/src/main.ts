@@ -504,6 +504,17 @@ if (redisCount > 0 && !dropData) {
     console.log("Syncing hot state to disk...");
     const urlIterator = context.dedupManager.getAllUrlsIterator();
     await updateUrlsCrawledStreaming(domain, urlIterator);
+
+    // Rehydrate '?' and '#' counters from dataset (dedup already in Redis)
+    if (context.config.crawleeStorageName) {
+        for await (const url of rehydrateDedupFromDataset(context.config.crawleeStorageName)) {
+            if (url.includes('?')) context.countQuestionMark++;
+            if (url.includes('#')) context.countDiez++;
+        }
+        if (context.countQuestionMark > 0 || context.countDiez > 0) {
+            console.log(`Rehydrated counters (hot): ${context.countQuestionMark} URLs with '?', ${context.countDiez} URLs with '#'`);
+        }
+    }
 } else {
     // Cold Start or Drop Data
     console.log("❄️ Cold Start detected (Redis empty). Loading from disk...");
@@ -511,9 +522,24 @@ if (redisCount > 0 && !dropData) {
     await context.dedupManager.loadFromIterator(urlIterator);
 
     // Rehydrate from dataset if we crashed before saving to history file
+    // Also count URLs with '?' and '#' to restore postNavigationHooks counters
     if (context.config.crawleeStorageName) {
         const rehydrateIter = rehydrateDedupFromDataset(context.config.crawleeStorageName);
-        await context.dedupManager.loadFromIterator(rehydrateIter);
+        let qmCount = 0;
+        let diezCount = 0;
+        const countingIter = async function*() {
+            for await (const url of rehydrateIter) {
+                if (url.includes('?')) qmCount++;
+                if (url.includes('#')) diezCount++;
+                yield url;
+            }
+        };
+        await context.dedupManager.loadFromIterator(countingIter());
+        context.countQuestionMark = qmCount;
+        context.countDiez = diezCount;
+        if (qmCount > 0 || diezCount > 0) {
+            console.log(`Rehydrated counters from dataset: ${qmCount} URLs with '?', ${diezCount} URLs with '#'`);
+        }
     }
 }
 
