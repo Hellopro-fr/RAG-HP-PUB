@@ -428,7 +428,6 @@ export const dropDataset = async (name: string) => {
  */
 export const startCrawler = async (
     router: RouterHandler<PlaywrightCrawlingContext<Dictionary>>,
-    startUrl: Array<string>,
     domain: string,
     paramPerCrawl: number,
     paramPerMinute: number,

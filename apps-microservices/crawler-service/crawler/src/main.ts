@@ -876,7 +876,6 @@ if (typeCrawling == "sitemap") {
     // Launch
     const crawler = await startCrawler(
         router,
-        [site],
         domain,
         paramPerCrawl,
         paramPerMinute,
