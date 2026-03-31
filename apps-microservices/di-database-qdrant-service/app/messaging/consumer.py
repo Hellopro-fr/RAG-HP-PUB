@@ -79,7 +79,7 @@ class Consumer:
         """
         try:
             devis_data = json.loads(body)
-            logger.debug("Database-Devis-Processor: Message recu.")
+            logger.info("Processing devis lead_id=%s", devis_data.get("data", [{}])[0].get("lead_id", "unknown"))
 
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(devis_data)
@@ -94,21 +94,27 @@ class Consumer:
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message est invalide.
             logger.error("Erreur permanente. Message envoye a la DLQ finale. Erreur: %s", e, exc_info=True)
-            dlq_props = DLQProperties.create_dlq_properties(e, 'di-database-qdrant-service', 0, method)
-            ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+            try:
+                dlq_props = DLQProperties.create_dlq_properties(e, 'di-database-qdrant-service', 0, method)
+                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception:
+                logger.warning("Channel closed during error handling, message will be redelivered")
 
         except Exception as e:
             # Erreur potentiellement transitoire (ex: BDD indisponible).
             retry_count = self._get_retry_count(properties)
-            if retry_count < MAX_RETRIES:
-                logger.warning(f"Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoye pour une nouvelle tentative. Erreur: %s", e, exc_info=True)
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            else:
-                logger.error(f"Echec apres {MAX_RETRIES + 1} tentatives. Message envoye a la DLQ finale. Erreur: %s", e, exc_info=True)
-                dlq_props = DLQProperties.create_dlq_properties(e, 'di-database-qdrant-service', MAX_RETRIES, method)
-                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+            try:
+                if retry_count < MAX_RETRIES:
+                    logger.warning(f"Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoye pour une nouvelle tentative. Erreur: %s", e, exc_info=True)
+                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                else:
+                    logger.error(f"Echec apres {MAX_RETRIES + 1} tentatives. Message envoye a la DLQ finale. Erreur: %s", e, exc_info=True)
+                    dlq_props = DLQProperties.create_dlq_properties(e, 'di-database-qdrant-service', MAX_RETRIES, method)
+                    ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
+                    ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception:
+                logger.warning("Channel closed during error handling, message will be redelivered")
 
     def start_consuming(self):
         """
@@ -120,7 +126,7 @@ class Consumer:
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
                 logger.info("Database-Devis-Processor: En attente de messages...")
                 self.channel.start_consuming()
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker, pika.exceptions.StreamLostError) as e:
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker, pika.exceptions.StreamLostError, pika.exceptions.ChannelWrongStateError) as e:
                 attempt += 1
                 wait_time = min(5 * attempt, 30)
                 logger.warning(f"Connexion perdue: {e}, tentative de reconnexion dans {wait_time}s...")

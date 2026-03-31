@@ -6,6 +6,11 @@ from common_utils.autres.CollectionName import CollectionName
 
 logger = logging.getLogger(__name__)
 
+# Module-level singletons — persist across messages, reuse cached connections
+_milvus_website_crud = MilvusWebsiteCrud()
+_qdrant_website_crud = QdrantWebsiteCrud()
+
+
 def insertion_data(website_data: dict) -> dict:
     """
     Inserts or updates (upserts) website data into the specified vector database.
@@ -53,9 +58,9 @@ def insertion_data(website_data: dict) -> dict:
 
     # Initialisation du client de base de données
     if bdd.lower() == "milvus":
-        base_vectorielle = MilvusWebsiteCrud()
+        base_vectorielle = _milvus_website_crud
     else:
-        base_vectorielle = QdrantWebsiteCrud()
+        base_vectorielle = _qdrant_website_crud
 
     # --- Étape 1: Upsert - Supprimer l'ancien contenu si existant ---
     try:

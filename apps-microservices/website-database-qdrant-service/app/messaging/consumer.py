@@ -77,7 +77,7 @@ class Consumer:
     def _on_message_callback(self, ch, method, properties, body):
         try:
             website_data = json.loads(body)
-            logger.debug(f"Database-Website-Processor: Message reçu pour URL: {website_data.get('data', [{}])[0].get('url', 'URL inconnue')}")
+            logger.info("Processing website url=%s", website_data.get("data", [{}])[0].get("url", "unknown"))
 
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(website_data)
@@ -92,21 +92,27 @@ class Consumer:
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message est invalide.
             logger.error(f"Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
-            dlq_props = DLQProperties.create_dlq_properties(e, 'website-database-qdrant-service', 0, method)
-            ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+            try:
+                dlq_props = DLQProperties.create_dlq_properties(e, 'website-database-qdrant-service', 0, method)
+                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception:
+                logger.warning("Channel closed during error handling, message will be redelivered")
 
         except Exception as e:
             # Erreur potentiellement transitoire (ex: BDD indisponible).
             retry_count = self._get_retry_count(properties)
-            if retry_count < MAX_RETRIES:
-                logger.warning(f"Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}", exc_info=True)
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            else:
-                logger.error(f"Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
-                dlq_props = DLQProperties.create_dlq_properties(e, 'website-database-qdrant-service', MAX_RETRIES, method)
-                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+            try:
+                if retry_count < MAX_RETRIES:
+                    logger.warning(f"Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}", exc_info=True)
+                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                else:
+                    logger.error(f"Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
+                    dlq_props = DLQProperties.create_dlq_properties(e, 'website-database-qdrant-service', MAX_RETRIES, method)
+                    ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
+                    ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception:
+                logger.warning("Channel closed during error handling, message will be redelivered")
 
     def start_consuming(self):
         """
@@ -118,7 +124,7 @@ class Consumer:
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
                 logger.info("Database-Website-Processor: En attente de messages...")
                 self.channel.start_consuming()
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker, pika.exceptions.StreamLostError) as e:
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker, pika.exceptions.StreamLostError, pika.exceptions.ChannelWrongStateError) as e:
                 attempt += 1
                 wait_time = min(5 * attempt, 30)
                 logger.warning(f"Connexion perdue: {e}, tentative de reconnexion dans {wait_time}s...")

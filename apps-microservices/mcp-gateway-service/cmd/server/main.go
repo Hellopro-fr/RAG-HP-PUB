@@ -115,8 +115,8 @@ func main() {
 	log.Println("[main] UI mounted at /ui/")
 
 	// Scope handler factory: creates a ScopedGateway for filtered access
-	scopeFactory := func(allowedIDs map[string]bool) transport.Handler {
-		return gateway.NewScopedGateway(gw, allowedIDs)
+	scopeFactory := func(allowedIDs map[string]bool, allowedTools map[string]map[string]bool) transport.Handler {
+		return gateway.NewScopedGateway(gw, allowedIDs, allowedTools)
 	}
 
 	// MCP transport mux (SSE + streamable HTTP) with scope filtering
@@ -210,6 +210,10 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				// Utilise les capabilities cachées de la DB
 				registerFromDBCache(gw, &s)
 			} else {
+				// Set tool prefix from DB on the freshly discovered backend
+				if s.ToolPrefix != "" {
+					reg.SetToolPrefix(s.ID, s.ToolPrefix)
+				}
 				_ = repo.UpdateHealth(s.ID, "healthy", "")
 			}
 		}(srv)
@@ -226,6 +230,7 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 		TransportType: srv.TransportType,
 		Name:          srv.ServerName,
 		Version:       srv.ServerVersion,
+		ToolPrefix:    srv.ToolPrefix,
 	}
 
 	// Reconstruit les capabilities depuis les données DB

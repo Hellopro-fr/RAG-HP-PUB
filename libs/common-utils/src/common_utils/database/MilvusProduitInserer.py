@@ -27,6 +27,8 @@ class ModelConfig:
 
 
 class MilvusProduitInserer:
+    _CONNECTION_ALIAS = "milvus_correspondance_produits"
+
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -39,28 +41,28 @@ class MilvusProduitInserer:
             raise ValueError(
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
-        self.logger = kwargs.get("logger", logging)
+        self.logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
+        self.logger.debug("Connexion sur Zilliz cloud...")
         try:
-            connections.disconnect("default")
+            connections.disconnect(self._CONNECTION_ALIAS)
         except Exception:
             pass
         connections.connect(
-            "default",
+            self._CONNECTION_ALIAS,
             host=self.config.ZILLIZ_URI,
             port=self.config.ZILLIZ_PORT,
             user=self.config.ZILLIZ_USER,
             password=self.config.ZILLIZ_PASSWORD,
         )
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        self.logger.debug("Connexion sur Zilliz cloud avec succès.")
 
     def _ensure_connected(self):
-        if self.collection is not None and connections.has_connection("default"):
+        if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
             return
         with milvus_connection_lock:
-            if self.collection is not None and connections.has_connection("default"):
+            if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
                 return
             self.collection = None
             self._connect_to_milvus()
@@ -71,14 +73,14 @@ class MilvusProduitInserer:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
-        if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
-            logging.warning(
-                f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'"
+        if utility.has_collection(collection_name, using=self._CONNECTION_ALIAS) and self.config.RECREATE_COLLECTIONS:
+            self.logger.warning(
+                f"[{model_key}] Collection déjà existante, suppression en cours : '{collection_name}'"
             )
-            utility.drop_collection(collection_name)
+            utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS)
 
-        if not utility.has_collection(collection_name):
-            self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
+        if not utility.has_collection(collection_name, using=self._CONNECTION_ALIAS):
+            self.logger.debug(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
                 # TODO a completer / verifier
@@ -106,7 +108,7 @@ class MilvusProduitInserer:
                 fields, description=f"Collection de chunks de Produit pour {model_key}"
             )
 
-            collection = Collection(collection_name, schema, consistency_level="Bounded")
+            collection = Collection(collection_name, schema, consistency_level="Bounded", using=self._CONNECTION_ALIAS)
 
             index_params = {
                 "metric_type": "COSINE",
@@ -119,10 +121,10 @@ class MilvusProduitInserer:
             collection.create_index(field_name="embedding", index_params=index_params)
 
         else:
-            self.logger.info(
+            self.logger.debug(
                 f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
             )
-            collection = Collection(collection_name)
+            collection = Collection(collection_name, using=self._CONNECTION_ALIAS)
 
         collection.load()
         return collection
@@ -159,12 +161,11 @@ class MilvusProduitInserer:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
-            # self.collection.flush()
 
-            self.logger.info(f"Résultat insertion : {result}")
-            self.logger.info(f"Clé primaire : {result.primary_keys}")
+            self.logger.debug(f"Résultat insertion : {result}")
+            self.logger.debug(f"Clé primaire : {result.primary_keys}")
 
-            self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
+            self.logger.info(f"[{model_key}] Insertion terminée avec succès.")
 
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
@@ -233,7 +234,7 @@ class MilvusProduitInserer:
                 }
 
             self.logger.info(
-                f"[Correspondance Produit BO-Milvus] ✓ Récupération terminée avec succès."
+                f"[Correspondance Produit BO-Milvus] Récupération terminée avec succès."
             )
 
             return {
@@ -296,7 +297,7 @@ class MilvusProduitInserer:
                     self.collection.flush()
 
                     self.logger.info(
-                        f"[Correspondance Produit BO-Milvus] ✓ Suppression terminée avec succès."
+                        f"[Correspondance Produit BO-Milvus] Suppression terminée avec succès."
                     )
 
                     return {
@@ -362,7 +363,7 @@ class MilvusProduitInserer:
                     self.collection.flush()
 
                     self.logger.info(
-                        f"[Correspondance Produit BO-Milvus] ✓ Suppression terminée avec succès."
+                        f"[Correspondance Produit BO-Milvus] Suppression terminée avec succès."
                     )
 
                     return {

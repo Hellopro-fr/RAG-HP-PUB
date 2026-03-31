@@ -13,8 +13,13 @@ import (
 // Uses a plain string so both scopetoken and transport packages can read it.
 const AllowedServersContextKey = "scope_allowed_servers"
 
+// AllowedToolsContextKey is the context key for scope-allowed tools per server.
+// Value is map[string]map[string]bool: server_id → tool_name → true.
+// A nil inner map for a server means all tools are allowed.
+const AllowedToolsContextKey = "scope_allowed_tools"
+
 // Middleware returns an HTTP middleware that validates X-MCP-Scope-Token
-// and stores the allowed server IDs in the request context.
+// and stores the allowed server IDs and tool selections in the request context.
 func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,11 +55,26 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 				for _, s := range dbToken.Servers {
 					serverIDs[s.ServerID] = true
 				}
+
+				// Build allowed tools map from DB tool rows
+				// server_id → tool_name → true; missing server_id key = all tools
+				var allowedTools map[string]map[string]bool
+				if len(dbToken.Tools) > 0 {
+					allowedTools = make(map[string]map[string]bool)
+					for _, t := range dbToken.Tools {
+						if allowedTools[t.ServerID] == nil {
+							allowedTools[t.ServerID] = make(map[string]bool)
+						}
+						allowedTools[t.ServerID][t.ToolName] = true
+					}
+				}
+
 				ct = &CachedToken{
-					ID:        dbToken.ID,
-					ServerIDs: serverIDs,
-					ExpiresAt: dbToken.ExpiresAt,
-					IsActive:  dbToken.IsActive,
+					ID:           dbToken.ID,
+					ServerIDs:    serverIDs,
+					AllowedTools: allowedTools,
+					ExpiresAt:    dbToken.ExpiresAt,
+					IsActive:     dbToken.IsActive,
 				}
 				cache.Set(hash, ct)
 			}
@@ -69,8 +89,11 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 				return
 			}
 
-			// Store allowed server IDs in context
+			// Store allowed server IDs and tool selections in context
 			ctx := context.WithValue(r.Context(), AllowedServersContextKey, ct.ServerIDs)
+			if ct.AllowedTools != nil {
+				ctx = context.WithValue(ctx, AllowedToolsContextKey, ct.AllowedTools)
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

@@ -34,6 +34,23 @@
     .tag-dropdown-item { padding: 6px 12px; font-size: 13px; cursor: pointer; }
     .tag-dropdown-item:hover, .tag-dropdown-item.active { background: #f0f7ff; color: #005fa1; }
     .tag-dropdown-item.create { color: #0078c7; font-style: italic; }
+    /* Drag-and-drop tool picker */
+    .dnd-panel { min-height: 280px; }
+    .dnd-panel.drag-over { background: #f0f9ff; outline: 2px dashed #60a5fa; outline-offset: -2px; }
+    .dnd-server-group { margin-bottom: 2px; }
+    .dnd-server-header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; transition: background .1s; }
+    .dnd-server-header:hover { background: #dbeafe; }
+    .dnd-server-header.dragging { opacity: .5; }
+    .dnd-server-header .srv-chevron { transition: transform .15s; flex-shrink: 0; }
+    .dnd-server-header .srv-chevron.collapsed { transform: rotate(-90deg); }
+    .dnd-server-header .srv-count { font-size: 10px; font-weight: 500; color: #60a5fa; margin-left: auto; }
+    .dnd-tools-list { padding-left: 12px; overflow: hidden; transition: max-height .2s ease; }
+    .dnd-tools-list.collapsed { max-height: 0 !important; }
+    .dnd-tool-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 12px; margin: 1px 0; border-radius: 5px; cursor: pointer; user-select: none; font-size: 12px; color: #374151; border-left: 2px solid #c7d2fe; transition: background .1s, opacity .15s; }
+    .dnd-tool-item:hover { background: #eef2ff; }
+    .dnd-tool-item.dragging { opacity: .5; }
+    .dnd-tool-item .tool-icon { color: #818cf8; flex-shrink: 0; }
+    .dnd-tool-item .tool-desc { font-size: 11px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
 </head>
 <body class="h-full bg-gray-50 text-gray-900">
@@ -239,6 +256,11 @@
             <div id="tag-dropdown" class="tag-dropdown hidden"></div>
           </div>
         </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Préfixe des outils <span class="text-xs text-gray-400">(optionnel, alphanumérique uniquement)</span></label>
+          <input id="form-tool-prefix" type="text" placeholder="ex. rag, crm, bdd" pattern="[a-zA-Z0-9]*" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <p class="text-xs text-gray-400 mt-1">Si renseigné, les outils seront exposés comme <code>{préfixe}_{nom_outil}</code></p>
+        </div>
         <div id="form-discover-row" class="flex items-center gap-2">
           <input id="form-discover" type="checkbox" checked class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
           <label for="form-discover" class="text-sm text-gray-700">Découverte automatique des capacités à la création</label>
@@ -335,12 +357,12 @@
   <!-- Modal: Create Scope Token -->
   <div id="token-backdrop" class="hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onclick="closeTokenModal()"></div>
   <div id="token-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg fade-in" onclick="event.stopPropagation()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full fade-in" style="max-width:1024px" onclick="event.stopPropagation()">
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Créer un jeton d'accès</h2>
+        <h2 id="token-modal-title" class="text-lg font-semibold">Créer un jeton d'accès</h2>
         <button onclick="closeTokenModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
-      <div class="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+      <div class="px-6 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Nom du jeton <span class="text-red-400">*</span></label>
           <input id="token-name" type="text" required placeholder="ex. dev-rag-only" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
@@ -355,10 +377,35 @@
           <p class="text-xs text-gray-400 mt-1">Nom utilisé comme clé dans le .mcp.json généré</p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Accès serveurs <span class="text-red-400">*</span></label>
-          <p class="text-xs text-gray-400 mb-2">Sélectionnez les serveurs auxquels ce jeton peut accéder</p>
-          <div id="token-server-list" class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-100">
-            <p class="text-xs text-gray-400 p-3">Chargement des serveurs...</p>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Accès serveurs & outils <span class="text-red-400">*</span></label>
+          <p class="text-xs text-gray-400 mb-2">Glissez les serveurs et outils vers la droite, ou double-cliquez pour les déplacer</p>
+          <div class="grid grid-cols-2 gap-3" style="min-height:300px">
+            <!-- LEFT: Available -->
+            <div class="border border-gray-200 rounded-lg flex flex-col">
+              <div class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-lg">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Disponible</span>
+                  <button type="button" onclick="dndAddAll()" class="text-xs text-brand-600 hover:text-brand-800 font-medium">Tout ajouter</button>
+                </div>
+                <input id="dnd-search-available" type="text" placeholder="Rechercher..." oninput="dndFilter('available')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
+              </div>
+              <div id="dnd-available" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'available')">
+                <p class="text-xs text-gray-400 p-2">Chargement...</p>
+              </div>
+            </div>
+            <!-- RIGHT: Selected -->
+            <div class="border border-brand-200 rounded-lg flex flex-col bg-brand-50/30">
+              <div class="px-3 py-2 border-b border-brand-100 bg-brand-50 rounded-t-lg">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs font-semibold text-brand-700 uppercase tracking-wide">Sélectionné <span id="dnd-selected-count" class="text-brand-500 font-normal">(0)</span></span>
+                  <button type="button" onclick="dndRemoveAll()" class="text-xs text-red-500 hover:text-red-700 font-medium">Tout retirer</button>
+                </div>
+                <input id="dnd-search-selected" type="text" placeholder="Rechercher..." oninput="dndFilter('selected')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
+              </div>
+              <div id="dnd-selected" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'selected')">
+                <p id="dnd-empty-msg" class="text-xs text-gray-400 p-2 italic">Glissez des serveurs ou outils ici</p>
+              </div>
+            </div>
           </div>
         </div>
         <div>
@@ -722,6 +769,7 @@
       document.getElementById('form-env').value = '';
       document.getElementById('form-auth-headers').value = '';
       document.getElementById('form-mcp-headers').value = '';
+      document.getElementById('form-tool-prefix').value = '';
       setMCPTransport('http');
       document.getElementById('form-discover-row').classList.remove('hidden');
       openModal();
@@ -743,6 +791,7 @@
         document.getElementById('form-env').value = s.mcp_env ? JSON.stringify(s.mcp_env) : '';
         document.getElementById('form-auth-headers').value = s.auth_headers ? JSON.stringify(s.auth_headers) : '';
         document.getElementById('form-mcp-headers').value = s.mcp_headers ? JSON.stringify(s.mcp_headers) : '';
+        document.getElementById('form-tool-prefix').value = s.tool_prefix || '';
         setMCPTransport(s.mcp_transport || 'http');
         document.getElementById('form-discover-row').classList.add('hidden');
         openModal();
@@ -760,7 +809,9 @@
       const mcpTransport = getFormMCPTransport();
 
       // Build request body
-      const body = { name: document.getElementById('form-name').value, tags, mcp_transport: mcpTransport };
+      const toolPrefix = document.getElementById('form-tool-prefix').value.trim();
+      if (toolPrefix && !/^[a-zA-Z0-9]+$/.test(toolPrefix)) { toast('Le préfixe doit être alphanumérique (a-z, A-Z, 0-9)', 'error'); return; }
+      const body = { name: document.getElementById('form-name').value, tags, mcp_transport: mcpTransport, tool_prefix: toolPrefix };
 
       if (mcpTransport === 'stdio') {
         body.url = 'stdio://' + (document.getElementById('form-command').value || 'local');
@@ -925,6 +976,7 @@
     let _fullToken = '';  // full token for clipboard (never displayed)
     let _fullMcpJson = ''; // full .mcp.json for clipboard (never displayed)
     const _tokenCardJsonMap = {}; // elId -> full JSON for clipboard
+    let _editingTokenId = null; // non-null when editing an existing token
 
     async function loadMCPConfig() {
       try {
@@ -965,11 +1017,18 @@
                       ${statusBadge}
                     </div>
                     <div class="flex items-center gap-1">
-                      <button onclick="copyJSON('${jsonElId}')" class="copy-btn inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Copier
+                      <button onclick="copyJSON('${jsonElId}')" class="copy-btn inline-flex items-center justify-center w-7 h-7 text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100" title="Copier">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                       </button>
-                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100">Révoquer</button>` : ''}
-                      <button onclick="deleteToken('${t.id}')" class="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-md hover:bg-red-100">Supprimer</button>
+                      ${t.is_active ? `<button onclick="openEditTokenModal('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100" title="Modifier">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>` : ''}
+                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100" title="Révoquer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                      </button>` : ''}
+                      <button onclick="deleteToken('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-red-700 bg-red-50 rounded-md hover:bg-red-100" title="Supprimer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
                     </div>
                   </div>
                   <div class="mt-2 flex items-center gap-4 text-xs text-gray-500">
@@ -1012,6 +1071,8 @@
 
     // ── Scope Token modal ────────────────────────────────────────────────
     function openTokenModal() {
+      _editingTokenId = null;
+      document.getElementById('token-modal-title').textContent = "Créer un jeton d'accès";
       document.getElementById('token-name').value = '';
       document.getElementById('token-desc').value = '';
       document.getElementById('token-server-name').value = 'hellopro-gateway';
@@ -1025,31 +1086,338 @@
       document.getElementById('token-custom-args-prefix').value = '';
       document.getElementById('token-command-doc-link').classList.add('hidden');
       document.getElementById('token-created-result').classList.add('hidden');
-      document.getElementById('token-submit-btn').disabled = false;
-      document.getElementById('token-submit-btn').classList.remove('hidden');
+      const btn = document.getElementById('token-submit-btn');
+      btn.disabled = false;
+      btn.classList.remove('hidden');
+      btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
       document.getElementById('token-backdrop').classList.remove('hidden');
       document.getElementById('token-modal').classList.remove('hidden');
 
-      // Populate server checkboxes
-      const listEl = document.getElementById('token-server-list');
-      if (allServers.length === 0) {
-        listEl.innerHTML = '<p class="text-xs text-gray-400 p-3">Aucun serveur actif — ajoutez d\'abord des serveurs</p>';
-      } else {
-        listEl.innerHTML = allServers.map(s => `
-          <label class="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-            <input type="checkbox" value="${s.id}" class="token-server-cb rounded border-gray-300 text-brand-600 focus:ring-brand-500">
-            <div class="flex-1 min-w-0">
-              <span class="text-sm font-medium">${esc(s.name)}</span>
-              <span class="text-xs text-gray-400 ml-2">${s.tools_count || 0} outil${(s.tools_count||0)>1?'s':''}</span>
-            </div>
-          </label>`).join('');
-      }
+      // Populate drag-and-drop panels
+      dndPopulate();
       document.getElementById('token-name').focus();
+    }
+
+    async function openEditTokenModal(tokenId) {
+      try {
+        const token = await api(`/tokens/${tokenId}`);
+        _editingTokenId = tokenId;
+        document.getElementById('token-modal-title').textContent = "Modifier le jeton d'accès";
+        document.getElementById('token-name').value = token.name || '';
+        document.getElementById('token-desc').value = token.description || '';
+        document.getElementById('token-server-name').value = 'hellopro-gateway';
+        document.getElementById('token-mcp-command').value = token.mcp_command || 'npx';
+        updateCommandDoc();
+
+        // Expiration
+        if (token.expires_at) {
+          document.querySelector('input[name="token_expiry_type"][value="custom"]').checked = true;
+          document.getElementById('token-expires').disabled = false;
+          // Convert RFC3339 to datetime-local format
+          const d = new Date(token.expires_at);
+          document.getElementById('token-expires').value = d.toISOString().slice(0, 16);
+        } else {
+          document.querySelector('input[name="token_expiry_type"][value="permanent"]').checked = true;
+          document.getElementById('token-expires').disabled = true;
+          document.getElementById('token-expires').value = '';
+        }
+
+        document.getElementById('token-allow-http').checked = true;
+        document.getElementById('token-created-result').classList.add('hidden');
+        const btn = document.getElementById('token-submit-btn');
+        btn.disabled = false;
+        btn.classList.remove('hidden');
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications';
+
+        document.getElementById('token-backdrop').classList.remove('hidden');
+        document.getElementById('token-modal').classList.remove('hidden');
+
+        // Populate drag-and-drop panels then move selected servers/tools to the right panel
+        dndPopulate();
+        dndRestoreSelection(token.server_ids || [], token.server_tools || []);
+
+        document.getElementById('token-name').focus();
+      } catch (e) {
+        toast('Erreur lors du chargement du jeton: ' + e.message, 'error');
+      }
+    }
+
+    /** Restore the drag-and-drop selection from a token's server_ids and server_tools */
+    function dndRestoreSelection(serverIds, serverTools) {
+      // Build a map: server_id -> [tool_names] (null means all tools)
+      const toolMap = {};
+      for (const st of serverTools) {
+        toolMap[st.server_id] = st.tool_names || [];
+      }
+
+      for (const sid of serverIds) {
+        const srv = allServers.find(s => s.id === sid);
+        if (!srv) continue;
+        const allToolNames = (srv.tool_names || []).map(t => t.name);
+
+        if (toolMap[sid]) {
+          // Partial selection: move only specified tools
+          // First, need to apply prefix to compare with UI tool names
+          const selectedToolNames = toolMap[sid];
+          const prefix = srv.tool_prefix || '';
+          const prefixedSelected = selectedToolNames.map(n => prefix ? prefix + '_' + n : n);
+
+          for (const toolName of prefixedSelected) {
+            dndTransferTool(sid, toolName, true);
+          }
+        } else {
+          // All tools selected: move entire server
+          dndTransferServer(sid, true);
+        }
+      }
+      dndUpdateCount();
     }
 
     function closeTokenModal() {
       document.getElementById('token-backdrop').classList.add('hidden');
       document.getElementById('token-modal').classList.add('hidden');
+    }
+
+    // ── Drag-and-drop hierarchical tool picker ──────────────────────────
+
+    const SVG_CHEVRON = '<svg class="w-3.5 h-3.5 srv-chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
+    const SVG_TOOL = '<svg class="w-3 h-3 tool-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.25 5.25a2.12 2.12 0 01-3-3l5.25-5.25m7.41-3.41a3.37 3.37 0 10-4.77-4.77L6.75 8.25 15.75 17.25l4.08-4.08z"/></svg>';
+    const SVG_SERVER = '<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>';
+
+    function dndBuildServerGroup(s, tools, panelId) {
+      const gId = `dnd-grp-${panelId}-${s.id}`;
+      const toolsHtml = tools.map(t => `
+        <div class="dnd-tool-item" draggable="true" data-type="tool" data-server-id="${s.id}"
+          data-tool-name="${esc(t.name)}" data-tool-desc="${esc(t.description||'')}"
+          ondragstart="dndDragStart(event)" ondragend="dndDragEnd(event)" ondblclick="dndMoveTool(this)">
+          ${SVG_TOOL}
+          <span class="font-medium flex-shrink-0">${esc(t.name)}</span>
+          ${t.description ? `<span class="tool-desc flex-1 min-w-0">${esc(t.description)}</span>` : ''}
+        </div>`).join('');
+      return `<div class="dnd-server-group" id="${gId}" data-server-id="${s.id}">
+        <div class="dnd-server-header" draggable="true" data-type="server" data-server-id="${s.id}"
+          ondragstart="dndDragStart(event)" ondragend="dndDragEnd(event)" ondblclick="dndMoveServer('${s.id}',this)">
+          <span onclick="dndToggleCollapse('${gId}');event.stopPropagation()">${SVG_CHEVRON}</span>
+          ${SVG_SERVER}
+          <span class="flex-1 truncate">${esc(s.name)}</span>
+          <span class="srv-count">${tools.length} outil${tools.length>1?'s':''}</span>
+        </div>
+        <div class="dnd-tools-list" style="max-height:${tools.length*32+4}px">${toolsHtml}</div>
+      </div>`;
+    }
+
+    function dndToggleCollapse(groupId) {
+      const grp = document.getElementById(groupId);
+      if (!grp) return;
+      const list = grp.querySelector('.dnd-tools-list');
+      const chev = grp.querySelector('.srv-chevron');
+      list.classList.toggle('collapsed');
+      if (chev) chev.classList.toggle('collapsed');
+    }
+
+    function dndPopulate() {
+      const avail = document.getElementById('dnd-available');
+      const sel = document.getElementById('dnd-selected');
+      sel.innerHTML = '<p id="dnd-empty-msg" class="text-xs text-gray-400 p-2 italic">Glissez des serveurs ou outils ici</p>';
+      document.getElementById('dnd-search-available').value = '';
+      document.getElementById('dnd-search-selected').value = '';
+      if (allServers.length === 0) {
+        avail.innerHTML = '<p class="text-xs text-gray-400 p-2">Aucun serveur actif</p>';
+        dndUpdateCount(); return;
+      }
+      let html = '';
+      for (const s of allServers) {
+        html += dndBuildServerGroup(s, s.tool_names || [], 'avail');
+      }
+      avail.innerHTML = html;
+      dndUpdateCount();
+    }
+
+    // ── Drag handlers ──────────────────────
+
+    function dndDragStart(e) {
+      const el = e.target.closest('[data-type]');
+      if (!el) return;
+      e.dataTransfer.setData('application/x-type', el.dataset.type);
+      e.dataTransfer.setData('application/x-server', el.dataset.serverId);
+      if (el.dataset.toolName) e.dataTransfer.setData('application/x-tool', el.dataset.toolName);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    }
+
+    function dndDragEnd(e) {
+      const el = e.target.closest('[data-type]');
+      if (el) el.classList.remove('dragging');
+      document.querySelectorAll('.dnd-panel').forEach(p => p.classList.remove('drag-over'));
+    }
+
+    function dndDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.classList.add('drag-over'); }
+
+    function dndDrop(e, targetPanel) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      const type = e.dataTransfer.getData('application/x-type');
+      const serverId = e.dataTransfer.getData('application/x-server');
+      const toolName = e.dataTransfer.getData('application/x-tool');
+      const toSelected = targetPanel === 'selected';
+      if (type === 'server') {
+        dndTransferServer(serverId, toSelected);
+      } else if (type === 'tool') {
+        dndTransferTool(serverId, toolName, toSelected);
+      }
+      dndUpdateCount();
+    }
+
+    // ── Double-click handlers ──────────────
+
+    function dndMoveServer(serverId, headerEl) {
+      const inSelected = !!headerEl.closest('#dnd-selected');
+      dndTransferServer(serverId, !inSelected);
+      dndUpdateCount();
+    }
+
+    function dndMoveTool(toolEl) {
+      const inSelected = !!toolEl.closest('#dnd-selected');
+      dndTransferTool(toolEl.dataset.serverId, toolEl.dataset.toolName, !inSelected);
+      dndUpdateCount();
+    }
+
+    // ── Core transfer logic ───────────────
+
+    function dndTransferServer(serverId, toSelected) {
+      const srv = allServers.find(s => s.id === serverId);
+      if (!toSelected) {
+        // Move all tools back to available, rebuild available group, remove selected group
+        dndEnsureAvailGroup(srv);
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        if (selGrp) {
+          // Move each tool item back to available group
+          const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+          if (availGrp) {
+            const availList = availGrp.querySelector('.dnd-tools-list');
+            selGrp.querySelectorAll('.dnd-tool-item').forEach(t => availList.appendChild(t));
+            dndRefreshGroupCount(availGrp);
+          }
+          selGrp.remove();
+        }
+      } else {
+        // Move entire server with all its tools to selected
+        const tools = srv?.tool_names || [];
+        dndEnsureSelGroup(srv);
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        const selList = selGrp?.querySelector('.dnd-tools-list');
+        // Move any remaining available tools to selected
+        const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+        if (availGrp) {
+          availGrp.querySelectorAll('.dnd-tool-item').forEach(t => { if (selList) selList.appendChild(t); });
+          availGrp.remove(); // remove empty available group
+        }
+        dndRefreshGroupCount(selGrp);
+      }
+    }
+
+    function dndTransferTool(serverId, toolName, toSelected) {
+      const srv = allServers.find(s => s.id === serverId);
+      if (toSelected) {
+        // Ensure server group exists in selected panel
+        dndEnsureSelGroup(srv);
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        const selList = selGrp?.querySelector('.dnd-tools-list');
+        // Find the tool in available and move it
+        const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+        if (availGrp) {
+          const toolEl = [...availGrp.querySelectorAll('.dnd-tool-item')].find(t => t.dataset.toolName === toolName);
+          if (toolEl && selList) selList.appendChild(toolEl);
+          dndRefreshGroupCount(availGrp);
+          // If no tools left in available, remove the empty server group
+          if (availGrp.querySelectorAll('.dnd-tool-item').length === 0) availGrp.remove();
+        }
+        dndRefreshGroupCount(selGrp);
+      } else {
+        // Move tool back to available
+        dndEnsureAvailGroup(srv);
+        const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+        const availList = availGrp?.querySelector('.dnd-tools-list');
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        if (selGrp) {
+          const toolEl = [...selGrp.querySelectorAll('.dnd-tool-item')].find(t => t.dataset.toolName === toolName);
+          if (toolEl && availList) availList.appendChild(toolEl);
+          dndRefreshGroupCount(selGrp);
+          // If no tools left in selected, remove the server group
+          if (selGrp.querySelectorAll('.dnd-tool-item').length === 0) selGrp.remove();
+        }
+        dndRefreshGroupCount(availGrp);
+      }
+    }
+
+    // ── Helpers: ensure group exists ──────
+
+    function dndEnsureSelGroup(srv) {
+      if (!srv) return;
+      let grp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${srv.id}"]`);
+      if (!grp) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = dndBuildServerGroup(srv, [], 'sel');
+        grp = tmp.firstElementChild;
+        document.getElementById('dnd-selected').appendChild(grp);
+      }
+    }
+
+    function dndEnsureAvailGroup(srv) {
+      if (!srv) return;
+      let grp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${srv.id}"]`);
+      if (!grp) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = dndBuildServerGroup(srv, [], 'avail');
+        grp = tmp.firstElementChild;
+        document.getElementById('dnd-available').appendChild(grp);
+      }
+    }
+
+    function dndRefreshGroupCount(grp) {
+      if (!grp) return;
+      const count = grp.querySelectorAll('.dnd-tool-item').length;
+      const badge = grp.querySelector('.srv-count');
+      if (badge) badge.textContent = `${count} outil${count>1?'s':''}`;
+      const list = grp.querySelector('.dnd-tools-list');
+      if (list) list.style.maxHeight = (count * 32 + 4) + 'px';
+    }
+
+    // ── Bulk actions ──────────────────────
+
+    function dndAddAll() {
+      for (const s of allServers) dndTransferServer(s.id, true);
+      dndUpdateCount();
+    }
+
+    function dndRemoveAll() {
+      for (const s of allServers) dndTransferServer(s.id, false);
+      dndUpdateCount();
+    }
+
+    function dndUpdateCount() {
+      const toolCount = document.querySelectorAll('#dnd-selected .dnd-tool-item').length;
+      const srvCount = document.querySelectorAll('#dnd-selected .dnd-server-group').length;
+      document.getElementById('dnd-selected-count').textContent = `(${srvCount} srv, ${toolCount} outils)`;
+      const emptyMsg = document.getElementById('dnd-empty-msg');
+      if (emptyMsg) emptyMsg.style.display = (srvCount > 0) ? 'none' : '';
+    }
+
+    function dndFilter(panel) {
+      const isAvail = panel === 'available';
+      const input = document.getElementById(isAvail ? 'dnd-search-available' : 'dnd-search-selected');
+      const container = document.getElementById(isAvail ? 'dnd-available' : 'dnd-selected');
+      const q = input.value.toLowerCase().trim();
+      container.querySelectorAll('.dnd-server-group').forEach(grp => {
+        const srvName = (grp.querySelector('.dnd-server-header')?.textContent || '').toLowerCase();
+        let anyToolVisible = false;
+        grp.querySelectorAll('.dnd-tool-item').forEach(t => {
+          const match = !q || t.dataset.toolName.toLowerCase().includes(q) || (t.dataset.toolDesc||'').toLowerCase().includes(q) || srvName.includes(q);
+          t.style.display = match ? '' : 'none';
+          if (match) anyToolVisible = true;
+        });
+        grp.style.display = (!q || srvName.includes(q) || anyToolVisible) ? '' : 'none';
+      });
     }
 
     function updateTokenCardJSON(elId, token, cmdKey) {
@@ -1081,64 +1449,103 @@
       const name = document.getElementById('token-name').value.trim();
       const description = document.getElementById('token-desc').value.trim();
       const expiresRaw = document.getElementById('token-expires').value;
-      const serverIDs = [...document.querySelectorAll('.token-server-cb:checked')].map(cb => cb.value);
+      const isEditing = !!_editingTokenId;
+
+      // Collect from drag-and-drop selected panel (hierarchical)
+      const selectedServerIds = new Set();
+      const selectedToolsByServer = {};
+      document.querySelectorAll('#dnd-selected .dnd-server-group').forEach(grp => {
+        const sid = grp.dataset.serverId;
+        selectedServerIds.add(sid);
+        const toolEls = grp.querySelectorAll('.dnd-tool-item');
+        if (toolEls.length > 0) {
+          selectedToolsByServer[sid] = [...toolEls].map(t => t.dataset.toolName);
+        }
+      });
+      const serverIDs = [...selectedServerIds];
 
       if (!name) { toast('Le nom du jeton est requis', 'error'); return; }
-      if (serverIDs.length === 0) { toast('Sélectionnez au moins un serveur', 'error'); return; }
-      if (!document.getElementById('token-mcp-command').value) { toast('Sélectionnez une commande MCP', 'error'); return; }
+      if (serverIDs.length === 0) { toast('Sélectionnez au moins un serveur ou outil', 'error'); return; }
+      if (!isEditing && !document.getElementById('token-mcp-command').value) { toast('Sélectionnez une commande MCP', 'error'); return; }
 
-      const mcpCommandSel = document.getElementById('token-mcp-command').value;
-      const body = { name, server_ids: serverIDs, mcp_command: mcpCommandSel };
-      if (description) body.description = description;
-      if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
+      // Build per-server tool selections (only when a subset is selected)
+      const serverTools = [];
+      for (const sid of serverIDs) {
+        const srv = allServers.find(s => s.id === sid);
+        const totalTools = (srv?.tool_names || []).length;
+        const pickedTools = selectedToolsByServer[sid] || [];
+        if (totalTools === 0) continue;
+        if (pickedTools.length === totalTools) continue; // all tools — no restriction needed
+        serverTools.push({ server_id: sid, tool_names: pickedTools });
+      }
 
       const btn = document.getElementById('token-submit-btn');
       btn.disabled = true;
-      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Génération...';
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> ' + (isEditing ? 'Mise à jour...' : 'Génération...');
 
       try {
-        const result = await api('/tokens', { method: 'POST', body: JSON.stringify(body) });
+        if (isEditing) {
+          // ── UPDATE existing token ──
+          const body = { name, description, server_ids: serverIDs };
+          if (serverTools.length > 0) body.server_tools = serverTools;
+          else body.server_tools = []; // clear all tool restrictions
 
-        // Show the raw token and .mcp.json
-        _fullToken = result.token;
-        const maskedToken = result.token.slice(0, 8) + '\u2022'.repeat(12) + result.token.slice(-4);
-        document.getElementById('token-raw-value').textContent = maskedToken;
-        const gatewayURL = window.location.origin + '/mcp';
-        const allowHttp = document.getElementById('token-allow-http').checked;
-        const cmdCfg = getMCPCommandConfig();
-        const mcpArgs = [...cmdCfg.argsPrefix, gatewayURL];
-        if (allowHttp) mcpArgs.push("--allow-http");
-        mcpArgs.push("--header", "X-MCP-Scope-Token: " + result.token);
-        const serverName = document.getElementById('token-server-name').value.trim() || 'hellopro-gateway';
-        const mcpConfig = {
-          mcpServers: {
-            [serverName]: {
-              command: cmdCfg.command,
-              args: mcpArgs
-            }
-          }
-        };
-        _fullMcpJson = JSON.stringify(mcpConfig, null, 2);
-        // Display anonymized version
-        const maskedArgs = mcpArgs.map(a => a.startsWith('X-MCP-Scope-Token: ') ? 'X-MCP-Scope-Token: ' + maskedToken : a);
-        const maskedConfig = {
-          mcpServers: {
-            [serverName]: {
-              command: cmdCfg.command,
-              args: maskedArgs
-            }
-          }
-        };
-        document.getElementById('token-mcp-json').textContent = JSON.stringify(maskedConfig, null, 2);
-        document.getElementById('token-created-result').classList.remove('hidden');
-        btn.classList.add('hidden');
+          await api(`/tokens/${_editingTokenId}`, { method: 'PUT', body: JSON.stringify(body) });
+          toast('Jeton mis à jour !', 'success');
+          closeTokenModal();
+          loadMCPConfig();
+        } else {
+          // ── CREATE new token ──
+          const mcpCommandSel = document.getElementById('token-mcp-command').value;
+          const body = { name, server_ids: serverIDs, mcp_command: mcpCommandSel };
+          if (description) body.description = description;
+          if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
+          if (serverTools.length > 0) body.server_tools = serverTools;
 
-        toast('Jeton d\'accès créé !', 'success');
-        loadMCPConfig(); // refresh token list in background
+          const result = await api('/tokens', { method: 'POST', body: JSON.stringify(body) });
+
+          // Show the raw token and .mcp.json
+          _fullToken = result.token;
+          const maskedToken = result.token.slice(0, 8) + '\u2022'.repeat(12) + result.token.slice(-4);
+          document.getElementById('token-raw-value').textContent = maskedToken;
+          const gatewayURL = window.location.origin + '/mcp';
+          const allowHttp = document.getElementById('token-allow-http').checked;
+          const cmdCfg = getMCPCommandConfig();
+          const mcpArgs = [...cmdCfg.argsPrefix, gatewayURL];
+          if (allowHttp) mcpArgs.push("--allow-http");
+          mcpArgs.push("--header", "X-MCP-Scope-Token: " + result.token);
+          const serverName = document.getElementById('token-server-name').value.trim() || 'hellopro-gateway';
+          const mcpConfig = {
+            mcpServers: {
+              [serverName]: {
+                command: cmdCfg.command,
+                args: mcpArgs
+              }
+            }
+          };
+          _fullMcpJson = JSON.stringify(mcpConfig, null, 2);
+          const maskedArgs = mcpArgs.map(a => a.startsWith('X-MCP-Scope-Token: ') ? 'X-MCP-Scope-Token: ' + maskedToken : a);
+          const maskedConfig = {
+            mcpServers: {
+              [serverName]: {
+                command: cmdCfg.command,
+                args: maskedArgs
+              }
+            }
+          };
+          document.getElementById('token-mcp-json').textContent = JSON.stringify(maskedConfig, null, 2);
+          document.getElementById('token-created-result').classList.remove('hidden');
+          btn.classList.add('hidden');
+
+          toast('Jeton d\'accès créé !', 'success');
+          loadMCPConfig();
+        }
       } catch (e) {
         toast(e.message, 'error');
         btn.disabled = false;
-        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
+        btn.innerHTML = isEditing
+          ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications'
+          : '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
       }
     }
 
