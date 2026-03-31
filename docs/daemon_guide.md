@@ -20,9 +20,58 @@ sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_download_re
 
 ---
 
+## Shared Directories & Config Mapping
+
+The daemons communicate with the crawler service via shared directories (Docker bind mounts):
+
+| Host Path (relative) | Container Path | Config Setting | Purpose |
+|---|---|---|---|
+| `crawler-service/crawler_archives/` | `/app/archives` | `ARCHIVES_SHARED_PATH` | Upload staging: service writes `.tar.gz`, daemon uploads to GCS |
+| `crawler-service/crawler_download_requests/` | `/app/gcs-requests` | `DOWNLOAD_REQUESTS_PATH` | Download requests: service writes `.request`, daemon picks up |
+| `crawler-service/crawler_download_results/` | `/app/gcs-downloads` | `DOWNLOAD_RESULTS_PATH` | Download results: daemon writes `.tar.gz` + `.done`, service reads |
+
+### Volume Mounts (docker-compose.yml)
+
+```yaml
+crawler-service:
+  volumes:
+    - ./crawler_archives:/app/archives
+    - ./crawler_download_requests:/app/gcs-requests
+    - ./crawler_download_results:/app/gcs-downloads
+```
+
+---
+
 ## Upload Daemon (`upload_daemon.sh`)
 
 Automatically uploads archived crawl jobs to GCS. The crawler service places `.tar.gz` archives in the shared `crawler_archives/` directory, and this daemon uploads them to `gs://{bucket}/crawls/` then deletes the local file.
+
+### Retry & Dead Letter
+
+The daemon retries failed uploads up to **3 times** (configurable via `MAX_RETRIES`). After exhausting retries, the archive is moved to a `dead_letter/` subdirectory inside `crawler_archives/`:
+
+```
+crawler_archives/
+├── 1234.tar.gz            # Pending upload
+├── 1234.tar.gz.retries    # Retry counter (deleted on success or dead-letter)
+└── dead_letter/
+    └── 5678.tar.gz        # Failed after 3 attempts — requires manual investigation
+```
+
+**Investigating dead-letter archives:**
+```bash
+# List dead-letter files
+ls -la apps-microservices/crawler-service/crawler_archives/dead_letter/
+
+# Check GCS credentials
+gcloud auth list
+
+# Retry manually
+gcloud storage cp crawler_archives/dead_letter/5678.tar.gz gs://{bucket}/crawls/5678.tar.gz
+
+# If successful, remove from dead-letter
+rm crawler_archives/dead_letter/5678.tar.gz
+```
 
 ### Running
 
@@ -144,3 +193,22 @@ If `GET /results/{crawl_id}` returns a 504 timeout for archived crawls, check th
 2. GCS credentials are valid (`gcloud auth list`)
 3. The archive exists in GCS (`gcloud storage ls gs://{bucket}/crawls/{crawl_id}.tar.gz`)
 4. The timeout is sufficient (default: 300s, configurable via `GCS_DOWNLOAD_TIMEOUT_SECONDS`)
+
+**Upload failures going to dead-letter:**
+1. Check `dead_letter/` directory for accumulated archives
+2. Review upload daemon logs for GCS error messages
+3. Verify GCS bucket exists and credentials have write permission
+4. Retry manually with `gcloud storage cp` then remove from `dead_letter/`
+
+---
+
+## Automatic Cleanup
+
+The crawler service automatically cleans up stale files across all shared directories:
+
+- **Cached result archives** (`/app/storage/archives/`): deleted after 24h (background task, every 1h)
+- **GCS download artifacts** (`.tar.gz`, `.done`, `.error` in download results): cleaned during the same task
+- **Stale download requests** (`.request` files): cleaned during the same task
+- **Manual trigger**: `POST /prune-archives?max_age_hours=24` (or `delete_all=true`)
+
+The `dead_letter/` directory is **never** auto-cleaned — it requires manual investigation.
