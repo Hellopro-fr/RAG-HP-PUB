@@ -93,6 +93,8 @@ func (c *Checker) checkOne(id, url, prevStatus, toolPrefix string, authHeaders m
 			log.Printf("[health] server %s (%s) became unhealthy: %v", id, url, err)
 		}
 		_ = c.repo.UpdateHealth(id, "unhealthy", err.Error())
+		// Clear stale tools/resources/prompts so UI doesn't show outdated data
+		_ = c.repo.ClearCapabilities(id)
 		return
 	}
 

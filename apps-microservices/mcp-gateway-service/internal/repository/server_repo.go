@@ -177,6 +177,23 @@ func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
 	})
 }
 
+// ClearCapabilities removes all tools, resources, and prompts for a server
+// and resets discovered metadata. Used when discovery fails.
+func (r *ServerRepo) ClearCapabilities(id string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("server_id = ?", id).Delete(&db.ServerTool{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("server_id = ?", id).Delete(&db.ServerResource{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("server_id = ?", id).Delete(&db.ServerPrompt{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 // SaveTags replaces all tags for a server.
 func (r *ServerRepo) SaveTags(id string, tags []string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
