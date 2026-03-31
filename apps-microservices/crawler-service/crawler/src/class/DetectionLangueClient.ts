@@ -39,6 +39,9 @@ export class DetectionLangueClient {
             baseUrl ||
             process.env.DETECTION_LANGUE_API_URL ||
             "http://api-detection-langue-fr-service:8999";
+        if (!baseUrl && !process.env.DETECTION_LANGUE_API_URL) {
+            console.warn('DETECTION_LANGUE_API_URL not set, using default: http://api-detection-langue-fr-service:8999');
+        }
         this.client = axios.create({
             baseURL: `${url}/api/v1`,
             timeout: 120000, // 120s — accommode le retry interne de l'API et la navigation Playwright
@@ -54,15 +57,20 @@ export class DetectionLangueClient {
         htmlContent?: string,
         options?: DetectOptions
     ): Promise<DetectionResult> {
-        const response = await this.client.post<DetectionResult>("/detect", {
-            url,
-            html_content: htmlContent || undefined,
-            mode: options?.mode ?? "complete",
-            forced_method: options?.forcedMethod ?? undefined,
-            use_nlp_detection: options?.useNlpDetection ?? true,
-            proxy_url: options?.proxyUrl ?? undefined,
-        });
-        return response.data;
+        try {
+            const response = await this.client.post<DetectionResult>("/detect", {
+                url,
+                html_content: htmlContent || undefined,
+                mode: options?.mode ?? "complete",
+                forced_method: options?.forcedMethod ?? undefined,
+                use_nlp_detection: options?.useNlpDetection ?? true,
+                proxy_url: options?.proxyUrl ?? undefined,
+            });
+            return response.data;
+        } catch (error: any) {
+            const message = error?.response?.data?.detail || error?.message || String(error);
+            throw new Error(`Detection API error for ${url}: ${message}`);
+        }
     }
 
     /**
@@ -73,10 +81,15 @@ export class DetectionLangueClient {
         url: string,
         trackRedirect: boolean = false
     ): Promise<CheckUrlResult> {
-        const response = await this.client.get<CheckUrlResult>("/check-url", {
-            params: { url, track_redirect: trackRedirect },
-        });
-        return response.data;
+        try {
+            const response = await this.client.get<CheckUrlResult>("/check-url", {
+                params: { url, track_redirect: trackRedirect },
+            });
+            return response.data;
+        } catch (error: any) {
+            const message = error?.response?.data?.detail || error?.message || String(error);
+            throw new Error(`Detection API check-url error for ${url}: ${message}`);
+        }
     }
 
     /**

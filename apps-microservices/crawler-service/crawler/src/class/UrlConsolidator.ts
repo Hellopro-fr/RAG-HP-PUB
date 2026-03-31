@@ -36,6 +36,7 @@ export class UrlConsolidator {
     private redis: RedisClientType;
     private datasetKey: string;
     private requestQueueKey: string;
+    private requestUrlKey: string;
     private ttl: number;
     private ttlSet: boolean = false;
 
@@ -53,6 +54,7 @@ export class UrlConsolidator {
         this.redis.on('error', (err: Error) => console.error('Redis UrlConsolidator Error:', err));
         this.datasetKey = `update_dataset:${crawlId}`;
         this.requestQueueKey = `update_rq:${crawlId}`;
+        this.requestUrlKey = `update_ru:${crawlId}`;
         this.previousCrawlId = previousCrawlId;
         this.domain = domain;
         this.ttl = ttlSeconds;
@@ -71,10 +73,15 @@ export class UrlConsolidator {
     }
 
     private async ensureTtl(): Promise<void> {
-        if (!this.ttlSet) {
+        if (this.ttlSet) return;
+        this.ttlSet = true; // Set immediately to prevent concurrent calls
+        try {
             await this.redis.expire(this.datasetKey, this.ttl);
             await this.redis.expire(this.requestQueueKey, this.ttl);
-            this.ttlSet = true;
+            await this.redis.expire(this.requestUrlKey, this.ttl);
+        } catch (e) {
+            this.ttlSet = false; // Reset on failure so it retries
+            console.warn(`Failed to set TTL: ${e}`);
         }
     }
 
@@ -179,6 +186,8 @@ export class UrlConsolidator {
                 phase3Dupes++;
                 continue;
             }
+            // Store in Redis SET so buildAllUrlsIterator can yield them
+            await this.redis.sAdd(this.requestUrlKey, url);
             counts.requestUrl++;
         }
         counts.duplicatesRemoved += phase3Dupes;
@@ -207,8 +216,15 @@ export class UrlConsolidator {
                 }
             } while (cursor !== 0);
 
-            // Request URL: not stored in a dedicated SET (they were counted but not stored to save RAM).
-            // They will be re-read and enqueued in main.ts seeding logic.
+            // Yield Request URL URLs (scan the RU SET)
+            cursor = 0;
+            do {
+                const result = await self.redis.sScan(self.requestUrlKey, cursor, { COUNT: 200 });
+                cursor = result.cursor;
+                for (const url of result.members) {
+                    yield { url, source: 'request_url' };
+                }
+            } while (cursor !== 0);
         }
 
         console.log(`\n[UrlConsolidator] ═══════════════════════════════════════`);
@@ -303,6 +319,7 @@ export class UrlConsolidator {
     async cleanup(): Promise<void> {
         try {
             await this.redis.del(this.requestQueueKey);
+            await this.redis.del(this.requestUrlKey);
             // datasetKey is intentionally kept alive for UpdateChecker.isInDataset()
             // It will auto-expire via TTL
             await this.disconnect();
@@ -319,6 +336,7 @@ export class UrlConsolidator {
         try {
             await this.redis.del(this.datasetKey);
             await this.redis.del(this.requestQueueKey);
+            await this.redis.del(this.requestUrlKey);
             await this.disconnect();
             console.log(`[UrlConsolidator] Full cleanup complete.`);
         } catch (e) {

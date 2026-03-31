@@ -51,6 +51,10 @@ export const context = {
     },
     stopReason: "",
     crawlErrorMessage: "",
+    // In-memory counters for URLs containing '?' and '#' pushed to the dataset.
+    // Used by postNavigationHooks to avoid O(n²) full-dataset scans.
+    countQuestionMark: 0,
+    countDiez: 0,
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null

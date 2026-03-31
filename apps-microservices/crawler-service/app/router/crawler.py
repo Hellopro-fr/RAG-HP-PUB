@@ -6,8 +6,9 @@ from datetime import datetime
 from typing import Dict, Optional, List
 
 import aiofiles
-from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query, Depends
+from fastapi import APIRouter, HTTPException, status, Query, Depends
 from fastapi.responses import FileResponse
+from starlette.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY
@@ -94,7 +95,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
 
     recovered_data = {
         "crawl_id": crawl_id, "status": final_status, "domain": domain,
-        "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
+        "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)).isoformat(),
         "storage_path": job_storage_path,
         "failure_callback_url": None, "pid": None
     }
@@ -267,7 +268,6 @@ async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
 
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
-    background_tasks: BackgroundTasks,
     include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues)."),
     job_info: dict = Depends(get_job_or_recover)
 ):
@@ -289,11 +289,21 @@ async def download_crawl_results(
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
 
-        # For GCS downloads (temporary files): schedule cleanup after the response is sent
         if is_temporary:
-            background_tasks.add_task(crawler_manager.cleanup_temp_download, crawl_id)
+            # Stream the file and clean up after streaming completes (prevents race with BackgroundTasks)
+            def iterfile():
+                with open(archive_path, 'rb') as f:
+                    yield from f
+                # Cleanup after streaming is complete
+                crawler_manager.cleanup_temp_download(crawl_id)
 
-        return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
+            return StreamingResponse(
+                iterfile(),
+                media_type='application/gzip',
+                headers={"Content-Disposition": f"attachment; filename={crawl_id}-results.tar.gz"}
+            )
+        else:
+            return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
     except HTTPException as e:
         raise e
     except Exception as e:

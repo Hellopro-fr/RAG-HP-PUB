@@ -6,6 +6,8 @@ import re
 import signal
 import tempfile
 import shutil
+import threading
+import time
 import anyio
 import tarfile
 import hashlib
@@ -47,6 +49,10 @@ def _count_files_in_dir(path: str) -> int:
         return count
     except OSError:
         return 0
+
+# Thread-safe locks for concurrent archive generation (keyed by archive path)
+_archive_locks: Dict[str, threading.Lock] = {}
+_archive_locks_guard = threading.Lock()
 
 class CrawlerManager:
     """
@@ -200,7 +206,16 @@ class CrawlerManager:
             if value is not None:
                 command.append(f"--{key}={value}")
 
-        logger.info(f"Starting crawl '{crawl_id}' with command: {' '.join(command)}")
+        # Mask sensitive params for logging
+        safe_command = []
+        for arg in command:
+            if arg.startswith('--proxyapify='):
+                safe_command.append('--proxyapify=***')
+            elif arg.startswith('--callbackUrl='):
+                safe_command.append('--callbackUrl=***')
+            else:
+                safe_command.append(arg)
+        logger.info(f"Starting crawl '{crawl_id}' with command: {' '.join(safe_command)}")
         
         process = await asyncio.create_subprocess_exec(
             *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -325,6 +340,8 @@ class CrawlerManager:
             domain = job_info.get("domain")
             if domain:
                 dataset_path = os.path.join(job_info["storage_path"], 'storage', 'datasets', domain)
+                if not os.path.isdir(dataset_path):
+                    dataset_path = os.path.join(job_info["storage_path"], 'storage', 'datasets', domain.replace('.', '-'))
                 stored_files_count = _count_files_in_dir(dataset_path)
                 params["stored_files_count"] = stored_files_count
                 # Optional: Override 'success' if you want the main success field to reflect disk count
@@ -516,7 +533,7 @@ class CrawlerManager:
         if job_info:
             exit_code = process.returncode
             # Allow exit code 2 (Node.js intentional success/partial success) or 0 (Standard success)
-            is_success = (exit_code == 2)
+            is_success = (exit_code in (0, 2))
             # Exit code 3 is a specially dedicated code for OOM_RELAUNCH
             is_oom_relaunch = (exit_code == 3)
 
@@ -825,16 +842,18 @@ class CrawlerManager:
             logger.info(f"GCS download already available for '{crawl_id}'.")
             return download_path
 
-        # Submit download request (idempotent: overwrites existing request file)
-        os.makedirs(requests_dir, exist_ok=True)
-        async with aiofiles.open(request_path, 'w') as f:
-            await f.write(crawl_id)
+        # Submit download request only if not already pending
+        if not os.path.exists(request_path) and not os.path.exists(done_path):
+            os.makedirs(requests_dir, exist_ok=True)
+            async with aiofiles.open(request_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.info(f"GCS download request submitted for '{crawl_id}'. Waiting for daemon...")
+        else:
+            logger.info(f"GCS download already pending/complete for '{crawl_id}'. Waiting...")
 
-        logger.info(f"GCS download request submitted for '{crawl_id}'. Waiting for daemon...")
-
-        # Poll for completion with timeout
-        timeout = settings.GCS_DOWNLOAD_TIMEOUT_SECONDS
-        for _ in range(timeout):
+        # Poll for completion with deadline-based timeout
+        deadline = time.monotonic() + settings.GCS_DOWNLOAD_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
             # Check for error first
             if os.path.exists(error_path):
                 error_msg = "Download failed"
@@ -868,7 +887,7 @@ class CrawlerManager:
             pass
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail=f"GCS download timed out after {timeout}s for '{crawl_id}'. Ensure the download daemon is running."
+            detail=f"GCS download timed out after {settings.GCS_DOWNLOAD_TIMEOUT_SECONDS}s for '{crawl_id}'. Ensure the download daemon is running."
         )
 
     def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive]) -> str:
@@ -894,72 +913,79 @@ class CrawlerManager:
         os.makedirs(archive_base_path, exist_ok=True)
         final_archive_path = os.path.join(archive_base_path, f"{crawl_id}-results-{include_hash}.tar.gz")
 
-        # --- CACHING STRATEGY ---
-        # If the file already exists, return it immediately!
-        if os.path.exists(final_archive_path):
-            logger.info(f"Returning cached archive for '{crawl_id}' (hash: {include_hash})")
-            return final_archive_path
+        # --- CACHING STRATEGY (with concurrency lock) ---
+        # Get or create a lock for this specific archive path
+        with _archive_locks_guard:
+            if final_archive_path not in _archive_locks:
+                _archive_locks[final_archive_path] = threading.Lock()
+            lock = _archive_locks[final_archive_path]
 
-        # Map the user's request to the actual folder names
-        # Note: We prioritize original domain, then sanitized
-        path_mappings = {
-            IncludeInArchive.DATASET: ["datasets/" + domain, "datasets/" + sanitized_name],
-            IncludeInArchive.DATASET_NFR: ["datasets/nfr-" + domain, "datasets/nfr-" + sanitized_name],
-            IncludeInArchive.DATASET_ERROR: ["datasets/error-" + domain, "datasets/error-" + sanitized_name],
-            IncludeInArchive.DATASET_UPDATE: ["datasets/update-" + domain, "datasets/update-" + sanitized_name],
-            IncludeInArchive.REQUEST_QUEUES: ["request_queues/" + domain, "request_queues/" + sanitized_name],
-            IncludeInArchive.REQUEST_URLS: ["request_urls/" + domain, "request_urls/" + sanitized_name],
-            IncludeInArchive.MISCELLANEOUS: ["miscellaneous/" + domain, "miscellaneous/" + sanitized_name],
-        }
+        with lock:
+            # Re-check cache after acquiring lock (another thread may have created it)
+            if os.path.exists(final_archive_path):
+                logger.info(f"Returning cached archive for '{crawl_id}' (hash: {include_hash})")
+                return final_archive_path
 
-        crawlee_storage_base = os.path.join(job_storage_path, 'storage')
-        copied_anything = False
+            # Map the user's request to the actual folder names
+            # Note: We prioritize original domain, then sanitized
+            path_mappings = {
+                IncludeInArchive.DATASET: ["datasets/" + domain, "datasets/" + sanitized_name],
+                IncludeInArchive.DATASET_NFR: ["datasets/nfr-" + domain, "datasets/nfr-" + sanitized_name],
+                IncludeInArchive.DATASET_ERROR: ["datasets/error-" + domain, "datasets/error-" + sanitized_name],
+                IncludeInArchive.DATASET_UPDATE: ["datasets/update-" + domain, "datasets/update-" + sanitized_name],
+                IncludeInArchive.REQUEST_QUEUES: ["request_queues/" + domain, "request_queues/" + sanitized_name],
+                IncludeInArchive.REQUEST_URLS: ["request_urls/" + domain, "request_urls/" + sanitized_name],
+                IncludeInArchive.MISCELLANEOUS: ["miscellaneous/" + domain, "miscellaneous/" + sanitized_name],
+            }
 
-        # Use a temporary file for writing the partial archive to avoid race conditions
-        # or serving incomplete files if the process fails mid-way.
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz", dir=archive_base_path) as tmp_file:
-            try:
-                # Open tarfile with reduced compression level (1 = fastest)
-                with tarfile.open(fileobj=tmp_file, mode='w:gz', compresslevel=1) as tar:
-                    for item in set(include):
-                        possible_paths = path_mappings.get(item, [])
-                        
-                        found = False
-                        for relative_path in possible_paths:
-                            source_path = os.path.join(crawlee_storage_base, relative_path)
-                            
-                            if os.path.exists(source_path):
-                                # V3 Logic: Remap sanitized names back to original domain in archive
-                                # If we found 'datasets/example-com', we want to store it as 'storage/datasets/example.com'
-                                arcname = os.path.join("storage", relative_path)
-                                if sanitized_name in relative_path and domain != sanitized_name:
-                                    arcname = arcname.replace(sanitized_name, domain)
-                                
-                                tar.add(source_path, arcname=arcname)
-                                copied_anything = True
-                                found = True
-                                break # Stop checking fallbacks for this item type
-                
-                if not copied_anything:
-                    # Don't leave the empty temp file
-                    tmp_file.close() # Ensure closed before remove
-                    os.remove(tmp_file.name)
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"None of the requested components were found for crawl '{crawl_id}'. "
-                        f"The crawl data may have been cleaned up after archiving to GCS."
-                    )
-            
-            except Exception:
-                # Cleanup on error
+            crawlee_storage_base = os.path.join(job_storage_path, 'storage')
+            copied_anything = False
+
+            # Use a temporary file for writing the partial archive to avoid race conditions
+            # or serving incomplete files if the process fails mid-way.
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz", dir=archive_base_path) as tmp_file:
+                try:
+                    # Open tarfile with reduced compression level (1 = fastest)
+                    with tarfile.open(fileobj=tmp_file, mode='w:gz', compresslevel=1) as tar:
+                        for item in set(include):
+                            possible_paths = path_mappings.get(item, [])
+
+                            found = False
+                            for relative_path in possible_paths:
+                                source_path = os.path.join(crawlee_storage_base, relative_path)
+
+                                if os.path.exists(source_path):
+                                    # V3 Logic: Remap sanitized names back to original domain in archive
+                                    # If we found 'datasets/example-com', we want to store it as 'storage/datasets/example.com'
+                                    arcname = os.path.join("storage", relative_path)
+                                    if sanitized_name in relative_path and domain != sanitized_name:
+                                        arcname = arcname.replace(sanitized_name, domain)
+
+                                    tar.add(source_path, arcname=arcname)
+                                    copied_anything = True
+                                    found = True
+                                    break # Stop checking fallbacks for this item type
+
+                    if not copied_anything:
+                        # Don't leave the empty temp file
+                        tmp_file.close() # Ensure closed before remove
+                        os.remove(tmp_file.name)
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"None of the requested components were found for crawl '{crawl_id}'. "
+                            f"The crawl data may have been cleaned up after archiving to GCS."
+                        )
+
+                except Exception:
+                    # Cleanup on error
+                    tmp_file.close()
+                    if os.path.exists(tmp_file.name):
+                        os.remove(tmp_file.name)
+                    raise
+
+                # Atomic move: only put the file in its final place when fully done
                 tmp_file.close()
-                if os.path.exists(tmp_file.name):
-                    os.remove(tmp_file.name)
-                raise
-
-            # Atomic move: only put the file in its final place when fully done
-            tmp_file.close()
-            shutil.move(tmp_file.name, final_archive_path)
+                shutil.move(tmp_file.name, final_archive_path)
             
         logger.info(f"Created new optimized archive for '{crawl_id}' at {final_archive_path}")
         return final_archive_path
@@ -1031,7 +1057,7 @@ class CrawlerManager:
                 
                 reindexed_data = {
                     "crawl_id": crawl_id, "status": final_status, "domain": domain,
-                    "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
+                    "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)).isoformat(),
                     "storage_path": job_storage_path,
                     "callback_url": None, "failure_callback_url": None, "pid": None
                 }
@@ -1174,20 +1200,28 @@ class CrawlerManager:
             logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
 
             try:
-                def _archive_and_cleanup():
-                    """Synchronous archive creation + local cleanup, run in a worker thread."""
+                def _create_archive():
+                    """Create tar.gz archive in shared volume."""
                     os.makedirs(archives_dir, exist_ok=True)
-
-                    # Create tar.gz archive in the shared volume
                     base_name = os.path.join(archives_dir, crawl_id)
                     final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
-
-                    # Verify archive integrity
                     archive_size = os.path.getsize(final_path)
                     if archive_size == 0:
-                        raise RuntimeError(f"Archive created at '{final_path}' is empty (0 bytes).")
+                        raise RuntimeError(f"Archive at '{final_path}' is empty (0 bytes).")
 
-                    # Cleanup local data files (preserve logs, markers, and status snapshot)
+                    # Verify archive is readable
+                    try:
+                        import tarfile as tf
+                        with tf.open(final_path, 'r:gz') as t:
+                            t.getnames()  # Force read of the archive index
+                    except Exception as e:
+                        os.remove(final_path)
+                        raise RuntimeError(f"Archive integrity check failed: {e}")
+
+                    return final_path, archive_size
+
+                def _cleanup_local_data():
+                    """Remove crawl data files, keeping only logs and markers."""
                     files_to_keep = {'crawler.log', '_callback_payload.json',
                                      '_completion_marker.json', '_status_snapshot.json',
                                      '_exit_reason.json', '_update_report.json',
@@ -1202,14 +1236,19 @@ class CrawlerManager:
                             except OSError:
                                 pass
 
-                    return final_path, archive_size
+                # Step 1: Create archive
+                final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
+                logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
 
-                final_path, archive_size = await anyio.to_thread.run_sync(_archive_and_cleanup)
-
-                logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes). Local storage cleaned up.")
-
-                # Mark job as 'archived' to prevent double-archiving
+                # Step 2: Mark as archived (must succeed before cleanup)
                 await self._mark_as_archived(crawl_id, job_info)
+
+                # Step 3: Cleanup (safe to fail — data is in the archive)
+                try:
+                    await anyio.to_thread.run_sync(_cleanup_local_data)
+                    logger.info(f"Cleaned up local storage for '{crawl_id}'.")
+                except Exception as e:
+                    logger.warning(f"Local cleanup failed for '{crawl_id}' (archive is safe): {e}")
 
                 return {
                     "crawl_id": crawl_id,
@@ -1391,7 +1430,32 @@ class CrawlerManager:
             except Exception as e:
                 logger.error(f"Error listing archives directory during cleanup: {e}")
                 errors += 1
-                
+
+            # Also clean up stale GCS download artifacts
+            for dir_path, file_suffixes in [
+                (settings.DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error')),
+                (settings.DOWNLOAD_REQUESTS_PATH, ('.request',)),
+            ]:
+                if not os.path.exists(dir_path):
+                    continue
+                try:
+                    for filename in os.listdir(dir_path):
+                        file_path = os.path.join(dir_path, filename)
+                        if not os.path.isfile(file_path):
+                            continue
+                        try:
+                            mtime = os.path.getmtime(file_path)
+                            age = now - mtime
+                            if age > max_age_seconds:
+                                os.remove(file_path)
+                                deleted_count += 1
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up '{filename}': {e}")
+                            errors += 1
+                except Exception as e:
+                    logger.error(f"Error listing directory '{dir_path}': {e}")
+                    errors += 1
+
             return deleted_count, retained_count, errors
 
         # Run in thread

@@ -73,6 +73,75 @@ const FORBIDDEN_PARAMS = [
     'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_',
 ];
 
+// alwaysRemove: These params are STRIPPED from the URL, but the URL is still crawled.
+// Use for noise params (tracking, session, actions) that don't change page content.
+// Hoisted to module-level to avoid re-instantiation on every discovered link.
+const ALWAYS_REMOVE_PARAMS = [
+    // === CART, WISHLIST & USER ACTIONS ===
+    "add-to-cart", "add_to_cart", "addtocart",
+    "add-to-compare", "add_to_compare",
+    "add-to-wishlist", "add_to_wishlist", "addtowishlist",
+    "remove_from_wishlist", "remove_wishlist",
+    "remove_compare", "remove_item",
+    "quantity", "qty",
+
+    // === UTM (Marketing) ===
+    "utm_source", "utm_medium", "utm_campaign",
+    "utm_content", "utm_term", "utm_id",
+    "utm_referrer", "utm_name",
+
+    // === FACEBOOK & META ===
+    "fbclid", "fb_action_ids", "fb_action_types",
+    "fb_source", "fb_ref",
+
+    // === GOOGLE ADS & ANALYTICS ===
+    "gclid", "gclsrc", "dclid",
+    "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+    "_ga", "_gid", "_gat", "_gl",
+
+    // === HUBSPOT ===
+    "hsa_acc", "hsa_cam", "hsa_grp",
+    "hsa_ad", "hsa_src", "hsa_mt",
+    "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+    "hsCtaTracking", "hsCta",
+
+    // === MAILCHIMP ===
+    "mc_cid", "mc_eid",
+
+    // === SOCIAL MEDIA TRACKING ===
+    "twclid", "li_fat_id", "msclkid",
+    "igshid", "tt_medium", "tt_content",
+
+    // === OTHER TRACKING ===
+    "_openstat", "yclid", "wickedid", "_kx", "epik", "pp",
+    "click_id", "transaction_id",
+    "ref", "referrer", "source", "medium", "campaign",
+
+    // === SESSION ===
+    "sessionid", "session_id", "PHPSESSID",
+    "sid", "s_id", "SID",
+
+    // === AFFILIATE & MARKETING ===
+    "aff_id", "affiliate", "partner",
+    "coupon", "discount", "promo", "voucher",
+
+    // === CMS INTERNALS (noise, not navigation) ===
+    // WordPress
+    "_wpnonce", "preview", "preview_id", "preview_nonce", "et_blog",
+    // PrestaShop (non-routing params only)
+    "id_product_attribute", "isolang", "id_lang",
+    // Shopify (recommendation tracking only)
+    "pr_prod_strat", "pr_rec_id", "pr_rec_pid", "pr_ref_pid", "pr_seq",
+    "selling_plan",
+    // Magento
+    "___store", "___from_store",
+
+    // === DEDUP HELPERS (same content, different presentation) ===
+    // NOTE: "view", "mode", "display", "order", "sort", "resultsPerPage", "productListView"
+    // are intentionally NOT listed here — they belong in FORBIDDEN_PARAMS (reject the URL entirely).
+    "timestamp", "random", "nocache",
+];
+
 const detectionClient = new DetectionLangueClient();
 
 router.addDefaultHandler(
@@ -494,6 +563,10 @@ router.addDefaultHandler(
                     }
                 }
 
+                // Track URLs with '?' and '#' for postNavigationHook limit checks
+                if (url.includes('?')) context.countQuestionMark++;
+                if (url.includes('#')) context.countDiez++;
+
                 await routerDefaultHandler(
                     request,
                     requestQueue,
@@ -541,73 +614,8 @@ router.addDefaultHandler(
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
                         
-                        // alwaysRemove: These params are STRIPPED from the URL, but the URL is still crawled.
-                        // Use for noise params (tracking, session, actions) that don't change page content.
-                        const alwaysRemove = [
-                            // === CART, WISHLIST & USER ACTIONS ===
-                            "add-to-cart", "add_to_cart", "addtocart",
-                            "add-to-compare", "add_to_compare",
-                            "add-to-wishlist", "add_to_wishlist", "addtowishlist",
-                            "remove_from_wishlist", "remove_wishlist",
-                            "remove_compare", "remove_item",
-                            "quantity", "qty",
-
-                            // === UTM (Marketing) ===
-                            "utm_source", "utm_medium", "utm_campaign",
-                            "utm_content", "utm_term", "utm_id",
-                            "utm_referrer", "utm_name",
-
-                            // === FACEBOOK & META ===
-                            "fbclid", "fb_action_ids", "fb_action_types",
-                            "fb_source", "fb_ref",
-
-                            // === GOOGLE ADS & ANALYTICS ===
-                            "gclid", "gclsrc", "dclid",
-                            "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
-                            "_ga", "_gid", "_gat", "_gl",
-
-                            // === HUBSPOT ===
-                            "hsa_acc", "hsa_cam", "hsa_grp",
-                            "hsa_ad", "hsa_src", "hsa_mt",
-                            "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
-                            "hsCtaTracking", "hsCta",
-
-                            // === MAILCHIMP ===
-                            "mc_cid", "mc_eid",
-
-                            // === SOCIAL MEDIA TRACKING ===
-                            "twclid", "li_fat_id", "msclkid",
-                            "igshid", "tt_medium", "tt_content",
-
-                            // === OTHER TRACKING ===
-                            "_openstat", "yclid", "wickedid", "_kx", "epik", "pp",
-                            "click_id", "transaction_id",
-                            "ref", "referrer", "source", "medium", "campaign",
-
-                            // === SESSION ===
-                            "sessionid", "session_id", "PHPSESSID",
-                            "sid", "s_id", "SID",
-
-                            // === AFFILIATE & MARKETING ===
-                            "aff_id", "affiliate", "partner",
-                            "coupon", "discount", "promo", "voucher",
-
-                            // === CMS INTERNALS (noise, not navigation) ===
-                            // WordPress
-                            "_wpnonce", "preview", "preview_id", "preview_nonce", "et_blog",
-                            // PrestaShop (non-routing params only)
-                            "id_product_attribute", "isolang", "id_lang",
-                            // Shopify (recommendation tracking only)
-                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid", "pr_ref_pid", "pr_seq",
-                            "selling_plan",
-                            // Magento
-                            "___store", "___from_store",
-
-                            // === DEDUP HELPERS (same content, different presentation) ===
-                            "view", "mode", "display",
-                            "order", "sort", "resultsPerPage", "productListView",
-                            "timestamp", "random", "nocache",
-                        ];
+                        // ALWAYS_REMOVE_PARAMS is defined at module level to avoid
+                        // re-instantiation on every discovered link.
 
                         // Strip empty fragment (#) — "page#" and "page" are identical content
                         if (request.url.endsWith('#')) {
@@ -615,7 +623,7 @@ router.addDefaultHandler(
                         }
 
                         // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
-                        request.url = processUrl(request.url, false, false, { toRemove: alwaysRemove });
+                        request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });
 
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
@@ -740,7 +748,6 @@ router.addDefaultHandler(
                 if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
                 await dataset.pushData({ url, content });
-                await requestQueue.markRequestHandled(request);
             }
         } else {
             console.log(`Doublon url : ${url}`);
