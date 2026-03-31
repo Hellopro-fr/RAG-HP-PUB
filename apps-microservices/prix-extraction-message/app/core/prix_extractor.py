@@ -579,11 +579,12 @@ class PrixExtractor:
 
             all_item_results.extend(batch_item_results)
 
-            # Sauvegarde batch des IDs traités avec succès ou skipped
-            successful_ids = [r.item_id for r in batch_item_results if r.status in ("success", "skipped")]
+            # Sauvegarde batch des IDs traités (success et skipped séparément)
+            success_ids = [r.item_id for r in batch_item_results if r.status == "success"]
+            skipped_ids = [r.item_id for r in batch_item_results if r.status == "skipped"]
 
-            if successful_ids:
-                self._log(f"--- Sauvegarde batch de {len(successful_ids)} ID(s) message ---")
+            if success_ids:
+                self._log(f"--- Sauvegarde batch de {len(success_ids)} ID(s) success message ---")
                 save_result = await self.api_client.post(
                     "prix",
                     "process",
@@ -591,17 +592,38 @@ class PrixExtractor:
                     {
                         "id_categorie":    id_categorie,
                         "type_extraction": self.TYPE_EXTRACTION,
-                        "id_cibles":       successful_ids
+                        "id_cibles":       success_ids,
+                        "flag":            1
                     }
                 )
-
                 if save_result and not save_result.get("erreur"):
-                    nb = save_result.get("nb_insere", len(successful_ids))
-                    self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s)")
+                    nb = save_result.get("nb_insere", len(success_ids))
+                    self._log(f"✅ Batch save OK: {nb} ID(s) success enregistré(s)")
                 else:
                     self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
                     raise Exception(f"Batch save: réponse inattendue: {save_result}")
 
+            if skipped_ids:
+                self._log(f"--- Sauvegarde batch de {len(skipped_ids)} ID(s) skipped message ---")
+                save_result = await self.api_client.post(
+                    "prix",
+                    "process",
+                    "save",
+                    {
+                        "id_categorie":    id_categorie,
+                        "type_extraction": self.TYPE_EXTRACTION,
+                        "id_cibles":       skipped_ids,
+                        "flag":            0
+                    }
+                )
+                if save_result and not save_result.get("erreur"):
+                    nb = save_result.get("nb_insere", len(skipped_ids))
+                    self._log(f"✅ Batch save OK: {nb} ID(s) skipped enregistré(s)")
+                else:
+                    self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                    raise Exception(f"Batch save: réponse inattendue: {save_result}")
+
+            if success_ids or skipped_ids:
                 # Publier les résultats du batch vers embedding
                 if self._on_batch_publish:
                     published = await self._on_batch_publish(batch_item_results, id_categorie)

@@ -614,8 +614,8 @@ router.addDefaultHandler(
                             request.url = request.url.slice(0, -1);
                         }
 
-                        // Always strip the "Always Remove" list first
-                        request.url = processUrl(request.url, true, false, { toRemove: alwaysRemove });
+                        // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
+                        request.url = processUrl(request.url, false, false, { toRemove: alwaysRemove });
 
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
