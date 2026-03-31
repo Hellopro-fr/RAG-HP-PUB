@@ -80,6 +80,12 @@ class Consumer:
             data = json.loads(body)
             logger.info(f"📥 Message reçu pour collection: {data.get('collection', 'unknown')}")
 
+            # Filtrage : seuls les messages mode=update sont traités
+            if data.get("mode") != "update":
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                logger.info(f"Message ignoré (mode={data.get('mode', 'none')} != 'update'), ACK silencieux")
+                return
+
             # Appel de la logique métier
             success = send_webhook(data)
 

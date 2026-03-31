@@ -84,8 +84,8 @@ class Consumer:
             # 1. Appelle la logique métier PURE
             output_message = insertion_data(produits_data)
             
-            # 2. Utilise le publisher pour envoyer le résultat
-            if output_message:
+            # 2. Publie vers le webhook uniquement pour les updates forcés
+            if output_message and output_message.get("mode") == "update" and output_message.get("updated"):
                 self.publisher.publish_message(output_message)
 
             # 3. Acquitte le message original
