@@ -572,8 +572,17 @@ class RecommendationServiceV2:
         scored = []
         count = 0
         start = time.perf_counter()
+        first_record_time = None
+        last_log_count = 0
         async for row in clients.execute_cypher_stream(query, params):
             count += 1
+            elapsed = time.perf_counter() - start
+            if count == 1:
+                first_record_time = elapsed
+                logging.warning("[V2-STREAM] first record at %.3fs", elapsed)
+            if count % 100 == 0:
+                logging.warning("[V2-STREAM] record #%d at %.3fs (delta %.3fs for last 100)", count, elapsed, elapsed - (time.perf_counter() - start) if last_log_count == 0 else elapsed - last_log_count)
+                last_log_count = elapsed
             result = self._score_single_row(
                 row, flat_filters, scoring_params,
                 user_id_pays, user_dept, user_typologie, id_categorie,
@@ -582,8 +591,8 @@ class RecommendationServiceV2:
                 scored.append(result)
         total = time.perf_counter() - start
         logging.warning(
-            "[V2-TIMING] stream+score: %.3fs (%d fetched, %d scored)",
-            total, count, len(scored),
+            "[V2-TIMING] stream+score: %.3fs (%d fetched, %d scored) | first_record: %.3fs",
+            total, count, len(scored), first_record_time or 0.0,
         )
         return scored, total
 
