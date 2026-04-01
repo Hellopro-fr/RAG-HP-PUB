@@ -61,13 +61,10 @@ RETURN product_data, info_soc
 CYPHER_V2_FETCH_CHARS = """
 MATCH (p:Produit)
 WHERE p.id_produit IN $product_ids AND p.est_actif = true
-WITH p, $all_cids AS cids
-UNWIND cids AS cid
 OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-WHERE pc.id_source_caracteristique = cid
-WITH p, cid, collect(properties(pc)) AS matched_nodes
-WITH p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
-RETURN p.id_produit AS id_produit, characteristics
+WHERE pc.id_source_caracteristique IN $all_cids
+WITH p, collect(properties(pc)) AS all_chars
+RETURN p.id_produit AS id_produit, all_chars
 """
 
 
@@ -593,9 +590,19 @@ class RecommendationServiceV2:
                     candidate = candidate_map.get(pid)
                     if not candidate:
                         continue
+                    # Group flat chars list by cid for score_product
+                    all_chars = row.get("all_chars", [])
+                    chars_by_cid = defaultdict(list)
+                    for pc in all_chars:
+                        cid = pc.get("id_source_caracteristique", "")
+                        chars_by_cid[cid].append(pc)
+                    characteristics = [
+                        {"cid": cid, "matched_nodes": nodes}
+                        for cid, nodes in chars_by_cid.items()
+                    ]
                     raw = {
                         "product_data": candidate.get("product_data", {}),
-                        "characteristics": row.get("characteristics", []),
+                        "characteristics": characteristics,
                         "info_soc": candidate.get("info_soc", {}),
                     }
                     result = self._score_single_product(
