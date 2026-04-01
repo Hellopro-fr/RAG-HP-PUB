@@ -567,13 +567,28 @@ class PrixExtractor:
 
             self._log(f"📊 {len(chunks)} chunks trouvés dans Milvus")
 
-            # Filtrer les chunks déjà traités (dédoublonnage cross-boucles Q1)
+            # Filtrer les chunks déjà traités + dédoublonnage intra-résultat RAG
             chunks_filtres = []
+            ids_vus_dans_batch = {}  # chunk_id -> fingerprint (text + context)
             for chunk in chunks:
                 chunk_id = str(chunk.get("id", ""))
+                metadata = chunk.get("metadata", {})
+                entity = metadata.get("entity", metadata)
+                fingerprint = (
+                    entity.get("text", ""),
+                    metadata.get("context_pre") or entity.get("context_pre") or "",
+                    metadata.get("context_post") or entity.get("context_post") or ""
+                )
                 if chunk_id in ids_chunks_traites:
                     self._log(f"Chunk {chunk_id} déjà traité")
+                elif chunk_id in ids_vus_dans_batch:
+                    if ids_vus_dans_batch[chunk_id] == fingerprint:
+                        self._log(f"Chunk {chunk_id} doublon identique dans résultat RAG — ignoré")
+                    else:
+                        self._log(f"Chunk {chunk_id} même ID mais contenu différent — conservé")
+                        chunks_filtres.append(chunk)
                 else:
+                    ids_vus_dans_batch[chunk_id] = fingerprint
                     chunks_filtres.append(chunk)
             chunks = chunks_filtres
 
