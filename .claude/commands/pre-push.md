@@ -12,21 +12,30 @@ Group them by service directory.
 
 ### Step 2 — Per-service checks
 
-For each affected service:
+Detect each service's stack per `.claude/rules/stack-detection.md`, then run the appropriate checks:
 
-**Python services:**
+**Python** (detected by `requirements.txt` or `pyproject.toml`):
 1. Check syntax: `python -m py_compile <modified_files>`
 2. Check imports: verify no circular imports, no unused imports visible
 3. Run tests if they exist: `pytest apps-microservices/<service>/tests/ -v --tb=short -x`
 4. If no tests exist, flag: "⚠️ No tests found for <service>. Consider using @test-writer."
 
-**Rust services:**
+**Rust** (detected by `Cargo.toml`):
 1. `cargo check --manifest-path apps-microservices/<service>/Cargo.toml`
 2. `cargo test --manifest-path apps-microservices/<service>/Cargo.toml` (if tests exist)
 
-**TypeScript/Node.js services:**
+**Node.js / TypeScript** (detected by `package.json`):
 1. Check if lint script exists in package.json, run it
 2. Check if test script exists in package.json, run it
+
+**Go** (detected by `go.mod`):
+1. `go vet ./...` from the service directory
+2. `go test ./...` (if tests exist)
+
+**Unknown stack** (no recognized indicator file):
+1. Look for a `Makefile`, `justfile`, or `taskfile` — run `make check` or `make test` if available.
+2. Look for a `tests/` or `test/` directory — attempt to infer and run the test framework.
+3. Flag: "⚠️ Unknown stack for <service>. Manual verification recommended."
 
 **Shared libraries (libs/):**
 1. Check syntax and imports

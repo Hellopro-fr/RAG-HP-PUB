@@ -11,10 +11,31 @@
 
 ## Build Best Practices
 
+Detect the service's stack per `.claude/rules/stack-detection.md`, then apply the appropriate build patterns:
+
+**Python:**
 - ALWAYS use `--no-cache-dir` on `pip install` to reduce image size.
-- ALWAYS use multi-stage builds when the build step produces artifacts (e.g., ONNX export, proto compilation).
-- COPY only what is needed — avoid `COPY . .` at the root level. Copy `requirements.txt` first, install, then copy source.
+- Copy `requirements.txt` first, install, then copy source (layer caching).
+
+**Node.js:**
+- Copy `package.json` and lock file first, install, then copy source.
+- Use `npm ci` (not `npm install`) for deterministic builds.
+- Add `node_modules/` to `.dockerignore`.
+
+**Rust:**
+- Use multi-stage builds: build in a `rust:*` image, copy binary to a minimal runtime image (`debian:*-slim` or `alpine`).
+- Cache cargo registry and build artifacts between builds if possible.
+
+**Go:**
+- Use multi-stage builds: build with `golang:*`, copy binary to `scratch` or `alpine`.
+- Use `CGO_ENABLED=0` for static binaries when possible.
+
+**All stacks:**
+- ALWAYS use multi-stage builds when the build step produces artifacts (e.g., ONNX export, proto compilation, compiled binaries).
+- COPY only what is needed — avoid `COPY . .` at the root level.
 - Remove build-time dependencies after use (`apt-get purge`, `rm -rf /var/lib/apt/lists/*`).
+
+**Unknown stack:** Apply the generic rules above. If the stack has specific Dockerfile patterns, flag: "Consider updating `.claude/rules/docker-security.md` with patterns for this stack."
 
 ## Runtime Security
 

@@ -2,6 +2,8 @@
 
 > No project-wide formatter is enforced yet. These rules define the conventions Claude must follow when writing or modifying code, ensuring consistency until formal tooling is adopted.
 
+> **Stack detection:** Always detect the service's stack per `.claude/rules/stack-detection.md` before applying formatting conventions. The sections below cover known stacks. For stacks not listed here, follow the Unknown/New Stack section at the bottom.
+
 ## Python (80+ services)
 
 ### Style
@@ -62,6 +64,27 @@ from app.core.config import settings
 - **Match the file's existing style.** If a file uses single quotes, keep single quotes. If it uses 2-space indent, keep 2-space.
 - NEVER reformat code outside the scope of your change.
 - If you notice inconsistent formatting in a file, flag it as a suggestion — do not auto-fix it during an unrelated change.
+
+## Go
+
+- Follow `go fmt` defaults (canonical — no configuration needed).
+- **Indentation**: Tabs (Go standard).
+- **Line length**: No strict limit, but keep readable (~100 chars).
+- **Naming**: Exported = `PascalCase`, unexported = `camelCase`. No underscores in function names.
+- **Imports**: Use `goimports` grouping (stdlib, third-party, local).
+- **Error handling**: Always check errors. Never ignore returned errors.
+
+## Unknown / New Stack
+
+When a service's stack is not listed above:
+
+1. **Detect the stack** per `.claude/rules/stack-detection.md`.
+2. **Infer conventions from existing code**: read 2-3 files to determine indentation (tabs vs spaces, width), quote style, naming patterns.
+3. **Apply language-agnostic defaults**:
+   - Match the file's existing indentation and style.
+   - Consistent naming within the file.
+   - Trailing newline at end of file.
+4. **Flag for update**: "New stack detected: [stack]. Consider adding formatting conventions to `.claude/rules/formatting.md`."
 
 ## Future: When Formatters Are Adopted
 
