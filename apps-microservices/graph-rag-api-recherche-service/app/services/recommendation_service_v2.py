@@ -746,6 +746,17 @@ class RecommendationServiceV2:
             coeff_caracteristique=float(scored["global_score"]),
         )
 
+    def _extract_all_cids(self, request) -> List[str]:
+        """Extract CIDs directly from request — no normalization needed."""
+        return [str(c.id_caracteristique) for c in request.liste_caracteristique]
+
+    async def _fetch_raw_results(self, query: str, params: Dict) -> List[Dict]:
+        """Collect all streamed results into a list."""
+        results = []
+        async for row in clients.execute_cypher_stream(query, params):
+            results.append(row)
+        return results
+
     async def get_products_by_caracteristique_filters(
         self,
         request: MatchingPayloadIdProduit,
@@ -756,21 +767,32 @@ class RecommendationServiceV2:
         if request.id_produit is not None:
             target_product_id = str(request.id_produit)
 
-        # 1. Normalize constraints (reuse V1)
-        norm_start = time.perf_counter()
-        flat_filters = await v1_service._normalize_constraints_for_caracteristique(
-            request
+        # 1. Build Cypher params from raw request (no normalization needed)
+        all_cids = self._extract_all_cids(request)
+        cypher = self._build_v2_cypher(request, target_product_id)
+        params = {
+            "all_cids": all_cids,
+            "id_categorie": str(request.id_categorie) if request.id_categorie is not None else None,
+            "min_matching_cids": getattr(request, "min_matching_cids", self.MIN_MATCHING_CIDS_DEFAULT),
+        }
+        if target_product_id:
+            params["target_product_id"] = str(f"id_produit_{request.id_produit}") if request.id_produit else None
+
+        # 2. Run normalize + Neo4j fetch in PARALLEL
+        parallel_start = time.perf_counter()
+        flat_filters_task = v1_service._normalize_constraints_for_caracteristique(request)
+        fetch_task = self._fetch_raw_results(cypher, params)
+
+        flat_filters, raw_results = await asyncio.gather(flat_filters_task, fetch_task)
+        parallel_time = time.perf_counter() - parallel_start
+        logging.warning(
+            "[V2-TIMING] parallel(normalize+fetch): %.3fs (%d results)",
+            parallel_time, len(raw_results),
         )
-        norm_time = time.perf_counter() - norm_start
-        logging.warning("[V2-TIMING] normalize_constraints: %.3fs", norm_time)
 
         scoring_params = v1_service._extract_scoring_params(request)
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
-
-        # 2. Stream from Neo4j + score each product as it arrives
-        cypher = self._build_v2_cypher(request, target_product_id)
-        params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
 
         user_meta = request.metadonnee_utilisateurs
         user_cp = user_meta.cp if user_meta else None
@@ -780,12 +802,16 @@ class RecommendationServiceV2:
         id_categorie = str(request.id_categorie) if request.id_categorie else None
 
         try:
-            scored, stream_time = await self._stream_and_score(
-                cypher, params, flat_filters, scoring_params,
+            # 3. Score all products (normalize is done, results are buffered)
+            score_start = time.perf_counter()
+            scored = self._score_raw_results(
+                raw_results, flat_filters, scoring_params,
                 user_id_pays, user_dept, user_typologie, id_categorie,
             )
-            fetch_time = stream_time
-            score_time = 0.0  # included in stream_time
+            score_time = time.perf_counter() - score_start
+            logging.warning("[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)", score_time, len(raw_results), len(scored))
+
+            fetch_time = parallel_time
 
             if not scored:
                 return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
@@ -818,10 +844,9 @@ class RecommendationServiceV2:
 
             total_time = time.perf_counter() - start_time
             logging.warning(
-                "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | cypher: %.3fs | scoring: %.3fs | diversity: %.3fs",
+                "[V2-TIMING] === TOTAL: %.3fs === | parallel(norm+fetch): %.3fs | scoring: %.3fs | diversity: %.3fs",
                 total_time,
-                norm_time,
-                fetch_time,
+                parallel_time,
                 score_time,
                 diversity_time,
             )
@@ -847,21 +872,28 @@ class RecommendationServiceV2:
         if request.id_produit is not None:
             target_product_id = str(request.id_produit)
 
-        # 1. Normalize
-        norm_start = time.perf_counter()
-        flat_filters = await v1_service._normalize_constraints_for_caracteristique(
-            request
+        # 1. Build Cypher params from raw request + run normalize + fetch in PARALLEL
+        all_cids = self._extract_all_cids(request)
+        cypher = self._build_v2_cypher(request, target_product_id)
+        params = {
+            "all_cids": all_cids,
+            "id_categorie": str(request.id_categorie) if request.id_categorie is not None else None,
+            "min_matching_cids": getattr(request, "min_matching_cids", self.MIN_MATCHING_CIDS_DEFAULT),
+        }
+        if target_product_id:
+            params["target_product_id"] = str(f"id_produit_{request.id_produit}") if request.id_produit else None
+
+        parallel_start = time.perf_counter()
+        flat_filters, raw_results = await asyncio.gather(
+            v1_service._normalize_constraints_for_caracteristique(request),
+            self._fetch_raw_results(cypher, params),
         )
-        norm_time = time.perf_counter() - norm_start
-        logging.warning("[V2-TIMING] normalize_constraints: %.3fs", norm_time)
+        parallel_time = time.perf_counter() - parallel_start
+        logging.warning("[V2-TIMING] parallel(normalize+fetch): %.3fs (%d results)", parallel_time, len(raw_results))
 
         scoring_params = v1_service._extract_scoring_params(request)
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
-
-        # 2. Stream from Neo4j + score each product as it arrives
-        cypher = self._build_v2_cypher(request, target_product_id)
-        params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
 
         user_meta = request.metadonnee_utilisateurs
         user_cp = user_meta.cp if user_meta else None
@@ -871,12 +903,14 @@ class RecommendationServiceV2:
         id_categorie = str(request.id_categorie) if request.id_categorie else None
 
         try:
-            scored, stream_time = await self._stream_and_score(
-                cypher, params, flat_filters, scoring_params,
+            score_start = time.perf_counter()
+            scored = self._score_raw_results(
+                raw_results, flat_filters, scoring_params,
                 user_id_pays, user_dept, user_typologie, id_categorie,
             )
-            fetch_time = stream_time
-            score_time = 0.0
+            score_time = time.perf_counter() - score_start
+            logging.warning("[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)", score_time, len(raw_results), len(scored))
+            fetch_time = parallel_time
 
             if not scored:
                 return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
@@ -979,10 +1013,9 @@ class RecommendationServiceV2:
 
             total_time = time.perf_counter() - start_time
             logging.warning(
-                "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | cypher: %.3fs | scoring: %.3fs | diversity: %.3fs | enrich+llm: %.3fs",
+                "[V2-TIMING] === TOTAL: %.3fs === | parallel(norm+fetch): %.3fs | scoring: %.3fs | diversity: %.3fs | enrich+llm: %.3fs",
                 total_time,
-                norm_time,
-                fetch_time,
+                parallel_time,
                 score_time,
                 diversity_time,
                 enrich_time,
