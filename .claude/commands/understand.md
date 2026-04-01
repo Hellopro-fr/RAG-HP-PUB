@@ -1,5 +1,7 @@
 # /understand — Content Comprehension
 
+Absorb and summarize **multiple files, uploads, or broad topics** before discussing them. Use `/explain` instead for a single file or code block deep-dive.
+
 The user wants you to absorb and understand content before discussing it.
 
 1. Identify the content: uploaded files first, then any text following the command.

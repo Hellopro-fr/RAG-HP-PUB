@@ -1,5 +1,7 @@
 # /explain — Code Explanation
 
+Explain a **single file or code block** the user references. Use `/understand` instead for multi-file content or broad codebase comprehension.
+
 Analyze the file or code block the user references.
 
 Provide a clear, plain-language explanation:

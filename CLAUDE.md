@@ -43,7 +43,7 @@ docs/                 # Project documentation
 - **Messaging**: RabbitMQ (pika) for async processing; most processors consume from queues.
 - **Inter-service RPC**: gRPC via `protos/` definitions; Python stubs in `libs/grpc-stubs`, Rust in `libs/rust-common-utils`.
 - **Containerization**: Every service has a Dockerfile; root `docker-compose.yml` orchestrates infra.
-- **Type checking**: `cargo check` for Rust. [TODO: Python type checker to be decided by the team].
+- **Type checking**: `cargo check` for Rust. No Python type checker enforced yet (ruff or mypy recommended — team decision pending).
 - **CI/CD**: GitHub Actions — `ci_services_*.yml` (lint/test), `cd_build_push_*.yml` (Docker build+push).
 - **Commit messages**: Conventional Commits, bilingual EN/FR (see `.claude/rules/commit-messages.md`).
 
@@ -63,9 +63,12 @@ Most Python/Rust microservices run on a remote server with GPU and network acces
 - **Qdrant**: Vector database (category/product/document search)
 - **Elasticsearch**: Full-text search (disabled by default in compose)
 
+### MCP Servers
+`settings.json` enables all project MCP servers (`enableAllProjectMcpServers: true`). When adding a new MCP server, ensure it is reviewed by the team before merging — this flag grants full tool access to every configured server.
+
 ## Sub-Agent Routing
 
-- **Rust service** (`graph-rag-api-recherche-rust-service`): use for Actix-web, Neo4j, gRPC client work.
+- **Rust service** (`graph-rag-api-recherche-rust-service`): use for Actix-web, Neo4j, gRPC client work. Note: no dedicated Rust agent exists yet — use the general-purpose agent with Rust context.
 - **Python FastAPI services**: most follow identical patterns — check one as template.
 - **Frontend services**: Next.js/React — separate Node.js toolchain.
 - **Proto changes**: update `protos/`, regenerate stubs in `libs/grpc-stubs` and `libs/rust-common-utils`.

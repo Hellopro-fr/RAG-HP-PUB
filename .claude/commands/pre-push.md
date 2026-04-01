@@ -7,7 +7,7 @@ Run this checklist before pushing code to the remote repository.
 For EACH service that was modified in the current session:
 
 ### Step 1 — Identify changed files
-Run `git diff --name-only HEAD` to find all modified files.
+Run `git diff --name-only origin/main...HEAD` to find all files changed in the current branch.
 Group them by service directory.
 
 ### Step 2 — Per-service checks
@@ -34,7 +34,8 @@ For each affected service:
 3. Flag: "⚠️ Changes to libs/ affect multiple services. Review downstream impact."
 
 ### Step 3 — Code review
-Run `@code-reviewer` on all changed files.
+Review all changed files for SOLID/DRY/KISS violations, security issues, and performance concerns.
+Note: This step is a manual review by the main agent — do NOT delegate to `@code-reviewer` (it lacks Bash access needed for this workflow context).
 
 ### Step 4 — Summary
 Display a summary table:

@@ -47,13 +47,13 @@ A new microservice has been added to the project. Generate its CLAUDE.md and upd
 
 4. **Update root CLAUDE.md:**
    - Add a new row to the Service Map table.
-   - Add a new @import line under "Per-Service Details."
+   - Add a new @import line under "Per-Service Instructions."
 
 5. **Show the user both files** (new service CLAUDE.md + root CLAUDE.md diff) and ask for confirmation before writing.
 
 ## Rules
 
-- Keep the new service CLAUDE.md under 60 lines.
+- Keep the new service CLAUDE.md under 80 lines.
 - Use ONLY information detectable from actual files. Mark unknowns as [TODO].
 - If the service has no tests yet, note: "⚠️ No test suite detected. Add tests before relying on test feedback loops."
 - If the service has no linter config, note: "⚠️ No linter detected. Consider adding [appropriate linter for the language]."
