@@ -25,67 +25,49 @@ logging.basicConfig(
 # Simplified Cypher Queries — fetch only, no scoring
 # ---------------------------------------------------------------------------
 
-CYPHER_V2_FETCH_ANCHOR = """
+# Phase 1: Fast candidate fetch (IDs + fournisseur info only, no characteristics)
+CYPHER_V2_CANDIDATES_ANCHOR = """
 UNWIND $filters AS f
 MATCH (pc:CaracteristiqueTechnique)
 WHERE pc.id_source_caracteristique = f.cid
 MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
 WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie) AND p.est_actif = true
 WITH DISTINCT p
-
-// Fetch characteristics only for filter CIDs
-WITH p, $all_cids AS cids
-UNWIND cids AS cid
-OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-WHERE pc.id_source_caracteristique = cid
-WITH p, cid, collect(properties(pc)) AS matched_nodes
-WITH p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
-
-// Fetch fournisseur data (no geo)
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-
 WITH p PROJECTION_PLACEHOLDER AS product_data,
-     characteristics,
      {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
-RETURN product_data, characteristics, info_soc
+RETURN product_data, info_soc
 """
 
-CYPHER_V2_FETCH_TARGET = """
+CYPHER_V2_CANDIDATES_TARGET = """
 MATCH (p:Produit)
 WHERE p.id = $target_product_id AND p.est_actif = true
-
-WITH p, $all_cids AS cids
-UNWIND cids AS cid
-OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-WHERE pc.id_source_caracteristique = cid
-WITH p, cid, collect(properties(pc)) AS matched_nodes
-WITH p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
-
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-
 WITH p PROJECTION_PLACEHOLDER AS product_data,
-     characteristics,
      {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
-RETURN product_data, characteristics, info_soc
+RETURN product_data, info_soc
 """
 
-CYPHER_V2_FETCH_BY_IDS = """
+CYPHER_V2_CANDIDATES_BY_IDS = """
 MATCH (p:Produit)
 WHERE p.id_produit IN $target_id_produits AND p.est_actif = true
+OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
+WITH p PROJECTION_PLACEHOLDER AS product_data,
+     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
+RETURN product_data, info_soc
+"""
 
+# Phase 2: Fetch characteristics for a batch of product IDs
+CYPHER_V2_FETCH_CHARS = """
+MATCH (p:Produit)
+WHERE p.id_produit IN $product_ids AND p.est_actif = true
 WITH p, $all_cids AS cids
 UNWIND cids AS cid
 OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
 WHERE pc.id_source_caracteristique = cid
 WITH p, cid, collect(properties(pc)) AS matched_nodes
 WITH p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
-
-OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-
-WITH p PROJECTION_PLACEHOLDER AS product_data,
-     characteristics,
-     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
-RETURN product_data, characteristics, info_soc
+RETURN p.id_produit AS id_produit, characteristics
 """
 
 
@@ -364,81 +346,6 @@ def score_product(
     return global_score, details
 
 
-def compute_zone_score(
-    pays_rels: List[Dict],
-    zone_rels: List[Dict],
-    info_soc: Dict,
-    user_id_pays: Optional[str],
-    user_dept: Optional[str],
-    id_categorie: Optional[str],
-    scoring_params: Dict,
-) -> float:
-    """Compute geographic zone score."""
-    g_unknown = scoring_params["g_unknown_score"]
-    z_unmatched = scoring_params["z_unmatched"]
-
-    # Filter out null entries
-    valid_pays = [pr for pr in pays_rels if pr.get("id_pays") is not None]
-    valid_zones = [zr for zr in zone_rels if zr.get("id_dept") is not None]
-
-    # Case 1: has pays relations
-    if valid_pays:
-        if user_id_pays is None:
-            return g_unknown
-        matching_pays = [pr for pr in valid_pays if pr.get("id_pays") == user_id_pays]
-        if not matching_pays:
-            return z_unmatched
-
-        # Check partiel
-        partiel_match = [pr for pr in matching_pays if pr.get("partiel") is True]
-        if partiel_match:
-            # Drill into zone
-            if user_dept is None:
-                return g_unknown
-            matching_zones = [zr for zr in valid_zones if zr.get("id_dept") == user_dept]
-            if not matching_zones:
-                return z_unmatched
-            for zr in matching_zones:
-                if zr.get("couvre_tous") is True:
-                    return 1.0
-                if zr.get("couvre_tous") is False:
-                    if id_categorie in (zr.get("couvre") or []):
-                        return 1.0
-                    if id_categorie in (zr.get("ne_couvre_pas") or []):
-                        return z_unmatched
-            return g_unknown
-        else:
-            # Non-partiel: check couvre_tous/couvre/ne_couvre_pas on pays
-            for pr in matching_pays:
-                if pr.get("couvre_tous") is True:
-                    return 1.0
-                if pr.get("couvre_tous") is False:
-                    if id_categorie in (pr.get("couvre") or []):
-                        return 1.0
-                    if id_categorie in (pr.get("ne_couvre_pas") or []):
-                        return z_unmatched
-            return g_unknown
-
-    # Case 2: no pays but has zone
-    if valid_zones:
-        if user_dept is None:
-            return g_unknown
-        matching_zones = [zr for zr in valid_zones if zr.get("id_dept") == user_dept]
-        if not matching_zones:
-            return z_unmatched
-        for zr in matching_zones:
-            if zr.get("couvre_tous") is True:
-                return 1.0
-            if zr.get("couvre_tous") is False:
-                if id_categorie in (zr.get("couvre") or []):
-                    return 1.0
-                if id_categorie in (zr.get("ne_couvre_pas") or []):
-                    return z_unmatched
-        return g_unknown
-
-    # Case 3: neither
-    return g_unknown
-
 
 def compute_etat_score(info_soc: Dict, global_score: float, scoring_params: Dict) -> Tuple[float, float]:
     """
@@ -549,6 +456,8 @@ def apply_diversity_mmr(
 
 class RecommendationServiceV2:
 
+    BATCH_SIZE = 10  # Products per characteristic-fetch batch
+
     def _build_v2_projection(self, request) -> str:
         if request.champs_sortie is not None and len(request.champs_sortie) > 0:
             champs = list(request.champs_sortie)
@@ -560,26 +469,22 @@ class RecommendationServiceV2:
             return f"{{ {', '.join(fields)} }}"
         return "{.*}"
 
-    def _build_v2_cypher(self, request, target_product_id: Optional[str] = None) -> str:
+    def _build_candidates_cypher(self, request, target_product_id: Optional[str] = None) -> str:
         if target_product_id:
-            query = CYPHER_V2_FETCH_TARGET
+            query = CYPHER_V2_CANDIDATES_TARGET
         else:
-            query = CYPHER_V2_FETCH_ANCHOR
+            query = CYPHER_V2_CANDIDATES_ANCHOR
         projection = self._build_v2_projection(request)
         return query.replace("PROJECTION_PLACEHOLDER", projection)
 
-    def _build_v2_cypher_by_ids(self, request) -> str:
-        query = CYPHER_V2_FETCH_BY_IDS
+    def _build_candidates_cypher_by_ids(self, request) -> str:
+        query = CYPHER_V2_CANDIDATES_BY_IDS
         projection = self._build_v2_projection(request)
         return query.replace("PROJECTION_PLACEHOLDER", projection)
 
-    def _build_v2_params(self, request, flat_filters, target_product_id=None, target_id_produits=None) -> Dict:
-        user_meta = request.metadonnee_utilisateurs
-        all_cids = [f["cid"] for f in flat_filters]
-
+    def _build_candidates_params(self, request, flat_filters, target_product_id=None, target_id_produits=None) -> Dict:
         params = {
             "filters": flat_filters,
-            "all_cids": all_cids,
             "id_categorie": str(request.id_categorie) if request.id_categorie is not None else None,
         }
         if target_product_id:
@@ -587,6 +492,82 @@ class RecommendationServiceV2:
         if target_id_produits:
             params["target_id_produits"] = target_id_produits
         return params
+
+    async def _stream_fetch_and_score(
+        self,
+        candidates: List[Dict],
+        flat_filters: List[Dict],
+        scoring_params: Dict,
+        user_id_pays: Optional[str],
+        user_dept: Optional[str],
+        user_typologie: Optional[str],
+        id_categorie: Optional[str],
+    ) -> List[Dict]:
+        """
+        Streaming pipeline: fetch characteristics in batches and score each batch
+        concurrently as results arrive. Uses asyncio.Queue producer-consumer pattern.
+        """
+        all_cids = [f["cid"] for f in flat_filters]
+        scored_results: List[Dict] = []
+        queue: asyncio.Queue = asyncio.Queue()
+
+        # Index candidates by id_produit for fast lookup
+        candidate_map = {}
+        for c in candidates:
+            pid = str(c.get("product_data", {}).get("id_produit", ""))
+            candidate_map[pid] = c
+
+        # Producer: fetch characteristics in batches, push to queue
+        async def producer():
+            product_ids = list(candidate_map.keys())
+            batch_tasks = []
+            for i in range(0, len(product_ids), self.BATCH_SIZE):
+                batch_ids = product_ids[i:i + self.BATCH_SIZE]
+                batch_tasks.append(self._fetch_chars_batch(batch_ids, all_cids))
+
+            # Fire all batch fetches concurrently
+            batch_results = await asyncio.gather(*batch_tasks)
+
+            for char_map in batch_results:
+                await queue.put(char_map)
+            await queue.put(None)  # Sentinel
+
+        # Consumer: score products as batches arrive
+        async def consumer():
+            while True:
+                char_map = await queue.get()
+                if char_map is None:
+                    break
+                for pid, characteristics in char_map.items():
+                    candidate = candidate_map.get(pid)
+                    if not candidate:
+                        continue
+                    raw = {
+                        "product_data": candidate.get("product_data", {}),
+                        "characteristics": characteristics,
+                        "info_soc": candidate.get("info_soc", {}),
+                    }
+                    result = self._score_single_product(
+                        raw, flat_filters, scoring_params,
+                        user_id_pays, user_dept, user_typologie, id_categorie,
+                    )
+                    if result is not None:
+                        scored_results.append(result)
+
+        await asyncio.gather(producer(), consumer())
+        return scored_results
+
+    async def _fetch_chars_batch(self, product_ids: List[str], all_cids: List[str]) -> Dict[str, List[Dict]]:
+        """Fetch characteristics for a batch of products. Returns {id_produit: characteristics}."""
+        results = await clients.execute_cypher(
+            CYPHER_V2_FETCH_CHARS,
+            {"product_ids": product_ids, "all_cids": all_cids},
+        )
+        char_map = {}
+        for row in (results or []):
+            pid = str(row.get("id_produit", ""))
+            char_map[pid] = row.get("characteristics", [])
+        return char_map
 
     def _score_single_product(
         self,
@@ -733,17 +714,20 @@ class RecommendationServiceV2:
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
 
-        # 2. Fetch candidates from Neo4j (lightweight query)
-        cypher = self._build_v2_cypher(request, target_product_id)
-        params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
+        # 2. Phase 1: Fast candidate fetch (IDs + fournisseur, no characteristics)
+        cypher = self._build_candidates_cypher(request, target_product_id)
+        params = self._build_candidates_params(request, flat_filters, target_product_id=target_product_id)
 
         try:
-            query_start = time.perf_counter()
-            raw_results = await clients.execute_cypher(cypher, params)
-            query_time = time.perf_counter() - query_start
-            logging.warning("[V2-TIMING] cypher_fetch: %.3fs (%d candidates)", query_time, len(raw_results) if raw_results else 0)
+            candidates_start = time.perf_counter()
+            candidates = await clients.execute_cypher(cypher, params)
+            candidates_time = time.perf_counter() - candidates_start
+            logging.warning("[V2-TIMING] candidates_fetch: %.3fs (%d candidates)", candidates_time, len(candidates) if candidates else 0)
 
-            # 3. Score all products in Python
+            if not candidates:
+                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
+
+            # 3. Phase 2: Stream characteristics + score concurrently
             user_meta = request.metadonnee_utilisateurs
             user_cp = user_meta.cp if user_meta else None
             user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
@@ -751,17 +735,13 @@ class RecommendationServiceV2:
             user_typologie = user_meta.typologie if user_meta else None
             id_categorie = str(request.id_categorie) if request.id_categorie else None
 
-            score_start = time.perf_counter()
-            scored = []
-            for raw in (raw_results or []):
-                result = self._score_single_product(
-                    raw, flat_filters, scoring_params,
-                    user_id_pays, user_dept, user_typologie, id_categorie,
-                )
-                if result is not None:
-                    scored.append(result)
-            score_time = time.perf_counter() - score_start
-            logging.warning("[V2-TIMING] python_scoring: %.3fs (%d products scored, %d passed threshold)", score_time, len(raw_results or []), len(scored))
+            stream_start = time.perf_counter()
+            scored = await self._stream_fetch_and_score(
+                candidates, flat_filters, scoring_params,
+                user_id_pays, user_dept, user_typologie, id_categorie,
+            )
+            stream_time = time.perf_counter() - stream_start
+            logging.warning("[V2-TIMING] stream_fetch+score: %.3fs (%d scored)", stream_time, len(scored))
 
             # 4. Diversity + top_p selection
             diversity_start = time.perf_counter()
@@ -780,8 +760,8 @@ class RecommendationServiceV2:
 
             total_time = time.perf_counter() - start_time
             logging.warning(
-                "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | cypher: %.3fs | scoring: %.3fs | diversity: %.3fs",
-                total_time, norm_time, query_time, score_time, diversity_time,
+                "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | candidates: %.3fs | stream+score: %.3fs | diversity: %.3fs",
+                total_time, norm_time, candidates_time, stream_time, diversity_time,
             )
 
             return MatchingResponse(
@@ -813,17 +793,20 @@ class RecommendationServiceV2:
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
 
-        # 2. Fetch candidates
-        cypher = self._build_v2_cypher(request, target_product_id)
-        params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
+        # 2. Phase 1: Fast candidate fetch
+        cypher = self._build_candidates_cypher(request, target_product_id)
+        params = self._build_candidates_params(request, flat_filters, target_product_id=target_product_id)
 
         try:
-            query_start = time.perf_counter()
-            raw_results = await clients.execute_cypher(cypher, params)
-            query_time = time.perf_counter() - query_start
-            logging.warning("[V2-TIMING] cypher_fetch: %.3fs (%d candidates)", query_time, len(raw_results) if raw_results else 0)
+            candidates_start = time.perf_counter()
+            candidates = await clients.execute_cypher(cypher, params)
+            candidates_time = time.perf_counter() - candidates_start
+            logging.warning("[V2-TIMING] candidates_fetch: %.3fs (%d candidates)", candidates_time, len(candidates) if candidates else 0)
 
-            # 3. Score
+            if not candidates:
+                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
+
+            # 3. Phase 2: Stream characteristics + score
             user_meta = request.metadonnee_utilisateurs
             user_cp = user_meta.cp if user_meta else None
             user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
@@ -831,17 +814,13 @@ class RecommendationServiceV2:
             user_typologie = user_meta.typologie if user_meta else None
             id_categorie = str(request.id_categorie) if request.id_categorie else None
 
-            score_start = time.perf_counter()
-            scored = []
-            for raw in (raw_results or []):
-                result = self._score_single_product(
-                    raw, flat_filters, scoring_params,
-                    user_id_pays, user_dept, user_typologie, id_categorie,
-                )
-                if result is not None:
-                    scored.append(result)
-            score_time = time.perf_counter() - score_start
-            logging.warning("[V2-TIMING] python_scoring: %.3fs (%d scored)", score_time, len(scored))
+            stream_start = time.perf_counter()
+            scored = await self._stream_fetch_and_score(
+                candidates, flat_filters, scoring_params,
+                user_id_pays, user_dept, user_typologie, id_categorie,
+            )
+            stream_time = time.perf_counter() - stream_start
+            logging.warning("[V2-TIMING] stream_fetch+score: %.3fs (%d scored)", stream_time, len(scored))
 
             # 4. Diversity + top_p
             diversity_start = time.perf_counter()
@@ -871,27 +850,23 @@ class RecommendationServiceV2:
             enrich_time = time.perf_counter() - enrich_start
             logging.warning("[V2-TIMING] enrich_and_rerank_llm: %.3fs", enrich_time)
 
-            # 6. Re-query with LLM-selected IDs (using V2 fetch)
+            # 6. Re-query with LLM-selected IDs (streaming fetch + score)
             llm_selected_ids = [str(p.id_produit) for p in reranked_top + reranked_liste]
 
             if llm_selected_ids:
                 requery_start = time.perf_counter()
                 try:
-                    requery_cypher = self._build_v2_cypher_by_ids(request)
-                    requery_params = self._build_v2_params(request, flat_filters, target_id_produits=llm_selected_ids)
-                    requery_params["target_id_produits"] = llm_selected_ids
+                    # Fetch candidates by IDs
+                    requery_cypher = self._build_candidates_cypher_by_ids(request)
+                    requery_params = self._build_candidates_params(request, flat_filters, target_id_produits=llm_selected_ids)
+                    requery_candidates = await clients.execute_cypher(requery_cypher, requery_params)
 
-                    requery_results = await clients.execute_cypher(requery_cypher, requery_params)
-
-                    # Re-score
-                    requery_scored = {}
-                    for raw in (requery_results or []):
-                        result = self._score_single_product(
-                            raw, flat_filters, scoring_params,
-                            user_id_pays, user_dept, user_typologie, id_categorie,
-                        )
-                        if result:
-                            requery_scored[result["id_produit"]] = result
+                    # Stream fetch chars + score
+                    requery_scored_list = await self._stream_fetch_and_score(
+                        requery_candidates or [], flat_filters, scoring_params,
+                        user_id_pays, user_dept, user_typologie, id_categorie,
+                    )
+                    requery_scored = {r["id_produit"]: r for r in requery_scored_list}
 
                     # Rebuild preserving LLM order
                     final_top = []
@@ -923,8 +898,8 @@ class RecommendationServiceV2:
 
             total_time = time.perf_counter() - start_time
             logging.warning(
-                "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | cypher: %.3fs | scoring: %.3fs | diversity: %.3fs | enrich+llm: %.3fs",
-                total_time, norm_time, query_time, score_time, diversity_time, enrich_time,
+                "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | candidates: %.3fs | stream+score: %.3fs | diversity: %.3fs | enrich+llm: %.3fs",
+                total_time, norm_time, candidates_time, stream_time, diversity_time, enrich_time,
             )
 
             return MatchingResponse(
