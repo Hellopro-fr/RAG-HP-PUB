@@ -46,6 +46,8 @@ docs/                 # Project documentation
 - **Type checking**: `cargo check` for Rust. No Python type checker enforced yet (ruff or mypy recommended — team decision pending).
 - **CI/CD**: GitHub Actions — `ci_services_*.yml` (lint/test), `cd_build_push_*.yml` (Docker build+push).
 - **Commit messages**: Conventional Commits, bilingual EN/FR (see `.claude/rules/commit-messages.md`).
+- **Impact awareness**: Before modifying code, analyze trade-offs, bigger picture, and blast radius on shared components (see `.claude/rules/impact-awareness.md`).
+- **Auto-review**: A `Stop` hook in `settings.json` automatically checks after each response whether CLAUDE.md files need updating and whether modified code needs a self-review.
 
 ## Constraints
 

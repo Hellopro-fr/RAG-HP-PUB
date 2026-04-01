@@ -14,9 +14,13 @@ Analyze the provided code against these quality dimensions:
 1. **SOLID Principles** — Flag violations (e.g., "Function Y violates Single Responsibility").
 2. **DRY** — Identify duplicated logic that should be abstracted.
 3. **KISS** — Flag unnecessary complexity.
-4. **Security** — Check for injection risks, exposed secrets, missing input validation, unsafe deserialization.
+4. **Security** — Check for injection risks, exposed secrets, missing input validation, unsafe deserialization (see `.claude/rules/security.md`).
 5. **Performance** — Flag obvious N+1 queries, memory leaks, unnecessary re-renders.
 6. **Error Handling** — Check for unhandled promise rejections, missing try/catch, swallowed errors.
+7. **Impact Awareness** — Apply `.claude/rules/impact-awareness.md`:
+   - If the code modifies shared components (`libs/`, `protos/`, `docker-compose.yml`), list all downstream consumers.
+   - Flag changes that are **breaking** (removal/rename) vs. **additive** (new field/function).
+   - Note trade-offs: what does the current design gain vs. what does it cost?
 
 ## Output Format
 
@@ -24,6 +28,7 @@ Provide a structured critique:
 - Group findings by severity: 🔴 Critical → 🟡 Warning → 🔵 Suggestion
 - Reference specific lines or functions.
 - Keep each finding to 1-2 sentences.
+- End with an **Impact Summary**: one paragraph on the trade-offs and downstream effects of the reviewed code.
 
 ## Rules
 
