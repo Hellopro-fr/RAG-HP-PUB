@@ -356,6 +356,12 @@ class MatchingPayload(BaseModel):
 
 class MatchingPayloadIdProduit(MatchingPayload):
     id_produit: Optional[int] = Field(None, description="Identifiant du produit")
+    v: int = Field(
+        2, description="Pipeline version: 1=Cypher scoring, 2=Python scoring"
+    )
+    min_matching_cids: int = Field(
+        1, description="V2 only: minimum distinct CIDs a product must match to be scored"
+    )
 
 
 """ 

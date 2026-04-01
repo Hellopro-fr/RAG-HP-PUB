@@ -107,6 +107,59 @@ class ServiceClients:
             logging.error(f"Direct Graph DB Error: {e}", exc_info=True)
             return []
 
+    async def execute_cypher_async(
+        self, query: str, params: Dict[str, Any] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute Cypher query using the native neo4j async driver.
+        Fully async — no thread pool, no LangChain overhead.
+        """
+        from neo4j import AsyncGraphDatabase
+
+        # Lazy initialization of async driver
+        if not hasattr(self, "_neo4j_async_driver") or self._neo4j_async_driver is None:
+            self._neo4j_async_driver = AsyncGraphDatabase.driver(
+                settings.NEO4J_URI,
+                auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                max_connection_pool_size=50,
+                connection_acquisition_timeout=30,
+            )
+            logging.info("Native async Neo4j driver initialized.")
+
+        try:
+            async with self._neo4j_async_driver.session(
+                database=settings.NEO4J_DATABASE
+            ) as session:
+                result = await session.run(query, params or {})
+                records = await result.data()
+                return records if records else []
+        except Exception as e:
+            logging.error(f"Async Neo4j Error: {e}", exc_info=True)
+            return []
+
+    async def execute_cypher_stream(self, query: str, params: Dict[str, Any] = None):
+        """
+        Execute Cypher query and yield records one by one as they arrive from Neo4j.
+        Allows caller to process/score products while Neo4j is still sending results.
+        """
+        from neo4j import AsyncGraphDatabase
+
+        if not hasattr(self, "_neo4j_async_driver") or self._neo4j_async_driver is None:
+            self._neo4j_async_driver = AsyncGraphDatabase.driver(
+                settings.NEO4J_URI,
+                auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                max_connection_pool_size=50,
+                connection_acquisition_timeout=30,
+            )
+            logging.info("Native async Neo4j driver initialized (stream).")
+
+        async with self._neo4j_async_driver.session(
+            database=settings.NEO4J_DATABASE
+        ) as session:
+            result = await session.run(query, params or {})
+            async for record in result:
+                yield record.data()
+
     async def get_graph_schema(self) -> str:
         try:
             schema = await graph_database_client.get_graph_schema(

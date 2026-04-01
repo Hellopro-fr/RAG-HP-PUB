@@ -11,6 +11,7 @@ from app.domain.models import (
     CaracteristiqueMatching,
 )
 from app.services.recommendation_service import recommendation_service
+from app.services.recommendation_service_v2 import recommendation_service_v2
 import logging
 
 router = APIRouter()
@@ -115,6 +116,7 @@ async def match_products(request: MatchingPayloadIdProduit):
     """
     Endpoint pour effectuer le matching de produits.
     Recoit un contexte utilisateur et des critères, retourne une liste de produits scorés.
+    Set "v": 2 in the request body to use the V2 Python-scoring pipeline.
     """
     try:
         if not request.liste_caracteristique:
@@ -123,13 +125,16 @@ async def match_products(request: MatchingPayloadIdProduit):
                 liste_produit=[],
                 temps_de_traitement=0.0,
             )
+
+        service = recommendation_service_v2 if request.v == 2 else recommendation_service
+
         if request.rerank.use_rerank:
-            result = await recommendation_service.get_products_by_caracteristique_filters_rerank(
+            result = await service.get_products_by_caracteristique_filters_rerank(
                 request
             )
         else:
             result = (
-                await recommendation_service.get_products_by_caracteristique_filters(
+                await service.get_products_by_caracteristique_filters(
                     request
                 )
             )
