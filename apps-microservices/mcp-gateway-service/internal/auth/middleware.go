@@ -28,11 +28,12 @@ func UserEmailFromContext(ctx context.Context) string {
 
 // Config holds JWT/auth configuration.
 type Config struct {
-	JWTSecret   string
-	JWTAlgo     string // always HS256
-	JWTAudience string
-	AuthURL     string // hellopro.fr auth endpoint
-	Enabled     bool
+	JWTSecret    string
+	JWTAlgo      string // always HS256
+	JWTAudience  string
+	AuthURL      string // hellopro.fr auth endpoint
+	Enabled      bool
+	SecureCookie bool // Secure flag on session cookie (true when behind TLS)
 }
 
 // publicPaths that don't require authentication.

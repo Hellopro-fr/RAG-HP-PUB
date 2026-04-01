@@ -8,7 +8,7 @@ Central MCP (Model Context Protocol) gateway that aggregates and routes requests
 - `net/http` (standard library) — HTTP server
 - GORM v1.25 — ORM (MySQL driver)
 - AES-256-GCM — encryption for stored auth headers
-- JWT (HS256) — optional authentication
+- JWT (HS256 via golang-jwt/jwt/v5) — authentication (enabled by default)
 - Docker (multi-stage: golang:1.24-alpine → alpine:3.20), exposed port **8581**
 
 ## Run
@@ -125,8 +125,8 @@ Dockerfile                   # Multi-stage build
 | `JWT_ALGO` | `HS256` | JWT algorithm |
 | `JWT_AUDIENCE` | `https://www.hellopro.fr` | JWT audience claim |
 | `AUTH_URL` | — | External auth redirect URL |
-| `AUTH_ENABLED` | `false` | Require login |
-| `SCOPE_TOKEN_REQUIRED` | `false` | Require scope token on MCP endpoints |
+| `AUTH_ENABLED` | `true` | Require login (set to "false" to disable) |
+| `SCOPE_TOKEN_REQUIRED` | `true` | Require scope token on MCP endpoints (set to "false" to disable) |
 | `GATEWAY_PUBLIC_URL` | — | Public URL for generated .mcp.json snippets |
 
 ## Database

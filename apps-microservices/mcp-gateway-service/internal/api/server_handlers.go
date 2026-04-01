@@ -12,6 +12,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
 var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
@@ -51,6 +52,12 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Name == "" || req.URL == "" {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "name and url are required"})
+		return
+	}
+
+	// SSRF protection: validate that the URL does not point to internal/private ranges
+	if err := urlvalidation.ValidateServerURL(req.URL); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid server URL: " + err.Error()})
 		return
 	}
 
@@ -225,6 +232,11 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		updates["name"] = *req.Name
 	}
 	if req.URL != nil {
+		// SSRF protection: validate that the new URL does not point to internal/private ranges
+		if err := urlvalidation.ValidateServerURL(*req.URL); err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid server URL: " + err.Error()})
+			return
+		}
 		updates["url"] = strings.TrimRight(*req.URL, "/")
 		urlChanged = true
 	}

@@ -23,7 +23,8 @@ type SessionData struct {
 }
 
 // SetSession writes an HMAC-signed session cookie.
-func SetSession(w http.ResponseWriter, secret string, data SessionData) error {
+// secureCookie controls the Secure flag (should be true when behind TLS).
+func SetSession(w http.ResponseWriter, secret string, data SessionData, secureCookie bool) error {
 	data.ExpiresAt = time.Now().Add(sessionMaxAge).Unix()
 	payload, err := json.Marshal(data)
 	if err != nil {
@@ -35,6 +36,7 @@ func SetSession(w http.ResponseWriter, secret string, data SessionData) error {
 		Value:    signed,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secureCookie,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(sessionMaxAge.Seconds()),
 	})

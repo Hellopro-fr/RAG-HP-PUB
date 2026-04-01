@@ -103,7 +103,7 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 		DisplayName: authResp.DisplayName,
 		Email:       authResp.Email,
 		Token:       token,
-	}); err != nil {
+	}, cfg.SecureCookie); err != nil {
 		log.Printf("[auth] failed to set session: %v", err)
 		http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur serveur"), http.StatusSeeOther)
 		return

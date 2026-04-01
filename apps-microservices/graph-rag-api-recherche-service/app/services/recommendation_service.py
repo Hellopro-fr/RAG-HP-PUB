@@ -624,8 +624,8 @@ class RecommendationService:
         
         // --- STEP 6: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products, pre_diversity_debug,
-             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
-                 head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
+             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | toString(prod.node.id_fournisseur)]) |
+                 head([prod IN all_products WHERE toString(prod.node.id_fournisseur) = fournisseur_id | prod])
              ] AS top_per_fournisseur
         
         // Sort top_per_fournisseur by final_score descending and limit to 4
@@ -938,8 +938,8 @@ class RecommendationService:
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
              // Group by id_fournisseur and get the top product per fournisseur
-             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
-                 head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
+             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | toString(prod.node.id_fournisseur)]) |
+                 head([prod IN all_products WHERE toString(prod.node.id_fournisseur) = fournisseur_id | prod])
              ] AS top_per_fournisseur
         
         // Sort top_per_fournisseur by global_score descending and limit to 4
