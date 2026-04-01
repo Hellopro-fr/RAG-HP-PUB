@@ -30,6 +30,8 @@ BATCH_SIZE = 16384
 async def get_distinct_values(
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     distinct_field: str = Query(..., description="Nom du champ dont on veut les valeurs uniques (ex: 'url', 'domaine', 'page_type')"),
+    limit: int = Query(10000, ge=1, le=100000, description="Nombre max de valeurs distinctes à retourner (défaut: 10000)"),
+    offset: int = Query(0, ge=0, description="Nombre de valeurs distinctes à sauter (pour pagination)"),
     metadata: Optional[str] = Query(None, description="""Filtres de recherche au format JSON.
 
 Formats supportés: <br>
@@ -172,8 +174,12 @@ Exemples: <br>
             if len(results) < BATCH_SIZE:
                 break
 
-        # --- 7. Trier les valeurs et construire la réponse ---
+        # --- 7. Trier les valeurs, paginer et construire la réponse ---
         sorted_values = sorted(unique_values, key=lambda x: str(x))
+        total_distinct = len(sorted_values)
+
+        # Appliquer offset/limit pour la pagination
+        paginated_values = sorted_values[offset:offset + limit]
 
         return {
             "status": "success",
@@ -181,8 +187,11 @@ Exemples: <br>
             "distinct_field": distinct_field,
             "filters": parsed_metadata if parsed_metadata else None,
             "total_rows_scanned": total_rows_scanned,
-            "count": len(sorted_values),
-            "values": sorted_values
+            "total_distinct": total_distinct,
+            "count": len(paginated_values),
+            "offset": offset,
+            "limit": limit,
+            "values": paginated_values
         }
 
     except HTTPException:
