@@ -105,6 +105,18 @@ class RetrieveResponse(BaseModel):
     status: str = Field(..., description="Restored job status after retrieval (e.g., 'finished').")
     domain: str
 
+class FailedCallback(BaseModel):
+    crawl_id: str
+    webhook_type: str = Field(..., description="Type of webhook: success, failure, or stop")
+    url: str
+    params: dict
+    error: Optional[str] = None
+    failed_at: datetime
+
+class PendingCallbacksResponse(BaseModel):
+    count: int
+    callbacks: List[FailedCallback]
+
 class CrawlStatus(BaseModel):
     crawl_id: str
     id_domaine: str # Legacy alias

@@ -11,10 +11,10 @@ from fastapi.responses import FileResponse
 from starlette.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY
+from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY, FAILED_CALLBACKS_KEY
 from common_utils.redis import cache_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse, PendingCallbacksResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -251,13 +251,14 @@ async def force_finish_crawl(
 
 @router.get("/status", response_model=Dict[str, CrawlStatus])
 async def get_all_crawl_statuses(
-    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (e.g., running, finished, failed, archived, restarting_oom).")
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status. Supports comma-separated values (e.g., running,stopping).")
 ):
     """
     Gets the status of all crawl jobs. Optionally filter by status.
-    Examples: /status?status=running, /status?status=finished
+    Examples: /status?status=running, /status?status=finished, /status?status=running,stopping
     """
-    return await crawler_manager.get_all_statuses(status_filter=status_filter)
+    filter_list = [s.strip() for s in status_filter.split(",") if s.strip()] if status_filter else None
+    return await crawler_manager.get_all_statuses(status_filter=filter_list)
 
 @router.get("/status/{crawl_id}", response_model=CrawlStatus)
 async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
@@ -339,6 +340,27 @@ async def reconcile_jobs():
     """
     await crawler_manager.reconcile_jobs()
     return {"status": "reconciliation_complete"}
+
+@router.get("/pending-callbacks", response_model=PendingCallbacksResponse)
+async def get_pending_callbacks():
+    """
+    Returns all failed webhook callbacks stored in Redis after retry exhaustion.
+    These can be reviewed and replayed manually or by an automated reconciliation process.
+    """
+    raw_entries = await cache_service.redis_client.lrange(FAILED_CALLBACKS_KEY, 0, -1)
+    callbacks = []
+    for raw in raw_entries:
+        try:
+            callbacks.append(json.loads(raw))
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return PendingCallbacksResponse(count=len(callbacks), callbacks=callbacks)
+
+@router.delete("/pending-callbacks")
+async def clear_pending_callbacks():
+    """Clears all failed webhook callbacks from Redis."""
+    deleted = await cache_service.redis_client.delete(FAILED_CALLBACKS_KEY)
+    return {"status": "cleared", "keys_deleted": deleted}
 
 @router.post("/prune-archives", response_model=PruneResponse)
 async def prune_archives(

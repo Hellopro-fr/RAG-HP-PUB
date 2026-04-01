@@ -5,6 +5,8 @@ import json
 import asyncio
 from typing import List, Dict, Any, Optional
 
+from toon_format import encode as toon_encode
+
 from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
@@ -1765,16 +1767,20 @@ class RecommendationService:
         # )
         # logging.warning(f"[RERANK] Product IDs: {id_produits}")
 
-        # 2. Fetch product info + characteristics + category definitions in parallel
+        # 2. Fetch product info + characteristics + category definitions + prompt in parallel
         logging.warning(
             "[RERANK] Fetching product info, characteristics, and category definitions from HelloPro API..."
         )
         try:
-            products_info, all_caracs, category_caracs = await asyncio.gather(
+            api_fetch_start = time.perf_counter()
+            products_info, all_caracs, category_caracs, prompt_data = await asyncio.gather(
                 hellopro_api_client.fetch_products_info(id_categorie, id_produits),
                 hellopro_api_client.fetch_all_product_caracteristiques(id_produits),
                 hellopro_api_client.fetch_category_caracteristiques(id_categorie),
+                hellopro_api_client.fetch_prompt(str(id_prompt) or "112"),
             )
+            api_fetch_time = time.perf_counter() - api_fetch_start
+            logging.warning("[RERANK-TIMING] hellopro_api_fetch (parallel): %.3fs", api_fetch_time)
         except Exception as e:
             logging.error(f"[RERANK] HelloPro API enrichment error: {e}", exc_info=True)
             return top_produit, liste_produit, []
@@ -1787,6 +1793,7 @@ class RecommendationService:
         # )
 
         # 3. Format enriched data for LLM
+        format_start = time.perf_counter()
         formatted_products = []
         # logging.warning(f"[RERANK] product_info: {products_info}")
         liste_carac_id = []
@@ -1811,6 +1818,20 @@ class RecommendationService:
                 else "Prospect"
             )
 
+            # Build caracteristiques, stripping empty values to reduce tokens
+            filtered_caracs = []
+            if caracs:
+                for c in caracs:
+                    if str(c.get("id_caracteristique", "")) in liste_carac_id:
+                        carac_entry = {"nom": c.get("nom_caracteristique", c.get("label", ""))}
+                        valeur = c.get("valeur", "")
+                        if valeur:
+                            carac_entry["valeur"] = valeur
+                        unite = c.get("unite", "")
+                        if unite:
+                            carac_entry["unite"] = unite
+                        filtered_caracs.append(carac_entry)
+
             formatted_product = {
                 "id_produit": str(id_produit),
                 "titre": info.get(
@@ -1825,22 +1846,9 @@ class RecommendationService:
                 ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
-                    "id_fournisseur": str(info_fournisseur.get("id", "")),
                     "type": etat_societe_label,
                 },
-                "caracteristiques": (
-                    [
-                        {
-                            "nom": c.get("nom_caracteristique", c.get("label", "")),
-                            "valeur": c.get("valeur", ""),
-                            "unite": c.get("unite", ""),
-                        }
-                        for c in caracs
-                        if str(c.get("id_caracteristique", "")) in liste_carac_id
-                    ]
-                    if caracs
-                    else []
-                ),
+                "caracteristiques": filtered_caracs,
             }
             formatted_products.append(formatted_product)
 
@@ -1932,17 +1940,23 @@ class RecommendationService:
         #     f"{caracteristiques_critiques}"
         # )
 
-        # LISTE_PRODUITS = formatted product list as JSON
-        liste_produits_json = json.dumps(formatted_products, ensure_ascii=False)
+        format_time = time.perf_counter() - format_start
+        logging.warning("[RERANK-TIMING] format_products: %.3fs (%d products)", format_time, len(formatted_products))
+
+        # LISTE_PRODUITS = formatted product list as TOON (Token-Oriented Object Notation)
+        # TOON uses ~40% fewer tokens than JSON for structured data sent to LLMs
+        toon_start = time.perf_counter()
+        liste_produits_json = toon_encode(formatted_products)
+        toon_time = time.perf_counter() - toon_start
+        logging.warning("[RERANK-TIMING] toon_encode: %.3fs (%d chars)", toon_time, len(liste_produits_json))
         # logging.warning(
         #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
         # )
 
-        # 5. Fetch system prompt from HelloPro API and call Gemini
+        # 5. Use pre-fetched prompt data (fetched in parallel above) and call Gemini
         logging.warning(
-            "[RERANK] Fetching prompt from HelloPro API (id_prompt=%s)...", id_prompt
+            "[RERANK] Using pre-fetched prompt from HelloPro API (id_prompt=%s)...", id_prompt
         )
-        prompt_data = await hellopro_api_client.fetch_prompt(str(id_prompt) or "112")
 
         prompt_temperature = None
         if prompt_data and prompt_data.get("contenu_prompt"):
@@ -2215,11 +2229,7 @@ class RecommendationService:
             liste_produits_json=liste_produits_json,
         )
 
-        # logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
-        # logging.warning(f"[RERANK] System prompt: {system_prompt}")
-        # logging.warning(f"[RERANK] Liste produits: {liste_produits_json}")
-        # return top_produit, liste_produit, []
         try:
             gemini_start = time.perf_counter()
             llm_response = await gemini_client.generate_rerank_response(
@@ -2381,8 +2391,10 @@ class RecommendationService:
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
         norm_time = time.perf_counter() - norm_start
+        logging.warning("[RERANK-TIMING] normalize_constraints: %.3fs", norm_time)
 
         # Build weights map from request (cid -> q_weight)
+        build_params_start = time.perf_counter()
         weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
 
         # Extract scoring parameters
@@ -2402,11 +2414,14 @@ class RecommendationService:
             top_k=request.rerank.top_k,
             target_product_id=target_product_id,
         )
+        build_params_time = time.perf_counter() - build_params_start
+        logging.warning("[RERANK-TIMING] build_query+params: %.3fs", build_params_time)
 
         try:
             query_start = time.perf_counter()
             results = await clients.execute_cypher(cypher_query, params)
             query_time = time.perf_counter() - query_start
+            logging.warning("[RERANK-TIMING] cypher_query: %.3fs (%d results)", query_time, len(results) if results else 0)
 
             # --- DEBUG: Diversity Algorithm Output ---
             if results:
@@ -2424,17 +2439,21 @@ class RecommendationService:
                     pd = rec.get("product_data", {})
 
             # Parse results and convert to MatchingResponse format
+            parse_start = time.perf_counter()
             liste_produit, top_produit = self._parse_matching_results(
                 results,
                 request,
                 blocked_val,
                 different_val,
             )
+            parse_time = time.perf_counter() - parse_start
+            logging.warning("[RERANK-TIMING] parse_results: %.3fs (top=%d, liste=%d)", parse_time, len(top_produit), len(liste_produit))
 
             # --- Enrich with HelloPro API data and rerank via Gemini LLM ---
             id_categorie = str(request.id_categorie) if request.id_categorie else ""
             parcours = request.rerank.parcours if request.rerank else ""
 
+            enrich_start = time.perf_counter()
             reranked_top, reranked_liste, ecarts = (
                 await self._enrich_and_rerank_with_llm(
                     top_produit,
@@ -2446,6 +2465,8 @@ class RecommendationService:
                     thinking_level=request.rerank.thinking_level if request.rerank else "low",
                 )
             )
+            enrich_time = time.perf_counter() - enrich_start
+            logging.warning("[RERANK-TIMING] enrich_and_rerank_llm: %.3fs", enrich_time)
 
             # --- Re-query Cypher with only LLM-selected product IDs ---
             llm_selected_ids = [
@@ -2458,6 +2479,7 @@ class RecommendationService:
                     len(llm_selected_ids),
                     llm_selected_ids,
                 )
+                requery_total_start = time.perf_counter()
                 try:
                     # Build Cypher query restricted to LLM-selected IDs
                     requery_cypher = self._build_cypher_query_by_ids(request)
@@ -2484,12 +2506,15 @@ class RecommendationService:
                     )
 
                     # Parse re-queried results into Produit objects
+                    requery_parse_start = time.perf_counter()
                     requery_liste, requery_top = self._parse_matching_results(
                         requery_results,
                         request,
                         blocked_val,
                         different_val,
                     )
+                    requery_parse_time = time.perf_counter() - requery_parse_start
+                    logging.warning("[RERANK-TIMING] requery_parse_results: %.3fs", requery_parse_time)
 
                     # Build a map of id_produit -> re-queried Produit for fast lookup
                     requery_map = {}
@@ -2544,6 +2569,11 @@ class RecommendationService:
 
                     reranked_top = final_top
                     reranked_liste = final_liste
+                    requery_total_time = time.perf_counter() - requery_total_start
+                    logging.warning(
+                        "[RERANK-TIMING] requery_total (cypher+parse+rebuild): %.3fs",
+                        requery_total_time,
+                    )
                     logging.warning(
                         "[RERANK-REQUERY] Successfully rebuilt %d top + %d liste products from re-query",
                         len(reranked_top),
@@ -2557,6 +2587,10 @@ class RecommendationService:
                     )
 
             total_time = time.perf_counter() - start_time
+            logging.warning(
+                "[RERANK-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | build_params: %.3fs | cypher: %.3fs | parse: %.3fs | enrich+llm: %.3fs",
+                total_time, norm_time, build_params_time, query_time, parse_time, enrich_time,
+            )
             return MatchingResponse(
                 top_produit=reranked_top,
                 liste_produit=reranked_liste,
