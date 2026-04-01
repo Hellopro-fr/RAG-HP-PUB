@@ -5,6 +5,8 @@ import json
 import asyncio
 from typing import List, Dict, Any, Optional
 
+from toon_format import encode as toon_encode
+
 from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
@@ -1934,8 +1936,9 @@ class RecommendationService:
         #     f"{caracteristiques_critiques}"
         # )
 
-        # LISTE_PRODUITS = formatted product list as compact JSON (minimize tokens)
-        liste_produits_json = json.dumps(formatted_products, ensure_ascii=False, separators=(",", ":"))
+        # LISTE_PRODUITS = formatted product list as TOON (Token-Oriented Object Notation)
+        # TOON uses ~40% fewer tokens than JSON for structured data sent to LLMs
+        liste_produits_json = toon_encode(formatted_products)
         # logging.warning(
         #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
         # )
