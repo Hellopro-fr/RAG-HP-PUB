@@ -32,6 +32,7 @@ WHERE pc.id_source_caracteristique IN $all_cids
   AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
   AND p.est_actif = true
 WITH p, collect({id_source_caracteristique: pc.id_source_caracteristique, id_source_valeur: pc.id_source_valeur, valeur: pc.valeur, valeur_canonique: pc.valeur_canonique, valeur_min_canonique: pc.valeur_min_canonique, valeur_max_canonique: pc.valeur_max_canonique, unite_canonique: pc.unite_canonique, type_donnee: pc.type_donnee, unite: pc.unite, valeur_min: pc.valeur_min, valeur_max: pc.valeur_max}) AS all_chars
+WHERE size(apoc.coll.toSet([c IN all_chars | c.id_source_caracteristique])) >= $min_matching_cids
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
 RETURN p PROJECTION_PLACEHOLDER AS product_data,
        all_chars,
@@ -530,11 +531,14 @@ class RecommendationServiceV2:
         projection = self._build_full_projection(request)
         return query.replace("PROJECTION_PLACEHOLDER", projection)
 
+    MIN_MATCHING_CIDS_DEFAULT = 1  # Minimum distinct CIDs a product must match
+
     def _build_v2_params(self, request, flat_filters, target_product_id=None, target_id_produits=None) -> Dict:
         all_cids = [f["cid"] for f in flat_filters]
         params = {
             "all_cids": all_cids,
             "id_categorie": str(request.id_categorie) if request.id_categorie is not None else None,
+            "min_matching_cids": getattr(request, "min_matching_cids", self.MIN_MATCHING_CIDS_DEFAULT),
         }
         if target_product_id:
             params["target_product_id"] = str(f"id_produit_{request.id_produit}") if request.id_produit else None
@@ -747,7 +751,7 @@ class RecommendationServiceV2:
 
         try:
             fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_direct(cypher, params)
+            raw_results = await clients.execute_cypher_async(cypher, params)
             fetch_time = time.perf_counter() - fetch_start
             logging.warning(
                 "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
@@ -854,7 +858,7 @@ class RecommendationServiceV2:
 
         try:
             fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_direct(cypher, params)
+            raw_results = await clients.execute_cypher_async(cypher, params)
             fetch_time = time.perf_counter() - fetch_start
             logging.warning(
                 "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
@@ -937,7 +941,7 @@ class RecommendationServiceV2:
                     requery_params = self._build_v2_params(
                         request, flat_filters, target_id_produits=llm_selected_ids
                     )
-                    requery_results = await clients.execute_cypher(
+                    requery_results = await clients.execute_cypher_async(
                         requery_cypher, requery_params
                     )
 
