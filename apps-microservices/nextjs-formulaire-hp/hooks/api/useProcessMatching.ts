@@ -16,8 +16,8 @@ const DEFAULT_GEO_METADATA = {
   cp: "75001",
 };
 
-const MATCHING_TOP_K = 30;
-const RERANK_TOP_K = 30;
+const MATCHING_TOP_K = 26;
+const RERANK_TOP_K = 26;
 const RERANK_ID_PROMPT = 118;
 
 const getApiBasePath = () => {

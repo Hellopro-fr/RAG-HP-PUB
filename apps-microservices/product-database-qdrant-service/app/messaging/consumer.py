@@ -86,7 +86,10 @@ class Consumer:
             
             # 2. Publie vers le webhook uniquement pour les updates forcés
             if output_message and output_message.get("mode") == "update" and output_message.get("updated"):
+                logger.info("Publication webhook pour id_produit=%s (mode=update, updated=True)", output_message.get("id_produit"))
                 self.publisher.publish_message(output_message)
+            else:
+                logger.debug("Pas de publication webhook - mode=%s, updated=%s", output_message.get("mode") if output_message else None, output_message.get("updated") if output_message else None)
 
             # 3. Acquitte le message original
             ch.basic_ack(delivery_tag=method.delivery_tag)
