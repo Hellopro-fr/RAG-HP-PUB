@@ -48,6 +48,14 @@ docs/                 # Project documentation
 - **Commit messages**: Conventional Commits, bilingual EN/FR (see `.claude/rules/commit-messages.md`).
 - **Impact awareness**: Before modifying code, analyze trade-offs, bigger picture, and blast radius on shared components (see `.claude/rules/impact-awareness.md`).
 - **Auto-review**: A `Stop` hook in `settings.json` automatically checks after each response whether CLAUDE.md files need updating and whether modified code needs a self-review.
+- **Docker security**: Dockerfile and docker-compose changes must follow `.claude/rules/docker-security.md` (pinned images, no root, healthchecks).
+- **Config freshness**: Mid-conversation, re-read `.claude/` files before using them (see `.claude/rules/config-freshness.md`).
+
+## Skills (Scaffolding)
+
+- `/fastapi-service-scaffold <name> <description>` — Generate a new FastAPI service with all conventions.
+- `/rabbitmq-consumer-scaffold <name> <collection>` — Generate a new RabbitMQ processor service.
+- `/proto-sync [proto-file]` — Regenerate Python gRPC stubs from protos/.
 
 ## Constraints
 
