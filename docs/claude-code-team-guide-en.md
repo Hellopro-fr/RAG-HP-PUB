@@ -571,6 +571,28 @@ This rule ensures Claude Code always works with the latest `.claude/` configurat
 2. After creating or updating any `.claude/` file, treat it as immediately active.
 3. If a conflict exists between a stale in-context version and the file on disk, the file on disk wins.
 
+### 5.8 `formatting.md` — Code Formatting Conventions
+
+**Location:** `.claude/rules/formatting.md`
+
+No project-wide formatter is enforced yet. This rule defines the conventions Claude must follow:
+
+1. **Python**: 4-space indent, 88-char line length, double quotes, import ordering (stdlib → third-party → libs → local).
+2. **Rust**: rustfmt defaults, 100-char line length, no `unwrap()` in production.
+3. **JS/TS**: 2-space indent, semicolons required, single quotes.
+4. **Universal**: Match the file's existing style. Never reformat outside the scope of your change.
+
+### 5.9 `refactoring.md` — Refactoring Guidelines
+
+**Location:** `.claude/rules/refactoring.md`
+
+Governs when and how to refactor safely:
+
+1. **When**: After reviewer flags duplication/SOLID violation, when logic exists in 3+ services, or user explicitly requests.
+2. **When NOT**: During bug fixes, during feature additions, without tests, or unprompted.
+3. **Shared components**: Always `/plan` first, list all downstream consumers, commit library changes separately.
+4. **Known targets**: logging centralization (75 services), config duplication (45 services), structure standardization (15 services).
+
 ### How Rules Are Loaded
 
 Rules in `.claude/rules/` are loaded **automatically** at every session start. You do not need to reference them explicitly. Claude Code reads them as part of its initialization.
@@ -1149,6 +1171,8 @@ Follow these steps in order on your first day:
 | `.claude/rules/impact-awareness.md` | Trade-off analysis, bigger picture, blast radius on shared components |
 | `.claude/rules/docker-security.md` | Pinned images, no root, healthchecks, no secrets in ENV, `.dockerignore` |
 | `.claude/rules/config-freshness.md` | Re-read `.claude/` config mid-session before using agents/commands |
+| `.claude/rules/formatting.md` | Code style per stack: Python (4-space, 88-char, import order), Rust (rustfmt), JS/TS (2-space) |
+| `.claude/rules/refactoring.md` | When/how to refactor safely, scope rules, known duplication targets |
 
 ### Key Thresholds
 

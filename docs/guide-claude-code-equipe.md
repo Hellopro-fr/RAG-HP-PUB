@@ -567,6 +567,28 @@ Assure que Claude Code travaille toujours avec la derniere version de la configu
 
 > **Chemin :** `.claude/rules/config-freshness.md`
 
+### 5.8 `formatting.md` -- Conventions de formatage du code
+
+Aucun formateur projet n'est impose pour le moment. Cette regle definit les conventions que Claude doit suivre :
+
+1. **Python** : indentation 4 espaces, longueur de ligne 88 caracteres, guillemets doubles, ordre des imports (stdlib → third-party → libs → local)
+2. **Rust** : defauts de rustfmt, longueur de ligne 100 caracteres, pas de `unwrap()` en production
+3. **JS/TS** : indentation 2 espaces, points-virgules obligatoires, guillemets simples
+4. **Universel** : Toujours respecter le style existant du fichier. Ne jamais reformater en dehors du scope du changement.
+
+> **Chemin :** `.claude/rules/formatting.md`
+
+### 5.9 `refactoring.md` -- Regles de refactoring
+
+Gouverne quand et comment refactorer en toute securite :
+
+1. **Quand** : Apres que le revieweur signale une duplication/violation SOLID, quand la meme logique existe dans 3+ services, ou sur demande explicite
+2. **Quand NON** : Pendant un bug fix, pendant un ajout de feature, sans tests, ou sans demande
+3. **Composants partages** : Toujours `/plan` d'abord, lister tous les consommateurs en aval, commiter les changements de lib separement
+4. **Cibles connues** : centralisation du logging (75 services), duplication de config (45 services), standardisation de structure (15 services)
+
+> **Chemin :** `.claude/rules/refactoring.md`
+
 ### Comment les regles sont chargees
 
 Les fichiers dans `.claude/rules/` sont charges **automatiquement** par Claude Code au demarrage de chaque session. Vous n'avez rien a faire pour les activer -- elles s'appliquent a toutes les interactions dans le repo.
@@ -1125,6 +1147,8 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 | `impact-awareness.md` | `.claude/rules/` | Analyse des compromis, vision globale, rayon d'impact sur composants partages |
 | `docker-security.md` | `.claude/rules/` | Images epinglees, pas de root, healthchecks, pas de secrets dans ENV |
 | `config-freshness.md` | `.claude/rules/` | Relire la config `.claude/` en cours de session avant utilisation |
+| `formatting.md` | `.claude/rules/` | Style par stack : Python (4 espaces, 88 car, ordre imports), Rust (rustfmt), JS/TS (2 espaces) |
+| `refactoring.md` | `.claude/rules/` | Quand/comment refactorer, regles de scope, cibles de duplication connues |
 
 ### Raccourcis et seuils
 
