@@ -34,6 +34,10 @@ CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 CRAWL_UPDATES_CHANNEL = "crawl_updates"
 STALE_JOB_THRESHOLD_SECONDS = 180  # 3 minutes without heartbeat = dead
 
+# Webhook retry configuration
+WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
+FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
+
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory, excluding Crawlee metadata."""
     if not os.path.isdir(path):
@@ -312,6 +316,47 @@ class CrawlerManager:
                     job_info.get("crawl_mode", "standard")
                 ))
 
+    async def _send_webhook_with_retry(self, url: str, params: dict, crawl_id: str, webhook_type: str):
+        """
+        Sends an HTTP GET webhook with exponential backoff retry.
+        On exhaustion, stores the failed callback in Redis for manual replay.
+        """
+        last_error = None
+        for attempt, delay in enumerate(WEBHOOK_RETRY_DELAYS):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url, params=params, timeout=30.0)
+                    if response.status_code < 500:
+                        logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (attempt {attempt + 1}). Status: {response.status_code}")
+                        return True
+                    last_error = f"HTTP {response.status_code}"
+                    logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' got {response.status_code} (attempt {attempt + 1}/{len(WEBHOOK_RETRY_DELAYS)})")
+            except httpx.RequestError as e:
+                last_error = str(e)
+                logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' failed (attempt {attempt + 1}/{len(WEBHOOK_RETRY_DELAYS)}): {e}")
+            if attempt < len(WEBHOOK_RETRY_DELAYS) - 1:
+                await asyncio.sleep(delay)
+
+        # All retries exhausted — store in Redis for manual replay
+        logger.error(f"Webhook '{webhook_type}' for '{crawl_id}' failed after {len(WEBHOOK_RETRY_DELAYS)} attempts. Storing for manual replay.")
+        await self._store_failed_callback(url, params, crawl_id, webhook_type, last_error)
+        return False
+
+    async def _store_failed_callback(self, url: str, params: dict, crawl_id: str, webhook_type: str, error: str):
+        """Appends a failed callback entry to the Redis list for later replay."""
+        entry = {
+            "crawl_id": crawl_id,
+            "webhook_type": webhook_type,
+            "url": url,
+            "params": params,
+            "error": error,
+            "failed_at": datetime.utcnow().isoformat(),
+        }
+        try:
+            await cache_service.redis_client.rpush(FAILED_CALLBACKS_KEY, json.dumps(entry, default=str))
+        except Exception as e:
+            logger.error(f"Failed to store failed callback for '{crawl_id}': {e}")
+
     async def _send_success_webhook(self, job_info: dict):
         callback_url = job_info.get("callback_url")
         crawl_id = job_info["crawl_id"]
@@ -384,12 +429,7 @@ class CrawlerManager:
                 params["message_erreur_crawling"] = self._map_error_to_message(str(is_error))
         # --- END: Ensure message_erreur_crawling is present ---
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(str(callback_url), params=params, timeout=30.0)
-                logger.info(f"Successfully sent success notification for '{crawl_id}'. Status: {response.status_code}")
-        except httpx.RequestError as e:
-            logger.error(f"Failed to send success notification for '{crawl_id}'. Error: {e}")
+        await self._send_webhook_with_retry(str(callback_url), params, crawl_id, "success")
 
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int, crawl_mode: str = "standard"):
         # We process failures for both standard and update modes now
@@ -406,12 +446,7 @@ class CrawlerManager:
             "message_erreur_crawling": error_message
         }
         
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, timeout=30.0)
-                logger.info(f"Successfully sent failure notification for '{crawl_id}'. Status: {response.status_code}")
-        except httpx.RequestError as e:
-            logger.error(f"Failed to send failure notification for '{crawl_id}'. Error: {e}")
+        await self._send_webhook_with_retry(url, params, crawl_id, "failure")
 
     async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped"):
         """
@@ -470,12 +505,7 @@ class CrawlerManager:
             "message_erreur_crawling": self._map_error_to_message(is_error) if is_error else ""
         }
         
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(str(url), params=params, timeout=30.0)
-                logger.info(f"Sent stop webhook for '{crawl_id}' (reason: {reason}). Status: {response.status_code}")
-        except Exception as e:
-            logger.error(f"Failed to send stop webhook for '{crawl_id}': {e}")
+        await self._send_webhook_with_retry(str(url), params, crawl_id, "stop")
 
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
