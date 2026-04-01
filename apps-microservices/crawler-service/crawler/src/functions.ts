@@ -517,6 +517,9 @@ export const startCrawler = async (
                 'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
                 'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
                 'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
+                'Download is starting',      // Playwright binary download trigger
+                'net::ERR_ABORTED',          // Navigation aborted (often binary content)
+                'Execution context was destroyed', // Page destroyed during download
             ];
             const errorStr = String(request.errorMessages);
             const isPermanentError = NON_RETRYABLE_ERRORS.some(err => errorStr.includes(err));

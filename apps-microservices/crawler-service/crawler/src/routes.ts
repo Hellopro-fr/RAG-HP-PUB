@@ -203,6 +203,16 @@ router.addDefaultHandler(
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
         ];
 
+        // Content-Type guard: skip non-HTML responses (PDF, binary downloads, etc.)
+        // This prevents Playwright from crashing on binary content served from extension-less URLs
+        if (response) {
+            const contentType = (response.headers()['content-type'] || '').toLowerCase();
+            if (contentType && !contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/xhtml')) {
+                log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
+                return;
+            }
+        }
+
         // Blocked Status Check
         if (response) {
             const status = response.status();
@@ -677,6 +687,12 @@ router.addDefaultHandler(
                                 request.url.includes('/cart/cart/') ||
                                 request.url.includes('/catalog/product_compare/')) {
                                 logBlocked('spider-trap', request.url);
+                                return false;
+                            }
+
+                            // Download Route Checks (extension-less URLs that serve binary content)
+                            if (/\/(download|export|print|telecharger|telechargement)\//i.test(request.url)) {
+                                logBlocked('download-route', request.url);
                                 return false;
                             }
 
