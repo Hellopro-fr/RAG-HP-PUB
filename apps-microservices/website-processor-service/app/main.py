@@ -9,13 +9,14 @@ from website_processor_service.messaging.publisher import Publisher
 import aio_pika
 
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
+from common_utils.logging import setup_logging
 
 async def main():
     """
     Point d'entrée principal asynchrone du service.
     Met en place la connexion et lance les composants.
     """
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    setup_logging("website-processor-service")
     
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
     

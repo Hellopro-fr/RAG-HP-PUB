@@ -1,6 +1,9 @@
 import json
+import logging
 from datetime import datetime, timezone
 from common_utils.autres.CollectionName import CollectionName
+
+logger = logging.getLogger(__name__)
 
 def convertir_date_to_timestamp(date_str: str) -> int:
     """
@@ -65,7 +68,7 @@ def process_devis_data_for_embedding(devis_data: dict, bdd: str = "qdrant") -> d
         "database": bdd
     }
     
-    print(f"🔍Devis-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2, ensure_ascii=False)}")
-    print(f"📦 Devis-Processor: Lead '{devis_clean.get('lead_id', 'ID inconnu')}' traité pour embedding.")
+    logger.debug(f"🔍 Devis-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2, ensure_ascii=False)}")
+    logger.info(f"📦 Devis-Processor: Lead '{devis_clean.get('lead_id', 'ID inconnu')}' traité pour embedding.")
     
     return output_message

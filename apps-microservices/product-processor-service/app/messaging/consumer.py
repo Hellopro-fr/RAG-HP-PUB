@@ -1,3 +1,4 @@
+import logging
 import pika
 import json
 from product_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
@@ -5,6 +6,8 @@ from product_processor_service.core.processor import process_product_data_for_em
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 from common_utils.autres.DLQProperties import DLQProperties
 from common_utils.metrics.prometheus import measure_processing_time
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
@@ -29,7 +32,7 @@ class Consumer:
         
         self.rabbitmq_connection = RabbitMQConnection()
         self.connect()
-        print("✅ Consumer initialisé.")
+        logger.info("✅ Consumer initialisé.")
 
     def connect(self):
         """
@@ -75,7 +78,7 @@ class Consumer:
         Callback privé qui orchestre le traitement d'un message.
         """
         try:
-            print("📥 Product-Processor: Message reçu.")
+            logger.info("📥 Product-Processor: Message reçu.")
             data = json.loads(body)
             product_data = data.get('data', {})
             bdd = data.get('database', "qdrant")
@@ -86,7 +89,7 @@ class Consumer:
                 raise ValueError("Aucune donnée de produit trouvée dans le message.")
             
             product_id = product_data.get('id_produit', 'ID inconnu')
-            print(f"\n📥 Product-Processor: Message reçu pour '{product_id}'.")
+            logger.info(f"📥 Product-Processor: Message reçu pour '{product_id}'.")
 
             # 1. Appelle la logique métier PURE
             output_message = process_product_data_for_embedding(product_data,bdd,origin,mode)
@@ -99,7 +102,7 @@ class Consumer:
 
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message est invalide.
-            print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+            logger.error(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
             dlq_props = DLQProperties.create_dlq_properties(e, 'product-processor-service', 0, method)
             ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
             ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -108,10 +111,10 @@ class Consumer:
             # Erreur potentiellement transitoire.
             retry_count = self._get_retry_count(properties)
             if retry_count < MAX_RETRIES:
-                print(f"❌ Erreur inattendue (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                logger.warning(f"❌ Erreur inattendue (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             else:
-                print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
                 dlq_props = DLQProperties.create_dlq_properties(e, 'product-processor-service', MAX_RETRIES, method)
                 ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -123,9 +126,9 @@ class Consumer:
                 Démarre la boucle d'écoute des messages.
                 """
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-                print("👂 Product-Processor: En attente de messages...")
+                logger.info("👂 Product-Processor: En attente de messages...")
                 self.channel.start_consuming()
                 break  # Si start_consuming se termine normalement, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                logger.warning(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
                 self.connect()

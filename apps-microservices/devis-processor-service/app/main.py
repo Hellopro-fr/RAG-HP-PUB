@@ -1,16 +1,21 @@
 import pika
 import os
 import time
+import logging
 
 from devis_processor_service.messaging.consumer import Consumer
 from devis_processor_service.messaging.publisher import Publisher
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
+from common_utils.logging import setup_logging
+
+logger = logging.getLogger(__name__)
 
 def main():
     """
     Point d'entrée principal du service.
     Met en place la connexion et lance les composants.
     """
+    setup_logging("devis-processor-service")
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
     connection = None
 
@@ -21,14 +26,14 @@ def main():
     for i in range(10):
         try:
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ DI-Processor: Connecté à RabbitMQ.")
+            logger.info("✅ DI-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ DI-Processor: En attente de RabbitMQ... {i+1}s")
+            logger.info(f"⏳ DI-Processor: En attente de RabbitMQ... {i+1}s")
             time.sleep(1)
 
     if not connection:
-        print("❌ DI-Processor: Impossible de se connecter, arrêt du service.")
+        logger.error("❌ DI-Processor: Impossible de se connecter, arrêt du service.")
         exit(1)
 
     try:
@@ -42,11 +47,11 @@ def main():
         consumer.start_consuming()
 
     except KeyboardInterrupt:
-        print("\n🛑 DI-Processor: Arrêt demandé.")
+        logger.info("🛑 DI-Processor: Arrêt demandé.")
     finally:
         if connection and not connection.is_closed:
             connection.close()
-            print("✅ DI-Processor: Connexion RabbitMQ fermée.")
+            logger.info("✅ DI-Processor: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
     main()

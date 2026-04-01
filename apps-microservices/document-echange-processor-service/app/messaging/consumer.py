@@ -3,13 +3,15 @@ import os
 import time
 import json
 import asyncio
+import logging
 import aiormq
-import traceback
 import gc
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
 from common_utils.autres.DLQProperties import DLQProperties
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
@@ -30,7 +32,7 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
-        print("✅ Consumer initialisé.")
+        logger.info("✅ Consumer initialisé.")
 
     async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
         dlx = await channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -65,7 +67,7 @@ class Consumer:
     
     async def batch_processor(self):
         """Tâche de fond qui traite les messages par lots de manière asynchrone."""
-        print("⚙️  Processeur de batch démarré. En attente de messages...")
+        logger.info("⚙️  Processeur de batch démarré. En attente de messages...")
         
         while True:
             batch = []
@@ -83,7 +85,7 @@ class Consumer:
                     except asyncio.TimeoutError:
                         break
             except asyncio.CancelledError:
-                print("   -> Tâche de traitement de batch annulée.")
+                logger.info("   -> Tâche de traitement de batch annulée.")
                 break
 
             if not batch:
@@ -91,7 +93,7 @@ class Consumer:
 
             start_time = time.monotonic()
             batch_size = len(batch)
-            print(f"⚙️  Traitement d'un batch de {batch_size} messages...")
+            logger.info(f"⚙️  Traitement d'un batch de {batch_size} messages...")
             
             # --- ACK-EARLY STRATEGY ---
             # On acquitte les messages AVANT le traitement long pour éviter le timeout RabbitMQ.
@@ -100,7 +102,7 @@ class Consumer:
                 try:
                     await msg.ack()
                 except Exception as e:
-                    print(f"⚠️ Impossible d'acquitter le message {msg.delivery_tag} avant traitement: {e}")
+                    logger.warning(f"⚠️ Impossible d'acquitter le message {msg.delivery_tag} avant traitement: {e}")
                     # On continue quand même, car si la co est coupée, le traitement sera probablement perdu ou republié plus tard.
 
             messages_to_process = []
@@ -111,7 +113,7 @@ class Consumer:
                     messages_to_process.append(json.loads(msg.body))
                     valid_batch_indices.append(i)
                 except json.JSONDecodeError:
-                     print(f"❌ Erreur de décodage JSON pour le message {msg.delivery_tag}. Message ignoré (déjà acké).")
+                     logger.error(f"❌ Erreur de décodage JSON pour le message {msg.delivery_tag}. Message ignoré (déjà acké).")
                      # Optionnel: Envoyer directement en DLQ si JSON invalide irrécupérable
 
             if not messages_to_process:
@@ -134,7 +136,7 @@ class Consumer:
                             
                         elif result['status'] == 'error':
                             # Envoi direct à la DLQ sans retry
-                            print(f"   -> Erreur de traitement pour le message (tag: {original_message.delivery_tag}). Envoi direct à la DLQ.")
+                            logger.error(f"   -> Erreur de traitement pour le message (tag: {original_message.delivery_tag}). Envoi direct à la DLQ.")
                             dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
                             
                             dlq_headers = DLQProperties.create_dlq_headers(
@@ -154,8 +156,8 @@ class Consumer:
                             )
 
             except Exception as e:
-                print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}.")
-                traceback.print_exc()
+                logger.critical(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}.")
+                logger.exception("Traceback complet:")
 
                 # En cas de crash global du batch, on essaie de sauver les messages en les republiant
                 # Attention : si la connexion est morte, ceci échouera aussi.
@@ -180,7 +182,7 @@ class Consumer:
                                 )
                             else:
                                 # MAX_RETRIES atteint : envoi à la DLQ
-                                print(f"   -> MAX_RETRIES atteint pour le message (tag: {msg.delivery_tag}). Envoi à la DLQ.")
+                                logger.error(f"   -> MAX_RETRIES atteint pour le message (tag: {msg.delivery_tag}). Envoi à la DLQ.")
                                 dlx = await rescue_channel.get_exchange(self.dead_letter_exchange, ensure=True)
                                 
                                 dlq_headers = DLQProperties.create_dlq_headers(
@@ -199,12 +201,12 @@ class Consumer:
                                     routing_key=self.routing_key
                                 ) 
                 except Exception as rescue_error:
-                    print(f"💀 Impossible de sauver le batch après crash : {rescue_error}")
+                    logger.critical(f"💀 Impossible de sauver le batch après crash : {rescue_error}")
 
             finally:
                 end_time = time.monotonic()
                 duration = end_time - start_time
-                print(f"🏁 Traitement du batch terminé en {duration:.4f} secondes.")
+                logger.info(f"🏁 Traitement du batch terminé en {duration:.4f} secondes.")
                 
                 # Nettoyage explicite de la mémoire après chaque batch
                 try:
@@ -212,9 +214,9 @@ class Consumer:
                     if 'messages_to_process' in locals(): del messages_to_process
                     if 'processed_results' in locals(): del processed_results
                     gc.collect()
-                    print("🧹 Mémoire nettoyée (GC collect).")
+                    logger.debug("🧹 Mémoire nettoyée (GC collect).")
                 except Exception as e:
-                    print(f"Message non critique : Erreur lors du nettoyage mémoire : {e}")
+                    logger.debug(f"Message non critique : Erreur lors du nettoyage mémoire : {e}")
     
     async def _on_message(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Callback léger qui met les messages dans un buffer asynchrone."""
@@ -232,5 +234,5 @@ class Consumer:
         asyncio.create_task(self.batch_processor())
         
         # Commencer à consommer les messages et à les mettre dans le buffer
-        print("👂 Document-processor-service: En attente de messages...")
+        logger.info("👂 Document-processor-service: En attente de messages...")
         await queue.consume(self._on_message)

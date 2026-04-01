@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import List, Dict
 import urllib.parse
 
@@ -6,6 +7,8 @@ from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
 from common_utils.cleaner.AnonymizeText import AnonymizeText
 from common_utils.ocr.DeepseekOCRDocExtractor import DeepseekOCRDocExtractor
+
+logger = logging.getLogger(__name__)
 
 async def process_document_data_for_templating(documents: List[Dict], bdd: str = "milvus") -> List[Dict]:    
     anonymize = AnonymizeText()
@@ -51,12 +54,12 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             # Si validation OK, conserver le fichier en mémoire pour l'OCR
             # NE PAS fermer file_content ici, il sera utilisé pour l'OCR
             valid_files_data.append((index, file_content, filename, document))
-            print(f"✅ Document valide: {nom_doc}")
+            logger.info(f"✅ Document valide: {nom_doc}")
             
         except ValueError as e:
             # Document invalide (trop de pages) -> erreur pour DLQ
             error_msg = str(e)
-            print(f"❌ Document invalide: {nom_doc} - {error_msg}")
+            logger.warning(f"❌ Document invalide: {nom_doc} - {error_msg}")
             
             results_by_index[index] = {
                 "status": "error",
@@ -70,7 +73,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
         except Exception as e:
             # Autre erreur (téléchargement, etc.) -> erreur pour DLQ
             error_msg = str(e)
-            print(f"❌ Erreur lors de la validation de {nom_doc}: {error_msg}")
+            logger.error(f"❌ Erreur lors de la validation de {nom_doc}: {error_msg}")
             
             results_by_index[index] = {
                 "status": "error",
@@ -89,7 +92,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     
     if valid_files_data:
         try:
-            print(f"🔄 Traitement OCR de {len(valid_files_data)} document(s) valide(s)...")
+            logger.info(f"🔄 Traitement OCR de {len(valid_files_data)} document(s) valide(s)...")
             
             # Préparer les données pour extract_from_files (file_content, filename)
             files_for_ocr = [(file_content, filename) for _, file_content, filename, _ in valid_files_data]
@@ -102,7 +105,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             # Si l'OCR échoue pour le batch, tous les documents valides deviennent des erreurs
             ocr_failed = True
             ocr_error_msg = str(e)
-            print(f"❌ Erreur OCR batch: {ocr_error_msg}")
+            logger.error(f"❌ Erreur OCR batch: {ocr_error_msg}")
         finally:
             # Fermer tous les fichiers en mémoire après traitement OCR
             for _, file_content, _, _ in valid_files_data:
@@ -209,5 +212,5 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             })
             error_count += 1
     
-    print(f"🔍Document-Echange-Processor: {success_count} succès, {error_count} erreurs")
+    logger.info(f"🔍 Document-Echange-Processor: {success_count} succès, {error_count} erreurs")
     return all_results
