@@ -35,7 +35,7 @@ WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie) AND p.est_actif 
 WITH DISTINCT p
 OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc2:CaracteristiqueTechnique)
 WHERE pc2.id_source_caracteristique IN $all_cids
-WITH p, collect(properties(pc2)) AS all_chars
+WITH p, collect({id_source_caracteristique: pc2.id_source_caracteristique, id_source_valeur: pc2.id_source_valeur, valeur: pc2.valeur, valeur_canonique: pc2.valeur_canonique, valeur_min_canonique: pc2.valeur_min_canonique, valeur_max_canonique: pc2.valeur_max_canonique, unite_canonique: pc2.unite_canonique, type_donnee: pc2.type_donnee, unite: pc2.unite, valeur_min: pc2.valeur_min, valeur_max: pc2.valeur_max}) AS all_chars
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
 RETURN p PROJECTION_PLACEHOLDER AS product_data,
        all_chars,
@@ -47,7 +47,7 @@ MATCH (p:Produit)
 WHERE p.id = $target_product_id AND p.est_actif = true
 OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc2:CaracteristiqueTechnique)
 WHERE pc2.id_source_caracteristique IN $all_cids
-WITH p, collect(properties(pc2)) AS all_chars
+WITH p, collect({id_source_caracteristique: pc2.id_source_caracteristique, id_source_valeur: pc2.id_source_valeur, valeur: pc2.valeur, valeur_canonique: pc2.valeur_canonique, valeur_min_canonique: pc2.valeur_min_canonique, valeur_max_canonique: pc2.valeur_max_canonique, unite_canonique: pc2.unite_canonique, type_donnee: pc2.type_donnee, unite: pc2.unite, valeur_min: pc2.valeur_min, valeur_max: pc2.valeur_max}) AS all_chars
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
 RETURN p PROJECTION_PLACEHOLDER AS product_data,
        all_chars,
@@ -59,7 +59,7 @@ MATCH (p:Produit)
 WHERE p.id_produit IN $target_id_produits AND p.est_actif = true
 OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc2:CaracteristiqueTechnique)
 WHERE pc2.id_source_caracteristique IN $all_cids
-WITH p, collect(properties(pc2)) AS all_chars
+WITH p, collect({id_source_caracteristique: pc2.id_source_caracteristique, id_source_valeur: pc2.id_source_valeur, valeur: pc2.valeur, valeur_canonique: pc2.valeur_canonique, valeur_min_canonique: pc2.valeur_min_canonique, valeur_max_canonique: pc2.valeur_max_canonique, unite_canonique: pc2.unite_canonique, type_donnee: pc2.type_donnee, unite: pc2.unite, valeur_min: pc2.valeur_min, valeur_max: pc2.valeur_max}) AS all_chars
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
 RETURN p PROJECTION_PLACEHOLDER AS product_data,
        all_chars,
@@ -505,7 +505,11 @@ def apply_diversity_mmr(
 
 class RecommendationServiceV2:
 
-    def _build_v2_projection(self, request) -> str:
+    # Minimal projection for scoring (only id_produit needed from product node)
+    SCORING_PROJECTION = "{ .id_produit }"
+
+    def _build_full_projection(self, request) -> str:
+        """Full projection for requery/output (includes champs_sortie)."""
         if request.champs_sortie is not None and len(request.champs_sortie) > 0:
             champs = list(request.champs_sortie)
             if "id_produit" not in champs:
@@ -521,12 +525,13 @@ class RecommendationServiceV2:
             query = CYPHER_V2_TARGET
         else:
             query = CYPHER_V2_ANCHOR
-        projection = self._build_v2_projection(request)
-        return query.replace("PROJECTION_PLACEHOLDER", projection)
+        # Use minimal projection for scoring — less data over gRPC
+        return query.replace("PROJECTION_PLACEHOLDER", self.SCORING_PROJECTION)
 
     def _build_v2_cypher_by_ids(self, request) -> str:
         query = CYPHER_V2_BY_IDS
-        projection = self._build_v2_projection(request)
+        # Requery uses full projection for output
+        projection = self._build_full_projection(request)
         return query.replace("PROJECTION_PLACEHOLDER", projection)
 
     def _build_v2_params(self, request, flat_filters, target_product_id=None, target_id_produits=None) -> Dict:
