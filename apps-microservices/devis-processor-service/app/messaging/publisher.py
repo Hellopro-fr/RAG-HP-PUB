@@ -25,12 +25,10 @@ class Publisher:
         logger.info("✅ Publisher initialisé.")
 
     def publish_message(self, message_dict: dict):
+        """Publie un message (dictionnaire) sur le topic configuré."""
         for i in range(3):  # Essaye de se reconnecter 3 fois
             try:
-                """
-                Publie un message (dictionnaire) sur le topic configuré.
-                """
-                id_demande = message_dict.get("lead_id", "ID DI inconnu")
+                id_demande = message_dict.get("data", {}).get("lead_id", "ID DI inconnu")
                 self.channel.basic_publish(
                     exchange=self.exchange_name,
                     routing_key=self.routing_key,

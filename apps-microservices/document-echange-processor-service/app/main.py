@@ -21,7 +21,7 @@ async def main():
     rabbitmq_url = os.environ.get("RABBITMQ_URL")
     if not rabbitmq_url:
         logger.error("❌ ERREUR: La variable d'environnement RABBITMQ_URL n'est pas définie.")
-        exit(1)
+        return
 
     logger.info("🚀 Document-processor-service: Démarrage...")
     
@@ -50,7 +50,7 @@ async def main():
             await asyncio.sleep(10)
         except KeyboardInterrupt:
             logger.info("🛑 Document-processor-service: Arrêt demandé.")
-            # break
+            break
         except Exception as e:
             logger.error(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
             await asyncio.sleep(10)

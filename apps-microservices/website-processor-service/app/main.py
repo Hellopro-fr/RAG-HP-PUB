@@ -5,8 +5,8 @@ import logging
 from common_utils.logging import setup_logging
 setup_logging("website-processor-service")
 
-import pika
 import aio_pika
+import aiormq
 
 from website_processor_service.messaging.consumer import Consumer
 from website_processor_service.messaging.publisher import Publisher
@@ -19,7 +19,10 @@ async def main():
     Point d'entrée principal asynchrone du service.
     Met en place la connexion et lance les composants.
     """
-    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
+    rabbitmq_url = os.environ.get("RABBITMQ_URL")
+    if not rabbitmq_url:
+        logger.error("❌ Website-Processor: RABBITMQ_URL n'est pas définie.")
+        return
 
     logger.info("🚀 Website-Processor: Démarrage...")
 
@@ -40,7 +43,7 @@ async def main():
             # Garder le service en vie
             await asyncio.Future()
 
-    except pika.exceptions.AMQPConnectionError as e:
+    except (aiormq.exceptions.AMQPConnectionError, aio_pika.exceptions.AMQPConnectionError) as e:
         logger.error(f"❌ Website-Processor: Impossible de se connecter après plusieurs tentatives. Erreur: {e}")
         exit(1)
     except KeyboardInterrupt:

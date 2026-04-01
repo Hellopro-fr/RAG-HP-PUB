@@ -17,7 +17,11 @@ def main():
     Point d'entrée principal du service.
     Met en place la connexion et lance les composants.
     """
-    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
+    rabbitmq_url = os.environ.get("RABBITMQ_URL")
+    if not rabbitmq_url:
+        logger.error("❌ Product-Processor: RABBITMQ_URL n'est pas définie.")
+        exit(1)
+
     connection = None
 
     # --- Start Prometheus metrics server ---

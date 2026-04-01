@@ -18,9 +18,8 @@ class Consumer:
         Initialise le consumer.
         Il a besoin d'une connexion ET d'une instance du publisher.
         """
-        self.channel = connection.channel()
         self.publisher = publisher
-        
+
         # Noms des composants RabbitMQ
         self.exchange_name = 'data_exchange_echanges'
         self.routing_key = 'new_data.echange'
@@ -109,20 +108,18 @@ class Consumer:
             # Erreur potentiellement transitoire.
             retry_count = self._get_retry_count(properties)
             if retry_count < MAX_RETRIES:
-                logger.warning(f"⚠️ Erreur inattendue (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                logger.warning(f"⚠️ Erreur inattendue (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}", exc_info=True)
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             else:
-                logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
                 dlq_props = DLQProperties.create_dlq_properties(e, 'echange-processor-service', MAX_RETRIES, method)
                 ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def start_consuming(self):
+        """Démarre la boucle d'écoute des messages."""
         for i in range(3):
-            try: 
-                """
-                Démarre la boucle d'écoute des messages.
-                """
+            try:
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
                 logger.info("👂 Echange-Processor: En attente de messages...")
                 self.channel.start_consuming()
