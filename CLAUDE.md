@@ -46,16 +46,59 @@ docs/                 # Project documentation
 - **Type checking**: `cargo check` for Rust. No Python type checker enforced yet (ruff or mypy recommended — team decision pending).
 - **CI/CD**: GitHub Actions — `ci_services_*.yml` (lint/test), `cd_build_push_*.yml` (Docker build+push).
 - **Commit messages**: Conventional Commits, bilingual EN/FR (see `.claude/rules/commit-messages.md`).
-- **Impact awareness**: Before modifying code, analyze trade-offs, bigger picture, and blast radius on shared components (see `.claude/rules/impact-awareness.md`).
-- **Auto-review**: A `Stop` hook in `settings.json` automatically checks after each response whether CLAUDE.md files need updating and whether modified code needs a self-review.
-- **Docker security**: Dockerfile and docker-compose changes must follow `.claude/rules/docker-security.md` (pinned images, no root, healthchecks).
-- **Config freshness**: Mid-conversation, re-read `.claude/` files before using them (see `.claude/rules/config-freshness.md`).
 
-## Skills (Scaffolding)
+## Claude Code Configuration
 
-- `/fastapi-service-scaffold <name> <description>` — Generate a new FastAPI service with all conventions.
-- `/rabbitmq-consumer-scaffold <name> <collection>` — Generate a new RabbitMQ processor service.
-- `/proto-sync [proto-file]` — Regenerate Python gRPC stubs from protos/.
+### Rules (`.claude/rules/`)
+
+| Rule | Purpose |
+|------|---------|
+| `code-modification.md` | Surgical edit protocol: read first, minimal diff, preserve formatting, verify after |
+| `commit-messages.md` | Bilingual Conventional Commits, scope to current response, < 72 chars |
+| `language.md` | Respond in user's language, bilingual commits, English code identifiers |
+| `security.md` | No hardcoded secrets/URLs, Pydantic BaseSettings, CORS (internal vs public), JWT, input validation, all infra connection strings |
+| `impact-awareness.md` | Trade-off analysis, bigger-picture context, blast radius check on shared components before any modification |
+| `docker-security.md` | Pinned base images, no root, healthchecks, no secrets in ENV, `.dockerignore`, `--no-cache-dir` |
+| `config-freshness.md` | Re-read `.claude/` files mid-conversation before using agents/commands |
+
+### Agents (`.claude/agents/`)
+
+| Agent | Purpose | Tools |
+|-------|---------|-------|
+| `code-reviewer` | SOLID/DRY/KISS, security, performance, error handling, impact awareness. Exhaustive single-pass (multi-pass internally). | Read, Glob, Grep |
+| `debugger` | Root cause analysis → structured fix plan with trade-offs and blast radius → apply after confirmation. | Read, Bash, Glob, Grep |
+| `doc-writer` | Add file-level, function-level, and inline documentation. English docstrings only. Code-immutable. | Read, Write, Edit, Glob, Grep |
+| `test-writer` | Stack-agnostic test generation: auto-detects Python (pytest), Rust (cargo test), Node.js (Jest/Vitest), or asks for unknown stacks. | Read, Write, Edit, Glob, Grep |
+
+### Commands (`.claude/commands/`)
+
+| Command | Purpose |
+|---------|---------|
+| `/commit-msg` | Generate bilingual commit message (EN/FR) |
+| `/explain` | Explain a single file or code block (no modifications) |
+| `/understand` | Absorb and summarize multiple files or broad topics |
+| `/plan` | Interactive planning with step list and optional file table |
+| `/pre-push` | Pre-push verification: syntax, tests, review, summary table |
+| `/new-service-claude-md` | Generate CLAUDE.md for a new service + update root |
+| `/new-feature-claude-md` | Update service CLAUDE.md after a feature addition |
+| `/update-claude-md` | Propose surgical CLAUDE.md updates (mistake prevention, project change, rescan) |
+| `/investigate` | Evidence-based statement verification: CONFIRMED / PARTIALLY TRUE / FALSE / INCONCLUSIVE |
+| `/audit-feature` | End-to-end feature audit tracing the pipeline across services |
+| `/review-task` | Tech Lead review: combined state + diff analysis, verdict APPROVED / CHANGES REQUESTED / BLOCKED |
+
+### Skills (`.claude/skills/`)
+
+| Skill | Purpose |
+|-------|---------|
+| `/fastapi-service-scaffold <name> <desc>` | Scaffold a new FastAPI service with all conventions |
+| `/rabbitmq-consumer-scaffold <name> <collection>` | Scaffold a new RabbitMQ processor with consumer, DLQ, metrics |
+| `/proto-sync [proto-file]` | Regenerate Python gRPC stubs from protos/ and check for breaking changes |
+
+### Hooks (`settings.json`)
+
+| Event | Purpose |
+|-------|---------|
+| `Stop` | After each response: (1) check if CLAUDE.md files need updating, (2) self-review modified code for quality/security/impact |
 
 ## Constraints
 
