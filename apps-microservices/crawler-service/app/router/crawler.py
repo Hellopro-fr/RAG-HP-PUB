@@ -6,14 +6,15 @@ from datetime import datetime
 from typing import Dict, Optional, List
 
 import aiofiles
-from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query, Depends
+from fastapi import APIRouter, HTTPException, status, Query, Depends
 from fastapi.responses import FileResponse
+from starlette.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY
+from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY, FAILED_CALLBACKS_KEY
 from common_utils.redis import cache_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse, PendingCallbacksResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         # Heuristic: if storage was modified recently (< 2 hours), assume running
         try:
             storage_mtime = os.path.getmtime(job_storage_path)
-            age_hours = (datetime.now().timestamp() - storage_mtime) / 3600
+            age_hours = (datetime.utcnow().timestamp() - storage_mtime) / 3600
             if age_hours < 2:
                 final_status = "running"
                 logger.info(f"No completion marker for '{crawl_id}', but storage modified {age_hours:.1f}h ago. Assuming RUNNING.")
@@ -94,7 +95,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
 
     recovered_data = {
         "crawl_id": crawl_id, "status": final_status, "domain": domain,
-        "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
+        "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)).isoformat(),
         "storage_path": job_storage_path,
         "failure_callback_url": None, "pid": None
     }
@@ -250,13 +251,14 @@ async def force_finish_crawl(
 
 @router.get("/status", response_model=Dict[str, CrawlStatus])
 async def get_all_crawl_statuses(
-    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (e.g., running, finished, failed, archived, restarting_oom).")
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status. Supports comma-separated values (e.g., running,stopping).")
 ):
     """
     Gets the status of all crawl jobs. Optionally filter by status.
-    Examples: /status?status=running, /status?status=finished
+    Examples: /status?status=running, /status?status=finished, /status?status=running,stopping
     """
-    return await crawler_manager.get_all_statuses(status_filter=status_filter)
+    filter_list = [s.strip() for s in status_filter.split(",") if s.strip()] if status_filter else None
+    return await crawler_manager.get_all_statuses(status_filter=filter_list)
 
 @router.get("/status/{crawl_id}", response_model=CrawlStatus)
 async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
@@ -267,7 +269,6 @@ async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
 
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
-    background_tasks: BackgroundTasks,
     include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues)."),
     job_info: dict = Depends(get_job_or_recover)
 ):
@@ -289,11 +290,21 @@ async def download_crawl_results(
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
 
-        # For GCS downloads (temporary files): schedule cleanup after the response is sent
         if is_temporary:
-            background_tasks.add_task(crawler_manager.cleanup_temp_download, crawl_id)
+            # Stream the file and clean up after streaming completes (prevents race with BackgroundTasks)
+            def iterfile():
+                with open(archive_path, 'rb') as f:
+                    yield from f
+                # Cleanup after streaming is complete
+                crawler_manager.cleanup_temp_download(crawl_id)
 
-        return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
+            return StreamingResponse(
+                iterfile(),
+                media_type='application/gzip',
+                headers={"Content-Disposition": f"attachment; filename={crawl_id}-results.tar.gz"}
+            )
+        else:
+            return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -329,6 +340,27 @@ async def reconcile_jobs():
     """
     await crawler_manager.reconcile_jobs()
     return {"status": "reconciliation_complete"}
+
+@router.get("/pending-callbacks", response_model=PendingCallbacksResponse)
+async def get_pending_callbacks():
+    """
+    Returns all failed webhook callbacks stored in Redis after retry exhaustion.
+    These can be reviewed and replayed manually or by an automated reconciliation process.
+    """
+    raw_entries = await cache_service.redis_client.lrange(FAILED_CALLBACKS_KEY, 0, -1)
+    callbacks = []
+    for raw in raw_entries:
+        try:
+            callbacks.append(json.loads(raw))
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return PendingCallbacksResponse(count=len(callbacks), callbacks=callbacks)
+
+@router.delete("/pending-callbacks")
+async def clear_pending_callbacks():
+    """Clears all failed webhook callbacks from Redis."""
+    deleted = await cache_service.redis_client.delete(FAILED_CALLBACKS_KEY)
+    return {"status": "cleared", "keys_deleted": deleted}
 
 @router.post("/prune-archives", response_model=PruneResponse)
 async def prune_archives(

@@ -27,10 +27,14 @@ export class DedupManager {
     }
 
     private async ensureTtl() {
-        if (!this.ttlSet) {
+        if (this.ttlSet) return;
+        this.ttlSet = true; // Set immediately to prevent concurrent calls
+        try {
             await this.redis.expire(this.key, this.ttl);
             await this.redis.expire(this.blockedKey, this.ttl);
-            this.ttlSet = true;
+        } catch (e) {
+            this.ttlSet = false; // Reset on failure so it retries
+            console.warn(`Failed to set TTL: ${e}`);
         }
     }
 

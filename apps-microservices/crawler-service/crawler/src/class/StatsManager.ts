@@ -28,9 +28,13 @@ export class StatsManager {
     }
 
     private async ensureTtl() {
-        if (!this.ttlSet) {
+        if (this.ttlSet) return;
+        this.ttlSet = true; // Set immediately to prevent concurrent calls
+        try {
             await this.redis.expire(this.key, this.ttl);
-            this.ttlSet = true;
+        } catch (e) {
+            this.ttlSet = false; // Reset on failure so it retries
+            console.warn(`Failed to set TTL: ${e}`);
         }
     }
 
@@ -93,7 +97,7 @@ export class StatsManager {
                 console.log(`Loaded existing stats: ${JSON.stringify(data)}`);
             }
         } catch (e) {
-            // File doesn't exist or error, ignore
+            console.warn(`Failed to load stats from disk (starting from zero): ${e}`);
         }
     }
 

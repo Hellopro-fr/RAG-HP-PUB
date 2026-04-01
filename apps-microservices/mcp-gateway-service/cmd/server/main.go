@@ -84,11 +84,12 @@ func main() {
 
 	// Configure auth
 	authCfg := auth.Config{
-		JWTSecret:   cfg.JWTSecret,
-		JWTAlgo:     cfg.JWTAlgo,
-		JWTAudience: cfg.JWTAudience,
-		AuthURL:     cfg.AuthURL,
-		Enabled:     cfg.AuthEnabled,
+		JWTSecret:    cfg.JWTSecret,
+		JWTAlgo:      cfg.JWTAlgo,
+		JWTAudience:  cfg.JWTAudience,
+		AuthURL:      cfg.AuthURL,
+		Enabled:      cfg.AuthEnabled,
+		SecureCookie: cfg.SecureCookie,
 	}
 
 	// Mount login/logout routes

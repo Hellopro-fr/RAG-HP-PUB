@@ -223,7 +223,7 @@ services:
       - EMBEDDING_BATCH_SIZE=8
       - TRITON_MAX_CONCURRENT_DEFAULT=1
       - TOTAL_MAX_CONCURRENT_REQUESTS=10
-      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement
+      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement,mcp-api-recherche
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
     # depends_on:
     #   triton-server:
@@ -256,7 +256,7 @@ services:
     profiles: ["app"] # Profile for the main application stack
     environment:
       - TOTAL_MAX_CONCURRENT_REQUESTS=200
-      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement
+      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement,mcp-api-recherche
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
       - DB_BATCH_SIZE=16
       - DB_MAX_CONCURRENT_ZILLIZ_DEFAULT=2
@@ -2106,6 +2106,30 @@ services:
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - LLM_SERVICE_URL=llm-service:50051
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Google Analytics Service ──────────────────────────────────────
+  mcp-google-analytics-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-google-analytics-service/Dockerfile
+    container_name: mcp-google-analytics-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8583:8583"
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
+      - GOOGLE_PROJECT_ID=${GOOGLE_ANALYTICS_PROJECT_ID}
+      # Set to "p12" to use P12 key format instead of JSON
+      - GOOGLE_CREDENTIALS_TYPE=${GOOGLE_CREDENTIALS_TYPE:-json}
+      - GOOGLE_SERVICE_ACCOUNT_EMAIL=${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
+      - GOOGLE_P12_PASSWORD=${GOOGLE_P12_PASSWORD:-notasecret}
+    volumes:
+      - ${GOOGLE_ANALYTICS_CREDENTIALS_PATH:-./secrets/gcp-analytics-credentials.json}:/secrets/gcp-credentials.json:ro
+      - ${GOOGLE_ANALYTICS_P12_PATH:-./secrets/gcp-analytics-credentials.p12}:/secrets/gcp-credentials.p12:ro
     networks:
       - services-net
     logging: *logging_defaults

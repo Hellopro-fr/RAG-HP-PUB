@@ -6,6 +6,8 @@ import re
 import signal
 import tempfile
 import shutil
+import threading
+import time
 import anyio
 import tarfile
 import hashlib
@@ -32,6 +34,10 @@ CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 CRAWL_UPDATES_CHANNEL = "crawl_updates"
 STALE_JOB_THRESHOLD_SECONDS = 180  # 3 minutes without heartbeat = dead
 
+# Webhook retry configuration
+WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
+FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
+
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory, excluding Crawlee metadata."""
     if not os.path.isdir(path):
@@ -47,6 +53,10 @@ def _count_files_in_dir(path: str) -> int:
         return count
     except OSError:
         return 0
+
+# Thread-safe locks for concurrent archive generation (keyed by archive path)
+_archive_locks: Dict[str, threading.Lock] = {}
+_archive_locks_guard = threading.Lock()
 
 class CrawlerManager:
     """
@@ -200,7 +210,16 @@ class CrawlerManager:
             if value is not None:
                 command.append(f"--{key}={value}")
 
-        logger.info(f"Starting crawl '{crawl_id}' with command: {' '.join(command)}")
+        # Mask sensitive params for logging
+        safe_command = []
+        for arg in command:
+            if arg.startswith('--proxyapify='):
+                safe_command.append('--proxyapify=***')
+            elif arg.startswith('--callbackUrl='):
+                safe_command.append('--callbackUrl=***')
+            else:
+                safe_command.append(arg)
+        logger.info(f"Starting crawl '{crawl_id}' with command: {' '.join(safe_command)}")
         
         process = await asyncio.create_subprocess_exec(
             *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -281,8 +300,62 @@ class CrawlerManager:
             )
         except Exception as e:
             logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}", exc_info=True)
-            # Ensure we clean up the slot if relaunch fails
+            # Release the reserved slot since relaunch failed
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            # Mark job as failed
+            job_info["status"] = "failed"
+            job_info["isError"] = "OOM_RELAUNCH_FAILED"
+            await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
+            await self._publish_update(crawl_id, "failed")
+            if job_info.get("failure_callback_url"):
+                asyncio.create_task(self._send_failure_webhook(
+                    str(job_info["failure_callback_url"]),
+                    crawl_id,
+                    job_info["domain"],
+                    -1,
+                    job_info.get("crawl_mode", "standard")
+                ))
+
+    async def _send_webhook_with_retry(self, url: str, params: dict, crawl_id: str, webhook_type: str):
+        """
+        Sends an HTTP GET webhook with exponential backoff retry.
+        On exhaustion, stores the failed callback in Redis for manual replay.
+        """
+        last_error = None
+        for attempt, delay in enumerate(WEBHOOK_RETRY_DELAYS):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url, params=params, timeout=30.0)
+                    if response.status_code < 500:
+                        logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (attempt {attempt + 1}). Status: {response.status_code}")
+                        return True
+                    last_error = f"HTTP {response.status_code}"
+                    logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' got {response.status_code} (attempt {attempt + 1}/{len(WEBHOOK_RETRY_DELAYS)})")
+            except httpx.RequestError as e:
+                last_error = str(e)
+                logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' failed (attempt {attempt + 1}/{len(WEBHOOK_RETRY_DELAYS)}): {e}")
+            if attempt < len(WEBHOOK_RETRY_DELAYS) - 1:
+                await asyncio.sleep(delay)
+
+        # All retries exhausted — store in Redis for manual replay
+        logger.error(f"Webhook '{webhook_type}' for '{crawl_id}' failed after {len(WEBHOOK_RETRY_DELAYS)} attempts. Storing for manual replay.")
+        await self._store_failed_callback(url, params, crawl_id, webhook_type, last_error)
+        return False
+
+    async def _store_failed_callback(self, url: str, params: dict, crawl_id: str, webhook_type: str, error: str):
+        """Appends a failed callback entry to the Redis list for later replay."""
+        entry = {
+            "crawl_id": crawl_id,
+            "webhook_type": webhook_type,
+            "url": url,
+            "params": params,
+            "error": error,
+            "failed_at": datetime.utcnow().isoformat(),
+        }
+        try:
+            await cache_service.redis_client.rpush(FAILED_CALLBACKS_KEY, json.dumps(entry, default=str))
+        except Exception as e:
+            logger.error(f"Failed to store failed callback for '{crawl_id}': {e}")
 
     async def _send_success_webhook(self, job_info: dict):
         callback_url = job_info.get("callback_url")
@@ -312,6 +385,8 @@ class CrawlerManager:
             domain = job_info.get("domain")
             if domain:
                 dataset_path = os.path.join(job_info["storage_path"], 'storage', 'datasets', domain)
+                if not os.path.isdir(dataset_path):
+                    dataset_path = os.path.join(job_info["storage_path"], 'storage', 'datasets', domain.replace('.', '-'))
                 stored_files_count = _count_files_in_dir(dataset_path)
                 params["stored_files_count"] = stored_files_count
                 # Optional: Override 'success' if you want the main success field to reflect disk count
@@ -354,12 +429,7 @@ class CrawlerManager:
                 params["message_erreur_crawling"] = self._map_error_to_message(str(is_error))
         # --- END: Ensure message_erreur_crawling is present ---
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(str(callback_url), params=params, timeout=30.0)
-                logger.info(f"Successfully sent success notification for '{crawl_id}'. Status: {response.status_code}")
-        except httpx.RequestError as e:
-            logger.error(f"Failed to send success notification for '{crawl_id}'. Error: {e}")
+        await self._send_webhook_with_retry(str(callback_url), params, crawl_id, "success")
 
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int, crawl_mode: str = "standard"):
         # We process failures for both standard and update modes now
@@ -376,12 +446,7 @@ class CrawlerManager:
             "message_erreur_crawling": error_message
         }
         
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, timeout=30.0)
-                logger.info(f"Successfully sent failure notification for '{crawl_id}'. Status: {response.status_code}")
-        except httpx.RequestError as e:
-            logger.error(f"Failed to send failure notification for '{crawl_id}'. Error: {e}")
+        await self._send_webhook_with_retry(url, params, crawl_id, "failure")
 
     async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped"):
         """
@@ -440,12 +505,7 @@ class CrawlerManager:
             "message_erreur_crawling": self._map_error_to_message(is_error) if is_error else ""
         }
         
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(str(url), params=params, timeout=30.0)
-                logger.info(f"Sent stop webhook for '{crawl_id}' (reason: {reason}). Status: {response.status_code}")
-        except Exception as e:
-            logger.error(f"Failed to send stop webhook for '{crawl_id}': {e}")
+        await self._send_webhook_with_retry(str(url), params, crawl_id, "stop")
 
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
@@ -453,6 +513,11 @@ class CrawlerManager:
         job_info_initial = await cache_service.get_json(job_key)
         if not job_info_initial:
             logger.error(f"Cannot monitor process for '{crawl_id}': job info vanished immediately after start.")
+            # Clean up: decrement counter and remove from local processes
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            if crawl_id in self.local_processes:
+                del self.local_processes[crawl_id]
+            self._kill_process_group(process.pid)
             return
 
         log_path = os.path.join(job_info_initial['storage_path'], 'crawler.log')
@@ -498,7 +563,7 @@ class CrawlerManager:
         if job_info:
             exit_code = process.returncode
             # Allow exit code 2 (Node.js intentional success/partial success) or 0 (Standard success)
-            is_success = (exit_code == 2)
+            is_success = (exit_code in (0, 2))
             # Exit code 3 is a specially dedicated code for OOM_RELAUNCH
             is_oom_relaunch = (exit_code == 3)
 
@@ -602,12 +667,19 @@ class CrawlerManager:
         
         old_status = job_info.get("status")
 
+        # Kill the actual OS process if running on this replica
+        if crawl_id in self.local_processes:
+            proc = self.local_processes[crawl_id]
+            if proc.returncode is None:
+                self._kill_process_group(proc.pid)
+                logger.info(f"Force-finish: killed process for '{crawl_id}' (PID {proc.pid}).")
+
         # Validate target status
         if target_status not in ("finished", "failed"):
             target_status = "finished"
 
         # Release the global concurrency slot if the job was holding one
-        if old_status in ("running", "restarting_oom"):
+        if old_status in ("running", "restarting_oom", "stopping"):
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
             logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{old_status}').")
 
@@ -620,8 +692,17 @@ class CrawlerManager:
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, target_status)
         
-        # Send force-finish notification callback
-        asyncio.create_task(self._send_stop_webhook(job_info, target_status))
+        # Use appropriate webhook based on target status
+        if target_status == "failed" and job_info.get("failure_callback_url"):
+            asyncio.create_task(self._send_failure_webhook(
+                str(job_info["failure_callback_url"]),
+                crawl_id,
+                job_info.get("domain", "unknown"),
+                -1,  # Force-finish exit code
+                job_info.get("crawl_mode", "standard")
+            ))
+        else:
+            asyncio.create_task(self._send_stop_webhook(job_info, target_status))
         
         # Write completion marker
         marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
@@ -638,7 +719,7 @@ class CrawlerManager:
         logger.info(f"Force-finished job '{crawl_id}': {old_status} -> {target_status}")
         return {"crawl_id": crawl_id, "old_status": old_status, "new_status": target_status}
 
-    async def get_all_statuses(self, status_filter: Optional[str] = None) -> Dict[str, CrawlStatus]:
+    async def get_all_statuses(self, status_filter: Optional[list] = None) -> Dict[str, CrawlStatus]:
         all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
         if not all_job_keys:
             return {}
@@ -658,7 +739,7 @@ class CrawlerManager:
             except (json.JSONDecodeError, TypeError):
                 continue
             # Apply filter before computing full status (avoids unnecessary disk I/O)
-            if status_filter and job_info.get("status") != status_filter:
+            if status_filter and job_info.get("status") not in status_filter:
                 continue
             crawl_id = all_job_keys[i].replace(CRAWL_JOB_PREFIX, "")
             status_data = await self.get_status(job_info)
@@ -791,16 +872,18 @@ class CrawlerManager:
             logger.info(f"GCS download already available for '{crawl_id}'.")
             return download_path
 
-        # Submit download request (idempotent: overwrites existing request file)
-        os.makedirs(requests_dir, exist_ok=True)
-        async with aiofiles.open(request_path, 'w') as f:
-            await f.write(crawl_id)
+        # Submit download request only if not already pending
+        if not os.path.exists(request_path) and not os.path.exists(done_path):
+            os.makedirs(requests_dir, exist_ok=True)
+            async with aiofiles.open(request_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.info(f"GCS download request submitted for '{crawl_id}'. Waiting for daemon...")
+        else:
+            logger.info(f"GCS download already pending/complete for '{crawl_id}'. Waiting...")
 
-        logger.info(f"GCS download request submitted for '{crawl_id}'. Waiting for daemon...")
-
-        # Poll for completion with timeout
-        timeout = settings.GCS_DOWNLOAD_TIMEOUT_SECONDS
-        for _ in range(timeout):
+        # Poll for completion with deadline-based timeout
+        deadline = time.monotonic() + settings.GCS_DOWNLOAD_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
             # Check for error first
             if os.path.exists(error_path):
                 error_msg = "Download failed"
@@ -834,7 +917,7 @@ class CrawlerManager:
             pass
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail=f"GCS download timed out after {timeout}s for '{crawl_id}'. Ensure the download daemon is running."
+            detail=f"GCS download timed out after {settings.GCS_DOWNLOAD_TIMEOUT_SECONDS}s for '{crawl_id}'. Ensure the download daemon is running."
         )
 
     def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive]) -> str:
@@ -860,72 +943,79 @@ class CrawlerManager:
         os.makedirs(archive_base_path, exist_ok=True)
         final_archive_path = os.path.join(archive_base_path, f"{crawl_id}-results-{include_hash}.tar.gz")
 
-        # --- CACHING STRATEGY ---
-        # If the file already exists, return it immediately!
-        if os.path.exists(final_archive_path):
-            logger.info(f"Returning cached archive for '{crawl_id}' (hash: {include_hash})")
-            return final_archive_path
+        # --- CACHING STRATEGY (with concurrency lock) ---
+        # Get or create a lock for this specific archive path
+        with _archive_locks_guard:
+            if final_archive_path not in _archive_locks:
+                _archive_locks[final_archive_path] = threading.Lock()
+            lock = _archive_locks[final_archive_path]
 
-        # Map the user's request to the actual folder names
-        # Note: We prioritize original domain, then sanitized
-        path_mappings = {
-            IncludeInArchive.DATASET: ["datasets/" + domain, "datasets/" + sanitized_name],
-            IncludeInArchive.DATASET_NFR: ["datasets/nfr-" + domain, "datasets/nfr-" + sanitized_name],
-            IncludeInArchive.DATASET_ERROR: ["datasets/error-" + domain, "datasets/error-" + sanitized_name],
-            IncludeInArchive.DATASET_UPDATE: ["datasets/update-" + domain, "datasets/update-" + sanitized_name],
-            IncludeInArchive.REQUEST_QUEUES: ["request_queues/" + domain, "request_queues/" + sanitized_name],
-            IncludeInArchive.REQUEST_URLS: ["request_urls/" + domain, "request_urls/" + sanitized_name],
-            IncludeInArchive.MISCELLANEOUS: ["miscellaneous/" + domain, "miscellaneous/" + sanitized_name],
-        }
+        with lock:
+            # Re-check cache after acquiring lock (another thread may have created it)
+            if os.path.exists(final_archive_path):
+                logger.info(f"Returning cached archive for '{crawl_id}' (hash: {include_hash})")
+                return final_archive_path
 
-        crawlee_storage_base = os.path.join(job_storage_path, 'storage')
-        copied_anything = False
+            # Map the user's request to the actual folder names
+            # Note: We prioritize original domain, then sanitized
+            path_mappings = {
+                IncludeInArchive.DATASET: ["datasets/" + domain, "datasets/" + sanitized_name],
+                IncludeInArchive.DATASET_NFR: ["datasets/nfr-" + domain, "datasets/nfr-" + sanitized_name],
+                IncludeInArchive.DATASET_ERROR: ["datasets/error-" + domain, "datasets/error-" + sanitized_name],
+                IncludeInArchive.DATASET_UPDATE: ["datasets/update-" + domain, "datasets/update-" + sanitized_name],
+                IncludeInArchive.REQUEST_QUEUES: ["request_queues/" + domain, "request_queues/" + sanitized_name],
+                IncludeInArchive.REQUEST_URLS: ["request_urls/" + domain, "request_urls/" + sanitized_name],
+                IncludeInArchive.MISCELLANEOUS: ["miscellaneous/" + domain, "miscellaneous/" + sanitized_name],
+            }
 
-        # Use a temporary file for writing the partial archive to avoid race conditions
-        # or serving incomplete files if the process fails mid-way.
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz", dir=archive_base_path) as tmp_file:
-            try:
-                # Open tarfile with reduced compression level (1 = fastest)
-                with tarfile.open(fileobj=tmp_file, mode='w:gz', compresslevel=1) as tar:
-                    for item in set(include):
-                        possible_paths = path_mappings.get(item, [])
-                        
-                        found = False
-                        for relative_path in possible_paths:
-                            source_path = os.path.join(crawlee_storage_base, relative_path)
-                            
-                            if os.path.exists(source_path):
-                                # V3 Logic: Remap sanitized names back to original domain in archive
-                                # If we found 'datasets/example-com', we want to store it as 'storage/datasets/example.com'
-                                arcname = os.path.join("storage", relative_path)
-                                if sanitized_name in relative_path and domain != sanitized_name:
-                                    arcname = arcname.replace(sanitized_name, domain)
-                                
-                                tar.add(source_path, arcname=arcname)
-                                copied_anything = True
-                                found = True
-                                break # Stop checking fallbacks for this item type
-                
-                if not copied_anything:
-                    # Don't leave the empty temp file
-                    tmp_file.close() # Ensure closed before remove
-                    os.remove(tmp_file.name)
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"None of the requested components were found for crawl '{crawl_id}'. "
-                        f"The crawl data may have been cleaned up after archiving to GCS."
-                    )
-            
-            except Exception:
-                # Cleanup on error
+            crawlee_storage_base = os.path.join(job_storage_path, 'storage')
+            copied_anything = False
+
+            # Use a temporary file for writing the partial archive to avoid race conditions
+            # or serving incomplete files if the process fails mid-way.
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz", dir=archive_base_path) as tmp_file:
+                try:
+                    # Open tarfile with reduced compression level (1 = fastest)
+                    with tarfile.open(fileobj=tmp_file, mode='w:gz', compresslevel=1) as tar:
+                        for item in set(include):
+                            possible_paths = path_mappings.get(item, [])
+
+                            found = False
+                            for relative_path in possible_paths:
+                                source_path = os.path.join(crawlee_storage_base, relative_path)
+
+                                if os.path.exists(source_path):
+                                    # V3 Logic: Remap sanitized names back to original domain in archive
+                                    # If we found 'datasets/example-com', we want to store it as 'storage/datasets/example.com'
+                                    arcname = os.path.join("storage", relative_path)
+                                    if sanitized_name in relative_path and domain != sanitized_name:
+                                        arcname = arcname.replace(sanitized_name, domain)
+
+                                    tar.add(source_path, arcname=arcname)
+                                    copied_anything = True
+                                    found = True
+                                    break # Stop checking fallbacks for this item type
+
+                    if not copied_anything:
+                        # Don't leave the empty temp file
+                        tmp_file.close() # Ensure closed before remove
+                        os.remove(tmp_file.name)
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"None of the requested components were found for crawl '{crawl_id}'. "
+                            f"The crawl data may have been cleaned up after archiving to GCS."
+                        )
+
+                except Exception:
+                    # Cleanup on error
+                    tmp_file.close()
+                    if os.path.exists(tmp_file.name):
+                        os.remove(tmp_file.name)
+                    raise
+
+                # Atomic move: only put the file in its final place when fully done
                 tmp_file.close()
-                if os.path.exists(tmp_file.name):
-                    os.remove(tmp_file.name)
-                raise
-
-            # Atomic move: only put the file in its final place when fully done
-            tmp_file.close()
-            shutil.move(tmp_file.name, final_archive_path)
+                shutil.move(tmp_file.name, final_archive_path)
             
         logger.info(f"Created new optimized archive for '{crawl_id}' at {final_archive_path}")
         return final_archive_path
@@ -997,11 +1087,14 @@ class CrawlerManager:
                 
                 reindexed_data = {
                     "crawl_id": crawl_id, "status": final_status, "domain": domain,
-                    "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
+                    "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)).isoformat(),
                     "storage_path": job_storage_path,
-                    "failure_callback_url": None, "pid": None
+                    "callback_url": None, "failure_callback_url": None, "pid": None
                 }
-                
+
+                if final_status in ("running", "stopping"):
+                    logger.warning(f"Recovered job '{crawl_id}' has no callback_url. Webhooks will not fire for this job.")
+
                 await cache_service.set_json(job_key, reindexed_data)
                 summary["reindexed_jobs"] += 1
         
@@ -1100,76 +1193,105 @@ class CrawlerManager:
         archives_dir = settings.ARCHIVES_SHARED_PATH
         target_archive_path = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
 
-        # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
-        if os.path.exists(target_archive_path):
-            archive_size = os.path.getsize(target_archive_path)
-            logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
-            await self._mark_as_archived(crawl_id, job_info)
-            return {
-                "crawl_id": crawl_id,
-                "archive_status": "pending_upload",
-                "archive_size_bytes": archive_size,
-            }
-
-        # Save current status snapshot before archiving (critical: dataset files will be deleted)
-        try:
-            current_status = await self.get_status(job_info)
-            snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
-            snapshot_data = current_status.model_dump(mode='json')
-
-            async with aiofiles.open(snapshot_path, 'w') as f:
-                await f.write(json.dumps(snapshot_data, indent=2, default=str))
-
-            logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
-        except Exception as e:
-            logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
-
-        logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
-
-        try:
-            def _archive_and_cleanup():
-                """Synchronous archive creation + local cleanup, run in a worker thread."""
-                os.makedirs(archives_dir, exist_ok=True)
-
-                # Create tar.gz archive in the shared volume
-                base_name = os.path.join(archives_dir, crawl_id)
-                final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
-
-                # Cleanup local data files (preserve logs, markers, and status snapshot)
-                files_to_keep = {'crawler.log', '_callback_payload.json',
-                                 '_completion_marker.json', '_status_snapshot.json',
-                                 '_exit_reason.json', '_update_report.json',
-                                 'update_stats.json'}
-                for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                    for name in files:
-                        if name not in files_to_keep:
-                            os.remove(os.path.join(root, name))
-                    for name in dirs:
-                        try:
-                            os.rmdir(os.path.join(root, name))
-                        except OSError:
-                            pass
-
-                archive_size = os.path.getsize(final_path)
-                return final_path, archive_size
-
-            final_path, archive_size = await anyio.to_thread.run_sync(_archive_and_cleanup)
-
-            logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes). Local storage cleaned up.")
-
-            # Mark job as 'archived' to prevent double-archiving
-            await self._mark_as_archived(crawl_id, job_info)
-
-            return {
-                "crawl_id": crawl_id,
-                "archive_status": "pending_upload",
-                "archive_size_bytes": archive_size,
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+        # Acquire a Redis lock to prevent concurrent archiving of the same crawl
+        lock_key = f"archive_lock:{crawl_id}"
+        lock_acquired = await cache_service.redis_client.set(lock_key, "1", nx=True, ex=300)  # 5 min TTL
+        if not lock_acquired:
             raise HTTPException(
-                status_code=500, detail=f"Archiving failed: {str(e)}")
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Archiving for crawl '{crawl_id}' is already in progress."
+            )
+
+        try:
+            # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
+            if os.path.exists(target_archive_path):
+                archive_size = os.path.getsize(target_archive_path)
+                logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
+                await self._mark_as_archived(crawl_id, job_info)
+                return {
+                    "crawl_id": crawl_id,
+                    "archive_status": "pending_upload",
+                    "archive_size_bytes": archive_size,
+                }
+
+            # Save current status snapshot before archiving (critical: dataset files will be deleted)
+            try:
+                current_status = await self.get_status(job_info)
+                snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
+                snapshot_data = current_status.model_dump(mode='json')
+
+                async with aiofiles.open(snapshot_path, 'w') as f:
+                    await f.write(json.dumps(snapshot_data, indent=2, default=str))
+
+                logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
+            except Exception as e:
+                logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
+
+            logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
+
+            try:
+                def _create_archive():
+                    """Create tar.gz archive in shared volume."""
+                    os.makedirs(archives_dir, exist_ok=True)
+                    base_name = os.path.join(archives_dir, crawl_id)
+                    final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
+                    archive_size = os.path.getsize(final_path)
+                    if archive_size == 0:
+                        raise RuntimeError(f"Archive at '{final_path}' is empty (0 bytes).")
+
+                    # Verify archive is readable
+                    try:
+                        import tarfile as tf
+                        with tf.open(final_path, 'r:gz') as t:
+                            t.getnames()  # Force read of the archive index
+                    except Exception as e:
+                        os.remove(final_path)
+                        raise RuntimeError(f"Archive integrity check failed: {e}")
+
+                    return final_path, archive_size
+
+                def _cleanup_local_data():
+                    """Remove crawl data files, keeping only logs and markers."""
+                    files_to_keep = {'crawler.log', '_callback_payload.json',
+                                     '_completion_marker.json', '_status_snapshot.json',
+                                     '_exit_reason.json', '_update_report.json',
+                                     'update_stats.json'}
+                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                        for name in files:
+                            if name not in files_to_keep:
+                                os.remove(os.path.join(root, name))
+                        for name in dirs:
+                            try:
+                                os.rmdir(os.path.join(root, name))
+                            except OSError:
+                                pass
+
+                # Step 1: Create archive
+                final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
+                logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
+
+                # Step 2: Mark as archived (must succeed before cleanup)
+                await self._mark_as_archived(crawl_id, job_info)
+
+                # Step 3: Cleanup (safe to fail — data is in the archive)
+                try:
+                    await anyio.to_thread.run_sync(_cleanup_local_data)
+                    logger.info(f"Cleaned up local storage for '{crawl_id}'.")
+                except Exception as e:
+                    logger.warning(f"Local cleanup failed for '{crawl_id}' (archive is safe): {e}")
+
+                return {
+                    "crawl_id": crawl_id,
+                    "archive_status": "pending_upload",
+                    "archive_size_bytes": archive_size,
+                }
+
+            except Exception as e:
+                logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500, detail=f"Archiving failed: {str(e)}")
+        finally:
+            await cache_service.redis_client.delete(lock_key)
 
     async def _mark_as_archived(self, crawl_id: str, job_info: dict):
         """Updates job status to 'archived' in Redis to prevent double-archiving."""
@@ -1223,7 +1345,7 @@ class CrawlerManager:
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
 
-                if status in ("running", "restarting_oom"):
+                if status in ("running", "restarting_oom", "stopping"):
                     # Check for staleness — applies to both running and restarting_oom jobs.
                     # A restarting_oom job holds a concurrency slot but may be orphaned
                     # if the replica that owned it crashed without cleanup.
@@ -1338,7 +1460,32 @@ class CrawlerManager:
             except Exception as e:
                 logger.error(f"Error listing archives directory during cleanup: {e}")
                 errors += 1
-                
+
+            # Also clean up stale GCS download artifacts
+            for dir_path, file_suffixes in [
+                (settings.DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error')),
+                (settings.DOWNLOAD_REQUESTS_PATH, ('.request',)),
+            ]:
+                if not os.path.exists(dir_path):
+                    continue
+                try:
+                    for filename in os.listdir(dir_path):
+                        file_path = os.path.join(dir_path, filename)
+                        if not os.path.isfile(file_path):
+                            continue
+                        try:
+                            mtime = os.path.getmtime(file_path)
+                            age = now - mtime
+                            if age > max_age_seconds:
+                                os.remove(file_path)
+                                deleted_count += 1
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up '{filename}': {e}")
+                            errors += 1
+                except Exception as e:
+                    logger.error(f"Error listing directory '{dir_path}': {e}")
+                    errors += 1
+
             return deleted_count, retained_count, errors
 
         # Run in thread

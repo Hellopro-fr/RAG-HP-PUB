@@ -428,7 +428,6 @@ export const dropDataset = async (name: string) => {
  */
 export const startCrawler = async (
     router: RouterHandler<PlaywrightCrawlingContext<Dictionary>>,
-    startUrl: Array<string>,
     domain: string,
     paramPerCrawl: number,
     paramPerMinute: number,
@@ -518,6 +517,9 @@ export const startCrawler = async (
                 'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
                 'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
                 'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
+                'Download is starting',      // Playwright binary download trigger
+                'net::ERR_ABORTED',          // Navigation aborted (often binary content)
+                'Execution context was destroyed', // Page destroyed during download
             ];
             const errorStr = String(request.errorMessages);
             const isPermanentError = NON_RETRYABLE_ERRORS.some(err => errorStr.includes(err));
@@ -667,53 +669,17 @@ export const startCrawler = async (
 
         postNavigationHooks: [
             async () => {
-                // ... Keep existing logic or optimize if needed. 
-                // V3 uses batch processing here but for now keeping V2 logic slightly modified is safer 
-                // unless we want to do a full rewrite of this hook.
-                // Given the constraints, let's keep it but be aware of memory.
-                
-                // If skipping is enabled, we check counts.
-                if ((!bypassQuestionMark && !skipquestionmark) || (!bypassDiez && !skipdiez)) {
-                    // Use batch processing to check limits (V3 Optimization)
-                    const limitQuestionMarkDiez = 50;
-                    const dataset = await Dataset.open(domain);
-                    const info = await dataset.getInfo();
-                    const total = info?.itemCount || 0;
-                    
-                    let countQuestionMark = 0;
-                    let countDiez = 0;
-                    let offset = 0;
-                    const batchSize = 1000;
+                // Counter-based limit check — counters are incremented in routes.ts
+                // when URLs are pushed to the dataset (O(1) instead of O(n²) dataset scan).
+                const limitQuestionMarkDiez = 50;
 
-                    const patternQuestionMark = new RegExp(`(?:/[^?]*)?\\?.*$`);
-                    const patternDiez = new RegExp(`(?:/[^#]*)?#.*$`);
-
-                    while (offset < total) {
-                        const data = await dataset.getData({ offset, limit: batchSize });
-                        for (const item of data.items) {
-                            if (patternQuestionMark.test(item.url)) countQuestionMark++;
-                            if (patternDiez.test(item.url)) countDiez++;
-                        }
-                        
-                        if (
-                            (!bypassQuestionMark &&
-                                !skipquestionmark &&
-                                countQuestionMark >= limitQuestionMarkDiez) ||
-                            (!bypassDiez &&
-                                !skipdiez &&
-                                countDiez >= limitQuestionMarkDiez)
-                        ) break;
-                        offset += batchSize;
-                    }
-
-                    if (!bypassQuestionMark && !skipquestionmark && countQuestionMark >= limitQuestionMarkDiez) {
-                        context.stopReason = "limitQuestionMark";
-                        await stopCrawler(crawler, "Limit of 50 question marks reached.");
-                    }
-                    if (!bypassDiez && !skipdiez && countDiez >= limitQuestionMarkDiez) {
-                        context.stopReason = "limitDiez";
-                        await stopCrawler(crawler, "Limit of 50 hashes reached.");
-                    }
+                if (!bypassQuestionMark && !skipquestionmark && context.countQuestionMark >= limitQuestionMarkDiez) {
+                    context.stopReason = "limitQuestionMark";
+                    await stopCrawler(crawler, "Limit of 50 question marks reached.");
+                }
+                if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
+                    context.stopReason = "limitDiez";
+                    await stopCrawler(crawler, "Limit of 50 hashes reached.");
                 }
             },
         ],
@@ -726,14 +692,8 @@ export const startCrawler = async (
     const crawler = new PlaywrightCrawler(optionsCrawler, configuration);
     context.crawlerInstance = crawler; // Expose instance for stopping
 
-    if (await requestQueue.isEmpty()) {
-        console.log("RequestQueueEmpty - Adding seed");
-        await requestQueue.addRequest({ url: startUrl[0] });
-    } else {
-        console.log("RequestQueueNotEmpty");
-        const queueInfo = await requestQueue.getInfo();
-        console.log("Resume crawling : ", JSON.stringify(queueInfo, null, 2));
-    }
+    // Seeding is handled in main.ts (both standard and update mode).
+    // Do NOT re-seed here — it would silently overwrite update-mode seeding.
 
     await crawler.run();
 
@@ -757,13 +717,15 @@ export const startCrawler = async (
  * And it will remove the file 'stopper/{domaine}.txt' if it exists.
  *
  */
-export const isStoppedManualy = (name: string, historised: boolean) => {
-    if (fs.existsSync(`stopper/${name}.txt`)) {
+export const isStoppedManualy = (name: string, historised: boolean, storagePath?: string) => {
+    const base = storagePath || process.cwd();
+    const stopperFile = path.join(base, 'stopper', `${name}.txt`);
+    if (fs.existsSync(stopperFile)) {
         if (historised) {
             console.log("The crawler has been stopped manually.");
             const date = new Date().toISOString();
-            fs.appendFileSync(`stopper/history-${name}.txt`, `- Date arrêt : ${date}\n`);
-            fs.unlinkSync(`stopper/${name}.txt`);
+            fs.appendFileSync(path.join(base, 'stopper', `history-${name}.txt`), `- Date arrêt : ${date}\n`);
+            fs.unlinkSync(stopperFile);
         }
         return true;
     }
@@ -1581,7 +1543,12 @@ export const reclaimFailedRequest = async (name: string) => {
     });
 
     console.log(`Successfully reclaimed ${reclaimedCount} requests.`);
-    await dropDataset(errorDatasetName);
+    if (reclaimedCount > 0) {
+        await dropDataset(errorDatasetName);
+        console.log(`Reclaimed ${reclaimedCount} items, dropped error dataset.`);
+    } else {
+        console.warn(`No items reclaimed — keeping error dataset '${errorDatasetName}' for debugging.`);
+    }
 };
 
 // Updated: Save title

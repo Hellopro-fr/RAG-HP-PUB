@@ -24,7 +24,6 @@ type MCPServer struct {
 	MCPCommand   string          `gorm:"type:varchar(2048)" json:"mcp_command,omitempty"`              // for stdio: e.g. "npx", "python"
 	MCPArgs      json.RawMessage `gorm:"type:json" json:"mcp_args,omitempty"`                          // for stdio: e.g. ["-y", "@mcp/server"]
 	MCPEnv       json.RawMessage `gorm:"type:json" json:"mcp_env,omitempty"`                           // for stdio: e.g. {"KEY": "val"}
-	MCPHeaders   json.RawMessage `gorm:"type:json" json:"mcp_headers,omitempty"`                       // for http/sse: e.g. {"Authorization": "Bearer xxx"}
 
 	// ToolPrefix is an optional alphanumeric prefix prepended to all tool names as {prefix}_{tool_name}.
 	ToolPrefix string `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
