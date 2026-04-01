@@ -1,2 +1,0 @@
-crawlee[all]
-camoufox[geoip]
