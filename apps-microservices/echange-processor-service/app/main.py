@@ -1,12 +1,14 @@
-import pika
 import os
 import time
 import logging
 
+from common_utils.logging import setup_logging
+setup_logging("echange-processor-service")
+
+import pika
 from echange_processor_service.messaging.consumer import Consumer
 from echange_processor_service.messaging.publisher import Publisher
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
-from common_utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,6 @@ def main():
     Point d'entrée principal du service.
     Met en place la connexion et lance les composants.
     """
-    setup_logging("echange-processor-service")
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
     connection = None
 

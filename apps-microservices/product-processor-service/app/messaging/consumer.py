@@ -111,7 +111,7 @@ class Consumer:
             # Erreur potentiellement transitoire.
             retry_count = self._get_retry_count(properties)
             if retry_count < MAX_RETRIES:
-                logger.warning(f"❌ Erreur inattendue (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                logger.warning(f"⚠️ Erreur inattendue (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             else:
                 logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")

@@ -1,9 +1,12 @@
 import os
 import asyncio
 import logging
+
+from common_utils.logging import setup_logging
+setup_logging("document-echange-processor-service")
+
 import aio_pika
 import aiormq
-from common_utils.logging import setup_logging
 from document_echange_processor_service.messaging.publisher import Publisher
 from document_echange_processor_service.messaging.consumer import Consumer
 
@@ -14,7 +17,6 @@ async def main():
     Point d'entrée principal asynchrone du service.
     Met en place la connexion et lance les composants.
     """
-    setup_logging("document-echange-processor-service")
 
     rabbitmq_url = os.environ.get("RABBITMQ_URL")
     if not rabbitmq_url:
