@@ -533,37 +533,65 @@ class RecommendationServiceV2:
             params["target_id_produits"] = target_id_produits
         return params
 
-    def _score_raw_results(
+    def _score_single_row(self, row: Dict, flat_filters, scoring_params, user_id_pays, user_dept, user_typologie, id_categorie) -> Optional[Dict]:
+        """Score a single Cypher result row (group all_chars by cid, then score)."""
+        all_chars = row.get("all_chars", [])
+        chars_by_cid = defaultdict(list)
+        for pc in all_chars:
+            cid = pc.get("id_source_caracteristique", "")
+            chars_by_cid[cid].append(pc)
+        characteristics = [
+            {"cid": cid, "matched_nodes": nodes}
+            for cid, nodes in chars_by_cid.items()
+        ]
+        raw = {
+            "product_data": row.get("product_data", {}),
+            "characteristics": characteristics,
+            "info_soc": row.get("info_soc", {}),
+        }
+        return self._score_single_product(
+            raw, flat_filters, scoring_params,
+            user_id_pays, user_dept, user_typologie, id_categorie,
+        )
+
+    async def _stream_and_score(
         self,
-        raw_results: List[Dict],
+        query: str,
+        params: Dict,
         flat_filters: List[Dict],
         scoring_params: Dict,
         user_id_pays: Optional[str],
         user_dept: Optional[str],
         user_typologie: Optional[str],
         id_categorie: Optional[str],
-    ) -> List[Dict]:
-        """Score all raw results from a single-pass Cypher query."""
+    ) -> Tuple[List[Dict], float]:
+        """
+        Stream results from Neo4j and score each product as it arrives.
+        Returns (scored_products, total_time).
+        """
         scored = []
-        for row in (raw_results or []):
-            all_chars = row.get("all_chars", [])
-            chars_by_cid = defaultdict(list)
-            for pc in all_chars:
-                cid = pc.get("id_source_caracteristique", "")
-                chars_by_cid[cid].append(pc)
-            characteristics = [
-                {"cid": cid, "matched_nodes": nodes}
-                for cid, nodes in chars_by_cid.items()
-            ]
-            raw = {
-                "product_data": row.get("product_data", {}),
-                "characteristics": characteristics,
-                "info_soc": row.get("info_soc", {}),
-            }
-            result = self._score_single_product(
-                raw, flat_filters, scoring_params,
+        count = 0
+        start = time.perf_counter()
+        async for row in clients.execute_cypher_stream(query, params):
+            count += 1
+            result = self._score_single_row(
+                row, flat_filters, scoring_params,
                 user_id_pays, user_dept, user_typologie, id_categorie,
             )
+            if result is not None:
+                scored.append(result)
+        total = time.perf_counter() - start
+        logging.warning(
+            "[V2-TIMING] stream+score: %.3fs (%d fetched, %d scored)",
+            total, count, len(scored),
+        )
+        return scored, total
+
+    def _score_raw_results(self, raw_results, flat_filters, scoring_params, user_id_pays, user_dept, user_typologie, id_categorie) -> List[Dict]:
+        """Score all raw results (non-streaming fallback for requery)."""
+        scored = []
+        for row in (raw_results or []):
+            result = self._score_single_row(row, flat_filters, scoring_params, user_id_pays, user_dept, user_typologie, id_categorie)
             if result is not None:
                 scored.append(result)
         return scored
@@ -731,30 +759,24 @@ class RecommendationServiceV2:
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
 
-        # 2. Single-pass fetch + score in Python
+        # 2. Stream from Neo4j + score each product as it arrives
         cypher = self._build_v2_cypher(request, target_product_id)
         params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
 
+        user_meta = request.metadonnee_utilisateurs
+        user_cp = user_meta.cp if user_meta else None
+        user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
+        user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
+        user_typologie = user_meta.typologie if user_meta else None
+        id_categorie = str(request.id_categorie) if request.id_categorie else None
+
         try:
-            fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_async(cypher, params)
-            fetch_time = time.perf_counter() - fetch_start
-            logging.warning("[V2-TIMING] cypher_fetch: %.3fs (%d results)", fetch_time, len(raw_results) if raw_results else 0)
-
-            if not raw_results:
-                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
-
-            user_meta = request.metadonnee_utilisateurs
-            user_cp = user_meta.cp if user_meta else None
-            user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
-            user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
-            user_typologie = user_meta.typologie if user_meta else None
-            id_categorie = str(request.id_categorie) if request.id_categorie else None
-
-            score_start = time.perf_counter()
-            scored = self._score_raw_results(raw_results, flat_filters, scoring_params, user_id_pays, user_dept, user_typologie, id_categorie)
-            score_time = time.perf_counter() - score_start
-            logging.warning("[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)", score_time, len(raw_results), len(scored))
+            scored, stream_time = await self._stream_and_score(
+                cypher, params, flat_filters, scoring_params,
+                user_id_pays, user_dept, user_typologie, id_categorie,
+            )
+            fetch_time = stream_time
+            score_time = 0.0  # included in stream_time
 
             if not scored:
                 return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
@@ -828,30 +850,24 @@ class RecommendationServiceV2:
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
 
-        # 2. Single-pass fetch + score
+        # 2. Stream from Neo4j + score each product as it arrives
         cypher = self._build_v2_cypher(request, target_product_id)
         params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
 
+        user_meta = request.metadonnee_utilisateurs
+        user_cp = user_meta.cp if user_meta else None
+        user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
+        user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
+        user_typologie = user_meta.typologie if user_meta else None
+        id_categorie = str(request.id_categorie) if request.id_categorie else None
+
         try:
-            fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_async(cypher, params)
-            fetch_time = time.perf_counter() - fetch_start
-            logging.warning("[V2-TIMING] cypher_fetch: %.3fs (%d results)", fetch_time, len(raw_results) if raw_results else 0)
-
-            if not raw_results:
-                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
-
-            user_meta = request.metadonnee_utilisateurs
-            user_cp = user_meta.cp if user_meta else None
-            user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
-            user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
-            user_typologie = user_meta.typologie if user_meta else None
-            id_categorie = str(request.id_categorie) if request.id_categorie else None
-
-            score_start = time.perf_counter()
-            scored = self._score_raw_results(raw_results, flat_filters, scoring_params, user_id_pays, user_dept, user_typologie, id_categorie)
-            score_time = time.perf_counter() - score_start
-            logging.warning("[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)", score_time, len(raw_results), len(scored))
+            scored, stream_time = await self._stream_and_score(
+                cypher, params, flat_filters, scoring_params,
+                user_id_pays, user_dept, user_typologie, id_categorie,
+            )
+            fetch_time = stream_time
+            score_time = 0.0
 
             if not scored:
                 return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
