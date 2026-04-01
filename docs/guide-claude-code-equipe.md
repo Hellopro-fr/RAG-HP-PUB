@@ -1147,8 +1147,9 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 | `impact-awareness.md` | `.claude/rules/` | Analyse des compromis, vision globale, rayon d'impact sur composants partages |
 | `docker-security.md` | `.claude/rules/` | Images epinglees, pas de root, healthchecks, pas de secrets dans ENV |
 | `config-freshness.md` | `.claude/rules/` | Relire la config `.claude/` en cours de session avant utilisation |
-| `formatting.md` | `.claude/rules/` | Style par stack : Python (4 espaces, 88 car, ordre imports), Rust (rustfmt), JS/TS (2 espaces) |
+| `formatting.md` | `.claude/rules/` | Style par stack — reference stack-detection.md, avec fallback pour stacks inconnus |
 | `refactoring.md` | `.claude/rules/` | Quand/comment refactorer, regles de scope, cibles de duplication connues |
+| `stack-detection.md` | `.claude/rules/` | Source unique pour la detection de stack. Toutes les regles dependantes du stack referencent ce fichier. |
 
 ### Raccourcis et seuils
 

@@ -1171,8 +1171,9 @@ Follow these steps in order on your first day:
 | `.claude/rules/impact-awareness.md` | Trade-off analysis, bigger picture, blast radius on shared components |
 | `.claude/rules/docker-security.md` | Pinned images, no root, healthchecks, no secrets in ENV, `.dockerignore` |
 | `.claude/rules/config-freshness.md` | Re-read `.claude/` config mid-session before using agents/commands |
-| `.claude/rules/formatting.md` | Code style per stack: Python (4-space, 88-char, import order), Rust (rustfmt), JS/TS (2-space) |
+| `.claude/rules/formatting.md` | Code style per stack — references stack-detection.md, with unknown stack fallback |
 | `.claude/rules/refactoring.md` | When/how to refactor safely, scope rules, known duplication targets |
+| `.claude/rules/stack-detection.md` | Single source of truth for stack detection. All stack-dependent rules reference this file. |
 
 ### Key Thresholds
 

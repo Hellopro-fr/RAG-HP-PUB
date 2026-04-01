@@ -60,8 +60,9 @@ docs/                 # Project documentation
 | `impact-awareness.md` | Trade-off analysis, bigger-picture context, blast radius check on shared components before any modification |
 | `docker-security.md` | Pinned base images, no root, healthchecks, no secrets in ENV, `.dockerignore`, `--no-cache-dir` |
 | `config-freshness.md` | Re-read `.claude/` files mid-conversation before using agents/commands |
-| `formatting.md` | Code style conventions per stack (Python, Rust, JS/TS): indentation, imports, naming, line length |
+| `formatting.md` | Code style conventions per stack — references `stack-detection.md`, with unknown stack fallback |
 | `refactoring.md` | When/how to refactor safely: scope rules, shared component protocol, known duplication targets |
+| `stack-detection.md` | Single source of truth for detecting a service's stack from file indicators. All stack-dependent rules reference this. Unknown stack protocol included. |
 
 ### Agents (`.claude/agents/`)
 
