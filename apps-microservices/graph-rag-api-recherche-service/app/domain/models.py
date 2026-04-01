@@ -356,7 +356,7 @@ class MatchingPayload(BaseModel):
 
 class MatchingPayloadIdProduit(MatchingPayload):
     id_produit: Optional[int] = Field(None, description="Identifiant du produit")
-    v: int = Field(2, description="Pipeline version: 1=Cypher scoring, 2=Python scoring")
+    v: int = Field(1, description="Pipeline version: 1=Cypher scoring, 2=Python scoring")
 
 
 """ 

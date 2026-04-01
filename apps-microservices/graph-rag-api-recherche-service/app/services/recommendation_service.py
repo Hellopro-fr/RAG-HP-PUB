@@ -417,108 +417,19 @@ class RecommendationService:
         WITH p, q_weight_groups AS details, 
              CASE WHEN denominator = 0 THEN 0.0 ELSE (numerator / denominator) END AS global_score
         
-        // --- STEP 2.5: ZONE SCORING based on MetadonneUtilisateurs ---
-        // Get the product's fournisseur
+        // --- STEP 2.5: FOURNISSEUR SCORING (zone geo disabled — forced to 1) ---
         OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-        
-        // Check for COUVRE_PAYS relationships with couvre_tous, couvre, ne_couvre_pas properties
-        OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
-        
-        // Check for COUVRE_ZONE relationships with couvre_tous, couvre, ne_couvre_pas properties
-        OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
-        
-        WITH p, details, global_score, f,
-             collect(DISTINCT {
-                 pays: pays, 
-                 id_pays: pays.id_pays, 
-                 partiel: r_pays.partiel,
-                 couvre_tous: r_pays.couvre_tous, 
-                 couvre: r_pays.couvre, 
-                 ne_couvre_pas: r_pays.ne_couvre_pas
-             }) AS pays_rels,
-             collect(DISTINCT {
-                 zone: zone,
-                 id_dept: zone.id_dept,
-                 couvre_tous: r_zone.couvre_tous,
-                 couvre: r_zone.couvre,
-                 ne_couvre_pas: r_zone.ne_couvre_pas
-             }) AS zone_rels,
+
+        // NOTE: COUVRE_PAYS and COUVRE_ZONE matching is disabled (zone_score forced to 1 in final_score).
+        // Kept as comment for future re-enablement:
+        // OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
+        // OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
+
+        WITH p, details, global_score,
              { id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie } AS info_soc
-        
-        // Calculate zone_score based on the algorithm:
-        // 1. If has pays relation:
-        //    a. First check if user's id_pays matches any pays
-        //    b. If match found, check partiel:
-        //       - partiel=true: drill into ZoneGeo by dept, then check zone couvre_tous/couvre
-        //       - partiel=false: check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas for categorie
-        // 2. If no pays relation but has zonegeographique relation: check dept then couvre_tous/couvre
-        // 3. If neither exists: score=g_unknown_score
-        WITH p, info_soc, details, global_score, pays_rels, zone_rels,
-             CASE
-                 // Case 1: Has pays relations
-                 WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
-                     CASE
-                         // First check if user_id_pays is provided
-                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
-                         // Check if user's country matches any COUVRE_PAYS
-                         WHEN ANY(pr IN pays_rels WHERE pr.id_pays = $user_id_pays) THEN
-                             // Country matched - now check partiel on the matched pays relation
-                             CASE
-                                 // Case 1a: partiel=true -> drill into ZoneGeo by dept
-                                 WHEN ANY(pr IN pays_rels WHERE pr.id_pays = $user_id_pays AND pr.partiel = true) THEN
-                                     CASE
-                                         WHEN $user_dept IS NULL THEN $g_unknown_score
-                                         // Check if user_dept matches any COUVRE_ZONE
-                                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND zr.id_dept = $user_dept) THEN
-                                             // Dept matched - check couvre_tous on the matched zone relation
-                                             CASE
-                                                 // Find the matched zone and check its couvre_tous
-                                                 WHEN ANY(zr IN zone_rels WHERE zr.id_dept = $user_dept AND zr.couvre_tous = true) THEN 1.0
-                                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
-                                                 WHEN ANY(zr IN zone_rels WHERE zr.id_dept = $user_dept AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
-                                                 WHEN ANY(zr IN zone_rels WHERE zr.id_dept = $user_dept AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
-                                                 ELSE $g_unknown_score
-                                             END
-                                         // Dept not covered
-                                         ELSE $z_unmatched
-                                     END
-                                 // Case 1b: partiel=false -> check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas
-                                 ELSE
-                                     CASE
-                                         // couvre_tous=true -> covers all categories in this country
-                                         WHEN ANY(pr IN pays_rels WHERE pr.id_pays = $user_id_pays AND pr.couvre_tous = true) THEN 1.0
-                                         // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
-                                         WHEN ANY(pr IN pays_rels WHERE pr.id_pays = $user_id_pays AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN 1.0
-                                         WHEN ANY(pr IN pays_rels WHERE pr.id_pays = $user_id_pays AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
-                                         ELSE $g_unknown_score
-                                     END
-                             END
-                         // User's country not in any COUVRE_PAYS
-                         ELSE $z_unmatched
-                     END
-                 // Case 2: No pays relation but has zonegeographique relation
-                 WHEN size(zone_rels) > 0 AND zone_rels[0].zone IS NOT NULL THEN
-                     CASE
-                         WHEN $user_dept IS NULL THEN $g_unknown_score
-                         // Check if user_dept matches any COUVRE_ZONE
-                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND zr.id_dept = $user_dept) THEN
-                             // Dept matched - check couvre_tous on the matched zone relation
-                             CASE
-                                 WHEN ANY(zr IN zone_rels WHERE zr.id_dept = $user_dept AND zr.couvre_tous = true) THEN 1.0
-                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
-                                 WHEN ANY(zr IN zone_rels WHERE zr.id_dept = $user_dept AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
-                                 WHEN ANY(zr IN zone_rels WHERE zr.id_dept = $user_dept AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
-                                 ELSE $g_unknown_score
-                             END
-                         // Dept not covered
-                         ELSE $z_unmatched
-                     END
-                 // Case 3: Neither exists
-                 ELSE $g_unknown_score
-             END AS zone_score
 
         // Calculate score by Etat and affichage fournisseur
-        WITH p, info_soc, details, global_score, zone_score,
+        WITH p, info_soc, details, global_score, $g_unknown_score AS zone_score,
              CASE
                 WHEN ((info_soc.id_etat = '1') OR ((info_soc.id_etat = '2') AND (info_soc.id_affichage = '1'))) THEN 1.0
                 ELSE $e_unmatched
@@ -538,24 +449,18 @@ class RecommendationService:
                  ELSE global_score
              END AS global_score
         
-        // Calculate typologie score
-        WITH p, details, global_score, zone_score, etat_score, info_soc,
-             CASE
-                WHEN etat_score = 1.0 THEN
-                    CASE
-                        WHEN $user_typologie IS NULL THEN 1.0
-                        WHEN $user_typologie IN coalesce(info_soc.typologie, []) THEN 1.0
-                        ELSE $t_unmatched
-                    END
-                ELSE 1.0
-             END AS typo_score
-        
-        // Calculate final_score = global_score * 1 * etat_score * 1
-        // Filter out products with negative final_score
-        // forcer zone_geo et typo_score à 1
-        // global_score * zone_score * etat_score * typo_score AS final_score
+        // NOTE: Typologie scoring disabled (typo_score forced to 1 in final_score).
+        // Kept as comment for future re-enablement:
+        // WITH p, details, global_score, zone_score, etat_score, info_soc,
+        //      CASE WHEN etat_score = 1.0 THEN
+        //          CASE WHEN $user_typologie IS NULL THEN 1.0
+        //                WHEN $user_typologie IN coalesce(info_soc.typologie, []) THEN 1.0
+        //                ELSE $t_unmatched END
+        //      ELSE 1.0 END AS typo_score
+
+        // Calculate final_score (zone_score and typo_score forced to 1)
         WITH p, details, global_score, 1 AS zone_score, etat_score, 1 AS typo_score, info_soc,
-            global_score * 1 * etat_score * 1 AS final_score
+            global_score * etat_score AS final_score
         WHERE final_score >= $absolute_threshold OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
