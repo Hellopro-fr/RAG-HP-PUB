@@ -747,7 +747,7 @@ class RecommendationServiceV2:
 
         try:
             fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_direct(cypher, params)
+            raw_results = await clients.execute_cypher_async(cypher, params)
             fetch_time = time.perf_counter() - fetch_start
             logging.warning(
                 "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
@@ -854,7 +854,7 @@ class RecommendationServiceV2:
 
         try:
             fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_direct(cypher, params)
+            raw_results = await clients.execute_cypher_async(cypher, params)
             fetch_time = time.perf_counter() - fetch_start
             logging.warning(
                 "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
@@ -937,7 +937,7 @@ class RecommendationServiceV2:
                     requery_params = self._build_v2_params(
                         request, flat_filters, target_id_produits=llm_selected_ids
                     )
-                    requery_results = await clients.execute_cypher(
+                    requery_results = await clients.execute_cypher_async(
                         requery_cypher, requery_params
                     )
 
