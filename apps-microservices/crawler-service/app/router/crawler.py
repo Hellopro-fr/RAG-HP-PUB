@@ -69,24 +69,23 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         except Exception:
             final_status = "failed"
 
-    # Reconstruct metadata by parsing the log file (best effort)
+    # Reconstruct metadata by parsing the log file (best effort).
+    # Uses --domain= and --site= CLI arg patterns from the Node.js crawler command line.
     domain, start_url = "unknown", "http://unknown.com"
     log_path = os.path.join(job_storage_path, 'crawler.log')
     if os.path.exists(log_path):
         try:
             async with aiofiles.open(log_path, 'r', errors='ignore') as f:
-                # Read a limited number of lines to avoid loading huge logs
                 line_count = 0
                 async for line in f:
-                    # Logic adapted to match typical Node.js logs or arg dumps
-                    if '"domain":' in line or 'domain=' in line:
-                        # Simple extraction attempt
-                        match = re.search(r'domain["=:\s]+"?([^"\s,]+)', line)
-                        if match: domain = match.group(1)
-                    if '"site":' in line or 'site=' in line:
-                        match = re.search(r'site["=:\s]+"?([^"\s,]+)', line)
-                        if match: start_url = match.group(1)
-                    
+                    # Match CLI args: --domain=value or --site=value
+                    if domain == "unknown":
+                        m = re.search(r'--domain=(\S+)', line)
+                        if m: domain = m.group(1)
+                    if start_url == "http://unknown.com":
+                        m = re.search(r'--site=(\S+)', line)
+                        if m: start_url = m.group(1)
+
                     if (domain != "unknown" and start_url != "http://unknown.com") or line_count > 300:
                         break
                     line_count += 1
@@ -100,6 +99,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         "failure_callback_url": None, "pid": None
     }
 
+    # State keys can persist safely — the distributed lock (crawl_lock:{id}) is separate.
     logger.info(f"Successfully recovered job '{crawl_id}' from storage with status '{final_status}'. Re-indexing in Redis.")
     await cache_service.set_json(job_key, recovered_data)
 
