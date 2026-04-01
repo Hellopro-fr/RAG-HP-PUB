@@ -316,7 +316,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
                 const priceItems = (exemples_produits || []).map((ex) => ({
-                  price: `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(ex.prix)} € ${ex.tva || "HT"}`,
+                  price: `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(ex.prix)} €${ex.tva && ex.tva !== "inconnu" ? ` ${ex.tva}` : ""}`,
                   equipment: `${ex.nom}${ex.fournisseur ? ` — ${ex.fournisseur}` : ""}`,
                   date: ex.date || "",
                 }));
