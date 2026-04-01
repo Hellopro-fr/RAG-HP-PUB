@@ -747,7 +747,7 @@ class RecommendationServiceV2:
 
         try:
             fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher(cypher, params)
+            raw_results = await clients.execute_cypher_direct(cypher, params)
             fetch_time = time.perf_counter() - fetch_start
             logging.warning(
                 "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
@@ -854,7 +854,7 @@ class RecommendationServiceV2:
 
         try:
             fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher(cypher, params)
+            raw_results = await clients.execute_cypher_direct(cypher, params)
             fetch_time = time.perf_counter() - fetch_start
             logging.warning(
                 "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
