@@ -75,7 +75,10 @@ RETURN p.id_produit AS id_produit, characteristics
 # Pure scoring functions (stateless, no I/O)
 # ---------------------------------------------------------------------------
 
-def _score_numeric_single(pc_val: float, target_num: Dict, threshold: float = 0.8) -> float:
+
+def _score_numeric_single(
+    pc_val: float, target_num: Dict, threshold: float = 0.8
+) -> float:
     """Score a single numeric value against target constraints (exact/min/max/range)."""
     exact = target_num.get("exact")
     t_min = target_num.get("min")
@@ -94,7 +97,11 @@ def _score_numeric_single(pc_val: float, target_num: Dict, threshold: float = 0.
             return 0.0
         return max(
             t_min / pc_val if pc_val >= t_min else 0.0,
-            (pc_val / t_min if (pc_val / t_min) >= threshold else 0.0) if pc_val <= t_min else 0.0,
+            (
+                (pc_val / t_min if (pc_val / t_min) >= threshold else 0.0)
+                if pc_val <= t_min
+                else 0.0
+            ),
         )
 
     if t_max is not None and t_min is None:
@@ -102,7 +109,11 @@ def _score_numeric_single(pc_val: float, target_num: Dict, threshold: float = 0.
             return 0.0
         return max(
             pc_val / t_max if pc_val <= t_max else 0.0,
-            (t_max / pc_val if (t_max / pc_val) >= threshold else 0.0) if pc_val >= t_max else 0.0,
+            (
+                (t_max / pc_val if (t_max / pc_val) >= threshold else 0.0)
+                if pc_val >= t_max
+                else 0.0
+            ),
         )
 
     if t_min is not None and t_max is not None:
@@ -148,7 +159,9 @@ def _score_numeric_range(pc_min: float, pc_max: float, target_num: Dict) -> floa
     return 1.0
 
 
-def score_constraint(constraint: Dict, matched_nodes: List[Dict], scoring_params: Dict) -> Tuple[float, List[Dict]]:
+def score_constraint(
+    constraint: Dict, matched_nodes: List[Dict], scoring_params: Dict
+) -> Tuple[float, List[Dict]]:
     """
     Score a single constraint against its matched characteristic nodes.
     Returns (score, scored_nodes_with_node_score).
@@ -173,13 +186,19 @@ def score_constraint(constraint: Dict, matched_nodes: List[Dict], scoring_params
     # Priority 1: target_list match
     if target_list:
         for pc in matched_nodes:
-            if str(pc.get("id_source_valeur", "")) in target_list or str(pc.get("valeur", "")) in target_list:
+            if (
+                str(pc.get("id_source_valeur", "")) in target_list
+                or str(pc.get("valeur", "")) in target_list
+            ):
                 return 1.0, scored_nodes
 
     # Priority 2: blocking_list
     if blocking_list:
         for pc in matched_nodes:
-            if str(pc.get("id_source_valeur", "")) in blocking_list or str(pc.get("valeur", "")) in blocking_list:
+            if (
+                str(pc.get("id_source_valeur", "")) in blocking_list
+                or str(pc.get("valeur", "")) in blocking_list
+            ):
                 return blocked_val, scored_nodes
 
     # Priority 3: numeric scoring
@@ -222,12 +241,18 @@ def _score_single_node(pc: Dict, constraint: Dict, scoring_params: Dict) -> floa
 
     # Text target match
     if target_list:
-        if str(pc.get("id_source_valeur", "")) in target_list or str(pc.get("valeur", "")) in target_list:
+        if (
+            str(pc.get("id_source_valeur", "")) in target_list
+            or str(pc.get("valeur", "")) in target_list
+        ):
             return 1.0
 
     # Blocking match
     if blocking_list:
-        if str(pc.get("id_source_valeur", "")) in blocking_list or str(pc.get("valeur", "")) in blocking_list:
+        if (
+            str(pc.get("id_source_valeur", "")) in blocking_list
+            or str(pc.get("valeur", "")) in blocking_list
+        ):
             return blocked_val
 
     # Numeric scoring
@@ -278,15 +303,21 @@ def score_product(
         constraint_scores = []
         for c in f["constraints"]:
             c_weight = c.get("c_weight", 1)
-            c_matched = [n for n in matched_nodes if n.get("id_source_caracteristique") == c["id_caracteristique"]]
+            c_matched = [
+                n
+                for n in matched_nodes
+                if n.get("id_source_caracteristique") == c["id_caracteristique"]
+            ]
             c_score, scored_nodes = score_constraint(c, c_matched, scoring_params)
-            constraint_scores.append({
-                "cid": c["id_caracteristique"],
-                "score": c_score,
-                "c_weight": c_weight,
-                "has_pc": len(c_matched) > 0,
-                "matched_nodes": scored_nodes,
-            })
+            constraint_scores.append(
+                {
+                    "cid": c["id_caracteristique"],
+                    "score": c_score,
+                    "c_weight": c_weight,
+                    "has_pc": len(c_matched) > 0,
+                    "matched_nodes": scored_nodes,
+                }
+            )
 
         # Aggregate per cid: weighted average by c_weight
         has_blocking = any(cs["score"] == blocked_val for cs in constraint_scores)
@@ -296,19 +327,26 @@ def score_product(
         elif c_weight_sum == 0:
             cid_score = 0.0
         else:
-            cid_score = sum(cs["score"] * cs["c_weight"] for cs in constraint_scores) / c_weight_sum
+            cid_score = (
+                sum(cs["score"] * cs["c_weight"] for cs in constraint_scores)
+                / c_weight_sum
+            )
 
         matched = any(cs["has_pc"] for cs in constraint_scores)
 
-        all_constraints.append({
-            "cid": cid,
-            "score": cid_score,
-            "c_weight_sum": c_weight_sum,
-            "q_weight": q_weight,
-            "matched": matched,
-            "matched_nodes": [n for cs in constraint_scores for n in cs["matched_nodes"]],
-            "constraints": constraint_scores,
-        })
+        all_constraints.append(
+            {
+                "cid": cid,
+                "score": cid_score,
+                "c_weight_sum": c_weight_sum,
+                "q_weight": q_weight,
+                "matched": matched,
+                "matched_nodes": [
+                    n for cs in constraint_scores for n in cs["matched_nodes"]
+                ],
+                "constraints": constraint_scores,
+            }
+        )
 
     # Group by q_weight and compute group scores
     q_groups = defaultdict(list)
@@ -322,32 +360,39 @@ def score_product(
             group_score = 0.0
         else:
             group_score = sum(c["score"] * c["c_weight_sum"] for c in group) / total_w
-        q_weight_results.append({"q_weight": qw, "group_score": group_score, "constraints": group})
+        q_weight_results.append(
+            {"q_weight": qw, "group_score": group_score, "constraints": group}
+        )
 
     # Global score: weighted avg of group scores by q_weight
     denom = sum(g["q_weight"] for g in q_weight_results)
     if denom == 0:
         global_score = 0.0
     else:
-        global_score = sum(g["group_score"] * g["q_weight"] for g in q_weight_results) / denom
+        global_score = (
+            sum(g["group_score"] * g["q_weight"] for g in q_weight_results) / denom
+        )
 
     # Build details in V1-compatible format
     details = []
     for c in all_constraints:
-        details.append({
-            "cid": c["cid"],
-            "score": c["score"],
-            "c_weight_sum": c["c_weight_sum"],
-            "q_weight": c["q_weight"],
-            "matched": c["matched"],
-            "matched_nodes": c["matched_nodes"],
-        })
+        details.append(
+            {
+                "cid": c["cid"],
+                "score": c["score"],
+                "c_weight_sum": c["c_weight_sum"],
+                "q_weight": c["q_weight"],
+                "matched": c["matched"],
+                "matched_nodes": c["matched_nodes"],
+            }
+        )
 
     return global_score, details
 
 
-
-def compute_etat_score(info_soc: Dict, global_score: float, scoring_params: Dict) -> Tuple[float, float]:
+def compute_etat_score(
+    info_soc: Dict, global_score: float, scoring_params: Dict
+) -> Tuple[float, float]:
     """
     Compute etat score with cross-score adjustment.
     Returns (etat_score, adjusted_global_score).
@@ -375,7 +420,12 @@ def compute_etat_score(info_soc: Dict, global_score: float, scoring_params: Dict
     return etat_score, adjusted_global
 
 
-def compute_typo_score(info_soc: Dict, etat_score: float, user_typologie: Optional[str], scoring_params: Dict) -> float:
+def compute_typo_score(
+    info_soc: Dict,
+    etat_score: float,
+    user_typologie: Optional[str],
+    scoring_params: Dict,
+) -> float:
     """Compute typologie score."""
     t_unmatched = scoring_params["t_unmatched"]
     if etat_score != 1.0:
@@ -424,7 +474,9 @@ def apply_diversity_mmr(
             break
         vid = prod["id_fournisseur"]
         if vendor_counts[vid] < max_per_supplier:
-            mmr_score = diversity_lambda * prod["final_score"] - (1.0 - diversity_lambda) * (vendor_counts[vid] / max_per_supplier)
+            mmr_score = diversity_lambda * prod["final_score"] - (
+                1.0 - diversity_lambda
+            ) * (vendor_counts[vid] / max_per_supplier)
             prod["mmr_score"] = mmr_score
             selected.append(prod)
             vendor_counts[vid] += 1
@@ -454,9 +506,10 @@ def apply_diversity_mmr(
 # V2 Service Class
 # ---------------------------------------------------------------------------
 
+
 class RecommendationServiceV2:
 
-    BATCH_SIZE = 10  # Products per characteristic-fetch batch
+    BATCH_SIZE = 500  # Products per characteristic-fetch batch
 
     def _build_v2_projection(self, request) -> str:
         if request.champs_sortie is not None and len(request.champs_sortie) > 0:
@@ -469,7 +522,9 @@ class RecommendationServiceV2:
             return f"{{ {', '.join(fields)} }}"
         return "{.*}"
 
-    def _build_candidates_cypher(self, request, target_product_id: Optional[str] = None) -> str:
+    def _build_candidates_cypher(
+        self, request, target_product_id: Optional[str] = None
+    ) -> str:
         if target_product_id:
             query = CYPHER_V2_CANDIDATES_TARGET
         else:
@@ -482,13 +537,19 @@ class RecommendationServiceV2:
         projection = self._build_v2_projection(request)
         return query.replace("PROJECTION_PLACEHOLDER", projection)
 
-    def _build_candidates_params(self, request, flat_filters, target_product_id=None, target_id_produits=None) -> Dict:
+    def _build_candidates_params(
+        self, request, flat_filters, target_product_id=None, target_id_produits=None
+    ) -> Dict:
         params = {
             "filters": flat_filters,
-            "id_categorie": str(request.id_categorie) if request.id_categorie is not None else None,
+            "id_categorie": (
+                str(request.id_categorie) if request.id_categorie is not None else None
+            ),
         }
         if target_product_id:
-            params["target_product_id"] = str(f"id_produit_{request.id_produit}") if request.id_produit else None
+            params["target_product_id"] = (
+                str(f"id_produit_{request.id_produit}") if request.id_produit else None
+            )
         if target_id_produits:
             params["target_id_produits"] = target_id_produits
         return params
@@ -522,7 +583,7 @@ class RecommendationServiceV2:
             product_ids = list(candidate_map.keys())
             batch_tasks = []
             for i in range(0, len(product_ids), self.BATCH_SIZE):
-                batch_ids = product_ids[i:i + self.BATCH_SIZE]
+                batch_ids = product_ids[i : i + self.BATCH_SIZE]
                 batch_tasks.append(self._fetch_chars_batch(batch_ids, all_cids))
 
             # Fire all batch fetches concurrently
@@ -548,8 +609,13 @@ class RecommendationServiceV2:
                         "info_soc": candidate.get("info_soc", {}),
                     }
                     result = self._score_single_product(
-                        raw, flat_filters, scoring_params,
-                        user_id_pays, user_dept, user_typologie, id_categorie,
+                        raw,
+                        flat_filters,
+                        scoring_params,
+                        user_id_pays,
+                        user_dept,
+                        user_typologie,
+                        id_categorie,
                     )
                     if result is not None:
                         scored_results.append(result)
@@ -557,14 +623,16 @@ class RecommendationServiceV2:
         await asyncio.gather(producer(), consumer())
         return scored_results
 
-    async def _fetch_chars_batch(self, product_ids: List[str], all_cids: List[str]) -> Dict[str, List[Dict]]:
+    async def _fetch_chars_batch(
+        self, product_ids: List[str], all_cids: List[str]
+    ) -> Dict[str, List[Dict]]:
         """Fetch characteristics for a batch of products. Returns {id_produit: characteristics}."""
         results = await clients.execute_cypher(
             CYPHER_V2_FETCH_CHARS,
             {"product_ids": product_ids, "all_cids": all_cids},
         )
         char_map = {}
-        for row in (results or []):
+        for row in results or []:
             pid = str(row.get("id_produit", ""))
             char_map[pid] = row.get("characteristics", [])
         return char_map
@@ -585,19 +653,27 @@ class RecommendationServiceV2:
         info_soc = raw.get("info_soc", {})
 
         id_produit = str(product_data.get("id_produit", ""))
-        id_fournisseur = str(info_soc.get("id_fournisseur", product_data.get("id_fournisseur", "")))
+        id_fournisseur = str(
+            info_soc.get("id_fournisseur", product_data.get("id_fournisseur", ""))
+        )
 
         # 1. Characteristic scoring
-        global_score, details = score_product(characteristics, flat_filters, scoring_params)
+        global_score, details = score_product(
+            characteristics, flat_filters, scoring_params
+        )
 
         # 2. Zone scoring — skipped (forced to 1 in final_score anyway)
         zone_score = scoring_params["g_unknown_score"]
 
         # 3. Etat scoring (with cross-adjustment)
-        etat_score, global_score = compute_etat_score(info_soc, global_score, scoring_params)
+        etat_score, global_score = compute_etat_score(
+            info_soc, global_score, scoring_params
+        )
 
         # 4. Typologie scoring
-        typo_score = compute_typo_score(info_soc, etat_score, user_typologie, scoring_params)
+        typo_score = compute_typo_score(
+            info_soc, etat_score, user_typologie, scoring_params
+        )
 
         # 5. Final score (zone and typo forced to 1 as in V1)
         final_score = global_score * 1 * etat_score * 1
@@ -620,7 +696,9 @@ class RecommendationServiceV2:
             "info_soc": info_soc,
         }
 
-    def _build_produit(self, scored: Dict, rang: int, request, blocked_val: float, different_val: float) -> Produit:
+    def _build_produit(
+        self, scored: Dict, rang: int, request, blocked_val: float, different_val: float
+    ) -> Produit:
         """Convert a scored product dict to a Produit model."""
         details = scored["details"]
         caracteristiques = []
@@ -668,26 +746,32 @@ class RecommendationServiceV2:
                 elif c_score > 0 and type_donnee in ["numeric", "numeric_range"]:
                     statut = 1
 
-            caracteristiques.append(CaracteristiqueMatching(
-                statut_matching=statut,
-                id_caracteristique=int(cid) if cid.isdigit() else 0,
-                type_caracteristique=type_carac,
-                valeur=valeur,
-                valeur_min=valeur_min,
-                valeur_max=valeur_max,
-                unite=unite,
-                id_valeur=id_valeurs,
-                poids=int(c_weight),
-                bareme=float(c_score),
-                poids_question=int(q_weight),
-            ))
+            caracteristiques.append(
+                CaracteristiqueMatching(
+                    statut_matching=statut,
+                    id_caracteristique=int(cid) if cid.isdigit() else 0,
+                    type_caracteristique=type_carac,
+                    valeur=valeur,
+                    valeur_min=valeur_min,
+                    valeur_max=valeur_max,
+                    unite=unite,
+                    id_valeur=id_valeurs,
+                    poids=int(c_weight),
+                    bareme=float(c_score),
+                    poids_question=int(q_weight),
+                )
+            )
 
         return Produit(
             rang=rang,
             id_produit=scored["id_produit"],
             score=float(scored["final_score"]),
             caracteristique=caracteristiques,
-            info_produit=scored["product_data"] if request.champs_sortie and len(request.champs_sortie) > 0 else None,
+            info_produit=(
+                scored["product_data"]
+                if request.champs_sortie and len(request.champs_sortie) > 0
+                else None
+            ),
             coeff_geo=float(scored["zone_score"]),
             coeff_type_frns=float(scored["typo_score"]),
             coeff_etat_score=float(scored["etat_score"]),
@@ -706,7 +790,9 @@ class RecommendationServiceV2:
 
         # 1. Normalize constraints (reuse V1)
         norm_start = time.perf_counter()
-        flat_filters = await v1_service._normalize_constraints_for_caracteristique(request)
+        flat_filters = await v1_service._normalize_constraints_for_caracteristique(
+            request
+        )
         norm_time = time.perf_counter() - norm_start
         logging.warning("[V2-TIMING] normalize_constraints: %.3fs", norm_time)
 
@@ -716,32 +802,53 @@ class RecommendationServiceV2:
 
         # 2. Phase 1: Fast candidate fetch (IDs + fournisseur, no characteristics)
         cypher = self._build_candidates_cypher(request, target_product_id)
-        params = self._build_candidates_params(request, flat_filters, target_product_id=target_product_id)
+        params = self._build_candidates_params(
+            request, flat_filters, target_product_id=target_product_id
+        )
 
         try:
             candidates_start = time.perf_counter()
             candidates = await clients.execute_cypher(cypher, params)
             candidates_time = time.perf_counter() - candidates_start
-            logging.warning("[V2-TIMING] candidates_fetch: %.3fs (%d candidates)", candidates_time, len(candidates) if candidates else 0)
+            logging.warning(
+                "[V2-TIMING] candidates_fetch: %.3fs (%d candidates)",
+                candidates_time,
+                len(candidates) if candidates else 0,
+            )
 
             if not candidates:
-                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
+                return MatchingResponse(
+                    top_produit=[],
+                    liste_produit=[],
+                    temps_de_traitement=time.perf_counter() - start_time,
+                )
 
             # 3. Phase 2: Stream characteristics + score concurrently
             user_meta = request.metadonnee_utilisateurs
             user_cp = user_meta.cp if user_meta else None
             user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
-            user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
+            user_id_pays = (
+                str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
+            )
             user_typologie = user_meta.typologie if user_meta else None
             id_categorie = str(request.id_categorie) if request.id_categorie else None
 
             stream_start = time.perf_counter()
             scored = await self._stream_fetch_and_score(
-                candidates, flat_filters, scoring_params,
-                user_id_pays, user_dept, user_typologie, id_categorie,
+                candidates,
+                flat_filters,
+                scoring_params,
+                user_id_pays,
+                user_dept,
+                user_typologie,
+                id_categorie,
             )
             stream_time = time.perf_counter() - stream_start
-            logging.warning("[V2-TIMING] stream_fetch+score: %.3fs (%d scored)", stream_time, len(scored))
+            logging.warning(
+                "[V2-TIMING] stream_fetch+score: %.3fs (%d scored)",
+                stream_time,
+                len(scored),
+            )
 
             # 4. Diversity + top_p selection
             diversity_start = time.perf_counter()
@@ -752,16 +859,31 @@ class RecommendationServiceV2:
                 diversity_lambda=scoring_params["diversity_lambda"],
             )
             diversity_time = time.perf_counter() - diversity_start
-            logging.warning("[V2-TIMING] diversity_mmr: %.3fs (top=%d, liste=%d)", diversity_time, len(top_p_raw), len(liste_raw))
+            logging.warning(
+                "[V2-TIMING] diversity_mmr: %.3fs (top=%d, liste=%d)",
+                diversity_time,
+                len(top_p_raw),
+                len(liste_raw),
+            )
 
             # 5. Convert to Produit models
-            top_produit = [self._build_produit(p, i + 1, request, blocked_val, different_val) for i, p in enumerate(top_p_raw)]
-            liste_produit = [self._build_produit(p, i + 1, request, blocked_val, different_val) for i, p in enumerate(liste_raw)]
+            top_produit = [
+                self._build_produit(p, i + 1, request, blocked_val, different_val)
+                for i, p in enumerate(top_p_raw)
+            ]
+            liste_produit = [
+                self._build_produit(p, i + 1, request, blocked_val, different_val)
+                for i, p in enumerate(liste_raw)
+            ]
 
             total_time = time.perf_counter() - start_time
             logging.warning(
                 "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | candidates: %.3fs | stream+score: %.3fs | diversity: %.3fs",
-                total_time, norm_time, candidates_time, stream_time, diversity_time,
+                total_time,
+                norm_time,
+                candidates_time,
+                stream_time,
+                diversity_time,
             )
 
             return MatchingResponse(
@@ -771,7 +893,9 @@ class RecommendationServiceV2:
             )
         except Exception as e:
             logging.error(f"[V2] Caracteristique Filter Error: {e}", exc_info=True)
-            return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=0.0)
+            return MatchingResponse(
+                top_produit=[], liste_produit=[], temps_de_traitement=0.0
+            )
 
     async def get_products_by_caracteristique_filters_rerank(
         self,
@@ -785,7 +909,9 @@ class RecommendationServiceV2:
 
         # 1. Normalize
         norm_start = time.perf_counter()
-        flat_filters = await v1_service._normalize_constraints_for_caracteristique(request)
+        flat_filters = await v1_service._normalize_constraints_for_caracteristique(
+            request
+        )
         norm_time = time.perf_counter() - norm_start
         logging.warning("[V2-TIMING] normalize_constraints: %.3fs", norm_time)
 
@@ -795,32 +921,53 @@ class RecommendationServiceV2:
 
         # 2. Phase 1: Fast candidate fetch
         cypher = self._build_candidates_cypher(request, target_product_id)
-        params = self._build_candidates_params(request, flat_filters, target_product_id=target_product_id)
+        params = self._build_candidates_params(
+            request, flat_filters, target_product_id=target_product_id
+        )
 
         try:
             candidates_start = time.perf_counter()
             candidates = await clients.execute_cypher(cypher, params)
             candidates_time = time.perf_counter() - candidates_start
-            logging.warning("[V2-TIMING] candidates_fetch: %.3fs (%d candidates)", candidates_time, len(candidates) if candidates else 0)
+            logging.warning(
+                "[V2-TIMING] candidates_fetch: %.3fs (%d candidates)",
+                candidates_time,
+                len(candidates) if candidates else 0,
+            )
 
             if not candidates:
-                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
+                return MatchingResponse(
+                    top_produit=[],
+                    liste_produit=[],
+                    temps_de_traitement=time.perf_counter() - start_time,
+                )
 
             # 3. Phase 2: Stream characteristics + score
             user_meta = request.metadonnee_utilisateurs
             user_cp = user_meta.cp if user_meta else None
             user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
-            user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
+            user_id_pays = (
+                str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
+            )
             user_typologie = user_meta.typologie if user_meta else None
             id_categorie = str(request.id_categorie) if request.id_categorie else None
 
             stream_start = time.perf_counter()
             scored = await self._stream_fetch_and_score(
-                candidates, flat_filters, scoring_params,
-                user_id_pays, user_dept, user_typologie, id_categorie,
+                candidates,
+                flat_filters,
+                scoring_params,
+                user_id_pays,
+                user_dept,
+                user_typologie,
+                id_categorie,
             )
             stream_time = time.perf_counter() - stream_start
-            logging.warning("[V2-TIMING] stream_fetch+score: %.3fs (%d scored)", stream_time, len(scored))
+            logging.warning(
+                "[V2-TIMING] stream_fetch+score: %.3fs (%d scored)",
+                stream_time,
+                len(scored),
+            )
 
             # 4. Diversity + top_p
             diversity_start = time.perf_counter()
@@ -833,38 +980,59 @@ class RecommendationServiceV2:
             diversity_time = time.perf_counter() - diversity_start
 
             # Convert to Produit
-            top_produit = [self._build_produit(p, i + 1, request, blocked_val, different_val) for i, p in enumerate(top_p_raw)]
-            liste_produit = [self._build_produit(p, i + 1, request, blocked_val, different_val) for i, p in enumerate(liste_raw)]
+            top_produit = [
+                self._build_produit(p, i + 1, request, blocked_val, different_val)
+                for i, p in enumerate(top_p_raw)
+            ]
+            liste_produit = [
+                self._build_produit(p, i + 1, request, blocked_val, different_val)
+                for i, p in enumerate(liste_raw)
+            ]
 
             # 5. Enrich + LLM rerank (reuse V1)
             enrich_start = time.perf_counter()
-            reranked_top, reranked_liste, ecarts = await v1_service._enrich_and_rerank_with_llm(
-                top_produit,
-                liste_produit,
-                id_categorie or "",
-                request.rerank.parcours if request.rerank else "",
-                id_prompt=request.rerank.id_prompt if request.rerank else 112,
-                request=request,
-                thinking_level=request.rerank.thinking_level if request.rerank else "low",
+            reranked_top, reranked_liste, ecarts = (
+                await v1_service._enrich_and_rerank_with_llm(
+                    top_produit,
+                    liste_produit,
+                    id_categorie or "",
+                    request.rerank.parcours if request.rerank else "",
+                    id_prompt=request.rerank.id_prompt if request.rerank else 112,
+                    request=request,
+                    thinking_level=(
+                        request.rerank.thinking_level if request.rerank else "low"
+                    ),
+                )
             )
             enrich_time = time.perf_counter() - enrich_start
             logging.warning("[V2-TIMING] enrich_and_rerank_llm: %.3fs", enrich_time)
 
             # 6. Re-query with LLM-selected IDs (streaming fetch + score)
-            llm_selected_ids = [str(p.id_produit) for p in reranked_top + reranked_liste]
+            llm_selected_ids = [
+                str(p.id_produit) for p in reranked_top + reranked_liste
+            ]
 
             if llm_selected_ids:
                 requery_start = time.perf_counter()
                 try:
                     # Fetch candidates by IDs
                     requery_cypher = self._build_candidates_cypher_by_ids(request)
-                    requery_params = self._build_candidates_params(request, flat_filters, target_id_produits=llm_selected_ids)
-                    requery_candidates = await clients.execute_cypher(requery_cypher, requery_params)
+                    requery_params = self._build_candidates_params(
+                        request, flat_filters, target_id_produits=llm_selected_ids
+                    )
+                    requery_candidates = await clients.execute_cypher(
+                        requery_cypher, requery_params
+                    )
 
                     # Stream fetch chars + score
                     requery_scored_list = await self._stream_fetch_and_score(
-                        requery_candidates or [], flat_filters, scoring_params,
-                        user_id_pays, user_dept, user_typologie, id_categorie,
+                        requery_candidates or [],
+                        flat_filters,
+                        scoring_params,
+                        user_id_pays,
+                        user_dept,
+                        user_typologie,
+                        id_categorie,
                     )
                     requery_scored = {r["id_produit"]: r for r in requery_scored_list}
 
@@ -873,7 +1041,13 @@ class RecommendationServiceV2:
                     for idx, p in enumerate(reranked_top):
                         pid = str(p.id_produit)
                         if pid in requery_scored:
-                            rp = self._build_produit(requery_scored[pid], idx + 1, request, blocked_val, different_val)
+                            rp = self._build_produit(
+                                requery_scored[pid],
+                                idx + 1,
+                                request,
+                                blocked_val,
+                                different_val,
+                            )
                             rp.llm_response = p.llm_response
                             final_top.append(rp)
                         else:
@@ -883,7 +1057,13 @@ class RecommendationServiceV2:
                     for idx, p in enumerate(reranked_liste):
                         pid = str(p.id_produit)
                         if pid in requery_scored:
-                            rp = self._build_produit(requery_scored[pid], idx + 1, request, blocked_val, different_val)
+                            rp = self._build_produit(
+                                requery_scored[pid],
+                                idx + 1,
+                                request,
+                                blocked_val,
+                                different_val,
+                            )
                             rp.llm_response = p.llm_response
                             final_liste.append(rp)
                         else:
@@ -899,7 +1079,12 @@ class RecommendationServiceV2:
             total_time = time.perf_counter() - start_time
             logging.warning(
                 "[V2-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | candidates: %.3fs | stream+score: %.3fs | diversity: %.3fs | enrich+llm: %.3fs",
-                total_time, norm_time, candidates_time, stream_time, diversity_time, enrich_time,
+                total_time,
+                norm_time,
+                candidates_time,
+                stream_time,
+                diversity_time,
+                enrich_time,
             )
 
             return MatchingResponse(
@@ -910,7 +1095,9 @@ class RecommendationServiceV2:
             )
         except Exception as e:
             logging.error(f"[V2] Rerank Error: {e}", exc_info=True)
-            return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=0.0)
+            return MatchingResponse(
+                top_produit=[], liste_produit=[], temps_de_traitement=0.0
+            )
 
 
 recommendation_service_v2 = RecommendationServiceV2()
