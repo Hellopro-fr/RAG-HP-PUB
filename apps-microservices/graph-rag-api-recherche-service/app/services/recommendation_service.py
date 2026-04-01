@@ -1812,6 +1812,20 @@ class RecommendationService:
                 else "Prospect"
             )
 
+            # Build caracteristiques, stripping empty values to reduce tokens
+            filtered_caracs = []
+            if caracs:
+                for c in caracs:
+                    if str(c.get("id_caracteristique", "")) in liste_carac_id:
+                        carac_entry = {"nom": c.get("nom_caracteristique", c.get("label", ""))}
+                        valeur = c.get("valeur", "")
+                        if valeur:
+                            carac_entry["valeur"] = valeur
+                        unite = c.get("unite", "")
+                        if unite:
+                            carac_entry["unite"] = unite
+                        filtered_caracs.append(carac_entry)
+
             formatted_product = {
                 "id_produit": str(id_produit),
                 "titre": info.get(
@@ -1826,22 +1840,9 @@ class RecommendationService:
                 ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
-                    "id_fournisseur": str(info_fournisseur.get("id", "")),
                     "type": etat_societe_label,
                 },
-                "caracteristiques": (
-                    [
-                        {
-                            "nom": c.get("nom_caracteristique", c.get("label", "")),
-                            "valeur": c.get("valeur", ""),
-                            "unite": c.get("unite", ""),
-                        }
-                        for c in caracs
-                        if str(c.get("id_caracteristique", "")) in liste_carac_id
-                    ]
-                    if caracs
-                    else []
-                ),
+                "caracteristiques": filtered_caracs,
             }
             formatted_products.append(formatted_product)
 
@@ -1933,8 +1934,8 @@ class RecommendationService:
         #     f"{caracteristiques_critiques}"
         # )
 
-        # LISTE_PRODUITS = formatted product list as JSON
-        liste_produits_json = json.dumps(formatted_products, ensure_ascii=False)
+        # LISTE_PRODUITS = formatted product list as compact JSON (minimize tokens)
+        liste_produits_json = json.dumps(formatted_products, ensure_ascii=False, separators=(",", ":"))
         # logging.warning(
         #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
         # )
@@ -2208,33 +2209,18 @@ class RecommendationService:
             {liste_produits_json}
             """
 
-        # Separate static instructions (cacheable) from dynamic data
-        # Split at "DONNÉES D'ENTRÉE" to keep instructions static for Gemini context caching
-        data_marker = "DONNÉES D'ENTRÉE"
-        marker_idx = system_prompt.find(data_marker)
-        if marker_idx != -1:
-            static_prompt = system_prompt[:marker_idx].rstrip()
-        else:
-            # Fallback: use entire prompt as static (no split possible)
-            static_prompt = system_prompt
-
-        # Build user content with the dynamic data
-        user_content = f"""DONNÉES D'ENTRÉE
-
-[BESOIN_ACHETEUR]
-{besoin_acheteur}
-
-[CARACTERISTIQUES_CRITIQUES]
-{caracteristiques_critiques}
-
-[LISTE_PRODUITS]
-{liste_produits_json}"""
+        # Format the template variables into the system prompt
+        system_prompt = system_prompt.format(
+            besoin_acheteur=besoin_acheteur,
+            caracteristiques_critiques=caracteristiques_critiques,
+            liste_produits_json=liste_produits_json,
+        )
 
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
         try:
             gemini_start = time.perf_counter()
             llm_response = await gemini_client.generate_rerank_response(
-                static_prompt, user_content=user_content, temperature=prompt_temperature, thinking_level=thinking_level
+                system_prompt, temperature=prompt_temperature, thinking_level=thinking_level
             )
             gemini_time = time.perf_counter() - gemini_start
             logging.warning("[RERANK] Gemini LLM call completed in %.3fs", gemini_time)
