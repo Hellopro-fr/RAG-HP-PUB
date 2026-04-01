@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
+	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
 // ── Import .mcp.json ─────────────────────────────────────────────────────────
@@ -148,6 +149,15 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 		result.Status = "error"
 		result.Error = "could not determine server URL or command"
 		return result
+	}
+
+	// SSRF protection: validate remote server URLs
+	if serverURL != "" {
+		if err := urlvalidation.ValidateServerURL(serverURL); err != nil {
+			result.Status = "error"
+			result.Error = "invalid server URL: " + err.Error()
+			return result
+		}
 	}
 
 	// Use URL or synthesize one for stdio

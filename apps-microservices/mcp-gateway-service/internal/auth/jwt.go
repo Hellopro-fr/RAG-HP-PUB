@@ -1,14 +1,11 @@
 package auth
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
@@ -22,75 +19,61 @@ type Claims struct {
 	Exp      int64  `json:"exp,omitempty"`
 	Iat      int64  `json:"iat,omitempty"`
 	Name     string `json:"name,omitempty"`
+	jwt.RegisteredClaims
 }
 
 // SignJWT creates an HS256 JWT with the given claims.
 func SignJWT(secret string, claims Claims) (string, error) {
-	header := base64URLEncode([]byte(`{"alg":"HS256","typ":"JWT"}`))
-	payload, err := json.Marshal(claims)
-	if err != nil {
-		return "", err
+	claims.RegisteredClaims = jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(time.Unix(claims.Exp, 0)),
+		IssuedAt:  jwt.NewNumericDate(time.Unix(claims.Iat, 0)),
 	}
-	payloadB64 := base64URLEncode(payload)
-	signingInput := header + "." + payloadB64
+	if claims.Audience != "" {
+		claims.RegisteredClaims.Audience = jwt.ClaimStrings{claims.Audience}
+	}
 
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(signingInput))
-	sig := base64URLEncode(mac.Sum(nil))
-
-	return signingInput + "." + sig, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
 }
 
 // ValidateJWT decodes and validates an HS256 JWT.
+// It strictly enforces that the token uses the HS256 algorithm.
 func ValidateJWT(tokenStr, secret, audience string) (*Claims, error) {
-	parts := strings.SplitN(tokenStr, ".", 3)
-	if len(parts) != 3 {
-		return nil, ErrTokenInvalid
+	parserOpts := []jwt.ParserOption{
+		jwt.WithValidMethods([]string{"HS256"}),
+		// Do not use WithAudience — external auth tokens may omit aud claim.
+		// Audience is checked manually below when present.
 	}
 
-	// Verify signature
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(parts[0] + "." + parts[1]))
-	expectedSig := base64URLEncode(mac.Sum(nil))
-	if !hmac.Equal([]byte(parts[2]), []byte(expectedSig)) {
-		return nil, ErrTokenInvalid
-	}
+	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		// Double-check algorithm to prevent alg:none or alg switching attacks
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("%w: unexpected signing method: %v", ErrTokenInvalid, token.Header["alg"])
+		}
+		return []byte(secret), nil
+	}, parserOpts...)
 
-	// Decode payload
-	payload, err := base64URLDecode(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: decode payload: %v", ErrTokenInvalid, err)
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrTokenExpired
+		}
+		return nil, fmt.Errorf("%w: %v", ErrTokenInvalid, err)
 	}
 
-	var claims Claims
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, fmt.Errorf("%w: unmarshal claims: %v", ErrTokenInvalid, err)
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
+		return nil, ErrTokenInvalid
 	}
 
-	// Check expiration
-	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
-		return nil, ErrTokenExpired
-	}
-
-	// Check audience
-	if audience != "" && claims.Audience != audience {
+	// Check audience manually: only enforce if the token carries an aud claim
+	if audience != "" && claims.Audience != "" && claims.Audience != audience {
 		return nil, fmt.Errorf("%w: audience mismatch", ErrTokenInvalid)
 	}
 
-	return &claims, nil
-}
-
-func base64URLEncode(data []byte) string {
-	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
-}
-
-func base64URLDecode(s string) ([]byte, error) {
-	// Add padding
-	switch len(s) % 4 {
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
+	// Reject tokens with iat in the future (clock-skew attack, 5min tolerance)
+	if claims.Iat > 0 && time.Unix(claims.Iat, 0).After(time.Now().Add(5*time.Minute)) {
+		return nil, fmt.Errorf("%w: token issued in the future", ErrTokenInvalid)
 	}
-	return base64.URLEncoding.DecodeString(s)
+
+	return claims, nil
 }
