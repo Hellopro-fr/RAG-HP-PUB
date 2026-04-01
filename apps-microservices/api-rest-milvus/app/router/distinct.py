@@ -30,7 +30,7 @@ BATCH_SIZE = 16384
 async def get_distinct_values(
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     distinct_field: str = Query(..., description="Nom du champ dont on veut les valeurs uniques (ex: 'url', 'domaine', 'page_type')"),
-    limit: int = Query(10000, ge=1, le=100000, description="Nombre max de valeurs distinctes à retourner (défaut: 10000)"),
+    limit: int = Query(10000, ge=1, le=2000000, description="Nombre max de valeurs distinctes à retourner (défaut: 10000)"),
     offset: int = Query(0, ge=0, description="Nombre de valeurs distinctes à sauter (pour pagination)"),
     metadata: Optional[str] = Query(None, description="""Filtres de recherche au format JSON.
 
