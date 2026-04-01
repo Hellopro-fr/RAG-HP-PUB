@@ -8,8 +8,7 @@ import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type Matc
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
-// TODO: réactiver quand les tests de vitesse sont terminés
-// import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
+import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
 
 // Interface pour les données URL (réponse Q1 pré-remplie)
 interface UrlData {
@@ -35,8 +34,7 @@ export default function QuestionnaireClient({
   const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
   const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
-  // TODO: réactiver quand les tests de vitesse sont terminés
-  // const { fetchPriceEstimation } = usePriceEstimation();
+  const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
 
@@ -217,15 +215,15 @@ export default function QuestionnaireClient({
     // Wrapper monotone : le progress ne recule jamais (protection contre les réponses tardives)
     const safeProgress = (value: number) => setLoaderProgress(prev => Math.max(prev, value));
 
-    // TODO: réactiver l'appel prix quand les tests de vitesse sont terminés
-    // const prixPromise = fetchPriceEstimation()
-    //   .then(() => { safeProgress(25); })
-    //   .catch((err) => {
-    //     console.error('[Prix] Error (non-blocking):', err);
-    //     safeProgress(25); // Même en erreur, on avance
-    //   });
-    const prixPromise = Promise.resolve();
-    safeProgress(25);
+    // Lancer prix et matching en parallèle
+    // Le prix répond plus vite → met à jour le progress à 25%
+    // Le matching prend le relais (50→65→75) via safeProgress
+    const prixPromise = fetchPriceEstimation()
+      .then(() => { safeProgress(25); })
+      .catch((err) => {
+        console.error('[Prix] Error (non-blocking):', err);
+        safeProgress(25); // Même en erreur, on avance
+      });
 
     const matchingPromise = processMatching(safeProgress); // progress interne : 50→65→75
 
