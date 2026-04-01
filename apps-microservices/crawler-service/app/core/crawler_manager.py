@@ -154,6 +154,12 @@ class CrawlerManager:
         # For normal starts: use SET NX to atomically prevent duplicate crawl_ids.
         # For OOM restarts: key already exists with status "restarting_oom", use regular SET.
         if not is_restart:
+            # If a key exists with a terminal status, delete it first to allow restart.
+            existing_job = await cache_service.get_json(job_key)
+            if existing_job and existing_job.get("status") in ("failed", "finished"):
+                await cache_service.delete_key(job_key)
+                logger.info(f"Cleared stale '{existing_job.get('status')}' key for '{crawl_id}' to allow restart.")
+
             claimed = await cache_service.set_json_nx(job_key, job_data)
             if not claimed:
                 logger.warning(f"Crawl job '{crawl_id}' is already running globally (NX failed). Request rejected.")
@@ -606,8 +612,8 @@ class CrawlerManager:
             job_info["pid"] = None
             if "last_heartbeat" in job_info:
                 del job_info["last_heartbeat"]
-            await cache_service.set_json(job_key, job_info)
-            logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. Counter decremented.")
+            await cache_service.delete_key(job_key)
+            logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. NX key released. Counter decremented.")
 
             await self._publish_update(crawl_id, final_status)
 
@@ -695,13 +701,13 @@ class CrawlerManager:
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
             logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{old_status}').")
 
-        # Update status
+        # Update status and release NX key
         job_info["status"] = target_status
         job_info["pid"] = None
         if "last_heartbeat" in job_info:
             del job_info["last_heartbeat"]
-        
-        await cache_service.set_json(job_key, job_info)
+
+        await cache_service.delete_key(job_key)
         await self._publish_update(crawl_id, target_status)
         
         # Use appropriate webhook based on target status
@@ -1398,9 +1404,8 @@ class CrawlerManager:
                         if "last_heartbeat" in job_data:
                             del job_data["last_heartbeat"]
 
-                        # Update Redis
-                        # We do this individually to ensure safety, though pipeline could be used for speed if needed
-                        await cache_service.set_json(all_job_keys[i], job_data)
+                        # Delete the NX key so the same crawl_id can be re-queued
+                        await cache_service.delete_key(all_job_keys[i])
                         await self._publish_update(crawl_id, "failed")
 
                         # Send failure webhook
