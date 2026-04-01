@@ -41,17 +41,13 @@ WHERE pc.id_source_caracteristique = cid
 WITH p, cid, collect(properties(pc)) AS matched_nodes
 WITH p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
 
-// Fetch fournisseur + geo data
+// Fetch fournisseur data (no geo)
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
-OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
 
 WITH p PROJECTION_PLACEHOLDER AS product_data,
      characteristics,
-     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc,
-     collect(DISTINCT {id_pays: pays.id_pays, partiel: r_pays.partiel, couvre_tous: r_pays.couvre_tous, couvre: r_pays.couvre, ne_couvre_pas: r_pays.ne_couvre_pas}) AS pays_rels,
-     collect(DISTINCT {id_dept: zone.id_dept, couvre_tous: r_zone.couvre_tous, couvre: r_zone.couvre, ne_couvre_pas: r_zone.ne_couvre_pas}) AS zone_rels
-RETURN product_data, characteristics, info_soc, pays_rels, zone_rels
+     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
+RETURN product_data, characteristics, info_soc
 """
 
 CYPHER_V2_FETCH_TARGET = """
@@ -66,15 +62,11 @@ WITH p, cid, collect(properties(pc)) AS matched_nodes
 WITH p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
 
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
-OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
 
 WITH p PROJECTION_PLACEHOLDER AS product_data,
      characteristics,
-     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc,
-     collect(DISTINCT {id_pays: pays.id_pays, partiel: r_pays.partiel, couvre_tous: r_pays.couvre_tous, couvre: r_pays.couvre, ne_couvre_pas: r_pays.ne_couvre_pas}) AS pays_rels,
-     collect(DISTINCT {id_dept: zone.id_dept, couvre_tous: r_zone.couvre_tous, couvre: r_zone.couvre, ne_couvre_pas: r_zone.ne_couvre_pas}) AS zone_rels
-RETURN product_data, characteristics, info_soc, pays_rels, zone_rels
+     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
+RETURN product_data, characteristics, info_soc
 """
 
 CYPHER_V2_FETCH_BY_IDS = """
@@ -86,18 +78,14 @@ UNWIND cids AS cid
 OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
 WHERE pc.id_source_caracteristique = cid
 WITH p, cid, collect(properties(pc)) AS matched_nodes
-With p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
+WITH p, collect({cid: cid, matched_nodes: matched_nodes}) AS characteristics
 
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
-OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
 
 WITH p PROJECTION_PLACEHOLDER AS product_data,
      characteristics,
-     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc,
-     collect(DISTINCT {id_pays: pays.id_pays, partiel: r_pays.partiel, couvre_tous: r_pays.couvre_tous, couvre: r_pays.couvre, ne_couvre_pas: r_pays.ne_couvre_pas}) AS pays_rels,
-     collect(DISTINCT {id_dept: zone.id_dept, couvre_tous: r_zone.couvre_tous, couvre: r_zone.couvre, ne_couvre_pas: r_zone.ne_couvre_pas}) AS zone_rels
-RETURN product_data, characteristics, info_soc, pays_rels, zone_rels
+     {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
+RETURN product_data, characteristics, info_soc
 """
 
 
@@ -614,8 +602,6 @@ class RecommendationServiceV2:
         product_data = raw.get("product_data", {})
         characteristics = raw.get("characteristics", [])
         info_soc = raw.get("info_soc", {})
-        pays_rels = raw.get("pays_rels", [])
-        zone_rels = raw.get("zone_rels", [])
 
         id_produit = str(product_data.get("id_produit", ""))
         id_fournisseur = str(info_soc.get("id_fournisseur", product_data.get("id_fournisseur", "")))
@@ -623,8 +609,8 @@ class RecommendationServiceV2:
         # 1. Characteristic scoring
         global_score, details = score_product(characteristics, flat_filters, scoring_params)
 
-        # 2. Zone scoring
-        zone_score = compute_zone_score(pays_rels, zone_rels, info_soc, user_id_pays, user_dept, id_categorie, scoring_params)
+        # 2. Zone scoring — skipped (forced to 1 in final_score anyway)
+        zone_score = scoring_params["g_unknown_score"]
 
         # 3. Etat scoring (with cross-adjustment)
         etat_score, global_score = compute_etat_score(info_soc, global_score, scoring_params)
