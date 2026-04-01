@@ -1,15 +1,12 @@
 """
 Direct Gemini SDK client for LLM-based reranking.
 Uses google-genai package with Gemini 3 Flash and retry logic.
-Supports explicit context caching for static system prompts (2h TTL).
 """
 
 import asyncio
-import hashlib
 import json
 import logging
-import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 
 from google import genai
 from google.genai import types, errors
@@ -23,9 +20,6 @@ from tenacity import (
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-# Context cache TTL: 2 hours
-CONTEXT_CACHE_TTL_SECONDS = 2 * 60 * 60
 
 
 def make_serializable(obj):
@@ -68,47 +62,6 @@ class GeminiClient:
         self._temperature = 0.1
         self._timeout = 120  # seconds
         self.client = genai.Client(api_key=self.api_key)
-        # Context cache: prompt_hash -> (created_at, cache_name)
-        self._context_cache: Dict[str, Tuple[float, str]] = {}
-
-    def _get_or_create_context_cache(self, system_prompt: str) -> Optional[str]:
-        """
-        Get or create a Gemini context cache for the given system prompt.
-        Returns the cache name (str) to use in generate_content, or None on failure.
-        """
-        prompt_hash = hashlib.md5(system_prompt.encode()).hexdigest()
-
-        # Check local cache entry
-        entry = self._context_cache.get(prompt_hash)
-        if entry is not None:
-            created_at, cache_name = entry
-            # Still valid if within TTL (with 5min safety margin)
-            if time.monotonic() - created_at < CONTEXT_CACHE_TTL_SECONDS - 300:
-                logger.info("[GEMINI-CACHE] Reusing existing context cache: %s", cache_name)
-                return cache_name
-
-        # Create new context cache
-        try:
-            cache = self.client.caches.create(
-                model=self.model,
-                config=types.CreateCachedContentConfig(
-                    system_instruction=system_prompt,
-                    ttl=f"{CONTEXT_CACHE_TTL_SECONDS}s",
-                ),
-            )
-            cache_name = cache.name
-            self._context_cache[prompt_hash] = (time.monotonic(), cache_name)
-            logger.warning(
-                "[GEMINI-CACHE] Created new context cache: %s (prompt_hash=%s)",
-                cache_name,
-                prompt_hash,
-            )
-            return cache_name
-        except Exception as e:
-            logger.warning(
-                "[GEMINI-CACHE] Failed to create context cache, will send inline: %s", e
-            )
-            return None
 
     def chat(
         self,
@@ -166,6 +119,7 @@ class GeminiClient:
                         config=types.GenerateContentConfig(
                             temperature=effective_temperature,
                             response_mime_type="application/json",
+                            max_output_tokens=4096,
                             # thinking_config=thinking_config,
                         ),
                     )
@@ -200,128 +154,40 @@ class GeminiClient:
 
         return {"message": response.text, "api_response": safe_api_response}
 
-    def chat_with_cache(
-        self,
-        system_prompt: str,
-        user_content: str,
-        temperature: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        """
-        Send a request using Gemini context caching for the system prompt.
-        Falls back to inline prompt if caching fails.
-        """
-        response = None
-        cache_name = self._get_or_create_context_cache(system_prompt)
-
-        try:
-            retryer = Retrying(
-                stop=stop_after_attempt(self.max_retries),
-                wait=wait_exponential(multiplier=1, min=1, max=60),
-                retry=retry_if_exception(is_retryable_error),
-                reraise=True,
-            )
-
-            for attempt in retryer:
-                with attempt:
-                    if attempt.retry_state.attempt_number > 1:
-                        logger.info(
-                            f"Retry Gemini API (cached)... Tentative {attempt.retry_state.attempt_number}"
-                        )
-
-                    effective_temperature = (
-                        temperature if temperature is not None else self._temperature
-                    )
-
-                    if cache_name:
-                        # Use cached system prompt
-                        response = self.client.models.generate_content(
-                            model=self.model,
-                            contents=user_content,
-                            config=types.GenerateContentConfig(
-                                cached_content=cache_name,
-                                temperature=effective_temperature,
-                                response_mime_type="application/json",
-                            ),
-                        )
-                    else:
-                        # Fallback: inline everything
-                        response = self.client.models.generate_content(
-                            model=self.model,
-                            contents=f"{system_prompt}\n\n{user_content}",
-                            config=types.GenerateContentConfig(
-                                temperature=effective_temperature,
-                                response_mime_type="application/json",
-                            ),
-                        )
-
-        except errors.ClientError as e:
-            logger.error(
-                f"Gemini ClientError (cached): {e.message} (Code: {e.code}) type: {type(e)}"
-            )
-            return {
-                "code": e.code,
-                "error": e.message,
-                "content": None,
-                "response": {
-                    "code": e.code,
-                    "message": e.message,
-                    "status": getattr(e, "status", "UNKNOWN"),
-                },
-            }
-        except Exception as e:
-            logger.error(f"Erreur inattendue dans Gemini (cached): {e}")
-            return {
-                "code": 500,
-                "error": str(e),
-                "content": None,
-                "response": {},
-            }
-
-        api_response_dict = response.model_dump()
-        safe_api_response = make_serializable(api_response_dict)
-        return {"message": response.text, "api_response": safe_api_response}
-
     async def generate_rerank_response(
         self,
         system_prompt: str,
-        user_content: str = "",
+        # user_data_json: str,
         temperature: Optional[float] = None,
         thinking_level: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Send enriched product data to Gemini for reranking analysis.
-        Uses context caching for the system prompt when user_content is provided separately.
 
         Args:
-            system_prompt: The system instruction for the LLM (cached server-side).
-            user_content: The dynamic data (besoin, caracteristiques, produits).
-            temperature: Optional temperature override.
-            thinking_level: Optional thinking level.
+            system_prompt: The system instruction for the LLM.
+            user_data_json: JSON string of the formatted product data.
 
         Returns:
             Parsed JSON dict from the LLM response, or None on error.
         """
         try:
+            # Combine system prompt and user data into one prompt
+            # combined_prompt = f"{system_prompt}\n\n{user_data_json}"
+            combined_prompt = f"{system_prompt}"
+
             logger.warning(
                 "[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self.model
             )
+            # logger.warning("[RERANK-GEMINI] Combined prompt: %s", combined_prompt)
 
-            if user_content:
-                # Use context caching: system_prompt cached, user_content sent as contents
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self.chat_with_cache, system_prompt, user_content, temperature
-                    ),
-                    timeout=self._timeout,
-                )
-            else:
-                # Legacy: everything in one prompt
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self.chat, system_prompt, temperature, thinking_level
-                    ),
-                    timeout=self._timeout,
-                )
+            # Run the synchronous chat call in a thread pool to avoid blocking the event loop
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.chat, combined_prompt, temperature, thinking_level
+                ),
+                timeout=self._timeout,
+            )
 
             # logger.warning(
             #     "[RERANK-GEMINI] Gemini response received: %s",
