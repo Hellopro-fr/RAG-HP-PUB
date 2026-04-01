@@ -210,7 +210,7 @@ const BudgetEstimate = ({
                   <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
                     Équipement
                   </th>
-                  <th className="px-4 py-2.5 text-right font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">
+                  <th className="px-4 py-2.5 text-right font-medium text-muted-foreground whitespace-nowrap hidden">
                     Date
                   </th>
                 </tr>
@@ -227,7 +227,7 @@ const BudgetEstimate = ({
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {item.equipment}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap hidden sm:table-cell">
+                    <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap hidden">
                       {formatDateISO(item.date)}
                     </td>
                   </tr>
