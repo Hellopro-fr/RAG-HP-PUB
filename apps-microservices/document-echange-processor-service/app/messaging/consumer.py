@@ -102,7 +102,7 @@ class Consumer:
                 try:
                     await msg.ack()
                 except Exception as e:
-                    logger.warning(f"⚠️ Impossible d'acquitter le message {msg.delivery_tag} avant traitement: {e}")
+                    logger.warning(f"⚠️ Impossible d'acquitter le message {msg.delivery_tag} avant traitement: {e}. Le traitement continue sans ACK confirmé.")
                     # On continue quand même, car si la co est coupée, le traitement sera probablement perdu ou republié plus tard.
 
             messages_to_process = []
@@ -225,13 +225,13 @@ class Consumer:
 
     async def start_consuming(self):
         """Démarre le consumer et la tâche de traitement de batch."""
-        channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=BATCH_SIZE)
-        
-        queue = await self._setup_queues(channel)
-        
+        self._channel = await self.connection.channel()
+        await self._channel.set_qos(prefetch_count=BATCH_SIZE)
+
+        queue = await self._setup_queues(self._channel)
+
         # Démarrer la tâche de fond qui traitera les batches
-        asyncio.create_task(self.batch_processor())
+        self._batch_task = asyncio.create_task(self.batch_processor())
         
         # Commencer à consommer les messages et à les mettre dans le buffer
         logger.info("👂 Document-processor-service: En attente de messages...")

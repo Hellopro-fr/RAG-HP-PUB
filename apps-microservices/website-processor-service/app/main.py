@@ -29,9 +29,8 @@ async def main():
     # --- Start Prometheus metrics server ---
     start_metrics_server_in_thread(port=8530)
 
-    loop = asyncio.get_event_loop()
     try:
-        connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+        connection = await aio_pika.connect_robust(rabbitmq_url)
         logger.info("✅ Website-Processor: Connecté à RabbitMQ.")
 
         async with connection:
@@ -45,7 +44,7 @@ async def main():
 
     except (aiormq.exceptions.AMQPConnectionError, aio_pika.exceptions.AMQPConnectionError) as e:
         logger.error(f"❌ Website-Processor: Impossible de se connecter après plusieurs tentatives. Erreur: {e}")
-        exit(1)
+        return
     except KeyboardInterrupt:
         logger.info("🛑 Website-Processor: Arrêt demandé.")
     finally:

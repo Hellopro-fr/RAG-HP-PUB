@@ -26,13 +26,11 @@ async def main():
     logger.info("🚀 Document-processor-service: Démarrage...")
     
     # Créer le répertoire de récupération s'il n'existe pas
-    os.makedirs('recovery_data', exist_ok=True)
+    os.makedirs('/app/recovery_data', exist_ok=True)
 
-    loop = asyncio.get_event_loop()
-    
     while True:
         try:
-            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+            connection = await aio_pika.connect_robust(rabbitmq_url)
             logger.info("✅ Document-processor-service: Connecté à RabbitMQ.")
             
             async with connection:

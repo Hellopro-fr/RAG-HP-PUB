@@ -34,7 +34,7 @@ def convert_fields_to_int(data: dict, fields: list[str]) -> dict:
             try:
                 data[field] = int(value)
             except (ValueError, TypeError):
-                pass 
+                logger.warning(f"⚠️ Impossible de convertir le champ '{field}' (valeur: {value!r}) en int.")
     return data
 
 def process_devis_data_for_embedding(devis_data: dict, bdd: str = "qdrant") -> dict:
@@ -57,7 +57,7 @@ def process_devis_data_for_embedding(devis_data: dict, bdd: str = "qdrant") -> d
         try:
             devis_clean["date_du_lead"] = convertir_date_to_timestamp(devis_clean["date_du_lead"])
         except ValueError:
-            pass
+            logger.warning(f"⚠️ Impossible de convertir date_du_lead: {devis_clean['date_du_lead']!r}")
     
     output_message = {
         "data": {

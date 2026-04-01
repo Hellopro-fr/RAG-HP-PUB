@@ -20,7 +20,6 @@ class Publisher:
         """
         Publie un message de manière asynchrone sur le canal fourni.
         """
-        # routing_key = message_dict.get('routing_key', 'data.ready_for_embedding')
         routing_key = self.routing_key
         exchange = await channel.get_exchange(self.exchange_name, ensure=True)
         

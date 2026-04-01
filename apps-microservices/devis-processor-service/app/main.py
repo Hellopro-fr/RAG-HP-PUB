@@ -34,7 +34,7 @@ def main():
             logger.info("✅ DI-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            logger.info(f"⏳ DI-Processor: En attente de RabbitMQ... {i+1}s")
+            logger.info(f"⏳ DI-Processor: En attente de RabbitMQ... tentative {i+1}/10")
             time.sleep(1)
 
     if not connection:
@@ -46,7 +46,7 @@ def main():
         publisher = Publisher(connection)
         
         # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher)
+        consumer = Consumer(publisher)
         
         # 3. Lancer l'écoute
         consumer.start_consuming()

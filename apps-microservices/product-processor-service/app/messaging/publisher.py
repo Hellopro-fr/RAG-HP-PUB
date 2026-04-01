@@ -40,5 +40,9 @@ class Publisher:
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
                 logger.warning(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                try:
+                    self.connection.close()
+                except Exception:
+                    pass
                 self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
                 self.channel = self.connection.channel()

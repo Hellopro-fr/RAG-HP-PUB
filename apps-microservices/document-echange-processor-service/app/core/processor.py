@@ -10,6 +10,8 @@ from common_utils.ocr.DeepseekOCRDocExtractor import DeepseekOCRDocExtractor
 
 logger = logging.getLogger(__name__)
 
+MAX_PAGES = 20
+
 async def process_document_data_for_templating(documents: List[Dict], bdd: str = "milvus") -> List[Dict]:    
     anonymize = AnonymizeText()
     extractor = DeepseekOCRDocExtractor()
@@ -147,7 +149,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             texts = ""
             nb_pages = 0
 
-        if nb_pages >= 20 or len(texts.strip()) < 200:
+        if nb_pages >= MAX_PAGES or len(texts.strip()) < 200:
             results_by_index[index] = {
                 "status": "error",
                 "error_message": f"Doc à ne pas traiter : nb_pages = {nb_pages} | len = {len(texts.strip())}",

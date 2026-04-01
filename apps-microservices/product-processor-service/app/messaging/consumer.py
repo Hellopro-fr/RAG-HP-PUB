@@ -13,10 +13,10 @@ MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
+    def __init__(self, publisher: Publisher):
         """
         Initialise le consumer.
-        Il a besoin d'une connexion ET d'une instance du publisher.
+        Il a besoin d'une instance du publisher.
         """
         self.publisher = publisher
 
