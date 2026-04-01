@@ -1765,15 +1765,16 @@ class RecommendationService:
         # )
         # logging.warning(f"[RERANK] Product IDs: {id_produits}")
 
-        # 2. Fetch product info + characteristics + category definitions in parallel
+        # 2. Fetch product info + characteristics + category definitions + prompt in parallel
         logging.warning(
             "[RERANK] Fetching product info, characteristics, and category definitions from HelloPro API..."
         )
         try:
-            products_info, all_caracs, category_caracs = await asyncio.gather(
+            products_info, all_caracs, category_caracs, prompt_data = await asyncio.gather(
                 hellopro_api_client.fetch_products_info(id_categorie, id_produits),
                 hellopro_api_client.fetch_all_product_caracteristiques(id_produits),
                 hellopro_api_client.fetch_category_caracteristiques(id_categorie),
+                hellopro_api_client.fetch_prompt(str(id_prompt) or "112"),
             )
         except Exception as e:
             logging.error(f"[RERANK] HelloPro API enrichment error: {e}", exc_info=True)
@@ -1938,11 +1939,10 @@ class RecommendationService:
         #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
         # )
 
-        # 5. Fetch system prompt from HelloPro API and call Gemini
+        # 5. Use pre-fetched prompt data (fetched in parallel above) and call Gemini
         logging.warning(
-            "[RERANK] Fetching prompt from HelloPro API (id_prompt=%s)...", id_prompt
+            "[RERANK] Using pre-fetched prompt from HelloPro API (id_prompt=%s)...", id_prompt
         )
-        prompt_data = await hellopro_api_client.fetch_prompt(str(id_prompt) or "112")
 
         prompt_temperature = None
         if prompt_data and prompt_data.get("contenu_prompt"):
