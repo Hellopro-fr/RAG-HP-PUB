@@ -2208,22 +2208,33 @@ class RecommendationService:
             {liste_produits_json}
             """
 
-        # Format the template variables into the system prompt
-        system_prompt = system_prompt.format(
-            besoin_acheteur=besoin_acheteur,
-            caracteristiques_critiques=caracteristiques_critiques,
-            liste_produits_json=liste_produits_json,
-        )
+        # Separate static instructions (cacheable) from dynamic data
+        # Split at "DONNÉES D'ENTRÉE" to keep instructions static for Gemini context caching
+        data_marker = "DONNÉES D'ENTRÉE"
+        marker_idx = system_prompt.find(data_marker)
+        if marker_idx != -1:
+            static_prompt = system_prompt[:marker_idx].rstrip()
+        else:
+            # Fallback: use entire prompt as static (no split possible)
+            static_prompt = system_prompt
 
-        # logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
+        # Build user content with the dynamic data
+        user_content = f"""DONNÉES D'ENTRÉE
+
+[BESOIN_ACHETEUR]
+{besoin_acheteur}
+
+[CARACTERISTIQUES_CRITIQUES]
+{caracteristiques_critiques}
+
+[LISTE_PRODUITS]
+{liste_produits_json}"""
+
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
-        # logging.warning(f"[RERANK] System prompt: {system_prompt}")
-        # logging.warning(f"[RERANK] Liste produits: {liste_produits_json}")
-        # return top_produit, liste_produit, []
         try:
             gemini_start = time.perf_counter()
             llm_response = await gemini_client.generate_rerank_response(
-                system_prompt, temperature=prompt_temperature, thinking_level=thinking_level
+                static_prompt, user_content=user_content, temperature=prompt_temperature, thinking_level=thinking_level
             )
             gemini_time = time.perf_counter() - gemini_start
             logging.warning("[RERANK] Gemini LLM call completed in %.3fs", gemini_time)
