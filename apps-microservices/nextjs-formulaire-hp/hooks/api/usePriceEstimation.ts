@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
 import { buildTexteRecherchePrix } from '@/lib/utils/build-texte-recherche-prix';
+import { buildTextePromptPrix } from '@/lib/utils/build-texte-prompt-prix';
 import { basePath } from '@/lib/utils';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import type { PrixApiResponse } from '@/types/prix';
@@ -24,6 +25,7 @@ export function usePriceEstimation() {
     dynamicAnswers,
     caracteristiquesPrix,
     characteristicsMap,
+    userQuestionAnswers,
     setPriceEstimation,
   } = useFlowStore();
 
@@ -64,9 +66,14 @@ export function usePriceEstimation() {
         return;
       }
 
+      // 4b. Construire texte_prompt (parcours Q/R enrichi, mode prix_version=3)
+      const textePrompt = buildTextePromptPrix(userQuestionAnswers, characteristicsMap);
+
       const requestPayload = {
         id_categorie: categoryId,
         texte_recherche: texteRecherche,
+        texte_prompt: textePrompt,
+        type_source: 'other',
         nom_categorie: categoryName,
       };
 
@@ -90,6 +97,8 @@ export function usePriceEstimation() {
       const trackingRequest = {
         id_categorie: categoryId,
         texte_recherche: texteRecherche,
+        texte_prompt: textePrompt,
+        type_source: 'other',
         nom_categorie: categoryName,
         equivalences_count: consolidated.length,
         prix_caracs_count: caracsPrixIds.length,
@@ -179,6 +188,7 @@ export function usePriceEstimation() {
     dynamicAnswers,
     caracteristiquesPrix,
     characteristicsMap,
+    userQuestionAnswers,
     setPriceEstimation,
     trackDbEvent,
   ]);
