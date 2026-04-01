@@ -67,6 +67,19 @@ async def set_json(key: str, data: Dict[str, Any], ttl: Optional[int] = None):
     except Exception as e:
         logger.error(f"Failed to set JSON for key '{key}' in Redis: {e}", exc_info=True)
 
+async def set_json_nx(key: str, data: Dict[str, Any]) -> bool:
+    """Atomically sets a key only if it does not already exist (SET NX).
+    Returns True if the key was set, False if it already existed."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        value = json.dumps(data, default=str)
+        result = await redis_client.set(key, value, nx=True)
+        return result is True
+    except Exception as e:
+        logger.error(f"Failed to SET NX for key '{key}' in Redis: {e}", exc_info=True)
+        return False
+
 async def get_json(key: str) -> Optional[Dict[str, Any]]:
     """Gets a dictionary for a key, deserializing it from JSON."""
     if not redis_client:

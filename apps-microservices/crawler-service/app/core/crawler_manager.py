@@ -135,72 +135,90 @@ class CrawlerManager:
                 logger.info(f"Crawl job '{crawl_id}' found in local processes but is finished. Clearing for restart.")
                 del self.local_processes[crawl_id]
         
-        # Global concurrency check against Redis
-        # If is_restart=True, we bypass this check because we theoretically still hold the slot (status is restarting_oom)
-        existing_job = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
-        if existing_job and existing_job.get("status") == "running" and not is_restart:
-            logger.warning(f"Crawl job '{crawl_id}' is already running globally. Request rejected.")
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"A crawl job with ID '{crawl_id}' is already in progress."
-            )
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
 
-        # Check dynamic global limit (V3 Logic)
-        # If is_restart=True, we skip this because we already consumed a slot.
+        # Build job data early (pid will be patched after spawn)
+        job_data = {
+            "crawl_id": crawl_id, "status": "starting", "domain": domain,
+            "start_url": start_url, "start_time": datetime.utcnow(),
+            "storage_path": job_storage_path,
+            "callback_url": callback_url,
+            "failure_callback_url": failure_callback_url, "pid": None,
+            "crawl_mode": params.get("crawlMode", "standard"),
+            "params": params,
+            "oom_restart_count": oom_restart_count
+        }
+
+        # --- ATOMIC CLAIM via SET NX ---
+        # For normal starts: use SET NX to atomically prevent duplicate crawl_ids.
+        # For OOM restarts: key already exists with status "restarting_oom", use regular SET.
+        if not is_restart:
+            claimed = await cache_service.set_json_nx(job_key, job_data)
+            if not claimed:
+                logger.warning(f"Crawl job '{crawl_id}' is already running globally (NX failed). Request rejected.")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"A crawl job with ID '{crawl_id}' is already in progress."
+                )
+        else:
+            # OOM restart: overwrite the existing "restarting_oom" key
+            await cache_service.set_json(job_key, job_data)
+
+        # --- CAPACITY CHECKS (with cleanup on rejection) ---
+        # Helper to rollback both NX claim and counter on rejection
+        async def _rollback_claim(decrement_counter: bool = False):
+            if not is_restart:
+                await cache_service.delete_key(job_key)
+                if decrement_counter:
+                    await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+
+        # Check dynamic global limit
         if not is_restart:
             redis_max_global_str = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)
             current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
 
-            # Optimistic increment: atomically claim a slot, then check the limit.
-            # This prevents the TOCTOU race where two concurrent requests both read
-            # count=N-1, both pass the check, and both increment to N+1.
             new_count = await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
 
             if new_count > current_max_global:
-                # Over limit — roll back the optimistic increment and reject
                 await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                await cache_service.delete_key(job_key)
                 logger.warning(f"Global concurrency limit reached ({new_count - 1}/{current_max_global}). Rejecting '{crawl_id}'.")
-                detail_payload = {
-                "error_code": "GLOBAL_CAPACITY_EXCEEDED",
-                "message": "The service has reached its global concurrency limit.",
-                "global_limit": current_max_global,
-                "current_running": new_count - 1
-                }
                 raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=detail_payload
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "error_code": "GLOBAL_CAPACITY_EXCEEDED",
+                        "message": "The service has reached its global concurrency limit.",
+                        "global_limit": current_max_global,
+                        "current_running": new_count - 1
+                    }
                 )
 
         # Local concurrency check for this replica
-        # Bypassed for is_restart=True (OOM relaunch) because the slot is reserved
-        # in local_processes until relaunch completes.
         active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
         if not is_restart and active_local >= settings.MAX_CONCURRENT_CRAWLS:
-            # Roll back the global INCR we claimed above before rejecting
-            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            await _rollback_claim(decrement_counter=True)
             logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'. Global counter rolled back.")
-            detail_payload = {
-                "error_code": "REPLICA_CAPACITY_EXCEEDED",
-                "message": "This service instance is at its maximum capacity.",
-                "replica_capacity": settings.MAX_CONCURRENT_CRAWLS,
-                "rejected_request": {
-                    "crawl_id": crawl_id,
-                    "domain": domain
-                }
-            }
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=detail_payload
+                detail={
+                    "error_code": "REPLICA_CAPACITY_EXCEEDED",
+                    "message": "This service instance is at its maximum capacity.",
+                    "replica_capacity": settings.MAX_CONCURRENT_CRAWLS,
+                    "rejected_request": {"crawl_id": crawl_id, "domain": domain}
+                }
             )
 
-        job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
+        # --- STORAGE SETUP ---
         try:
             os.makedirs(job_storage_path, exist_ok=True)
             logger.info(f"Using storage for crawl_id '{crawl_id}' at '{job_storage_path}'")
         except OSError as e:
+            await _rollback_claim(decrement_counter=True)
             logger.error(f"Failed to create/access storage directory for crawl '{crawl_id}': {e}")
             raise HTTPException(status_code=500, detail="Could not initialize crawl environment.")
 
+        # --- BUILD & LOG COMMAND ---
         command = [
             "node", settings.CRAWLER_EXECUTABLE_PATH,
             f"--domain={domain}", f"--site={start_url}", f"--id={crawl_id}",
@@ -210,7 +228,6 @@ class CrawlerManager:
             if value is not None:
                 command.append(f"--{key}={value}")
 
-        # Mask sensitive params for logging
         safe_command = []
         for arg in command:
             if arg.startswith('--proxyapify='):
@@ -220,32 +237,27 @@ class CrawlerManager:
             else:
                 safe_command.append(arg)
         logger.info(f"Starting crawl '{crawl_id}' with command: {' '.join(safe_command)}")
-        
-        process = await asyncio.create_subprocess_exec(
-            *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            start_new_session=True  # Create new process group for safe cleanup (V3 Logic)
-        )
+
+        # --- SPAWN PROCESS (with cleanup on failure) ---
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                start_new_session=True
+            )
+        except Exception as e:
+            await _rollback_claim(decrement_counter=True)
+            logger.error(f"Failed to spawn crawler process for '{crawl_id}': {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Could not start crawler process.")
+
         self.local_processes[crawl_id] = process
 
-        # Create the initial job state in Redis
-        job_data = {
-            "crawl_id": crawl_id, "status": "running", "domain": domain,
-            "start_url": start_url, "start_time": datetime.utcnow(),
-            "storage_path": job_storage_path,
-            "callback_url": callback_url,
-            "failure_callback_url": failure_callback_url, "pid": process.pid,
-            "crawl_mode": params.get("crawlMode", "standard"), # Persist mode for webhooks logic
-            "params": params, # STORE PARAMS FOR RELAUNCH
-            "oom_restart_count": oom_restart_count # START/TRACK RESTART COUNT
-        }
-        await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
-        
-        # Note: Global counter was already incremented via optimistic increment above
-        # (for non-restart crawls). For is_restart=True, we intentionally skip
-        # incrementing because the slot was preserved from the original OOM'd crawl.
+        # --- PATCH Redis with pid + status: running ---
+        job_data["pid"] = process.pid
+        job_data["status"] = "running"
+        await cache_service.set_json(job_key, job_data)
 
         await self._publish_update(crawl_id, "running")
-        
+
         asyncio.create_task(self._monitor_process(crawl_id, process))
         return crawl_id
 
@@ -935,8 +947,19 @@ class CrawlerManager:
         sanitized_name = domain.replace('.', '-')
 
         # Sort include list to ensure deterministic hash
+        # Include the completion marker timestamp so the cache key changes when the crawl data changes
+        # (e.g., after OOM restart or concurrent processes writing to the same storage path)
         sorted_include = sorted([item.value for item in include])
-        include_hash = hashlib.md5(json.dumps(sorted_include).encode()).hexdigest()
+        marker_ts = ""
+        marker_path = os.path.join(job_storage_path, '_completion_marker.json')
+        if os.path.exists(marker_path):
+            try:
+                with open(marker_path, 'r') as f:
+                    marker_ts = json.loads(f.read()).get("end_timestamp", "")
+            except Exception:
+                pass  # Fall back to empty string — same as current behavior for running jobs
+        hash_input = json.dumps({"include": sorted_include, "end_timestamp": marker_ts})
+        include_hash = hashlib.md5(hash_input.encode()).hexdigest()
         
         # Define the centralized archive path with hash to allow caching of different requests
         archive_base_path = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
