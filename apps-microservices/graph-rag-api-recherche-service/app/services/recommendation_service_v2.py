@@ -22,45 +22,80 @@ logging.basicConfig(
 
 
 # ---------------------------------------------------------------------------
-# Single-pass Cypher Queries — fetch candidates + chars + fournisseur in one call
-# Uses IN clause for chars (no UNWIND cartesian product), scoring done in Python
+# Parallel Cypher Queries — two concurrent queries, no collect(), join in Python
+# Query A: products + fournisseur (DISTINCT, no chars)
+# Query B: flat char rows (no collect, no fournisseur)
+# Both run concurrently via asyncio.gather for max throughput
 # ---------------------------------------------------------------------------
 
-CYPHER_V2_ANCHOR = """
+CYPHER_V2_PRODUCTS_ANCHOR = """
 MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
 WHERE pc.id_source_caracteristique IN $all_cids
   AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
   AND p.est_actif = true
-WITH p, collect({id_source_caracteristique: pc.id_source_caracteristique, id_source_valeur: pc.id_source_valeur, valeur: pc.valeur, valeur_canonique: pc.valeur_canonique, valeur_min_canonique: pc.valeur_min_canonique, valeur_max_canonique: pc.valeur_max_canonique, unite_canonique: pc.unite_canonique, type_donnee: pc.type_donnee, unite: pc.unite, valeur_min: pc.valeur_min, valeur_max: pc.valeur_max}) AS all_chars
-WHERE size(apoc.coll.toSet([c IN all_chars | c.id_source_caracteristique])) >= $min_matching_cids
+WITH DISTINCT p
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-RETURN p PROJECTION_PLACEHOLDER AS product_data,
-       all_chars,
-       {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
+RETURN p.id_produit AS id_produit,
+       f.id_etat AS id_etat, f.id_affichage AS id_affichage,
+       f.typologie AS typologie, f.id_fournisseur AS id_fournisseur
 """
 
-CYPHER_V2_TARGET = """
+CYPHER_V2_CHARS_ANCHOR = """
+MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
+WHERE pc.id_source_caracteristique IN $all_cids
+  AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+  AND p.est_actif = true
+RETURN p.id_produit AS id_produit,
+       pc.id_source_caracteristique AS id_source_caracteristique,
+       pc.id_source_valeur AS id_source_valeur, pc.valeur AS valeur,
+       pc.valeur_canonique AS valeur_canonique, pc.valeur_min_canonique AS valeur_min_canonique,
+       pc.valeur_max_canonique AS valeur_max_canonique, pc.unite_canonique AS unite_canonique,
+       pc.type_donnee AS type_donnee, pc.unite AS unite,
+       pc.valeur_min AS valeur_min, pc.valeur_max AS valeur_max
+"""
+
+CYPHER_V2_PRODUCTS_TARGET = """
 MATCH (p:Produit)
 WHERE p.id = $target_product_id AND p.est_actif = true
-OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-WHERE pc.id_source_caracteristique IN $all_cids
-WITH p, collect({id_source_caracteristique: pc.id_source_caracteristique, id_source_valeur: pc.id_source_valeur, valeur: pc.valeur, valeur_canonique: pc.valeur_canonique, valeur_min_canonique: pc.valeur_min_canonique, valeur_max_canonique: pc.valeur_max_canonique, unite_canonique: pc.unite_canonique, type_donnee: pc.type_donnee, unite: pc.unite, valeur_min: pc.valeur_min, valeur_max: pc.valeur_max}) AS all_chars
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-RETURN p PROJECTION_PLACEHOLDER AS product_data,
-       all_chars,
-       {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
+RETURN p.id_produit AS id_produit,
+       f.id_etat AS id_etat, f.id_affichage AS id_affichage,
+       f.typologie AS typologie, f.id_fournisseur AS id_fournisseur
 """
 
-CYPHER_V2_BY_IDS = """
+CYPHER_V2_CHARS_TARGET = """
+MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
+WHERE p.id = $target_product_id AND p.est_actif = true
+  AND pc.id_source_caracteristique IN $all_cids
+RETURN p.id_produit AS id_produit,
+       pc.id_source_caracteristique AS id_source_caracteristique,
+       pc.id_source_valeur AS id_source_valeur, pc.valeur AS valeur,
+       pc.valeur_canonique AS valeur_canonique, pc.valeur_min_canonique AS valeur_min_canonique,
+       pc.valeur_max_canonique AS valeur_max_canonique, pc.unite_canonique AS unite_canonique,
+       pc.type_donnee AS type_donnee, pc.unite AS unite,
+       pc.valeur_min AS valeur_min, pc.valeur_max AS valeur_max
+"""
+
+CYPHER_V2_PRODUCTS_BY_IDS = """
 MATCH (p:Produit)
 WHERE p.id_produit IN $target_id_produits AND p.est_actif = true
-OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-WHERE pc.id_source_caracteristique IN $all_cids
-WITH p, collect({id_source_caracteristique: pc.id_source_caracteristique, id_source_valeur: pc.id_source_valeur, valeur: pc.valeur, valeur_canonique: pc.valeur_canonique, valeur_min_canonique: pc.valeur_min_canonique, valeur_max_canonique: pc.valeur_max_canonique, unite_canonique: pc.unite_canonique, type_donnee: pc.type_donnee, unite: pc.unite, valeur_min: pc.valeur_min, valeur_max: pc.valeur_max}) AS all_chars
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-RETURN p PROJECTION_PLACEHOLDER AS product_data,
-       all_chars,
-       {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
+RETURN p.id_produit AS id_produit,
+       f.id_etat AS id_etat, f.id_affichage AS id_affichage,
+       f.typologie AS typologie, f.id_fournisseur AS id_fournisseur
+"""
+
+CYPHER_V2_CHARS_BY_IDS = """
+MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
+WHERE p.id_produit IN $target_id_produits AND p.est_actif = true
+  AND pc.id_source_caracteristique IN $all_cids
+RETURN p.id_produit AS id_produit,
+       pc.id_source_caracteristique AS id_source_caracteristique,
+       pc.id_source_valeur AS id_source_valeur, pc.valeur AS valeur,
+       pc.valeur_canonique AS valeur_canonique, pc.valeur_min_canonique AS valeur_min_canonique,
+       pc.valeur_max_canonique AS valeur_max_canonique, pc.unite_canonique AS unite_canonique,
+       pc.type_donnee AS type_donnee, pc.unite AS unite,
+       pc.valeur_min AS valeur_min, pc.valeur_max AS valeur_max
 """
 
 
@@ -502,43 +537,13 @@ def apply_diversity_mmr(
 
 class RecommendationServiceV2:
 
-    # Minimal projection for scoring (only id_produit needed from product node)
-    SCORING_PROJECTION = "{ .id_produit }"
-
-    def _build_full_projection(self, request) -> str:
-        """Full projection for requery/output (includes champs_sortie)."""
-        if request.champs_sortie is not None and len(request.champs_sortie) > 0:
-            champs = list(request.champs_sortie)
-            if "id_produit" not in champs:
-                champs.append("id_produit")
-            if "id_fournisseur" not in champs:
-                champs.append("id_fournisseur")
-            fields = [f".{f}" for f in champs]
-            return f"{{ {', '.join(fields)} }}"
-        return "{.*}"
-
-    def _build_v2_cypher(self, request, target_product_id: Optional[str] = None) -> str:
-        if target_product_id:
-            query = CYPHER_V2_TARGET
-        else:
-            query = CYPHER_V2_ANCHOR
-        # Use minimal projection for scoring — less data over gRPC
-        return query.replace("PROJECTION_PLACEHOLDER", self.SCORING_PROJECTION)
-
-    def _build_v2_cypher_by_ids(self, request) -> str:
-        query = CYPHER_V2_BY_IDS
-        # Requery uses full projection for output
-        projection = self._build_full_projection(request)
-        return query.replace("PROJECTION_PLACEHOLDER", projection)
-
-    MIN_MATCHING_CIDS_DEFAULT = 1  # Minimum distinct CIDs a product must match
+    MIN_MATCHING_CIDS_DEFAULT = 1
 
     def _build_v2_params(self, request, flat_filters, target_product_id=None, target_id_produits=None) -> Dict:
         all_cids = [f["cid"] for f in flat_filters]
         params = {
             "all_cids": all_cids,
             "id_categorie": str(request.id_categorie) if request.id_categorie is not None else None,
-            "min_matching_cids": getattr(request, "min_matching_cids", self.MIN_MATCHING_CIDS_DEFAULT),
         }
         if target_product_id:
             params["target_product_id"] = str(f"id_produit_{request.id_produit}") if request.id_produit else None
@@ -546,33 +551,85 @@ class RecommendationServiceV2:
             params["target_id_produits"] = target_id_produits
         return params
 
-    def _score_raw_results(
+    def _get_query_pair(self, target_product_id=None, by_ids=False):
+        """Return (products_query, chars_query) pair based on mode."""
+        if by_ids:
+            return CYPHER_V2_PRODUCTS_BY_IDS, CYPHER_V2_CHARS_BY_IDS
+        elif target_product_id:
+            return CYPHER_V2_PRODUCTS_TARGET, CYPHER_V2_CHARS_TARGET
+        else:
+            return CYPHER_V2_PRODUCTS_ANCHOR, CYPHER_V2_CHARS_ANCHOR
+
+    async def _parallel_fetch_and_score(
         self,
-        raw_results: List[Dict],
+        request,
         flat_filters: List[Dict],
         scoring_params: Dict,
-        user_id_pays: Optional[str],
-        user_dept: Optional[str],
-        user_typologie: Optional[str],
-        id_categorie: Optional[str],
-    ) -> List[Dict]:
-        """Score all raw results from a single-pass Cypher query."""
+        target_product_id: Optional[str] = None,
+        target_id_produits: Optional[List[str]] = None,
+    ) -> Tuple[List[Dict], float, float]:
+        """
+        Run products + chars queries in parallel, join in Python, score.
+        Returns (scored_products, fetch_time, score_time).
+        """
+        products_q, chars_q = self._get_query_pair(target_product_id, by_ids=bool(target_id_produits))
+        params = self._build_v2_params(request, flat_filters, target_product_id, target_id_produits)
+
+        # Fire both queries concurrently
+        fetch_start = time.perf_counter()
+        products_raw, chars_raw = await asyncio.gather(
+            clients.execute_cypher_async(products_q, params),
+            clients.execute_cypher_async(chars_q, params),
+        )
+        fetch_time = time.perf_counter() - fetch_start
+        logging.warning(
+            "[V2-TIMING] parallel_fetch: %.3fs (products=%d, char_rows=%d)",
+            fetch_time, len(products_raw or []), len(chars_raw or []),
+        )
+
+        if not products_raw:
+            return [], fetch_time, 0.0
+
+        # Join: group chars by id_produit, then by cid
+        score_start = time.perf_counter()
+        chars_by_product = defaultdict(lambda: defaultdict(list))
+        for row in (chars_raw or []):
+            pid = str(row.get("id_produit", ""))
+            cid = row.get("id_source_caracteristique", "")
+            chars_by_product[pid][cid].append(row)
+
+        # Build product map
+        user_meta = request.metadonnee_utilisateurs
+        user_cp = user_meta.cp if user_meta else None
+        user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
+        user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
+        user_typologie = user_meta.typologie if user_meta else None
+        id_categorie = str(request.id_categorie) if request.id_categorie else None
+        min_cids = getattr(request, "min_matching_cids", self.MIN_MATCHING_CIDS_DEFAULT)
+
         scored = []
-        for row in (raw_results or []):
-            # Group flat all_chars by cid for score_product
-            all_chars = row.get("all_chars", [])
-            chars_by_cid = defaultdict(list)
-            for pc in all_chars:
-                cid = pc.get("id_source_caracteristique", "")
-                chars_by_cid[cid].append(pc)
+        for prod in products_raw:
+            pid = str(prod.get("id_produit", ""))
+            product_chars = chars_by_product.get(pid, {})
+
+            # Apply min_matching_cids filter
+            if len(product_chars) < min_cids:
+                continue
+
             characteristics = [
                 {"cid": cid, "matched_nodes": nodes}
-                for cid, nodes in chars_by_cid.items()
+                for cid, nodes in product_chars.items()
             ]
+            info_soc = {
+                "id_etat": prod.get("id_etat"),
+                "id_affichage": prod.get("id_affichage"),
+                "typologie": prod.get("typologie"),
+                "id_fournisseur": prod.get("id_fournisseur"),
+            }
             raw = {
-                "product_data": row.get("product_data", {}),
+                "product_data": {"id_produit": pid},
                 "characteristics": characteristics,
-                "info_soc": row.get("info_soc", {}),
+                "info_soc": info_soc,
             }
             result = self._score_single_product(
                 raw, flat_filters, scoring_params,
@@ -580,7 +637,14 @@ class RecommendationServiceV2:
             )
             if result is not None:
                 scored.append(result)
-        return scored
+
+        score_time = time.perf_counter() - score_start
+        logging.warning(
+            "[V2-TIMING] python_scoring: %.3fs (%d products, %d scored)",
+            score_time, len(products_raw), len(scored),
+        )
+
+        return scored, fetch_time, score_time
 
     def _score_single_product(
         self,
@@ -745,45 +809,20 @@ class RecommendationServiceV2:
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
 
-        # 2. Single-pass fetch (candidates + chars + fournisseur in one query)
-        cypher = self._build_v2_cypher(request, target_product_id)
-        params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
-
+        # 2. Parallel fetch (products + chars concurrently) + score in Python
         try:
-            fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_async(cypher, params)
-            fetch_time = time.perf_counter() - fetch_start
-            logging.warning(
-                "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
-                fetch_time, len(raw_results) if raw_results else 0,
+            scored, fetch_time, score_time = await self._parallel_fetch_and_score(
+                request, flat_filters, scoring_params,
+                target_product_id=target_product_id,
             )
 
-            if not raw_results:
+            if not scored:
                 return MatchingResponse(
                     top_produit=[], liste_produit=[],
                     temps_de_traitement=time.perf_counter() - start_time,
                 )
 
-            # 3. Score all products in Python
-            user_meta = request.metadonnee_utilisateurs
-            user_cp = user_meta.cp if user_meta else None
-            user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
-            user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
-            user_typologie = user_meta.typologie if user_meta else None
-            id_categorie = str(request.id_categorie) if request.id_categorie else None
-
-            score_start = time.perf_counter()
-            scored = self._score_raw_results(
-                raw_results, flat_filters, scoring_params,
-                user_id_pays, user_dept, user_typologie, id_categorie,
-            )
-            score_time = time.perf_counter() - score_start
-            logging.warning(
-                "[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)",
-                score_time, len(raw_results), len(scored),
-            )
-
-            # 4. Diversity + top_p selection
+            # 3. Diversity + top_p selection
             diversity_start = time.perf_counter()
             top_p_raw, liste_raw = apply_diversity_mmr(
                 scored,
@@ -852,45 +891,22 @@ class RecommendationServiceV2:
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
 
-        # 2. Single-pass fetch
-        cypher = self._build_v2_cypher(request, target_product_id)
-        params = self._build_v2_params(request, flat_filters, target_product_id=target_product_id)
-
+        # 2. Parallel fetch + score
         try:
-            fetch_start = time.perf_counter()
-            raw_results = await clients.execute_cypher_async(cypher, params)
-            fetch_time = time.perf_counter() - fetch_start
-            logging.warning(
-                "[V2-TIMING] cypher_fetch: %.3fs (%d results)",
-                fetch_time, len(raw_results) if raw_results else 0,
+            scored, fetch_time, score_time = await self._parallel_fetch_and_score(
+                request, flat_filters, scoring_params,
+                target_product_id=target_product_id,
             )
 
-            if not raw_results:
+            if not scored:
                 return MatchingResponse(
                     top_produit=[], liste_produit=[],
                     temps_de_traitement=time.perf_counter() - start_time,
                 )
 
-            # 3. Score all products in Python
-            user_meta = request.metadonnee_utilisateurs
-            user_cp = user_meta.cp if user_meta else None
-            user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
-            user_id_pays = str(user_meta.id_pays) if user_meta and user_meta.id_pays else None
-            user_typologie = user_meta.typologie if user_meta else None
             id_categorie = str(request.id_categorie) if request.id_categorie else None
 
-            score_start = time.perf_counter()
-            scored = self._score_raw_results(
-                raw_results, flat_filters, scoring_params,
-                user_id_pays, user_dept, user_typologie, id_categorie,
-            )
-            score_time = time.perf_counter() - score_start
-            logging.warning(
-                "[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)",
-                score_time, len(raw_results), len(scored),
-            )
-
-            # 4. Diversity + top_p
+            # 3. Diversity + top_p
             diversity_start = time.perf_counter()
             top_p_raw, liste_raw = apply_diversity_mmr(
                 scored,
@@ -936,19 +952,10 @@ class RecommendationServiceV2:
             if llm_selected_ids:
                 requery_start = time.perf_counter()
                 try:
-                    # Single-pass re-fetch by IDs
-                    requery_cypher = self._build_v2_cypher_by_ids(request)
-                    requery_params = self._build_v2_params(
-                        request, flat_filters, target_id_produits=llm_selected_ids
-                    )
-                    requery_results = await clients.execute_cypher_async(
-                        requery_cypher, requery_params
-                    )
-
-                    # Score re-fetched products
-                    requery_scored_list = self._score_raw_results(
-                        requery_results or [], flat_filters, scoring_params,
-                        user_id_pays, user_dept, user_typologie, id_categorie,
+                    # Parallel re-fetch + score by IDs
+                    requery_scored_list, _, _ = await self._parallel_fetch_and_score(
+                        request, flat_filters, scoring_params,
+                        target_id_produits=llm_selected_ids,
                     )
                     requery_scored = {r["id_produit"]: r for r in requery_scored_list}
 
