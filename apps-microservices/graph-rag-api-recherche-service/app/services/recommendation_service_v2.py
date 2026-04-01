@@ -509,7 +509,8 @@ def apply_diversity_mmr(
 
 class RecommendationServiceV2:
 
-    BATCH_SIZE = 500  # Products per characteristic-fetch batch
+    BATCH_SIZE = 150  # Products per characteristic-fetch batch
+    MAX_CONCURRENT = 5  # Max concurrent Cypher fetch tasks
 
     def _build_v2_projection(self, request) -> str:
         if request.champs_sortie is not None and len(request.champs_sortie) > 0:
@@ -565,12 +566,12 @@ class RecommendationServiceV2:
         id_categorie: Optional[str],
     ) -> List[Dict]:
         """
-        Streaming pipeline: fetch characteristics in batches and score each batch
-        concurrently as results arrive. Uses asyncio.Queue producer-consumer pattern.
+        Streaming pipeline: fetch characteristics in batches (max MAX_CONCURRENT
+        concurrent gRPC calls) and score each batch immediately as it completes.
         """
         all_cids = [f["cid"] for f in flat_filters]
         scored_results: List[Dict] = []
-        queue: asyncio.Queue = asyncio.Queue()
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
 
         # Index candidates by id_produit for fast lookup
         candidate_map = {}
@@ -578,64 +579,50 @@ class RecommendationServiceV2:
             pid = str(c.get("product_data", {}).get("id_produit", ""))
             candidate_map[pid] = c
 
-        # Producer: fetch characteristics in batches, push to queue
-        async def producer():
-            product_ids = list(candidate_map.keys())
-            batch_tasks = []
-            for i in range(0, len(product_ids), self.BATCH_SIZE):
-                batch_ids = product_ids[i : i + self.BATCH_SIZE]
-                batch_tasks.append(self._fetch_chars_batch(batch_ids, all_cids))
+        async def fetch_and_score_batch(batch_ids: List[str]) -> List[Dict]:
+            """Fetch chars for a batch, score immediately. Throttled by semaphore."""
+            async with semaphore:
+                results = await clients.execute_cypher(
+                    CYPHER_V2_FETCH_CHARS,
+                    {"product_ids": batch_ids, "all_cids": all_cids},
+                )
 
-            # Fire all batch fetches concurrently
-            batch_results = await asyncio.gather(*batch_tasks)
-
-            for char_map in batch_results:
-                await queue.put(char_map)
-            await queue.put(None)  # Sentinel
-
-        # Consumer: score products as batches arrive
-        async def consumer():
-            while True:
-                char_map = await queue.get()
-                if char_map is None:
-                    break
-                for pid, characteristics in char_map.items():
+                batch_scored = []
+                for row in (results or []):
+                    pid = str(row.get("id_produit", ""))
                     candidate = candidate_map.get(pid)
                     if not candidate:
                         continue
                     raw = {
                         "product_data": candidate.get("product_data", {}),
-                        "characteristics": characteristics,
+                        "characteristics": row.get("characteristics", []),
                         "info_soc": candidate.get("info_soc", {}),
                     }
                     result = self._score_single_product(
-                        raw,
-                        flat_filters,
-                        scoring_params,
-                        user_id_pays,
-                        user_dept,
-                        user_typologie,
-                        id_categorie,
+                        raw, flat_filters, scoring_params,
+                        user_id_pays, user_dept, user_typologie, id_categorie,
                     )
                     if result is not None:
-                        scored_results.append(result)
+                        batch_scored.append(result)
+                return batch_scored
 
-        await asyncio.gather(producer(), consumer())
-        return scored_results
+        # Split into batches, fire all (semaphore limits to MAX_CONCURRENT)
+        product_ids = list(candidate_map.keys())
+        tasks = []
+        for i in range(0, len(product_ids), self.BATCH_SIZE):
+            batch_ids = product_ids[i:i + self.BATCH_SIZE]
+            tasks.append(fetch_and_score_batch(batch_ids))
 
-    async def _fetch_chars_batch(
-        self, product_ids: List[str], all_cids: List[str]
-    ) -> Dict[str, List[Dict]]:
-        """Fetch characteristics for a batch of products. Returns {id_produit: characteristics}."""
-        results = await clients.execute_cypher(
-            CYPHER_V2_FETCH_CHARS,
-            {"product_ids": product_ids, "all_cids": all_cids},
+        logging.warning(
+            "[V2-TIMING] streaming %d products in %d batches (batch_size=%d, max_concurrent=%d)",
+            len(product_ids), len(tasks), self.BATCH_SIZE, self.MAX_CONCURRENT,
         )
-        char_map = {}
-        for row in results or []:
-            pid = str(row.get("id_produit", ""))
-            char_map[pid] = row.get("characteristics", [])
-        return char_map
+
+        batch_results = await asyncio.gather(*tasks)
+        for batch in batch_results:
+            scored_results.extend(batch)
+
+        return scored_results
 
     def _score_single_product(
         self,
