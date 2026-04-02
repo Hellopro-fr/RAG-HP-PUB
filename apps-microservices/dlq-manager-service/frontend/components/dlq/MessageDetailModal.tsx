@@ -168,7 +168,7 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
                     />
                   ) : (
                     <div className="p-4 border border-gris-blanc rounded-lg bg-clair-4 max-h-48 overflow-auto">
-                      <pre className="text-xs text-noir-primary whitespace-pre-wrap break-words">
+                      <pre className="font-mono text-xs text-noir-primary whitespace-pre-wrap break-words">
                         {JSON.stringify(message._source.original_payload, null, 2)}
                       </pre>
                     </div>
