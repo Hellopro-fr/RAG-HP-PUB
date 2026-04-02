@@ -518,7 +518,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # Utiliser GeminiProvider
         gemini = GeminiProvider(
             model=gemini_model,
-            thinking_level="medium"
+            thinking_level="low"
         )
         
         llm_result = await gemini.chat(final_prompt)
