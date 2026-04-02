@@ -1,0 +1,7 @@
+{
+  "name": "mcp-semrush-service",
+  "private": true,
+  "dependencies": {
+    "semrush-mcp": "latest"
+  }
+}

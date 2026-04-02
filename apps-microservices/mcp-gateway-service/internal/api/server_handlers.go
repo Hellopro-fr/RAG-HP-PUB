@@ -19,11 +19,12 @@ var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 // Handler holds dependencies for the REST API.
 type Handler struct {
-	repo       *repository.ServerRepo
-	tokenRepo  *repository.TokenRepo
-	tokenCache TokenCache
-	gw         *gateway.Gateway
-	registry   *gateway.Registry
+	repo              *repository.ServerRepo
+	tokenRepo         *repository.TokenRepo
+	tokenCache        TokenCache
+	gw                *gateway.Gateway
+	registry          *gateway.Registry
+	allowInternalURLs bool
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -32,8 +33,8 @@ type TokenCache interface {
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry) *Handler {
-	return &Handler{repo: repo, gw: gw, registry: registry}
+func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry, allowInternalURLs bool) *Handler {
+	return &Handler{repo: repo, gw: gw, registry: registry, allowInternalURLs: allowInternalURLs}
 }
 
 // SetTokenRepo sets the token repository for token CRUD operations.
@@ -56,7 +57,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// SSRF protection: validate that the URL does not point to internal/private ranges
-	if err := urlvalidation.ValidateServerURL(req.URL); err != nil {
+	if err := urlvalidation.ValidateServerURL(req.URL, h.allowInternalURLs); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid server URL: " + err.Error()})
 		return
 	}
@@ -233,7 +234,7 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.URL != nil {
 		// SSRF protection: validate that the new URL does not point to internal/private ranges
-		if err := urlvalidation.ValidateServerURL(*req.URL); err != nil {
+		if err := urlvalidation.ValidateServerURL(*req.URL, h.allowInternalURLs); err != nil {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid server URL: " + err.Error()})
 			return
 		}
