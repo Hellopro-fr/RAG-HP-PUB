@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import router as api_router
+from app.api import router as api_router, unhandled_exception_handler
 from app.es_client import get_es_client
 
 
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="DLQ Manager Service", lifespan=lifespan)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 # Internal service only — not exposed publicly
 app.add_middleware(

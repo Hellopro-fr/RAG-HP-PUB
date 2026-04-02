@@ -17,8 +17,7 @@ from .models import (
 router = APIRouter()
 
 
-@router.exception_handler(Exception)
-async def _unhandled_exception_handler(request: Request, exc: Exception):
+async def unhandled_exception_handler(request: Request, exc: Exception):
     """Centralized error logging for all unhandled exceptions in API routes."""
     print(f"--- UNHANDLED ERROR IN {request.method} {request.url.path} ---")
     print(traceback.format_exc())
