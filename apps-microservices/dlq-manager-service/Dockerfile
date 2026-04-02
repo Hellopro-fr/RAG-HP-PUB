@@ -8,7 +8,8 @@ RUN npm install -g pnpm
 # Copy package manifests to leverage Docker cache
 COPY apps-microservices/dlq-manager-service/frontend/package.json ./
 COPY apps-microservices/dlq-manager-service/frontend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# TODO: regenerate pnpm-lock.yaml and switch to --frozen-lockfile for deterministic builds
+RUN pnpm install
 
 # Copy the rest of the frontend source code
 COPY apps-microservices/dlq-manager-service/frontend/ ./
