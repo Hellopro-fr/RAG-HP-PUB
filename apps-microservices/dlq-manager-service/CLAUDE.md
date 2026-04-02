@@ -23,12 +23,12 @@ Dead Letter Queue manager for browsing, searching, and requeuing failed messages
 ### Backend (`backend/`)
 | Action | Command |
 |--------|---------|
-| Run | `uvicorn main:app --host 0.0.0.0 --port 8560` |
+| Run | `uvicorn main:app --host 0.0.0.0 --port 8560` (container) / accessible on host port **8585** |
 | Deps | `pip install -r requirements.txt` |
 
 ## Docker
 
-- Port: **8560**
+- Port: **8585** (host) / **8560** (container)
 - Frontend built as static export, served by FastAPI `StaticFiles`
 - Backend runs Uvicorn with FastAPI
 

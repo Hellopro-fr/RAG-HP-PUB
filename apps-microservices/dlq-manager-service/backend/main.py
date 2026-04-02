@@ -1,5 +1,5 @@
-import os
 import asyncio
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -14,7 +14,7 @@ app.include_router(api_router, prefix="/api")
 
 # Define the directory where the built React app's static files are located.
 # The Dockerfile copies the entire 'build' folder into this 'static' directory.
-static_dir = os.path.join(os.path.dirname(__file__), "static")
+static_dir = Path(__file__).parent / "static"
 
 # Mount the static files at the root.
 # This will catch all routes not handled by the API router above.

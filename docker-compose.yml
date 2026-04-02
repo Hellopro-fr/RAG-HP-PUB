@@ -1168,7 +1168,7 @@ services:
     profiles: ["disabled"]
     restart: unless-stopped
     ports:
-      - "8560:8560"
+      - "8585:8560"
     env_file:
       - .env
     environment:
