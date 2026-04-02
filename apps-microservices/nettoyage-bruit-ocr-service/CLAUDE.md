@@ -48,6 +48,7 @@ nettoyage-bruit-ocr-service/
 - DLQ sends the correct individual message body (not hardcoded `batch_bodies[0]`).
 - Reconnection loop restored in `main.py` (was commented out).
 - Docker: non-root user, `--no-cache-dir`, `.dockerignore`.
+- Structured logging via `common_utils.logging.setup_logging()` (no `print()`).
 
 ## Dependencies on Other Services
 

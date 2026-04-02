@@ -18,6 +18,8 @@ from queue import Queue
 import threading
 import time
 
+import logging
+
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -26,7 +28,10 @@ from pydantic import BaseModel
 import torch
 import fitz  # PyMuPDF
 from PIL import Image
-from tqdm import tqdm
+
+LOG_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+logger = logging.getLogger("deepseek-ocr")
 
 # Add current directory to Python path
 sys.path.insert(0, '/app/DeepSeek-OCR-vllm')
@@ -125,7 +130,7 @@ class DynamicBatchProcessor:
             request_id=request_id
         )
         
-        print(f"[DEBUG] Request {request_id} added to queue with {len(request_items)} items")
+        logger.debug("Request %s added to queue with %d items", request_id, len(request_items))
         await self.queue.put(batch_req)
         
         # Wait for result
@@ -134,7 +139,7 @@ class DynamicBatchProcessor:
     
     async def process_loop(self):
         """Main processing loop - collects and batches requests"""
-        print("[DEBUG] Dynamic batch processor started")
+        logger.debug("Dynamic batch processor started")
         
         while True:
             try:
@@ -169,15 +174,13 @@ class DynamicBatchProcessor:
                     except asyncio.TimeoutError:
                         break
                 
-                print(f"[DEBUG] Processing batch: {len(batch_requests)} requests, {total_items} total items")
+                logger.debug("Processing batch: %d requests, %d total items", len(batch_requests), total_items)
                 
                 # Process the batch
                 await self._process_batch(batch_requests)
                 
             except Exception as e:
-                print(f"[ERROR] Batch processor error: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error("Batch processor error: %s", e, exc_info=True)
     
     async def _process_batch(self, batch_requests: List[BatchRequest]):
         """Process a collected batch"""
@@ -189,7 +192,7 @@ class DynamicBatchProcessor:
             item_counts.append(len(req.request_items))
             all_items.extend(req.request_items)
         
-        print(f"[DEBUG] Sending {len(all_items)} items to vLLM")
+        logger.debug("Sending %d items to vLLM", len(all_items))
         
         try:
             # Run vLLM in executor
@@ -210,10 +213,10 @@ class DynamicBatchProcessor:
                 # Set result
                 if not req.future.done():
                     req.future.set_result(req_results)
-                    print(f"[DEBUG] Request {req.request_id} completed with {len(req_results)} results")
+                    logger.debug("Request %s completed with %d results", req.request_id, len(req_results))
             
         except Exception as e:
-            print(f"[ERROR] vLLM processing failed: {e}")
+            logger.error("vLLM processing failed: %s", e, exc_info=True)
             # Propagate error to all futures
             for req in batch_requests:
                 if not req.future.done():
@@ -221,7 +224,7 @@ class DynamicBatchProcessor:
     
     def _vllm_generate(self, request_items: List[dict]) -> List[str]:
         """Synchronous vLLM generation (runs in thread pool)"""
-        print(f"[DEBUG] vLLM generating {len(request_items)} items")
+        logger.debug("vLLM generating %d items", len(request_items))
         
         outputs = llm.generate(request_items, sampling_params=sampling_params)
         
@@ -241,7 +244,7 @@ class DynamicBatchProcessor:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
-        print(f"[DEBUG] vLLM generation complete: {len(results)} results")
+        logger.debug("vLLM generation complete: %d results", len(results))
         return results
 
 # Global batch processor
@@ -252,7 +255,7 @@ def initialize_model():
     global llm, sampling_params, processor
     
     if llm is None:
-        print("Initializing DeepSeek-OCR model...")
+        logger.info("Initializing DeepSeek-OCR model...")
         
         # Initialize processor once
         processor = DeepseekOCRProcessor()
@@ -285,7 +288,7 @@ def initialize_model():
             include_stop_str_in_output=True,
         )
         
-        print("Model initialization complete!")
+        logger.info("Model initialization complete!")
 
 def pdf_to_images_high_quality(pdf_data: bytes, dpi: int = 144) -> List[Image.Image]:
     """Convert PDF bytes to high-quality PIL Images"""
@@ -335,7 +338,7 @@ def prepare_image_request(image: Image.Image, prompt: str) -> dict:
 
 async def process_images(images: List[Image.Image], prompt: str = PROMPT) -> List[str]:
     """Process multiple images using dynamic batching"""
-    print(f"[DEBUG] process_images called with {len(images)} images")
+    logger.debug("process_images called with %d images", len(images))
     
     if not images:
         return []
@@ -348,12 +351,12 @@ async def process_images(images: List[Image.Image], prompt: str = PROMPT) -> Lis
     ]
     request_items = await asyncio.gather(*prepare_tasks)
     
-    print(f"[DEBUG] All {len(request_items)} requests prepared")
+    logger.debug("All %d requests prepared", len(request_items))
     
     # Step 2: Send to dynamic batch processor
     results = await batch_processor.add_request(request_items)
     
-    print(f"[DEBUG] Received {len(results)} results")
+    logger.debug("Received %d results", len(results))
     return results
 
 @app.on_event("startup")
@@ -371,7 +374,7 @@ async def startup_event():
     
     # Start background processing loop
     asyncio.create_task(batch_processor.process_loop())
-    print("[INFO] Dynamic batch processor started")
+    logger.info("Dynamic batch processor started")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -401,7 +404,7 @@ async def health_check():
 async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[str] = Form(None)):
     """Process a single image file with optional custom prompt"""
     try:
-        print(f"[DEBUG] Image endpoint called for file: {file.filename}")
+        logger.debug("Image endpoint called for file: %s", file.filename)
 
         # Read image data
         image_data = await file.read()
@@ -414,7 +417,7 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
         
         # Convert to PIL Image
         image = Image.open(io.BytesIO(image_data)).convert('RGB')
-        print(f"[DEBUG] Image size: {image.size}")
+        logger.debug("Image size: %s", image.size)
         
         # Use provided prompt or default
         use_prompt = prompt if prompt else PROMPT
@@ -427,7 +430,7 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
         image.close()
         del image
         
-        print(f"[DEBUG] OCR complete, output length: {len(result)}")
+        logger.debug("OCR complete, output length: %d", len(result))
         
         return OCRResponse(
             success=True,
@@ -436,9 +439,7 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
         )
         
     except Exception as e:
-        print(f"[ERROR] Image endpoint failed: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Image endpoint failed: %s", e, exc_info=True)
         return OCRResponse(
             success=False,
             error=str(e)
@@ -448,11 +449,11 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
 async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[str] = Form(None)):
     """Process a PDF file with optional custom prompt"""
     try:
-        print(f"[DEBUG] PDF endpoint called for file: {file.filename}")
+        logger.debug("PDF endpoint called for file: %s", file.filename)
         
         # Read PDF data
         pdf_data = await file.read()
-        print(f"[DEBUG] Read {len(pdf_data)} bytes of PDF data")
+        logger.debug("Read %d bytes of PDF data", len(pdf_data))
 
         if len(pdf_data) > MAX_UPLOAD_SIZE_BYTES:
             return BatchOCRResponse(success=False, results=[], total_pages=0, filename=file.filename,
@@ -465,7 +466,7 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         # Convert PDF to images
         loop = asyncio.get_event_loop()
         images = await loop.run_in_executor(cpu_executor, pdf_to_images_high_quality, pdf_data, 144)
-        print(f"[DEBUG] Converted PDF to {len(images)} images")
+        logger.debug("Converted PDF to %d images", len(images))
         
         if not images:
             return BatchOCRResponse(
@@ -500,7 +501,7 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
             for i, result in enumerate(results_text)
         ]
         
-        print(f"[DEBUG] PDF processing complete: {len(results)} pages")
+        logger.debug("PDF processing complete: %d pages", len(results))
         return BatchOCRResponse(
             success=True,
             results=results,
@@ -509,9 +510,7 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         )
         
     except Exception as e:
-        print(f"[ERROR] PDF endpoint failed: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("PDF endpoint failed: %s", e, exc_info=True)
         return BatchOCRResponse(
             success=False,
             results=[OCRResponse(success=False, error=str(e))],
@@ -552,7 +551,7 @@ async def process_batch_endpoint(files: List[UploadFile] = File(...), prompt: Op
     return {"success": True, "results": results}
 
 if __name__ == "__main__":
-    print("Starting DeepSeek-OCR API server...")
+    logger.info("Starting DeepSeek-OCR API server...")
     uvicorn.run(
         "start_server:app",
         host="0.0.0.0",

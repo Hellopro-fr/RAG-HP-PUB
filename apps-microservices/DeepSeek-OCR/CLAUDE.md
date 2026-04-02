@@ -53,6 +53,7 @@ DeepSeek-OCR/
 - `CUDA_VISIBLE_DEVICES` read from env with fallback to `'0'` (no longer hardcoded override).
 - `eval()` replaced by `ast.literal_eval()` in enhanced client scripts (prevents RCE from crafted model output).
 - Docker: non-root user after build, `.dockerignore`.
+- Structured logging via Python `logging` module (no `print()`). Logger name: `deepseek-ocr`.
 
 ## Dependencies on Other Services
 
