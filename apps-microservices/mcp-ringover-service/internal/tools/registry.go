@@ -39,6 +39,7 @@ func NewRegistry(clients *Clients) *Registry {
 
 	r.register("get_calls", getCallsDescription, getCallsInputSchema, handleGetCalls)
 	r.register("get_call_details", getCallDetailsDescription, getCallDetailsInputSchema, handleGetCallDetails)
+	r.register("get_empower_call_uuid", getEmpowerCallUUIDDescription, getEmpowerCallUUIDInputSchema, handleGetEmpowerCallUUID)
 	r.register("get_call_transcription", getCallTranscriptionDescription, getCallTranscriptionInputSchema, handleGetCallTranscription)
 	r.register("get_call_summary", getCallSummaryDescription, getCallSummaryInputSchema, handleGetCallSummary)
 	r.register("get_call_moments", getCallMomentsDescription, getCallMomentsInputSchema, handleGetCallMoments)

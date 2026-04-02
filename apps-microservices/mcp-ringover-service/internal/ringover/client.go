@@ -29,9 +29,18 @@ func NewClient(baseURL, apiKey string) *Client {
 
 // doGet performs an authenticated GET request and returns the raw JSON body.
 func (c *Client) doGet(ctx context.Context, path string) (json.RawMessage, error) {
+	return c.doRequest(ctx, http.MethodGet, path, nil)
+}
+
+// doPost performs an authenticated POST request with an empty body.
+func (c *Client) doPost(ctx context.Context, path string) (json.RawMessage, error) {
+	return c.doRequest(ctx, http.MethodPost, path, nil)
+}
+
+func (c *Client) doRequest(ctx context.Context, method, path string, _ []byte) (json.RawMessage, error) {
 	url := c.baseURL + path
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -67,6 +76,14 @@ func (c *Client) GetCalls(ctx context.Context, limitCount int) (json.RawMessage,
 func (c *Client) GetCallDetails(ctx context.Context, callID string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/calls/%s", callID)
 	return c.doGet(ctx, path)
+}
+
+// GetEmpowerCallUUID converts a Ringover channel_id to an Empower calluuid.
+// Requires Empower to be enabled on the API key.
+// Ringover API: POST /public/empower/platform/{platformName}/channel/{channelID}
+func (c *Client) GetEmpowerCallUUID(ctx context.Context, platformName, channelID string) (json.RawMessage, error) {
+	path := fmt.Sprintf("/public/empower/platform/%s/channel/%s", platformName, channelID)
+	return c.doPost(ctx, path)
 }
 
 // GetCallTranscription retrieves the transcription for a call.
