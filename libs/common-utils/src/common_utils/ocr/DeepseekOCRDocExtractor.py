@@ -105,10 +105,9 @@ class DeepseekOCRDocExtractor:
         
         if page_count > self.max_pdf_pages:
             error_msg = (
-                f"Le fichier '{filename}' contient {page_count} pages, "
-                f"ce qui dépasse la limite autorisée de {self.max_pdf_pages} pages."
+                f"Contient {page_count} pages, limite autorisee: {self.max_pdf_pages}"
             )
-            logger.warning(error_msg)
+            logger.warning("PDF %s: %s", filename, error_msg)
             raise ValueError(error_msg)
         
         logger.info(f"Validation réussie pour '{filename}': {page_count} page(s)")
@@ -319,34 +318,38 @@ class DeepseekOCRDocExtractor:
         response = await self.extract_from_urls([url], prompt) 
         return response
     
-    def get_clean_result(self,response: Dict) -> Dict:
+    def get_clean_result(self, response: Dict) -> Dict:
         res_dict = {}
 
-        if response.get('success') and response.get('results'):
-  
-            for results in response['results']:
+        if not response.get('success'):
+            error_msg = response.get('error', 'Unknown OCR error')
+            logger.warning("OCR response success=false: %s", error_msg)
+            return res_dict
 
-                texts = []
-                
-                filename = results['filename']
+        if not response.get('results'):
+            return res_dict
 
-                if 'results' in results.get('result', {}).keys():
-                    for res in results['result']['results']:
-                        texts.append(res["result"])
-                else:
-                    texts.append(results['result']['result'])
+        for results in response['results']:
+            texts = []
+            filename = results['filename']
 
+            if 'results' in results.get('result', {}).keys():
+                for res in results['result']['results']:
+                    # Guard against None results (blank pages, unreadable scans)
+                    texts.append(res["result"] if res["result"] is not None else "")
+            else:
+                page_result = results['result']['result']
+                texts.append(page_result if page_result is not None else "")
 
-                if "total_pages" in results.get('result', {}):
-                    total_pages = results['result']['total_pages']
-                else:
-                    total_pages = 1
+            if "total_pages" in results.get('result', {}):
+                total_pages = results['result']['total_pages']
+            else:
+                total_pages = 1
 
-
-                res_dict[filename] = {
-                  "text" : " ".join(texts),
-                  "total_pages": total_pages  
-                }
+            res_dict[filename] = {
+                "text": " ".join(texts),
+                "total_pages": total_pages
+            }
 
         return res_dict
 

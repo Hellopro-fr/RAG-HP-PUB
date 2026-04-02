@@ -58,4 +58,4 @@ src/common_utils/
 - **DLQProperties**: `create_dlq_headers()` now uses `repr(error)` for richer error messages in DLQ headers.
 - **MilvusDocumentCrud / MilvusPjCrud**: `_ensure_connected()` uses `utility.list_collections()` RPC health check instead of unreliable `has_connection()`. Expression injection prevented via input sanitization in `get_document()`/`get_pj()` and type validation in `delete_document()`/`delete_pj()`.
 - **MilvusPjCrud**: `update_pj()` returns serializable `"updated"` string instead of raw `MutationResult`.
-- **DeepseekOCRDocExtractor**: HTTP timeout now uses `self.timeout` (default 300s) instead of `None` (unbounded).
+- **DeepseekOCRDocExtractor**: HTTP timeout now uses `self.timeout` (default 300s) instead of `None` (unbounded). `get_clean_result()` guards against `None` page results (blank pages). `_validate_pdf_page_count()` no longer includes filename in the `ValueError` message (caller has it).

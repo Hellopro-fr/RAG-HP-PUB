@@ -24,7 +24,6 @@ app/
     consumer.py        # Batch consumer (size=10, timeout=0.5s), ACK-early strategy, DLQ/retry
     publisher.py       # Async publisher to 'processed_data_exchange'
   testmanuel.py        # Manual test script
-entrypoint.sh
 Dockerfile
 requirements.txt
 ```
@@ -47,6 +46,12 @@ requirements.txt
 - OCR HTTP timeout: configurable via `DeepseekOCRDocExtractor(timeout=N)` (default 300s, was unbounded)
 - Docker: non-root user, `--no-cache-dir`, `--no-install-recommends` for LibreOffice, `.dockerignore`
 - `entrypoint.sh` removed (was a dead file with conflicting runtime topology)
+- **Three-status result model**: `success` (publish downstream), `error` (permanent → DLQ), `transient_error` (retry up to MAX_RETRIES then DLQ)
+- Transient errors (OCR service down, connection timeout) are retried via retry exchange instead of going straight to DLQ
+- DLQ error messages do NOT contain filenames (filename already in message body)
+- URL protocol validation: messages with non-http(s) URLs are rejected immediately
+- `publisher.publish_message()` wrapped in try/except to prevent silent message loss
+- Étape 3 (result assembly) wrapped in per-item try/except to prevent one bad result from crashing the whole batch
 
 ## Dependencies on Other Services
 

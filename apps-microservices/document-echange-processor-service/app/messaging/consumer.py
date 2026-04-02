@@ -135,28 +135,66 @@ class Consumer:
                 processed_results = await process_document_data_for_templating(messages_to_process)
                 
                 async with self.connection.channel() as channel:
-                    # processed_results correspond aux messages_to_process, qui correspondent aux valid_batch_indices
                     for i, result in enumerate(processed_results):
                         original_msg_index = valid_batch_indices[i]
                         original_message = batch[original_msg_index]
                         retry_count = self._get_retry_count(original_message)
 
                         if result['status'] == 'success':
-                            await self.publisher.publish_message(result['processed_message'], channel)
-                            # Message déjà acké au début
-                            
+                            try:
+                                await self.publisher.publish_message(result['processed_message'], channel)
+                            except Exception as pub_err:
+                                logger.error("Echec publication message (tag: %s): %s", original_message.delivery_tag, pub_err)
+                                try:
+                                    dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                                    dlq_headers = DLQProperties.create_dlq_headers(
+                                        pub_err, 'document-echange-processor-service', retry_count, original_message
+                                    )
+                                    await dlx.publish(
+                                        aio_pika.Message(body=original_message.body, headers=dlq_headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT),
+                                        routing_key=self.routing_key
+                                    )
+                                except Exception as dlq_err:
+                                    logger.critical("Echec publication en DLQ apres erreur publish: %s", dlq_err)
+
+                        elif result['status'] == 'transient_error':
+                            # Transient error (OCR down, connection timeout) -> retry via retry exchange
+                            if retry_count < MAX_RETRIES:
+                                logger.warning("Erreur transitoire (essai %d/%d): %s", retry_count + 1, MAX_RETRIES, result.get('error_message', ''))
+                                try:
+                                    retry_ex = await channel.get_exchange(self.retry_exchange, ensure=True)
+                                    current_headers = (original_message.headers or {}).copy()
+                                    current_headers['x-retry-count'] = retry_count + 1
+                                    await retry_ex.publish(
+                                        aio_pika.Message(body=original_message.body, headers=current_headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT),
+                                        routing_key=self.routing_key
+                                    )
+                                except Exception as retry_err:
+                                    logger.critical("Echec republication pour retry: %s", retry_err)
+                            else:
+                                logger.error("MAX_RETRIES atteint pour erreur transitoire. Envoi en DLQ.")
+                                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                                dlq_headers = DLQProperties.create_dlq_headers(
+                                    Exception(result.get('error_message', 'Transient error after max retries')),
+                                    'document-echange-processor-service', retry_count, original_message
+                                )
+                                await dlx.publish(
+                                    aio_pika.Message(body=original_message.body, headers=dlq_headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT),
+                                    routing_key=self.routing_key
+                                )
+
                         elif result['status'] == 'error':
-                            # Envoi direct à la DLQ sans retry
-                            logger.error(f"   -> Erreur de traitement pour le message (tag: {original_message.delivery_tag}). Envoi direct à la DLQ.")
+                            # Permanent error -> DLQ directly
+                            logger.error("Erreur permanente pour message (tag: %s). Envoi en DLQ.", original_message.delivery_tag)
                             dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-                            
+
                             dlq_headers = DLQProperties.create_dlq_headers(
-                                Exception(result['error_message']), 
-                                'document-echange-processor-service', 
-                                retry_count,  # On garde le compteur actuel pour traçabilité
+                                Exception(result['error_message']),
+                                'document-echange-processor-service',
+                                retry_count,
                                 original_message
                             )
-                            
+
                             await dlx.publish(
                                 aio_pika.Message(
                                     body=original_message.body,
