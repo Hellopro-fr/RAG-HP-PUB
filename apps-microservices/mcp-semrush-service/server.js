@@ -45,7 +45,7 @@ function buildQS(params) {
 const STD    = 'https://api.semrush.com/';                     // Standard analytics
 const BACK   = 'https://api.semrush.com/analytics/v1/';        // Backlinks API
 // DISABLED: const TRENDS = 'https://api.semrush.com/analytics/ta/api/v3/'; // Trends API (requires Trends API subscription)
-const BAL    = 'https://api.semrush.com/management/v1/api-units/balance'; // API units balance
+const BAL    = 'https://api.semrush.com/management/v1/api-units';          // API units balance
 
 // ── Tool definitions ────────────────────────────────────────────────────────
 
