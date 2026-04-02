@@ -174,7 +174,3 @@ export const apiDeleteRule = (ruleId: string) => {
     return api.delete(`/rules/${ruleId}`);
 };
 
-// --- UTILITY ---
-export const formatTimestamp = (ts: string) => {
-    return ts;
-};

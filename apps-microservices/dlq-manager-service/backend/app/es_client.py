@@ -132,7 +132,7 @@ class ElasticsearchClient:
         total_archived = 0
         try:
             # source=False disables payload fetching. batch_size=50 prevents OOM during bulk updates.
-            async for batch in self.scroll_messages(filters=active_filters, search_term=search_term, batch_size=50, source=False):
+            async for batch in self.scroll_messages(filters=active_filters, search_term=search_term, batch_size=50, include_source=False):
                 message_ids = [msg['_id'] for msg in batch]
                 if message_ids:
                     archived_in_batch = await self.update_message_status_bulk(message_ids, "Auto-Archived")
@@ -149,35 +149,36 @@ class ElasticsearchClient:
             print(f"Error applying auto-archive rule {rule.get('name')}: {e}")
             return total_archived
 
-    async def check_url_in_dlq(self, url: str) -> Dict[str, Any]:
-        """
-        Vérifie si une URL existe dans les DLQ Elasticsearch.
-        Recherche dans original_payload.data.url et original_payload.url
-        
-        Args:
-            url: L'URL à vérifier
-            
-        Returns:
-            Dict avec exists (bool), count (int), et latest (dict) si trouvé
-        """
-        # Normaliser l'URL (retirer trailing slash)
+    @staticmethod
+    def _build_url_query(url: str) -> Dict:
+        """Builds the ES query for matching a URL in DLQ payloads."""
         normalized_url = url.rstrip('/')
-        
-        query = {
+        return {
             "bool": {
                 "should": [
-                    # Recherche exacte sur les champs keyword
                     {"term": {"original_payload.data.url.keyword": url}},
                     {"term": {"original_payload.url.keyword": url}},
                     {"term": {"original_payload.data.url.keyword": normalized_url}},
                     {"term": {"original_payload.url.keyword": normalized_url}},
-                    # Recherche par phrase pour plus de flexibilité
                     {"match_phrase": {"original_payload.data.url": url}},
                     {"match_phrase": {"original_payload.url": url}}
                 ],
                 "minimum_should_match": 1
             }
         }
+
+    async def check_url_in_dlq(self, url: str) -> Dict[str, Any]:
+        """
+        Vérifie si une URL existe dans les DLQ Elasticsearch.
+        Recherche dans original_payload.data.url et original_payload.url
+
+        Args:
+            url: L'URL à vérifier
+
+        Returns:
+            Dict avec exists (bool), count (int), et latest (dict) si trouvé
+        """
+        query = self._build_url_query(url)
         
         try:
             response = await self.client.search(
@@ -236,25 +237,11 @@ class ElasticsearchClient:
         # Construire les requêtes msearch
         search_lines = []
         for url in unique_urls:
-            normalized_url = url.rstrip('/')
-            
             # Header de la requête (index)
             search_lines.append({"index": ELASTIC_INDEX_NAME})
-            
+
             # Body de la requête
-            query = {
-                "bool": {
-                    "should": [
-                        {"term": {"original_payload.data.url.keyword": url}},
-                        {"term": {"original_payload.url.keyword": url}},
-                        {"term": {"original_payload.data.url.keyword": normalized_url}},
-                        {"term": {"original_payload.url.keyword": normalized_url}},
-                        {"match_phrase": {"original_payload.data.url": url}},
-                        {"match_phrase": {"original_payload.url": url}}
-                    ],
-                    "minimum_should_match": 1
-                }
-            }
+            query = self._build_url_query(url)
             search_lines.append({
                 "query": query,
                 "size": 1,
@@ -483,7 +470,8 @@ class ElasticsearchClient:
             response = await self.client.get(index=ELASTIC_INDEX_NAME, id=message_id)
             raw_hit = dict(response.body) if hasattr(response, "body") else dict(response)
             return self._rehydrate_document(raw_hit)
-        except:
+        except Exception as e:
+            print(f"Error fetching message {message_id}: {e}")
             return None
             
     async def get_messages_bulk(self, message_ids: List[str]) -> List[Dict]:
@@ -519,35 +507,33 @@ class ElasticsearchClient:
         response = await self.client.bulk(body=actions)
         return len([item for item in response['items'] if not item['update'].get('error')])
         
-    async def scroll_messages(self, filters: Dict, search_term: str, batch_size: int = 100, source: Any = True):
+    async def scroll_messages(self, filters: Dict, search_term: str, batch_size: int = 100, include_source: bool = True):
         """
         Scrolls through all messages matching a query, yielding them in batches.
         :param batch_size: Number of documents to fetch per batch.
-        :param source: Pass False to exclude fetching _source fields entirely (saves massive memory).
+        :param include_source: Set to False to exclude _source fields entirely (saves massive memory).
         """
         query = self._build_query(filters, search_term)
         pit = await self.client.open_point_in_time(index=ELASTIC_INDEX_NAME, keep_alive="1m")
-        
+
         body = {
             "size": batch_size,
             "query": query,
             "sort": [{"@timestamp": "asc"}],
             "pit": {"id": pit['id'], "keep_alive": "1m"}
         }
-        
-        # If source is False, we tell ES not to fetch the heavy payload body.
-        if source is not True:
-            body["_source"] = source
-        
+
+        if not include_source:
+            body["_source"] = False
+
         try:
             while True:
                 response = await self.client.search(body=body)
                 hits = response['hits']['hits']
                 if not hits:
                     break
-                
-                # Rehydrate only if we actually fetched the _source payloads
-                if source is not False:
+
+                if include_source:
                     hits = [self._rehydrate_document(hit) for hit in hits]
                     
                 yield hits

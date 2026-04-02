@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, Request
+from fastapi.responses import JSONResponse
 from typing import List, Dict, Any, Optional
 import asyncio
 import traceback
@@ -15,8 +16,44 @@ from .models import (
 
 router = APIRouter()
 
-# In-memory tracking for background tasks initiated by FastAPI
-TASK_STORE: Dict[str, str] = {}
+
+@router.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """Centralized error logging for all unhandled exceptions in API routes."""
+    print(f"--- UNHANDLED ERROR IN {request.method} {request.url.path} ---")
+    print(traceback.format_exc())
+    print("---")
+    return JSONResponse(status_code=500, content={"detail": f"An internal error occurred: {exc}"})
+
+# In-memory tracking for background tasks with TTL eviction.
+# Each entry: {"status": str, "error": str | None, "created_at": float}
+TASK_STORE: Dict[str, Dict[str, Any]] = {}
+TASK_TTL_SECONDS = 3600  # Evict completed tasks after 1 hour
+
+
+def _evict_stale_tasks():
+    """Remove completed/errored tasks older than TTL."""
+    now = time.time()
+    stale_keys = [
+        k for k, v in TASK_STORE.items()
+        if v["status"] in ("completed", "error") and (now - v["created_at"]) > TASK_TTL_SECONDS
+    ]
+    for k in stale_keys:
+        del TASK_STORE[k]
+
+
+def _create_task(task_id: str):
+    _evict_stale_tasks()
+    TASK_STORE[task_id] = {"status": "processing", "error": None, "created_at": time.time()}
+
+
+def _complete_task(task_id: str):
+    TASK_STORE[task_id]["status"] = "completed"
+
+
+def _fail_task(task_id: str, error: str):
+    TASK_STORE[task_id]["status"] = "error"
+    TASK_STORE[task_id]["error"] = error
 
 # --- AUTO-ARCHIVE RULES ENDPOINTS ---
 
@@ -67,16 +104,9 @@ async def check_url_in_dlq(url: str, es_client: ElasticsearchClient = Depends(ge
     Exemple d'utilisation:
         GET /api/check-url?url=https://example.com/page
     """
-    try:
-        if not url:
-            raise HTTPException(status_code=400, detail="Le paramètre 'url' est requis")
-        result = await es_client.check_url_in_dlq(url)
-        return result
-    except Exception as e:
-        print(f"--- UNHANDLED ERROR IN /api/check-url ---")
-        print(traceback.format_exc())
-        print("------------------------------------------")
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+    if not url:
+        raise HTTPException(status_code=400, detail="Le paramètre 'url' est requis")
+    return await es_client.check_url_in_dlq(url)
 
 
 @router.post("/check-urls")
@@ -95,64 +125,42 @@ async def check_urls_batch_in_dlq(request: CheckUrlsBatchRequest, es_client: Ela
         POST /api/check-urls
         Body: {"urls": ["https://example.com/page1", "https://example.com/page2"]}
     """
-    try:
-        if not request.urls:
-            return {
-                "results": {},
-                "summary": {"total": 0, "found": 0, "missing": 0}
-            }
-        result = await es_client.check_urls_batch_in_dlq(request.urls)
-        return result
-    except Exception as e:
-        print(f"--- UNHANDLED ERROR IN /api/check-urls ---")
-        print(traceback.format_exc())
-        print("-------------------------------------------")
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+    if not request.urls:
+        return {
+            "results": {},
+            "summary": {"total": 0, "found": 0, "missing": 0}
+        }
+    return await es_client.check_urls_batch_in_dlq(request.urls)
 
 @router.post("/dashboard-stats")
 async def get_dashboard_stats(filters: Optional[Dict[str, Any]] = Body(None), es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Provides aggregated data for the main dashboard, with optional filters.
     """
-    try:
-        return await es_client.get_dashboard_stats(filters=filters)
-    except Exception as e:
-        print("--- UNHANDLED ERROR IN /api/dashboard-stats ---")
-        print(traceback.format_exc())
-        print("---------------------------------------------")
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+    return await es_client.get_dashboard_stats(filters=filters)
 
 @router.post("/messages/search")
 async def search_messages(request: SearchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Performs an advanced search for messages based on multiple filters.
     """
-    try:
-        results, total = await es_client.search_messages(
-            filters=request.filters,
-            search_term=request.search_term,
-            page=request.page,
-            page_size=request.page_size
-        )
-        return {"messages": results, "total": total}
-    except Exception as e:
-        print("--- UNHANDLED ERROR IN /api/messages/search ---")
-        print(traceback.format_exc())
-        print("---------------------------------------------")
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+    results, total = await es_client.search_messages(
+        filters=request.filters,
+        search_term=request.search_term,
+        page=request.page,
+        page_size=request.page_size
+    )
+    return {"messages": results, "total": total}
 
 @router.get("/messages/{message_id}")
 async def get_message_details(message_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Gets the full details for a single message, including its payload.
     """
-    try:
-        message = await es_client.get_message(message_id)
-        if not message:
-            raise HTTPException(status_code=404, detail="Message not found")
-        return message
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    message = await es_client.get_message(message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return message
 
 
 @router.post("/messages/grouped-search")
@@ -243,7 +251,7 @@ async def requeue_by_filter(
     to prevent HTTP timeout limits on massive queues.
     """
     task_id = f"requeue_{uuid.uuid4().hex}"
-    TASK_STORE[task_id] = "processing"
+    _create_task(task_id)
 
     async def process_requeue():
         try:
@@ -260,21 +268,21 @@ async def requeue_by_filter(
                             if request.rate_limit_per_second and request.rate_limit_per_second > 0:
                                 time.sleep(1.0 / request.rate_limit_per_second)
                     return batch_requeued
-                
+
                 requeued_in_batch = await asyncio.to_thread(do_batch_publish, batch)
                 total_requeued += requeued_in_batch
 
                 message_ids = [msg['_id'] for msg in batch]
                 await es_client.update_message_status_bulk(message_ids, "Re-queued")
-                
+
                 # Pressure relief valve: give ES Garbage Collector time to clean up
                 await asyncio.sleep(0.5)
-                
+
             print(f"Background Task {task_id}: Finished bulk requeue. Total: {total_requeued} messages.")
-            TASK_STORE[task_id] = "completed"
+            _complete_task(task_id)
         except Exception as e:
             print(f"Background Task {task_id}: Error in bulk requeue: {e}")
-            TASK_STORE[task_id] = "error"
+            _fail_task(task_id, str(e))
 
     background_tasks.add_task(process_requeue)
     return {"status": "success", "message": "Re-queue process successfully started in the background.", "task_id": task_id}
@@ -290,26 +298,25 @@ async def archive_by_filter(
     task engine and reliable scroll methodology to prevent mapping issues.
     """
     task_id = f"archive_{uuid.uuid4().hex}"
-    TASK_STORE[task_id] = "processing"
+    _create_task(task_id)
 
     async def process_archive():
         try:
             print(f"Background Task {task_id}: Starting bulk archive by filter...")
             total_archived = 0
-            # source=False disables payload fetching, batch_size=50 prevents OOM
-            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=50, source=False):
+            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=50, include_source=False):
                 message_ids = [msg['_id'] for msg in batch]
                 archived_in_batch = await es_client.update_message_status_bulk(message_ids, "Archived")
                 total_archived += archived_in_batch
-                
+
                 # Pressure relief valve: give ES Garbage Collector time to clean up
                 await asyncio.sleep(0.5)
-                
+
             print(f"Background Task {task_id}: Finished bulk archive. Total: {total_archived} messages.")
-            TASK_STORE[task_id] = "completed"
+            _complete_task(task_id)
         except Exception as e:
             print(f"Background Task {task_id}: Error in bulk archive: {e}")
-            TASK_STORE[task_id] = "error"
+            _fail_task(task_id, str(e))
 
     background_tasks.add_task(process_archive)
     return {"status": "success", "message": "Archive process successfully started in the background.", "task_id": task_id}
@@ -322,8 +329,12 @@ async def get_task_status(task_id: str, es_client: ElasticsearchClient = Depends
     # 1. Check if it's a python background task
     if task_id.startswith("requeue_") or task_id.startswith("archive_"):
         if task_id in TASK_STORE:
-            status = TASK_STORE[task_id]
-            return {"task_id": task_id, "completed": status in ["completed", "error"], "status": status}
+            task = TASK_STORE[task_id]
+            status = task["status"]
+            result = {"task_id": task_id, "completed": status in ("completed", "error"), "status": status}
+            if task.get("error"):
+                result["error"] = task["error"]
+            return result
         else:
             raise HTTPException(status_code=404, detail="Background task not found")
             
@@ -340,24 +351,21 @@ async def edit_and_requeue(message_id: str, request: EditAndRequeueRequest, es_c
     """
     Allows editing a message payload before re-queuing it.
     """
-    try:
-        message = await es_client.get_message(message_id)
-        if not message:
-            raise HTTPException(status_code=404, detail="Message not found")
+    message = await es_client.get_message(message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
 
-        # Override the original payload with the new one
-        message['_source']['original_payload'] = request.new_payload
-        
-        def do_publish():
-            with get_rabbitmq_channel() as channel:
-                rmq_client.publish_message(channel, message)
-        
-        await asyncio.to_thread(do_publish)
-        await es_client.update_message_status(message_id, "Re-queued (Edited)")
-        
-        return {"status": "success", "message": f"Message {message_id} has been edited and re-queued."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Override the original payload with the new one
+    message['_source']['original_payload'] = request.new_payload
+
+    def do_publish():
+        with get_rabbitmq_channel() as channel:
+            rmq_client.publish_message(channel, message)
+
+    await asyncio.to_thread(do_publish)
+    await es_client.update_message_status(message_id, "Re-queued (Edited)")
+
+    return {"status": "success", "message": f"Message {message_id} has been edited and re-queued."}
 
 @router.get("/history")
 async def get_requeue_history(page: int = 1, page_size: int = 50, es_client: ElasticsearchClient = Depends(get_es_client)):
@@ -379,17 +387,10 @@ async def get_unique_errors(
     Returns all unique (service_name, error_reason) combinations matching the current filters.
     Uses composite aggregation for unlimited bucket count.
     """
-    try:
-        result = await es_client.get_unique_errors(
-            filters=request.filters or {},
-            search_term=request.search_term or ""
-        )
-        return result
-    except Exception as e:
-        print("--- UNHANDLED ERROR IN /api/messages/unique-errors ---")
-        print(traceback.format_exc())
-        print("------------------------------------------------------")
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+    return await es_client.get_unique_errors(
+        filters=request.filters or {},
+        search_term=request.search_term or ""
+    )
 
 @router.post("/messages/extract-field")
 async def extract_field_from_messages(

@@ -88,35 +88,7 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
     if (!message) return;
     const payloadStr = JSON.stringify(message._source.original_payload, null, 2);
 
-    const copyToClipboard = (text: string) => {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        return navigator.clipboard.writeText(text);
-      } else {
-        // Fallback for non-secure contexts
-        return new Promise<void>((resolve, reject) => {
-          try {
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed";
-            textArea.style.left = "-9999px";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            const successful = document.execCommand('copy');
-            document.body.removeChild(textArea);
-            if (successful) {
-              resolve();
-            } else {
-              reject(new Error("Fallback copy failed"));
-            }
-          } catch (err) {
-            reject(err);
-          }
-        });
-      }
-    };
-
-    copyToClipboard(payloadStr).then(() => {
+    navigator.clipboard.writeText(payloadStr).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     }).catch(err => {
@@ -142,7 +114,7 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
               <h2 className="text-lg sm:text-xl font-semibold text-noir-primary truncate">Message Details</h2>
               <p className="text-xs sm:text-sm text-gris-primary mt-1 truncate">ID: {messageId}</p>
             </div>
-            <button onClick={onClose} className="text-gris-primary hover:text-noir-primary shrink-0">
+            <button onClick={onClose} className="text-gris-primary hover:text-noir-primary shrink-0" aria-label="Close modal">
               <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </div>

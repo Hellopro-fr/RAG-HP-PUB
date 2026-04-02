@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react";
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Calendar, SearchIcon, Loader2, Info, BookmarkPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
@@ -23,6 +23,7 @@ interface Filters {
 }
 
 const loadFiltersFromStorage = (): Omit<Filters, 'date_start' | 'date_end'> => {
+    if (typeof window === 'undefined') return { status: ['New'], service_names: [] };
     try {
         const stored = localStorage.getItem('dlq-filters-v3');
         const filters = stored ? JSON.parse(stored) : {};
@@ -58,7 +59,7 @@ const statusOptions: MultiSelectOption[] = [
 ];
 
 export default function SearchPage() {
-  const [filters, setFilters] = useState<Filters>(loadFiltersFromStorage());
+  const [filters, setFilters] = useState<Filters>(loadFiltersFromStorage);
   const [searchTerm, setSearchTerm] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -76,6 +77,14 @@ export default function SearchPage() {
   const [uniqueErrorBuckets, setUniqueErrorBuckets] = useState<UniqueErrorBucket[]>([]);
   const [uniqueErrorTotal, setUniqueErrorTotal] = useState(0);
   const [loadingUniqueErrors, setLoadingUniqueErrors] = useState(false);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     apiGetDashboardStats().then(response => {
@@ -90,7 +99,7 @@ export default function SearchPage() {
   }, []);
 
   // Construct standard JSON filter payload to use consistently
-  const getActiveFiltersPayload = () => {
+  const getActiveFiltersPayload = useCallback(() => {
     const activeFilters: Record<string, any> = {};
     (Object.keys(filters) as Array<keyof Filters>).forEach(key => {
       const value = filters[key];
@@ -103,7 +112,7 @@ export default function SearchPage() {
       }
     });
     return activeFilters;
-  };
+  }, [filters]);
 
   const fetchMessages = useCallback(async (page = 1) => {
     setLoading(true);
@@ -164,7 +173,11 @@ export default function SearchPage() {
   }
 
   const pollTaskStatus = (taskId: string, successMessage: string) => {
+    let attempts = 0;
+    const MAX_POLL_ATTEMPTS = 300; // 10 minutes at 2s intervals
+
     const checkStatus = async () => {
+      attempts++;
       try {
         const res = await apiGetTaskStatus(taskId);
         if (res.data.completed) {
@@ -175,16 +188,22 @@ export default function SearchPage() {
           }
           fetchMessages(1);
           setLoadingAction(null);
+          pollTimeoutRef.current = null;
+        } else if (attempts >= MAX_POLL_ATTEMPTS) {
+          alert("Polling timed out. The task might still be running in the background.");
+          setLoadingAction(null);
+          pollTimeoutRef.current = null;
         } else {
-          setTimeout(checkStatus, 2000); // Check again in 2 seconds
+          pollTimeoutRef.current = setTimeout(checkStatus, 2000);
         }
       } catch (err) {
         console.error("Polling failed", err);
         alert("Failed to confirm task completion. The task might still be running.");
         setLoadingAction(null);
+        pollTimeoutRef.current = null;
       }
     };
-    
+
     checkStatus();
   };
 
@@ -206,8 +225,9 @@ export default function SearchPage() {
     try {
         if (action === 'requeue') {
             const rateStr = prompt("Enter messages per second (e.g., 10). Leave blank for no limit.", "10");
+            if (rateStr === null) { setLoadingAction(null); return; } // User cancelled
             const rate = rateStr ? parseInt(rateStr, 10) : undefined;
-            if (rateStr && isNaN(rate)) {
+            if (rateStr && isNaN(rate!)) {
                 alert("Invalid number for rate limit.");
                 setLoadingAction(null);
                 return;
@@ -238,8 +258,9 @@ export default function SearchPage() {
 
       try {
           const rateStr = prompt("Enter messages per second (e.g., 10). Leave blank for no limit.", "10");
+          if (rateStr === null) { setLoadingAction(null); return; } // User cancelled
           const rate = rateStr ? parseInt(rateStr, 10) : undefined;
-          if (rateStr && isNaN(rate)) {
+          if (rateStr && isNaN(rate!)) {
               alert("Invalid number for rate limit.");
               setLoadingAction(null);
               return;

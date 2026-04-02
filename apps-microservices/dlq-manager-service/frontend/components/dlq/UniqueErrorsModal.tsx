@@ -95,7 +95,7 @@ export default function UniqueErrorsModal({ buckets, totalUnique, loading, onClo
               <Download className="w-4 h-4 mr-1" />
               JSON
             </Button>
-            <button onClick={onClose} className="text-gris-primary hover:text-noir-primary transition-colors ml-2">
+            <button onClick={onClose} className="text-gris-primary hover:text-noir-primary transition-colors ml-2" aria-label="Close modal">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -149,7 +149,7 @@ export default function UniqueErrorsModal({ buckets, totalUnique, loading, onClo
                 </thead>
                 <tbody>
                   {paginatedBuckets.map((bucket, index) => (
-                    <tr key={`${bucket.service_name}-${index}`} className="border-b border-gris-blanc hover:bg-clair-4 transition-colors">
+                    <tr key={`${bucket.service_name}-${bucket.error_reason}`} className="border-b border-gris-blanc hover:bg-clair-4 transition-colors">
                       <td className="p-3 text-gris-primary">{(currentPage - 1) * PAGE_SIZE + index + 1}</td>
                       <td className="p-3 font-medium text-noir-primary whitespace-nowrap">{bucket.service_name}</td>
                       <td className="p-3 text-noir-primary break-all">{bucket.error_reason}</td>

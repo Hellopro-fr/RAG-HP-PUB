@@ -1,18 +1,18 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 class SearchRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = None
     search_term: Optional[str] = None
     page: int = 1
-    page_size: int = 50
+    page_size: int = Field(default=50, ge=1, le=500)
 
 class RequeueBulkRequest(BaseModel):
-    message_ids: List[str]
+    message_ids: List[str] = Field(max_length=500)
     rate_limit_per_second: Optional[int] = None
 
 class UpdateStatusBulkRequest(BaseModel):
-    message_ids: List[str]
+    message_ids: List[str] = Field(max_length=500)
 
 class EditAndRequeueRequest(BaseModel):
     new_payload: Dict[str, Any]
@@ -28,7 +28,7 @@ class ArchiveByFilterRequest(BaseModel):
 
 class CheckUrlsBatchRequest(BaseModel):
     """Modèle pour la vérification batch d'URLs dans les DLQ."""
-    urls: List[str]
+    urls: List[str] = Field(max_length=500)
 
 class AutoArchiveRuleCreate(BaseModel):
     name: str
