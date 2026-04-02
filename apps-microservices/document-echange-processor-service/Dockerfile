@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY libs/ /app/libs/
 RUN pip install --no-cache-dir -e ./libs/common-utils
 
+# Install spaCy model required by Presidio (AnonymizeText)
+RUN python -m spacy download en_core_web_lg
+
 # Copier le code source principal
 COPY apps-microservices/document-echange-processor-service/app/ \
      /app/document_echange_processor_service
