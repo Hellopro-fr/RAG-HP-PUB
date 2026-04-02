@@ -24,9 +24,6 @@ async def main():
         return
 
     logger.info("🚀 Document-processor-service: Démarrage...")
-    
-    # Créer le répertoire de récupération s'il n'existe pas
-    os.makedirs('/app/recovery_data', exist_ok=True)
 
     while True:
         try:
