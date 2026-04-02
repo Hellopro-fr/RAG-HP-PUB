@@ -32,11 +32,6 @@ func (c *Client) doGet(ctx context.Context, path string) (json.RawMessage, error
 	return c.doRequest(ctx, http.MethodGet, path, nil)
 }
 
-// doPost performs an authenticated POST request with an empty body.
-func (c *Client) doPost(ctx context.Context, path string) (json.RawMessage, error) {
-	return c.doRequest(ctx, http.MethodPost, path, nil)
-}
-
 func (c *Client) doRequest(ctx context.Context, method, path string, _ []byte) (json.RawMessage, error) {
 	url := c.baseURL + path
 
@@ -80,27 +75,27 @@ func (c *Client) GetCallDetails(ctx context.Context, callID string) (json.RawMes
 
 // GetEmpowerCallUUID converts a Ringover channel_id to an Empower calluuid.
 // Requires Empower to be enabled on the API key.
-// Ringover API: POST /public/empower/platform/{platformName}/channel/{channelID}
+// Ringover API: GET /empower/platform/{platformName}/channel/{channelID}
 func (c *Client) GetEmpowerCallUUID(ctx context.Context, platformName, channelID string) (json.RawMessage, error) {
-	path := fmt.Sprintf("/public/empower/platform/%s/channel/%s", platformName, channelID)
-	return c.doPost(ctx, path)
+	path := fmt.Sprintf("/empower/platform/%s/channel/%s", platformName, channelID)
+	return c.doGet(ctx, path)
 }
 
 // GetCallTranscription retrieves the transcription for a call.
 func (c *Client) GetCallTranscription(ctx context.Context, callUUID string) (json.RawMessage, error) {
-	path := fmt.Sprintf("/public/empower/call/%s", callUUID)
+	path := fmt.Sprintf("/empower/call/%s", callUUID)
 	return c.doGet(ctx, path)
 }
 
 // GetCallSummary retrieves the AI-generated summary of a call.
 func (c *Client) GetCallSummary(ctx context.Context, callUUID string) (json.RawMessage, error) {
-	path := fmt.Sprintf("/public/empower/call/%s/summary", callUUID)
+	path := fmt.Sprintf("/empower/call/%s/summary", callUUID)
 	return c.doGet(ctx, path)
 }
 
 // GetCallMoments retrieves key moments from a call.
 func (c *Client) GetCallMoments(ctx context.Context, callUUID string) (json.RawMessage, error) {
-	path := fmt.Sprintf("/public/empower/call/%s/moments", callUUID)
+	path := fmt.Sprintf("/empower/call/%s/moments", callUUID)
 	return c.doGet(ctx, path)
 }
 
