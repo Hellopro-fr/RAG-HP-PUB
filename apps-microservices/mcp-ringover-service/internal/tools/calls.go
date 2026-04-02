@@ -83,14 +83,14 @@ func handleListCallsByDate(ctx context.Context, clients *Clients, args map[strin
 
 // ── search_calls ─────────────────────────────────────────────────────────────
 
-const searchCallsDescription = "Search and filter calls by direction, phone number, or user. All parameters are optional."
+const searchCallsDescription = "Search and filter calls by type, phone number, or user. All parameters are optional. Use call_type to filter by ANSWERED, MISSED, OUT (outbound), or VOICEMAIL."
 const searchCallsInputSchema = `{
 	"type": "object",
 	"properties": {
-		"direction_type": {
+		"call_type": {
 			"type": "string",
-			"description": "Filter by call direction: inbound, outbound, or missed",
-			"enum": ["inbound", "outbound", "missed"]
+			"description": "Filter by call type: ANSWERED (answered inbound/outbound), MISSED (missed inbound), OUT (outbound), VOICEMAIL",
+			"enum": ["ANSWERED", "MISSED", "OUT", "VOICEMAIL"]
 		},
 		"phone_number": {
 			"type": "string",
@@ -109,7 +109,7 @@ const searchCallsInputSchema = `{
 }`
 
 func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
-	directionType, _ := args["direction_type"].(string)
+	callType, _ := args["call_type"].(string)
 	phoneNumber, _ := args["phone_number"].(string)
 	userID, _ := args["user_id"].(string)
 	limit := 20
@@ -119,7 +119,7 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 		}
 	}
 
-	data, err := clients.Ringover.SearchCalls(ctx, directionType, phoneNumber, userID, limit)
+	data, err := clients.Ringover.SearchCalls(ctx, callType, phoneNumber, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("SearchCalls: %w", err)
 	}

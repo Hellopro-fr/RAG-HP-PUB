@@ -7,9 +7,26 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"time"
 )
+
+// dateOnlyRe matches "YYYY-MM-DD" without a time component.
+var dateOnlyRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// normalizeDate converts "YYYY-MM-DD" to full ISO 8601 ("YYYY-MM-DDT00:00:00.000Z").
+// If asEndOfDay is true, it uses 23:59:59.999Z instead. Already-full timestamps are
+// returned as-is.
+func normalizeDate(date string, asEndOfDay bool) string {
+	if dateOnlyRe.MatchString(date) {
+		if asEndOfDay {
+			return date + "T23:59:59.999Z"
+		}
+		return date + "T00:00:00.000Z"
+	}
+	return date
+}
 
 // Client wraps the Ringover public REST API.
 type Client struct {
@@ -77,23 +94,24 @@ func (c *Client) GetCallDetails(ctx context.Context, callID string) (json.RawMes
 
 // ListCallsByDate retrieves calls within a date range.
 // startDate, endDate: ISO 8601 (e.g. "2026-04-01T00:00:00.000Z") or "YYYY-MM-DD".
+// Short dates are automatically normalized to full ISO 8601.
 func (c *Client) ListCallsByDate(ctx context.Context, startDate, endDate string, limitCount int) (json.RawMessage, error) {
 	q := url.Values{}
-	q.Set("start_date", startDate)
-	q.Set("end_date", endDate)
+	q.Set("start_date", normalizeDate(startDate, false))
+	q.Set("end_date", normalizeDate(endDate, true))
 	q.Set("limit_count", strconv.Itoa(limitCount))
 	return c.doGet(ctx, "/calls?"+q.Encode())
 }
 
 // SearchCalls retrieves calls matching optional filters.
-// directionType: "inbound", "outbound", or "missed" (empty = all).
+// callType: Ringover call_type filter — "ANSWERED", "MISSED", "OUT", or "VOICEMAIL" (empty = all).
 // phoneNumber: filter by caller/callee number (empty = no filter).
 // userID: filter by Ringover user ID (empty = all users).
-func (c *Client) SearchCalls(ctx context.Context, directionType, phoneNumber, userID string, limitCount int) (json.RawMessage, error) {
+func (c *Client) SearchCalls(ctx context.Context, callType, phoneNumber, userID string, limitCount int) (json.RawMessage, error) {
 	q := url.Values{}
 	q.Set("limit_count", strconv.Itoa(limitCount))
-	if directionType != "" {
-		q.Set("direction_type", directionType)
+	if callType != "" {
+		q.Set("call_type", callType)
 	}
 	if phoneNumber != "" {
 		q.Set("from_number", phoneNumber)

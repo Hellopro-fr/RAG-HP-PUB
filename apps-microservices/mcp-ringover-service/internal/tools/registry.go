@@ -40,10 +40,10 @@ func NewRegistry(clients *Clients) *Registry {
 	// ── Active tools ──────────────────────────────────────────────────────────
 	r.register("list_calls_by_date", listCallsByDateDescription, listCallsByDateInputSchema, handleListCallsByDate)
 	r.register("search_calls", searchCallsDescription, searchCallsInputSchema, handleSearchCalls)
-	r.register("get_call_stats_by_user", getCallStatsByUserDescription, getCallStatsByUserInputSchema, handleGetCallStatsByUser)
 	r.register("get_call_details", getCallDetailsDescription, getCallDetailsInputSchema, handleGetCallDetails)
 
 	// ── Deactivated tools ─────────────────────────────────────────────────────
+	// r.register("get_call_stats_by_user", ...) // DISABLED: no /stats/team endpoint in Ringover public API (returns 404)
 	// r.register("get_calls", ...) // superseded by list_calls_by_date + search_calls
 	// r.register("list_contacts", ...) // not needed
 	// r.register("list_users", ...) // not needed
