@@ -578,6 +578,70 @@ class ElasticsearchClient:
         total = response['hits']['total']['value']
         return hits, total
 
+    async def extract_field_from_messages(
+        self, filters: Dict, search_term: str, field_path: str
+    ) -> Tuple[List[Any], int]:
+        """
+        Scrolls through all matching messages, loads original_payload,
+        and extracts a specific nested field value.
+
+        field_path: dot-separated path within original_payload (e.g. "data.fichier_source")
+        Returns: (unique_values, total_scanned)
+        """
+        query = self._build_query(filters, search_term)
+        unique_values = set()
+        total_scanned = 0
+        batch_size = 500
+
+        # Use search_after for efficient deep pagination
+        sort_field = "@timestamp"
+        search_after = None
+
+        while True:
+            body = {
+                "query": query,
+                "size": batch_size,
+                "sort": [{sort_field: "asc"}, {"_id": "asc"}],
+                "_source": ["original_payload", "payload_conflict_fallback"]
+            }
+            if search_after:
+                body["search_after"] = search_after
+
+            response = await self.client.search(
+                index=ELASTIC_INDEX_NAME,
+                body=body,
+                track_total_hits=True
+            )
+
+            hits = response['hits']['hits']
+            if not hits:
+                break
+
+            for hit in hits:
+                rehydrated = self._rehydrate_document(hit)
+                source = rehydrated.get('_source', {})
+                payload = source.get('original_payload', {})
+
+                # Navigate the field_path (e.g. "data.fichier_source")
+                value = payload
+                for key in field_path.split('.'):
+                    if isinstance(value, dict):
+                        value = value.get(key)
+                    else:
+                        value = None
+                        break
+
+                if value is not None and value != "":
+                    unique_values.add(value)
+
+            total_scanned += len(hits)
+            search_after = hits[-1]['sort']
+
+            if len(hits) < batch_size:
+                break
+
+        return sorted(unique_values, key=str), total_scanned
+
     async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Gets the status of an Elasticsearch background task."""
         try:

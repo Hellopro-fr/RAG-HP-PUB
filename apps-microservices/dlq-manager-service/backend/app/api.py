@@ -10,7 +10,7 @@ from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_c
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
     EditAndRequeueRequest, RequeueByFilterRequest, ArchiveByFilterRequest, CheckUrlsBatchRequest,
-    AutoArchiveRuleCreate
+    AutoArchiveRuleCreate, ExtractFieldRequest
 )
 
 router = APIRouter()
@@ -367,5 +367,38 @@ async def get_requeue_history(page: int = 1, page_size: int = 50, es_client: Ela
     try:
         results, total = await es_client.get_history(page, page_size)
         return {"history": results, "total": total}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/messages/extract-field")
+async def extract_field_from_messages(
+    request: ExtractFieldRequest,
+    es_client: ElasticsearchClient = Depends(get_es_client)
+):
+    """
+    Extracts a specific field from original_payload of all matching messages.
+    Uses scroll API to handle large result sets efficiently.
+
+    Example: extract all fichier_source from document processor failures:
+    {
+        "filters": {
+            "date_start": "2026-04-01T02:00:00Z",
+            "service_names": ["document-echange-processor-service"],
+            "status": ["New", "Archived", "Auto-Archived"]
+        },
+        "field_path": "data.fichier_source"
+    }
+    """
+    try:
+        values, total_scanned = await es_client.extract_field_from_messages(
+            filters=request.filters or {},
+            search_term=request.search_term or "",
+            field_path=request.field_path
+        )
+        return {
+            "values": values,
+            "total": len(values),
+            "total_scanned": total_scanned
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

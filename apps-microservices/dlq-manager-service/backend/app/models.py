@@ -36,3 +36,9 @@ class AutoArchiveRuleCreate(BaseModel):
     search_term: Optional[str] = None
     filters: Optional[Dict[str, Any]] = None
     is_active: bool = True
+
+class ExtractFieldRequest(BaseModel):
+    """Extracts a specific field from original_payload of matching messages."""
+    filters: Optional[Dict[str, Any]] = None
+    search_term: Optional[str] = None
+    field_path: str  # e.g. "data.fichier_source"
