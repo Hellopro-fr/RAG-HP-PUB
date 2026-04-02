@@ -416,7 +416,8 @@ const TOOLS = [
   },
   */
 
-  // ── API balance (fixed: uses correct URL) ──
+  // DISABLED: api_units_balance — not needed (utility/monitoring tool outside domain/keyword/backlinks scope)
+  /*
   {
     name: 'api_units_balance',
     description: 'Check remaining Semrush API units balance',
@@ -428,6 +429,7 @@ const TOOLS = [
       return httpGet(BAL + '?' + buildQS({ key: API_KEY }));
     },
   },
+  */
 ];
 
 const toolByName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
