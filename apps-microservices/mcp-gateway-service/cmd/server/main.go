@@ -105,7 +105,7 @@ func main() {
 	// Monte les routes REST API si le repository est disponible
 	if repo != nil && database != nil {
 		tokenRepo = repository.NewTokenRepo(database, encryptor)
-		apiHandler := api.NewHandler(repo, gw, registry)
+		apiHandler := api.NewHandler(repo, gw, registry, cfg.AllowInternalURLs)
 		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")

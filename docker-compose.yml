@@ -2134,6 +2134,82 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP Google Search Console Service ─────────────────────────────────
+  mcp-google-search-console-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-google-search-console-service/Dockerfile
+    container_name: mcp-google-search-console-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8584:8584"
+    environment:
+      - GOOGLE_CLIENT_ID=${GSC_GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GSC_GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REFRESH_TOKEN=${GSC_GOOGLE_REFRESH_TOKEN:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gsc-credentials.json
+      - GSC_SITE_URL=${GSC_SITE_URL:-}
+      - GSC_SKIP_OAUTH=${GSC_SKIP_OAUTH:-true}
+    volumes:
+      - ${GSC_CREDENTIALS_PATH:-./secrets/gsc-credentials.json}:/secrets/gsc-credentials.json:ro
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Semrush Service ───────────────────────────────────────────────
+  mcp-semrush-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-semrush-service/Dockerfile
+    container_name: mcp-semrush-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8585:8585"
+    environment:
+      - SEMRUSH_API_KEY=${SEMRUSH_API_KEY}
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Ringover Service ──────────────────────────────────────────────
+  mcp-ringover-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-ringover-service/Dockerfile
+    container_name: mcp-ringover-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8586:8586"
+    environment:
+      - RINGOVER_API_KEY=${RINGOVER_API_KEY}
+      - RINGOVER_API_BASE_URL=${RINGOVER_API_BASE_URL:-https://public-api.ringover.com/v2}
+      - MCP_PORT=8586
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Neo4j Service ─────────────────────────────────────────────────
+  mcp-neo4j-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-neo4j-service/Dockerfile
+    container_name: mcp-neo4j-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8587:8587"
+    environment:
+      - NEO4J_URI=${NEO4J_MCP_URI:-bolt://neo4j:7687}
+      - NEO4J_USERNAME=${NEO4J_MCP_USERNAME:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_MCP_PASSWORD}
+      - NEO4J_DATABASE=${NEO4J_MCP_DATABASE:-neo4j}
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Gateway Service ──────────────────────────────────────────────
   mcp-gateway-service:
     build:
@@ -2157,6 +2233,7 @@ services:
       - AUTH_URL=${AUTH_URL}
       - SCOPE_TOKEN_REQUIRED=${MCP_SCOPE_TOKEN_REQUIRED}
       - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
+      - ALLOW_INTERNAL_URLS=${MCP_ALLOW_INTERNAL_URLS:-true}
     # depends_on:
     #   mysql:
     #     condition: service_healthy

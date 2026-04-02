@@ -9,7 +9,8 @@ import (
 
 // ValidateServerURL checks that a URL is safe to use as a backend MCP server.
 // It blocks private/loopback/link-local/metadata IP ranges to prevent SSRF.
-func ValidateServerURL(rawURL string) error {
+// Set allowInternal=true to allow Docker-internal private IP ranges (e.g. 172.x.x.x).
+func ValidateServerURL(rawURL string, allowInternal bool) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
@@ -24,6 +25,10 @@ func ValidateServerURL(rawURL string) error {
 	hostname := parsed.Hostname()
 	if hostname == "" {
 		return fmt.Errorf("URL must have a hostname")
+	}
+
+	if allowInternal {
+		return nil
 	}
 
 	// Resolve hostname to IPs and check each one
