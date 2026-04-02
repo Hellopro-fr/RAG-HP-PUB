@@ -935,6 +935,11 @@ class RecommendationServiceV2:
                 for i, p in enumerate(liste_raw)
             ]
 
+            # Build id_produit -> id_fournisseur map for post-LLM dedup
+            produit_fournisseur_map = {
+                str(p["id_produit"]): str(p["id_fournisseur"]) for p in scored
+            }
+
             # 5. Enrich + LLM rerank (reuse V1)
             enrich_start = time.perf_counter()
             reranked_top, reranked_liste, ecarts = (
@@ -952,6 +957,29 @@ class RecommendationServiceV2:
             )
             enrich_time = time.perf_counter() - enrich_start
             logging.warning("[V2-TIMING] enrich_and_rerank_llm: %.3fs", enrich_time)
+
+            # Post-LLM fournisseur deduplication on top_produit
+            seen_vendors = set()
+            deduped_top = []
+            overflow = []
+            for p in reranked_top:
+                vid = produit_fournisseur_map.get(str(p.id_produit), "")
+                if vid not in seen_vendors:
+                    deduped_top.append(p)
+                    seen_vendors.add(vid)
+                else:
+                    overflow.append(p)
+            # Backfill from reranked_liste if we lost top slots
+            for p in reranked_liste:
+                if len(deduped_top) >= 4:
+                    break
+                vid = produit_fournisseur_map.get(str(p.id_produit), "")
+                if vid not in seen_vendors:
+                    deduped_top.append(p)
+                    seen_vendors.add(vid)
+            # Put overflow back into liste
+            reranked_top = deduped_top[:4]
+            reranked_liste = overflow + reranked_liste
 
             # 6. Re-query with LLM-selected IDs (streaming fetch + score)
             llm_selected_ids = [
