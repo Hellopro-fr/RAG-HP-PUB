@@ -2166,7 +2166,7 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8585:8585"
+      - "8588:8588"
     environment:
       - SEMRUSH_API_KEY=${SEMRUSH_API_KEY}
     networks:

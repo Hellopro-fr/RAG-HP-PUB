@@ -12,7 +12,7 @@ RUN npm install
 COPY apps-microservices/mcp-semrush-service/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-EXPOSE 8585
+EXPOSE 8588
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["mcp-proxy", "--port", "8585", "--host", "0.0.0.0", "--pass-environment", "--allow-origin", "*", "--stateless", "--", "npx", "semrush-mcp"]
+CMD ["mcp-proxy", "--port", "8588", "--host", "0.0.0.0", "--pass-environment", "--allow-origin", "*", "--stateless", "--", "npx", "semrush-mcp"]
