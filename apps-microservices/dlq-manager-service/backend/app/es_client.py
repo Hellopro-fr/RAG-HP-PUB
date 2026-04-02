@@ -587,7 +587,7 @@ class ElasticsearchClient:
             body = {
                 "query": query,
                 "size": batch_size,
-                "sort": [{sort_field: "asc"}, {"_id": "asc"}],
+                "sort": [{sort_field: "asc"}, {"_shard_doc": "asc"}],
                 "_source": ["original_payload", "payload_conflict_fallback"]
             }
             if search_after:
