@@ -126,45 +126,26 @@ class Consumer:
         return queue
 
     async def batch_processor(self):
-        """Tâche de fond qui traite les messages."""
-        print("⚙️  Processeur de batch démarré. En attente de messages...")
-        
+        """Tâche de fond qui traite les messages un par un avec ACK-after."""
+        print("Processeur de batch demarre. En attente de messages...")
+
         while True:
             batch = []
-            batch_bodies = []
-            
+
             try:
-                # 🔥 Recevoir et ACK IMMÉDIATEMENT
                 first_message = await self.message_buffer.get()
-                batch_bodies.append(first_message.body)
-                
-                try:
-                    await first_message.ack()
-                    print(f"✅ Message ACK immédiatement (tag: {first_message.delivery_tag})")
-                except Exception as e:
-                    print(f"⚠️  Impossible d'ACK: {e}")
-                    continue  # Skip ce message
-                
                 batch.append(first_message)
 
                 while len(batch) < BATCH_SIZE:
                     try:
                         message = await asyncio.wait_for(
-                            self.message_buffer.get(), 
+                            self.message_buffer.get(),
                             timeout=BATCH_TIMEOUT_SECONDS
                         )
-                        batch_bodies.append(message.body)
-                        
-                        try:
-                            await message.ack()
-                            print(f"✅ Message ACK immédiatement (tag: {message.delivery_tag})")
-                        except Exception:
-                            continue
-                        
                         batch.append(message)
                     except asyncio.TimeoutError:
                         break
-                        
+
             except asyncio.CancelledError:
                 break
 
@@ -173,19 +154,26 @@ class Consumer:
 
             start_time = time.monotonic()
             batch_size = len(batch)
-            print(f"⚙️  Traitement de {batch_size} message(s) (DÉJÀ ACK)...")
-            messages_to_process = [json.loads(body) for body in batch_bodies]
-            
+            print(f"Traitement de {batch_size} message(s)...")
+
             try:
-                # Traitement - même si ça crash, c'est déjà ACK
+                messages_to_process = [json.loads(msg.body) for msg in batch]
+            except json.JSONDecodeError as e:
+                print(f"Erreur de decodage JSON: {e}")
+                for msg in batch:
+                    await msg.nack(requeue=False)
+                continue
+
+            try:
                 processed_results = await nettoyer_bruits_ocr(messages_to_process)
-                
-                # Publier les résultats
+
                 async with self.connection.channel() as channel:
                     for i, result in enumerate(processed_results):
+                        msg = batch[i]
+
                         if 'metric_payload' in result:
                             await self.publisher.publish_metric_message(
-                                result['metric_payload'], 
+                                result['metric_payload'],
                                 channel
                             )
 
@@ -197,51 +185,45 @@ class Consumer:
 
                         if result['status'] == 'success' and text:
                             await self.publisher.publish_message(
-                                result['processed_message'], 
+                                result['processed_message'],
                                 channel
                             )
+                            await msg.ack()
                         else:
-                            # Envoyer à DLQ
-                            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-                            dlq_headers = DLQProperties.create_dlq_headers(
-                                        Exception(result['error_message']), 
-                                        'nettoyage-bruit-ocr-service', 
-                                        MAX_RETRIES, 
-                                        batch_bodies[0]
-                                    )
-                                    
-                            await dlx.publish(
-                                aio_pika.Message(
-                                    body=batch_bodies[0],
-                                    headers=dlq_headers,
-                                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                                ),
-                                routing_key=self.routing_key
-                            )
-            
+                            # Send to DLQ with the correct message body
+                            try:
+                                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                                dlq_headers = DLQProperties.create_dlq_headers(
+                                    Exception(result.get('error_message', 'Unknown error')),
+                                    'nettoyage-bruit-ocr-service',
+                                    MAX_RETRIES,
+                                    msg
+                                )
+                                await dlx.publish(
+                                    aio_pika.Message(
+                                        body=msg.body,
+                                        headers=dlq_headers,
+                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                    ),
+                                    routing_key=self.routing_key
+                                )
+                            except Exception as dlq_err:
+                                print(f"CRITICAL: Impossible d'envoyer en DLQ: {dlq_err}")
+                            await msg.ack()
+
             except Exception as e:
-                print(f"❌ ERREUR (messages déjà ACK, potentiellement perdus): {e}")
+                print(f"ERREUR sur le batch: {e}")
                 traceback.print_exc()
-                
-                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-                dlq_headers = DLQProperties.create_dlq_headers(
-                                        Exception(f'Message envoyé à DLQ après erreur: {e}'), 
-                                        'nettoyage-bruit-ocr-service', 
-                                        MAX_RETRIES, 
-                                        batch_bodies[0]
-                                    )
-                await dlx.publish(
-                    aio_pika.Message(
-                        body=batch_bodies[0],
-                        headers=dlq_headers,
-                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                    ),
-                    routing_key=self.routing_key
-                )
-                    
+                # NACK all messages so they go through retry via DLX
+                for msg in batch:
+                    try:
+                        await msg.nack(requeue=False)
+                    except Exception:
+                        pass
+
             finally:
                 duration = time.monotonic() - start_time
-                print(f"🏁 Batch terminé en {duration:.2f}s ({duration/60:.2f} min)")
+                print(f"Batch termine en {duration:.2f}s ({duration/60:.2f} min)")
     
     async def _on_message(self, message: aio_pika.abc.AbstractIncomingMessage):
         """

@@ -4,9 +4,7 @@ import json
 import asyncio
 import logging
 from typing import List, Dict
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import threading
 
 
 from common_utils.autres.CollectionName import CollectionName
@@ -108,7 +106,7 @@ async def _process_single_message(document_item: dict) -> dict:
         error_details = response_details.get('error', {})
         state_llm = 1 if not error_details else 2
 
-        doc_url = document_data.get("fichier_source").replace(r"\/", "/")
+        doc_url = (document_data.get("fichier_source") or "").replace(r"\/", "/")
         metric_payload = {
             "source_service": "nettoyage-bruit-ocr-service",
             "url": f"{doc_url}({nb_pages} page(s))",
@@ -166,7 +164,7 @@ async def _process_single_message(document_item: dict) -> dict:
         "status": "success",
         "processed_message": output_message,
         "metric_payload": metric_payload,
-        "error_message": "" if not cleaned_text else "le text ocrisé nettoyé est vide"
+        "error_message": "le texte OCR nettoyé est vide" if not cleaned_text else ""
     }
 
 
@@ -178,9 +176,8 @@ async def nettoyer_bruits_ocr(documents: List[Dict]) -> List[Dict]:
     if not documents:
         return []
 
-    loop = asyncio.get_event_loop()
-    
-    # 🔥 Chaque message sera traité dans son propre thread avec son propre event loop
+    loop = asyncio.get_running_loop()
+
     tasks = [
         loop.run_in_executor(
             _thread_pool,

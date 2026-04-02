@@ -40,11 +40,13 @@ requirements.txt
 ## Conventions
 
 - Batch processing: accumulates up to 10 messages, processes together via DeepseekOCR
-- ACK-early strategy: messages ACKed before long OCR processing to avoid RabbitMQ timeout
+- ACK-early strategy: JSON decode runs BEFORE ACK; malformed messages sent to DLQ, valid messages ACKed before long OCR processing
 - Validates PDF page count (<20 pages) and minimum text length (>200 chars)
 - Anonymizes PII using Presidio before publishing
-- Creates `recovery_data/` directory for crash recovery
 - GC collect after each batch to manage memory
+- OCR HTTP timeout: configurable via `DeepseekOCRDocExtractor(timeout=N)` (default 300s, was unbounded)
+- Docker: non-root user, `--no-cache-dir`, `--no-install-recommends` for LibreOffice, `.dockerignore`
+- `entrypoint.sh` removed (was a dead file with conflicting runtime topology)
 
 ## Dependencies on Other Services
 

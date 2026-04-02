@@ -95,26 +95,37 @@ class Consumer:
             batch_size = len(batch)
             logger.info(f"⚙️  Traitement d'un batch de {batch_size} messages...")
             
-            # --- ACK-EARLY STRATEGY ---
-            # On acquitte les messages AVANT le traitement long pour éviter le timeout RabbitMQ.
-            # Si le traitement échoue, on devra republier manuellement le message.
-            for msg in batch:
-                try:
-                    await msg.ack()
-                except Exception as e:
-                    logger.warning(f"⚠️ Impossible d'acquitter le message {msg.delivery_tag} avant traitement: {e}. Le traitement continue sans ACK confirmé.")
-                    # On continue quand même, car si la co est coupée, le traitement sera probablement perdu ou republié plus tard.
-
+            # --- DECODE FIRST, THEN ACK ---
+            # Parse JSON before ACK so malformed messages can be sent to DLQ instead of being lost.
             messages_to_process = []
-            valid_batch_indices = [] # Indices des messages qui ont pu être décodés
-            
+            valid_batch_indices = []
+
             for i, msg in enumerate(batch):
                 try:
                     messages_to_process.append(json.loads(msg.body))
                     valid_batch_indices.append(i)
-                except json.JSONDecodeError:
-                     logger.error(f"❌ Erreur de décodage JSON pour le message {msg.delivery_tag}. Message ignoré (déjà acké).")
-                     # Optionnel: Envoyer directement en DLQ si JSON invalide irrécupérable
+                except json.JSONDecodeError as e:
+                    logger.error(f"Erreur de décodage JSON pour le message {msg.delivery_tag}. Envoi en DLQ.")
+                    try:
+                        async with self.connection.channel() as dlq_channel:
+                            dlx = await dlq_channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                            dlq_headers = DLQProperties.create_dlq_headers(
+                                e, 'document-echange-processor-service', 0, msg
+                            )
+                            await dlx.publish(
+                                aio_pika.Message(body=msg.body, headers=dlq_headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT),
+                                routing_key=self.routing_key,
+                            )
+                    except Exception as dlq_err:
+                        logger.critical(f"Impossible d'envoyer le message malformé en DLQ: {dlq_err}")
+                    await msg.ack()
+
+            # ACK-EARLY for valid messages — before the long OCR processing to avoid RabbitMQ timeout.
+            for idx in valid_batch_indices:
+                try:
+                    await batch[idx].ack()
+                except Exception as e:
+                    logger.warning(f"Impossible d'acquitter le message {batch[idx].delivery_tag} avant traitement: {e}.")
 
             if not messages_to_process:
                 continue

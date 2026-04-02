@@ -35,7 +35,8 @@ sys.path.insert(0, '/app/DeepSeek-OCR-vllm')
 if torch.version.cuda == '11.8':
     os.environ["TRITON_PTXAS_PATH"] = "/usr/local/cuda-11.8/bin/ptxas"
 os.environ['VLLM_USE_V1'] = '0'
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+if "CUDA_VISIBLE_DEVICES" not in os.environ:
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 # Import DeepSeek-OCR components
 from config import INPUT_PATH, OUTPUT_PATH, PROMPT, CROP_MODE, MAX_CONCURRENCY, NUM_WORKERS
@@ -66,6 +67,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Upload safety limits
+MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "100"))
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/tiff", "image/bmp", "image/webp"}
+ALLOWED_PDF_TYPES = {"application/pdf"}
+ALLOWED_TYPES = ALLOWED_IMAGE_TYPES | ALLOWED_PDF_TYPES
+MAX_BATCH_FILES = int(os.environ.get("MAX_BATCH_FILES", "50"))
 
 # Global variables for the model
 llm = None
@@ -393,9 +402,15 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
     """Process a single image file with optional custom prompt"""
     try:
         print(f"[DEBUG] Image endpoint called for file: {file.filename}")
-        
+
         # Read image data
         image_data = await file.read()
+
+        if len(image_data) > MAX_UPLOAD_SIZE_BYTES:
+            return OCRResponse(success=False, error=f"File too large: {len(image_data)} bytes (max {MAX_UPLOAD_SIZE_MB} MB)")
+
+        if file.content_type and file.content_type not in ALLOWED_IMAGE_TYPES:
+            return OCRResponse(success=False, error=f"Unsupported image type: {file.content_type}")
         
         # Convert to PIL Image
         image = Image.open(io.BytesIO(image_data)).convert('RGB')
@@ -438,6 +453,14 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         # Read PDF data
         pdf_data = await file.read()
         print(f"[DEBUG] Read {len(pdf_data)} bytes of PDF data")
+
+        if len(pdf_data) > MAX_UPLOAD_SIZE_BYTES:
+            return BatchOCRResponse(success=False, results=[], total_pages=0, filename=file.filename,
+                                    error=f"File too large: {len(pdf_data)} bytes (max {MAX_UPLOAD_SIZE_MB} MB)")
+
+        if file.content_type and file.content_type not in ALLOWED_PDF_TYPES:
+            return BatchOCRResponse(success=False, results=[], total_pages=0, filename=file.filename,
+                                    error=f"Unsupported file type: {file.content_type}")
         
         # Convert PDF to images
         loop = asyncio.get_event_loop()
@@ -499,8 +522,11 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
 @app.post("/ocr/batch")
 async def process_batch_endpoint(files: List[UploadFile] = File(...), prompt: Optional[str] = Form(None)):
     """Process multiple files (images and PDFs) with optional custom prompt"""
+    if len(files) > MAX_BATCH_FILES:
+        return {"success": False, "error": f"Too many files: {len(files)} (max {MAX_BATCH_FILES})"}
+
     tasks = []
-    
+
     for file in files:
         if file.filename.lower().endswith('.pdf'):
             tasks.append(process_pdf_endpoint(file, prompt))

@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+.env
+.git
+recovery_data/
+app/testmanuel.py

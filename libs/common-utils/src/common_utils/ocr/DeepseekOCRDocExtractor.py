@@ -213,7 +213,7 @@ class DeepseekOCRDocExtractor:
                 data['prompt'] = prompt
             
             # Envoi de la requête à l'API OCR (asynchrone)
-            async with httpx.AsyncClient(timeout=None) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout, connect=30.0)) as client:
                 response = await client.post(
                     self.endpoint,
                     files=files,
@@ -280,7 +280,7 @@ class DeepseekOCRDocExtractor:
                 data['prompt'] = prompt
             
             # Envoi de la requête à l'API OCR (asynchrone)
-            async with httpx.AsyncClient(timeout=None) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout, connect=30.0)) as client:
                 response = await client.post(
                     self.endpoint,
                     files=files,

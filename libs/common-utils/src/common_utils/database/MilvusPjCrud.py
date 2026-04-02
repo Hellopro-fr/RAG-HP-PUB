@@ -61,11 +61,21 @@ class MilvusPjCrud:
         )
         self.logger.debug("Connexion sur Zilliz cloud avec succès.")
 
+    def _is_connection_alive(self) -> bool:
+        """Verify the gRPC channel is actually usable, not just registered."""
+        if not connections.has_connection(self._CONNECTION_ALIAS):
+            return False
+        try:
+            utility.list_collections(using=self._CONNECTION_ALIAS, timeout=5)
+            return True
+        except Exception:
+            return False
+
     def _ensure_connected(self):
-        if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+        if self.collection is not None and self._is_connection_alive():
             return
         with milvus_connection_lock:
-            if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+            if self.collection is not None and self._is_connection_alive():
                 return
             self.collection = None
             self._connect_to_milvus()
@@ -260,7 +270,7 @@ class MilvusPjCrud:
             result = await asyncio.to_thread(self.collection.upsert, sanitized_batch)
             self.logger.info(f"[{model_key}] Mise à jour terminée avec succès.")
 
-            return {"status": "success", "data": result}
+            return {"status": "success", "data": "updated"}
 
         except MilvusException as e:
             self.collection = None  # Force reconnection on next call
@@ -298,6 +308,11 @@ class MilvusPjCrud:
             self.logger.info(
                 f"[{model_key}][pj] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'..."
             )
+            if not isinstance(id_entity_milvus, int):
+                try:
+                    id_entity_milvus = int(id_entity_milvus)
+                except (ValueError, TypeError):
+                    return {"status": "error", "message": f"ID invalide (non-entier): {id_entity_milvus}"}
             result = await asyncio.to_thread(
                 self.collection.delete, f"id == {id_entity_milvus}"
             )
@@ -321,7 +336,9 @@ class MilvusPjCrud:
             raise
 
     async def get_pj(self, fichier_source: str) -> Dict[str, Any]:
-        list_fichier_source = [fichier_source]
+        # Sanitize to prevent expression injection
+        sanitized = fichier_source.replace("'", "\\'").replace('"', '\\"')
+        list_fichier_source = [sanitized]
         model_config = ModelConfig()
         model_key = model_config.model_id
 

@@ -49,6 +49,10 @@ DeepSeek-OCR/
 - Gundam mode: base_size=1024, image_size=640, crop_mode=True, 2-6 crops.
 - DynamicBatchProcessor collects requests within 50ms window before GPU inference.
 - Memory management: explicit `gc.collect()` + `torch.cuda.empty_cache()` after inference.
+- Upload safety: file type validation (MIME), size limit (configurable via `MAX_UPLOAD_SIZE_MB`, default 100MB), batch file count limit (`MAX_BATCH_FILES`, default 50).
+- `CUDA_VISIBLE_DEVICES` read from env with fallback to `'0'` (no longer hardcoded override).
+- `eval()` replaced by `ast.literal_eval()` in enhanced client scripts (prevents RCE from crafted model output).
+- Docker: non-root user after build, `.dockerignore`.
 
 ## Dependencies on Other Services
 
