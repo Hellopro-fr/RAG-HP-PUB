@@ -31,6 +31,28 @@ class ModelConfig:
 class MilvusPjCrud:
     _CONNECTION_ALIAS = "milvus_pjechanges"
 
+    # Must match FieldSchema definitions in _get_or_create_collection()
+    _VARCHAR_MAX_LENGTHS = {
+        "page_type": 65535,
+        "id_demande": 65535,
+        "categorie": 65535,
+        "id_categorie": 65535,
+        "produit": 65535,
+        "id_produit": 65535,
+        "acheteur": 65535,
+        "id_acheteur": 65535,
+        "fournisseur": 65535,
+        "id_fournisseur": 65535,
+        "etat": 65535,
+        "affichage": 65535,
+        "text": 65535,
+        "source": 65535,
+        "fichier_source": 65535,
+        "chunk_id": 65535,
+        "date_ajout": 65535,
+        "date_maj": 65535,
+    }
+
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -44,6 +66,16 @@ class MilvusPjCrud:
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
         self.logger = kwargs.get("logger", logging.getLogger(__name__))
+
+    def _validate_varchar_lengths(self, record: dict) -> None:
+        for field_name, max_len in self._VARCHAR_MAX_LENGTHS.items():
+            value = record.get(field_name)
+            if isinstance(value, str) and len(value) > max_len:
+                raise ValueError(
+                    f"Field '{field_name}' exceeds VARCHAR limit: "
+                    f"{len(value)} chars > max {max_len}. "
+                    f"Preview: {value[:100]!r}..."
+                )
 
     def _connect_to_milvus(self):
         # Called with milvus_connection_lock already held
@@ -215,6 +247,7 @@ class MilvusPjCrud:
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
                 data = Utils.sanitize_record(data)
+                self._validate_varchar_lengths(data)
                 sanitized_batch.append(data)
 
             result = await asyncio.to_thread(self.collection.insert, sanitized_batch)
@@ -233,7 +266,9 @@ class MilvusPjCrud:
             self.logger.error(
                 f"[{model_key}][pj] Erreur Milvus lors de l'insertion : {e}"
             )
-            raise
+            raise RuntimeError(
+                f"[{model_key}][pj] Milvus insert failed: {e}"
+            ) from e
         except Exception as e:
             self.collection = None  # Force reconnection on next call
             self.logger.error(
@@ -265,6 +300,7 @@ class MilvusPjCrud:
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
                 data = Utils.sanitize_record(data)
+                self._validate_varchar_lengths(data)
                 sanitized_batch.append(data)
 
             result = await asyncio.to_thread(self.collection.upsert, sanitized_batch)
@@ -278,7 +314,9 @@ class MilvusPjCrud:
                 f"[{model_key}][pj] Erreur Milvus lors de mise à jour : {e}"
             )
             self.logger.error(f"Data : {datas}")
-            raise
+            raise RuntimeError(
+                f"[{model_key}][pj] Milvus upsert failed: {e}"
+            ) from e
         except Exception as e:
             self.collection = None  # Force reconnection on next call
             self.logger.error(
@@ -329,7 +367,9 @@ class MilvusPjCrud:
             self.logger.error(
                 f"[{model_key}][pj] Erreur Milvus lors de la suppression : {e}"
             )
-            raise
+            raise RuntimeError(
+                f"[{model_key}][pj] Milvus delete failed: {e}"
+            ) from e
         except Exception as e:
             self.collection = None  # Force reconnection on next call
             self.logger.error(f"[{model_key}][pj] Suppression : {e}", exc_info=True)
@@ -388,7 +428,9 @@ class MilvusPjCrud:
             self.logger.error(
                 f"[{model_key}][pj] Erreur Milvus lors de la récupération : {e}"
             )
-            raise
+            raise RuntimeError(
+                f"[{model_key}][pj] Milvus query failed: {e}"
+            ) from e
         except Exception as e:
             self.collection = None  # Force reconnection on next call
             self.logger.error(
