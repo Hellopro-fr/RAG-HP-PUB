@@ -977,13 +977,13 @@ class RecommendationServiceV2:
                 if vid not in seen_vendors:
                     deduped_top.append(p)
                     seen_vendors.add(vid)
-            # Put overflow back into liste, exclude top ids
+            # Put overflow back into liste, exclude top from liste
             reranked_top = deduped_top[:4]
             top_ids = {str(p.id_produit) for p in reranked_top}
             reranked_liste = [
                 p for p in (overflow + reranked_liste)
                 if str(p.id_produit) not in top_ids
-            ][:request.top_k]
+            ]
 
             # 6. Re-query with LLM-selected IDs (streaming fetch + score)
             llm_selected_ids = [
