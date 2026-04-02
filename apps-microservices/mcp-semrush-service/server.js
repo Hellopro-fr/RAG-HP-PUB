@@ -44,8 +44,8 @@ function buildQS(params) {
 
 const STD    = 'https://api.semrush.com/';                     // Standard analytics
 const BACK   = 'https://api.semrush.com/analytics/v1/';        // Backlinks API
-const TRENDS = 'https://api.semrush.com/analytics/ta/api/v3/'; // Trends API
-const BAL    = 'http://www.semrush.com/users/countapiunits.html'; // API units balance
+// DISABLED: const TRENDS = 'https://api.semrush.com/analytics/ta/api/v3/'; // Trends API (requires Trends API subscription)
+const BAL    = 'https://api.semrush.com/management/v1/api-units/balance'; // API units balance
 
 // ── Tool definitions ────────────────────────────────────────────────────────
 
@@ -363,9 +363,12 @@ const TOOLS = [
     },
   },
 
-  // ── Traffic / Trends (fixed: uses correct Trends API base URL) ──
+  // ── Traffic / Trends ──
+  // DISABLED: requires Semrush Trends API subscription (returns ERROR 130 :: API DISABLED)
+  // To re-enable: subscribe to Trends API at semrush.com, then uncomment the block below.
+  /*
   {
-    name: 'traffic_summary',
+    name: 'traffic_summary', // DISABLED: requires Semrush Trends API subscription
     description: 'Traffic analytics summary: visits, users, pages/visit, bounce rate, avg duration. Requires Semrush Trends API subscription.',
     inputSchema: {
       type: 'object',
@@ -389,7 +392,7 @@ const TOOLS = [
   },
 
   {
-    name: 'traffic_sources',
+    name: 'traffic_sources', // DISABLED: requires Semrush Trends API subscription
     description: 'Traffic sources breakdown (direct, organic, referral, social, paid, email). Requires Semrush Trends API subscription.',
     inputSchema: {
       type: 'object',
@@ -411,6 +414,7 @@ const TOOLS = [
       return httpGet(TRENDS + 'sources?' + buildQS(params));
     },
   },
+  */
 
   // ── API balance (fixed: uses correct URL) ──
   {
