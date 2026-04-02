@@ -93,6 +93,16 @@ export default function SearchPage() {
             label: bucket.key,
         }));
         setServiceOptions(options);
+
+        // Purge stale service_names that no longer exist in current options
+        const validKeys = new Set(options.map((o: MultiSelectOption) => o.value));
+        setFilters((prev: Filters) => {
+            const cleaned = prev.service_names.filter((s: string) => validKeys.has(s));
+            if (cleaned.length !== prev.service_names.length) {
+                return { ...prev, service_names: cleaned };
+            }
+            return prev;
+        });
     }).catch(err => {
         console.error("Failed to fetch service names for filters", err);
     })
