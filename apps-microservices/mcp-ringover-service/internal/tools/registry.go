@@ -37,13 +37,20 @@ func NewRegistry(clients *Clients) *Registry {
 		clients: clients,
 	}
 
-	r.register("get_calls", getCallsDescription, getCallsInputSchema, handleGetCalls)
+	// ── Active tools ──────────────────────────────────────────────────────────
+	r.register("list_calls_by_date", listCallsByDateDescription, listCallsByDateInputSchema, handleListCallsByDate)
+	r.register("search_calls", searchCallsDescription, searchCallsInputSchema, handleSearchCalls)
 	r.register("get_call_details", getCallDetailsDescription, getCallDetailsInputSchema, handleGetCallDetails)
-	r.register("get_call_transcription", getCallTranscriptionDescription, getCallTranscriptionInputSchema, handleGetCallTranscription)
-	r.register("get_call_summary", getCallSummaryDescription, getCallSummaryInputSchema, handleGetCallSummary)
-	r.register("get_call_moments", getCallMomentsDescription, getCallMomentsInputSchema, handleGetCallMoments)
-	r.register("list_contacts", listContactsDescription, listContactsInputSchema, handleListContacts)
-	r.register("list_users", listUsersDescription, listUsersInputSchema, handleListUsers)
+
+	// ── Deactivated tools ─────────────────────────────────────────────────────
+	// r.register("get_call_stats_by_user", ...) // DISABLED: no /stats/team endpoint in Ringover public API (returns 404)
+	// r.register("get_calls", ...) // superseded by list_calls_by_date + search_calls
+	// r.register("list_contacts", ...) // not needed
+	// r.register("list_users", ...) // not needed
+	// r.register("get_empower_call_uuid", ...) // DISABLED: requires Ringover Empower subscription (returns 403)
+	// r.register("get_call_transcription", ...) // DISABLED: requires Ringover Empower subscription (returns 403)
+	// r.register("get_call_summary", ...) // DISABLED: requires Ringover Empower subscription (returns 403)
+	// r.register("get_call_moments", ...) // DISABLED: requires Ringover Empower subscription (returns 403)
 
 	return r
 }
