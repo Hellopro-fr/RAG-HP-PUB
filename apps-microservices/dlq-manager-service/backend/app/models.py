@@ -42,3 +42,8 @@ class ExtractFieldRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = None
     search_term: Optional[str] = None
     field_path: str  # e.g. "data.fichier_source"
+
+class UniqueErrorsRequest(BaseModel):
+    """Returns unique (service_name, error_reason) combinations matching filters."""
+    filters: Optional[Dict[str, Any]] = None
+    search_term: Optional[str] = None

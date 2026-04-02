@@ -8,7 +8,8 @@ import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
 import CreateRuleModal from "./CreateRuleModal";
-import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, Message } from "@/lib/api";
+import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, apiGetUniqueErrors, Message, UniqueErrorBucket } from "@/lib/api";
+import UniqueErrorsModal from "./UniqueErrorsModal";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "./DateTimePicker";
@@ -71,6 +72,10 @@ export default function SearchPage() {
   const [serviceOptions, setServiceOptions] = useState<MultiSelectOption[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [showUniqueErrors, setShowUniqueErrors] = useState(false);
+  const [uniqueErrorBuckets, setUniqueErrorBuckets] = useState<UniqueErrorBucket[]>([]);
+  const [uniqueErrorTotal, setUniqueErrorTotal] = useState(0);
+  const [loadingUniqueErrors, setLoadingUniqueErrors] = useState(false);
 
   useEffect(() => {
     apiGetDashboardStats().then(response => {
@@ -256,6 +261,25 @@ export default function SearchPage() {
       }
   };
 
+  const handleViewUniqueErrors = async () => {
+    setShowUniqueErrors(true);
+    setLoadingUniqueErrors(true);
+    setUniqueErrorBuckets([]);
+    setUniqueErrorTotal(0);
+    try {
+      const activeFilters = getActiveFiltersPayload();
+      const response = await apiGetUniqueErrors(activeFilters, searchTerm);
+      setUniqueErrorBuckets(response.data.buckets);
+      setUniqueErrorTotal(response.data.total_unique);
+    } catch (err) {
+      console.error("Failed to fetch unique errors", err);
+      alert("Failed to fetch unique errors.");
+      setShowUniqueErrors(false);
+    } finally {
+      setLoadingUniqueErrors(false);
+    }
+  };
+
   const handleArchiveByFilter = async () => {
       if (loadingAction) {
           alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
@@ -436,6 +460,15 @@ export default function SearchPage() {
           ) : (
             <>
               <Button
+                onClick={handleViewUniqueErrors}
+                variant="outline"
+                style={{ borderColor: "var(--bleu-primary)", color: "var(--bleu-primary)" }}
+                disabled={totalResults === 0 || !!loadingAction}
+                className="hover:bg-bleu-light disabled:opacity-50 w-full sm:w-auto"
+              >
+                View Unique Errors
+              </Button>
+              <Button
                 onClick={handleArchiveByFilter}
                 style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
                 disabled={totalResults === 0 || !!loadingAction}
@@ -489,10 +522,19 @@ export default function SearchPage() {
       )}
 
       {showCreateRuleModal && (
-        <CreateRuleModal 
+        <CreateRuleModal
           currentSearchTerm={searchTerm}
           currentFilters={getActiveFiltersPayload()}
           onClose={() => setShowCreateRuleModal(false)}
+        />
+      )}
+
+      {showUniqueErrors && (
+        <UniqueErrorsModal
+          buckets={uniqueErrorBuckets}
+          totalUnique={uniqueErrorTotal}
+          loading={loadingUniqueErrors}
+          onClose={() => setShowUniqueErrors(false)}
         />
       )}
     </div>

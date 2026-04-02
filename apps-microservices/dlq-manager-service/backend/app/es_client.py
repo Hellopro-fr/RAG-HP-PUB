@@ -642,6 +642,50 @@ class ElasticsearchClient:
 
         return sorted(unique_values, key=str), total_scanned
 
+    async def get_unique_errors(self, filters: Dict, search_term: str) -> Dict[str, Any]:
+        """Returns all unique (service_name, error_reason) combinations matching the query
+        using a composite aggregation for unlimited bucket count."""
+        query = self._build_query(filters, search_term)
+        buckets = []
+        after_key = None
+
+        while True:
+            composite_source = {
+                "sources": [
+                    {"service_name": {"terms": {"field": "service_name"}}},
+                    {"error_reason": {"terms": {"field": "error_reason.keyword"}}}
+                ],
+                "size": 500
+            }
+            if after_key:
+                composite_source["after"] = after_key
+
+            body = {
+                "size": 0,
+                "query": query,
+                "aggs": {
+                    "unique_errors": {
+                        "composite": composite_source
+                    }
+                }
+            }
+
+            response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
+            agg_buckets = response['aggregations']['unique_errors']['buckets']
+
+            for bucket in agg_buckets:
+                buckets.append({
+                    "service_name": bucket['key']['service_name'],
+                    "error_reason": bucket['key']['error_reason'],
+                    "count": bucket['doc_count']
+                })
+
+            if len(agg_buckets) < 500:
+                break
+            after_key = agg_buckets[-1]['key']
+
+        return {"buckets": buckets, "total_unique": len(buckets)}
+
     async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Gets the status of an Elasticsearch background task."""
         try:

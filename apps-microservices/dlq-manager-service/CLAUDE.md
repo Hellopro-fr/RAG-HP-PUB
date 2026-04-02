@@ -51,6 +51,7 @@ frontend/
       MessageList.tsx
       MessageDetailModal.tsx
       SearchPage.tsx
+      UniqueErrorsModal.tsx
       RulesPage.tsx
       CreateRuleModal.tsx
       Sidebar.tsx
@@ -67,6 +68,7 @@ frontend/
 - `POST /api/requeue-bulk` -- Bulk requeue messages
 - `POST /api/update-status-bulk` -- Bulk update status
 - `POST /api/archive-by-filter` -- Archive messages by filter
+- `POST /api/messages/unique-errors` -- Get unique (service_name, error_reason) combos matching filters
 
 ## Conventions
 

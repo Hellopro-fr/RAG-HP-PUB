@@ -10,7 +10,7 @@ from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_c
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
     EditAndRequeueRequest, RequeueByFilterRequest, ArchiveByFilterRequest, CheckUrlsBatchRequest,
-    AutoArchiveRuleCreate, ExtractFieldRequest
+    AutoArchiveRuleCreate, ExtractFieldRequest, UniqueErrorsRequest
 )
 
 router = APIRouter()
@@ -369,6 +369,27 @@ async def get_requeue_history(page: int = 1, page_size: int = 50, es_client: Ela
         return {"history": results, "total": total}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/messages/unique-errors")
+async def get_unique_errors(
+    request: UniqueErrorsRequest,
+    es_client: ElasticsearchClient = Depends(get_es_client)
+):
+    """
+    Returns all unique (service_name, error_reason) combinations matching the current filters.
+    Uses composite aggregation for unlimited bucket count.
+    """
+    try:
+        result = await es_client.get_unique_errors(
+            filters=request.filters or {},
+            search_term=request.search_term or ""
+        )
+        return result
+    except Exception as e:
+        print("--- UNHANDLED ERROR IN /api/messages/unique-errors ---")
+        print(traceback.format_exc())
+        print("------------------------------------------------------")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
 
 @router.post("/messages/extract-field")
 async def extract_field_from_messages(
