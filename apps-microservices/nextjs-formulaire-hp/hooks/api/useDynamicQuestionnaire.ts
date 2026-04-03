@@ -37,7 +37,6 @@ async function prefetchCategoryStats(
     if (data.produit !== undefined && data.fournisseur !== undefined) {
       const productsCount = Number(data.produit);
       const suppliersCount = Number(data.fournisseur);
-      console.log('categoryStats:', { suppliersCount, productsCount });
       setCategoryStats({ productsCount, suppliersCount });
     }
   } catch (error) {
