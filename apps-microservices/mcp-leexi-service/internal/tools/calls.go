@@ -110,6 +110,13 @@ func handleGetCallTranscript(ctx context.Context, clients *Clients, args map[str
 		return rawJSONResult(data), nil
 	}
 
+	// Unwrap the "data" envelope if present.
+	if inner, exists := full["data"]; exists {
+		if err := json.Unmarshal(inner, &full); err == nil {
+			// full now contains the actual call fields
+		}
+	}
+
 	transcript := map[string]json.RawMessage{}
 	for _, key := range []string{"uuid", "title", "transcript", "simple_transcript", "call_topics", "speakers", "duration"} {
 		if v, exists := full[key]; exists {
@@ -153,6 +160,13 @@ func handleGetCallSummary(ctx context.Context, clients *Clients, args map[string
 	var full map[string]json.RawMessage
 	if err := json.Unmarshal(data, &full); err != nil {
 		return rawJSONResult(data), nil
+	}
+
+	// Unwrap the "data" envelope if present.
+	if inner, exists := full["data"]; exists {
+		if err := json.Unmarshal(inner, &full); err == nil {
+			// full now contains the actual call fields
+		}
 	}
 
 	summary := map[string]json.RawMessage{}
