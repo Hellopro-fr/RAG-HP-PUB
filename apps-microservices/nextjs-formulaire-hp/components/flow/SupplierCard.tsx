@@ -132,6 +132,25 @@ const SupplierCard = ({
       )}
       onClick={handleCardClick}
     >
+      {/* Checkbox */}
+      <div
+        className="checkbox-area absolute top-2 right-2 z-10"
+        onClick={handleCheckboxClick}
+      >
+        <div
+          className={cn(
+            "flex h-6 w-6 items-center justify-center rounded-lg border-2 transition-all duration-200 shadow-sm",
+            isSelected
+              ? "border-primary bg-primary"
+              : "border-muted-foreground/30 bg-background/90 backdrop-blur-sm"
+          )}
+        >
+          {isSelected && (
+            <Check className="h-3.5 w-3.5 text-primary-foreground animate-check-bounce" />
+          )}
+        </div>
+      </div>
+
       {/* Image */}
       <div className="relative w-24 h-24 flex-shrink-0 overflow-hidden bg-muted">
         {!imageLoaded && !imageError && (
@@ -155,10 +174,13 @@ const SupplierCard = ({
           // TODO: Implement better fallback for missing images
           <div className="w-full h-full" />
         )}
-        {isRecommended && (
+        {matchScore >= 60 && (
           <div className="absolute top-1 left-1">
-            <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-              Top
+            <span className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white",
+              matchScore >= 80 ? "bg-match-high" : "bg-match-medium"
+            )}>
+              {matchScore >= 80 ? "Idéal" : "À considérer"}
             </span>
           </div>
         )}
@@ -171,12 +193,6 @@ const SupplierCard = ({
             {productName}
           </h4>
           <div className="flex items-center gap-3 mt-1.5">
-            <span className={cn(
-              "rounded px-1.5 py-0.5 font-bold text-xs",
-              getMatchBadgeStyle()
-            )}>
-              {matchScore}%
-            </span>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className={matchingSpecs.length > 0 ? "text-match-high" : "text-muted-foreground"}>
                 {matchingSpecs.length}/{specs.length} ✓
@@ -192,24 +208,6 @@ const SupplierCard = ({
         </div>
       </div>
 
-      {/* Checkbox */}
-      <div
-        className="checkbox-area absolute top-2 right-2 z-10"
-        onClick={handleCheckboxClick}
-      >
-        <div
-          className={cn(
-            "flex h-6 w-6 items-center justify-center rounded-lg border-2 transition-all duration-200 shadow-sm",
-            isSelected
-              ? "border-primary bg-primary"
-              : "border-muted-foreground/30 bg-background/90 backdrop-blur-sm"
-          )}
-        >
-          {isSelected && (
-            <Check className="h-3.5 w-3.5 text-primary-foreground animate-check-bounce" />
-          )}
-        </div>
-      </div>
     </div>
   ) : null;
 
@@ -225,30 +223,15 @@ const SupplierCard = ({
       )}
       onClick={handleCardClick}
     >
-      {/* Checkbox */}
-      <div
-        className="checkbox-area absolute top-3 right-3 z-10"
-        onClick={handleCheckboxClick}
-      >
-        <div
-          className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-lg border-2 transition-all duration-200 shadow-sm",
-            isSelected
-              ? "border-primary bg-primary"
-              : "border-muted-foreground/30 bg-background/90 backdrop-blur-sm group-hover:border-primary/50"
-          )}
-        >
-          {isSelected && (
-            <Check className="h-4 w-4 text-primary-foreground animate-check-bounce" />
-          )}
-        </div>
-      </div>
 
-      {/* Recommended Badge */}
-      {isRecommended && (
+      {/* Score Badge */}
+      {matchScore >= 60 && (
         <div className="absolute top-3 left-3 z-10">
-          <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm">
-            Recommandé
+          <span className={cn(
+            "rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow-sm",
+            matchScore >= 80 ? "bg-match-high" : "bg-match-medium"
+          )}>
+            {matchScore >= 80 ? "Idéal" : "À considérer"}
           </span>
         </div>
       )}
@@ -276,13 +259,6 @@ const SupplierCard = ({
           // TODO: Implement better fallback for missing images
           <div className="w-full h-full" />
         )}
-        {/* Match Score Badge */}
-        <div className={cn(
-          "absolute bottom-2 right-2 rounded-lg px-2.5 py-1 font-bold text-sm shadow-lg",
-          getMatchBadgeStyle()
-        )}>
-          {matchScore}%
-        </div>
       </div>
 
       {/* Content - Structured with fixed heights for alignment */}
@@ -390,10 +366,28 @@ const SupplierCard = ({
         </div>
       </div>
 
-      {/* View Details Footer */}
-      <div className="border-t border-border px-4 py-2.5 text-center bg-muted/30 flex-shrink-0">
-        <span className="text-xs font-medium text-primary group-hover:underline">
-          Voir détails →
+      {/* Selection Footer */}
+      <div
+        className="checkbox-area border-t border-border px-4 py-2.5 flex items-center justify-center gap-2 bg-muted/30 flex-shrink-0 cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={handleCheckboxClick}
+      >
+        <div
+          className={cn(
+            "flex h-5 w-5 items-center justify-center rounded-md border-2 transition-all duration-200",
+            isSelected
+              ? "border-primary bg-primary"
+              : "border-muted-foreground/30 bg-background group-hover:border-primary/50"
+          )}
+        >
+          {isSelected && (
+            <Check className="h-3 w-3 text-primary-foreground" />
+          )}
+        </div>
+        <span className={cn(
+          "text-xs font-medium transition-colors",
+          isSelected ? "" : "text-muted-foreground"
+        )}>
+          Recevoir un devis
         </span>
       </div>
     </div>
