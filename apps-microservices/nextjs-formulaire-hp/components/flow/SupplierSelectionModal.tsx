@@ -28,6 +28,7 @@ import {
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
+import { getCategorySelection } from "@/data/category-static-content";
 
 type ViewState = "selection" | "contact" | "modify-criteria" | "custom-need";
 
@@ -485,12 +486,19 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                     </>
                   ) : (
                     <>
-                      Voir plus de {(categoryName || "produits").toLowerCase()}
+                      {(categoryId && getCategorySelection(categoryId)?.voirPlus) || `Voir plus de ${(categoryName || "produits").toLowerCase()}`}
                       <ChevronDown className="h-4 w-4" />
                     </>
                   )}
                 </button>
               </div>
+
+              {/* Bloc réassurance "Recommandé" */}
+              {categoryId && getCategorySelection(categoryId)?.recommandeReassurance && (
+                <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                  <span className="font-semibold text-foreground">Recommandé</span> = {getCategorySelection(categoryId)!.recommandeReassurance}
+                </div>
+              )}
             </div>
           )}
 
