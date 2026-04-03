@@ -15,9 +15,12 @@ interface ProgressHeaderProps {
   steps: Step[];
   currentStep: number;
   progress: number;
+  showSteps?: boolean;
+  showExpertHelp?: boolean;
+  showProgressBar?: boolean;
 }
 
-const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) => {
+const ProgressHeader = ({ steps, currentStep, progress, showSteps = true, showExpertHelp = true, showProgressBar = true }: ProgressHeaderProps) => {
   const currentStepData = steps.find(s => s.id === currentStep);
   
   return (
@@ -28,6 +31,7 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
         <Image src={hpLogo} alt="Hellopro" width={120} height={32} className="h-5 lg:h-8 w-auto shrink-0" />
 
         {/* Mobile/Tablet: Current step indicator - simplified */}
+        {showSteps && (
         <div className="flex lg:hidden items-center gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">
             Étape {currentStep}/{steps.length}
@@ -36,8 +40,10 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
             · {currentStepData?.label}
           </span>
         </div>
+        )}
 
         {/* Desktop: Full steps */}
+        {showSteps && (
         <div className="hidden lg:flex items-center gap-6">
           {steps.map((step, index) => (
             <div key={step.id} className="flex items-center gap-2">
@@ -73,8 +79,10 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
             </div>
           ))}
         </div>
+        )}
 
         {/* Expert help - desktop */}
+        {showExpertHelp && (
         <a
           href="tel:+33745882953"
           className="hidden lg:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -89,8 +97,10 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
           <span className="text-xs">Besoin d'aide ?</span>
           <span className="font-medium text-foreground">07 45 88 29 53</span>
         </a>
+        )}
 
         {/* Expert help - mobile/tablet (icon only) */}
+        {showExpertHelp && (
         <a
           href="tel:+33745882953"
           className="lg:hidden flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
@@ -104,15 +114,18 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
           />
           <Phone className="h-4 w-4 text-primary" />
         </a>
+        )}
       </div>
 
       {/* Progress Bar */}
+      {showProgressBar && (
       <div className="h-1 w-full bg-muted">
         <div
           className="h-full bg-primary transition-all duration-500 ease-out"
           style={{ width: `${progress}%` }}
         />
       </div>
+      )}
     </div>
   );
 };

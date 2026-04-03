@@ -55,14 +55,13 @@ const QuestionScreen = ({
       {/* Scrollable content */}
       <div className="flex-1 p-4 sm:p-6 lg:p-10 pb-32 sm:pb-6">
         <div className="mx-auto max-w-[44em] space-y-6 sm:space-y-8">
-          {/* Question counter */}
-
-          {/* Question counter */}
+          {/* Question counter — DISABLED: remplacé par QuestionnaireProgressBar dans le header
           <div className="text-center">
             <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-1.5 text-sm font-medium text-secondary-foreground">
-              {totalQuestions == 1 ? "Question 1" : `Question ${currentIndex + 1} sur ${totalQuestions}`}              
+              {totalQuestions == 1 ? "Question 1" : `Question ${currentIndex + 1} sur ${totalQuestions}`}
             </span>
           </div>
+          */}
 
           {/* Question title */}
           <div className="text-center space-y-3 sm:space-y-4">
@@ -207,19 +206,19 @@ const QuestionScreen = ({
 
           {/* Desktop navigation with reassurance - hidden on mobile */}
           <div className="hidden sm:block pt-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">             
               <button
                 onClick={onBack}
                 disabled={isFirst}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg border-2 border-border bg-background px-5 py-3 text-sm font-medium transition-colors",
+                  "flex items-center gap-2 text-sm font-semibold uppercase tracking-wide transition-colors",
                   isFirst
-                    ? "opacity-50 cursor-not-allowed"
-                    : "hover:bg-muted text-foreground"
+                    ? "opacity-0 cursor-default pointer-events-none"
+                    : "text-foreground hover:text-foreground/70"
                 )}
               >
                 <ArrowLeft className="h-4 w-4" />
-                Précédent
+                Retour
               </button>
 
               {/* Always show Suivant button for visual consistency */}
@@ -239,19 +238,14 @@ const QuestionScreen = ({
               </button>
             </div>
             
-            {/* Desktop reassurance - below buttons */}
-            <div className="flex items-center justify-center gap-4 text-sm">
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5">
-                <Package className="h-4 w-4 text-primary" />
-                <span className="text-foreground">
-                  <span className="font-semibold text-primary">{categoryName || ""}</span>
-                  <span className="text-muted-foreground"> : {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-2 text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>+ de 10 000 pros équipés / mois</span>
-              </div>
+            {/* Nouvelle réassurance desktop */}
+            <div className="mt-5 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3 text-center">
+              <p className="text-sm text-foreground">
+                À la fin de ce questionnaire → <span className="font-semibold text-primary">💰 Estimation de prix</span> + <span className="font-semibold text-primary">📦 Produits adaptés à votre besoin</span>
+              </p>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                1 400 modèles de {categoryName || "produits"} comparés chez 43 vendeurs
+              </p>
             </div>
           </div>
         </div>
@@ -259,32 +253,32 @@ const QuestionScreen = ({
 
       {/* Mobile sticky footer with reassurance */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-        {/* Reassurance line */}
-        <div className="flex flex-col items-center gap-1 px-4 py-2 border-b border-border/50 bg-primary/5">
-          <div className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden">
-            <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="font-semibold text-primary truncate">{categoryName || ""}</span>
-            <span className="text-muted-foreground shrink-0">: {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
-          </div>
-          <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
-            <Users className="h-3.5 w-3.5 shrink-0" />
-            <span>+ de 10 000 pros équipés / mois</span>
-          </div>
+       
+
+        {/* Nouvelle réassurance mobile */}
+        <div className="px-4 py-2 border-b border-border/50 text-center">
+          <p className="text-xs text-foreground">
+            À la fin → <span className="font-semibold text-primary">💰 Estimation de prix</span> + <span className="font-semibold text-primary">📦 Produits adaptés</span>
+          </p>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            1 400 modèles de {categoryName || "produits"} comparés chez 43 vendeurs
+          </p>
         </div>
         
         {/* Navigation buttons */}
-        <div className="flex items-center gap-3 p-4">
+        <div className="flex items-center gap-3 p-4">          
           <button
             onClick={onBack}
             disabled={isFirst}
             className={cn(
-              "flex items-center justify-center rounded-lg border-2 border-border bg-background px-4 py-3 text-sm font-medium transition-colors",
+              "flex items-center gap-2 text-sm font-semibold uppercase tracking-wide transition-colors",
               isFirst
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:bg-muted text-foreground"
+                ? "opacity-0 cursor-default pointer-events-none"
+                : "text-foreground hover:text-foreground/70"
             )}
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4" />
+            Retour
           </button>
 
           {/* Always show Suivant button for visual consistency */}
