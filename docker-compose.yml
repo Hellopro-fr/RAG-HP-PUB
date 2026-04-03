@@ -2191,6 +2191,25 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP Leexi Service ──────────────────────────────────────────────────
+  mcp-leexi-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-leexi-service/Dockerfile
+    container_name: mcp-leexi-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8589:8589"
+    environment:
+      - LEEXI_API_KEY_ID=${LEEXI_API_KEY_ID}
+      - LEEXI_API_KEY_SECRET=${LEEXI_API_KEY_SECRET}
+      - LEEXI_API_BASE_URL=${LEEXI_API_BASE_URL:-https://public-api.leexi.ai/v1}
+      - MCP_PORT=8589
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Neo4j Service ─────────────────────────────────────────────────
   mcp-neo4j-service:
     build:
