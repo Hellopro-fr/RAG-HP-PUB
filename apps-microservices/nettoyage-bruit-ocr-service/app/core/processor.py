@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 _thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm_worker")
 
 MAX_OUTPUT_TOKEN = 64000
+MAX_CONTENT_CHARS = 60000
 
 PROMPT_NETTOYAGE = """
 Tu es un expert en analyse de documents B2B multilingues (devis, catalogues, fiches techniques, plaquettes commerciales,savoir-faire, autre type) et à l'aise en détection des langues utilisées dans un contenu spécifique.
@@ -60,6 +61,10 @@ def make_chat_request(prompt_template, content,temperature=0.7):
         ChatRequest prêt à être envoyé au modèle
     """
     
+    if len(content) > MAX_CONTENT_CHARS:
+        logger.warning("Content truncated: %d chars > %d max", len(content), MAX_CONTENT_CHARS)
+        content = content[:MAX_CONTENT_CHARS]
+
     # Construire le texte complet du prompt
     prompt_text = prompt_template.format(content=content)
     prompt_json = json.dumps(prompt_text)
