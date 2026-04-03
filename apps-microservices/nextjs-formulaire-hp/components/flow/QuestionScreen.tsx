@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, ArrowRight, Info, Check, Package, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Question } from "@/types";
@@ -36,25 +36,55 @@ const QuestionScreen = ({
   const { categoryName, categoryStats } = useFlowStore();
   const [showJustification, setShowJustification] = useState(false);
 
+  // Animation slide-fade : exit vers la gauche, enter depuis la droite
+  const [isExiting, setIsExiting] = useState(false);
+  const [displayedQuestion, setDisplayedQuestion] = useState(question);
+  const prevIndexRef = useRef(currentIndex);
+
+  useEffect(() => {
+    if (currentIndex === prevIndexRef.current) {
+      // Même index, juste mettre à jour la question (ex: re-render)
+      setDisplayedQuestion(question);
+      return;
+    }
+
+    // Phase exit : le contenu glisse vers la gauche et disparaît
+    setIsExiting(true);
+
+    const timer = setTimeout(() => {
+      // Après l'exit, afficher le nouveau contenu et lancer l'entrée
+      setDisplayedQuestion(question);
+      setIsExiting(false);
+      prevIndexRef.current = currentIndex;
+    }, 300); // même durée que transition-all duration-300
+
+    return () => clearTimeout(timer);
+  }, [currentIndex, question]);
+
   // Stats avec fallback sur valeurs statiques
   const productsCount = categoryStats?.productsCount ?? 347;
   const suppliersCount = categoryStats?.suppliersCount ?? 24;
 
-  const showOtherOption = question.id === 3;
+  // Utiliser displayedQuestion pour le rendu (suit l'animation exit/enter)
+  const showOtherOption = displayedQuestion.id === 3;
   const isOtherSelected = selectedAnswers.includes("other");
   const hasSelection = selectedAnswers.length > 0;
 
   const handleAnswerClick = (answerId: string) => {
     // For single select, auto-advance after selection - except for "other" which needs text input
-    const shouldAutoAdvance = !question.multiSelect && answerId !== "other";
+    const shouldAutoAdvance = !displayedQuestion.multiSelect && answerId !== "other";
     onSelectAnswer(answerId, shouldAutoAdvance);
   };
 
   return (
     <div className="flex flex-col min-h-full">
       {/* Scrollable content */}
-      <div className="flex-1 p-4 sm:p-6 lg:p-10 pb-32 sm:pb-6">
-        <div className="mx-auto max-w-[44em] space-y-6 sm:space-y-8">
+      <div className="flex-1 pb-32 sm:pb-6 transition-all duration-300">
+        <div className={cn(
+          "px-4 sm:px-6 lg:px-10 pt-5 sm:pt-8 transition-all duration-300",
+          isExiting ? "opacity-0 -translate-x-5" : "opacity-100 translate-x-0"
+        )}>
+        <div className="mx-auto max-w-2xl space-y-5">
           {/* Question counter — DISABLED: remplacé par QuestionnaireProgressBar dans le header
           <div className="text-center">
             <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-1.5 text-sm font-medium text-secondary-foreground">
@@ -66,7 +96,7 @@ const QuestionScreen = ({
           {/* Question title */}
           <div className="text-center space-y-3 sm:space-y-4">
             <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground leading-tight">
-              {question.title}
+              {displayedQuestion.title}
             </h2>
             
             {/* Justification toggle - temporairement masqué
@@ -91,7 +121,7 @@ const QuestionScreen = ({
           <div className="space-y-3">
 
             {/* Regular answers (excluding quick option) */}
-            {question.answers
+            {displayedQuestion.answers
               .filter((answer) => answer.id !== "1-quick")
               .map((answer) => {
                 const isSelected = selectedAnswers.includes(answer.id);
@@ -113,14 +143,14 @@ const QuestionScreen = ({
                       <div
                         className={cn(
                           "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center transition-colors",
-                          question.multiSelect ? "rounded" : "rounded-full",
+                          displayedQuestion.multiSelect ? "rounded" : "rounded-full",
                           isSelected
                             ? "border-2 border-primary bg-primary"
                             : "border-2 border-muted-foreground/30"
                         )}
                       >
                         {isSelected && (
-                          question.multiSelect ? (
+                          displayedQuestion.multiSelect ? (
                             <Check className="h-3 w-3 text-primary-foreground" />
                           ) : (
                             <div className="h-2 w-2 rounded-full bg-primary-foreground" />
@@ -158,14 +188,14 @@ const QuestionScreen = ({
                     <div
                       className={cn(
                         "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center transition-colors",
-                        question.multiSelect ? "rounded" : "rounded-full",
+                        displayedQuestion.multiSelect ? "rounded" : "rounded-full",
                         isOtherSelected
                           ? "border-2 border-primary bg-primary"
                           : "border-2 border-muted-foreground/30"
                       )}
                     >
                       {isOtherSelected && (
-                        question.multiSelect ? (
+                        displayedQuestion.multiSelect ? (
                           <Check className="h-3 w-3 text-primary-foreground" />
                         ) : (
                           <div className="h-2 w-2 rounded-full bg-primary-foreground" />
@@ -248,6 +278,7 @@ const QuestionScreen = ({
               </p>
             </div>
           </div>
+        </div>
         </div>
       </div>
 
