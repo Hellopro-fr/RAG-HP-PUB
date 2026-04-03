@@ -2,7 +2,7 @@ import hashlib
 import os
 import time
 from typing import Dict, Optional
-from common_utils.autres.CollectionWebhook import CollectionWebhook
+from common_utils.autres.CollectionWebhook import CollectionWebhook, CollectionWebhookUpdate
 from common_utils.autres.CollectionName import CollectionName as collections
 import logging
 import requests
@@ -172,9 +172,19 @@ def send_webhook(payload: dict) -> bool:
     collection = payload.get("collection", collections.PRODUIT)
     logger.info(f"Traitement du webhook pour la collection: {collection}")
 
-    # Récupération de l'URL du webhook
+    # Récupération de l'URL du webhook (mode update prioritaire)
     try:
-        url_webhook = CollectionWebhook.get(collection)
+        mode = payload.get("mode", "")
+        if mode == "update":
+            url_webhook = CollectionWebhookUpdate.get(collection, "")
+            if url_webhook:
+                logger.info(f"Mode 'update' détecté → utilisation de l'URL update pour '{collection}'")
+            else:
+                logger.warning(f"Aucune URL update configurée pour '{collection}', fallback sur l'URL standard")
+                url_webhook = CollectionWebhook.get(collection)
+        else:
+            url_webhook = CollectionWebhook.get(collection)
+
         if not url_webhook:
             logger.error(f"Aucune URL de webhook configurée pour la collection '{collection}'")
             return False

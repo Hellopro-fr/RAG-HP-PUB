@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 from common_utils.autres.CollectionName import CollectionName
 
@@ -10,4 +11,9 @@ CollectionWebhook = {
     CollectionName.ECHANGE    : "https://webhook.site/44bd6be7-e2b2-42eb-bd04-7b5d27761645",
     CollectionName.FOURNISSEUR: "https://webhook.site/c9e32e3d-348e-4df4-9584-f0848d23900b",
     CollectionName.SITEWEB    : "https://webhook.site/44bd6be7-e2b2-42eb-bd04-7b5d27761645",
-  }
+}
+
+# URL spécifiques par mode "update" (prioritaire sur CollectionWebhook)
+CollectionWebhookUpdate = {
+    CollectionName.PRODUIT: os.environ.get("WEBHOOK_UPDATE_PRODUIT_URL", ""),
+}

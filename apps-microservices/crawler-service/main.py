@@ -1,4 +1,5 @@
 import logging
+import logging.config
 import asyncio
 import json
 from typing import Optional
@@ -13,8 +14,37 @@ from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
 from app.core.config import settings
 from common_utils.redis import cache_service
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# Configure logging — uses dictConfig to override uvicorn's default loggers
+# (basicConfig is a no-op when uvicorn has already configured the root logger)
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": LOG_FORMAT,
+            "datefmt": LOG_DATE_FORMAT,
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "default",
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["console"],
+    },
+    "loggers": {
+        "uvicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "uvicorn.access": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+})
 logger = logging.getLogger(__name__)
 
 # --- Reconciliation Task ---
@@ -101,7 +131,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.on_event("startup")
 async def startup_event():
-    global reconciliation_task
+    global reconciliation_task, archive_cleanup_task
     logger.info("Crawler Service starting up.")
     await init_redis_pool()
 
@@ -122,7 +152,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    global reconciliation_task
+    global reconciliation_task, archive_cleanup_task
     logger.info("Crawler Service shutting down. Stopping all active crawls and disconnecting from Redis.")
     
     # Cancel the reconciliation task

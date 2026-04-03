@@ -2,9 +2,12 @@
 QC Tracking Service - Interface de visualisation des fichiers tracking
 """
 import os
-from fastapi import FastAPI, HTTPException
+import io
+import zipfile
+from datetime import datetime, date
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
@@ -33,6 +36,8 @@ class DirectoryContent(BaseModel):
     current_path: str
     parent_path: Optional[str]
     items: List[FileItem]
+    total_items: int = 0
+    has_more: bool = False
 
 
 class SearchResult(BaseModel):
@@ -49,49 +54,68 @@ async def root():
 
 
 @app.get("/api/browse")
-async def browse_directory(path: str = "") -> DirectoryContent:
+async def browse_directory(path: str = "", limit: int = 20, show_all: bool = False) -> DirectoryContent:
     """Browse directory contents"""
     # Sanitize path to prevent directory traversal
     safe_path = os.path.normpath(path).lstrip(os.sep).lstrip(".")
     full_path = os.path.join(TRACKING_BASE_PATH, safe_path)
-    
+
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail=f"Path not found: {path}")
-    
+
     if not os.path.isdir(full_path):
         raise HTTPException(status_code=400, detail="Path is not a directory")
-    
+
     # Security check
     if not os.path.abspath(full_path).startswith(os.path.abspath(TRACKING_BASE_PATH)):
         raise HTTPException(status_code=403, detail="Access denied")
-    
-    items = []
+
+    directories = []
+    files = []
     try:
         for entry in os.scandir(full_path):
             try:
                 stat = entry.stat()
-                items.append(FileItem(
+                item = FileItem(
                     name=entry.name,
                     path=os.path.join(safe_path, entry.name) if safe_path else entry.name,
                     is_directory=entry.is_dir(),
                     size=stat.st_size if entry.is_file() else None,
                     modified=str(stat.st_mtime)
-                ))
+                )
+                if entry.is_dir():
+                    directories.append(item)
+                else:
+                    files.append(item)
             except Exception as e:
                 logger.warning(f"Error reading {entry.name}: {e}")
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
-    
-    # Sort: directories first, then by name
-    items.sort(key=lambda x: (not x.is_directory, x.name.lower()))
-    
+
+    # Sort directories alphabetically, files by most recent first
+    directories.sort(key=lambda x: x.name.lower())
+    files.sort(key=lambda x: float(x.modified or 0), reverse=True)
+
+    total_files = len(files)
+    total_dirs = len(directories)
+
+    # Apply limit only to files (directories are always shown)
+    has_more = False
+    if not show_all and limit > 0 and len(files) > limit:
+        files = files[:limit]
+        has_more = True
+
+    items = directories + files
+
     # Calculate parent path
     parent_path = os.path.dirname(safe_path) if safe_path else None
-    
+
     return DirectoryContent(
         current_path=safe_path or "/",
         parent_path=parent_path,
-        items=items
+        items=items,
+        total_items=total_dirs + total_files,
+        has_more=has_more
     )
 
 
@@ -196,6 +220,48 @@ async def search_files(query: str, max_results: int = 50) -> List[SearchResult]:
             break
     
     return results
+
+
+@app.get("/api/download-by-date")
+async def download_files_by_date(
+    target_date: str = Query(..., description="Date au format YYYY-MM-DD"),
+):
+    """Download all tracking files modified on a given date as a ZIP archive"""
+    try:
+        parsed_date = date.fromisoformat(target_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Format de date invalide. Utilisez YYYY-MM-DD")
+
+    matched_files = []
+    for root, dirs, files in os.walk(TRACKING_BASE_PATH):
+        for filename in files:
+            full_path = os.path.join(root, filename)
+            try:
+                mtime = datetime.fromtimestamp(os.path.getmtime(full_path)).date()
+                if mtime == parsed_date:
+                    rel_path = os.path.relpath(full_path, TRACKING_BASE_PATH)
+                    matched_files.append((full_path, rel_path))
+            except Exception as e:
+                logger.warning(f"Error reading mtime for {full_path}: {e}")
+
+    if not matched_files:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Aucun fichier trouvé pour la date {target_date}"
+        )
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for full_path, rel_path in matched_files:
+            zf.write(full_path, rel_path)
+    zip_buffer.seek(0)
+
+    filename = f"tracking_{target_date}.zip"
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 if __name__ == "__main__":

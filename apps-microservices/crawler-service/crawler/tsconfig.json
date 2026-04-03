@@ -6,7 +6,7 @@
 		"target": "ES2022",
 		"outDir": "dist",
 		"noUnusedLocals": false,
-		"lib": ["DOM"]
+		"lib": ["DOM", "ES2022"]
 	},
 	"include": ["./src/**/*"]
 }

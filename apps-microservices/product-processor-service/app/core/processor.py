@@ -1,8 +1,11 @@
 import json
+import logging
 from common_utils.cleaner.CleanHTML import CleanHTML
 from common_utils.autres.CollectionName import CollectionName
 
-def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",origin: str = "bo") -> dict:
+logger = logging.getLogger(__name__)
+
+def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",origin: str = "bo", mode: str = "default") -> dict:
     """
     Prend un dictionnaire de produit, le nettoie et prépare le message
     pour l’étape d’embedding.
@@ -21,13 +24,7 @@ def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",or
     # Étape 4: Préparer le texte à embedder (À voir avec l'équipe en charge)
     text_to_embed = cleaned_text
     
-    # Étape 5: Ajouter les métadonnées nécessaires
-    metadata = {
-        key: value
-        for key, value in product_data.items() if key not in ['text']
-    }
-    
-    # Étape 6: Construire le message de sortie
+    # Étape 5: Construire le message de sortie
     output_message = {
         "data": {
             "text": text_to_embed,
@@ -35,12 +32,13 @@ def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",or
         },
         "collection": CollectionName.PRODUIT,
         "database": bdd,
-        "origin": origin
+        "origin": origin,
+        "mode": mode
     }
     
     # Afficher le message de sortie pour débogage
-    print(f"🔍 Product-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2)}")
+    logger.debug(f"🔍 Product-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2)}")
     
     # Étape 6: Retourner le message prêt à être publié
-    print(f"📦 Product-Processor: Produit '{product_data.get('id_produit', 'ID inconnu')}' traité pour embedding.")
+    logger.info(f"📦 Product-Processor: Produit '{product_data.get('id_produit', 'ID inconnu')}' traité pour embedding.")
     return output_message

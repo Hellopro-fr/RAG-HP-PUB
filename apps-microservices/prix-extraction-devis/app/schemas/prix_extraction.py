@@ -13,7 +13,7 @@ class ItemResult(BaseModel):
     item_id: str = Field(..., description="Chunk ID in Milvus or BO base ID")
     source: str = Field(default="devis", description="Source of the chunk")
     content: str = Field(default="", description="Full text content of the data")
-    prix_data: Optional[Dict[str, Any]] = Field(None, description="Price data extracted by the LLM")
+    prix_data: Optional[List[Dict[str, Any]]] = Field(None, description="Price data extracted by the LLM (liste de produits)")
     status: str = Field(default="pending", description="Status: pending, success, error")
     error_message: Optional[str] = Field(None, description="Error message if status=error")
 

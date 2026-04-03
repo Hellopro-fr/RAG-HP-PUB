@@ -2,9 +2,11 @@
 Module principal de traitement: extraction de prix depuis les données message via LLM.
 Traitement parallèle asynchrone avec asyncio.
 """
+import re
 import time
 import logging
 import asyncio
+import contextvars
 from typing import Dict, List, Any, Optional
 
 from app.core.api_client import HelloProAPIClient, GeminiProvider, DeepSeek
@@ -27,8 +29,19 @@ logger = logging.getLogger(__name__)
 class PrixExtractor:
     """Extracteur de prix depuis les données message via LLM (Gemini/DeepSeek)"""
 
+    _current_item_id = contextvars.ContextVar('current_item_id', default=None)
+
     # ID du prompt statique - Message
     PROMPT_ID = settings.PROMPT_ID  # "142"
+
+    # ID process
+    ID_PROCESS = "37"
+
+    # Type extraction (2 = message)
+    TYPE_EXTRACTION = "2"
+
+    # Provider LLM forcé (ne dépend pas de la variable d'env globale LLM_PROVIDER)
+    LLM_PROVIDER = "gemini"
 
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
@@ -38,17 +51,65 @@ class PrixExtractor:
 
     ETAPE = "9"
 
-    def __init__(self, api_client: Optional[HelloProAPIClient] = None):
+    def __init__(self, api_client: Optional[HelloProAPIClient] = None, on_batch_publish=None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
         self.prompt_config = None  # Sera chargé lors du premier traitement
+        self.info_q1 = ""  # Sera chargé lors du traitement (Question 1)
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL_ITEMS)
+        # Callback pour publier les résultats après chaque batch
+        self._on_batch_publish = on_batch_publish
+        # Buffer de logs par item pour éviter l'entrelacement en mode parallèle
+        self._item_log_buffers: Dict[str, List[str]] = {}
 
     def _log(self, message: str):
-        """Écrit dans le fichier de tracking et les logs"""
-        if self.tracking_file:
-            utils.write_log(self.tracking_file, message)
-        logger.info(message)
+        """
+        Écrit dans le fichier de tracking et les logs.
+        En mode parallèle, bufferise les logs par item pour éviter l'entrelacement.
+        """
+        item_id = self._current_item_id.get(None)
+
+        if item_id is not None:
+            prefixed = f"[I-{item_id}] {message}"
+            if item_id not in self._item_log_buffers:
+                self._item_log_buffers[item_id] = []
+            self._item_log_buffers[item_id].append(prefixed)
+            logger.info(prefixed)
+        else:
+            if self.tracking_file:
+                utils.write_log(self.tracking_file, message)
+            logger.info(message)
+
+    def _flush_item_logs(self, item_id: str):
+        """
+        Écrit tous les logs bufferisés d'un item d'un seul bloc dans le fichier de tracking.
+        Garantit que les logs d'un même item restent groupés et lisibles.
+        """
+        if item_id in self._item_log_buffers:
+            logs = self._item_log_buffers.pop(item_id)
+            if self.tracking_file and logs:
+                block = "\n".join(logs)
+                utils.write_log(self.tracking_file, block)
+
+    def _clean_q1_data(self, q1_response: dict) -> dict:
+        """
+        Nettoie les données Question 1 en retirant les champs inutiles
+        (equivalence, id_reponse_parent, id_question_parent, choix, et tous les id_*).
+        """
+        data = q1_response.get("response", q1_response)
+
+        cleaned = {
+            "intitule": data.get("intitule", ""),
+            "justification": data.get("justification", ""),
+            "reponses": []
+        }
+
+        for rep in data.get("reponses", []):
+            cleaned["reponses"].append({
+                "reponse": rep.get("reponse", "")
+            })
+
+        return cleaned
 
     async def _load_prompt(self, id_categorie: str):
         """Charge le prompt une seule fois au début du traitement"""
@@ -64,7 +125,7 @@ class PrixExtractor:
         Construit le prompt final en injectant le contenu de l'item dans le template.
 
         Args:
-            item_content: Le contenu de l'item à traiter
+            item_content: Le contenu JSON du message à traiter
             category_name: Le nom de la catégorie (optionnel)
 
         Returns:
@@ -73,9 +134,9 @@ class PrixExtractor:
         prompt_text = self.prompt_config.get("contenu_prompt", "")
 
         # Remplacer les placeholders si présents
-        prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
-        prompt_text = prompt_text.replace("{CONTENU}", item_content)
-        prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
+        prompt_text = prompt_text.replace("{json_message}", item_content)
+        prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
+        prompt_text = prompt_text.replace("{nom_categorie}", category_name)
 
         return prompt_text
 
@@ -90,7 +151,7 @@ class PrixExtractor:
         Returns:
             Dict avec le résultat du LLM
         """
-        provider = settings.LLM_PROVIDER.lower()
+        provider = self.LLM_PROVIDER.lower()
 
         if provider == "gemini":
             gemini = GeminiProvider(
@@ -105,9 +166,9 @@ class PrixExtractor:
             await self.api_client.log_llm_usage(
                 type_ia=3,  # Gemini
                 model=self.GEMINI_MODEL,
-                input_token=usage_metadata.get("prompt_token_count", 0),
-                output_token=usage_metadata.get("candidates_token_count", 0),
-                id_process=id_categorie,
+                input_token=usage_metadata.get("prompt_token_count") or 0,
+                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
+                id_process=self.ID_PROCESS,
                 origine="prix-extraction-message",
                 etat=1 if "code" not in result else 2,
                 retour_erreur=str(result.get("error", "")) if "code" in result else ""
@@ -134,7 +195,7 @@ class PrixExtractor:
                 model="deepseek-chat",
                 input_token=input_tokens,
                 output_token=output_tokens,
-                id_process=id_categorie,
+                id_process=self.ID_PROCESS,
                 origine="prix-extraction-message",
                 etat=1,
                 temperature=temperature
@@ -234,12 +295,32 @@ class PrixExtractor:
             validation du payload échoue.
         """
         async with self._semaphore:
-            item_id = str(item.get("id", item.get("item_id", f"item_{item_index}")))
-            item_content = str(item.get("content", item.get("text", item.get("data", ""))))
+            item_id = str(item.get("id_lead", item.get("id", f"item_{item_index}")))
+            #Ajouter id_fournisseur sur id_lead si n'est pas vide
+            if item.get("id_fournisseur") and item.get("id_fournisseur") != "" and item.get("id_fournisseur") is not None:
+                item_id = f"{item_id}_{item.get('id_fournisseur')}"
+            item_content = utils.to_json_string(item)
+
+            # Activer le contexte item pour bufferiser les logs
+            token = self._current_item_id.set(item_id)
 
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
+            self._log(f"[{item_index + 1}/{total_items}] item_content: {item_content}")
 
-            # 1. Construire le prompt avec le contenu de l'item
+            # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
+            if not re.search(r'€|\d+\s*(euros?|€|EUR)|\d[\d\s.,]*\s*H\.?T\.?|\d[\d\s.,]*\s*TTC|prix\s+de\s+\d+', item_content, re.IGNORECASE):
+                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
+                return ItemResult(
+                    item_id=item_id,
+                    source="message",
+                    content=item_content,
+                    prix_data=None,
+                    status="skipped"
+                )
+
+            # 1. Construire le prompt avec le contenu JSON du message
             prompt_text = self._build_prompt(item_content, category_name)
 
             # 2. Appeler le LLM
@@ -249,15 +330,17 @@ class PrixExtractor:
             if "code" in result:
                 error_msg = str(result.get("error", "Erreur LLM inconnue"))
                 self._log(f"[{item_index + 1}/{total_items}] ❌ Erreur LLM item {item_id}: {error_msg}")
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
                 raise Exception(f"Erreur LLM pour item {item_id}: {error_msg}")
 
             # 3. Extraire la réponse
             response_text = result.get("message", "")
-            self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({len(response_text)} chars)")
+            self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({response_text})")
 
             # Tenter d'extraire le JSON de la réponse
             prix_data_raw = utils.extract_json_from_text(response_text)
-            if not prix_data_raw:
+            if prix_data_raw is None:
                 self._log("ERREUR: Impossible d'extraire le JSON")
                 await self.api_client.post(
                     "prix",
@@ -271,25 +354,51 @@ class PrixExtractor:
                         "tracking_file": self.tracking_file
                     }
                 )
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
                 raise Exception(f"Impossible d'extraire le JSON de la réponse LLM pour item {item_id}")
 
-            # 3b. Valider et construire le payload structuré
-            payload = self._validate_and_build_payload(
-                prix_data=prix_data_raw,
-                item_id=item_id,
-                id_categorie=id_categorie,
-                category_name=category_name,
-                item_metadata=item.get("metadata", {})
-            )
-            if payload is None:
-                raise ValueError(
-                    f"Validation du payload échouée (champs obligatoires manquants) : "
-                    f"Catégorie {id_categorie} - Item {item_id} - Data : {prix_data_raw}"
+            # Liste vide = le LLM n'a trouvé aucun prix dans cet item → skip
+            if isinstance(prix_data_raw, list) and len(prix_data_raw) == 0:
+                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucun prix trouvé par le LLM")
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
+                return ItemResult(
+                    item_id=item_id,
+                    source="message",
+                    content=item_content,
+                    prix_data=None,
+                    status="skipped"
                 )
 
-            prix_data = payload.dict()
+            # Normaliser en liste (le LLM peut retourner un dict ou une liste)
+            if isinstance(prix_data_raw, dict):
+                prix_data_raw = [prix_data_raw]
+
+            # 3b. Valider et construire les payloads pour chaque produit
+            payloads = []
+            for single_prix in prix_data_raw:
+                payload = self._validate_and_build_payload(
+                    prix_data=single_prix,
+                    item_id=item_id,
+                    id_categorie=id_categorie,
+                    category_name=category_name,
+                    item_metadata=item.get("metadata", {})
+                )
+                if payload is None:
+                    self._flush_item_logs(item_id)
+                    self._current_item_id.reset(token)
+                    raise ValueError(
+                        f"Validation du payload échouée (champs obligatoires manquants) : "
+                        f"Catégorie {id_categorie} - Item {item_id} - Data : {single_prix}"
+                    )
+                payloads.append(payload)
+
+            prix_data = [p.dict() for p in payloads]
 
             self._log(f"[{item_index + 1}/{total_items}] ✅ Item {item_id} validé")
+            self._flush_item_logs(item_id)
+            self._current_item_id.reset(token)
             return ItemResult(
                 item_id=item_id,
                 source="message",
@@ -300,29 +409,24 @@ class PrixExtractor:
 
     async def _fetch_items(self, id_categorie: str, category_name: str) -> List[Dict[str, Any]]:
         """
-        Récupère les items à traiter pour cette catégorie.
+        Récupère les messages à traiter pour cette catégorie via l'API.
 
         Returns:
-            Liste d'objets à traiter, chacun contenant au minimum:
-            - 'id': identifiant unique de l'item
-            - 'content': le contenu textuel à envoyer au LLM
-            - 'metadata': (optionnel) données supplémentaires
-
-        TODO: Implémenter la logique d'extraction des données message.
-              Cette méthode doit retourner une liste de dictionnaires représentant
-              les items à traiter. Exemple:
-              [
-                  {"id": "123", "content": "Texte du message...", "metadata": {...}},
-                  {"id": "456", "content": "Autre message...", "metadata": {...}},
-                  ...
-              ]
+            Liste d'objets message, chacun contenant:
+            - 'id': id_lead (identifiant unique)
+            - et les données complètes du message (corps_messages, info_lead, etc.)
         """
-        # TODO: Implémenter la récupération des données message ici.
-        # Exemple: appel API, requête base de données, etc.
-        raise NotImplementedError(
-            "La logique d'extraction des données message n'est pas encore implémentée. "
-            "Veuillez implémenter _fetch_items() dans prix-extraction-message/app/core/prix_extractor.py"
+        data_messages = await self.api_client.post(
+            "prix",
+            "messages",
+            "get",
+            {"id_categorie": id_categorie}
         )
+        messages = data_messages.get("messages", [])
+        if not messages:
+            return []
+
+        return messages
 
     async def extract_prix_for_category(
         self,
@@ -352,7 +456,8 @@ class PrixExtractor:
         self._log("EXTRACTION PRIX MESSAGE")
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
-        self._log(f"Provider LLM: {settings.LLM_PROVIDER}")
+        self._log(f"Provider LLM: {self.LLM_PROVIDER}")
+        self._log(f"Model LLM: {self.GEMINI_MODEL}")
         self._log("=" * 60)
 
         # Vérifier le stopper manuel
@@ -380,17 +485,30 @@ class PrixExtractor:
             self._log("RESET DU PROCESSUS")
             await self.api_client.post(
                 "prix",
-                "extraction_message",
+                "process",
                 "reset",
-                {"id_categorie": id_categorie}
+                {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
             )
 
         # Charger le prompt
         await self._load_prompt(id_categorie)
 
-        # Récupérer les items à traiter
-        # TODO: _fetch_items() doit être implémentée - voir la méthode pour les détails
-        self._log("\n--- Récupération des items message (TODO) ---")
+        # Récupérer Question 1 pour le contexte du prompt
+        self._log("Récupération Question 1...")
+        q1_raw = await self.api_client.post(
+            "question",
+            "question1",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+        if not q1_raw:
+            self._log(f"ERREUR: Aucune donnée Question 1 pour la catégorie {id_categorie}")
+            raise Exception(f"Impossible de récupérer Question 1 pour la catégorie {id_categorie}")
+        self.info_q1 = utils.to_json_string(self._clean_q1_data(q1_raw))
+        self._log(f"Question 1 chargée: {self.info_q1}")
+
+        # Récupérer les items message à traiter
+        self._log("\n--- Récupération des messages ---")
         items = await self._fetch_items(id_categorie, category_name)
 
         if not items:
@@ -407,74 +525,120 @@ class PrixExtractor:
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
 
-        # Traitement parallèle de tous les items
-        self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
+        BATCH_SIZE = 50
         start_time = time.time()
+        success_count = 0
+        skipped_count = 0
+        error_count = 0
+        all_item_results: List[ItemResult] = []
 
-        tasks = [
-            self._process_single_item(
-                item=item,
-                item_index=i,
-                total_items=total_items,
-                id_categorie=id_categorie,
-                category_name=category_name
-            )
-            for i, item in enumerate(items)
-        ]
+        # Traitement par lot de 50 items
+        for batch_start in range(0, total_items, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, total_items)
+            batch_items = items[batch_start:batch_end]
+            batch_num = (batch_start // BATCH_SIZE) + 1
+            total_batches = (total_items + BATCH_SIZE - 1) // BATCH_SIZE
 
-        results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+            self._log(f"\n--- Lot [{batch_num}/{total_batches}] items {batch_start + 1}-{batch_end}/{total_items} ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
+
+            tasks = [
+                self._process_single_item(
+                    item=item,
+                    item_index=batch_start + i,
+                    total_items=total_items,
+                    id_categorie=id_categorie,
+                    category_name=category_name
+                )
+                for i, item in enumerate(batch_items)
+            ]
+
+            results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Flush tous les logs bufferisés des items
+            for item_id_key in list(self._item_log_buffers.keys()):
+                self._flush_item_logs(item_id_key)
+
+            # Collecter les résultats du lot
+            batch_item_results: List[ItemResult] = []
+            for r in results:
+                if isinstance(r, Exception):
+                    self._log(f"❌ Exception critique: {r}")
+                    raise r
+                elif isinstance(r, ItemResult):
+                    batch_item_results.append(r)
+                    if r.status == "success":
+                        success_count += 1
+                    elif r.status == "skipped":
+                        skipped_count += 1
+                    else:
+                        error_count += 1
+                        self._log(f"❌ Item en erreur: {r.item_id} — {r.error_message}")
+                        raise Exception(f"Item {r.item_id} en erreur: {r.error_message}")
+                else:
+                    raise Exception(f"Résultat inattendu: {type(r)} — {r}")
+
+            all_item_results.extend(batch_item_results)
+
+            # Sauvegarde batch des IDs traités (success et skipped séparément)
+            success_ids = [r.item_id for r in batch_item_results if r.status == "success"]
+            skipped_ids = [r.item_id for r in batch_item_results if r.status == "skipped"]
+
+            if success_ids:
+                self._log(f"--- Sauvegarde batch de {len(success_ids)} ID(s) success message ---")
+                save_result = await self.api_client.post(
+                    "prix",
+                    "process",
+                    "save",
+                    {
+                        "id_categorie":    id_categorie,
+                        "type_extraction": self.TYPE_EXTRACTION,
+                        "id_cibles":       success_ids,
+                        "flag":            1
+                    }
+                )
+                if save_result and not save_result.get("erreur"):
+                    nb = save_result.get("nb_insere", len(success_ids))
+                    self._log(f"✅ Batch save OK: {nb} ID(s) success enregistré(s)")
+                else:
+                    self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                    raise Exception(f"Batch save: réponse inattendue: {save_result}")
+
+            if skipped_ids:
+                self._log(f"--- Sauvegarde batch de {len(skipped_ids)} ID(s) skipped message ---")
+                save_result = await self.api_client.post(
+                    "prix",
+                    "process",
+                    "save",
+                    {
+                        "id_categorie":    id_categorie,
+                        "type_extraction": self.TYPE_EXTRACTION,
+                        "id_cibles":       skipped_ids,
+                        "flag":            0
+                    }
+                )
+                if save_result and not save_result.get("erreur"):
+                    nb = save_result.get("nb_insere", len(skipped_ids))
+                    self._log(f"✅ Batch save OK: {nb} ID(s) skipped enregistré(s)")
+                else:
+                    self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                    raise Exception(f"Batch save: réponse inattendue: {save_result}")
+
+            if success_ids or skipped_ids:
+                # Publier les résultats du batch vers embedding
+                if self._on_batch_publish:
+                    published = await self._on_batch_publish(batch_item_results, id_categorie)
+                    self._log(f"📤 {published} message(s) publié(s) vers embedding")
+            else:
+                self._log(f"ℹ️ Aucun ID à sauvegarder pour lot [{batch_num}/{total_batches}]")
 
         elapsed = time.time() - start_time
-
-        # Collecter et compter les résultats — toute exception lève immédiatement
-        success_count = 0
-        error_count = 0
-        item_results: List[ItemResult] = []
-        for r in results:
-            if isinstance(r, Exception):
-                # Propager l'exception : arrêt immédiat du traitement de la catégorie
-                self._log(f"❌ Exception critique: {r}")
-                raise r
-            elif isinstance(r, ItemResult):
-                item_results.append(r)
-                if r.status == "success":
-                    success_count += 1
-                else:
-                    error_count += 1
-                    self._log(f"❌ Item en erreur: {r.item_id} — {r.error_message}")
-                    raise Exception(f"Item {r.item_id} en erreur: {r.error_message}")
-            else:
-                raise Exception(f"Résultat inattendu: {type(r)} — {r}")
-
-        # Sauvegarde batch des IDs traités avec succès
-        # type_extraction = 1 pour les messages
-        successful_ids = [r.item_id for r in item_results if r.status == "success"]
-
-        if successful_ids:
-            self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) message ---")
-            save_result = await self.api_client.post(
-                "prix",
-                "process",
-                "save",
-                {
-                    "id_categorie":    id_categorie,
-                    "type_extraction": "1",           # 1 = message
-                    "id_cibles":       successful_ids  # liste d'IDs (batch)
-                }
-            )
-            if save_result and not save_result.get("erreur"):
-                nb = save_result.get("nb_insere", len(successful_ids))
-                self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s) dans extraction_prix_ia")
-            else:
-                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
-                raise Exception(f"Batch save: réponse inattendue: {save_result}")
-        else:
-            self._log("ℹ️ Aucun ID message à sauvegarder (aucun succès)")
+        item_results = all_item_results
 
         self._log("\n" + "=" * 60)
         self._log("EXTRACTION TERMINÉE")
         self._log(f"Total items: {total_items}")
         self._log(f"Succès: {success_count}")
+        self._log(f"Skipped: {skipped_count}")
         self._log(f"Erreurs: {error_count}")
         self._log(f"Durée: {elapsed:.1f}s")
         self._log("=" * 60)

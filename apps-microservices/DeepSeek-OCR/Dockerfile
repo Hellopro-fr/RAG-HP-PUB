@@ -62,6 +62,10 @@ RUN chmod +x /app/start_server.py
 # Expose the API port
 EXPOSE 8501
 
+# Switch to non-root user for runtime
+RUN useradd -m -r appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Set the default command to use our custom server
 # Override the entrypoint to run our script directly
 # Use the full path to python to avoid PATH issues

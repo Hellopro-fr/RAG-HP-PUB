@@ -5,7 +5,9 @@ MILVUS_COLLECTIONS = {
     "devis": "devis",
     "siteweb": "siteweb",
     "categories": "categories",
-    "echanges": "echanges"
+    "echanges": "echanges",
+    "document": "document",
+    "pjechanges": "pjechanges"
 }
 
 MILVUS_COLLECTIONS_DEFAULT_FIELDS = {
@@ -51,13 +53,30 @@ MILVUS_COLLECTIONS_DEFAULT_FIELDS = {
         "conversation_id",
         "text"
     ],
+    "document"    : [
+        "id",
+        "fichier_source",
+        "id_demande",
+        "id_fournisseur",
+        "text"
+    ],
+    "pjechanges"  : [
+        "id",
+        "fichier_source",
+        "id_demande",
+        "id_fournisseur",
+        "source",
+        "text"
+    ],
 }
 
 MILVUS_COLLECTIONS_UNIQUE_FIELD  = {
     "produits": "id_produit",
     "devis": "lead_id",
     "categories": "id_categorie",
-    "echanges": "conversation_id"
+    "echanges": "conversation_id",
+    "document": "fichier_source",
+    "pjechanges": "fichier_source"
 }
 
 # Mapping des collections principales vers leurs collections de correspondance

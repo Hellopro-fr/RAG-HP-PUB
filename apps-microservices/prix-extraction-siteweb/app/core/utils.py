@@ -217,6 +217,8 @@ def process_product_data_for_embedding(
         parts.append(f"Catégorie: {_v('nom_categorie')}")
     if _v("description_produit"):
         parts.append(f"Description: {_v('description_produit')}")
+    if _v("caracteristique"):
+        parts.append(f"Caracteristique: {_v('caracteristique')}")
     if _v("fournisseur"):
         parts.append(f"Fournisseur: {_v('fournisseur')}")
 

@@ -1,4 +1,5 @@
 // UI Component: Reusable confirmation dialog
+// S7: uses AlertDialog.Trigger with asChild for proper Radix pattern
 "use client"
 
 import type React from "react"
@@ -10,13 +11,12 @@ import {
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
 interface ConfirmDialogProps {
   title: string
   description: string
-  open: boolean
-  onOpenChange: (open: boolean) => void
   onConfirm: () => void | Promise<void>
   isLoading?: boolean
   children: React.ReactNode
@@ -25,27 +25,25 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({
   title,
   description,
-  open,
-  onOpenChange,
   onConfirm,
   isLoading,
   children,
 }: ConfirmDialogProps) {
   return (
-    <>
-      {children}
-      <AlertDialog open={open} onOpenChange={onOpenChange}>
-        <AlertDialogContent>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-          <div className="flex justify-end gap-3">
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={onConfirm} disabled={isLoading}>
-              {isLoading ? "Processing..." : "Confirm"}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        {children}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>{description}</AlertDialogDescription>
+        <div className="flex justify-end gap-3">
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} disabled={isLoading}>
+            {isLoading ? "Processing..." : "Confirm"}
+          </AlertDialogAction>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

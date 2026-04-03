@@ -42,8 +42,8 @@ const now = new Date().toISOString().replace(/:/g, "-");
 const args: Record<string, string> = {};
 process.argv.slice(2).forEach(arg => {
     if (arg.startsWith('--')) {
-        const [key, value] = arg.replace(/^--/, '').split('=');
-        args[key] = value || 'true';
+        const [key, ...rest] = arg.replace(/^--/, '').split('=');
+        args[key] = rest.join('=') || 'true';
     }
 });
 
@@ -59,8 +59,7 @@ const method = getArg('method', 'npm_config_method');
 const apifyProxyPassword = getArg('proxyapify', 'npm_config_proxyapify');
 
 // Local vars for parsing, stored in context
-// const breakLimit = (getArg('breaklimit', 'npm_config_breaklimit') || 'false').toLowerCase() === 'true';
-const breakLimit = true; // TODO: Enforce break limit of 5000 URLs to be crawled. Find a more elegant way to handle this
+const breakLimit = (getArg('breaklimit', 'npm_config_breaklimit') || 'true').toLowerCase() === 'true';
 const dropData = (getArg('dropdata', 'npm_config_dropdata') || 'false').toLowerCase() === 'true';
 const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmark') || 'false').toLowerCase() === 'true';
 const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
@@ -93,8 +92,9 @@ context.config = {
     maxRedirects,
     maxNewUrls,
     domain: domain || "",
+    siteHostname: site ? new URL(site).hostname : "",
     baseUrl: site || "",
-    crawleeStorageName: domain ? domain.replace('.', '-') : "",
+    crawleeStorageName: domain ? domain.replace(/\./g, '-') : "",
     // Filtering
     skipQuestionMark: skipquestionmark,
     skipDiez: skipdiez,
@@ -197,7 +197,8 @@ console.log(`💾 Memory status: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)}GB 
 if (memPercent > 80) {
     console.error(`❌ Memory critically low: ${memPercent.toFixed(1)}% used. Aborting to prevent OOM.`);
     console.error(`   Free memory: ${(freeMem / 1024 / 1024 / 1024).toFixed(2)}GB`);
-    process.exit(1);
+    console.error(`🔄 Pre-flight OOM: exiting with code 3 (OOM_RELAUNCH) to trigger Python-side auto-restart.`);
+    process.exit(3); // OOM_RELAUNCH: trigger Python-side auto-restart
 }
 
 console.log('✅ Pre-flight checks passed. Starting crawler...');
@@ -244,6 +245,7 @@ const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: numbe
 // --- Tier 1 Recovery Handler (85-92%) ---
 let lastWarningActionTime = 0;
 let lastMemPercent = 0; // Track global memory state for persistence guard
+let persistenceInterval: ReturnType<typeof setInterval> | undefined;
 const handleWarningMemory = async (memPercent: number) => {
     const now = Date.now();
     if (now - lastWarningActionTime < 30000) return; // Debounce 30s
@@ -454,10 +456,11 @@ if (includePath) {
 }
 
 // --- V3 Feature: Stale Stopper Cleanup ---
-if (fs.existsSync(`stopper/${domain}.txt`)) {
+const stopperFile = path.join(storagePath, 'stopper', `${domain}.txt`);
+if (fs.existsSync(stopperFile)) {
     try {
-        fs.unlinkSync(`stopper/${domain}.txt`);
-        console.log("Removed stale stopper file.");
+        fs.unlinkSync(stopperFile);
+        console.log(`Cleaned up leftover stopper file: ${stopperFile}`);
     } catch (e) {}
 }
 
@@ -501,6 +504,17 @@ if (redisCount > 0 && !dropData) {
     console.log("Syncing hot state to disk...");
     const urlIterator = context.dedupManager.getAllUrlsIterator();
     await updateUrlsCrawledStreaming(domain, urlIterator);
+
+    // Rehydrate '?' and '#' counters from dataset (dedup already in Redis)
+    if (context.config.crawleeStorageName) {
+        for await (const url of rehydrateDedupFromDataset(context.config.crawleeStorageName)) {
+            if (url.includes('?')) context.countQuestionMark++;
+            if (url.includes('#')) context.countDiez++;
+        }
+        if (context.countQuestionMark > 0 || context.countDiez > 0) {
+            console.log(`Rehydrated counters (hot): ${context.countQuestionMark} URLs with '?', ${context.countDiez} URLs with '#'`);
+        }
+    }
 } else {
     // Cold Start or Drop Data
     console.log("❄️ Cold Start detected (Redis empty). Loading from disk...");
@@ -508,15 +522,30 @@ if (redisCount > 0 && !dropData) {
     await context.dedupManager.loadFromIterator(urlIterator);
 
     // Rehydrate from dataset if we crashed before saving to history file
+    // Also count URLs with '?' and '#' to restore postNavigationHooks counters
     if (context.config.crawleeStorageName) {
         const rehydrateIter = rehydrateDedupFromDataset(context.config.crawleeStorageName);
-        await context.dedupManager.loadFromIterator(rehydrateIter);
+        let qmCount = 0;
+        let diezCount = 0;
+        const countingIter = async function*() {
+            for await (const url of rehydrateIter) {
+                if (url.includes('?')) qmCount++;
+                if (url.includes('#')) diezCount++;
+                yield url;
+            }
+        };
+        await context.dedupManager.loadFromIterator(countingIter());
+        context.countQuestionMark = qmCount;
+        context.countDiez = diezCount;
+        if (qmCount > 0 || diezCount > 0) {
+            console.log(`Rehydrated counters from dataset: ${qmCount} URLs with '?', ${diezCount} URLs with '#'`);
+        }
     }
 }
 
 // --- PERIODIC PERSISTENCE (Safety Net) ---
 const PERSIST_INTERVAL_MS = 10 * 60 * 1000; // Increased to 10 minutes (from 5)
-const persistenceInterval = setInterval(async () => {
+persistenceInterval = setInterval(async () => {
     try {
         // Guard: Skip persistence if memory is already high (>85%) to prevent OOM
         if (lastMemPercent > 85) {
@@ -688,6 +717,33 @@ if (queueInfo) {
 // --------------------------
 
 /**
+ * Maps internal stopReason/isError codes to human-readable French messages
+ * for storage in the database column `message_erreur_crawling` (VARCHAR 250).
+ */
+const mapStopReasonToMessage = (errorCode: string): string => {
+    const ERROR_MAP: Record<string, string> = {
+        "OOM_MAX_RESTARTS": "Out Of Memory",
+        "OOM_RELAUNCH": "Out Of Memory",
+        "limitQuestionMark": "Arrêt sur paramètre (?)",
+        "limitDiez": "Arrêt sur ancre (#)",
+        "circuitBreaker": "Circuit breaker déclenché",
+        "limitErrors": "Trop d'erreurs HTTP rencontrées",
+        "limitCrawl": "Limite de 5000 URLs atteinte",
+        "limitNewUrls": "Trop de nouvelles URLs détectées",
+        "stoppedManually": "Arrêté manuellement",
+        "insufficientData": "Données insuffisantes",
+        "PAYLOAD_READ_ERROR": "Erreur lecture payload",
+    };
+
+    if (!errorCode) return "";
+    const mapped = ERROR_MAP[errorCode];
+    if (mapped) return mapped;
+
+    // Fallback: truncate to 250 chars for VARCHAR(250)
+    return `Erreur inconnue : ${errorCode}`.substring(0, 250);
+};
+
+/**
  * Reusable Shutdown Logic
  * Handles persistence and cleanup on both Success and Signals (SIGTERM/SIGINT)
  */
@@ -697,7 +753,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     isShuttingDown = true;
     
     // Stop periodic task
-    clearInterval(persistenceInterval);
+    if (persistenceInterval) clearInterval(persistenceInterval);
     
     console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
@@ -726,10 +782,28 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             if (info && info.itemCount >= 5000) isError = "limitCrawl";
         } catch (e) {}
     }
-    if (isStoppedManualy(domain, true)) isError = "stoppedManually";
+    if (isStoppedManualy(domain, true, storagePath)) isError = "stoppedManually";
 
     // Get stats from instance if available, else usage functions
     const finalStats = context.crawlerInstance?.stats.state || statsFromFunctions;
+
+    // --- Compute message_erreur_crawling ---
+    // Priority: context.crawlErrorMessage (set by routes.ts for specific cases) > mapStopReasonToMessage
+    let messageErreurCrawling = context.crawlErrorMessage || "";
+
+    if (!messageErreurCrawling && isError) {
+        messageErreurCrawling = mapStopReasonToMessage(isError);
+    }
+
+    // Special case: OOM_RELAUNCH
+    if (reason === 'OOM_RELAUNCH' && !messageErreurCrawling) {
+        messageErreurCrawling = "Out Of Memory";
+    }
+
+    // Truncate to 250 chars (VARCHAR limit)
+    if (messageErreurCrawling.length > 250) {
+        messageErreurCrawling = messageErreurCrawling.substring(0, 250);
+    }
 
 
     // 3. Write Payloads
@@ -740,7 +814,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         isFinished: isFinished,
         method: method,
         isError: isError,
-        storagePath: storagePath
+        storagePath: storagePath,
+        message_erreur_crawling: messageErreurCrawling || null
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
@@ -827,7 +902,6 @@ if (typeCrawling == "sitemap") {
     // Launch
     const crawler = await startCrawler(
         router,
-        [site],
         domain,
         paramPerCrawl,
         paramPerMinute,

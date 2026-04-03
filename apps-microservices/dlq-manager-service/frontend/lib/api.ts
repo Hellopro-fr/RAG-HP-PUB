@@ -79,6 +79,17 @@ export interface AutoArchiveRule {
     execution_count?: number;
 }
 
+export interface UniqueErrorBucket {
+    service_name: string;
+    error_reason: string;
+    count: number;
+}
+
+export interface UniqueErrorsResponse {
+    buckets: UniqueErrorBucket[];
+    total_unique: number;
+}
+
 // --- API FUNCTIONS ---
 
 export const apiGetDashboardStats = (filters?: { date_start?: string; date_end?: string }) => {
@@ -138,6 +149,14 @@ export const apiEditAndRequeueMessage = (messageId: string, newPayload: Record<s
     return api.put(`/messages/${messageId}/edit-and-requeue`, { new_payload: newPayload });
 };
 
+// Unique Errors
+export const apiGetUniqueErrors = (filters: Record<string, any>, searchTerm: string) => {
+    return api.post<UniqueErrorsResponse>('/messages/unique-errors', {
+        filters,
+        search_term: searchTerm,
+    });
+};
+
 // Auto-Archive Rules
 export const apiGetRules = () => {
     return api.get<AutoArchiveRule[]>('/rules');
@@ -155,7 +174,3 @@ export const apiDeleteRule = (ruleId: string) => {
     return api.delete(`/rules/${ruleId}`);
 };
 
-// --- UTILITY ---
-export const formatTimestamp = (ts: string) => {
-    return ts;
-};

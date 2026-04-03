@@ -4,6 +4,12 @@ from common_utils.database.MilvusPjCrud import MilvusPjCrud
 
 from common_utils.autres.CollectionName import CollectionName
 
+logger = logging.getLogger(__name__)
+
+# Module-level singletons — persist across messages, reuse cached connections
+base_vectorielle = MilvusDocumentCrud()
+pj_crud = MilvusPjCrud()
+
 
 async def insertion_data(document_data: dict) -> dict:
     """
@@ -14,6 +20,8 @@ async def insertion_data(document_data: dict) -> dict:
     documents = document_data.get("data", [])
 
     if isinstance(documents, list):
+        if not documents:
+            raise ValueError("Le champ 'data' est une liste vide — aucun document à traiter.")
         page_type = documents[0].get("page_type", "")
     else:
         document = document_data.get("data", {})
@@ -27,10 +35,7 @@ async def insertion_data(document_data: dict) -> dict:
     try:
         collection_enum = CollectionName(collection)
     except ValueError:
-        logging.error("'%s' n'est pas un nom de collection valide.", collection)
-        return None
-
-    base_vectorielle = MilvusDocumentCrud()
+        raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
     processing_functions = {
         # CollectionName.DOCUMENT: base_vectorielle.insert_document
@@ -41,6 +46,7 @@ async def insertion_data(document_data: dict) -> dict:
 
     result = []
     fichier_source = ""
+    output_message = None
 
     if len(documents) > 0:
         fichier_source = documents[0].get("fichier_source", "fichier source inconnu")
@@ -71,7 +77,7 @@ async def insertion_data(document_data: dict) -> dict:
                 if not res or res.get("status") == "error":
                     raise Exception(f"L'update a échoué. Résultat: {res}")
 
-                print("Res update: ", res)
+                logger.debug("Res update: %s", res)
 
             else:
                 documents_bis = []
@@ -96,17 +102,16 @@ async def insertion_data(document_data: dict) -> dict:
                             }
                         }
                     )
-                res = await MilvusDocumentCrud().insert_document(documents_bis)
+                res = await base_vectorielle.insert_document(documents_bis)
                 if not res or res.get("status") == "error":
                     raise Exception(f"L'insertion a échoué. Résultat: {res}")
-                print("Res insert: ", res)
+                logger.debug("Res insert: %s", res)
 
             return res
 
-        pj_crud = MilvusPjCrud()
         res = await pj_crud.get_pj(fichier_source=fichier_source)
 
-        print("Document-database-service: Ajout data")
+        logger.debug("Document-database-service: Ajout data")
         status = res.get("status")
         data = res.get("data", [])
         code = res.get("code", None)
@@ -127,7 +132,7 @@ async def insertion_data(document_data: dict) -> dict:
                     "already_in_bdd": len(data) > 0,
                 }
             else:
-                logging.error(
+                logger.error(
                     "Erreur lors de la vérification du fichier source %s : %s",
                     fichier_source,
                     message,
@@ -136,7 +141,7 @@ async def insertion_data(document_data: dict) -> dict:
 
         elif status == "success":
             if len(data) > 0:
-                logging.info(
+                logger.info(
                     "Le fichier source %s existe déjà dans la base de données. Insertion ignorée.",
                     fichier_source,
                 )
@@ -156,4 +161,9 @@ async def insertion_data(document_data: dict) -> dict:
                 "already_in_bdd": len(data) > 0,
             }
 
+        if output_message is None:
+            raise ValueError(
+                f"État inattendu pour fichier_source={fichier_source}: "
+                f"status={res.get('status')}, code={res.get('code')}. Aucun output_message produit."
+            )
         return output_message

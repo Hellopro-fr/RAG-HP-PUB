@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestionnaire de Serveurs MCP</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#f0f7ff', 100:'#e0effe', 200:'#bae0fd', 300:'#7ccbfc', 400:'#36b2f8', 500:'#0c96e9', 600:'#0078c7', 700:'#005fa1', 800:'#035185', 900:'#07446e' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .fade-in { animation: fadeIn .2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .toast { animation: slideIn .3s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+    pre.json-view { tab-size: 2; white-space: pre-wrap; word-break: break-all; }
+    .copy-btn:active { transform: scale(.95); }
+    /* Tag selector */
+    .tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; background: #e0effe; color: #005fa1; }
+    .tag-chip button { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: transparent; border: none; cursor: pointer; color: #005fa1; font-size: 10px; line-height: 1; }
+    .tag-chip button:hover { background: #bae0fd; }
+    .tag-selector { position: relative; }
+    .tag-dropdown { position: absolute; left: 0; right: 0; top: 100%; z-index: 50; max-height: 160px; overflow-y: auto; background: white; border: 1px solid #d1d5db; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,.1); margin-top: 4px; }
+    .tag-dropdown-item { padding: 6px 12px; font-size: 13px; cursor: pointer; }
+    .tag-dropdown-item:hover, .tag-dropdown-item.active { background: #f0f7ff; color: #005fa1; }
+    .tag-dropdown-item.create { color: #0078c7; font-style: italic; }
+    /* Drag-and-drop tool picker */
+    .dnd-panel { min-height: 280px; }
+    .dnd-panel.drag-over { background: #f0f9ff; outline: 2px dashed #60a5fa; outline-offset: -2px; }
+    .dnd-server-group { margin-bottom: 2px; }
+    .dnd-server-header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; transition: background .1s; }
+    .dnd-server-header:hover { background: #dbeafe; }
+    .dnd-server-header.dragging { opacity: .5; }
+    .dnd-server-header .srv-chevron { transition: transform .15s; flex-shrink: 0; }
+    .dnd-server-header .srv-chevron.collapsed { transform: rotate(-90deg); }
+    .dnd-server-header .srv-count { font-size: 10px; font-weight: 500; color: #60a5fa; margin-left: auto; }
+    .dnd-tools-list { padding-left: 12px; overflow: hidden; transition: max-height .2s ease; }
+    .dnd-tools-list.collapsed { max-height: 0 !important; }
+    .dnd-tool-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 12px; margin: 1px 0; border-radius: 5px; cursor: pointer; user-select: none; font-size: 12px; color: #374151; border-left: 2px solid #c7d2fe; transition: background .1s, opacity .15s; }
+    .dnd-tool-item:hover { background: #eef2ff; }
+    .dnd-tool-item.dragging { opacity: .5; }
+    .dnd-tool-item .tool-icon { color: #818cf8; flex-shrink: 0; }
+    .dnd-tool-item .tool-desc { font-size: 11px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body class="h-full bg-gray-50 text-gray-900">
+  <div id="app" class="min-h-full flex flex-col">
+    <!-- Nav -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex h-14 items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+            <span class="font-semibold text-lg">Gestionnaire de Serveurs MCP</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="showPage('servers')" id="nav-servers" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Serveurs</button>
+            <button onclick="showPage('mcp-config')" id="nav-mcp-config" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Config MCP</button>
+            <div class="w-px h-6 bg-gray-200 mx-2"></div>
+            <a href="/logout" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Se déconnecter">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Toast container -->
+    <div id="toasts" class="fixed top-16 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- Page: Servers -->
+    <main id="page-servers" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold">Serveurs MCP</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Gérez vos serveurs backend Model Context Protocol</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="openImportModal()" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-brand-700 border border-brand-300 text-sm font-medium rounded-lg hover:bg-brand-50 transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Importer .mcp.json
+          </button>
+          <button onclick="openCreateModal()" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 4v16m8-8H4"/></svg>
+            Ajouter un serveur
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex gap-3 mb-4">
+        <select id="filter-status" onchange="loadServers()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <option value="">Tous les statuts</option>
+          <option value="true">Actif</option>
+          <option value="false">Inactif</option>
+        </select>
+        <div class="relative w-48">
+          <select id="filter-tag" onchange="loadServers()" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 w-full appearance-none pr-8">
+            <option value="">Tous les tags</option>
+          </select>
+          <svg class="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+        <button onclick="discoverAll()" class="ml-auto text-sm text-brand-600 hover:text-brand-800 font-medium flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Tout découvrir
+        </button>
+      </div>
+
+      <!-- Server grid -->
+      <div id="server-list" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <!-- populated by JS -->
+      </div>
+      <div id="empty-state" class="hidden text-center py-16 text-gray-400">
+        <svg class="mx-auto w-12 h-12 mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
+        <p class="text-lg font-medium">Aucun serveur pour le moment</p>
+        <p class="text-sm mt-1">Ajoutez votre premier serveur MCP pour commencer</p>
+      </div>
+    </main>
+
+    <!-- Page: MCP Config / Scope Tokens -->
+    <main id="page-mcp-config" class="hidden flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold">Jetons d'accès</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Créez des jetons avec un accès limité aux serveurs. Chaque jeton génère un <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">.mcp.json</code> prêt à coller</p>
+        </div>
+        <div class="flex gap-2">
+          <a href="install-guide.html" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-600 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+            Guide d'installation
+          </a>
+          <button onclick="openTokenModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+            Créer un jeton
+          </button>
+        </div>
+      </div>
+
+      <!-- Token list -->
+      <div id="token-list" class="space-y-4">
+        <p class="text-sm text-gray-400 py-12 text-center">Chargement...</p>
+      </div>
+
+      <!-- Legacy: Per-server configs (hidden) -->
+      <div id="per-server-configs" class="hidden"></div>
+    </main>
+  </div>
+
+  <!-- Modal: Create/Edit Server -->
+  <div id="modal-backdrop" class="hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg fade-in" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 id="modal-title" class="text-lg font-semibold">Ajouter un serveur</h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <form id="server-form" onsubmit="handleSubmit(event)" class="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        <input type="hidden" id="form-id">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom <span class="text-red-400">*</span></label>
+          <input id="form-name" type="text" required placeholder="ex. neo4j-cypher" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+
+        <!-- MCP Transport Type -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Transport MCP <span class="text-xs text-gray-400">— mode de connexion des clients</span></label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="relative flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg cursor-pointer text-sm transition-colors has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-700 hover:border-gray-400">
+              <input type="radio" name="mcp_transport" value="http" checked class="sr-only" onchange="onTransportChange()">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
+              HTTP
+            </label>
+            <label class="relative flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg cursor-pointer text-sm transition-colors has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-700 hover:border-gray-400">
+              <input type="radio" name="mcp_transport" value="sse" class="sr-only" onchange="onTransportChange()">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              SSE
+            </label>
+            <label class="relative flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg cursor-pointer text-sm transition-colors has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-700 hover:border-gray-400">
+              <input type="radio" name="mcp_transport" value="stdio" class="sr-only" onchange="onTransportChange()">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              stdio
+            </label>
+          </div>
+        </div>
+
+        <!-- Remote fields (http / sse) -->
+        <div id="remote-fields">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">URL <span class="text-red-400">*</span></label>
+            <input id="form-url" type="url" placeholder="http://mcp-server:8000" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Transport de découverte</label>
+              <select id="form-transport" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                <option value="auto">Auto</option>
+                <option value="sse">SSE</option>
+                <option value="streamable-http">Streamable HTTP</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Délai d'attente (ms)</label>
+              <input id="form-timeout" type="number" value="10000" min="1000" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">En-têtes d'authentification <span class="text-xs text-gray-400">(chiffrés AES-256-GCM, optionnel)</span></label>
+            <input id="form-auth-headers" type="text" placeholder='{"Authorization": "Bearer xxx"}' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            <p class="text-xs text-gray-400 mt-1">En-têtes transmis par la gateway au backend — stockés chiffrés, jamais exposés dans les réponses API</p>
+          </div>
+        </div>
+
+        <!-- stdio fields -->
+        <div id="stdio-fields" class="hidden space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Commande <span class="text-red-400">*</span></label>
+            <input id="form-command" type="text" placeholder="npx, python, node..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Arguments <span class="text-xs text-gray-400">(un par ligne)</span></label>
+            <textarea id="form-args" rows="3" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Environnement <span class="text-xs text-gray-400">(objet JSON, optionnel)</span></label>
+            <input id="form-env" type="text" placeholder='{"API_KEY": "xxx"}' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Étiquettes</label>
+          <div class="tag-selector" id="tag-selector">
+            <div class="flex flex-wrap gap-1.5 min-h-[38px] p-1.5 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-brand-500 focus-within:border-brand-500 cursor-text" onclick="document.getElementById('tag-input').focus()">
+              <div id="tag-chips" class="contents"></div>
+              <input id="tag-input" type="text" placeholder="Rechercher ou créer..." class="flex-1 min-w-[120px] border-none outline-none text-sm px-1 py-0.5 bg-transparent" autocomplete="off"
+                onfocus="showTagDropdown()" oninput="filterTags()" onkeydown="handleTagKeydown(event)">
+            </div>
+            <div id="tag-dropdown" class="tag-dropdown hidden"></div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Préfixe des outils <span class="text-xs text-gray-400">(optionnel, alphanumérique uniquement)</span></label>
+          <input id="form-tool-prefix" type="text" placeholder="ex. rag, crm, bdd" pattern="[a-zA-Z0-9]*" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <p class="text-xs text-gray-400 mt-1">Si renseigné, les outils seront exposés comme <code>{préfixe}_{nom_outil}</code></p>
+        </div>
+        <div id="form-discover-row" class="flex items-center gap-2">
+          <input id="form-discover" type="checkbox" checked class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
+          <label for="form-discover" class="text-sm text-gray-700">Découverte automatique des capacités à la création</label>
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Annuler</button>
+          <button type="submit" id="form-submit" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm">Créer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Server Detail -->
+  <div id="detail-backdrop" class="hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onclick="closeDetail()"></div>
+  <div id="detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col fade-in" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+        <h2 id="detail-title" class="text-lg font-semibold"></h2>
+        <button onclick="closeDetail()" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="detail-body" class="px-6 py-4 overflow-y-auto flex-1"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Import .mcp.json -->
+  <div id="import-backdrop" class="hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onclick="closeImportModal()"></div>
+  <div id="import-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col fade-in" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+        <div>
+          <h2 class="text-lg font-semibold">Importer .mcp.json</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Collez du JSON ou glissez-déposez un fichier — tous les formats supportés</p>
+        </div>
+        <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="px-6 py-4 flex-1 overflow-y-auto space-y-4">
+        <!-- Drop zone / textarea -->
+        <div id="import-dropzone" class="relative border-2 border-dashed border-gray-300 rounded-xl transition-colors hover:border-brand-400">
+          <textarea id="import-json" rows="12" placeholder='{
+  "mcpServers": {
+    "my-server": {
+      "url": "http://host:8000/mcp"
+    },
+    "my-stdio-server": {
+      "command": "npx",
+      "args": ["-y", "@mcp/server"]
+    }
+  }
+}' class="w-full px-4 py-3 text-xs font-mono bg-transparent resize-none focus:outline-none focus:ring-0 border-0 rounded-xl"></textarea>
+          <div id="import-drop-overlay" class="hidden absolute inset-0 bg-brand-50/80 rounded-xl flex items-center justify-center pointer-events-none">
+            <div class="text-brand-600 font-medium text-sm flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+              Déposez .mcp.json ici
+            </div>
+          </div>
+        </div>
+
+        <!-- File input fallback -->
+        <div class="flex items-center gap-3">
+          <label class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors cursor-pointer">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+            Choisir un fichier
+            <input type="file" id="import-file" accept=".json,.mcp.json" class="sr-only" onchange="handleImportFile(event)">
+          </label>
+          <span id="import-filename" class="text-xs text-gray-400"></span>
+          <div class="ml-auto flex items-center gap-2">
+            <input id="import-auto-discover" type="checkbox" checked class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
+            <label for="import-auto-discover" class="text-xs text-gray-600">Découverte automatique après import</label>
+          </div>
+        </div>
+
+        <!-- Import results -->
+        <div id="import-results" class="hidden space-y-2">
+          <h3 class="text-sm font-semibold text-gray-700">Résultats de l'import</h3>
+          <div id="import-results-list" class="space-y-1.5"></div>
+        </div>
+      </div>
+
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+        <button type="button" onclick="closeImportModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Annuler</button>
+        <button type="button" onclick="doImport()" id="import-submit" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm inline-flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Importer
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Scope Token -->
+  <div id="token-backdrop" class="hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onclick="closeTokenModal()"></div>
+  <div id="token-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full fade-in" style="max-width:1024px" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 id="token-modal-title" class="text-lg font-semibold">Créer un jeton d'accès</h2>
+        <button onclick="closeTokenModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="px-6 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom du jeton <span class="text-red-400">*</span></label>
+          <input id="token-name" type="text" required placeholder="ex. dev-rag-only" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <input id="token-desc" type="text" placeholder="Description optionnelle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom du serveur dans la config</label>
+          <input id="token-server-name" type="text" value="hellopro-gateway" placeholder="hellopro-gateway" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <p class="text-xs text-gray-400 mt-1">Nom utilisé comme clé dans le .mcp.json généré</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Accès serveurs & outils <span class="text-red-400">*</span></label>
+          <p class="text-xs text-gray-400 mb-2">Glissez les serveurs et outils vers la droite, ou double-cliquez pour les déplacer</p>
+          <div class="grid grid-cols-2 gap-3" style="min-height:300px">
+            <!-- LEFT: Available -->
+            <div class="border border-gray-200 rounded-lg flex flex-col">
+              <div class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-lg">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Disponible</span>
+                  <button type="button" onclick="dndAddAll()" class="text-xs text-brand-600 hover:text-brand-800 font-medium">Tout ajouter</button>
+                </div>
+                <input id="dnd-search-available" type="text" placeholder="Rechercher..." oninput="dndFilter('available')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
+              </div>
+              <div id="dnd-available" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'available')">
+                <p class="text-xs text-gray-400 p-2">Chargement...</p>
+              </div>
+            </div>
+            <!-- RIGHT: Selected -->
+            <div class="border border-brand-200 rounded-lg flex flex-col bg-brand-50/30">
+              <div class="px-3 py-2 border-b border-brand-100 bg-brand-50 rounded-t-lg">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs font-semibold text-brand-700 uppercase tracking-wide">Sélectionné <span id="dnd-selected-count" class="text-brand-500 font-normal">(0)</span></span>
+                  <button type="button" onclick="dndRemoveAll()" class="text-xs text-red-500 hover:text-red-700 font-medium">Tout retirer</button>
+                </div>
+                <input id="dnd-search-selected" type="text" placeholder="Rechercher..." oninput="dndFilter('selected')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
+              </div>
+              <div id="dnd-selected" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'selected')">
+                <p id="dnd-empty-msg" class="text-xs text-gray-400 p-2 italic">Glissez des serveurs ou outils ici</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Commande MCP <span class="text-red-400">*</span></label>
+          <p class="text-xs text-gray-400 mb-2">Commande utilisée pour lancer le client MCP dans le .mcp.json généré</p>
+          <select id="token-mcp-command" onchange="updateCommandDoc()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            <option value="" disabled selected>— Sélectionnez une commande —</option>
+            <option value="npx">npx (Node.js)</option>
+            <option value="bunx">bunx (Bun)</option>
+            <option value="deno">deno (Deno)</option>
+            <option value="uvx">uvx (Python / uv)</option>
+            <option value="docker">docker</option>
+            <option value="custom">Commande personnalisée</option>
+          </select>
+          <div id="token-custom-command-wrapper" class="hidden mt-2 space-y-2">
+            <input id="token-custom-command" type="text" placeholder="ex. /usr/local/bin/my-mcp-client" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            <input id="token-custom-args-prefix" type="text" placeholder='Arguments avant l&#39;URL (ex. run --allow-all)' class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          </div>
+          <a id="token-command-doc-link" href="install-guide.html#npx" target="_blank" class="mt-2 inline-flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+            Guide d'installation et d'utilisation
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          </a>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Expiration</label>
+          <div class="flex items-center gap-3 mb-2">
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="token_expiry_type" value="permanent" checked onchange="document.getElementById('token-expires').disabled=true;document.getElementById('token-expires').value=''" class="text-brand-600 focus:ring-brand-500">
+              <span class="text-sm text-gray-700">Permanent</span>
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="token_expiry_type" value="custom" onchange="document.getElementById('token-expires').disabled=false;document.getElementById('token-expires').focus()" class="text-brand-600 focus:ring-brand-500">
+              <span class="text-sm text-gray-700">Expiration personnalisée</span>
+            </label>
+          </div>
+          <input id="token-expires" type="datetime-local" disabled class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-400">
+        </div>
+        <div>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input id="token-allow-http" type="checkbox" checked class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+            <span class="text-sm font-medium text-gray-700">Autoriser HTTP</span>
+            <span class="text-xs text-gray-400">(requis pour les URLs de gateway non-HTTPS)</span>
+          </label>
+        </div>
+        <!-- Result area (hidden initially) -->
+        <div id="token-created-result" class="hidden">
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+            <p class="text-sm font-medium text-amber-800">Copiez ce jeton maintenant — il ne sera plus affiché !</p>
+            <div class="mt-2 flex items-center gap-2">
+              <code id="token-raw-value" class="flex-1 bg-white border border-amber-300 rounded px-3 py-2 text-sm font-mono break-all select-all"></code>
+              <button onclick="copyToClipboard(_fullToken,'Jeton copié !')" class="px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700">Copier</button>
+            </div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p class="text-xs font-medium text-gray-600 mb-1">.mcp.json — prêt à coller</p>
+            <pre id="token-mcp-json" class="text-xs font-mono text-gray-700 max-h-48 overflow-auto select-all"></pre>
+            <button onclick="copyToClipboard(_fullMcpJson,'Config copiée !')" class="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">Copier .mcp.json</button>
+          </div>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+        <button type="button" onclick="closeTokenModal()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Annuler</button>
+        <button type="button" onclick="createScopeToken()" id="token-submit-btn" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 inline-flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+          Générer le jeton
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── State ────────────────────────────────────────────────────────────
+    const API = '/api/v1';
+    let servers = [];
+    let currentPage = 'servers';
+
+    // ── MCP Command definitions ────────────────────────────────────────
+    const MCP_COMMANDS = {
+      npx:    { command: 'npx',    argsPrefix: ['-y', 'mcp-remote'] },
+      bunx:   { command: 'bunx',   argsPrefix: ['mcp-remote'] },
+      deno:   { command: 'deno',   argsPrefix: ['run', '--allow-all', 'npm:mcp-remote'] },
+      uvx:    { command: 'uvx',    argsPrefix: ['mcp-proxy'] },
+      docker: { command: 'docker', argsPrefix: ['run', '-i', '--rm', 'ghcr.io/anthropics/mcp-remote'] },
+      custom: { command: '',       argsPrefix: [] }
+    };
+
+    function updateCommandDoc() {
+      const sel = document.getElementById('token-mcp-command').value;
+      const customWrapper = document.getElementById('token-custom-command-wrapper');
+      const docLink = document.getElementById('token-command-doc-link');
+      customWrapper.classList.toggle('hidden', sel !== 'custom');
+      if (sel === 'custom') {
+        docLink.classList.add('hidden');
+      } else {
+        docLink.classList.remove('hidden');
+        docLink.href = 'install-guide.html#' + sel;
+      }
+    }
+
+    function getMCPCommandConfig() {
+      const sel = document.getElementById('token-mcp-command').value;
+      if (sel === 'custom') {
+        const cmd = document.getElementById('token-custom-command').value.trim();
+        const prefixRaw = document.getElementById('token-custom-args-prefix').value.trim();
+        const prefix = prefixRaw ? prefixRaw.split(/\s+/) : [];
+        return { command: cmd || 'my-command', argsPrefix: prefix };
+      }
+      const cfg = MCP_COMMANDS[sel];
+      return { command: cfg.command, argsPrefix: [...cfg.argsPrefix] };
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────────
+    function showPage(page) {
+      currentPage = page;
+      document.getElementById('page-servers').classList.toggle('hidden', page !== 'servers');
+      document.getElementById('page-mcp-config').classList.toggle('hidden', page !== 'mcp-config');
+      document.querySelectorAll('.nav-tab').forEach(t => {
+        t.classList.remove('bg-brand-50', 'text-brand-700');
+        t.classList.add('text-gray-600', 'hover:bg-gray-100');
+      });
+      const active = document.getElementById('nav-' + page);
+      active.classList.add('bg-brand-50', 'text-brand-700');
+      active.classList.remove('text-gray-600', 'hover:bg-gray-100');
+      if (page === 'mcp-config') loadMCPConfig();
+    }
+
+    // ── Toast ────────────────────────────────────────────────────────────
+    function toast(msg, type = 'success') {
+      const el = document.createElement('div');
+      const colors = { success: 'bg-emerald-500', error: 'bg-red-500', info: 'bg-brand-500' };
+      el.className = `toast text-white text-sm px-4 py-2.5 rounded-lg shadow-lg ${colors[type] || colors.info}`;
+      el.textContent = msg;
+      document.getElementById('toasts').appendChild(el);
+      setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3000);
+    }
+
+    // ── API helpers ──────────────────────────────────────────────────────
+    async function api(path, opts = {}) {
+      const res = await fetch(API + path, {
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+        ...opts,
+      });
+      if (res.status === 204) return null;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    // ── Load servers ─────────────────────────────────────────────────────
+    async function loadServers() {
+      try {
+        const params = new URLSearchParams();
+        const status = document.getElementById('filter-status').value;
+        const tag = document.getElementById('filter-tag').value.trim();
+        if (status) params.set('is_active', status);
+        if (tag) params.set('tag', tag);
+        const qs = params.toString() ? '?' + params.toString() : '';
+        const data = await api('/servers' + qs);
+        servers = data.servers;
+        renderServers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function renderServers() {
+      const list = document.getElementById('server-list');
+      const empty = document.getElementById('empty-state');
+      if (servers.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+      list.innerHTML = servers.map(s => serverCard(s)).join('');
+    }
+
+    function serverCard(s) {
+      const healthColors = {
+        healthy: 'bg-emerald-400', unhealthy: 'bg-red-400', degraded: 'bg-yellow-400', unknown: 'bg-gray-300'
+      };
+      const dot = healthColors[s.health_status] || healthColors.unknown;
+      const tags = (s.tags || []).map(t => `<span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">${esc(t)}</span>`).join(' ');
+      const stats = s.health_status === 'unhealthy' && !s.tools_count && !s.resources_count && !s.prompts_count
+        ? '<span class="text-red-500">Erreur de connexion</span>'
+        : [
+            s.tools_count ? `${s.tools_count} outil${s.tools_count>1?'s':''}` : null,
+            s.resources_count ? `${s.resources_count} ressource${s.resources_count>1?'s':''}` : null,
+            s.prompts_count ? `${s.prompts_count} prompt${s.prompts_count>1?'s':''}` : null,
+          ].filter(Boolean).join(' · ') || 'Aucune capacité';
+
+      return `
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow fade-in">
+          <div class="px-5 py-4">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full shrink-0 ${dot}" title="${esc(s.health_status)}"></span>
+                <h3 class="font-semibold text-sm truncate">${esc(s.name)}</h3>
+              </div>
+              <div class="flex items-center gap-1 shrink-0 ml-2">
+                ${s.is_active
+                  ? `<button onclick="toggleServer('${s.id}', false)" title="Désactiver" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-yellow-600 transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                     </button>`
+                  : `<button onclick="toggleServer('${s.id}', true)" title="Activer" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-emerald-600 transition-colors">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                     </button>`
+                }
+                <button onclick="openEditModal('${s.id}')" title="Modifier" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </button>
+                <button onclick="discoverServer('${s.id}')" title="Découvrir" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-purple-600 transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                </button>
+                <button onclick="deleteServer('${s.id}','${esc(s.name)}')" title="Supprimer" class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mb-2">
+              <span class="inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded ${s.mcp_transport === 'stdio' ? 'bg-violet-100 text-violet-700' : s.mcp_transport === 'sse' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}">${esc(s.mcp_transport || 'http')}</span>
+              <p class="text-xs text-gray-400 font-mono truncate" title="${esc(s.mcp_transport === 'stdio' ? s.mcp_command : s.url)}">${esc(s.mcp_transport === 'stdio' ? (s.mcp_command + ' ' + (s.mcp_args||[]).join(' ')).trim() : s.url)}</p>
+            </div>
+            <p class="text-xs text-gray-500 mb-2">${stats}</p>
+            <div class="flex items-center justify-between">
+              <div class="flex flex-wrap gap-1">${tags}</div>
+              <button onclick="showDetail('${s.id}')" class="text-xs text-brand-600 hover:text-brand-800 font-medium">Détails →</button>
+            </div>
+            ${!s.is_active ? '<div class="mt-2 text-xs text-yellow-600 bg-yellow-50 rounded px-2 py-1 inline-block">Désactivé</div>' : ''}
+            ${s.last_error && s.health_status === 'unhealthy' ? `<div class="mt-2 text-xs text-red-500 truncate" title="${esc(s.last_error)}">⚠ ${esc(s.last_error.substring(0, 80))}${s.last_error.length > 80 ? '...' : ''}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    // ── Tag Selector ──────────────────────────────────────────────────────
+    let allKnownTags = [];
+    let selectedTags = [];
+    let tagDropdownIdx = -1;
+
+    async function loadAllTags() {
+      try {
+        const data = await api('/tags');
+        allKnownTags = data.tags || [];
+        // Update filter dropdown
+        const filterSel = document.getElementById('filter-tag');
+        const currentVal = filterSel.value;
+        filterSel.innerHTML = '<option value="">Tous les tags</option>' +
+          allKnownTags.map(t => `<option value="${esc(t)}" ${t === currentVal ? 'selected' : ''}>${esc(t)}</option>`).join('');
+      } catch {}
+    }
+
+    function renderTagChips() {
+      document.getElementById('tag-chips').innerHTML = selectedTags.map(t =>
+        `<span class="tag-chip">${esc(t)}<button type="button" onclick="removeTag('${esc(t)}')">&times;</button></span>`
+      ).join('');
+    }
+
+    function addTag(tag) {
+      tag = tag.trim();
+      if (!tag || selectedTags.includes(tag)) return;
+      selectedTags.push(tag);
+      if (!allKnownTags.includes(tag)) allKnownTags.push(tag);
+      renderTagChips();
+      document.getElementById('tag-input').value = '';
+      hideTagDropdown();
+    }
+
+    function removeTag(tag) {
+      selectedTags = selectedTags.filter(t => t !== tag);
+      renderTagChips();
+    }
+
+    function setSelectedTags(tags) {
+      selectedTags = [...tags];
+      renderTagChips();
+    }
+
+    function getSelectedTags() {
+      return [...selectedTags];
+    }
+
+    function showTagDropdown() {
+      filterTags();
+      document.getElementById('tag-dropdown').classList.remove('hidden');
+    }
+
+    function hideTagDropdown() {
+      setTimeout(() => {
+        document.getElementById('tag-dropdown').classList.add('hidden');
+        tagDropdownIdx = -1;
+      }, 150);
+    }
+
+    function filterTags() {
+      const q = document.getElementById('tag-input').value.trim().toLowerCase();
+      const available = allKnownTags.filter(t => !selectedTags.includes(t) && (!q || t.toLowerCase().includes(q)));
+      const dd = document.getElementById('tag-dropdown');
+      tagDropdownIdx = -1;
+      let html = available.map((t, i) =>
+        `<div class="tag-dropdown-item" data-idx="${i}" onmousedown="addTag('${esc(t)}')">${esc(t)}</div>`
+      ).join('');
+      if (q && !allKnownTags.includes(q) && !selectedTags.includes(q)) {
+        html += `<div class="tag-dropdown-item create" data-idx="${available.length}" onmousedown="addTag('${esc(q)}')">+ Créer "${esc(q)}"</div>`;
+      }
+      if (!html) html = '<div class="px-3 py-2 text-xs text-gray-400">Aucun tag disponible</div>';
+      dd.innerHTML = html;
+      dd.classList.remove('hidden');
+    }
+
+    function handleTagKeydown(e) {
+      const dd = document.getElementById('tag-dropdown');
+      const items = dd.querySelectorAll('.tag-dropdown-item');
+      if (e.key === 'ArrowDown') { e.preventDefault(); tagDropdownIdx = Math.min(tagDropdownIdx + 1, items.length - 1); updateTagHighlight(items); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); tagDropdownIdx = Math.max(tagDropdownIdx - 1, 0); updateTagHighlight(items); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (tagDropdownIdx >= 0 && items[tagDropdownIdx]) { items[tagDropdownIdx].onmousedown(); }
+        else if (e.target.value.trim()) { addTag(e.target.value.trim()); }
+      } else if (e.key === 'Backspace' && !e.target.value && selectedTags.length) {
+        selectedTags.pop(); renderTagChips();
+      } else if (e.key === 'Escape') { hideTagDropdown(); }
+    }
+
+    function updateTagHighlight(items) {
+      items.forEach((el, i) => el.classList.toggle('active', i === tagDropdownIdx));
+      if (items[tagDropdownIdx]) items[tagDropdownIdx].scrollIntoView({ block: 'nearest' });
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#tag-selector')) hideTagDropdown();
+    });
+
+    // ── Transport toggle ─────────────────────────────────────────────────
+    function onTransportChange() {
+      const val = document.querySelector('input[name="mcp_transport"]:checked').value;
+      const isStdio = val === 'stdio';
+      document.getElementById('remote-fields').classList.toggle('hidden', isStdio);
+      document.getElementById('stdio-fields').classList.toggle('hidden', !isStdio);
+      document.getElementById('form-discover-row').classList.toggle('hidden', isStdio);
+      // URL required only for remote
+      document.getElementById('form-url').required = !isStdio;
+    }
+
+    function setMCPTransport(value) {
+      document.querySelectorAll('input[name="mcp_transport"]').forEach(r => { r.checked = r.value === value; });
+      onTransportChange();
+    }
+
+    // ── CRUD actions ─────────────────────────────────────────────────────
+    function openCreateModal() {
+      document.getElementById('modal-title').textContent = 'Ajouter un serveur';
+      document.getElementById('form-submit').textContent = 'Créer';
+      document.getElementById('form-id').value = '';
+      document.getElementById('form-name').value = '';
+      document.getElementById('form-url').value = '';
+      document.getElementById('form-transport').value = 'auto';
+      document.getElementById('form-timeout').value = '10000';
+      setSelectedTags([]);
+      document.getElementById('tag-input').value = '';
+      document.getElementById('form-discover').checked = true;
+      document.getElementById('form-command').value = '';
+      document.getElementById('form-args').value = '';
+      document.getElementById('form-env').value = '';
+      document.getElementById('form-auth-headers').value = '';
+      document.getElementById('form-tool-prefix').value = '';
+      setMCPTransport('http');
+      document.getElementById('form-discover-row').classList.remove('hidden');
+      openModal();
+    }
+
+    async function openEditModal(id) {
+      try {
+        const s = await api('/servers/' + id);
+        document.getElementById('modal-title').textContent = 'Modifier le serveur';
+        document.getElementById('form-submit').textContent = 'Enregistrer';
+        document.getElementById('form-id').value = s.id;
+        document.getElementById('form-name').value = s.name;
+        document.getElementById('form-url').value = s.url || '';
+        document.getElementById('form-transport').value = s.transport_preference || 'auto';
+        document.getElementById('form-timeout').value = s.connect_timeout_ms || 10000;
+        setSelectedTags(s.tags || []);
+        document.getElementById('form-command').value = s.mcp_command || '';
+        document.getElementById('form-args').value = (s.mcp_args || []).join('\n');
+        document.getElementById('form-env').value = s.mcp_env ? JSON.stringify(s.mcp_env) : '';
+        document.getElementById('form-auth-headers').value = '';
+        document.getElementById('form-auth-headers').placeholder = s.has_auth_headers ? '(en-têtes chiffrés existants — laisser vide pour conserver)' : '{"Authorization": "Bearer xxx"}';
+        document.getElementById('form-tool-prefix').value = s.tool_prefix || '';
+        setMCPTransport(s.mcp_transport || 'http');
+        document.getElementById('form-discover-row').classList.add('hidden');
+        openModal();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function getFormMCPTransport() {
+      return document.querySelector('input[name="mcp_transport"]:checked').value;
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const id = document.getElementById('form-id').value;
+      const tags = getSelectedTags();
+      const mcpTransport = getFormMCPTransport();
+
+      // Build request body
+      const toolPrefix = document.getElementById('form-tool-prefix').value.trim();
+      if (toolPrefix && !/^[a-zA-Z0-9]+$/.test(toolPrefix)) { toast('Le préfixe doit être alphanumérique (a-z, A-Z, 0-9)', 'error'); return; }
+      const body = { name: document.getElementById('form-name').value, tags, mcp_transport: mcpTransport, tool_prefix: toolPrefix };
+
+      if (mcpTransport === 'stdio') {
+        body.url = 'stdio://' + (document.getElementById('form-command').value || 'local');
+        body.mcp_command = document.getElementById('form-command').value;
+        const argsText = document.getElementById('form-args').value.trim();
+        if (argsText) body.mcp_args = argsText.split('\n').map(a => a.trim()).filter(Boolean);
+        const envText = document.getElementById('form-env').value.trim();
+        if (envText) { try { body.mcp_env = JSON.parse(envText); } catch { toast('JSON invalide dans Environnement', 'error'); return; } }
+      } else {
+        body.url = document.getElementById('form-url').value;
+        body.transport_preference = document.getElementById('form-transport').value;
+        body.connect_timeout_ms = parseInt(document.getElementById('form-timeout').value);
+        const authHeadersText = document.getElementById('form-auth-headers').value.trim();
+        if (authHeadersText) { try { body.auth_headers = JSON.parse(authHeadersText); } catch { toast('JSON invalide dans les en-têtes d\'authentification', 'error'); return; } }
+      }
+
+      try {
+        if (id) {
+          await api('/servers/' + id, { method: 'PUT', body: JSON.stringify(body) });
+          toast('Serveur mis à jour');
+        } else {
+          if (mcpTransport !== 'stdio') body.auto_discover = document.getElementById('form-discover').checked;
+          await api('/servers', { method: 'POST', body: JSON.stringify(body) });
+          toast('Serveur créé');
+        }
+        closeModal();
+        loadAllTags();
+        loadServers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteServer(id, name) {
+      if (!confirm(`Supprimer le serveur "${name}" ? Toutes ses capacités seront supprimées.`)) return;
+      try {
+        await api('/servers/' + id, { method: 'DELETE' });
+        toast('Serveur supprimé');
+        loadAllTags();
+        loadServers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function toggleServer(id, enable) {
+      try {
+        await api(`/servers/${id}/${enable ? 'enable' : 'disable'}`, { method: 'POST' });
+        toast(enable ? 'Serveur activé' : 'Serveur désactivé');
+        loadServers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function discoverServer(id) {
+      try {
+        await api('/servers/' + id + '/discover', { method: 'POST' });
+        toast('Découverte terminée');
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        loadServers();
+      }
+    }
+
+    async function discoverAll() {
+      try {
+        const result = await api('/servers/discover-all', { method: 'POST' });
+        const ok = (result.results || []).filter(r => r.status === 'discovered').length;
+        const fail = (result.results || []).filter(r => r.status === 'failed').length;
+        toast(`Découverte : ${ok} OK, ${fail} échoué${fail > 1 ? 's' : ''}`, fail > 0 ? 'info' : 'success');
+        loadServers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ── Detail modal ─────────────────────────────────────────────────────
+    async function showDetail(id) {
+      try {
+        const s = await api('/servers/' + id);
+        document.getElementById('detail-title').textContent = s.name;
+
+        const healthBadge = {
+          healthy: 'bg-emerald-100 text-emerald-700',
+          unhealthy: 'bg-red-100 text-red-700',
+          degraded: 'bg-yellow-100 text-yellow-700',
+          unknown: 'bg-gray-100 text-gray-600',
+        }[s.health_status] || 'bg-gray-100 text-gray-600';
+
+        let html = `
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div><span class="text-gray-400">ID</span><p class="font-mono text-xs mt-0.5">${esc(s.id)}</p></div>
+              <div><span class="text-gray-400">Statut</span>
+                <p class="mt-0.5"><span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full ${healthBadge}">${esc(s.health_status)}</span>
+                ${s.is_active ? '<span class="ml-1 text-xs text-emerald-600">Actif</span>' : '<span class="ml-1 text-xs text-yellow-600">Désactivé</span>'}</p>
+              </div>
+              <div><span class="text-gray-400">URL</span><p class="font-mono text-xs mt-0.5 break-all">${esc(s.url)}</p></div>
+              <div><span class="text-gray-400">URL de message</span><p class="font-mono text-xs mt-0.5 break-all">${esc(s.message_url || '—')}</p></div>
+              <div><span class="text-gray-400">Transport</span><p class="mt-0.5">${esc(s.transport_type || '—')} <span class="text-gray-400">(pref: ${esc(s.transport_preference)})</span></p></div>
+              <div><span class="text-gray-400">Serveur</span><p class="mt-0.5">${esc(s.server_name || '—')} ${s.server_version ? 'v' + esc(s.server_version) : ''}</p></div>
+            </div>
+            ${s.last_error ? `<div class="bg-red-50 rounded-lg p-3 text-xs text-red-600"><strong>Dernière erreur :</strong> ${esc(s.last_error)}</div>` : ''}
+        `;
+
+        // MCP JSON for this server
+        const mcpJSON = buildServerMCPJSON(s);
+        html += `
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
+              <span class="text-xs font-semibold text-gray-600">JSON du serveur MCP</span>
+              <button onclick="copyJSON('detail-mcp-json')" class="copy-btn text-xs text-brand-600 hover:text-brand-800 font-medium">Copier</button>
+            </div>
+            <pre id="detail-mcp-json" class="json-view px-4 py-3 text-xs font-mono text-gray-700 max-h-40 overflow-auto">${esc(JSON.stringify(mcpJSON, null, 2))}</pre>
+          </div>
+        `;
+
+        // Capabilities — hide stale data when unhealthy with no tools
+        const hasCapabilities = (s.tools && s.tools.length > 0) || (s.resources && s.resources.length > 0) || (s.prompts && s.prompts.length > 0);
+        if (s.health_status === 'unhealthy' && !hasCapabilities) {
+          html += `<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+            <p class="text-sm text-red-600 font-medium">Serveur inaccessible</p>
+            <p class="text-xs text-red-400 mt-1">Les outils, ressources et prompts ne sont pas disponibles. Relancez la découverte une fois le serveur rétabli.</p>
+          </div>`;
+        } else {
+          // Tools
+          if (s.tools && s.tools.length > 0) {
+            html += `<div><h3 class="text-sm font-semibold mb-2">Outils (${s.tools.length})</h3><div class="space-y-2">`;
+            for (const t of s.tools) {
+              html += `<div class="bg-gray-50 rounded-lg p-3">
+                <p class="font-medium text-sm">${esc(t.name)}</p>
+                ${t.description ? `<p class="text-xs text-gray-500 mt-0.5">${esc(t.description)}</p>` : ''}
+              </div>`;
+            }
+            html += '</div></div>';
+          }
+
+          // Resources
+          if (s.resources && s.resources.length > 0) {
+            html += `<div><h3 class="text-sm font-semibold mb-2">Ressources (${s.resources.length})</h3><div class="space-y-2">`;
+            for (const r of s.resources) {
+              html += `<div class="bg-gray-50 rounded-lg p-3">
+                <p class="font-medium text-sm">${esc(r.name)}</p>
+                <p class="text-xs text-gray-400 font-mono">${esc(r.uri)}</p>
+              </div>`;
+            }
+            html += '</div></div>';
+          }
+
+          // Prompts
+          if (s.prompts && s.prompts.length > 0) {
+            html += `<div><h3 class="text-sm font-semibold mb-2">Prompts (${s.prompts.length})</h3><div class="space-y-2">`;
+            for (const p of s.prompts) {
+              html += `<div class="bg-gray-50 rounded-lg p-3">
+                <p class="font-medium text-sm">${esc(p.name)}</p>
+                ${p.description ? `<p class="text-xs text-gray-500 mt-0.5">${esc(p.description)}</p>` : ''}
+                ${p.arguments && p.arguments.length > 0 ? `<p class="text-xs text-gray-400 mt-1">Args: ${p.arguments.map(a => esc(a.name) + (a.is_required ? '*' : '')).join(', ')}</p>` : ''}
+              </div>`;
+            }
+            html += '</div></div>';
+          }
+        }
+
+        html += '</div>';
+        document.getElementById('detail-body').innerHTML = html;
+        document.getElementById('detail-backdrop').classList.remove('hidden');
+        document.getElementById('detail-modal').classList.remove('hidden');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function closeDetail() {
+      document.getElementById('detail-backdrop').classList.add('hidden');
+      document.getElementById('detail-modal').classList.add('hidden');
+    }
+
+    // ── MCP Config / Scope Tokens page ─────────────────────────────────
+    let allServers = []; // cached for token modal
+    let _fullToken = '';  // full token for clipboard (never displayed)
+    let _fullMcpJson = ''; // full .mcp.json for clipboard (never displayed)
+    const _tokenCardJsonMap = {}; // elId -> full JSON for clipboard
+    let _editingTokenId = null; // non-null when editing an existing token
+
+    async function loadMCPConfig() {
+      try {
+        // Load tokens and servers in parallel
+        const [tokenData, serverData] = await Promise.all([
+          api('/tokens').catch(() => ({ tokens: [] })),
+          api('/servers?is_active=true')
+        ]);
+        const tokens = tokenData.tokens || [];
+        allServers = serverData.servers || [];
+
+        const gatewayURL = window.location.origin + '/mcp';
+
+        // Token list
+        const container = document.getElementById('token-list');
+        if (tokens.length === 0) {
+          container.innerHTML = `<div class="text-center py-12">
+            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+            <p class="text-sm text-gray-500">Aucun jeton d'accès pour le moment</p>
+            <p class="text-xs text-gray-400 mt-1">Créez un jeton pour générer une config .mcp.json avec accès limité</p>
+          </div>`;
+        } else {
+          container.innerHTML = tokens.map(t => {
+            const serverNames = allServers.filter(s => t.server_ids.includes(s.id)).map(s => s.name);
+            const statusBadge = t.is_active
+              ? '<span class="px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full">Actif</span>'
+              : '<span class="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 rounded-full">Révoqué</span>';
+            const jsonElId = 'token-cfg-' + t.id.replace(/-/g, '');
+            const expiresStr = t.expires_at ? new Date(t.expires_at).toLocaleDateString('fr-FR') : '<span class="text-emerald-600 font-medium">Permanent</span>';
+            return `
+              <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="px-5 py-3 border-b border-gray-100">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                      <span class="font-semibold text-sm">${esc(t.name)}</span>
+                      <code class="text-xs text-gray-400 font-mono">${esc(t.token_prefix)}...</code>
+                      ${statusBadge}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <button onclick="copyJSON('${jsonElId}')" class="copy-btn inline-flex items-center justify-center w-7 h-7 text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100" title="Copier">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                      </button>
+                      ${t.is_active ? `<button onclick="openEditTokenModal('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100" title="Modifier">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>` : ''}
+                      ${t.is_active ? `<button onclick="revokeToken('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100" title="Révoquer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                      </button>` : ''}
+                      <button onclick="deleteToken('${t.id}')" class="inline-flex items-center justify-center w-7 h-7 text-red-700 bg-red-50 rounded-md hover:bg-red-100" title="Supprimer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="mt-2 flex items-center gap-4 text-xs text-gray-500">
+                    <span>Serveurs : ${serverNames.length > 0 ? serverNames.map(n => '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">' + esc(n) + '</code>').join(' ') : '<em class="text-gray-400">aucun</em>'}</span>
+                    <span>Expire : ${expiresStr}</span>
+                    ${t.created_by ? '<span>Par : ' + esc(t.created_by) + '</span>' : ''}
+                    <span>Commande : <code class="bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded text-xs font-medium">${esc(t.mcp_command || 'npx')}</code></span>
+                  </div>
+                </div>
+                <pre id="${jsonElId}" class="json-view px-5 py-3 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto"></pre>
+              </div>`;
+          }).join('');
+          // Initialize all token card JSONs with their persisted command and decrypted token
+          tokens.forEach(t => {
+            const elId = 'token-cfg-' + t.id.replace(/-/g, '');
+            updateTokenCardJSON(elId, t.token || '', t.mcp_command || 'npx');
+          });
+        }
+
+        // Legacy per-server configs
+        const legacyContainer = document.getElementById('per-server-configs');
+        if (allServers.length === 0) {
+          legacyContainer.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">Aucun serveur actif</p>';
+        } else {
+          legacyContainer.innerHTML = allServers.map(s => {
+            const mcpJSON = buildServerMCPJSON(s);
+            const jsonStr = JSON.stringify(mcpJSON, null, 2);
+            const elId = 'srv-json-' + s.id.replace(/-/g, '');
+            return `<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div class="flex items-center justify-between px-5 py-2 border-b border-gray-100">
+                <span class="font-medium text-sm">${esc(s.name)}</span>
+                <button onclick="copyJSON('${elId}')" class="copy-btn text-xs text-brand-700 bg-brand-50 px-2.5 py-1 rounded-md hover:bg-brand-100">Copier</button>
+              </div>
+              <pre id="${elId}" class="json-view px-5 py-2 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto">${esc(jsonStr)}</pre>
+            </div>`;
+          }).join('');
+        }
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ── Scope Token modal ────────────────────────────────────────────────
+    function openTokenModal() {
+      _editingTokenId = null;
+      document.getElementById('token-modal-title').textContent = "Créer un jeton d'accès";
+      document.getElementById('token-name').value = '';
+      document.getElementById('token-desc').value = '';
+      document.getElementById('token-server-name').value = 'hellopro-gateway';
+      document.getElementById('token-expires').value = '';
+      document.getElementById('token-expires').disabled = true;
+      document.querySelector('input[name="token_expiry_type"][value="permanent"]').checked = true;
+      document.getElementById('token-allow-http').checked = true;
+      document.getElementById('token-mcp-command').value = '';
+      document.getElementById('token-custom-command-wrapper').classList.add('hidden');
+      document.getElementById('token-custom-command').value = '';
+      document.getElementById('token-custom-args-prefix').value = '';
+      document.getElementById('token-command-doc-link').classList.add('hidden');
+      document.getElementById('token-created-result').classList.add('hidden');
+      const btn = document.getElementById('token-submit-btn');
+      btn.disabled = false;
+      btn.classList.remove('hidden');
+      btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
+      document.getElementById('token-backdrop').classList.remove('hidden');
+      document.getElementById('token-modal').classList.remove('hidden');
+
+      // Populate drag-and-drop panels
+      dndPopulate();
+      document.getElementById('token-name').focus();
+    }
+
+    async function openEditTokenModal(tokenId) {
+      try {
+        const token = await api(`/tokens/${tokenId}`);
+        _editingTokenId = tokenId;
+        document.getElementById('token-modal-title').textContent = "Modifier le jeton d'accès";
+        document.getElementById('token-name').value = token.name || '';
+        document.getElementById('token-desc').value = token.description || '';
+        document.getElementById('token-server-name').value = 'hellopro-gateway';
+        document.getElementById('token-mcp-command').value = token.mcp_command || 'npx';
+        updateCommandDoc();
+
+        // Expiration
+        if (token.expires_at) {
+          document.querySelector('input[name="token_expiry_type"][value="custom"]').checked = true;
+          document.getElementById('token-expires').disabled = false;
+          // Convert RFC3339 to datetime-local format
+          const d = new Date(token.expires_at);
+          document.getElementById('token-expires').value = d.toISOString().slice(0, 16);
+        } else {
+          document.querySelector('input[name="token_expiry_type"][value="permanent"]').checked = true;
+          document.getElementById('token-expires').disabled = true;
+          document.getElementById('token-expires').value = '';
+        }
+
+        document.getElementById('token-allow-http').checked = true;
+        document.getElementById('token-created-result').classList.add('hidden');
+        const btn = document.getElementById('token-submit-btn');
+        btn.disabled = false;
+        btn.classList.remove('hidden');
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications';
+
+        document.getElementById('token-backdrop').classList.remove('hidden');
+        document.getElementById('token-modal').classList.remove('hidden');
+
+        // Populate drag-and-drop panels then move selected servers/tools to the right panel
+        dndPopulate();
+        dndRestoreSelection(token.server_ids || [], token.server_tools || []);
+
+        document.getElementById('token-name').focus();
+      } catch (e) {
+        toast('Erreur lors du chargement du jeton: ' + e.message, 'error');
+      }
+    }
+
+    /** Restore the drag-and-drop selection from a token's server_ids and server_tools */
+    function dndRestoreSelection(serverIds, serverTools) {
+      // Build a map: server_id -> [tool_names] (null means all tools)
+      const toolMap = {};
+      for (const st of serverTools) {
+        toolMap[st.server_id] = st.tool_names || [];
+      }
+
+      for (const sid of serverIds) {
+        const srv = allServers.find(s => s.id === sid);
+        if (!srv) continue;
+        const allToolNames = (srv.tool_names || []).map(t => t.name);
+
+        if (toolMap[sid]) {
+          // Partial selection: move only specified tools
+          // First, need to apply prefix to compare with UI tool names
+          const selectedToolNames = toolMap[sid];
+          const prefix = srv.tool_prefix || '';
+          const prefixedSelected = selectedToolNames.map(n => prefix ? prefix + '_' + n : n);
+
+          for (const toolName of prefixedSelected) {
+            dndTransferTool(sid, toolName, true);
+          }
+        } else {
+          // All tools selected: move entire server
+          dndTransferServer(sid, true);
+        }
+      }
+      dndUpdateCount();
+    }
+
+    function closeTokenModal() {
+      document.getElementById('token-backdrop').classList.add('hidden');
+      document.getElementById('token-modal').classList.add('hidden');
+    }
+
+    // ── Drag-and-drop hierarchical tool picker ──────────────────────────
+
+    const SVG_CHEVRON = '<svg class="w-3.5 h-3.5 srv-chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
+    const SVG_TOOL = '<svg class="w-3 h-3 tool-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.25 5.25a2.12 2.12 0 01-3-3l5.25-5.25m7.41-3.41a3.37 3.37 0 10-4.77-4.77L6.75 8.25 15.75 17.25l4.08-4.08z"/></svg>';
+    const SVG_SERVER = '<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>';
+
+    function dndBuildServerGroup(s, tools, panelId) {
+      const gId = `dnd-grp-${panelId}-${s.id}`;
+      const toolsHtml = tools.map(t => `
+        <div class="dnd-tool-item" draggable="true" data-type="tool" data-server-id="${s.id}"
+          data-tool-name="${esc(t.name)}" data-tool-desc="${esc(t.description||'')}"
+          ondragstart="dndDragStart(event)" ondragend="dndDragEnd(event)" ondblclick="dndMoveTool(this)">
+          ${SVG_TOOL}
+          <span class="font-medium flex-shrink-0">${esc(t.name)}</span>
+          ${t.description ? `<span class="tool-desc flex-1 min-w-0">${esc(t.description)}</span>` : ''}
+        </div>`).join('');
+      return `<div class="dnd-server-group" id="${gId}" data-server-id="${s.id}">
+        <div class="dnd-server-header" draggable="true" data-type="server" data-server-id="${s.id}"
+          ondragstart="dndDragStart(event)" ondragend="dndDragEnd(event)" ondblclick="dndMoveServer('${s.id}',this)">
+          <span onclick="dndToggleCollapse('${gId}');event.stopPropagation()">${SVG_CHEVRON}</span>
+          ${SVG_SERVER}
+          <span class="flex-1 truncate">${esc(s.name)}</span>
+          <span class="srv-count">${tools.length} outil${tools.length>1?'s':''}</span>
+        </div>
+        <div class="dnd-tools-list" style="max-height:${tools.length*32+4}px">${toolsHtml}</div>
+      </div>`;
+    }
+
+    function dndToggleCollapse(groupId) {
+      const grp = document.getElementById(groupId);
+      if (!grp) return;
+      const list = grp.querySelector('.dnd-tools-list');
+      const chev = grp.querySelector('.srv-chevron');
+      list.classList.toggle('collapsed');
+      if (chev) chev.classList.toggle('collapsed');
+    }
+
+    function dndPopulate() {
+      const avail = document.getElementById('dnd-available');
+      const sel = document.getElementById('dnd-selected');
+      sel.innerHTML = '<p id="dnd-empty-msg" class="text-xs text-gray-400 p-2 italic">Glissez des serveurs ou outils ici</p>';
+      document.getElementById('dnd-search-available').value = '';
+      document.getElementById('dnd-search-selected').value = '';
+      if (allServers.length === 0) {
+        avail.innerHTML = '<p class="text-xs text-gray-400 p-2">Aucun serveur actif</p>';
+        dndUpdateCount(); return;
+      }
+      let html = '';
+      for (const s of allServers) {
+        html += dndBuildServerGroup(s, s.tool_names || [], 'avail');
+      }
+      avail.innerHTML = html;
+      dndUpdateCount();
+    }
+
+    // ── Drag handlers ──────────────────────
+
+    function dndDragStart(e) {
+      const el = e.target.closest('[data-type]');
+      if (!el) return;
+      e.dataTransfer.setData('application/x-type', el.dataset.type);
+      e.dataTransfer.setData('application/x-server', el.dataset.serverId);
+      if (el.dataset.toolName) e.dataTransfer.setData('application/x-tool', el.dataset.toolName);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    }
+
+    function dndDragEnd(e) {
+      const el = e.target.closest('[data-type]');
+      if (el) el.classList.remove('dragging');
+      document.querySelectorAll('.dnd-panel').forEach(p => p.classList.remove('drag-over'));
+    }
+
+    function dndDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.classList.add('drag-over'); }
+
+    function dndDrop(e, targetPanel) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      const type = e.dataTransfer.getData('application/x-type');
+      const serverId = e.dataTransfer.getData('application/x-server');
+      const toolName = e.dataTransfer.getData('application/x-tool');
+      const toSelected = targetPanel === 'selected';
+      if (type === 'server') {
+        dndTransferServer(serverId, toSelected);
+      } else if (type === 'tool') {
+        dndTransferTool(serverId, toolName, toSelected);
+      }
+      dndUpdateCount();
+    }
+
+    // ── Double-click handlers ──────────────
+
+    function dndMoveServer(serverId, headerEl) {
+      const inSelected = !!headerEl.closest('#dnd-selected');
+      dndTransferServer(serverId, !inSelected);
+      dndUpdateCount();
+    }
+
+    function dndMoveTool(toolEl) {
+      const inSelected = !!toolEl.closest('#dnd-selected');
+      dndTransferTool(toolEl.dataset.serverId, toolEl.dataset.toolName, !inSelected);
+      dndUpdateCount();
+    }
+
+    // ── Core transfer logic ───────────────
+
+    function dndTransferServer(serverId, toSelected) {
+      const srv = allServers.find(s => s.id === serverId);
+      if (!toSelected) {
+        // Move all tools back to available, rebuild available group, remove selected group
+        dndEnsureAvailGroup(srv);
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        if (selGrp) {
+          // Move each tool item back to available group
+          const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+          if (availGrp) {
+            const availList = availGrp.querySelector('.dnd-tools-list');
+            selGrp.querySelectorAll('.dnd-tool-item').forEach(t => availList.appendChild(t));
+            dndRefreshGroupCount(availGrp);
+          }
+          selGrp.remove();
+        }
+      } else {
+        // Move entire server with all its tools to selected
+        const tools = srv?.tool_names || [];
+        dndEnsureSelGroup(srv);
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        const selList = selGrp?.querySelector('.dnd-tools-list');
+        // Move any remaining available tools to selected
+        const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+        if (availGrp) {
+          availGrp.querySelectorAll('.dnd-tool-item').forEach(t => { if (selList) selList.appendChild(t); });
+          availGrp.remove(); // remove empty available group
+        }
+        dndRefreshGroupCount(selGrp);
+      }
+    }
+
+    function dndTransferTool(serverId, toolName, toSelected) {
+      const srv = allServers.find(s => s.id === serverId);
+      if (toSelected) {
+        // Ensure server group exists in selected panel
+        dndEnsureSelGroup(srv);
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        const selList = selGrp?.querySelector('.dnd-tools-list');
+        // Find the tool in available and move it
+        const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+        if (availGrp) {
+          const toolEl = [...availGrp.querySelectorAll('.dnd-tool-item')].find(t => t.dataset.toolName === toolName);
+          if (toolEl && selList) selList.appendChild(toolEl);
+          dndRefreshGroupCount(availGrp);
+          // If no tools left in available, remove the empty server group
+          if (availGrp.querySelectorAll('.dnd-tool-item').length === 0) availGrp.remove();
+        }
+        dndRefreshGroupCount(selGrp);
+      } else {
+        // Move tool back to available
+        dndEnsureAvailGroup(srv);
+        const availGrp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${serverId}"]`);
+        const availList = availGrp?.querySelector('.dnd-tools-list');
+        const selGrp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${serverId}"]`);
+        if (selGrp) {
+          const toolEl = [...selGrp.querySelectorAll('.dnd-tool-item')].find(t => t.dataset.toolName === toolName);
+          if (toolEl && availList) availList.appendChild(toolEl);
+          dndRefreshGroupCount(selGrp);
+          // If no tools left in selected, remove the server group
+          if (selGrp.querySelectorAll('.dnd-tool-item').length === 0) selGrp.remove();
+        }
+        dndRefreshGroupCount(availGrp);
+      }
+    }
+
+    // ── Helpers: ensure group exists ──────
+
+    function dndEnsureSelGroup(srv) {
+      if (!srv) return;
+      let grp = document.querySelector(`#dnd-selected .dnd-server-group[data-server-id="${srv.id}"]`);
+      if (!grp) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = dndBuildServerGroup(srv, [], 'sel');
+        grp = tmp.firstElementChild;
+        document.getElementById('dnd-selected').appendChild(grp);
+      }
+    }
+
+    function dndEnsureAvailGroup(srv) {
+      if (!srv) return;
+      let grp = document.querySelector(`#dnd-available .dnd-server-group[data-server-id="${srv.id}"]`);
+      if (!grp) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = dndBuildServerGroup(srv, [], 'avail');
+        grp = tmp.firstElementChild;
+        document.getElementById('dnd-available').appendChild(grp);
+      }
+    }
+
+    function dndRefreshGroupCount(grp) {
+      if (!grp) return;
+      const count = grp.querySelectorAll('.dnd-tool-item').length;
+      const badge = grp.querySelector('.srv-count');
+      if (badge) badge.textContent = `${count} outil${count>1?'s':''}`;
+      const list = grp.querySelector('.dnd-tools-list');
+      if (list) list.style.maxHeight = (count * 32 + 4) + 'px';
+    }
+
+    // ── Bulk actions ──────────────────────
+
+    function dndAddAll() {
+      for (const s of allServers) dndTransferServer(s.id, true);
+      dndUpdateCount();
+    }
+
+    function dndRemoveAll() {
+      for (const s of allServers) dndTransferServer(s.id, false);
+      dndUpdateCount();
+    }
+
+    function dndUpdateCount() {
+      const toolCount = document.querySelectorAll('#dnd-selected .dnd-tool-item').length;
+      const srvCount = document.querySelectorAll('#dnd-selected .dnd-server-group').length;
+      document.getElementById('dnd-selected-count').textContent = `(${srvCount} srv, ${toolCount} outils)`;
+      const emptyMsg = document.getElementById('dnd-empty-msg');
+      if (emptyMsg) emptyMsg.style.display = (srvCount > 0) ? 'none' : '';
+    }
+
+    function dndFilter(panel) {
+      const isAvail = panel === 'available';
+      const input = document.getElementById(isAvail ? 'dnd-search-available' : 'dnd-search-selected');
+      const container = document.getElementById(isAvail ? 'dnd-available' : 'dnd-selected');
+      const q = input.value.toLowerCase().trim();
+      container.querySelectorAll('.dnd-server-group').forEach(grp => {
+        const srvName = (grp.querySelector('.dnd-server-header')?.textContent || '').toLowerCase();
+        let anyToolVisible = false;
+        grp.querySelectorAll('.dnd-tool-item').forEach(t => {
+          const match = !q || t.dataset.toolName.toLowerCase().includes(q) || (t.dataset.toolDesc||'').toLowerCase().includes(q) || srvName.includes(q);
+          t.style.display = match ? '' : 'none';
+          if (match) anyToolVisible = true;
+        });
+        grp.style.display = (!q || srvName.includes(q) || anyToolVisible) ? '' : 'none';
+      });
+    }
+
+    function updateTokenCardJSON(elId, token, cmdKey) {
+      const cfg = MCP_COMMANDS[cmdKey];
+      if (!cfg) return;
+      const gatewayURL = window.location.origin + '/mcp';
+      const isHttp = gatewayURL.startsWith('http://');
+      const hasToken = token && token.length > 12;
+
+      // Full version for clipboard
+      const fullArgs = [...cfg.argsPrefix, gatewayURL];
+      if (isHttp) fullArgs.push("--allow-http");
+      fullArgs.push("--header", "X-MCP-Scope-Token: " + (token || '<YOUR_TOKEN>'));
+      const fullConfig = { mcpServers: { "hellopro-gateway": { command: cfg.command, args: fullArgs } } };
+      _tokenCardJsonMap[elId] = JSON.stringify(fullConfig, null, 2);
+
+      // Masked version for display
+      const maskedArgs = [...cfg.argsPrefix, gatewayURL];
+      if (isHttp) maskedArgs.push("--allow-http");
+      const maskedToken = hasToken ? token.slice(0, 8) + '\u2022'.repeat(12) + token.slice(-4) : '<YOUR_TOKEN>';
+      maskedArgs.push("--header", "X-MCP-Scope-Token: " + maskedToken);
+      const maskedConfig = { mcpServers: { "hellopro-gateway": { command: cfg.command, args: maskedArgs } } };
+
+      const el = document.getElementById(elId);
+      if (el) el.textContent = JSON.stringify(maskedConfig, null, 2);
+    }
+
+    async function createScopeToken() {
+      const name = document.getElementById('token-name').value.trim();
+      const description = document.getElementById('token-desc').value.trim();
+      const expiresRaw = document.getElementById('token-expires').value;
+      const isEditing = !!_editingTokenId;
+
+      // Collect from drag-and-drop selected panel (hierarchical)
+      const selectedServerIds = new Set();
+      const selectedToolsByServer = {};
+      document.querySelectorAll('#dnd-selected .dnd-server-group').forEach(grp => {
+        const sid = grp.dataset.serverId;
+        selectedServerIds.add(sid);
+        const toolEls = grp.querySelectorAll('.dnd-tool-item');
+        if (toolEls.length > 0) {
+          selectedToolsByServer[sid] = [...toolEls].map(t => t.dataset.toolName);
+        }
+      });
+      const serverIDs = [...selectedServerIds];
+
+      if (!name) { toast('Le nom du jeton est requis', 'error'); return; }
+      if (serverIDs.length === 0) { toast('Sélectionnez au moins un serveur ou outil', 'error'); return; }
+      if (!isEditing && !document.getElementById('token-mcp-command').value) { toast('Sélectionnez une commande MCP', 'error'); return; }
+
+      // Build per-server tool selections (only when a subset is selected)
+      const serverTools = [];
+      for (const sid of serverIDs) {
+        const srv = allServers.find(s => s.id === sid);
+        const totalTools = (srv?.tool_names || []).length;
+        const pickedTools = selectedToolsByServer[sid] || [];
+        if (totalTools === 0) continue;
+        if (pickedTools.length === totalTools) continue; // all tools — no restriction needed
+        serverTools.push({ server_id: sid, tool_names: pickedTools });
+      }
+
+      const btn = document.getElementById('token-submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> ' + (isEditing ? 'Mise à jour...' : 'Génération...');
+
+      try {
+        if (isEditing) {
+          // ── UPDATE existing token ──
+          const body = { name, description, server_ids: serverIDs };
+          if (serverTools.length > 0) body.server_tools = serverTools;
+          else body.server_tools = []; // clear all tool restrictions
+
+          await api(`/tokens/${_editingTokenId}`, { method: 'PUT', body: JSON.stringify(body) });
+          toast('Jeton mis à jour !', 'success');
+          closeTokenModal();
+          loadMCPConfig();
+        } else {
+          // ── CREATE new token ──
+          const mcpCommandSel = document.getElementById('token-mcp-command').value;
+          const body = { name, server_ids: serverIDs, mcp_command: mcpCommandSel };
+          if (description) body.description = description;
+          if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
+          if (serverTools.length > 0) body.server_tools = serverTools;
+
+          const result = await api('/tokens', { method: 'POST', body: JSON.stringify(body) });
+
+          // Show the raw token and .mcp.json
+          _fullToken = result.token;
+          const maskedToken = result.token.slice(0, 8) + '\u2022'.repeat(12) + result.token.slice(-4);
+          document.getElementById('token-raw-value').textContent = maskedToken;
+          const gatewayURL = window.location.origin + '/mcp';
+          const allowHttp = document.getElementById('token-allow-http').checked;
+          const cmdCfg = getMCPCommandConfig();
+          const mcpArgs = [...cmdCfg.argsPrefix, gatewayURL];
+          if (allowHttp) mcpArgs.push("--allow-http");
+          mcpArgs.push("--header", "X-MCP-Scope-Token: " + result.token);
+          const serverName = document.getElementById('token-server-name').value.trim() || 'hellopro-gateway';
+          const mcpConfig = {
+            mcpServers: {
+              [serverName]: {
+                command: cmdCfg.command,
+                args: mcpArgs
+              }
+            }
+          };
+          _fullMcpJson = JSON.stringify(mcpConfig, null, 2);
+          const maskedArgs = mcpArgs.map(a => a.startsWith('X-MCP-Scope-Token: ') ? 'X-MCP-Scope-Token: ' + maskedToken : a);
+          const maskedConfig = {
+            mcpServers: {
+              [serverName]: {
+                command: cmdCfg.command,
+                args: maskedArgs
+              }
+            }
+          };
+          document.getElementById('token-mcp-json').textContent = JSON.stringify(maskedConfig, null, 2);
+          document.getElementById('token-created-result').classList.remove('hidden');
+          btn.classList.add('hidden');
+
+          toast('Jeton d\'accès créé !', 'success');
+          loadMCPConfig();
+        }
+      } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = isEditing
+          ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications'
+          : '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Générer le jeton';
+      }
+    }
+
+    async function revokeToken(id) {
+      if (!confirm('Révoquer ce jeton ? Les clients qui l\'utilisent perdront l\'accès.')) return;
+      try {
+        await api(`/tokens/${id}/revoke`, { method: 'POST' });
+        toast('Jeton révoqué', 'info');
+        loadMCPConfig();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteToken(id) {
+      if (!confirm('Supprimer définitivement ce jeton ?')) return;
+      try {
+        await api(`/tokens/${id}`, { method: 'DELETE' });
+        toast('Jeton supprimé', 'info');
+        loadMCPConfig();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function buildServerMCPEntry(s) {
+      const transport = s.mcp_transport || 'http';
+
+      if (transport === 'stdio') {
+        const entry = { command: s.mcp_command || '' };
+        if (s.mcp_args && s.mcp_args.length > 0) entry.args = s.mcp_args;
+        if (s.mcp_env && Object.keys(s.mcp_env).length > 0) entry.env = s.mcp_env;
+        return entry;
+      }
+
+      // Remote: http or sse
+      const entry = {};
+      if (transport === 'sse') {
+        entry.url = s.message_url || s.url;
+        entry.transport = 'sse';
+      } else {
+        entry.url = s.message_url || s.url;
+      }
+      // Auth headers are encrypted and never exposed — omitted from .mcp.json export for security
+      return entry;
+    }
+
+    function buildServerMCPJSON(s) {
+      const key = s.name.replace(/[^a-zA-Z0-9_-]/g, '-');
+      return { mcpServers: { [key]: buildServerMCPEntry(s) } };
+    }
+
+    // ── Modal helpers ────────────────────────────────────────────────────
+    function openModal() {
+      document.getElementById('modal-backdrop').classList.remove('hidden');
+      document.getElementById('modal').classList.remove('hidden');
+      document.getElementById('form-name').focus();
+    }
+    function closeModal() {
+      document.getElementById('modal-backdrop').classList.add('hidden');
+      document.getElementById('modal').classList.add('hidden');
+    }
+
+    // ── Clipboard ────────────────────────────────────────────────────────
+    function copyToClipboard(text, msg) {
+      msg = msg || 'Copié dans le presse-papiers';
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => toast(msg, 'info'));
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        toast(msg, 'info');
+      }
+    }
+
+    function copyJSON(elId) {
+      const text = _tokenCardJsonMap[elId] || document.getElementById(elId).textContent;
+      copyToClipboard(text);
+    }
+
+    // ── Utils ────────────────────────────────────────────────────────────
+    function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    let _debounceTimers = {};
+    function debounce(fn, ms) {
+      return function(...args) {
+        clearTimeout(_debounceTimers[fn.name]);
+        _debounceTimers[fn.name] = setTimeout(() => fn(...args), ms);
+      };
+    }
+
+    // ── Import .mcp.json ────────────────────────────────────────────────
+    function openImportModal() {
+      document.getElementById('import-json').value = '';
+      document.getElementById('import-filename').textContent = '';
+      document.getElementById('import-results').classList.add('hidden');
+      document.getElementById('import-results-list').innerHTML = '';
+      document.getElementById('import-submit').disabled = false;
+      document.getElementById('import-backdrop').classList.remove('hidden');
+      document.getElementById('import-modal').classList.remove('hidden');
+      document.getElementById('import-json').focus();
+    }
+
+    function closeImportModal() {
+      document.getElementById('import-backdrop').classList.add('hidden');
+      document.getElementById('import-modal').classList.add('hidden');
+    }
+
+    function handleImportFile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      document.getElementById('import-filename').textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = (ev) => { document.getElementById('import-json').value = ev.target.result; };
+      reader.readAsText(file);
+    }
+
+    // Drag & drop
+    (function initDropzone() {
+      const dz = document.getElementById('import-dropzone');
+      if (!dz) return;
+      const overlay = document.getElementById('import-drop-overlay');
+      ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, e => {
+        e.preventDefault(); dz.classList.add('border-brand-400','bg-brand-50/30'); overlay.classList.remove('hidden');
+      }));
+      ['dragleave','drop'].forEach(evt => dz.addEventListener(evt, e => {
+        e.preventDefault(); dz.classList.remove('border-brand-400','bg-brand-50/30'); overlay.classList.add('hidden');
+      }));
+      dz.addEventListener('drop', e => {
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        document.getElementById('import-filename').textContent = file.name;
+        const reader = new FileReader();
+        reader.onload = (ev) => { document.getElementById('import-json').value = ev.target.result; };
+        reader.readAsText(file);
+      });
+    })();
+
+    async function doImport() {
+      const jsonText = document.getElementById('import-json').value.trim();
+      if (!jsonText) { toast('Collez ou chargez d\'abord un fichier .mcp.json', 'error'); return; }
+      let parsed;
+      try { parsed = JSON.parse(jsonText); }
+      catch { toast('JSON invalide — vérifiez la syntaxe', 'error'); return; }
+
+      const autoDiscover = document.getElementById('import-auto-discover').checked;
+      const btn = document.getElementById('import-submit');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Import en cours...';
+
+      try {
+        const result = await api(`/servers/import?auto_discover=${autoDiscover}`, { method: 'POST', body: JSON.stringify(parsed) });
+        const resultsDiv = document.getElementById('import-results');
+        const listDiv = document.getElementById('import-results-list');
+        resultsDiv.classList.remove('hidden');
+
+        const icons = {
+          created: '<span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-600"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></span>',
+          skipped: '<span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-yellow-100 text-yellow-600"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v2m0 4h.01"/></svg></span>',
+          error:   '<span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-600"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg></span>',
+        };
+        const colors = { created: 'bg-emerald-50 border-emerald-200', skipped: 'bg-yellow-50 border-yellow-200', error: 'bg-red-50 border-red-200' };
+
+        listDiv.innerHTML = `
+          <div class="flex gap-4 mb-2 text-xs font-medium">
+            <span class="text-emerald-600">${result.imported} importé${result.imported>1?'s':''}</span>
+            <span class="text-yellow-600">${result.skipped} ignoré${result.skipped>1?'s':''}</span>
+            <span class="text-red-600">${result.errors} erreur${result.errors>1?'s':''}</span>
+          </div>
+          ${(result.results||[]).map(r => `
+            <div class="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${colors[r.status]||'bg-gray-50 border-gray-200'}">
+              ${icons[r.status]||''}
+              <span class="font-medium">${esc(r.name)}</span>
+              <span class="text-xs text-gray-400 ml-auto">${r.status}${r.error ? ' — '+esc(r.error) : ''}</span>
+            </div>`).join('')}`;
+
+        toast(`${result.imported} serveur${result.imported!==1?'s':''} importé${result.imported!==1?'s':''}`, result.errors > 0 ? 'info' : 'success');
+        loadServers();
+      } catch (e) { toast(e.message, 'error'); }
+      finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Importer';
+      }
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────
+    showPage('servers');
+    loadAllTags();
+    loadServers();
+  </script>
+</body>
+</html>

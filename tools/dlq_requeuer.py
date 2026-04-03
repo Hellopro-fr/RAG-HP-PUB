@@ -1,54 +1,12 @@
 import pika
-import os
 import json
 import time
 import argparse
 from datetime import datetime, timezone
-from elasticsearch import Elasticsearch
+from connections import get_rabbitmq_connection, get_elasticsearch_client
 
-# --- Configuration ---
-RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
-ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
-ES_USERNAME = os.environ.get("ES_USERNAME")
-ES_PASSWORD = os.environ.get("ES_PASSWORD")
-ELASTIC_INDEX_NAME = "failed_messages_archive" # Point to the new, correctly mapped index
+ELASTIC_INDEX_NAME = "failed_messages_archive"
 PAGE_SIZE = 100  # Number of documents to process per Elasticsearch query
-
-def get_rabbitmq_connection():
-    """Tente de se connecter à RabbitMQ avec des retries."""
-    for i in range(5):
-        try:
-            connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
-            print("✅ Re-queuer: Connecté à RabbitMQ.")
-            return connection
-        except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Re-queuer: En attente de RabbitMQ... {i+1}s")
-            time.sleep(i + 1)
-    raise ConnectionError("❌ Re-queuer: Impossible de se connecter à RabbitMQ.")
-
-def get_elasticsearch_client():
-    """Tente de se connecter à Elasticsearch avec des retries."""
-    for i in range(5):
-        try:
-            # Use credentials for Elasticsearch connection if provided
-            if ES_USERNAME and ES_PASSWORD:
-                es_client = Elasticsearch(
-                    ELASTICSEARCH_URL,
-                    basic_auth=(ES_USERNAME, ES_PASSWORD),
-                    request_timeout=30
-                )
-            else:
-                es_client = Elasticsearch(ELASTICSEARCH_URL, request_timeout=30)
-
-            if es_client.ping():
-                print("✅ Re-queuer: Connecté à Elasticsearch.")
-                return es_client
-            else:
-                raise ConnectionError("Ping Elasticsearch a échoué.")
-        except Exception as e:
-            print(f"⏳ Re-queuer: En attente d'Elasticsearch... {i+1}s ({e})")
-            time.sleep(i + 1)
-    raise ConnectionError("❌ Re-queuer: Impossible de se connecter à Elasticsearch.")
 
 def requeue_messages(es_client, rabbit_channel, args):
     """
@@ -69,8 +27,7 @@ def requeue_messages(es_client, rabbit_channel, args):
     if args.filter:
         for f in args.filter:
             if ':' not in f:
-                print(f"⚠️ Filtre invalide ignoré: '{f}'. Le format doit être 'champ:valeur'.")
-                continue
+                raise argparse.ArgumentTypeError(f"Filtre invalide: '{f}'. Le format doit être 'champ:valeur'.")
             
             key, value = f.split(':', 1)
             if '*' in value:
@@ -146,7 +103,7 @@ def requeue_messages(es_client, rabbit_channel, args):
                     update_body = {
                         "doc": {
                             "status": "Re-queued",
-                            "status_updated_at": datetime.utcnow().isoformat()
+                            "status_updated_at": datetime.now(timezone.utc).isoformat()
                         }
                     }
                     es_client.update(index=ELASTIC_INDEX_NAME, id=doc_id, body=update_body)
@@ -173,8 +130,8 @@ def run_requeue_cycle(args):
     """Encapsulates a single run of connecting, requeueing, and disconnecting."""
     rabbit_conn = None
     try:
-        es_client = get_elasticsearch_client()
-        rabbit_conn = get_rabbitmq_connection()
+        es_client = get_elasticsearch_client(retries=5, request_timeout=30)
+        rabbit_conn = get_rabbitmq_connection(retries=5)
         rabbit_channel = rabbit_conn.channel()
 
         requeue_messages(es_client, rabbit_channel, args)

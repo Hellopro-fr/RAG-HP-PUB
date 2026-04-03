@@ -34,6 +34,9 @@ class CaracterisationProduitGenerator:
     DEEPSEEK_MODEL = "deepseek-chat"
     
     ETAPE = "7"
+
+    # ID process
+    ID_PROCESS = "30"
     
     # ContextVar pour identifier le produit en cours dans chaque tâche async
     _current_product_id = contextvars.ContextVar('current_product_id', default=None)
@@ -387,7 +390,7 @@ class CaracterisationProduitGenerator:
                 model=self.DEEPSEEK_MODEL,
                 input_token=response_obj.usage.prompt_tokens,
                 output_token=response_obj.usage.completion_tokens,
-                id_process=id_categorie,
+                id_process=self.ID_PROCESS,
                 origine="qc-caracterisation",
                 etat=1 if "code" not in result else 2,
                 retour_erreur=str(result.get("error", "")) if "code" in result else "",
@@ -467,7 +470,7 @@ class CaracterisationProduitGenerator:
                 model=self.DEEPSEEK_MODEL,
                 input_token=response_obj.usage.prompt_tokens,
                 output_token=response_obj.usage.completion_tokens,
-                id_process=id_categorie,
+                id_process=self.ID_PROCESS,
                 origine="qc-caracterisation-repasse",
                 etat=1 if "code" not in result else 2,
                 retour_erreur=str(result.get("error", "")) if "code" in result else "",
@@ -898,7 +901,7 @@ class CaracterisationProduitGenerator:
             "caracterisation",
             "produits",
             "get",
-            {"id_categorie": id_categorie}
+            {"id_categorie": id_categorie , "is_script": True}
         )
         
         if not produits:

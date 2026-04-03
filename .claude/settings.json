@@ -1,0 +1,15 @@
+{
+    "enableAllProjectMcpServers": true,
+    "hooks": {
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "prompt",
+                        "prompt": "You just finished responding. Check if any of these apply:\n\n1. **CLAUDE.md refresh needed?** If you created new files, added endpoints, changed service structure, or modified shared libs — check if the relevant CLAUDE.md (service-level or root) needs updating. If yes, propose the update to the user.\n\n2. **Auto-review needed?** If you wrote or edited source code (not docs/comments/config only), do a quick self-review:\n   - Any SOLID/DRY/KISS violation introduced?\n   - Any security concern per `.claude/rules/security.md`?\n   - Any impact on shared components per `.claude/rules/impact-awareness.md`?\n   - If issues found, report them and offer to fix.\n\nIf neither applies, respond with {\"ok\": true}.\nIf something needs attention, respond with {\"ok\": false, \"reason\": \"brief description of what needs updating\"}."
+                    }
+                ]
+            }
+        ]
+    }
+}

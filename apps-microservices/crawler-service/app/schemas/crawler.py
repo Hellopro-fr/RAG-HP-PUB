@@ -78,7 +78,7 @@ class CrawlRequest(BaseModel):
     proxy_apify: Optional[str] = Field(None, description="Apify proxy key.", example="my_apify_proxy_key", alias="proxyapify")
     bypass_question_mark: Optional[bool] = Field(False, description="Bypass filtering of URLs with '?'", alias="bypassquestionmark")
     bypass_diez: Optional[bool] = Field(False, description="Bypass filtering of URLs with '#'", alias="bypassdiez")
-    break_limit: Optional[bool] = Field(False, description="Enable break limit of 5000 URLs to be crawled.", alias="breaklimit")
+    break_limit: Optional[bool] = Field(True, description="Bypass the 5000 URLs crawl limit.", alias="breaklimit")
     per_crawl: Optional[int] = Field(0, description="Number of URLs to crawl per job. 0 means unlimited.", example=1000, alias="percrawl")
     per_minute: Optional[int] = Field(100, description="Crawling speed in URLs per minute. 0 means unlimited.", example=100, alias="perminute")
     
@@ -95,7 +95,27 @@ class StopResponse(BaseModel):
 
 class ArchiveResponse(BaseModel):
     message: str
-    gcs_url: str
+    crawl_id: str
+    archive_status: str = Field("pending_upload", description="'pending_upload' = local archive created, awaiting daemon upload to GCS.")
+    archive_size_bytes: Optional[int] = Field(None, description="Size of the archive file in bytes.")
+
+class RetrieveResponse(BaseModel):
+    message: str
+    crawl_id: str
+    status: str = Field(..., description="Restored job status after retrieval (e.g., 'finished').")
+    domain: str
+
+class FailedCallback(BaseModel):
+    crawl_id: str
+    webhook_type: str = Field(..., description="Type of webhook: success, failure, or stop")
+    url: str
+    params: dict
+    error: Optional[str] = None
+    failed_at: datetime
+
+class PendingCallbacksResponse(BaseModel):
+    count: int
+    callbacks: List[FailedCallback]
 
 class CrawlStatus(BaseModel):
     crawl_id: str

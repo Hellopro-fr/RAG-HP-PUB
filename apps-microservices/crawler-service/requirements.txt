@@ -1,6 +1,7 @@
 fastapi[all]
 uvicorn
 python-dotenv
+pydantic-settings
 aiofiles
 httpx
 redis

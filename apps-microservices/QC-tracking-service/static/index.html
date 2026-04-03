@@ -94,6 +94,78 @@
             color: var(--text-secondary);
         }
 
+        /* Download by date */
+        .download-date-container {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .download-date-container label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .download-date-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .date-input {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .date-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn-download-date {
+            padding: 8px 14px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .btn-download-date:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-download-date:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .download-date-status {
+            font-size: 0.75rem;
+            margin-top: 6px;
+            min-height: 1.1em;
+        }
+
+        .download-date-status.error {
+            color: #f87171;
+        }
+
+        .download-date-status.success {
+            color: var(--success);
+        }
+
         /* Breadcrumb */
         .breadcrumb {
             padding: 12px 20px;
@@ -140,6 +212,28 @@
 
         .file-item:hover {
             background: var(--bg-tertiary);
+        }
+
+        .show-more-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: calc(100% - 10px);
+            margin: 8px 5px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border: 1px dashed var(--accent);
+            border-radius: 8px;
+            color: var(--accent);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .show-more-btn:hover {
+            background: rgba(0, 212, 255, 0.1);
         }
 
         .file-item.active {
@@ -367,6 +461,15 @@
             <div class="search-container">
                 <input type="text" class="search-input" id="searchInput" placeholder="🔍 Rechercher dans les fichiers...">
             </div>
+
+            <div class="download-date-container">
+                <label>📦 Télécharger les trackings d'une date</label>
+                <div class="download-date-row">
+                    <input type="date" class="date-input" id="dateInput">
+                    <button class="btn-download-date" id="downloadDateBtn" disabled>Télécharger</button>
+                </div>
+                <div class="download-date-status" id="downloadDateStatus"></div>
+            </div>
             
             <div class="search-results" id="searchResults" style="display: none;"></div>
             
@@ -435,15 +538,31 @@
             }
         }
 
+        // Load all files (no limit)
+        async function loadAllFiles() {
+            document.getElementById('fileList').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/browse?path=${encodeURIComponent(currentPath)}&show_all=true`);
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.detail);
+
+                renderFiles(data);
+            } catch (error) {
+                document.getElementById('fileList').innerHTML = `<div class="empty-state"><p>Erreur: ${error.message}</p></div>`;
+            }
+        }
+
         // Render file list
         function renderFiles(data) {
             const container = document.getElementById('fileList');
-            
+
             if (data.items.length === 0) {
                 container.innerHTML = '<div class="empty-state"><p>Dossier vide</p></div>';
                 return;
             }
-            
+
             // Add parent directory link
             let html = '';
             if (data.parent_path !== null) {
@@ -457,15 +576,15 @@
                     </div>
                 `;
             }
-            
+
             data.items.forEach(item => {
                 const icon = item.is_directory ? '📁' : '📄';
                 const iconClass = item.is_directory ? 'folder' : 'file';
                 const meta = item.is_directory ? 'Dossier' : formatSize(item.size);
-                const onclick = item.is_directory 
+                const onclick = item.is_directory
                     ? `navigateTo('${item.path}')`
                     : `viewFile('${item.path}', '${item.name}')`;
-                
+
                 html += `
                     <div class="file-item" onclick="${onclick}" data-path="${item.path}">
                         <span class="file-icon ${iconClass}">${icon}</span>
@@ -476,7 +595,17 @@
                     </div>
                 `;
             });
-            
+
+            // "Voir plus" button if there are more files
+            if (data.has_more) {
+                const remaining = data.total_items - data.items.length;
+                html += `
+                    <button class="show-more-btn" onclick="loadAllFiles()">
+                        📂 Voir plus (${remaining} fichiers restants)
+                    </button>
+                `;
+            }
+
             container.innerHTML = html;
         }
 
@@ -592,6 +721,57 @@
         });
 
         document.getElementById('downloadBtn').addEventListener('click', downloadFile);
+
+        // Download by date
+        const dateInput = document.getElementById('dateInput');
+        const downloadDateBtn = document.getElementById('downloadDateBtn');
+        const downloadDateStatus = document.getElementById('downloadDateStatus');
+
+        // Set default date to today
+        dateInput.value = new Date().toISOString().split('T')[0];
+        downloadDateBtn.disabled = false;
+
+        dateInput.addEventListener('change', () => {
+            downloadDateBtn.disabled = !dateInput.value;
+            downloadDateStatus.textContent = '';
+            downloadDateStatus.className = 'download-date-status';
+        });
+
+        downloadDateBtn.addEventListener('click', async () => {
+            const targetDate = dateInput.value;
+            if (!targetDate) return;
+
+            downloadDateBtn.disabled = true;
+            downloadDateStatus.textContent = 'Préparation du ZIP...';
+            downloadDateStatus.className = 'download-date-status';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/download-by-date?target_date=${encodeURIComponent(targetDate)}`);
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Erreur serveur');
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `tracking_${targetDate}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                downloadDateStatus.textContent = 'Téléchargement lancé !';
+                downloadDateStatus.className = 'download-date-status success';
+            } catch (error) {
+                downloadDateStatus.textContent = error.message;
+                downloadDateStatus.className = 'download-date-status error';
+            } finally {
+                downloadDateBtn.disabled = false;
+            }
+        });
 
         // Initial load
         navigateTo('');

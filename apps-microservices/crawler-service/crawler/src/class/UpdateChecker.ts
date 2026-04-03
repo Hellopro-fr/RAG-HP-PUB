@@ -1,7 +1,6 @@
 import { UrlConsolidator } from './UrlConsolidator.js';
 import { StatsManager } from './StatsManager.js';
 import { JsonlWriter } from './JsonlWriter.js';
-import { DomainFR } from './DomainFR.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
 
 /**
@@ -35,16 +34,30 @@ const IGNORED_EXTENSIONS_SET = new Set([
     "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
 ]);
 
+// IMPORTANT: Keep in sync with FORBIDDEN_PARAMS in routes.ts
 const FORBIDDEN_PARAMS = [
-    'order', 'sort', 'dir', 'limit', 'resultsPerPage',
+    // === SORTING & ORDERING ===
+    'sort', 'sort_by', 'order', 'dir',
+
+    // === PAGINATION ===
+    'limit', 'resultsPerPage', 'per_page', 'items',
+    'offset', 'start',
+
+    // === DISPLAY / VIEW MODE ===
+    'view', 'mode', 'display', 'productListView',
+
+    // === SEARCH (user-initiated, infinite variations) ===
+    'search', 'query',
+
+    // === PRICE & FILTER FACETS ===
     'filter', 'price', 'price_min', 'price_max',
-    'id_category', 'categoryId', 'productListView',
-    'q', 'search', 'query', 'offset', 'start',
-    'view', 'mode', 'display', 'per_page', 'items',
+
+    // === DATE FILTERS ===
     'year', 'month', 'day', 'date', 'from', 'to',
-    'ref', 'referrer', 'source', 'sort_by',
+
+    // === FACET PREFIXES (startsWith match) ===
     'size_', 'taille_', 'color_', 'couleur_',
-    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
+    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_',
 ];
 
 /**

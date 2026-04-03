@@ -19,6 +19,7 @@ export const context = {
         maxRedirects: 0,
         maxNewUrls: 0,
         domain: "",
+        siteHostname: "",
         baseUrl: "",
         crawleeStorageName: "",
         // Filtering
@@ -28,7 +29,7 @@ export const context = {
         bypassDiez: false,
         toKeep: [] as string[],
         toRemove: [] as string[],
-        breakLimit: false,
+        breakLimit: true,
         
         // V1 Update Logic: Dual-Mode Circuit Breaker
         circuitBreaker: {
@@ -48,5 +49,13 @@ export const context = {
             maxAbsNew: 20
         }
     },
-    stopReason: ""
+    stopReason: "",
+    crawlErrorMessage: "",
+    // In-memory counters for URLs containing '?' and '#' pushed to the dataset.
+    // Used by postNavigationHooks to avoid O(n²) full-dataset scans.
+    countQuestionMark: 0,
+    countDiez: 0,
+    // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
+    // Populated when homepage detection method is pattern_match_query
+    languageQueryParam: null as { key: string; value: string } | null
 };

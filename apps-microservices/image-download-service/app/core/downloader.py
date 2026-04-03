@@ -253,19 +253,18 @@ class Downloader:
                          error_reason: str, error_category: str = "unknown", error_severity: str = "error"):
         """
         Save download and processing errors to a dedicated domain errors.json file.
-        Uses fcntl.flock (LOCK_EX) for exclusive cross-replica locking
+        Uses NFS-safe locking (os.mkdir) for exclusive cross-replica locking
         and atomic write (temp file + os.replace) to prevent corruption.
         
         Catégories: no_url, http_client, http_server, timeout, network, processing, dlq
         Sévérités:  warning, error, critical
         """
         import json
-        import fcntl
         import tempfile
+        from image_download_service.core.nfs_lock import nfs_lock
         
         errors_dir = f"/app/storage/images/{domain}"
         errors_path = f"{errors_dir}/errors.json"
-        lock_path = f"{errors_path}.lock"
         
         os.makedirs(errors_dir, exist_ok=True)
         
@@ -280,32 +279,28 @@ class Downloader:
         }
         
         try:
-            with open(lock_path, 'w') as lock_file:
-                fcntl.flock(lock_file, fcntl.LOCK_EX)
-                try:
-                    errors_list = []
-                    if os.path.exists(errors_path):
-                        try:
-                            with open(errors_path, 'r') as f:
-                                content = f.read()
-                                if content.strip():
-                                    errors_list = json.loads(content)
-                        except (json.JSONDecodeError, ValueError) as e:
-                            logger.warning(f"Corrupted errors file detected for {domain}, starting fresh: {e}")
-                    
-                    errors_list.append(error_entry)
-                    
-                    fd, tmp_path = tempfile.mkstemp(dir=errors_dir, suffix='.tmp')
+            with nfs_lock(errors_path):
+                errors_list = []
+                if os.path.exists(errors_path):
                     try:
-                        with os.fdopen(fd, 'w') as tmp_f:
-                            tmp_f.write(json.dumps(errors_list, indent=2, ensure_ascii=False))
-                        os.replace(tmp_path, errors_path)
-                    except Exception:
-                        if os.path.exists(tmp_path):
-                            os.unlink(tmp_path)
-                        raise
-                finally:
-                    fcntl.flock(lock_file, fcntl.LOCK_UN)
+                        with open(errors_path, 'r') as f:
+                            content = f.read()
+                            if content.strip():
+                                errors_list = json.loads(content)
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.warning(f"Corrupted errors file detected for {domain}, starting fresh: {e}")
+                
+                errors_list.append(error_entry)
+                
+                fd, tmp_path = tempfile.mkstemp(dir=errors_dir, suffix='.tmp')
+                try:
+                    with os.fdopen(fd, 'w') as tmp_f:
+                        tmp_f.write(json.dumps(errors_list, indent=2, ensure_ascii=False))
+                    os.replace(tmp_path, errors_path)
+                except Exception:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                    raise
         except Exception as e:
             logger.error(f"Could not write error file for {domain}: {e}")
 
@@ -361,7 +356,7 @@ class Downloader:
                 
             result = await self.download_and_process(url, domain, product_id, product_name, index=img_index)
             
-            if result["status"] == "ok":
+            if result["status"] == "ok" and result["paths"] is not None:
                 processed_images.append(result["paths"])
             else:
                 # Erreur précise remontée par download_and_process
@@ -388,16 +383,15 @@ class Downloader:
         Appends product metadata to the domain's manifest.json file.
         This manifest will be included in the archive for the BO to update the database.
         
-        Uses fcntl.flock (LOCK_EX) for exclusive cross-replica locking 
+        Uses NFS-safe locking (os.mkdir) for exclusive cross-replica locking 
         and atomic write (temp file + os.replace) to prevent corruption.
         """
         import json
-        import fcntl
         import tempfile
+        from image_download_service.core.nfs_lock import nfs_lock
         
         manifest_dir = f"/app/storage/images/{domain}"
         manifest_path = f"{manifest_dir}/manifest.json"
-        lock_path = f"{manifest_path}.lock"
         
         # Create directory if needed
         os.makedirs(manifest_dir, exist_ok=True)
@@ -431,44 +425,40 @@ class Downloader:
                 "filename": img.get("filename", "")
             })
         
-        # --- Exclusive lock + atomic write to prevent concurrent corruption ---
+        # --- NFS-safe exclusive lock + atomic write to prevent concurrent corruption ---
         try:
-            with open(lock_path, 'w') as lock_file:
-                fcntl.flock(lock_file, fcntl.LOCK_EX)
-                try:
-                    # Read existing manifest (under lock)
-                    manifest = {"products": [], "last_updated": ""}
-                    if os.path.exists(manifest_path):
-                        try:
-                            with open(manifest_path, 'r') as f:
-                                content = f.read()
-                                if content.strip():
-                                    manifest = json.loads(content)
-                        except (json.JSONDecodeError, ValueError) as e:
-                            logger.warning(f"Corrupted manifest detected for {domain}, starting fresh: {e}")
-                            manifest = {"products": [], "last_updated": ""}
-                    
-                    # Update or add product entry
-                    existing_idx = next((i for i, p in enumerate(manifest.get("products", [])) if p.get("id_produit") == product_id), None)
-                    if existing_idx is not None:
-                        manifest["products"][existing_idx] = product_entry
-                    else:
-                        manifest.setdefault("products", []).append(product_entry)
-                    
-                    manifest["last_updated"] = datetime.now().isoformat()
-                    
-                    # Write to temp file, then atomic rename
-                    fd, tmp_path = tempfile.mkstemp(dir=manifest_dir, suffix='.tmp')
+            with nfs_lock(manifest_path):
+                # Read existing manifest (under lock)
+                manifest = {"products": [], "last_updated": ""}
+                if os.path.exists(manifest_path):
                     try:
-                        with os.fdopen(fd, 'w') as tmp_f:
-                            tmp_f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
-                        os.replace(tmp_path, manifest_path)
-                    except Exception:
-                        # Clean up temp file on error
-                        if os.path.exists(tmp_path):
-                            os.unlink(tmp_path)
-                        raise
-                finally:
-                    fcntl.flock(lock_file, fcntl.LOCK_UN)
+                        with open(manifest_path, 'r') as f:
+                            content = f.read()
+                            if content.strip():
+                                manifest = json.loads(content)
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.warning(f"Corrupted manifest detected for {domain}, starting fresh: {e}")
+                        manifest = {"products": [], "last_updated": ""}
+                
+                # Update or add product entry
+                existing_idx = next((i for i, p in enumerate(manifest.get("products", [])) if p.get("id_produit") == product_id), None)
+                if existing_idx is not None:
+                    manifest["products"][existing_idx] = product_entry
+                else:
+                    manifest.setdefault("products", []).append(product_entry)
+                
+                manifest["last_updated"] = datetime.now().isoformat()
+                
+                # Write to temp file, then atomic rename
+                fd, tmp_path = tempfile.mkstemp(dir=manifest_dir, suffix='.tmp')
+                try:
+                    with os.fdopen(fd, 'w') as tmp_f:
+                        tmp_f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
+                    os.replace(tmp_path, manifest_path)
+                except Exception:
+                    # Clean up temp file on error
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                    raise
         except Exception as e:
             logger.error(f"Could not write manifest for {domain}: {e}")

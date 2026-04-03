@@ -273,6 +273,10 @@ class RerankingOptions(BaseModel):
     top_k: int = Field(24, description="Nombre de produits à reclasser")
     use_rerank: bool = False
     parcours: str = ""
+    id_prompt: int = Field(112, description="ID du prompt")
+    thinking_level: str = Field(
+        "minimal", description="Niveau de réflexion du LLM (low, medium, high)"
+    )
 
 
 class ScoringOptions(BaseModel):
@@ -344,7 +348,7 @@ class MatchingPayload(BaseModel):
         description="Options pour le scoring",
     )
     rerank: Optional[RerankingOptions] = Field(
-        RerankingOptions(top_k=24, use_rerank=False, parcours=""),
+        RerankingOptions(top_k=24, use_rerank=False, parcours="", id_prompt=112),
         description="Options pour le reranking",
     )
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
@@ -352,6 +356,12 @@ class MatchingPayload(BaseModel):
 
 class MatchingPayloadIdProduit(MatchingPayload):
     id_produit: Optional[int] = Field(None, description="Identifiant du produit")
+    v: int = Field(
+        2, description="Pipeline version: 1=Cypher scoring, 2=Python scoring"
+    )
+    min_matching_cids: int = Field(
+        1, description="V2 only: minimum distinct CIDs a product must match to be scored"
+    )
 
 
 """ 

@@ -5,8 +5,9 @@ from typing import Optional
 
 class DetectionMode(str, Enum):
     """Mode de détection de la langue française"""
-    SIMPLE = "simple"      # Comportement TypeScript (URL + HTML lang uniquement)
-    COMPLETE = "complete"  # Comportement PHP (+ recherche liens alternatifs)
+    SIMPLE = "simple"        # Comportement TypeScript (URL + HTML lang uniquement)
+    COMPLETE = "complete"    # Comportement PHP (+ recherche liens alternatifs)
+    FIRST_MATCH = "first_match"  # Batch groupé : arrêt au premier FR par groupe
 
 
 class DetectionRequest(BaseModel):
@@ -14,11 +15,11 @@ class DetectionRequest(BaseModel):
     url: str = Field(..., description="URL du site à analyser")
     mode: DetectionMode = Field(
         default=DetectionMode.COMPLETE,
-        description="Mode de détection: simple ou complete"
+        description="Mode de détection: simple (URL + HTML lang), complete (+ NLP + alternatives), first_match (batch uniquement)"
     )
     html_content: Optional[str] = Field(
         default=None,
-        description="Contenu HTML déjà récupéré (optionnel)"
+        description="Contenu HTML déjà récupéré (skip fetch + skip cache)"
     )
     proxy_url: Optional[str] = Field(
         default=None,
@@ -31,6 +32,14 @@ class DetectionRequest(BaseModel):
     use_nlp_detection: bool = Field(
         default=True,
         description="Activer la détection NLP par contenu textuel"
+    )
+    force_refresh: bool = Field(
+        default=False,
+        description="Ignorer le cache et forcer une nouvelle détection"
+    )
+    include_full_content: bool = Field(
+        default=False,
+        description="(Debug uniquement) Inclure le contenu HTML complet et le texte nettoye complet dans la reponse debug"
     )
 
     model_config = {
@@ -46,6 +55,27 @@ class DetectionRequest(BaseModel):
     }
 
 
+class AlternativeUrl(BaseModel):
+    """URL alternative française détectée avec métadonnées de découverte"""
+    url: str = Field(..., description="URL de la version française")
+    method: str = Field(
+        ...,
+        description="Méthode de découverte (hreflang, data_lang, data_gt_lang, link_pattern, option_tag)"
+    )
+    reliability: str = Field(
+        ...,
+        description="Niveau de fiabilité: high (hreflang), medium (data-lang, validated links), low (non-validated)"
+    )
+    validated: bool = Field(
+        ...,
+        description="True si l'URL a été validée via HTTP (200 + text/html)"
+    )
+    region_priority: int = Field(
+        default=1,
+        description="Priorite region francaise: 0=France (fr-FR, /fr/fr), 1=Francais generique (/fr), 2=Autre region (fr-CA, fr-BE, /dz/fr)"
+    )
+
+
 class DetectionResponse(BaseModel):
     """Réponse de détection pour une URL"""
     ok: bool = Field(..., description="True si français détecté")
@@ -55,13 +85,17 @@ class DetectionResponse(BaseModel):
         default=None,
         description="Score de confiance NLP (0-1)"
     )
-    alternative_urls: list[str] = Field(
+    alternative_urls: list[AlternativeUrl] = Field(
         default=[],
-        description="URLs françaises alternatives trouvées"
+        description="URLs françaises alternatives trouvées, triées par fiabilité"
     )
     error: Optional[str] = Field(
         default=None,
         description="Message d'erreur si échec"
+    )
+    group: Optional[str] = Field(
+        default=None,
+        description="Clé du groupe (first_match mode uniquement)"
     )
 
 
@@ -72,17 +106,16 @@ class BatchItem(BaseModel):
         default=None,
         description="Contenu HTML optionnel déjà récupéré"
     )
+    group: Optional[str] = Field(
+        default=None,
+        description="Clé de groupe pour le mode first_match (ex: 'supplier_42')"
+    )
 
 
 class BatchDetectionRequest(BaseModel):
     """Requête de détection pour plusieurs URLs"""
-    urls: list[str] | None = Field(
-        default=None,
-        max_length=100,
-        description="[DEPRECATED] Liste d'URLs simples à analyser"
-    )
-    items: list[BatchItem] | None = Field(
-        default=None,
+    items: list[BatchItem] = Field(
+        ...,
         max_length=100,
         description="Liste d'items contenant l'URL et le HTML optionnel"
     )
@@ -97,6 +130,10 @@ class BatchDetectionRequest(BaseModel):
     use_nlp_detection: bool = Field(
         default=True,
         description="Activer la détection NLP"
+    )
+    force_refresh: bool = Field(
+        default=False,
+        description="Ignorer le cache et forcer une nouvelle détection pour toutes les URLs"
     )
     max_concurrency: int = Field(
         default=10,
@@ -142,3 +179,68 @@ class UrlCheckResponse(BaseModel):
     method: str
     url: Optional[str] = None
     original_url: Optional[str] = None
+
+
+# ============================================================================
+# Debug models
+# ============================================================================
+
+class DebugFetchInfo(BaseModel):
+    """Informations sur le contenu recupere"""
+    fetched_by: str = Field(..., description="'api' si recupere par Playwright, 'provided' si fourni dans la requete")
+    raw_html_length: int = Field(..., description="Longueur du HTML brut en caracteres")
+    raw_html_preview: str = Field(..., description="Premiers 500 caracteres du HTML brut")
+    raw_html_full: Optional[str] = Field(default=None, description="Contenu HTML complet (uniquement si include_full_content=true)")
+    redirected_from: Optional[str] = Field(default=None, description="URL d'origine avant redirection (null si pas de redirection)")
+    challenge_detected: Optional[str] = Field(default=None, description="Service de protection anti-bot detecte (Cloudflare, DataDome, etc.) ou null si contenu reel")
+
+class DebugCleaningInfo(BaseModel):
+    """Informations sur le nettoyage du contenu"""
+    cleaned_text_length: int = Field(..., description="Longueur du texte nettoye en caracteres")
+    cleaned_text_preview: str = Field(..., description="Premiers 500 caracteres du texte nettoye")
+    cleaned_text_full: Optional[str] = Field(default=None, description="Texte nettoye complet (uniquement si include_full_content=true)")
+
+class DebugUrlCheckInfo(BaseModel):
+    """Resultat du check URL (TLD, path, query)"""
+    ok: bool
+    method: str
+    is_strong_url: bool = Field(..., description="True si TLD .fr")
+
+class DebugHtmlTagsInfo(BaseModel):
+    """Resultat de la detection par balises HTML"""
+    detected: bool
+    is_french: bool
+    method: Optional[str] = None
+    value: Optional[str] = None
+
+class DebugNlpInfo(BaseModel):
+    """Resultat de la detection NLP"""
+    available: bool
+    lang: Optional[str] = None
+    confidence: Optional[float] = None
+    method: Optional[str] = None
+    details: Optional[dict] = None
+    confirms_french: bool = False
+    soft_french: bool = False
+    contradicts_french: bool = False
+    strongly_contradicts: bool = False
+
+class DebugAlternativesInfo(BaseModel):
+    """Informations sur les URLs alternatives detectees"""
+    candidates_found: int
+    candidates: list[AlternativeUrl] = []
+
+class DebugInfo(BaseModel):
+    """Informations de debug completes du pipeline de detection"""
+    fetch: DebugFetchInfo
+    cleaning: DebugCleaningInfo
+    url_check: DebugUrlCheckInfo
+    html_tags: DebugHtmlTagsInfo
+    nlp: DebugNlpInfo
+    alternatives: DebugAlternativesInfo
+    decision: str = Field(..., description="Cas de decision applique (ex: 'Case 1: nlp_confirmed')")
+
+class DebugDetectionResponse(BaseModel):
+    """Reponse de detection avec informations de debug"""
+    result: DetectionResponse
+    debug: DebugInfo

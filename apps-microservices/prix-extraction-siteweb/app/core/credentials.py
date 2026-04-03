@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     MAX_CONCURRENCY: int = 10  # Nombre de messages traités en parallèle
     
     # Milvus RAG Search
-    MILVUS_SOURCE: str = "siteweb"  # Collection source dans Milvus
+    MILVUS_SOURCE: str = "siteweb_2"  # Collection source dans Milvus
     MILVUS_TOP_K: int = 30  # Nombre de résultats à récupérer
     
     # LLM Provider selection - "gemini" ou "deepseek"
@@ -20,16 +20,16 @@ class Settings(BaseSettings):
     # LLM - Gemini
     GEMINI_API_KEY: str
     GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
+    # GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
     
     # LLM - DeepSeek
     DEEPSEEK_API_KEY: str = ""
     
-    # Prompt statique
-    PROMPT_ID: str = "140"
+    # Prompt statique - Briefing Prix - Prompt extraction prix SiteWeb
+    PROMPT_ID: str = "117"
     
     # API HelloPro
-    # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev
-    HP_TOKEN: str = "GQr3DiVJGPIxO9o7mp5FNHXsk8Ak4fZ8x8X/732mVcUY9kyOhvo79EpFYM9GplusZO/54dvfTKZF5YNSpFNEGiRvyYZkKplusmftUpAJXoEXq45aVVSKxjpiiMzrrToEYplusziMjI3Megal" #prod
+    HP_TOKEN: str
 
     class Config:
         env_file = ".env"

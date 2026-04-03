@@ -1,37 +1,45 @@
 // Application layer: Use case for retrieving cached data
-"use server"
+// W4: removed "use server" — this is a data-fetching function, not a server action
 
 import { cacheRepository } from "@/lib/infrastructure/redis-cache-repository"
-import type { CacheEntry } from "@/lib/domain/cache-entry"
+import type { CacheEntry, CacheMetadata } from "@/lib/domain/cache-entry"
 
 export async function getCachedData(): Promise<{
   entries: CacheEntry[]
-  metadata: { totalKeys: number; totalSize: number; lastRefreshed: Date }
+  metadata: CacheMetadata
   error?: string
 }> {
   try {
     const keys = await cacheRepository.getAllKeys()
+
+    // C1: fetch all entries in parallel instead of sequential N+1 round-trips
+    const entryResults = await Promise.all(
+      keys.map(async (key) => {
+        const [value, size, ttl] = await Promise.all([
+          cacheRepository.getEntry(key),
+          cacheRepository.getSize(key),
+          cacheRepository.getTTL(key),
+        ])
+        return { key, value, size, ttl }
+      })
+    )
+
     const entries: CacheEntry[] = []
     let totalSize = 0
 
-    for (const key of keys) {
-      const value = await cacheRepository.getEntry(key)
-      const size = await cacheRepository.getSize(key)
-      const ttl = await cacheRepository.getTTL(key)
-
+    for (const { key, value, size, ttl } of entryResults) {
       if (value !== null) {
         entries.push({
           key,
           value,
           size,
-          createdAt: new Date(),
+          fetchedAt: new Date(),
           ttl: ttl && ttl > 0 ? ttl : undefined,
         })
         totalSize += size
       }
     }
 
-    // Sort by key name
     entries.sort((a, b) => a.key.localeCompare(b.key))
 
     return {
@@ -43,7 +51,7 @@ export async function getCachedData(): Promise<{
       },
     }
   } catch (error) {
-    console.error("[v0] Specific error in getCachedData:", error)
+    console.error("[redis-client] Error in getCachedData:", error)
     return {
       entries: [],
       metadata: { totalKeys: 0, totalSize: 0, lastRefreshed: new Date() },

@@ -32,6 +32,9 @@ class PrixExtractor:
 
     ETAPE = "10"
 
+    # Type extraction (3 = produits)
+    TYPE_EXTRACTION = "3"
+
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
@@ -183,9 +186,9 @@ class PrixExtractor:
             self._log("RESET DU PROCESSUS")
             await self.api_client.post(
                 "prix",
-                "produits",
+                "process",
                 "reset",
-                {"id_categorie": id_categorie}
+                {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
             )
 
         # Récupérer les produits depuis l'API BO
@@ -236,35 +239,54 @@ class PrixExtractor:
 
         elapsed = time.time() - start_time
 
-        # Sauvegarde en batch des IDs produits traités avec succès
+        # Sauvegarde en batch des IDs produits traités (success et skipped séparément)
         # Appelle save_process_prix() (BO/api/v2/prix.php) via prix/process/save
         # type_extraction = 3 pour les produits
-        successful_ids = [
-            r.item_id
-            for r in item_results
-            if r.status == "success"
-        ]
+        success_ids = [r.item_id for r in item_results if r.status == "success"]
+        skipped_ids = [r.item_id for r in item_results if r.status == "skipped"]
 
-        if successful_ids:
-            self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) produit ---")            
+        if success_ids:
+            self._log(f"\n--- Sauvegarde batch de {len(success_ids)} ID(s) success produit ---")
             save_result = await self.api_client.post(
                 "prix",
                 "process",
                 "save",
                 {
                     "id_categorie":    id_categorie,
-                    "type_extraction": "3",          # 3 = produits
-                    "id_cibles":       successful_ids  # liste d'IDs (batch)
+                    "type_extraction": self.TYPE_EXTRACTION,
+                    "id_cibles":       success_ids,
+                    "flag":            1
                 }
             )
             if save_result and not save_result.get("erreur"):
-                nb = save_result.get("nb_insere", len(successful_ids))
-                self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s) dans extraction_prix_ia")
+                nb = save_result.get("nb_insere", len(success_ids))
+                self._log(f"✅ Batch save OK: {nb} ID(s) success enregistré(s) dans extraction_prix_ia")
             else:
-                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")       
-                raise Exception(f"Batch save: réponse inattendue: {save_result}")     
-        else:
-            self._log("ℹ️ Aucun ID produit à sauvegarder (aucun succès)")
+                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                raise Exception(f"Batch save: réponse inattendue: {save_result}")
+
+        if skipped_ids:
+            self._log(f"--- Sauvegarde batch de {len(skipped_ids)} ID(s) skipped produit ---")
+            save_result = await self.api_client.post(
+                "prix",
+                "process",
+                "save",
+                {
+                    "id_categorie":    id_categorie,
+                    "type_extraction": self.TYPE_EXTRACTION,
+                    "id_cibles":       skipped_ids,
+                    "flag":            0
+                }
+            )
+            if save_result and not save_result.get("erreur"):
+                nb = save_result.get("nb_insere", len(skipped_ids))
+                self._log(f"✅ Batch save OK: {nb} ID(s) skipped enregistré(s)")
+            else:
+                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                raise Exception(f"Batch save: réponse inattendue: {save_result}")
+
+        if not success_ids and not skipped_ids:
+            self._log("ℹ️ Aucun ID produit à sauvegarder")
 
         self._log("\n" + "=" * 60)
         self._log("EXTRACTION TERMINÉE")

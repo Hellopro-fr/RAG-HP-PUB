@@ -10,5 +10,8 @@ prometheus-client
 waitress
 langgraph
 langchain-core
+langchain-community
+neo4j
 google-genai
 tenacity
+toon-format>=0.9.0b1

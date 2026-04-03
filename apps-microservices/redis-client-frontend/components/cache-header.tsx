@@ -7,6 +7,7 @@ import { RefreshCw, Trash2 } from "lucide-react"
 import { refreshCacheData, clearAllCache } from "@/app/actions/cache-actions"
 import { useToast } from "@/hooks/use-toast"
 import { ConfirmDialog } from "./confirm-dialog"
+import { formatBytes } from "@/lib/utils"
 
 interface CacheHeaderProps {
   totalKeys: number
@@ -17,7 +18,6 @@ interface CacheHeaderProps {
 
 export function CacheHeader({ totalKeys, totalSize, lastRefreshed, onRefresh }: CacheHeaderProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const { toast } = useToast()
 
@@ -60,16 +60,7 @@ export function CacheHeader({ totalKeys, totalSize, lastRefreshed, onRefresh }: 
       }
     } finally {
       setIsClearing(false)
-      setShowClearConfirm(false)
     }
-  }
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return "0 B"
-    const k = 1024
-    const sizes = ["B", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
   }
 
   const formatTime = (date: Date) => {
@@ -110,16 +101,14 @@ export function CacheHeader({ totalKeys, totalSize, lastRefreshed, onRefresh }: 
           {isRefreshing ? "Refreshing..." : "Refresh"}
         </Button>
 
+        {/* S7: ConfirmDialog now wraps the trigger button via AlertDialog.Trigger */}
         <ConfirmDialog
           title="Clear All Cache?"
           description="This will delete all entries in Redis. This action cannot be undone."
-          open={showClearConfirm}
-          onOpenChange={setShowClearConfirm}
           onConfirm={handleClearAll}
           isLoading={isClearing}
         >
           <Button
-            onClick={() => setShowClearConfirm(true)}
             variant="destructive"
             disabled={totalKeys === 0 || isClearing}
           >

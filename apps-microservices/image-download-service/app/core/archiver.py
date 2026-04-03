@@ -42,12 +42,24 @@ class Archiver:
             return None
 
     async def save_manifest(self, domain: str, manifest: Dict):
-        """Save the manifest for a domain."""
+        """Save the manifest for a domain using NFS-safe locking and atomic write."""
+        import tempfile
+        from image_download_service.core.nfs_lock import nfs_lock
+        
         manifest_path = os.path.join(self.images_base, domain, "manifest.json")
+        manifest_dir = os.path.dirname(manifest_path)
         
         try:
-            async with aiofiles.open(manifest_path, 'w') as f:
-                await f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
+            with nfs_lock(manifest_path):
+                fd, tmp_path = tempfile.mkstemp(dir=manifest_dir, suffix='.tmp')
+                try:
+                    with os.fdopen(fd, 'w') as tmp_f:
+                        tmp_f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
+                    os.replace(tmp_path, manifest_path)
+                except Exception:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                    raise
         except Exception as e:
             logger.error(f"Error saving manifest for {domain}: {e}")
 
@@ -289,6 +301,36 @@ class Archiver:
         
         # Sort by most recent first
         return sorted(recent_domains, key=lambda x: x["last_updated"], reverse=True)
+
+    async def get_domains_with_unsynced(self) -> List[Dict]:
+        """Get ALL domains that have at least one unsynced product, regardless of last_updated."""
+        if not os.path.exists(self.images_base):
+            return []
+        
+        domains_with_unsynced = []
+        
+        for domain in os.listdir(self.images_base):
+            domain_path = os.path.join(self.images_base, domain)
+            if not os.path.isdir(domain_path):
+                continue
+            
+            manifest = await self.get_manifest(domain)
+            if not manifest:
+                continue
+            
+            products = manifest.get("products", [])
+            unsynced = sum(1 for p in products if not p.get("synced", False))
+            
+            if unsynced > 0:
+                domains_with_unsynced.append({
+                    "domain": domain,
+                    "last_updated": manifest.get("last_updated"),
+                    "total_products": len(products),
+                    "unsynced_products": unsynced,
+                })
+        
+        # Trier par nombre de non-sync décroissant
+        return sorted(domains_with_unsynced, key=lambda x: x["unsynced_products"], reverse=True)
 
     async def list_archives(self) -> List[Dict]:
         """List all archives with metadata."""

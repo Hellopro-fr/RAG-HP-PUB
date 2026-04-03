@@ -6,6 +6,13 @@ from common_utils.autres.CollectionName import CollectionName
 import logging
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
+# Module-level singletons — persist across messages, reuse cached connections
+_milvus_echange_crud = MilvusEchangeCrud()
+_qdrant_echange_crud = QdrantEchangeCrud()
+_correspondance_echange = MilvusEchangeInserer()
+
 
 def insertion_data(echange_data: dict) -> dict:
     """
@@ -21,13 +28,13 @@ def insertion_data(echange_data: dict) -> dict:
     try:
         collection_enum = CollectionName(collection)
     except ValueError:
-        logging.error("'%s' n'est pas un nom de collection valide.", collection)
+        logger.error("'%s' n'est pas un nom de collection valide.", collection)
         raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
     if bdd.lower() == "milvus":
-        base_vectorielle = MilvusEchangeCrud()
+        base_vectorielle = _milvus_echange_crud
     else:
-        base_vectorielle = QdrantEchangeCrud()
+        base_vectorielle = _qdrant_echange_crud
 
     processing_functions = {
         CollectionName.ECHANGE: base_vectorielle.insert_echange,
@@ -43,7 +50,7 @@ def insertion_data(echange_data: dict) -> dict:
 
     conversation_id = echanges[0].get("conversation_id", "conversation_id inconnu")
     res = base_vectorielle.get_echange(conversation_id=conversation_id)
-    correspondance_echange = MilvusEchangeInserer()
+    correspondance_echange = _correspondance_echange
 
     status = res.get("status")
     data = res.get("data", [])
@@ -76,13 +83,13 @@ def insertion_data(echange_data: dict) -> dict:
 
         else:
             error_message = f"Erreur lors de la vérification de conversation ID {conversation_id} : {message}"
-            logging.error(error_message)
+            logger.error(error_message)
             raise Exception(error_message)
 
     elif status == "success":
         if len(data) > 0:
             # Conversation existe déjà → MISE À JOUR
-            logging.info(
+            logger.info(
                 "La conversation_id %s existe déjà. Mise à jour en cours...",
                 conversation_id,
             )
@@ -95,7 +102,7 @@ def insertion_data(echange_data: dict) -> dict:
 
                 if not result or result.get("status") == "error":
                     error_message = f"Erreur mise à jour pour {conversation_id}: {result.get('message') if result else 'None'}"
-                    logging.error(error_message)
+                    logger.error(error_message)
                     raise Exception(error_message)
 
                 output_message = {
@@ -108,7 +115,7 @@ def insertion_data(echange_data: dict) -> dict:
                 }
             else:
                 # Pour Qdrant, garder l'ancien comportement (skip)
-                logging.info(
+                logger.info(
                     "La conversation_id %s existe déjà dans la base de données. Insertion ignorée.",
                     conversation_id,
                 )

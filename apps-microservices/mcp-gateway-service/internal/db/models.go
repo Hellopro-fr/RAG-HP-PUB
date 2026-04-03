@@ -1,0 +1,140 @@
+package db
+
+import (
+	"encoding/json"
+	"time"
+)
+
+// MCPServer is the GORM model for the mcp_servers table.
+type MCPServer struct {
+	ID                  string          `gorm:"type:char(36);primaryKey" json:"id"`
+	Name                string          `gorm:"type:varchar(255);not null" json:"name"`
+	URL                 string          `gorm:"type:varchar(2048);not null;uniqueIndex:uq_url,length:500" json:"url"`
+	MessageURL          string          `gorm:"type:varchar(2048)" json:"message_url"`
+	TransportType       string          `gorm:"type:varchar(20)" json:"transport_type"`
+	ServerName          string          `gorm:"type:varchar(255)" json:"server_name"`
+	ServerVersion       string          `gorm:"type:varchar(64)" json:"server_version"`
+	AuthHeaders         []byte          `gorm:"type:blob" json:"-"`
+	TransportPreference string          `gorm:"type:varchar(20);not null;default:auto" json:"transport_preference"`
+	ConnectTimeoutMs    uint            `gorm:"not null;default:10000" json:"connect_timeout_ms"`
+	CapabilitiesRaw     json.RawMessage `gorm:"type:json" json:"capabilities_raw,omitempty"`
+
+	// MCP client config fields — used to generate .mcp.json
+	MCPTransport string          `gorm:"type:varchar(20);not null;default:http" json:"mcp_transport"`  // "http", "sse", "stdio"
+	MCPCommand   string          `gorm:"type:varchar(2048)" json:"mcp_command,omitempty"`              // for stdio: e.g. "npx", "python"
+	MCPArgs      json.RawMessage `gorm:"type:json" json:"mcp_args,omitempty"`                          // for stdio: e.g. ["-y", "@mcp/server"]
+	MCPEnv       json.RawMessage `gorm:"type:json" json:"mcp_env,omitempty"`                           // for stdio: e.g. {"KEY": "val"}
+
+	// ToolPrefix is an optional alphanumeric prefix prepended to all tool names as {prefix}_{tool_name}.
+	ToolPrefix string `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
+
+	IsActive            bool            `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
+	HealthStatus        string          `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
+	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
+	LastError           string          `gorm:"type:text" json:"last_error,omitempty"`
+	LastDiscoveredAt    *time.Time      `gorm:"type:datetime(3)" json:"last_discovered_at,omitempty"`
+	CreatedBy           string          `gorm:"type:varchar(255);not null;default:'';index:idx_created_by" json:"created_by"`
+	CreatedAt           time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt           time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Associations
+	Tools     []ServerTool     `gorm:"foreignKey:ServerID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+	Resources []ServerResource `gorm:"foreignKey:ServerID;constraint:OnDelete:CASCADE" json:"resources,omitempty"`
+	Prompts   []ServerPrompt   `gorm:"foreignKey:ServerID;constraint:OnDelete:CASCADE" json:"prompts,omitempty"`
+	Tags      []ServerTag      `gorm:"foreignKey:ServerID;constraint:OnDelete:CASCADE" json:"tags,omitempty"`
+}
+
+func (MCPServer) TableName() string { return "mcp_servers" }
+
+// ServerTool is the GORM model for the server_tools table.
+type ServerTool struct {
+	ID          uint64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	ServerID    string          `gorm:"type:char(36);not null;uniqueIndex:uq_server_tool" json:"server_id"`
+	Name        string          `gorm:"type:varchar(255);not null;uniqueIndex:uq_server_tool;index:idx_tool_name" json:"name"`
+	Description string          `gorm:"type:text" json:"description,omitempty"`
+	InputSchema json.RawMessage `gorm:"type:json;not null" json:"input_schema"`
+}
+
+func (ServerTool) TableName() string { return "server_tools" }
+
+// ServerResource is the GORM model for the server_resources table.
+type ServerResource struct {
+	ID          uint64 `gorm:"primaryKey;autoIncrement" json:"id"`
+	ServerID    string `gorm:"type:char(36);not null;uniqueIndex:uq_server_resource" json:"server_id"`
+	URI         string `gorm:"type:varchar(2048);not null;uniqueIndex:uq_server_resource,length:500;index:idx_resource_uri,length:500" json:"uri"`
+	Name        string `gorm:"type:varchar(255);not null" json:"name"`
+	Description string `gorm:"type:text" json:"description,omitempty"`
+	MimeType    string `gorm:"type:varchar(255)" json:"mime_type,omitempty"`
+}
+
+func (ServerResource) TableName() string { return "server_resources" }
+
+// ServerPrompt is the GORM model for the server_prompts table.
+type ServerPrompt struct {
+	ID          uint64           `gorm:"primaryKey;autoIncrement" json:"id"`
+	ServerID    string           `gorm:"type:char(36);not null;uniqueIndex:uq_server_prompt" json:"server_id"`
+	Name        string           `gorm:"type:varchar(255);not null;uniqueIndex:uq_server_prompt;index:idx_prompt_name" json:"name"`
+	Description string           `gorm:"type:text" json:"description,omitempty"`
+	Arguments   []PromptArgument `gorm:"foreignKey:PromptID;constraint:OnDelete:CASCADE" json:"arguments,omitempty"`
+}
+
+func (ServerPrompt) TableName() string { return "server_prompts" }
+
+// PromptArgument is the GORM model for the prompt_arguments table.
+type PromptArgument struct {
+	ID          uint64 `gorm:"primaryKey;autoIncrement" json:"id"`
+	PromptID    uint64 `gorm:"not null;uniqueIndex:uq_prompt_arg" json:"prompt_id"`
+	Name        string `gorm:"type:varchar(255);not null;uniqueIndex:uq_prompt_arg" json:"name"`
+	Description string `gorm:"type:text" json:"description,omitempty"`
+	IsRequired  bool   `gorm:"not null;default:false" json:"is_required"`
+}
+
+func (PromptArgument) TableName() string { return "prompt_arguments" }
+
+// ServerTag is the GORM model for the server_tags table.
+type ServerTag struct {
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+	Tag      string `gorm:"type:varchar(64);not null;primaryKey;index:idx_tag" json:"tag"`
+}
+
+func (ServerTag) TableName() string { return "server_tags" }
+
+// ScopeToken is the GORM model for the scope_tokens table.
+type ScopeToken struct {
+	ID          string     `gorm:"type:char(36);primaryKey" json:"id"`
+	Name        string     `gorm:"type:varchar(255);not null" json:"name"`
+	Description string     `gorm:"type:text" json:"description,omitempty"`
+	TokenHash   string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_token_hash" json:"-"`
+	TokenPrefix string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
+	CreatedBy   string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	MCPCommand     string     `gorm:"type:varchar(64);not null;default:'npx'" json:"mcp_command"`
+	EncryptedToken []byte     `gorm:"type:blob" json:"-"`
+	ExpiresAt      *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
+	IsActive    bool       `gorm:"not null;default:true;index:idx_scope_active" json:"is_active"`
+	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Associations
+	Servers []ScopeTokenServer `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
+	Tools   []ScopeTokenTool   `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+}
+
+func (ScopeToken) TableName() string { return "scope_tokens" }
+
+// ScopeTokenServer is the join table between scope_tokens and mcp_servers.
+type ScopeTokenServer struct {
+	TokenID  string `gorm:"type:char(36);not null;primaryKey" json:"token_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+}
+
+func (ScopeTokenServer) TableName() string { return "scope_token_servers" }
+
+// ScopeTokenTool records which tools are allowed for a token+server pair.
+// If no rows exist for a (token_id, server_id), ALL tools of that server are allowed.
+type ScopeTokenTool struct {
+	TokenID  string `gorm:"type:char(36);not null;primaryKey" json:"token_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+	ToolName string `gorm:"type:varchar(255);not null;primaryKey" json:"tool_name"`
+}
+
+func (ScopeTokenTool) TableName() string { return "scope_token_tools" }

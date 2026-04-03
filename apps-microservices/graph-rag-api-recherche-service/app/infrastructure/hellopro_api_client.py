@@ -4,16 +4,19 @@ Uses httpx for async HTTP requests.
 """
 
 import os
-
+import time
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# TTL cache: 2 hours in seconds
+CACHE_TTL = 2 * 60 * 60
 
 # API endpoints
 HELLOPRO_VIEW_URL = "https://api.hellopro.fr/api/hp/view/index.php"
@@ -32,6 +35,23 @@ class HelloProApiClient:
 
     def __init__(self):
         self._timeout = httpx.Timeout(30.0, connect=10.0)
+        # In-memory TTL caches: key -> (timestamp, value)
+        self._prompt_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._carac_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+
+    def _get_cached(self, cache: dict, key: str):
+        """Return cached value if present and not expired, else None."""
+        entry = cache.get(key)
+        if entry is not None:
+            ts, value = entry
+            if time.monotonic() - ts < CACHE_TTL:
+                return value
+            del cache[key]
+        return None
+
+    def _set_cached(self, cache: dict, key: str, value):
+        """Store value in cache with current timestamp."""
+        cache[key] = (time.monotonic(), value)
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {
@@ -91,8 +111,13 @@ class HelloProApiClient:
         Fetch characteristics for a single product.
         POST https://api.hellopro.fr/api/v2/index.php
 
-        Returns list of characteristic dicts.
+        Returns list of characteristic dicts. Cached with 2h TTL.
         """
+        cache_key = str(id_produit)
+        cached = self._get_cached(self._carac_cache, cache_key)
+        if cached is not None:
+            return cached
+
         payload = {
             "etape": "caracterisation",
             "field": "produit",
@@ -112,7 +137,9 @@ class HelloProApiClient:
                 response.raise_for_status()
                 data = response.json()
                 # Response format: { "code": 200, "response": [ ... ] }
-                return data.get("response", [])
+                result = data.get("response", [])
+                self._set_cached(self._carac_cache, cache_key, result)
+                return result
         except Exception as e:
             logger.error(
                 f"HelloPro fetch_product_caracteristiques error for {id_produit}: {e}",
@@ -183,7 +210,14 @@ class HelloProApiClient:
         POST https://api.hellopro.fr/api/v2/index.php
 
         Returns dict with 'contenu_prompt' and 'temperature', or empty dict on error.
+        Cached with 2h TTL.
         """
+        cache_key = str(id_prompt)
+        cached = self._get_cached(self._prompt_cache, cache_key)
+        if cached is not None:
+            logger.info("[CACHE] Prompt id_prompt=%s served from cache", cache_key)
+            return cached
+
         payload = {
             "etape": "prompt",
             "field": "info",
@@ -203,7 +237,10 @@ class HelloProApiClient:
                 response.raise_for_status()
                 data = response.json()
                 # Response format: { "code": 200, "response": { "id_prompt": "...", "contenu_prompt": "...", "temperature": "..." } }
-                return data.get("response", {})
+                result = data.get("response", {})
+                if result:
+                    self._set_cached(self._prompt_cache, cache_key, result)
+                return result
         except Exception as e:
             logger.error(
                 f"HelloPro fetch_prompt error for id_prompt {id_prompt}: {e}",

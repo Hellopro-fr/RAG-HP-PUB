@@ -11,6 +11,8 @@ from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
 from website_processor_service.core.redis_manager import RedisManager
 from website_processor_service.core.exceptions import BatchProcessingError
 
+logger = logging.getLogger(__name__)
+
 # Global Redis Manager instance
 redis_manager = RedisManager()
 
@@ -40,7 +42,7 @@ def _check_existing_classification(url: str, domaine: str) -> str | None:
     try:
         from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
     except ImportError:
-        logging.warning(f"[{url}] - pymilvus non disponible, bypass désactivé.")
+        logger.warning(f"[{url}] - pymilvus non disponible, bypass désactivé.")
         return None
 
     try:
@@ -55,13 +57,13 @@ def _check_existing_classification(url: str, domaine: str) -> str | None:
                 # Récupérer le page_type du premier résultat
                 existing_page_type = data[0].get("page_type")
                 if existing_page_type and existing_page_type not in ["header", "footer"]:
-                    logging.info(f"[{url}] - ⚡ Bypass: Classification existante trouvée: '{existing_page_type}'")
+                    logger.info(f"[{url}] - ⚡ Bypass: Classification existante trouvée: '{existing_page_type}'")
                     return existing_page_type
 
     except Exception as e:
         # En cas d'erreur, on ne bloque pas le flux normal.
         # On laisse le message passer par le template-llm-service.
-        logging.warning(f"[{url}] - Bypass check échoué (non-bloquant): {e}")
+        logger.warning(f"[{url}] - Bypass check échoué (non-bloquant): {e}")
     
     return None
 
@@ -78,7 +80,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     log = "la vérification de template"
     url = website_data.get("url", "URL N/A")
     initial_content_size = len(website_data.get("text", ""))
-    logging.info(f"[{url}] - Taille contenu initial: {initial_content_size} chars.")
+    logger.info(f"[{url}] - Taille contenu initial: {initial_content_size} chars.")
     page_type = website_data.get("page_type", "")
     
     # Étape 1: Vérifier les données d'entrée
@@ -101,7 +103,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         }
         payload_str = json.dumps(full_payload)
         
-        logging.info(f"[{url}] - Traitement Header/Footer ({page_type}) pour domaine: {domain}")
+        logger.info(f"[{url}] - Traitement Header/Footer ({page_type}) pour domaine: {domain}")
         
         # Buffer in Redis and check for batch
         batch_json_strings = redis_manager.buffer_and_check_batch(domain, page_type, payload_str)
@@ -111,7 +113,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             return {"status": "PENDING"}
         
         # STATUS: READY (Batch returned)
-        logging.info(f"[{domain}] - Batch complet détecté. Lancement extraction Multi-Page.")
+        logger.info(f"[{domain}] - Batch complet détecté. Lancement extraction Multi-Page.")
         
         # Deserialize the batch
         # Each item is a full message: {"data": website_data, "database": bdd, "collection": "siteweb", "origin": ""}
@@ -120,7 +122,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             batch_payloads = [json.loads(s) for s in batch_json_strings]
         except json.JSONDecodeError as e:
             # Critical corruption in Redis data
-            logging.error(f"Failed to decode batch from Redis: {e}")
+            logger.error(f"Failed to decode batch from Redis: {e}")
             raise ValueError("Corrupted batch data in Redis")
 
         try:
@@ -146,7 +148,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             if not extracted_text:
                 raise ValueError(f"Aucun contenu extrait pour {page_type} via {method_used}")
             
-            logging.info(f"[{domain}] - Extraction {page_type} réussie via {method_used}. Taille: {len(extracted_text)} chars.")
+            logger.info(f"[{domain}] - Extraction {page_type} réussie via {method_used}. Taille: {len(extracted_text)} chars.")
             
             text_to_embed_clean = extracted_text.strip()
             
@@ -182,9 +184,9 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
                 website_data["page_type"] = existing_page_type
                 page_type = existing_page_type
                 log = "l'embedding (bypass template-llm)"
-                logging.info(f"[{url}] - ⚡ Bypass activé: réutilisation de la classification '{existing_page_type}'.")
+                logger.info(f"[{url}] - ⚡ Bypass activé: réutilisation de la classification '{existing_page_type}'.")
 
-        logging.info(f"[{url}] - Chemin de traitement: Contenu Principal (Trafilatura).")
+        logger.info(f"[{url}] - Chemin de traitement: Contenu Principal (Trafilatura).")
         # Étape 3.1: Construction du dictionnaire d'entrée pour le nettoyage
         info = {
             "url": website_data.get("url",""),
@@ -202,7 +204,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             extracted_content = trafilatura.extract(info).content
             if extracted_content and extracted_content.strip():
                 data_extracted = extracted_content
-                logging.info(
+                logger.info(
                     f"[{url}] - Extraction réussie avec Trafilatura Python (tentative {attempt + 1})")
                 break
             if attempt < max_retries - 1:
@@ -210,14 +212,14 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
 
         # 2. Fallback: Go-Trafilatura
         if not data_extracted:
-            logging.info(
+            logger.info(
                 f"[{url}] - Échec Trafilatura Python. Tentative avec Go-Trafilatura.")
             for attempt in range(max_retries):
                 extracted_content = trafilatura.extract_go_trafilatura(
                     info.get("content", ""), url)
                 if extracted_content and extracted_content.strip():
                     data_extracted = extracted_content
-                    logging.info(
+                    logger.info(
                         f"[{url}] - Extraction réussie avec Go-Trafilatura (tentative {attempt + 1})")
                     break
                 if attempt < max_retries - 1:
@@ -225,14 +227,14 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
 
         # 3. Fallback: Boilerpy3
         if not data_extracted:
-            logging.info(
+            logger.info(
                 f"[{url}] - Échec Go-Trafilatura. Tentative avec Boilerpy3.")
             for attempt in range(max_retries):
                 extracted_content = trafilatura.extract_boilerpy3(
                     info.get("content", ""))
                 if extracted_content and extracted_content.strip():
                     data_extracted = extracted_content
-                    logging.info(
+                    logger.info(
                         f"[{url}] - Extraction réussie avec Boilerpy3 (tentative {attempt + 1})")
                     break
                 if attempt < max_retries - 1:
@@ -242,7 +244,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             raise ValueError(
                 "Le contenu extrait est vide ou invalide après tous les essais (Trafilatura, Go, Boilerpy3).")
         
-        logging.info(
+        logger.info(
             f"[{url}] - Taille texte extrait: {len(data_extracted)} chars.")
         text_to_embed_clean = data_extracted.strip()
     
@@ -257,8 +259,8 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     }
 
     # Étape 5: Afficher le message de sortie pour débogage
-    logging.info(f"[{url}] - Taille finale du texte nettoyé: {len(text_to_embed_clean)} chars. Prêt pour {log}.")
+    logger.info(f"[{url}] - Taille finale du texte nettoyé: {len(text_to_embed_clean)} chars. Prêt pour {log}.")
     
     # Étape 6: Retourner le message prêt à être publié
-    logging.info(f"[{url}] - 📦 Website traité pour {log}.")
+    logger.info(f"[{url}] - 📦 Website traité pour {log}.")
     return output_message

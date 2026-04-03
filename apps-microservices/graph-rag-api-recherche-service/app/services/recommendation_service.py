@@ -5,6 +5,8 @@ import json
 import asyncio
 from typing import List, Dict, Any, Optional
 
+from toon_format import encode as toon_encode
+
 from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
@@ -37,19 +39,25 @@ class RecommendationService:
 
     CYPHER_STEP1_TARGET = """
          MATCH (p:Produit)
-         WHERE toString(p.id) = $target_product_id AND p.est_actif = true
+         WHERE p.id = $target_product_id AND p.est_actif = true
          WITH p, $filters AS active_filters
          """
 
     CYPHER_STEP1_ANCHOR = """
          UNWIND $filters AS f
          MATCH (pc:CaracteristiqueTechnique)
-         WHERE toString(pc.id_source_caracteristique) = f.cid
+         WHERE pc.id_source_caracteristique = f.cid
          MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
          
          WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie) AND p.est_actif = true
          
          WITH DISTINCT p, $filters AS active_filters
+         """
+
+    CYPHER_STEP1_BY_IDS = """
+         MATCH (p:Produit)
+         WHERE p.id_produit IN $target_id_produits AND p.est_actif = true
+         WITH p, $filters AS active_filters
          """
 
     CYPHER_STEP2_SCORING = """
@@ -58,14 +66,14 @@ class RecommendationService:
         
         // Match Characteristics for the specific caracteristique ID
         OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-        WHERE toString(pc.id_source_caracteristique) = f.cid
+        WHERE pc.id_source_caracteristique = f.cid
         
         // Bundle Constraints with their matching Characteristics
         WITH p, f, collect(pc) AS pcs
         WITH p, f, [c IN f.constraints | {
             cid: c.id_caracteristique,
             conf: c,
-            matches: [pc IN pcs WHERE toString(pc.id_source_caracteristique) = toString(c.id_caracteristique)]
+            matches: [pc IN pcs WHERE pc.id_source_caracteristique = c.id_caracteristique]
         }] AS constraint_data
         
         // Evaluate Scores per Characteristic ID with CONTINUOUS SCORING FORMULAS
@@ -76,13 +84,13 @@ class RecommendationService:
                 // If ANY node matches a target value, prioritize it over blocking
                 // This handles products with multiple text nodes for the same characteristic
                 WHEN ANY(pc IN item.matches WHERE 
-                    size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
+                    size(item.conf.target_list) > 0 AND (pc.id_source_valeur IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
                 ) THEN 1.0
                 
                 // ============== BLOCKING CHECK (Fatal Mismatch) ==============
                 // Only reached if no target list match was found above
                 WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
+                    (size(item.conf.blocking_list) > 0 AND (pc.id_source_valeur IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
                     // OR
                     // (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
                     //     (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
@@ -265,10 +273,10 @@ class RecommendationService:
             matched_nodes: [pc IN item.matches | apoc.map.merge(properties(pc), {
                 node_score: CASE
                     // Text target match
-                    WHEN size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
+                    WHEN size(item.conf.target_list) > 0 AND (pc.id_source_valeur IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
                     THEN 1.0
                     // Text blocking match
-                    WHEN (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
+                    WHEN (size(item.conf.blocking_list) > 0 AND (pc.id_source_valeur IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
                         OR
                         (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
                             (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
@@ -409,108 +417,19 @@ class RecommendationService:
         WITH p, q_weight_groups AS details, 
              CASE WHEN denominator = 0 THEN 0.0 ELSE (numerator / denominator) END AS global_score
         
-        // --- STEP 2.5: ZONE SCORING based on MetadonneUtilisateurs ---
-        // Get the product's fournisseur
+        // --- STEP 2.5: FOURNISSEUR SCORING (zone geo disabled — forced to 1) ---
         OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
-        
-        // Check for COUVRE_PAYS relationships with couvre_tous, couvre, ne_couvre_pas properties
-        OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
-        
-        // Check for COUVRE_ZONE relationships with couvre_tous, couvre, ne_couvre_pas properties
-        OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
-        
-        WITH p, details, global_score, f,
-             collect(DISTINCT {
-                 pays: pays, 
-                 id_pays: pays.id_pays, 
-                 partiel: r_pays.partiel,
-                 couvre_tous: r_pays.couvre_tous, 
-                 couvre: r_pays.couvre, 
-                 ne_couvre_pas: r_pays.ne_couvre_pas
-             }) AS pays_rels,
-             collect(DISTINCT {
-                 zone: zone,
-                 id_dept: zone.id_dept,
-                 couvre_tous: r_zone.couvre_tous,
-                 couvre: r_zone.couvre,
-                 ne_couvre_pas: r_zone.ne_couvre_pas
-             }) AS zone_rels,
+
+        // NOTE: COUVRE_PAYS and COUVRE_ZONE matching is disabled (zone_score forced to 1 in final_score).
+        // Kept as comment for future re-enablement:
+        // OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
+        // OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
+
+        WITH p, details, global_score,
              { id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie } AS info_soc
-        
-        // Calculate zone_score based on the algorithm:
-        // 1. If has pays relation:
-        //    a. First check if user's id_pays matches any pays
-        //    b. If match found, check partiel:
-        //       - partiel=true: drill into ZoneGeo by dept, then check zone couvre_tous/couvre
-        //       - partiel=false: check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas for categorie
-        // 2. If no pays relation but has zonegeographique relation: check dept then couvre_tous/couvre
-        // 3. If neither exists: score=g_unknown_score
-        WITH p, info_soc, details, global_score, pays_rels, zone_rels,
-             CASE
-                 // Case 1: Has pays relations
-                 WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
-                     CASE
-                         // First check if user_id_pays is provided
-                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
-                         // Check if user's country matches any COUVRE_PAYS
-                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN
-                             // Country matched - now check partiel on the matched pays relation
-                             CASE
-                                 // Case 1a: partiel=true -> drill into ZoneGeo by dept
-                                 WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.partiel = true) THEN
-                                     CASE
-                                         WHEN $user_dept IS NULL THEN $g_unknown_score
-                                         // Check if user_dept matches any COUVRE_ZONE
-                                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
-                                             // Dept matched - check couvre_tous on the matched zone relation
-                                             CASE
-                                                 // Find the matched zone and check its couvre_tous
-                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
-                                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
-                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
-                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
-                                                 ELSE $g_unknown_score
-                                             END
-                                         // Dept not covered
-                                         ELSE $z_unmatched
-                                     END
-                                 // Case 1b: partiel=false -> check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas
-                                 ELSE
-                                     CASE
-                                         // couvre_tous=true -> covers all categories in this country
-                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = true) THEN 1.0
-                                         // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
-                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN 1.0
-                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
-                                         ELSE $g_unknown_score
-                                     END
-                             END
-                         // User's country not in any COUVRE_PAYS
-                         ELSE $z_unmatched
-                     END
-                 // Case 2: No pays relation but has zonegeographique relation
-                 WHEN size(zone_rels) > 0 AND zone_rels[0].zone IS NOT NULL THEN
-                     CASE
-                         WHEN $user_dept IS NULL THEN $g_unknown_score
-                         // Check if user_dept matches any COUVRE_ZONE
-                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
-                             // Dept matched - check couvre_tous on the matched zone relation
-                             CASE
-                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
-                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
-                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
-                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
-                                 ELSE $g_unknown_score
-                             END
-                         // Dept not covered
-                         ELSE $z_unmatched
-                     END
-                 // Case 3: Neither exists
-                 ELSE $g_unknown_score
-             END AS zone_score
 
         // Calculate score by Etat and affichage fournisseur
-        WITH p, info_soc, details, global_score, zone_score,
+        WITH p, info_soc, details, global_score, $g_unknown_score AS zone_score,
              CASE
                 WHEN ((info_soc.id_etat = '1') OR ((info_soc.id_etat = '2') AND (info_soc.id_affichage = '1'))) THEN 1.0
                 ELSE $e_unmatched
@@ -530,24 +449,18 @@ class RecommendationService:
                  ELSE global_score
              END AS global_score
         
-        // Calculate typologie score
-        WITH p, details, global_score, zone_score, etat_score, info_soc,
-             CASE
-                WHEN etat_score = 1.0 THEN
-                    CASE
-                        WHEN $user_typologie IS NULL THEN 1.0
-                        WHEN ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
-                        ELSE $t_unmatched
-                    END
-                ELSE 1.0
-             END AS typo_score
-        
-        // Calculate final_score = global_score * 1 * etat_score * 1
-        // Filter out products with negative final_score
-        // forcer zone_geo et typo_score à 1
-        // global_score * zone_score * etat_score * typo_score AS final_score
+        // NOTE: Typologie scoring disabled (typo_score forced to 1 in final_score).
+        // Kept as comment for future re-enablement:
+        // WITH p, details, global_score, zone_score, etat_score, info_soc,
+        //      CASE WHEN etat_score = 1.0 THEN
+        //          CASE WHEN $user_typologie IS NULL THEN 1.0
+        //                WHEN $user_typologie IN coalesce(info_soc.typologie, []) THEN 1.0
+        //                ELSE $t_unmatched END
+        //      ELSE 1.0 END AS typo_score
+
+        // Calculate final_score (zone_score and typo_score forced to 1)
         WITH p, details, global_score, 1 AS zone_score, etat_score, 1 AS typo_score, info_soc,
-            global_score * 1 * etat_score * 1 AS final_score
+            global_score * etat_score AS final_score
         WHERE final_score >= $absolute_threshold OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
@@ -559,9 +472,9 @@ class RecommendationService:
         // Step 2: Compute supplier average scores for tie-breaking (top 5 products per vendor)
         WITH all_scored,
              apoc.map.fromPairs(
-                 [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
-                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid][0..5] | acc + item.final_score)
-                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid][0..5]))]]
+                 [sid IN apoc.coll.toSet([si IN all_scored | si.node.id_fournisseur]) |
+                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE fi.node.id_fournisseur = sid][0..5] | acc + item.final_score)
+                        / toFloat(size([sz IN all_scored WHERE sz.node.id_fournisseur = sid][0..5]))]]
              ) AS supplier_avg_map
         
         // Step 3: Enrich products with supplier_avg_score and sort by score DESC, supplier_avg DESC
@@ -574,7 +487,7 @@ class RecommendationService:
             typo_score: prod.typo_score,
             final_score: prod.final_score,
             info_soc: prod.info_soc,
-            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)]
+            supplier_avg_score: supplier_avg_map[prod.node.id_fournisseur]
         }] AS enriched
         
         // Re-sort by final_score DESC, then supplier_avg_score DESC for tie-breaking
@@ -589,7 +502,7 @@ class RecommendationService:
              reduce(acc = {selected: [], counts: {}}, prod IN sorted_candidates |
                  CASE 
                      WHEN size(acc.selected) >= $top_k + 4 THEN acc
-                     WHEN coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) < $max_per_supplier_extended THEN
+                     WHEN coalesce(acc.counts[prod.node.id_fournisseur], 0) < $max_per_supplier_extended THEN
                          {
                              selected: acc.selected + [{
                                  node: prod.node,
@@ -601,9 +514,9 @@ class RecommendationService:
                                  final_score: prod.final_score,
                                  info_soc: prod.info_soc,
                                  supplier_avg_score: prod.supplier_avg_score,
-                                 mmr_score: $diversity_lambda * prod.final_score - (1.0 - $diversity_lambda) * (toFloat(coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0)) / toFloat($max_per_supplier_extended))
+                                 mmr_score: $diversity_lambda * prod.final_score - (1.0 - $diversity_lambda) * (toFloat(coalesce(acc.counts[prod.node.id_fournisseur], 0)) / toFloat($max_per_supplier_extended))
                              }],
-                             counts: apoc.map.merge(acc.counts, apoc.map.fromPairs([[toString(prod.node.id_fournisseur), coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) + 1]]))
+                             counts: apoc.map.merge(acc.counts, apoc.map.fromPairs([[prod.node.id_fournisseur, coalesce(acc.counts[prod.node.id_fournisseur], 0) + 1]]))
                          }
                      ELSE acc
                  END
@@ -614,7 +527,7 @@ class RecommendationService:
         UNWIND mmr_selected AS ms
         WITH ms ORDER BY ms.mmr_score DESC
         WITH collect(ms) AS all_products,
-             collect({id_produit: toString(ms.node.id_produit), id_fournisseur: toString(ms.node.id_fournisseur), final_score: ms.final_score, mmr_score: ms.mmr_score, supplier_avg_score: ms.supplier_avg_score}) AS pre_diversity_debug
+             collect({id_produit: ms.node.id_produit, id_fournisseur: ms.node.id_fournisseur, final_score: ms.final_score, mmr_score: ms.mmr_score, supplier_avg_score: ms.supplier_avg_score}) AS pre_diversity_debug
         
         // --- STEP 6: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products, pre_diversity_debug,
@@ -859,7 +772,7 @@ class RecommendationService:
         WITH p, f, [c IN f.constraints | {
             cid: c.id_caracteristique,
             conf: c,
-            matches: [pc IN pcs WHERE toString(pc.id_source_caracteristique) = toString(c.id_caracteristique)]
+            matches: [pc IN pcs WHERE pc.id_source_caracteristique = c.id_caracteristique]
         }] AS constraint_data
         
         // Evaluate Scores per Characteristic ID
@@ -868,7 +781,7 @@ class RecommendationService:
             score: CASE 
                 // Blocking Check
                 WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
+                    (size(item.conf.blocking_list) > 0 AND (pc.id_source_valeur IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
                     OR
                     (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
                         (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
@@ -878,7 +791,7 @@ class RecommendationService:
                 ) THEN $blocked_val
                 // Target Check
                 WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list))
+                    (size(item.conf.target_list) > 0 AND (pc.id_source_valeur IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list))
                     OR
                     (item.conf.target_numeric IS NOT NULL AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit) AND (
                         (item.conf.target_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.target_numeric.min) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.min)))) OR
@@ -1318,6 +1231,48 @@ class RecommendationService:
 
         return cypher_query
 
+    def _build_cypher_query_by_ids(
+        self,
+        request: MatchingPayloadIdProduit,
+    ) -> str:
+        """
+        Build a Cypher query that matches products by a list of id_produit values
+        (CYPHER_STEP1_BY_IDS + CYPHER_STEP2_SCORING), with the same projection logic.
+        """
+        query_step_1 = self.CYPHER_STEP1_BY_IDS
+        query_step_2 = self.CYPHER_STEP2_SCORING
+        cypher_query = query_step_1 + query_step_2
+
+        if (
+            request.champs_sortie is not None
+            and len(request.champs_sortie) > 0
+            and "id_produit" not in request.champs_sortie
+        ):
+            request.champs_sortie.append("id_produit")
+        if (
+            request.champs_sortie is not None
+            and len(request.champs_sortie) > 0
+            and "id_fournisseur" not in request.champs_sortie
+        ):
+            request.champs_sortie.append("id_fournisseur")
+
+        # Determine projection
+        if request.champs_sortie:
+            fields = (
+                [f".{f}" for f in request.champs_sortie]
+                if len(request.champs_sortie) > 0
+                else [".*"]
+            )
+            projection = f"{{ {', '.join(fields)} }}"
+        else:
+            projection = "{.*}"
+
+        # Inject projection
+        cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
+        cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
+
+        return cypher_query
+
     def _build_cypher_params(
         self,
         request: MatchingPayloadIdProduit,
@@ -1687,7 +1642,9 @@ class RecommendationService:
         liste_produit: List[Produit],
         id_categorie: str,
         parcours: str = "",
+        id_prompt: int = 112,
         request: Optional[MatchingPayloadIdProduit] = None,
+        thinking_level: str = "low",
     ) -> tuple:
         """
         Enrich products with HelloPro API data and rerank using Gemini LLM.
@@ -1715,16 +1672,20 @@ class RecommendationService:
         # )
         # logging.warning(f"[RERANK] Product IDs: {id_produits}")
 
-        # 2. Fetch product info + characteristics + category definitions in parallel
+        # 2. Fetch product info + characteristics + category definitions + prompt in parallel
         logging.warning(
             "[RERANK] Fetching product info, characteristics, and category definitions from HelloPro API..."
         )
         try:
-            products_info, all_caracs, category_caracs = await asyncio.gather(
+            api_fetch_start = time.perf_counter()
+            products_info, all_caracs, category_caracs, prompt_data = await asyncio.gather(
                 hellopro_api_client.fetch_products_info(id_categorie, id_produits),
                 hellopro_api_client.fetch_all_product_caracteristiques(id_produits),
                 hellopro_api_client.fetch_category_caracteristiques(id_categorie),
+                hellopro_api_client.fetch_prompt(str(id_prompt) or "112"),
             )
+            api_fetch_time = time.perf_counter() - api_fetch_start
+            logging.warning("[RERANK-TIMING] hellopro_api_fetch (parallel): %.3fs", api_fetch_time)
         except Exception as e:
             logging.error(f"[RERANK] HelloPro API enrichment error: {e}", exc_info=True)
             return top_produit, liste_produit, []
@@ -1737,6 +1698,7 @@ class RecommendationService:
         # )
 
         # 3. Format enriched data for LLM
+        format_start = time.perf_counter()
         formatted_products = []
         # logging.warning(f"[RERANK] product_info: {products_info}")
         liste_carac_id = []
@@ -1761,6 +1723,20 @@ class RecommendationService:
                 else "Prospect"
             )
 
+            # Build caracteristiques, stripping empty values to reduce tokens
+            filtered_caracs = []
+            if caracs:
+                for c in caracs:
+                    if str(c.get("id_caracteristique", "")) in liste_carac_id:
+                        carac_entry = {"nom": c.get("nom_caracteristique", c.get("label", ""))}
+                        valeur = c.get("valeur", "")
+                        if valeur:
+                            carac_entry["valeur"] = valeur
+                        unite = c.get("unite", "")
+                        if unite:
+                            carac_entry["unite"] = unite
+                        filtered_caracs.append(carac_entry)
+
             formatted_product = {
                 "id_produit": str(id_produit),
                 "titre": info.get(
@@ -1775,22 +1751,9 @@ class RecommendationService:
                 ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
-                    "id_fournisseur": str(info_fournisseur.get("id", "")),
                     "type": etat_societe_label,
                 },
-                "caracteristiques": (
-                    [
-                        {
-                            "nom": c.get("nom_caracteristique", c.get("label", "")),
-                            "valeur": c.get("valeur", ""),
-                            "unite": c.get("unite", ""),
-                        }
-                        for c in caracs
-                        if str(c.get("id_caracteristique", "")) in liste_carac_id
-                    ]
-                    if caracs
-                    else []
-                ),
+                "caracteristiques": filtered_caracs,
             }
             formatted_products.append(formatted_product)
 
@@ -1882,15 +1845,23 @@ class RecommendationService:
         #     f"{caracteristiques_critiques}"
         # )
 
-        # LISTE_PRODUITS = formatted product list as JSON
-        liste_produits_json = json.dumps(formatted_products, ensure_ascii=False)
+        format_time = time.perf_counter() - format_start
+        logging.warning("[RERANK-TIMING] format_products: %.3fs (%d products)", format_time, len(formatted_products))
+
+        # LISTE_PRODUITS = formatted product list as TOON (Token-Oriented Object Notation)
+        # TOON uses ~40% fewer tokens than JSON for structured data sent to LLMs
+        toon_start = time.perf_counter()
+        liste_produits_json = toon_encode(formatted_products)
+        toon_time = time.perf_counter() - toon_start
+        logging.warning("[RERANK-TIMING] toon_encode: %.3fs (%d chars)", toon_time, len(liste_produits_json))
         # logging.warning(
         #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
         # )
 
-        # 5. Fetch system prompt from HelloPro API and call Gemini
-        logging.warning("[RERANK] Fetching prompt from HelloPro API (id_prompt=112)...")
-        prompt_data = await hellopro_api_client.fetch_prompt("112")
+        # 5. Use pre-fetched prompt data (fetched in parallel above) and call Gemini
+        logging.warning(
+            "[RERANK] Using pre-fetched prompt from HelloPro API (id_prompt=%s)...", id_prompt
+        )
 
         prompt_temperature = None
         if prompt_data and prompt_data.get("contenu_prompt"):
@@ -2163,15 +2134,14 @@ class RecommendationService:
             liste_produits_json=liste_produits_json,
         )
 
-        # logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
-        # logging.warning(f"[RERANK] System prompt: {system_prompt}")
-        # logging.warning(f"[RERANK] Liste produits: {liste_produits_json}")
-        # return top_produit, liste_produit, []
         try:
+            gemini_start = time.perf_counter()
             llm_response = await gemini_client.generate_rerank_response(
-                system_prompt, temperature=prompt_temperature
+                system_prompt, temperature=prompt_temperature, thinking_level=thinking_level
             )
+            gemini_time = time.perf_counter() - gemini_start
+            logging.warning("[RERANK] Gemini LLM call completed in %.3fs", gemini_time)
         except Exception as e:
             logging.error(f"[RERANK] Gemini rerank call error: {e}", exc_info=True)
             return top_produit, liste_produit, []
@@ -2326,8 +2296,10 @@ class RecommendationService:
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
         norm_time = time.perf_counter() - norm_start
+        logging.warning("[RERANK-TIMING] normalize_constraints: %.3fs", norm_time)
 
         # Build weights map from request (cid -> q_weight)
+        build_params_start = time.perf_counter()
         weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
 
         # Extract scoring parameters
@@ -2347,11 +2319,14 @@ class RecommendationService:
             top_k=request.rerank.top_k,
             target_product_id=target_product_id,
         )
+        build_params_time = time.perf_counter() - build_params_start
+        logging.warning("[RERANK-TIMING] build_query+params: %.3fs", build_params_time)
 
         try:
             query_start = time.perf_counter()
             results = await clients.execute_cypher(cypher_query, params)
             query_time = time.perf_counter() - query_start
+            logging.warning("[RERANK-TIMING] cypher_query: %.3fs (%d results)", query_time, len(results) if results else 0)
 
             # --- DEBUG: Diversity Algorithm Output ---
             if results:
@@ -2369,28 +2344,158 @@ class RecommendationService:
                     pd = rec.get("product_data", {})
 
             # Parse results and convert to MatchingResponse format
+            parse_start = time.perf_counter()
             liste_produit, top_produit = self._parse_matching_results(
                 results,
                 request,
                 blocked_val,
                 different_val,
             )
+            parse_time = time.perf_counter() - parse_start
+            logging.warning("[RERANK-TIMING] parse_results: %.3fs (top=%d, liste=%d)", parse_time, len(top_produit), len(liste_produit))
 
             # --- Enrich with HelloPro API data and rerank via Gemini LLM ---
             id_categorie = str(request.id_categorie) if request.id_categorie else ""
             parcours = request.rerank.parcours if request.rerank else ""
 
+            enrich_start = time.perf_counter()
             reranked_top, reranked_liste, ecarts = (
                 await self._enrich_and_rerank_with_llm(
                     top_produit,
                     liste_produit,
                     id_categorie,
                     parcours,
+                    id_prompt=request.rerank.id_prompt if request.rerank else 112,
                     request=request,
+                    thinking_level=request.rerank.thinking_level if request.rerank else "low",
                 )
             )
+            enrich_time = time.perf_counter() - enrich_start
+            logging.warning("[RERANK-TIMING] enrich_and_rerank_llm: %.3fs", enrich_time)
+
+            # --- Re-query Cypher with only LLM-selected product IDs ---
+            llm_selected_ids = [
+                str(p.id_produit) for p in reranked_top + reranked_liste
+            ]
+
+            if llm_selected_ids:
+                logging.warning(
+                    "[RERANK-REQUERY] Re-running Cypher query with %d LLM-selected product IDs: %s",
+                    len(llm_selected_ids),
+                    llm_selected_ids,
+                )
+                requery_total_start = time.perf_counter()
+                try:
+                    # Build Cypher query restricted to LLM-selected IDs
+                    requery_cypher = self._build_cypher_query_by_ids(request)
+                    requery_params = self._build_cypher_params(
+                        request,
+                        flat_filters,
+                        weights_map,
+                        scoring_params,
+                        top_k=len(llm_selected_ids),
+                        target_product_id=None,
+                    )
+                    # Add the target_id_produits parameter for CYPHER_STEP1_BY_IDS
+                    requery_params["target_id_produits"] = llm_selected_ids
+
+                    requery_start = time.perf_counter()
+                    requery_results = await clients.execute_cypher(
+                        requery_cypher, requery_params
+                    )
+                    requery_time = time.perf_counter() - requery_start
+                    logging.warning(
+                        "[RERANK-REQUERY] Re-query completed in %.3fs, got %d results",
+                        requery_time,
+                        len(requery_results) if requery_results else 0,
+                    )
+
+                    # Parse re-queried results into Produit objects
+                    requery_parse_start = time.perf_counter()
+                    requery_liste, requery_top = self._parse_matching_results(
+                        requery_results,
+                        request,
+                        blocked_val,
+                        different_val,
+                    )
+                    requery_parse_time = time.perf_counter() - requery_parse_start
+                    logging.warning("[RERANK-TIMING] requery_parse_results: %.3fs", requery_parse_time)
+
+                    # Build a map of id_produit -> re-queried Produit for fast lookup
+                    requery_map = {}
+                    for p in requery_top + requery_liste:
+                        requery_map[str(p.id_produit)] = p
+
+                    # Rebuild reranked_top preserving LLM order and LLM response data
+                    final_top = []
+                    for idx, p in enumerate(reranked_top):
+                        pid = str(p.id_produit)
+                        if pid in requery_map:
+                            rp = requery_map[pid]
+                            final_top.append(
+                                Produit(
+                                    rang=idx + 1,
+                                    id_produit=rp.id_produit,
+                                    score=rp.score,
+                                    caracteristique=rp.caracteristique,
+                                    coeff_geo=rp.coeff_geo,
+                                    coeff_type_frns=rp.coeff_type_frns,
+                                    coeff_etat_score=rp.coeff_etat_score,
+                                    coeff_caracteristique=rp.coeff_caracteristique,
+                                    info_produit=rp.info_produit,
+                                    llm_response=p.llm_response,
+                                )
+                            )
+                        else:
+                            final_top.append(p)
+
+                    # Rebuild reranked_liste preserving LLM order and LLM response data
+                    final_liste = []
+                    for idx, p in enumerate(reranked_liste):
+                        pid = str(p.id_produit)
+                        if pid in requery_map:
+                            rp = requery_map[pid]
+                            final_liste.append(
+                                Produit(
+                                    rang=idx + 1,
+                                    id_produit=rp.id_produit,
+                                    score=rp.score,
+                                    caracteristique=rp.caracteristique,
+                                    coeff_geo=rp.coeff_geo,
+                                    coeff_type_frns=rp.coeff_type_frns,
+                                    coeff_etat_score=rp.coeff_etat_score,
+                                    coeff_caracteristique=rp.coeff_caracteristique,
+                                    info_produit=rp.info_produit,
+                                    llm_response=p.llm_response,
+                                )
+                            )
+                        else:
+                            final_liste.append(p)
+
+                    reranked_top = final_top
+                    reranked_liste = final_liste
+                    requery_total_time = time.perf_counter() - requery_total_start
+                    logging.warning(
+                        "[RERANK-TIMING] requery_total (cypher+parse+rebuild): %.3fs",
+                        requery_total_time,
+                    )
+                    logging.warning(
+                        "[RERANK-REQUERY] Successfully rebuilt %d top + %d liste products from re-query",
+                        len(reranked_top),
+                        len(reranked_liste),
+                    )
+                except Exception as e:
+                    logging.error(
+                        "[RERANK-REQUERY] Re-query failed, keeping LLM-reranked results: %s",
+                        e,
+                        exc_info=True,
+                    )
 
             total_time = time.perf_counter() - start_time
+            logging.warning(
+                "[RERANK-TIMING] === TOTAL: %.3fs === | normalize: %.3fs | build_params: %.3fs | cypher: %.3fs | parse: %.3fs | enrich+llm: %.3fs",
+                total_time, norm_time, build_params_time, query_time, parse_time, enrich_time,
+            )
             return MatchingResponse(
                 top_produit=reranked_top,
                 liste_produit=reranked_liste,

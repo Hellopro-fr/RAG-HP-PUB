@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libvips-dev \
     libwebp-dev \
+    librsvg2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Installer la lib partagée common-utils

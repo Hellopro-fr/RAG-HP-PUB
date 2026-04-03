@@ -1,6 +1,9 @@
 import json
+import logging
 from datetime import datetime, timezone
 from common_utils.autres.CollectionName import CollectionName
+
+logger = logging.getLogger(__name__)
 
 def convertir_date_to_timestamp(date_str: str) -> int:
     """
@@ -31,7 +34,7 @@ def convert_fields_to_int(data: dict, fields: list[str]) -> dict:
             try:
                 data[field] = int(value)
             except (ValueError, TypeError):
-                pass 
+                logger.warning(f"⚠️ Impossible de convertir le champ '{field}' (valeur: {value!r}) en int.")
     return data
 
 def process_devis_data_for_embedding(devis_data: dict, bdd: str = "qdrant") -> dict:
@@ -54,7 +57,7 @@ def process_devis_data_for_embedding(devis_data: dict, bdd: str = "qdrant") -> d
         try:
             devis_clean["date_du_lead"] = convertir_date_to_timestamp(devis_clean["date_du_lead"])
         except ValueError:
-            pass
+            logger.warning(f"⚠️ Impossible de convertir date_du_lead: {devis_clean['date_du_lead']!r}")
     
     output_message = {
         "data": {
@@ -65,7 +68,7 @@ def process_devis_data_for_embedding(devis_data: dict, bdd: str = "qdrant") -> d
         "database": bdd
     }
     
-    print(f"🔍Devis-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2, ensure_ascii=False)}")
-    print(f"📦 Devis-Processor: Lead '{devis_clean.get('lead_id', 'ID inconnu')}' traité pour embedding.")
+    logger.debug(f"🔍 Devis-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2, ensure_ascii=False)}")
+    logger.info(f"📦 Devis-Processor: Lead '{devis_clean.get('lead_id', 'ID inconnu')}' traité pour embedding.")
     
     return output_message

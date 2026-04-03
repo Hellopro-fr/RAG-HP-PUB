@@ -8,13 +8,16 @@ import {
 } from "./main.js";
 import {
     manageFrenchDetectionMethod,
+    maskProxyUrl,
     processPage,
     processUrl,
     rightTrimSlash,
     routerDefaultHandler,
     stopCrawler,
+    detectChallengePage,
+    waitForChallengeResolution,
 } from "./functions.js";
-import { DomainFR } from "./class/DomainFR.js";
+import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 
 export const router = createPlaywrightRouter();
@@ -41,37 +44,128 @@ const ignoredExtensions = [
     "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
 ].join("|");
 
-// Ported Forbidden Params from V3
+// FORBIDDEN_PARAMS: If ANY of these params are present, the entire URL is REJECTED (not crawled).
+// Use only for params that indicate a page variant with NO unique content (filters, sorts, pagination).
+// Params that are just noise (tracking, session) belong in alwaysRemove instead (strip param, keep URL).
+// NOTE: Uses startsWith matching — 'size_' blocks 'size_42', 'size_xl', etc.
 const FORBIDDEN_PARAMS = [
-    'order', 'sort', 'dir', 'limit', 'resultsPerPage',
+    // === SORTING & ORDERING ===
+    'sort', 'sort_by', 'order', 'dir',
+
+    // === PAGINATION ===
+    'limit', 'resultsPerPage', 'per_page', 'items',
+    'offset', 'start',
+
+    // === DISPLAY / VIEW MODE ===
+    'view', 'mode', 'display', 'productListView',
+
+    // === SEARCH (user-initiated, infinite variations) ===
+    'search', 'query',
+
+    // === PRICE & FILTER FACETS ===
     'filter', 'price', 'price_min', 'price_max',
-    'id_category', 'categoryId', 'productListView',
-    'q', 'search', 'query', 'offset', 'start',
-    'view', 'mode', 'display', 'per_page', 'items',
+
+    // === DATE FILTERS ===
     'year', 'month', 'day', 'date', 'from', 'to',
-    'ref', 'referrer', 'source', 'sort_by',
+
+    // === FACET PREFIXES (startsWith match) ===
     'size_', 'taille_', 'color_', 'couleur_',
-    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
+    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_',
 ];
 
-const domainFR = new DomainFR("");
+// alwaysRemove: These params are STRIPPED from the URL, but the URL is still crawled.
+// Use for noise params (tracking, session, actions) that don't change page content.
+// Hoisted to module-level to avoid re-instantiation on every discovered link.
+const ALWAYS_REMOVE_PARAMS = [
+    // === CART, WISHLIST & USER ACTIONS ===
+    "add-to-cart", "add_to_cart", "addtocart",
+    "add-to-compare", "add_to_compare",
+    "add-to-wishlist", "add_to_wishlist", "addtowishlist",
+    "remove_from_wishlist", "remove_wishlist",
+    "remove_compare", "remove_item",
+    "quantity", "qty",
+
+    // === UTM (Marketing) ===
+    "utm_source", "utm_medium", "utm_campaign",
+    "utm_content", "utm_term", "utm_id",
+    "utm_referrer", "utm_name",
+
+    // === FACEBOOK & META ===
+    "fbclid", "fb_action_ids", "fb_action_types",
+    "fb_source", "fb_ref",
+
+    // === GOOGLE ADS & ANALYTICS ===
+    "gclid", "gclsrc", "dclid",
+    "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+    "_ga", "_gid", "_gat", "_gl",
+
+    // === HUBSPOT ===
+    "hsa_acc", "hsa_cam", "hsa_grp",
+    "hsa_ad", "hsa_src", "hsa_mt",
+    "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+    "hsCtaTracking", "hsCta",
+
+    // === MAILCHIMP ===
+    "mc_cid", "mc_eid",
+
+    // === SOCIAL MEDIA TRACKING ===
+    "twclid", "li_fat_id", "msclkid",
+    "igshid", "tt_medium", "tt_content",
+
+    // === OTHER TRACKING ===
+    "_openstat", "yclid", "wickedid", "_kx", "epik", "pp",
+    "click_id", "transaction_id",
+    "ref", "referrer", "source", "medium", "campaign",
+
+    // === SESSION ===
+    "sessionid", "session_id", "PHPSESSID",
+    "sid", "s_id", "SID",
+
+    // === AFFILIATE & MARKETING ===
+    "aff_id", "affiliate", "partner",
+    "coupon", "discount", "promo", "voucher",
+
+    // === CMS INTERNALS (noise, not navigation) ===
+    // WordPress
+    "_wpnonce", "preview", "preview_id", "preview_nonce", "et_blog",
+    // PrestaShop (non-routing params only)
+    "id_product_attribute", "isolang", "id_lang",
+    // Shopify (recommendation tracking only)
+    "pr_prod_strat", "pr_rec_id", "pr_rec_pid", "pr_ref_pid", "pr_seq",
+    "selling_plan",
+    // Magento
+    "___store", "___from_store",
+
+    // === DEDUP HELPERS (same content, different presentation) ===
+    // NOTE: "view", "mode", "display", "order", "sort", "resultsPerPage", "productListView"
+    // are intentionally NOT listed here — they belong in FORBIDDEN_PARAMS (reject the URL entirely).
+    "timestamp", "random", "nocache",
+];
+
+const detectionClient = new DetectionLangueClient();
 
 router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         const proxyUrl = proxyInfo?.url || null;
 
-        // Resource Blocking (Images, Fonts, etc.)
+        // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
+        // Uses ignoredExtensions as single source of truth for blocked file types
+        const blockedExtensionsRegex = new RegExp(`\\.(${ignoredExtensions})$`, 'i');
         await page.route('**/*', (route) => {
             const req = route.request();
             const resourceType = req.resourceType();
-            const reqUrl = req.url();
+            const reqUrl = req.url().toLowerCase();
 
             // Block heavy media and fonts
             if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
                 return route.abort();
             }
-            // Block download scripts and binary files
-            if (reqUrl.includes('download.php') || reqUrl.includes('imp=1') || /\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$/i.test(reqUrl)) {
+            // Block download scripts and binary files (uses ignoredExtensions list)
+            if (
+                reqUrl.includes('download.php') ||
+                reqUrl.includes('imp=1') ||
+                blockedExtensionsRegex.test(reqUrl)
+            ) {
                 return route.abort();
             }
             return route.continue();
@@ -81,19 +175,27 @@ router.addDefaultHandler(
 
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
-        const targetDomain = context.config.domain; 
+        const targetDomain = context.config.domain;
+        const siteHostname = context.config.siteHostname;
 
         // Local buffer for blocked URLs to handle async Redis logging
         const blockedBuffer: { reason: string, url: string }[] = [];
         const logBlocked = (reason: string, url: string) => {
             blockedBuffer.push({ reason, url });
-        }; 
+        };
 
-        // Check if hostname ends with the target domain (handles subdomains too)
-        // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
-        // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
-        if (!targetDomain || !urlObj.hostname.includes(targetDomain)) {
+        // Check if hostname belongs to either the target domain or the site hostname.
+        // This handles cases where domain and site have different hosts
+        // (e.g. domain="pmd-materiel.com", site="https://www.pmd-location.com/")
+        const hostname = urlObj.hostname;
+        const isInternal = (targetDomain && hostname.includes(targetDomain))
+            || (siteHostname && hostname.includes(siteHostname));
+        if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            // Set structured error message for "1 seul URL crawlé" case: domain change
+            if (request.url === site) {
+                context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
             return;
         }
 
@@ -101,11 +203,25 @@ router.addDefaultHandler(
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
         ];
 
+        // Content-Type guard: skip non-HTML responses (PDF, binary downloads, etc.)
+        // This prevents Playwright from crashing on binary content served from extension-less URLs
+        if (response) {
+            const contentType = (response.headers()['content-type'] || '').toLowerCase();
+            if (contentType && !contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/xhtml')) {
+                log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
+                return;
+            }
+        }
+
         // Blocked Status Check
         if (response) {
             const status = response.status();
             if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
                 log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
+                // Set structured error message for "1 seul URL crawlé" case: HTTP error on homepage
+                if (request.url === site) {
+                    context.crawlErrorMessage = `Erreur HTTP ${status}`;
+                }
                 // Delegate error tracking to UpdateChecker in update mode
                 const source = request.userData.source || '';
                 if (context.updateChecker && source) {
@@ -199,15 +315,7 @@ router.addDefaultHandler(
             // Redis update handled in dedupManager
             // Local file update is heavy, skipped in V3 logic, keeping minimal or periodic in main.ts
 
-            // Accept Cookies
-            await page.context().addCookies([
-                {
-                    name: "cookieConsent",
-                    value: "accepted",
-                    domain: targetDomain,
-                    path: "/",
-                },
-            ]);
+            // Cookie consent is now injected pre-navigation in preNavigationHooks (functions.ts)
 
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the 
@@ -241,53 +349,148 @@ router.addDefaultHandler(
             if (isMainSite) {
                 // Process normally and store the method
                 content = await processPage(page, request.loadedUrl, log);
-                domainFR.homepage = url;
-                const checkPageIfFrench = await domainFR.checkPageIfFrench(content, false);
 
-                if (checkPageIfFrench["ok"]) {
-                    frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkPageIfFrench["method"]);
-                    if (frenchDetectionMethod instanceof Error) {
-                        log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
-                        await stopCrawler(crawler, "Failed to store French detection method");
+                // Challenge page detection: check if the content is a bot protection page
+                // If detected, wait for the challenge to resolve before proceeding
+                const challengeService = detectChallengePage(content);
+                if (challengeService) {
+                    const resolvedContent = await waitForChallengeResolution(
+                        page, url, log, challengeService
+                    );
+                    if (resolvedContent) {
+                        content = resolvedContent;
+                    } else {
+                        // Challenge not resolved — store in error dataset and stop
+                        log.error(`Challenge ${challengeService} not resolved for main site ${url}. Aborting crawl.`);
+                        let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${targetDomain}`;
+                        let errorDataset = await Dataset.open(datasetName);
+                        await errorDataset.pushData({
+                            id: request.id,
+                            url: request.url,
+                            errors: [`Challenge page ${challengeService} not resolved after 45s`],
+                            proxy_used: maskProxyUrl(proxyUrl ?? undefined),
+                            status_code: response?.status() || 0,
+                            captcha: challengeService,
+                            timestamp: new Date().toISOString()
+                        });
+                        context.crawlErrorMessage = `Site protégé par ${challengeService} (challenge non résolu)`;
+                        await stopCrawler(crawler, `Challenge ${challengeService} not resolved for main site`);
                         return;
                     }
-                    isEnqueuingLinks = true;
-                } else {
-                    const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                    if (checkUrl["ok"]) {
-                        frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrl["method"]);
-                        if (frenchDetectionMethod instanceof Error) {
-                            log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
-                            await stopCrawler(crawler, "Failed to store French detection method");
-                            return;
+                }
+
+                try {
+                    const detectResult = await detectionClient.detect(url, content, {
+                        mode: "complete",
+                        proxyUrl: proxyUrl ?? undefined,
+                    });
+
+                    if (detectResult.ok) {
+                        const primaryMethod = DetectionLangueClient.extractPrimaryMethod(detectResult.method);
+                        if (!primaryMethod) {
+                            log.error(`API returned ok=true but empty method for ${url}. Cannot store detection method.`);
+                        } else {
+                            frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
+                            if (frenchDetectionMethod instanceof Error) {
+                                log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
+                                await stopCrawler(crawler, "Failed to store French detection method");
+                                return;
+                            }
+                            // For session-based i18n: extract ?lang=fr from start URL
+                            // so we can propagate it to discovered internal URLs
+                            if (primaryMethod === "pattern_match_query") {
+                                context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                                if (context.languageQueryParam) {
+                                    log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
+                                }
+                            }
+                            isEnqueuingLinks = true;
                         }
-                        isEnqueuingLinks = true;
+                    } else {
+                        // The API returns alternatives sorted by reliability (high > medium > low).
+                        // We only use the best one (first element).
+                        if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                            const best = detectResult.alternative_urls[0];
+                            log.error(`[ALTERNATIVE_URL] Homepage ${url} is NOT French, but a French alternative was found: ${best.url} (method: ${best.method}, reliability: ${best.reliability}, validated: ${best.validated})`);
+                            context.crawlErrorMessage = `Homepage non détectée en Français mais une alternative en Français a été trouvée : ${best.url} (fiabilité: ${best.reliability})`;
+                        }
+
+                        // Only fall back to URL check if NLP didn't explicitly reject.
+                        // When NLP analyzed the content and said "not French", a URL pattern
+                        // like .fr TLD should not override that verdict.
+                        const nlpRejected = detectResult.method.includes("nlp_not_confirmed")
+                            || detectResult.method.includes("nlp_override");
+
+                        if (!nlpRejected) {
+                            const checkUrlResult = await detectionClient.checkUrl(url);
+                            if (checkUrlResult.ok) {
+                                frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
+                                if (frenchDetectionMethod instanceof Error) {
+                                    log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
+                                    await stopCrawler(crawler, "Failed to store French detection method");
+                                    return;
+                                }
+                                // For session-based i18n: extract ?lang=fr from start URL
+                                if (checkUrlResult.method === "pattern_match_query") {
+                                    context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                                    if (context.languageQueryParam) {
+                                        log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
+                                    }
+                                }
+                                isEnqueuingLinks = true;
+                                // Clear alternative_urls error since crawl is proceeding via URL check
+                                context.crawlErrorMessage = "";
+                            }
+                        }
                     }
+                } catch (apiError: any) {
+                    log.error(`Detection API error for main site ${url}: ${apiError.message}`);
+                    context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
                 }
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
                 let methodOrError = manageFrenchDetectionMethod(targetDomain as string);
-                
+
                 if (methodOrError instanceof Error) {
                     log.warning(`French detection method not found in storage. Attempting auto-detection on current page.`);
-                    
-                    // Fallback: Detect on current content
+
+                    // Fallback: Detect on current content via API
                     if (!content) content = await processPage(page, request.loadedUrl, log);
-                    
-                    // Use global instance (no forced method) to auto-detect
-                    domainFR.homepage = url; 
-                    const autoCheck = await domainFR.checkPageIfFrench(content, false); 
-                    
-                    if (autoCheck.ok) {
-                        methodOrError = manageFrenchDetectionMethod(targetDomain as string, autoCheck.method);
-                        log.info(`Auto-detected and saved method: ${autoCheck.method}`);
-                    } else {
-                        // Try URL check fallback
-                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                        if (checkUrl.ok) {
-                             methodOrError = manageFrenchDetectionMethod(targetDomain as string, checkUrl.method);
-                             log.info(`Auto-detected (URL) and saved method: ${checkUrl.method}`);
+
+                    // Challenge check on internal page content
+                    const internalChallenge1 = content ? detectChallengePage(content) : null;
+                    if (internalChallenge1) {
+                        const resolved = await waitForChallengeResolution(page, url, log, internalChallenge1);
+                        if (resolved) {
+                            content = resolved;
+                        } else {
+                            log.warning(`Challenge ${internalChallenge1} not resolved for internal page ${url}. Skipping.`);
+                            isEnqueuingLinks = false;
                         }
+                    }
+
+                    try {
+                        const autoCheck = await detectionClient.detect(url, content, {
+                            mode: "simple",
+                            proxyUrl: proxyUrl ?? undefined,
+                        });
+
+                        if (autoCheck.ok) {
+                            const primaryMethod = DetectionLangueClient.extractPrimaryMethod(autoCheck.method);
+                            if (primaryMethod) {
+                                methodOrError = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
+                                log.info(`Auto-detected and saved method: ${primaryMethod}`);
+                            }
+                        } else {
+                            // Try URL check fallback
+                            const checkUrlResult = await detectionClient.checkUrl(url);
+                            if (checkUrlResult.ok) {
+                                methodOrError = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
+                                log.info(`Auto-detected (URL) and saved method: ${checkUrlResult.method}`);
+                            }
+                        }
+                    } catch (apiError: any) {
+                        log.error(`Detection API error during auto-detection for ${url}: ${apiError.message}`);
                     }
                 }
 
@@ -296,18 +499,47 @@ router.addDefaultHandler(
                     isEnqueuingLinks = false;
                 } else {
                     frenchDetectionMethod = methodOrError as string;
-                    
-                    if (!content) content = await processPage(page, request.loadedUrl, log);
-                    const domainFRWithMethod = new DomainFR(url, frenchDetectionMethod);
-                    const checkPageIfFrench = await domainFRWithMethod.checkPageIfFrench(content, false);
 
-                    if (checkPageIfFrench["ok"]) {
-                        isEnqueuingLinks = true;
-                    } else {
-                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                        if (checkUrl["ok"] && checkUrl["method"] === frenchDetectionMethod) {
-                            isEnqueuingLinks = true;
+                    if (!content) content = await processPage(page, request.loadedUrl, log);
+
+                    // Challenge check on internal page content
+                    const internalChallenge2 = content ? detectChallengePage(content) : null;
+                    if (internalChallenge2) {
+                        const resolved = await waitForChallengeResolution(page, url, log, internalChallenge2);
+                        if (resolved) {
+                            content = resolved;
+                        } else {
+                            log.warning(`Challenge ${internalChallenge2} not resolved for internal page ${url}. Skipping.`);
+                            isEnqueuingLinks = false;
                         }
+                    }
+
+                    try {
+                        const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);
+
+                        // When stored method is URL-based or NLP-only, forced_method cannot
+                        // validate HTML tags → use NLP to verify actual content instead.
+                        // When stored method is HTML-based, use forced_method for fast validation.
+                        const detectResult = await detectionClient.detect(url, content, {
+                            forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
+                            mode: "simple",
+                            useNlpDetection: needsNlp,
+                            proxyUrl: proxyUrl ?? undefined,
+                        });
+
+                        if (detectResult.ok) {
+                            isEnqueuingLinks = true;
+                        } else if (!needsNlp) {
+                            // Fallback: URL-only check (no method match required).
+                            // The stored method describes how the *homepage* was detected,
+                            // not which URL patterns are valid for internal pages.
+                            const checkUrlResult = await detectionClient.checkUrl(url);
+                            if (checkUrlResult.ok) {
+                                isEnqueuingLinks = true;
+                            }
+                        }
+                    } catch (apiError: any) {
+                        log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
                     }
                 }
             }
@@ -340,6 +572,10 @@ router.addDefaultHandler(
                         }
                     }
                 }
+
+                // Track URLs with '?' and '#' for postNavigationHook limit checks
+                if (url.includes('?')) context.countQuestionMark++;
+                if (url.includes('#')) context.countDiez++;
 
                 await routerDefaultHandler(
                     request,
@@ -388,82 +624,16 @@ router.addDefaultHandler(
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
                         
-                        // List parameters always to remove
-                        const alwaysRemove = [
-                            // === CART & WISHLIST ===
-                            "add-to-cart", "add_to_cart", "addtocart",
-                            "add-to-compare", "add_to_compare",
-                            "add-to-wishlist", "add_to_wishlist", "addtowishlist",
-                            "remove_from_wishlist", "remove_wishlist",
-                            "remove_compare", "remove_item",
-                            "quantity", "qty",
+                        // ALWAYS_REMOVE_PARAMS is defined at module level to avoid
+                        // re-instantiation on every discovered link.
 
-                            // === TRACKING UTM (Marketing) ===
-                            "utm_source", "utm_medium", "utm_campaign",
-                            "utm_content", "utm_term", "utm_id",
-                            "utm_referrer", "utm_name",
+                        // Strip empty fragment (#) — "page#" and "page" are identical content
+                        if (request.url.endsWith('#')) {
+                            request.url = request.url.slice(0, -1);
+                        }
 
-                            // === FACEBOOK & META ===
-                            "fbclid", "fb_action_ids", "fb_action_types",
-                            "fb_source", "fb_ref",
-
-                            // === GOOGLE ADS & ANALYTICS ===
-                            "gclid", "gclsrc", "dclid",
-                            "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
-                            "_ga", "_gid", "_gat",
-
-                            // === HUBSPOT ===
-                            "hsa_acc", "hsa_cam", "hsa_grp",
-                            "hsa_ad", "hsa_src", "hsa_mt",
-                            "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
-                            "hsCtaTracking", "hsCta",
-
-                            // === MAILCHIMP ===
-                            "mc_cid", "mc_eid",
-
-                            // === SOCIAL MEDIA TRACKING ===
-                            "twclid", "li_fat_id", "msclkid",
-                            "igshid", "tt_medium", "tt_content",
-
-                            // === WORDPRESS ===
-                            "_wpnonce", "preview", "preview_id",
-                            "preview_nonce", "et_blog",
-
-                            // === PRESTASHOP ===
-                            "id_product", "id_category", "pid",
-                            "controller", "id_product_attribute",
-                            "isolang", "id_lang",
-
-                            // === SHOPIFY ===
-                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
-                            "pr_ref_pid", "pr_seq",
-                            "variant", "selling_plan",
-
-                            // === MAGENTO ===
-                            "SID", "___store", "___from_store",
-
-                            // === SESSION & TRACKING ===
-                            "sessionid", "session_id", "PHPSESSID",
-                            "sid", "s_id",
-                            "_gl", "ref", "referrer",
-
-                            // === AFFILIATE & MARKETING ===
-                            "aff_id", "affiliate", "partner",
-                            "coupon", "discount", "promo",
-                            "voucher",
-
-                            // === AUTRES TRACKING ===
-                            "click_id", "transaction_id",
-                            "source", "medium", "campaign",
-
-                            // === FILTRES SOUVENT INUTILES ===
-                            "view", "mode", "display",
-                            "timestamp", "random", "nocache",
-                            "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
-                        ];
-
-                        // Always strip the "Always Remove" list first
-                        request.url = processUrl(request.url, true, false, { toRemove: alwaysRemove });
+                        // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
+                        request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });
 
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
@@ -477,6 +647,25 @@ router.addDefaultHandler(
                                 skipDiez,
                                 parameters
                             );
+                        }
+
+                        // 2b. Session-based i18n: propagate language query param
+                        // When the homepage was detected via ?lang=fr (pattern_match_query),
+                        // internal URLs often don't carry that param. Append it so the server
+                        // serves French content instead of the default language.
+                        if (context.languageQueryParam) {
+                            try {
+                                const reqUrl = new URL(request.url);
+                                if (!reqUrl.searchParams.has(context.languageQueryParam.key)) {
+                                    reqUrl.searchParams.set(
+                                        context.languageQueryParam.key,
+                                        context.languageQueryParam.value
+                                    );
+                                    request.url = reqUrl.toString();
+                                }
+                            } catch {
+                                // Invalid URL — skip param injection
+                            }
                         }
 
                         // 3. Security Checks & Forbidden Params
@@ -501,13 +690,22 @@ router.addDefaultHandler(
                                 return false;
                             }
 
+                            // Download Route Checks (extension-less URLs that serve binary content)
+                            if (/\/(download|export|print|telecharger|telechargement)\//i.test(request.url)) {
+                                logBlocked('download-route', request.url);
+                                return false;
+                            }
+
                             if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
                                 logBlocked('base64-url', request.url);
                                 return false;
                             }
 
-                            // External Domain Check
-                            if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
+                            // External Domain Check: allow URLs matching either domain or site hostname
+                            const reqHost = reqUrlObj.hostname;
+                            const isReqInternal = (targetDomain && reqHost.includes(targetDomain))
+                                || (siteHostname && reqHost.includes(siteHostname));
+                            if (!isReqInternal) {
                                 logBlocked('external-domain', request.url);
                                 return false;
                             }
@@ -563,9 +761,9 @@ router.addDefaultHandler(
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (not_french)`);
                 }
 
+                if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
                 await dataset.pushData({ url, content });
-                await requestQueue.markRequestHandled(request);
             }
         } else {
             console.log(`Doublon url : ${url}`);

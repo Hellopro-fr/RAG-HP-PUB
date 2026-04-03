@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.milvus_lock import milvus_connection_lock
 from common_utils.database.Utils import Utils
 
 from pymilvus import (
@@ -27,6 +28,8 @@ class PrixModelConfig:
 
 
 class MilvusPrixProduitsCrud:
+    _CONNECTION_ALIAS = "milvus_prix_produits"
+
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -39,31 +42,45 @@ class MilvusPrixProduitsCrud:
             raise ValueError(
                 "Zilliz Cloud URI and Port and User and Password must be set in the environment."
             )
-        self.logger = kwargs.get("logger", logging)
+        self.logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
+        try:
+            connections.disconnect(self._CONNECTION_ALIAS)
+        except Exception:
+            pass
+        self.logger.debug("Connexion sur Zilliz cloud...")
         connections.connect(
-            "default",
+            self._CONNECTION_ALIAS,
             host=self.config.ZILLIZ_URI,
             port=self.config.ZILLIZ_PORT,
             user=self.config.ZILLIZ_USER,
             password=self.config.ZILLIZ_PASSWORD,
         )
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        self.logger.debug("Connexion sur Zilliz cloud avec succès.")
+
+    def _ensure_connected(self):
+        if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+            return
+        with milvus_connection_lock:
+            if self.collection is not None and connections.has_connection(self._CONNECTION_ALIAS):
+                return
+            self.collection = None
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(PrixModelConfig())
 
     def _get_or_create_collection(self, model_config: PrixModelConfig) -> Collection:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
-        if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
-            logging.warning(
-                f"[{model_key}] Collection déjà existante → suppression en cours : '{collection_name}'"
+        if utility.has_collection(collection_name, using=self._CONNECTION_ALIAS) and self.config.RECREATE_COLLECTIONS:
+            self.logger.warning(
+                f"[{model_key}] Collection déjà existante, suppression en cours : '{collection_name}'"
             )
-            utility.drop_collection(collection_name)
+            utility.drop_collection(collection_name, using=self._CONNECTION_ALIAS)
 
-        if not utility.has_collection(collection_name):
-            self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
+        if not utility.has_collection(collection_name, using=self._CONNECTION_ALIAS):
+            self.logger.debug(f"Collection '{collection_name}' non trouvée. Création...")
 
             # Définition du schéma pour la collection prix
             fields = [
@@ -91,7 +108,7 @@ class MilvusPrixProduitsCrud:
                     name="nom_categorie", dtype=DataType.VARCHAR, max_length=65535
                 ),
                 FieldSchema(name="date_prix", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="id_lead", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="id_lead", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="id_produit", dtype=DataType.VARCHAR, max_length=255),
                 FieldSchema(name="domaine", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(
@@ -120,7 +137,7 @@ class MilvusPrixProduitsCrud:
                     name="fournisseur", dtype=DataType.VARCHAR, max_length=65535
                 ),
                 FieldSchema(
-                    name="source_chunk_id", dtype=DataType.VARCHAR, max_length=255
+                    name="source_chunk_id", dtype=DataType.VARCHAR, max_length=65535
                 ),
                 # --- Champs chunking ---
                 FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=255),
@@ -162,7 +179,7 @@ class MilvusPrixProduitsCrud:
             )
             schema.add_function(bm25_function)
 
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            collection = Collection(collection_name, schema, consistency_level="Bounded", using=self._CONNECTION_ALIAS)
 
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
@@ -194,16 +211,16 @@ class MilvusPrixProduitsCrud:
                 field_name="id_produit", index_name="idx_id_produit"
             )
 
-            self.logger.info(f"[{model_key}] ✓ Index créés.")
+            self.logger.info(f"[{model_key}] Index créés.")
         else:
-            self.logger.info(
+            self.logger.debug(
                 f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
             )
-            collection = Collection(collection_name)
+            collection = Collection(collection_name, using=self._CONNECTION_ALIAS)
 
         collection.load()
-        self.logger.info(
-            f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête."
+        self.logger.debug(
+            f"[{model_key}] Collection '{collection_name}' chargée et prête."
         )
         return collection
 
@@ -212,8 +229,7 @@ class MilvusPrixProduitsCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not datas or self.collection is None:
                 return {
@@ -253,10 +269,10 @@ class MilvusPrixProduitsCrud:
 
             result = self.collection.insert(sanitized_batch)
 
-            self.logger.info(f"Résultat insertion : {result}")
-            self.logger.info(f"Clé primaire : {result.primary_keys}")
+            self.logger.debug(f"Résultat insertion : {result}")
+            self.logger.debug(f"Clé primaire : {result.primary_keys}")
 
-            self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
+            self.logger.info(f"[{model_key}] Insertion terminée avec succès.")
 
             return {
                 "ids": (
@@ -272,12 +288,14 @@ class MilvusPrixProduitsCrud:
                 f"[{model_key}][PrixProduits] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {datas}")
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][PrixProduits] insertion de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {datas}")
+            self.collection = None
             raise
 
     def get_prix_produit(self, id_produit: int) -> Dict[str, Any]:
@@ -286,8 +304,7 @@ class MilvusPrixProduitsCrud:
         model_key = model_config.model_id
 
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            self._ensure_connected()
 
             if not self.collection:
                 return {
@@ -324,8 +341,9 @@ class MilvusPrixProduitsCrud:
                     "fournisseur",
                     "text",
                 ],
+                consistency_level="Bounded",
             )
-            self.logger.info(f"[{model_key}] ✓ Récupération terminée avec succès.")
+            self.logger.info(f"[{model_key}] Récupération terminée avec succès.")
 
             return {"status": "success", "data": result}
 
@@ -333,10 +351,12 @@ class MilvusPrixProduitsCrud:
             self.logger.error(
                 f"[{model_key}][PrixProduit] Erreur Milvus lors de la récupération : {e}"
             )
+            self.collection = None
             raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][PrixProduit] Erreur de Récupération du prix produit : {e}",
                 exc_info=True,
             )
+            self.collection = None
             raise

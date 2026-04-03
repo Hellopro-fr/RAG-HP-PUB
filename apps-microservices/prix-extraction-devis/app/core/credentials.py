@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
 
     # Prompt statique - Devis
-    PROMPT_ID: str = "73"
+    # PROMPT_ID: str = "119" #Briefing Prix - Prompt extraction prix devis pdf
+    PROMPT_ID: str = "121" #Briefing Prix - Prompt2 extraction prix devis pdf
 
     MILVUS_SOURCE: str = "pjechanges"  # Collection source dans Milvus
     MILVUS_PAGE_TYPE: str = "devis"
@@ -30,8 +31,7 @@ class Settings(BaseSettings):
     MILVUS_TOP_K: int = 1000
 
     # API HelloPro
-    # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev
-    HP_TOKEN: str = "GQr3DiVJGPIxO9o7mp5FNHXsk8Ak4fZ8x8X/732mVcUY9kyOhvo79EpFYM9GplusZO/54dvfTKZF5YNSpFNEGiRvyYZkKplusmftUpAJXoEXq45aVVSKxjpiiMzrrToEYplusziMjI3Megal" #prod
+    HP_TOKEN: str
 
     class Config:
         env_file = ".env"
