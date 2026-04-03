@@ -28,6 +28,7 @@ import {
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
+import { getCategorySelection } from "@/data/category-static-content";
 
 type ViewState = "selection" | "contact" | "modify-criteria" | "custom-need";
 
@@ -122,7 +123,9 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setEquivalenceCaracteristique,
     setOrphanedSelectedSuppliers,
     setCriteriaHaveChanged,
-    categoryId
+    categoryId,
+    categoryName,
+    categoryStats
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
@@ -484,12 +487,19 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                     </>
                   ) : (
                     <>
-                      Modifier ma sélection
+                      {(categoryId && getCategorySelection(categoryId)?.voirPlus) || `Voir plus de ${(categoryName || "produits").toLowerCase()}`}
                       <ChevronDown className="h-4 w-4" />
                     </>
                   )}
                 </button>
               </div>
+
+              {/* Bloc réassurance "Recommandé" */}
+              {categoryId && getCategorySelection(categoryId)?.recommandeReassurance && (
+                <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                  <span className="font-semibold text-foreground">Idéal</span> = {getCategorySelection(categoryId)!.recommandeReassurance.replace(/xx/g, String(categoryStats?.productsCount ?? ""))}
+                </div>
+              )}
             </div>
           )}
 
@@ -561,25 +571,33 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
       {viewState === "selection" && (
         <div className="border-t border-border bg-card/95 backdrop-blur-sm px-4 py-3 md:py-4 md:px-6">
           <div className="mx-auto max-w-7xl flex flex-col lg:flex-row items-stretch lg:items-center gap-2 md:gap-3 lg:justify-between">
-            {/* Primary CTA - on top for mobile */}
-            <button
-              disabled={selectedCount === 0}
-              onClick={() => {
-                setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
-                setViewState("contact");
-              }}
-              className={cn(
-                "order-1 lg:order-2 rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full lg:w-auto",
-                selectedCount > 0
-                  ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              )}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Send className="h-5 w-5" />
-                Recevoir {selectedCount} devis
+            {/* CTA group: mention + button */}
+            <div className="order-1 lg:order-2 flex flex-col lg:flex-row items-center gap-2 lg:gap-3 w-full lg:w-auto">
+              <span className="text-xs text-muted-foreground hidden lg:block">
+                ⏱️ 1er retour sous 1 heure
               </span>
-            </button>
+              <button
+                disabled={selectedCount === 0}
+                onClick={() => {
+                  setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
+                  setViewState("contact");
+                }}
+                className={cn(
+                  "rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full lg:w-auto",
+                  selectedCount > 0
+                    ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                )}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <Send className="h-5 w-5" />
+                  Recevoir {selectedCount} devis
+                </span>
+              </button>
+              <span className="text-xs text-muted-foreground lg:hidden">
+                ⏱️ 1er retour sous 1 heure
+              </span>
+            </div>
 
             {/* Secondary actions */}
             <div className="order-2 lg:order-1 flex flex-wrap items-center gap-2 md:gap-3">
