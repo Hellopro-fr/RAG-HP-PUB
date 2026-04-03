@@ -10,48 +10,69 @@ import (
 
 // ── search_calls ─────────────────────────────────────────────────────────────
 
-const searchCallsDescription = "Search and list calls/meetings from Leexi. Supports optional date range filtering and pagination."
+const searchCallsDescription = "Search and list calls/meetings from Leexi. Supports date range filtering, sorting, owner filtering, and pagination."
 const searchCallsInputSchema = `{
 	"type": "object",
 	"properties": {
-		"start_date": {
+		"from": {
 			"type": "string",
-			"description": "Filter calls starting from this date (ISO 8601, e.g. 2026-04-01)"
+			"description": "Start date filter (ISO 8601, e.g. 2026-04-01T00:00:00.000Z)"
 		},
-		"end_date": {
+		"to": {
 			"type": "string",
-			"description": "Filter calls up to this date (ISO 8601, e.g. 2026-04-03)"
+			"description": "End date filter (ISO 8601, e.g. 2026-04-03T23:59:59.000Z)"
+		},
+		"order": {
+			"type": "string",
+			"description": "Sort order for results",
+			"enum": ["created_at desc", "created_at asc", "performed_at desc", "performed_at asc", "updated_at desc", "updated_at asc"],
+			"default": "created_at desc"
+		},
+		"owner_uuid": {
+			"type": "string",
+			"description": "Filter by call owner UUID"
+		},
+		"with_simple_transcript": {
+			"type": "boolean",
+			"description": "Include transcript text in list results (default: false)",
+			"default": false
 		},
 		"page": {
 			"type": "integer",
 			"description": "Page number for pagination (default: 1)",
 			"default": 1
 		},
-		"per_page": {
+		"items": {
 			"type": "integer",
-			"description": "Number of results per page (default: 25)",
-			"default": 25
+			"description": "Number of results per page (1-100, default: 10)",
+			"default": 10
 		}
 	}
 }`
 
 func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
-	startDate, _ := args["start_date"].(string)
-	endDate, _ := args["end_date"].(string)
+	from, _ := args["from"].(string)
+	to, _ := args["to"].(string)
+	order, _ := args["order"].(string)
+	ownerUUID, _ := args["owner_uuid"].(string)
+	withTranscript := false
+	if v, ok := args["with_simple_transcript"].(bool); ok {
+		withTranscript = v
+	}
 	page := 1
 	if v, ok := args["page"]; ok {
 		if f, ok := v.(float64); ok {
 			page = int(f)
 		}
 	}
-	perPage := 25
-	if v, ok := args["per_page"]; ok {
+	items := 10
+	if v, ok := args["items"]; ok {
 		if f, ok := v.(float64); ok {
-			perPage = int(f)
+			items = int(f)
 		}
 	}
 
-	data, err := clients.Leexi.SearchCalls(ctx, startDate, endDate, page, perPage)
+	data, err := clients.Leexi.SearchCalls(ctx, from, to, order, ownerUUID, withTranscript, page, items)
 	if err != nil {
 		return nil, fmt.Errorf("SearchCalls: %w", err)
 	}
@@ -60,7 +81,7 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 
 // ── get_call_transcript ──────────────────────────────────────────────────────
 
-const getCallTranscriptDescription = "Get the full transcript of a call or meeting by UUID. Returns paragraph-level and word-level timestamped transcription."
+const getCallTranscriptDescription = "Get the full transcript of a call or meeting by UUID. Returns paragraph-level and word-level timestamped transcription with speaker attribution."
 const getCallTranscriptInputSchema = `{
 	"type": "object",
 	"properties": {
@@ -90,7 +111,7 @@ func handleGetCallTranscript(ctx context.Context, clients *Clients, args map[str
 	}
 
 	transcript := map[string]json.RawMessage{}
-	for _, key := range []string{"uuid", "title", "transcript", "simple_transcript", "topics"} {
+	for _, key := range []string{"uuid", "title", "transcript", "simple_transcript", "call_topics", "speakers", "duration"} {
 		if v, exists := full[key]; exists {
 			transcript[key] = v
 		}
@@ -105,7 +126,7 @@ func handleGetCallTranscript(ctx context.Context, clients *Clients, args map[str
 
 // ── get_call_summary ─────────────────────────────────────────────────────────
 
-const getCallSummaryDescription = "Get the AI-generated summary of a call or meeting by UUID. Includes summary, chaptering, and key topics."
+const getCallSummaryDescription = "Get the AI-generated summary of a call or meeting by UUID. Includes AI prompts/completions, chapters, and key topics."
 const getCallSummaryInputSchema = `{
 	"type": "object",
 	"properties": {
@@ -135,7 +156,7 @@ func handleGetCallSummary(ctx context.Context, clients *Clients, args map[string
 	}
 
 	summary := map[string]json.RawMessage{}
-	for _, key := range []string{"uuid", "title", "summary", "chaptering", "topics", "duration", "started_at"} {
+	for _, key := range []string{"uuid", "title", "prompts", "chapters", "call_topics", "duration", "performed_at", "speakers"} {
 		if v, exists := full[key]; exists {
 			summary[key] = v
 		}

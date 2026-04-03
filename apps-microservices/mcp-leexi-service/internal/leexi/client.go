@@ -63,32 +63,45 @@ func (c *Client) doGet(ctx context.Context, path string) (json.RawMessage, error
 }
 
 // ListCalls retrieves a paginated list of calls and meetings.
-// Leexi API: GET /calls?page={page}&per_page={perPage}
-func (c *Client) ListCalls(ctx context.Context, page, perPage int) (json.RawMessage, error) {
+// Leexi API: GET /calls?page={page}&items={items}
+func (c *Client) ListCalls(ctx context.Context, page, items int) (json.RawMessage, error) {
 	q := url.Values{}
 	q.Set("page", strconv.Itoa(page))
-	q.Set("per_page", strconv.Itoa(perPage))
+	q.Set("items", strconv.Itoa(items))
 	return c.doGet(ctx, "/calls?"+q.Encode())
 }
 
-// SearchCalls retrieves calls filtered by optional date range and pagination.
+// SearchCalls retrieves calls filtered by optional date range, ordering, and pagination.
 // Leexi API: GET /calls with query params.
-func (c *Client) SearchCalls(ctx context.Context, startDate, endDate string, page, perPage int) (json.RawMessage, error) {
+// from/to: ISO 8601 dates (e.g. "2026-04-01T00:00:00.000Z").
+// order: sorting (e.g. "created_at desc", "performed_at asc").
+// ownerUUID: filter by call owner.
+// withTranscript: include simple_transcript in list response.
+func (c *Client) SearchCalls(ctx context.Context, from, to, order, ownerUUID string, withTranscript bool, page, items int) (json.RawMessage, error) {
 	q := url.Values{}
 	q.Set("page", strconv.Itoa(page))
-	q.Set("per_page", strconv.Itoa(perPage))
-	if startDate != "" {
-		q.Set("start_date", startDate)
+	q.Set("items", strconv.Itoa(items))
+	if from != "" {
+		q.Set("from", from)
 	}
-	if endDate != "" {
-		q.Set("end_date", endDate)
+	if to != "" {
+		q.Set("to", to)
+	}
+	if order != "" {
+		q.Set("order", order)
+	}
+	if ownerUUID != "" {
+		q.Set("owner_uuid[]", ownerUUID)
+	}
+	if withTranscript {
+		q.Set("with_simple_transcript", "true")
 	}
 	return c.doGet(ctx, "/calls?"+q.Encode())
 }
 
 // GetCall retrieves full details of a call/meeting by UUID.
 // The response includes transcript (word-level + paragraph-level timestamps),
-// topics, and summary.
+// call_topics, prompts (AI summaries), and chapters.
 // Leexi API: GET /calls/{uuid}
 func (c *Client) GetCall(ctx context.Context, callUUID string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/calls/%s", callUUID)

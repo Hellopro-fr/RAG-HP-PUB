@@ -6,7 +6,7 @@ Custom MCP server exposing Leexi call transcription, search, and summary as MCP 
 
 - **Language:** Go 1.24
 - **Protocol:** MCP v2025-03-26 (JSON-RPC 2.0 over SSE + Streamable HTTP)
-- **Backend communication:** Leexi public REST API (`https://app.leexi.ai/api/v1`)
+- **Backend communication:** Leexi public REST API (`https://public-api.leexi.ai/v1`)
 - **Authentication:** HTTP Basic Auth (API Key ID + Key Secret, base64-encoded)
 - **Dependencies:** Go stdlib only (no external deps)
 
@@ -69,7 +69,7 @@ mcp-leexi-service/
 | `MCP_SERVICE_VERSION` | 0.1.0 | Service version |
 | `LEEXI_API_KEY_ID` | — | Leexi API Key ID (required) |
 | `LEEXI_API_KEY_SECRET` | — | Leexi API Key Secret (required) |
-| `LEEXI_API_BASE_URL` | `https://app.leexi.ai/api/v1` | Leexi API base URL |
+| `LEEXI_API_BASE_URL` | `https://public-api.leexi.ai/v1` | Leexi API base URL |
 
 ## Prerequisites
 

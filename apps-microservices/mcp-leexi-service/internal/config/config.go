@@ -20,7 +20,7 @@ func Load() *Config {
 
 		LeexiAPIKeyID:     getEnv("LEEXI_API_KEY_ID", ""),
 		LeexiAPIKeySecret: getEnv("LEEXI_API_KEY_SECRET", ""),
-		LeexiAPIBaseURL:   getEnv("LEEXI_API_BASE_URL", "https://app.leexi.ai/api/v1"),
+		LeexiAPIBaseURL:   getEnv("LEEXI_API_BASE_URL", "https://public-api.leexi.ai/v1"),
 	}
 }
 

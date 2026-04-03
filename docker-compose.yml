@@ -2204,7 +2204,7 @@ services:
     environment:
       - LEEXI_API_KEY_ID=${LEEXI_API_KEY_ID}
       - LEEXI_API_KEY_SECRET=${LEEXI_API_KEY_SECRET}
-      - LEEXI_API_BASE_URL=${LEEXI_API_BASE_URL:-https://app.leexi.ai/api/v1}
+      - LEEXI_API_BASE_URL=${LEEXI_API_BASE_URL:-https://public-api.leexi.ai/v1}
       - MCP_PORT=8589
     networks:
       - services-net
