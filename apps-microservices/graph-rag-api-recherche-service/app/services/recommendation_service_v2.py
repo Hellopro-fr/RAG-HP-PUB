@@ -35,6 +35,8 @@ WHERE pc.id_source_caracteristique IN $all_cids
 WITH p, collect({id_source_caracteristique: pc.id_source_caracteristique, id_source_valeur: pc.id_source_valeur, valeur: pc.valeur, valeur_canonique: pc.valeur_canonique, valeur_min_canonique: pc.valeur_min_canonique, valeur_max_canonique: pc.valeur_max_canonique, unite_canonique: pc.unite_canonique, type_donnee: pc.type_donnee, unite: pc.unite, valeur_min: pc.valeur_min, valeur_max: pc.valeur_max}) AS all_chars
 WHERE size(apoc.coll.toSet([c IN all_chars | c.id_source_caracteristique])) >= $min_matching_cids
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
+WITH p, all_chars, f
+WHERE f IS NULL OR f.id_affichage <> "4"
 RETURN p { .id_produit } AS product_data,
        all_chars,
        {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
@@ -47,6 +49,8 @@ OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
 WHERE pc.id_source_caracteristique IN $all_cids
 WITH p, collect({id_source_caracteristique: pc.id_source_caracteristique, id_source_valeur: pc.id_source_valeur, valeur: pc.valeur, valeur_canonique: pc.valeur_canonique, valeur_min_canonique: pc.valeur_min_canonique, valeur_max_canonique: pc.valeur_max_canonique, unite_canonique: pc.unite_canonique, type_donnee: pc.type_donnee, unite: pc.unite, valeur_min: pc.valeur_min, valeur_max: pc.valeur_max}) AS all_chars
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
+WITH p, all_chars, f
+WHERE f IS NULL OR f.id_affichage <> "4"
 RETURN p { .id_produit } AS product_data,
        all_chars,
        {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc
@@ -59,6 +63,8 @@ OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
 WHERE pc.id_source_caracteristique IN $all_cids
 WITH p, collect({id_source_caracteristique: pc.id_source_caracteristique, id_source_valeur: pc.id_source_valeur, valeur: pc.valeur, valeur_canonique: pc.valeur_canonique, valeur_min_canonique: pc.valeur_min_canonique, valeur_max_canonique: pc.valeur_max_canonique, unite_canonique: pc.unite_canonique, type_donnee: pc.type_donnee, unite: pc.unite, valeur_min: pc.valeur_min, valeur_max: pc.valeur_max}) AS all_chars
 OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
+WITH p, all_chars, f
+WHERE f IS NULL OR f.id_affichage <> "4"
 RETURN p PROJECTION_PLACEHOLDER AS product_data,
        all_chars,
        {id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie, id_fournisseur: f.id_fournisseur} AS info_soc

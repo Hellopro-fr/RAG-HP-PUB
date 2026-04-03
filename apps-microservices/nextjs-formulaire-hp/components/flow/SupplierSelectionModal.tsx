@@ -124,7 +124,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setOrphanedSelectedSuppliers,
     setCriteriaHaveChanged,
     categoryId,
-    categoryName
+    categoryName,
+    categoryStats
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
@@ -496,7 +497,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
               {/* Bloc réassurance "Recommandé" */}
               {categoryId && getCategorySelection(categoryId)?.recommandeReassurance && (
                 <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">Idéal</span> = {getCategorySelection(categoryId)!.recommandeReassurance}
+                  <span className="font-semibold text-foreground">Idéal</span> = {getCategorySelection(categoryId)!.recommandeReassurance.replace(/xx/g, String(categoryStats?.productsCount ?? ""))}
                 </div>
               )}
             </div>
