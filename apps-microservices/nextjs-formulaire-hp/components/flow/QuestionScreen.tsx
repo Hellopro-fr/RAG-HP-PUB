@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Info, Check, Package, Users } from "lucide-react
 import { cn } from "@/lib/utils";
 import type { Question } from "@/types";
 import { useFlowStore } from "@/lib/stores/flow-store";
+import { getCategoryQuestion } from "@/data/category-static-content";
 
 interface QuestionScreenProps {
   question: Question;
@@ -33,7 +34,7 @@ const QuestionScreen = ({
   isFirst,
   isLast,
 }: QuestionScreenProps) => {
-  const { categoryName, categoryStats } = useFlowStore();
+  const { categoryName, categoryStats, categoryId } = useFlowStore();
   const [showJustification, setShowJustification] = useState(false);
 
   // Animation slide-fade : exit vers la gauche, enter depuis la droite
@@ -62,8 +63,14 @@ const QuestionScreen = ({
   }, [currentIndex, question]);
 
   // Stats avec fallback sur valeurs statiques
-  const productsCount = categoryStats?.productsCount ?? 347;
-  const suppliersCount = categoryStats?.suppliersCount ?? 24;
+  const productsCount = categoryStats?.productsCount ?? 1400;
+  const suppliersCount = categoryStats?.suppliersCount ?? 43;
+
+  // Texte réassurance depuis categoryStaticContent si disponible
+  const staticContent = categoryId ? getCategoryQuestion(categoryId) : undefined;
+  const reassuranceText = staticContent?.reassurance
+    ? staticContent.reassurance.replace('xx', String(productsCount)).replace('zz', String(suppliersCount))
+    : `${productsCount} modèles de ${categoryName || "produits"} comparés chez ${suppliersCount} vendeurs`;
 
   // Utiliser displayedQuestion pour le rendu (suit l'animation exit/enter)
   const showOtherOption = displayedQuestion.id === 3;
@@ -274,7 +281,7 @@ const QuestionScreen = ({
                 À la fin de ce questionnaire → <span className="font-semibold text-primary">💰 Estimation de prix</span> + <span className="font-semibold text-primary">📦 Produits adaptés à votre besoin</span>
               </p>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                1 400 modèles de {categoryName || "produits"} comparés chez 43 vendeurs
+                {reassuranceText}
               </p>
             </div>
           </div>
@@ -284,7 +291,7 @@ const QuestionScreen = ({
 
       {/* Mobile sticky footer with reassurance */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-       
+
 
         {/* Nouvelle réassurance mobile */}
         <div className="px-4 py-2 border-b border-border/50 text-center">
@@ -292,7 +299,7 @@ const QuestionScreen = ({
             À la fin → <span className="font-semibold text-primary">💰 Estimation de prix</span> + <span className="font-semibold text-primary">📦 Produits adaptés</span>
           </p>
           <p className="mt-1 text-[10px] text-muted-foreground">
-            1 400 modèles de {categoryName || "produits"} comparés chez 43 vendeurs
+            {reassuranceText}
           </p>
         </div>
         

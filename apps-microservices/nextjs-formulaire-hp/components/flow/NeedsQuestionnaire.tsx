@@ -51,8 +51,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
         {/* Header simplifié — logo seul */}
         <div className="px-4 py-2.5 sm:px-6 border-b border-border">
           <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
-        </div>
-        <QuestionnaireProgressBar categoryName="" currentIndex={0} totalQuestions={1} />
+        </div>        
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4">
             <p className="text-destructive">Identifiant de catégorie manquant</p>
@@ -214,8 +213,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
         {/* Header simplifié — logo seul */}
         <div className="px-4 py-2.5 sm:px-6 border-b border-border">
           <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
-        </div>
-        <QuestionnaireProgressBar categoryName={categoryName || ""} currentIndex={0} totalQuestions={1} />
+        </div>       
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
@@ -237,8 +235,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
           {/* Header simplifié — logo seul */}
         <div className="px-4 py-2.5 sm:px-6 border-b border-border">
           <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
-        </div>
-          <QuestionnaireProgressBar categoryName={categoryName || ""} currentIndex={0} totalQuestions={1} />
+        </div>         
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-4">
               <p className="text-destructive">Erreur lors du chargement des questions</p>
@@ -265,8 +262,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
           {/* Header simplifié — logo seul */}
         <div className="px-4 py-2.5 sm:px-6 border-b border-border">
           <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
-        </div>
-          <QuestionnaireProgressBar categoryName={categoryName || ""} currentIndex={0} totalQuestions={1} />
+        </div>          
           <div className="flex-1 flex items-center justify-center">
             <p className="text-muted-foreground">Aucune question disponible</p>
           </div>

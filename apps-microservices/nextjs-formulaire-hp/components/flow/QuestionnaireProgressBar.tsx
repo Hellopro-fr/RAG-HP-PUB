@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { getAssetPath } from "@/lib/utils";
+import { useFlowStore } from "@/lib/stores/flow-store";
+import { getCategoryQuestion } from "@/data/category-static-content";
 
 // TODO: remplacer par l'image réelle de la catégorie quand l'API la fournira
 const categoryPlaceholder = getAssetPath("/images/product-lift-1.jpg");
@@ -13,6 +15,12 @@ interface QuestionnaireProgressBarProps {
 }
 
 const QuestionnaireProgressBar = ({ categoryName, currentIndex, totalQuestions }: QuestionnaireProgressBarProps) => {
+  const { categoryId } = useFlowStore();
+
+  // Texte header depuis categoryStaticContent si disponible, sinon fallback générique
+  const staticContent = categoryId ? getCategoryQuestion(categoryId) : undefined;
+  const headerText = staticContent?.header || `1 minute pour trouver votre ${(categoryName || "produit").toLowerCase()}`;
+
   // Q1 (index 0) → 0%, Q2 (index 1) → (1/total)*100, ... Qn → ((n-1)/total)*100
   const progressPercent = totalQuestions > 0 ? (currentIndex / totalQuestions) * 100 : 0;
 
@@ -29,7 +37,7 @@ const QuestionnaireProgressBar = ({ categoryName, currentIndex, totalQuestions }
         <div className="flex-1 min-w-0">
           <div>
             <span className="text-base font-semibold text-foreground">
-              1 minute pour trouver votre {categoryName || "produit"}
+              {headerText}
             </span>
           </div>
           <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
