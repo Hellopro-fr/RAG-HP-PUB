@@ -23,12 +23,12 @@ Dead Letter Queue manager for browsing, searching, and requeuing failed messages
 ### Backend (`backend/`)
 | Action | Command |
 |--------|---------|
-| Run | `uvicorn main:app --host 0.0.0.0 --port 8560` |
+| Run | `uvicorn main:app --host 0.0.0.0 --port 8560` (container) / accessible on host port **8585** |
 | Deps | `pip install -r requirements.txt` |
 
 ## Docker
 
-- Port: **8560**
+- Port: **8585** (host) / **8560** (container)
 - Frontend built as static export, served by FastAPI `StaticFiles`
 - Backend runs Uvicorn with FastAPI
 
@@ -51,6 +51,7 @@ frontend/
       MessageList.tsx
       MessageDetailModal.tsx
       SearchPage.tsx
+      UniqueErrorsModal.tsx
       RulesPage.tsx
       CreateRuleModal.tsx
       Sidebar.tsx
@@ -67,6 +68,7 @@ frontend/
 - `POST /api/requeue-bulk` -- Bulk requeue messages
 - `POST /api/update-status-bulk` -- Bulk update status
 - `POST /api/archive-by-filter` -- Archive messages by filter
+- `POST /api/messages/unique-errors` -- Get unique (service_name, error_reason) combos matching filters
 
 ## Conventions
 

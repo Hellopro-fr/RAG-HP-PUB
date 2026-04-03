@@ -43,8 +43,12 @@ nettoyage-bruit-ocr-service/
 - Removes 5 categories: legal mentions, contractual clauses, disclaimers, regulatory notes, marketing slogans.
 - Non-French content returns empty string (filtered out).
 - Uses `enable_thinking=True` for LLM calls (max 64K output tokens).
-- ACK-first strategy: messages acknowledged before processing (at-most-once delivery).
+- ACK-after strategy: messages acknowledged AFTER successful processing or DLQ routing (at-least-once delivery).
 - Channel keep-alive task runs every 30s to prevent timeout on long LLM calls.
+- DLQ sends the correct individual message body (not hardcoded `batch_bodies[0]`).
+- Reconnection loop restored in `main.py` (was commented out).
+- Docker: non-root user, `--no-cache-dir`, `.dockerignore`.
+- Structured logging via `common_utils.logging.setup_logging()` (no `print()`).
 
 ## Dependencies on Other Services
 

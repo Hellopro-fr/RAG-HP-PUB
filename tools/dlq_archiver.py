@@ -1,19 +1,16 @@
 import pika
 import os
 import json
+import copy
 import time
 import hashlib
-from datetime import datetime
-from elasticsearch import Elasticsearch, helpers
+from datetime import datetime, timezone
+from elasticsearch import helpers
 from es_mapping import INDEX_MAPPING
+from connections import get_rabbitmq_connection, get_elasticsearch_client
 
 # --- Configuration ---
-RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 DLQ_QUEUES_STR = os.environ.get("DLQ_QUEUES", "embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq")
-# TIER 2: Read Elasticsearch connection details from environment
-ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
-ES_USERNAME = os.environ.get("ES_USERNAME")
-ES_PASSWORD = os.environ.get("ES_PASSWORD")
 
 ELASTIC_INDEX_NAME = "failed_messages_archive"
 BATCH_SIZE = 50
@@ -30,41 +27,12 @@ class DLQArchiver:
 
     def connect(self):
         """Establishes and re-establishes connections to RabbitMQ and Elasticsearch."""
-        # Connect to RabbitMQ
-        for i in range(10):
-            try:
-                self.rabbit_conn = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
-                self.channel = self.rabbit_conn.channel()
-                print("✅ DLQ Archiver: Connecté à RabbitMQ.")
-                break
-            except pika.exceptions.AMQPConnectionError:
-                print(f"⏳ DLQ Archiver: En attente de RabbitMQ... {i+1}s")
-                time.sleep(i + 1)
-        if not self.rabbit_conn or self.rabbit_conn.is_closed:
-            raise ConnectionError("❌ DLQ Archiver: Impossible de se connecter à RabbitMQ après plusieurs tentatives.")
+        # Invalidate stale delivery tags from previous channel before reconnecting
+        self.documents_buffer.clear()
 
-        # Connect to Elasticsearch
-        for i in range(10):
-            try:
-                # TIER 2: Use credentials for Elasticsearch connection if provided
-                if ES_USERNAME and ES_PASSWORD:
-                    self.es_client = Elasticsearch(
-                        ELASTICSEARCH_URL,
-                        basic_auth=(ES_USERNAME, ES_PASSWORD)
-                    )
-                else:
-                    self.es_client = Elasticsearch(ELASTICSEARCH_URL)
-
-                if self.es_client.ping():
-                    print("✅ DLQ Archiver: Connecté à Elasticsearch.")
-                    break
-                else:
-                    raise ConnectionError("Ping Elasticsearch a échoué.")
-            except Exception as e:
-                print(f"⏳ DLQ Archiver: En attente d'Elasticsearch... {i+1}s ({e})")
-                time.sleep(i + 1)
-        if not self.es_client:
-            raise ConnectionError("❌ DLQ Archiver: Impossible de se connecter à Elasticsearch.")
+        self.rabbit_conn = get_rabbitmq_connection(retries=10)
+        self.channel = self.rabbit_conn.channel()
+        self.es_client = get_elasticsearch_client(retries=10)
 
     def setup_queues(self):
         """Declares queues and sets up consumers."""
@@ -88,37 +56,42 @@ class DLQArchiver:
         doc = self._process_message_to_doc(body, properties)
         self.documents_buffer.append((method.delivery_tag, doc))
 
-    def _extract_and_sanitize_embeddings(self, obj, path="", embeddings_dict=None):
+    MAX_RECURSION_DEPTH = 50
+
+    def _extract_and_sanitize_embeddings(self, obj, path="", embeddings_dict=None, depth=0):
         """
         Recursively finds 'embedding' keys, extracts them into a dictionary with their JSON paths,
-        and replaces them with placeholders in the original object.
-        
+        and replaces them with placeholders in a deep copy of the original object.
+
         Args:
             obj: The object to process (dict, list, or primitive)
             path: Current JSON path (e.g., "data.chunks.0")
             embeddings_dict: Dictionary to store extracted embeddings {path: embedding_array}
-        
+            depth: Current recursion depth (safety limit)
+
         Returns:
             The sanitized object with embeddings replaced by placeholders
         """
         if embeddings_dict is None:
             embeddings_dict = {}
-        
+
+        if depth > self.MAX_RECURSION_DEPTH:
+            return obj, embeddings_dict
+
         if isinstance(obj, dict):
             for key in list(obj.keys()):
                 current_path = f"{path}.{key}" if path else key
                 if key == 'embedding' and isinstance(obj[key], list):
-                    # Extract the embedding before replacing
                     vector_len = len(obj[key])
                     embeddings_dict[current_path] = obj[key]
                     obj[key] = f"Vector of size {vector_len} (removed for archiving)"
                 else:
-                    self._extract_and_sanitize_embeddings(obj[key], current_path, embeddings_dict)
+                    self._extract_and_sanitize_embeddings(obj[key], current_path, embeddings_dict, depth + 1)
         elif isinstance(obj, list):
             for idx, item in enumerate(obj):
                 current_path = f"{path}.{idx}" if path else str(idx)
-                self._extract_and_sanitize_embeddings(item, current_path, embeddings_dict)
-        
+                self._extract_and_sanitize_embeddings(item, current_path, embeddings_dict, depth + 1)
+
         return obj, embeddings_dict
 
     def _process_message_to_doc(self, body, properties):
@@ -135,8 +108,8 @@ class DLQArchiver:
         except json.JSONDecodeError:
             original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
         
-        # Extract embeddings and sanitize the payload
-        sanitized_payload, embeddings_dict = self._extract_and_sanitize_embeddings(original_payload)
+        # Extract embeddings and sanitize a copy of the payload (avoid mutating the original)
+        sanitized_payload, embeddings_dict = self._extract_and_sanitize_embeddings(copy.deepcopy(original_payload))
         
         # Serialize embeddings to JSON string if any were found
         raw_embedding_data = json.dumps(embeddings_dict) if embeddings_dict else None
@@ -166,7 +139,7 @@ class DLQArchiver:
             safe_retry_count = 0
             
         source_doc = {
-            "@timestamp": datetime.utcnow().isoformat(),
+            "@timestamp": datetime.now(timezone.utc).isoformat(),
             "service_name": str(service_name or "N/A"),
             "error_reason": str(error_reason or "Raison inconnue"),
             "retry_count": safe_retry_count,
@@ -298,6 +271,7 @@ class DLQArchiver:
 
             except (pika.exceptions.StreamLostError, pika.exceptions.AMQPConnectionError):
                 print("🔴 Connexion RabbitMQ perdue. Tentative de reconnexion...")
+                # connect() clears the buffer (stale delivery tags are invalid on new channel)
                 self.connect()
                 self.setup_queues()
             except KeyboardInterrupt:
@@ -306,6 +280,7 @@ class DLQArchiver:
             except Exception as e:
                 print(f"❌ Erreur inattendue dans la boucle principale: {e}. Tentative de reconnexion...")
                 time.sleep(5)
+                # connect() clears the buffer (stale delivery tags are invalid on new channel)
                 self.connect()
                 self.setup_queues()
 

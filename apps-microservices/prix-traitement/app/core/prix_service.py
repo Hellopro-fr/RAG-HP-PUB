@@ -492,7 +492,8 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # Joindre tous les chunks avec un séparateur
         all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
 
-        logger.info(f"[{id_categorie}] {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars) {all_chunks_text[:100]}")
+        logger.info(f"[{id_categorie}] chunks formatés ({len(all_chunks_text)} chars)")
+        logger.info(f"[{id_categorie}] all chunk : {all_chunks_text}")
 
         prompt_text = prompt_config.get("contenu_prompt", "")        
         
@@ -516,7 +517,8 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
 
         # Utiliser GeminiProvider
         gemini = GeminiProvider(
-            model=gemini_model
+            model=gemini_model,
+            thinking_level="low"
         )
         
         llm_result = await gemini.chat(final_prompt)

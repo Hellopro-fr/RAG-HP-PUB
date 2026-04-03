@@ -67,7 +67,7 @@ class CrawlRequest(BaseModel):
     proxy_apify: Optional[str] = Field(None, description="Apify proxy key.", alias="proxyapify")
     bypass_question_mark: Optional[bool] = Field(False, description="Bypass '?' filter", alias="bypassquestionmark")
     bypass_diez: Optional[bool] = Field(False, description="Bypass '#' filter", alias="bypassdiez")
-    break_limit: Optional[bool] = Field(False, description="Enable 5000 URLs limit.", alias="breaklimit")
+    break_limit: Optional[bool] = Field(True, description="Bypass the 5000 URLs crawl limit.", alias="breaklimit")
     per_crawl: Optional[int] = Field(0, description="URLs per job.", example=1000, alias="percrawl")
     per_minute: Optional[int] = Field(100, description="Speed limit.", example=100, alias="perminute")
     

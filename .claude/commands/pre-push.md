@@ -7,26 +7,35 @@ Run this checklist before pushing code to the remote repository.
 For EACH service that was modified in the current session:
 
 ### Step 1 — Identify changed files
-Run `git diff --name-only HEAD` to find all modified files.
+Run `git diff --name-only origin/main...HEAD` to find all files changed in the current branch.
 Group them by service directory.
 
 ### Step 2 — Per-service checks
 
-For each affected service:
+Detect each service's stack per `.claude/rules/stack-detection.md`, then run the appropriate checks:
 
-**Python services:**
+**Python** (detected by `requirements.txt` or `pyproject.toml`):
 1. Check syntax: `python -m py_compile <modified_files>`
 2. Check imports: verify no circular imports, no unused imports visible
 3. Run tests if they exist: `pytest apps-microservices/<service>/tests/ -v --tb=short -x`
 4. If no tests exist, flag: "⚠️ No tests found for <service>. Consider using @test-writer."
 
-**Rust services:**
+**Rust** (detected by `Cargo.toml`):
 1. `cargo check --manifest-path apps-microservices/<service>/Cargo.toml`
 2. `cargo test --manifest-path apps-microservices/<service>/Cargo.toml` (if tests exist)
 
-**TypeScript/Node.js services:**
+**Node.js / TypeScript** (detected by `package.json`):
 1. Check if lint script exists in package.json, run it
 2. Check if test script exists in package.json, run it
+
+**Go** (detected by `go.mod`):
+1. `go vet ./...` from the service directory
+2. `go test ./...` (if tests exist)
+
+**Unknown stack** (no recognized indicator file):
+1. Look for a `Makefile`, `justfile`, or `taskfile` — run `make check` or `make test` if available.
+2. Look for a `tests/` or `test/` directory — attempt to infer and run the test framework.
+3. Flag: "⚠️ Unknown stack for <service>. Manual verification recommended."
 
 **Shared libraries (libs/):**
 1. Check syntax and imports
@@ -34,7 +43,8 @@ For each affected service:
 3. Flag: "⚠️ Changes to libs/ affect multiple services. Review downstream impact."
 
 ### Step 3 — Code review
-Run `@code-reviewer` on all changed files.
+Review all changed files for SOLID/DRY/KISS violations, security issues, and performance concerns.
+Note: This step is a manual review by the main agent — do NOT delegate to `@code-reviewer` (it lacks Bash access needed for this workflow context).
 
 ### Step 4 — Summary
 Display a summary table:

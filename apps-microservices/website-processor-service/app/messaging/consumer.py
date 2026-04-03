@@ -4,6 +4,8 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+logger = logging.getLogger(__name__)
+
 from website_processor_service.messaging.publisher import Publisher
 from website_processor_service.core.processor import process_website_data_for_embedding
 from website_processor_service.core.exceptions import BatchProcessingError
@@ -19,7 +21,8 @@ class Consumer:
         self.connection = connection
         self.publisher = publisher
         self.executor = ThreadPoolExecutor()
-        
+        self._background_tasks = set()
+
         self.exchange_name = 'data_exchange_siteweb'
         self.routing_key = 'new_data.website'
         self.queue_name = 'website_processing_queue'
@@ -28,7 +31,7 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
-        logging.info("✅ Consumer initialisé.")
+        logger.info("✅ Consumer initialisé.")
 
     async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
         dlx = await channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -67,7 +70,7 @@ class Consumer:
         if not website_data or not website_data.get('text'):
             raise ValueError("Données invalides (contenu vide ou 'text' manquant).")
 
-        logging.info(f"\n📥 Website-Processor: Message reçu pour URL: {website_data.get('url', 'URL inconnue')}")
+        logger.info(f"\n📥 Website-Processor: Message reçu pour URL: {website_data.get('url', 'URL inconnue')}")
         
         loop = asyncio.get_running_loop()
         output_message = await loop.run_in_executor(
@@ -76,7 +79,7 @@ class Consumer:
         
         # Check specific status from processor
         if output_message.get("status") == "PENDING":
-            logging.info("⏸️ Message buffered in Redis. Acknowledging RabbitMQ message without publishing output.")
+            logger.info("⏸️ Message buffered in Redis. Acknowledging RabbitMQ message without publishing output.")
             # We acknowledge the message because it's safely stored in Redis awaiting batch processing.
             return
 
@@ -106,27 +109,27 @@ class Consumer:
         except BatchProcessingError as e:
             # Special Handling: Batch failed.
             # 1. Resurrect previous messages (stored in Redis, now lost from RabbitMQ) -> Send to DLQ
-            logging.error(f"❌ Batch Processing Failed for URL: {url}. Resurrecting {len(e.previous_payloads)} buffered messages to DLQ.")
+            logger.error(f"❌ Batch Processing Failed for URL: {url}. Resurrecting {len(e.previous_payloads)} buffered messages to DLQ.")
             await self._resurrect_to_dlq(e.previous_payloads, e.original_error)
             
             # 2. Send CURRENT message to DLQ (Standard flow)
-            logging.error(f"❌ Sending triggering message to DLQ. Error: {e.original_error}")
+            logger.error(f"❌ Sending triggering message to DLQ. Error: {e.original_error}")
             await self._send_to_dlq(message, e.original_error or e, 0)
             await message.ack()
 
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message ne sera jamais valide.
-            logging.error(f"❌ Website-Processor: Erreur permanente pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
+            logger.error(f"❌ Website-Processor: Erreur permanente pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
             await self._send_to_dlq(message, e, 0)
             await message.ack()
 
         except Exception as e:
             retry_count = self._get_retry_count(message)
             if retry_count < MAX_RETRIES:
-                logging.warning(f"⚠️ Website-Processor: Erreur transitoire pour URL: {url} (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                logger.warning(f"⚠️ Website-Processor: Erreur transitoire pour URL: {url} (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
                 await message.nack(requeue=False)
             else:
-                logging.error(f"❌ Website-Processor: Échec après {MAX_RETRIES + 1} tentatives pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
+                logger.error(f"❌ Website-Processor: Échec après {MAX_RETRIES + 1} tentatives pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
                 await self._send_to_dlq(message, e, MAX_RETRIES)
                 await message.ack()
 
@@ -156,9 +159,9 @@ class Consumer:
                         ),
                         routing_key=self.routing_key
                     )
-                    logging.info(f"   -> Resurrected msg for {payload.get('data', {}).get('url')} sent to DLQ.")
+                    logger.info(f"   -> Resurrected msg for {payload.get('data', {}).get('url')} sent to DLQ.")
                 except Exception as ex:
-                    logging.error(f"Failed to resurrect message to DLQ: {ex}. Payload: {json.dumps(payload)}")
+                    logger.error(f"Failed to resurrect message to DLQ: {ex}. Payload: {json.dumps(payload)}")
 
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
         async with self.connection.channel() as channel:
@@ -176,13 +179,15 @@ class Consumer:
     async def start_consuming(self):
         """Démarre le consumer."""
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=1) # Traiter jusqu'à 10 messages en parallèle
+        await channel.set_qos(prefetch_count=1) # Traiter un message à la fois
         
         queue = await self._setup_queues(channel)
         
-        logging.info("👂 Website-Processor: En attente de messages...")
+        logger.info("👂 Website-Processor: En attente de messages...")
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
                 # Lance le traitement de chaque message comme une tâche de fond
                 # Le service peut ainsi continuer à recevoir des messages pendant que les autres sont traités.
-                asyncio.create_task(self._process_message_task(message))
+                task = asyncio.create_task(self._process_message_task(message))
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)

@@ -18,7 +18,7 @@ class DLQProperties:
             original_routing_key = message_or_method.routing_key or 'N/A' # aio-pika can have None here
         
         headers = {
-            'x-error-reason': str(error),
+            'x-error-reason': repr(error),
             'x-service-name': service_name,
             'x-retry-count': retry_count,
             'x-original-exchange': original_exchange,

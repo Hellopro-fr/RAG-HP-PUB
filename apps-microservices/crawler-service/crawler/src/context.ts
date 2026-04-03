@@ -29,7 +29,7 @@ export const context = {
         bypassDiez: false,
         toKeep: [] as string[],
         toRemove: [] as string[],
-        breakLimit: false,
+        breakLimit: true,
         
         // V1 Update Logic: Dual-Mode Circuit Breaker
         circuitBreaker: {

@@ -20,6 +20,8 @@ async def insertion_data(document_data: dict) -> dict:
     documents = document_data.get("data", [])
 
     if isinstance(documents, list):
+        if not documents:
+            raise ValueError("Le champ 'data' est une liste vide — aucun document à traiter.")
         page_type = documents[0].get("page_type", "")
     else:
         document = document_data.get("data", {})
@@ -33,8 +35,7 @@ async def insertion_data(document_data: dict) -> dict:
     try:
         collection_enum = CollectionName(collection)
     except ValueError:
-        logger.error("'%s' n'est pas un nom de collection valide.", collection)
-        return None
+        raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
     processing_functions = {
         # CollectionName.DOCUMENT: base_vectorielle.insert_document
@@ -45,6 +46,7 @@ async def insertion_data(document_data: dict) -> dict:
 
     result = []
     fichier_source = ""
+    output_message = None
 
     if len(documents) > 0:
         fichier_source = documents[0].get("fichier_source", "fichier source inconnu")
@@ -159,4 +161,9 @@ async def insertion_data(document_data: dict) -> dict:
                 "already_in_bdd": len(data) > 0,
             }
 
+        if output_message is None:
+            raise ValueError(
+                f"État inattendu pour fichier_source={fichier_source}: "
+                f"status={res.get('status')}, code={res.get('code')}. Aucun output_message produit."
+            )
         return output_message

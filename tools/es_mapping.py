@@ -43,6 +43,8 @@ INDEX_MAPPING = {
             "retry_count": {"type": "integer"},
             "original_exchange": {"type": "keyword"},
             "original_routing_key": {"type": "keyword"},
+            "status": {"type": "keyword"},
+            "status_updated_at": {"type": "date"},
             "original_payload": {
                 "type": "object",
                 "dynamic": True

@@ -73,7 +73,7 @@ export function usePriceEstimation() {
         id_categorie: categoryId,
         texte_recherche: texteRecherche,
         texte_prompt: textePrompt,
-        type_source: 'other',
+        /*type_source: 'other',*/
         nom_categorie: categoryName,
       };
 
@@ -98,7 +98,7 @@ export function usePriceEstimation() {
         id_categorie: categoryId,
         texte_recherche: texteRecherche,
         texte_prompt: textePrompt,
-        type_source: 'other',
+        /*type_source: 'other',*/
         nom_categorie: categoryName,
         equivalences_count: consolidated.length,
         prix_caracs_count: caracsPrixIds.length,

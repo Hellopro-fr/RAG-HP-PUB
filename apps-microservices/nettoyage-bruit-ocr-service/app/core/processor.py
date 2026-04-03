@@ -4,18 +4,19 @@ import json
 import asyncio
 import logging
 from typing import List, Dict
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import threading
 
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
+logger = logging.getLogger(__name__)
+
 _thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm_worker")
 
 MAX_OUTPUT_TOKEN = 64000
+MAX_CONTENT_CHARS = 60000
 
 PROMPT_NETTOYAGE = """
 Tu es un expert en analyse de documents B2B multilingues (devis, catalogues, fiches techniques, plaquettes commerciales,savoir-faire, autre type) et à l'aise en détection des langues utilisées dans un contenu spécifique.
@@ -60,6 +61,10 @@ def make_chat_request(prompt_template, content,temperature=0.7):
         ChatRequest prêt à être envoyé au modèle
     """
     
+    if len(content) > MAX_CONTENT_CHARS:
+        logger.warning("Content truncated: %d chars > %d max", len(content), MAX_CONTENT_CHARS)
+        content = content[:MAX_CONTENT_CHARS]
+
     # Construire le texte complet du prompt
     prompt_text = prompt_template.format(content=content)
     prompt_json = json.dumps(prompt_text)
@@ -108,7 +113,7 @@ async def _process_single_message(document_item: dict) -> dict:
         error_details = response_details.get('error', {})
         state_llm = 1 if not error_details else 2
 
-        doc_url = document_data.get("fichier_source").replace(r"\/", "/")
+        doc_url = (document_data.get("fichier_source") or "").replace(r"\/", "/")
         metric_payload = {
             "source_service": "nettoyage-bruit-ocr-service",
             "url": f"{doc_url}({nb_pages} page(s))",
@@ -136,7 +141,7 @@ async def _process_single_message(document_item: dict) -> dict:
                 cleaned_text = contenu
 
     except Exception as e:
-        logging.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
+        logger.warning("Erreur lors du nettoyage LLM : %s - %s", type(e).__name__, e)
         error_str = f"Erreur lors du nettoyage LLM. Erreur: {e}"
         if not metric_payload:
             metric_payload = {
@@ -166,7 +171,7 @@ async def _process_single_message(document_item: dict) -> dict:
         "status": "success",
         "processed_message": output_message,
         "metric_payload": metric_payload,
-        "error_message": "" if not cleaned_text else "le text ocrisé nettoyé est vide"
+        "error_message": "le texte OCR nettoyé est vide" if not cleaned_text else ""
     }
 
 
@@ -178,9 +183,8 @@ async def nettoyer_bruits_ocr(documents: List[Dict]) -> List[Dict]:
     if not documents:
         return []
 
-    loop = asyncio.get_event_loop()
-    
-    # 🔥 Chaque message sera traité dans son propre thread avec son propre event loop
+    loop = asyncio.get_running_loop()
+
     tasks = [
         loop.run_in_executor(
             _thread_pool,
@@ -193,12 +197,11 @@ async def nettoyer_bruits_ocr(documents: List[Dict]) -> List[Dict]:
     # 🔥 L'event loop principal reste libre pendant que les threads travaillent
     processed_results = await asyncio.gather(*tasks)
         
-    # Journalisation
-    print(f"   -> Nettoyage des bruits OCR en batch terminée pour {len(processed_results)} messages.")
+    logger.info("Nettoyage des bruits OCR en batch terminee pour %d messages.", len(processed_results))
     for res in processed_results:
         msg = res.get('processed_message') or res.get('original_message')
         url = msg['data'].get('fichier_source', 'N/A')
-        
+
         if res['status'] == 'success':
             page_type = msg['data'].get('page_type', 'N/A')
             content_len = msg.get('_diag_content_length', 'N/A')
@@ -206,8 +209,8 @@ async def nettoyer_bruits_ocr(documents: List[Dict]) -> List[Dict]:
             model = metric.get('model', 'N/A')
             prompt_tokens = metric.get('prompt_tokens', 'N/A')
             completion_tokens = metric.get('completion_tokens', 'N/A')
-            print(f"      • [SUCCESS] URL: {url} => Type: {page_type} [Model: {model}, PromptTokens: {prompt_tokens}, CompletionTokens: {completion_tokens}, ContentLen: {content_len}]")
+            logger.info("[SUCCESS] URL: %s => Type: %s [Model: %s, PromptTokens: %s, CompletionTokens: %s, ContentLen: %s]", url, page_type, model, prompt_tokens, completion_tokens, content_len)
         else:
-            print(f"      • [FAILURE] URL: {url} => Erreur: {res.get('error_message', 'Inconnue')}")
+            logger.warning("[FAILURE] URL: %s => Erreur: %s", url, res.get('error_message', 'Inconnue'))
             
     return processed_results

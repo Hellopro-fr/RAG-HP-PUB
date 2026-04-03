@@ -1,14 +1,15 @@
 "use client"
 
 import * as React from "react";
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Calendar, SearchIcon, Loader2, Info, BookmarkPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
 import CreateRuleModal from "./CreateRuleModal";
-import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, Message } from "@/lib/api";
+import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, apiGetUniqueErrors, Message, UniqueErrorBucket } from "@/lib/api";
+import UniqueErrorsModal from "./UniqueErrorsModal";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "./DateTimePicker";
@@ -22,6 +23,7 @@ interface Filters {
 }
 
 const loadFiltersFromStorage = (): Omit<Filters, 'date_start' | 'date_end'> => {
+    if (typeof window === 'undefined') return { status: ['New'], service_names: [] };
     try {
         const stored = localStorage.getItem('dlq-filters-v3');
         const filters = stored ? JSON.parse(stored) : {};
@@ -57,7 +59,7 @@ const statusOptions: MultiSelectOption[] = [
 ];
 
 export default function SearchPage() {
-  const [filters, setFilters] = useState<Filters>(loadFiltersFromStorage());
+  const [filters, setFilters] = useState<Filters>(loadFiltersFromStorage);
   const [searchTerm, setSearchTerm] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -71,6 +73,18 @@ export default function SearchPage() {
   const [serviceOptions, setServiceOptions] = useState<MultiSelectOption[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [showUniqueErrors, setShowUniqueErrors] = useState(false);
+  const [uniqueErrorBuckets, setUniqueErrorBuckets] = useState<UniqueErrorBucket[]>([]);
+  const [uniqueErrorTotal, setUniqueErrorTotal] = useState(0);
+  const [loadingUniqueErrors, setLoadingUniqueErrors] = useState(false);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     apiGetDashboardStats().then(response => {
@@ -79,13 +93,23 @@ export default function SearchPage() {
             label: bucket.key,
         }));
         setServiceOptions(options);
+
+        // Purge stale service_names that no longer exist in current options
+        const validKeys = new Set(options.map((o: MultiSelectOption) => o.value));
+        setFilters((prev: Filters) => {
+            const cleaned = prev.service_names.filter((s: string) => validKeys.has(s));
+            if (cleaned.length !== prev.service_names.length) {
+                return { ...prev, service_names: cleaned };
+            }
+            return prev;
+        });
     }).catch(err => {
         console.error("Failed to fetch service names for filters", err);
     })
   }, []);
 
   // Construct standard JSON filter payload to use consistently
-  const getActiveFiltersPayload = () => {
+  const getActiveFiltersPayload = useCallback(() => {
     const activeFilters: Record<string, any> = {};
     (Object.keys(filters) as Array<keyof Filters>).forEach(key => {
       const value = filters[key];
@@ -98,7 +122,7 @@ export default function SearchPage() {
       }
     });
     return activeFilters;
-  };
+  }, [filters]);
 
   const fetchMessages = useCallback(async (page = 1) => {
     setLoading(true);
@@ -159,7 +183,11 @@ export default function SearchPage() {
   }
 
   const pollTaskStatus = (taskId: string, successMessage: string) => {
+    let attempts = 0;
+    const MAX_POLL_ATTEMPTS = 300; // 10 minutes at 2s intervals
+
     const checkStatus = async () => {
+      attempts++;
       try {
         const res = await apiGetTaskStatus(taskId);
         if (res.data.completed) {
@@ -170,16 +198,22 @@ export default function SearchPage() {
           }
           fetchMessages(1);
           setLoadingAction(null);
+          pollTimeoutRef.current = null;
+        } else if (attempts >= MAX_POLL_ATTEMPTS) {
+          alert("Polling timed out. The task might still be running in the background.");
+          setLoadingAction(null);
+          pollTimeoutRef.current = null;
         } else {
-          setTimeout(checkStatus, 2000); // Check again in 2 seconds
+          pollTimeoutRef.current = setTimeout(checkStatus, 2000);
         }
       } catch (err) {
         console.error("Polling failed", err);
         alert("Failed to confirm task completion. The task might still be running.");
         setLoadingAction(null);
+        pollTimeoutRef.current = null;
       }
     };
-    
+
     checkStatus();
   };
 
@@ -201,8 +235,9 @@ export default function SearchPage() {
     try {
         if (action === 'requeue') {
             const rateStr = prompt("Enter messages per second (e.g., 10). Leave blank for no limit.", "10");
+            if (rateStr === null) { setLoadingAction(null); return; } // User cancelled
             const rate = rateStr ? parseInt(rateStr, 10) : undefined;
-            if (rateStr && isNaN(rate)) {
+            if (rateStr && isNaN(rate!)) {
                 alert("Invalid number for rate limit.");
                 setLoadingAction(null);
                 return;
@@ -233,8 +268,9 @@ export default function SearchPage() {
 
       try {
           const rateStr = prompt("Enter messages per second (e.g., 10). Leave blank for no limit.", "10");
+          if (rateStr === null) { setLoadingAction(null); return; } // User cancelled
           const rate = rateStr ? parseInt(rateStr, 10) : undefined;
-          if (rateStr && isNaN(rate)) {
+          if (rateStr && isNaN(rate!)) {
               alert("Invalid number for rate limit.");
               setLoadingAction(null);
               return;
@@ -254,6 +290,25 @@ export default function SearchPage() {
           console.error(err);
           setLoadingAction(null);
       }
+  };
+
+  const handleViewUniqueErrors = async () => {
+    setShowUniqueErrors(true);
+    setLoadingUniqueErrors(true);
+    setUniqueErrorBuckets([]);
+    setUniqueErrorTotal(0);
+    try {
+      const activeFilters = getActiveFiltersPayload();
+      const response = await apiGetUniqueErrors(activeFilters, searchTerm);
+      setUniqueErrorBuckets(response.data.buckets);
+      setUniqueErrorTotal(response.data.total_unique);
+    } catch (err) {
+      console.error("Failed to fetch unique errors", err);
+      alert("Failed to fetch unique errors.");
+      setShowUniqueErrors(false);
+    } finally {
+      setLoadingUniqueErrors(false);
+    }
   };
 
   const handleArchiveByFilter = async () => {
@@ -436,6 +491,15 @@ export default function SearchPage() {
           ) : (
             <>
               <Button
+                onClick={handleViewUniqueErrors}
+                variant="outline"
+                style={{ borderColor: "var(--bleu-primary)", color: "var(--bleu-primary)" }}
+                disabled={totalResults === 0 || !!loadingAction}
+                className="hover:bg-bleu-light disabled:opacity-50 w-full sm:w-auto"
+              >
+                View Unique Errors
+              </Button>
+              <Button
                 onClick={handleArchiveByFilter}
                 style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
                 disabled={totalResults === 0 || !!loadingAction}
@@ -489,10 +553,19 @@ export default function SearchPage() {
       )}
 
       {showCreateRuleModal && (
-        <CreateRuleModal 
+        <CreateRuleModal
           currentSearchTerm={searchTerm}
           currentFilters={getActiveFiltersPayload()}
           onClose={() => setShowCreateRuleModal(false)}
+        />
+      )}
+
+      {showUniqueErrors && (
+        <UniqueErrorsModal
+          buckets={uniqueErrorBuckets}
+          totalUnique={uniqueErrorTotal}
+          loading={loadingUniqueErrors}
+          onClose={() => setShowUniqueErrors(false)}
         />
       )}
     </div>

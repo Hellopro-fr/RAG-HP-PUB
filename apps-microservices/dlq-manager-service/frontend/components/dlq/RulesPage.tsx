@@ -30,8 +30,8 @@ export default function RulesPage() {
 
     const handleToggle = async (ruleId: string, currentStatus: boolean) => {
         try {
-            // Optimistic update
-            setRules(rules.map(r => r._id === ruleId ? { ...r, is_active: !currentStatus } : r));
+            // Optimistic update using functional updater to avoid stale closure
+            setRules(prev => prev.map(r => r._id === ruleId ? { ...r, is_active: !currentStatus } : r));
             await apiToggleRule(ruleId, !currentStatus);
         } catch (error) {
             alert("Failed to update rule status.");
@@ -43,7 +43,7 @@ export default function RulesPage() {
         if (!window.confirm("Are you sure you want to permanently delete this rule?")) return;
         try {
             await apiDeleteRule(ruleId);
-            setRules(rules.filter(r => r._id !== ruleId));
+            setRules(prev => prev.filter(r => r._id !== ruleId));
         } catch (error) {
             alert("Failed to delete rule.");
         }
@@ -98,17 +98,18 @@ export default function RulesPage() {
                                         {rule.execution_count?.toLocaleString() || 0}
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <Switch 
-                                            checked={rule.is_active} 
-                                            onCheckedChange={() => handleToggle(rule._id!, rule.is_active)} 
+                                        <Switch
+                                            checked={rule.is_active}
+                                            onCheckedChange={() => rule._id && handleToggle(rule._id, rule.is_active)}
                                         />
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => handleDelete(rule._id!)}
+                                            onClick={() => rule._id && handleDelete(rule._id)}
                                             className="text-rouge-primary hover:bg-rouge-light hover:text-rouge-primary"
+                                            aria-label={`Delete rule ${rule.name}`}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </Button>

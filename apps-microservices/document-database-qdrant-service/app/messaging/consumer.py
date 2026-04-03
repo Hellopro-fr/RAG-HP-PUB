@@ -61,20 +61,18 @@ class Consumer:
         """Tâche pour traiter un seul message, y compris la logique de retry/dlq."""
         try:
             document_data = json.loads(message.body)
-            logger.info("Processing document fichier_source=%s", document_data.get("data", [{}])[0].get("fichier_source", "unknown"))
+            logger.info("Processing document fichier_source=%s", document_data.get("data", [{}])[0].get("fichier_source", "unknown") if isinstance(document_data.get("data"), list) and document_data.get("data") else "unknown")
 
             if not document_data:
                 raise ValueError("Données invalides (contenu vide ou 'document_data' manquant).")
 
             output_message = await insertion_data(document_data)
-            
-            async with self.connection.channel() as channel:
-                await self.publisher.publish_message(output_message, channel)
-            
+
+            await self.publisher.publish_message(output_message, self._publish_channel)
+
             await message.ack()
 
         except (json.JSONDecodeError, ValueError) as e:
-            # Erreur permanente: le message ne sera jamais valide.
             logger.error(f"Database-Document-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
             await self._send_to_dlq(message, e, 0)
             await message.ack()
@@ -83,34 +81,45 @@ class Consumer:
             retry_count = self._get_retry_count(message)
             stack = traceback.format_exc()
             if retry_count < MAX_RETRIES:
-                logger.error(f"Database-Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}\n{stack}")
+                logger.error(f"Database-Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Erreur: {e}\n{stack}")
                 await message.nack(requeue=False)
             else:
-                logger.error(f"Database-Document-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}", exc_info=True)
+                logger.error(f"Database-Document-Processor: Échec après {MAX_RETRIES + 1} tentatives. Erreur: {e}", exc_info=True)
                 await self._send_to_dlq(message, e, MAX_RETRIES)
                 await message.ack()
 
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
-        async with self.connection.channel() as channel:
-            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-            dlq_headers = DLQProperties.create_dlq_headers(error, 'Database-Document-Processor-service', retry_count, message)
-            await dlx.publish(
-                aio_pika.Message(
-                    body=message.body,
-                    headers=dlq_headers,
-                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                ),
-                routing_key=self.routing_key
+        try:
+            async with self.connection.channel() as channel:
+                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                dlq_headers = DLQProperties.create_dlq_headers(error, 'Database-Document-Processor-service', retry_count, message)
+                await dlx.publish(
+                    aio_pika.Message(
+                        body=message.body,
+                        headers=dlq_headers,
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                    ),
+                    routing_key=self.routing_key
+                )
+        except Exception as dlq_error:
+            logger.critical(
+                "Échec de publication vers la DLQ: %s. Message original perdu: %s",
+                repr(dlq_error),
+                message.body[:500] if message.body else "N/A",
+                exc_info=True,
             )
 
     async def start_consuming(self):
         """Démarre le consumer avec contrôle du parallélisme et gestion des erreurs."""
-        
-        # 1. Crée le channel et configure le prefetch
+
+        # 1. Crée le channel de consommation et configure le prefetch
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=100)  # Nombre maximum de messages traités en parallèle
-        
-        # 2. Déclare et bind les queues/exchanges
+        await channel.set_qos(prefetch_count=100)
+
+        # 2. Crée un channel dédié à la publication (évite l'ouverture d'un channel par message)
+        self._publish_channel = await self.connection.channel()
+
+        # 3. Déclare et bind les queues/exchanges
         queue = await self._setup_queues(channel)
         
         # 3. Crée un semaphore pour limiter le nombre de traitements simultanés
@@ -123,8 +132,8 @@ class Consumer:
                     await self._process_message_task(message)
                 except Exception as e:
                     logger.error(f"Erreur lors du traitement du message: {e}", exc_info=True)
-                    # NACK pour remettre le message en queue
-                    await message.nack(requeue=True)
+                    # NACK sans requeue — le DLX de la queue route vers retry_exchange
+                    await message.nack(requeue=False)
         
         # 4. Commence à consommer les messages
         logger.info("Database-Document-Processor: En attente de messages...")

@@ -1,5 +1,8 @@
 import json
+import logging
 from common_utils.autres.CollectionName import CollectionName
+
+logger = logging.getLogger(__name__)
 
 def process_echange_data_for_embedding(echange_data: dict, bdd: str) -> dict:
     """
@@ -30,8 +33,8 @@ def process_echange_data_for_embedding(echange_data: dict, bdd: str) -> dict:
                 
 
     # Afficher le message de sortie pour débogage
-    print(f"🔍Echange-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2)}")
+    logger.debug(f"🔍 Echange-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2)}")
     
     # Étape 6: Retourner le message prêt à être publié
-    print(f"📦 Echange-Processor: Echange traité pour embedding.")
+    logger.info(f"📦 Echange-Processor: Echange traité pour embedding.")
     return output_message
