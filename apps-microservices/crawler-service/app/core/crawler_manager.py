@@ -1265,7 +1265,8 @@ class CrawlerManager:
 
         # Acquire a Redis lock to prevent concurrent archiving of the same crawl
         lock_key = f"archive_lock:{crawl_id}"
-        lock_acquired = await cache_service.redis_client.set(lock_key, "1", nx=True, ex=300)  # 5 min TTL
+        # 30 min TTL: large crawls can take >5 min to archive via shutil.make_archive
+        lock_acquired = await cache_service.redis_client.set(lock_key, "1", nx=True, ex=1800)
         if not lock_acquired:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1277,7 +1278,7 @@ class CrawlerManager:
             if os.path.exists(target_archive_path):
                 archive_size = os.path.getsize(target_archive_path)
                 logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
-                await self._mark_as_archived(crawl_id, job_info)
+                await self._mark_as_archived(crawl_id)
                 return {
                     "crawl_id": crawl_id,
                     "archive_status": "pending_upload",
@@ -1311,8 +1312,7 @@ class CrawlerManager:
 
                     # Verify archive is readable
                     try:
-                        import tarfile as tf
-                        with tf.open(final_path, 'r:gz') as t:
+                        with tarfile.open(final_path, 'r:gz') as t:
                             t.getnames()  # Force read of the archive index
                     except Exception as e:
                         os.remove(final_path)
@@ -1341,7 +1341,7 @@ class CrawlerManager:
                 logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
 
                 # Step 2: Mark as archived (must succeed before cleanup)
-                await self._mark_as_archived(crawl_id, job_info)
+                await self._mark_as_archived(crawl_id)
 
                 # Step 3: Cleanup (safe to fail — data is in the archive)
                 try:
@@ -1363,12 +1363,17 @@ class CrawlerManager:
         finally:
             await cache_service.redis_client.delete(lock_key)
 
-    async def _mark_as_archived(self, crawl_id: str, job_info: dict):
-        """Updates job status to 'archived' in Redis to prevent double-archiving."""
+    async def _mark_as_archived(self, crawl_id: str):
+        """Updates job status to 'archived' in Redis to prevent double-archiving.
+        Re-reads the job from Redis to avoid overwriting concurrent field updates."""
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
-        job_info["status"] = "archived"
-        job_info["archived_at"] = datetime.utcnow().isoformat()
-        await cache_service.set_json(job_key, job_info)
+        fresh_job_info = await cache_service.get_json(job_key)
+        if not fresh_job_info:
+            logger.error(f"Cannot mark '{crawl_id}' as archived: job not found in Redis.")
+            return
+        fresh_job_info["status"] = "archived"
+        fresh_job_info["archived_at"] = datetime.utcnow().isoformat()
+        await cache_service.set_json(job_key, fresh_job_info)
         await self._publish_update(crawl_id, "archived")
         logger.info(f"Marked crawl '{crawl_id}' as 'archived' in Redis.")
 
@@ -1383,6 +1388,21 @@ class CrawlerManager:
                     logger.debug(f"Cleaned up temp download file: {path}")
             except OSError as e:
                 logger.warning(f"Failed to clean up temp file '{path}': {e}")
+
+    async def get_pending_callbacks(self) -> list:
+        """Returns all failed webhook callbacks stored in Redis."""
+        raw_entries = await cache_service.redis_client.lrange(FAILED_CALLBACKS_KEY, 0, -1)
+        callbacks = []
+        for raw in raw_entries:
+            try:
+                callbacks.append(json.loads(raw))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return callbacks
+
+    async def clear_pending_callbacks(self) -> int:
+        """Clears all failed webhook callbacks from Redis. Returns number of keys deleted."""
+        return await cache_service.redis_client.delete(FAILED_CALLBACKS_KEY)
 
     async def reconcile_jobs(self):
         """

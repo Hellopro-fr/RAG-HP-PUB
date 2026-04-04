@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from starlette.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY, FAILED_CALLBACKS_KEY
+from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY
 from common_utils.redis import cache_service
 from app.core.config import settings
 from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse, PendingCallbacksResponse
@@ -56,18 +56,28 @@ async def get_job_or_recover(crawl_id: str) -> dict:
             final_status = "failed"
     else:
         # No completion marker: job may still be running OR crashed without cleanup
-        # Heuristic: if storage was modified recently (< 2 hours), assume running
-        try:
-            storage_mtime = os.path.getmtime(job_storage_path)
-            age_hours = (datetime.utcnow().timestamp() - storage_mtime) / 3600
-            if age_hours < 2:
-                final_status = "running"
-                logger.info(f"No completion marker for '{crawl_id}', but storage modified {age_hours:.1f}h ago. Assuming RUNNING.")
-            else:
+        # Check if this instance is actively running the crawl process
+        is_running_locally = (
+            crawl_id in crawler_manager.local_processes
+            and crawler_manager.local_processes[crawl_id].returncode is None
+        )
+        if is_running_locally:
+            final_status = "running"
+            logger.info(f"No completion marker for '{crawl_id}', but process is alive locally. Status: RUNNING.")
+        else:
+            # Process not running on this instance — check age as secondary heuristic
+            # (another replica may be running it, but we can't verify cross-instance)
+            try:
+                storage_mtime = os.path.getmtime(job_storage_path)
+                age_hours = (datetime.utcnow().timestamp() - storage_mtime) / 3600
+                if age_hours < 2:
+                    final_status = "running"
+                    logger.info(f"No completion marker for '{crawl_id}', storage modified {age_hours:.1f}h ago. Possibly running on another replica.")
+                else:
+                    final_status = "failed"
+                    logger.warning(f"No completion marker for '{crawl_id}', storage stale ({age_hours:.1f}h), no local process. Assuming FAILED.")
+            except Exception:
                 final_status = "failed"
-                logger.warning(f"No completion marker for '{crawl_id}', storage stale ({age_hours:.1f}h). Assuming FAILED.")
-        except Exception:
-            final_status = "failed"
 
     # Reconstruct metadata by parsing the log file (best effort).
     # Uses --domain= and --site= CLI arg patterns from the Node.js crawler command line.
@@ -100,8 +110,9 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     }
 
     # State keys can persist safely — the distributed lock (crawl_lock:{id}) is separate.
+    # TTL 7 days: recovered orphan jobs should not persist in Redis indefinitely.
     logger.info(f"Successfully recovered job '{crawl_id}' from storage with status '{final_status}'. Re-indexing in Redis.")
-    await cache_service.set_json(job_key, recovered_data)
+    await cache_service.set_json(job_key, recovered_data, ttl=604800)
 
     return recovered_data
 
@@ -261,7 +272,7 @@ async def get_all_crawl_statuses(
     return await crawler_manager.get_all_statuses(status_filter=filter_list)
 
 @router.get("/status/{crawl_id}", response_model=CrawlStatus)
-async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
+async def get_crawl_status(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
     Gets the detailed status of a specific crawl job. Recovers from storage if missing from Redis.
     """
@@ -325,8 +336,8 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
             message="Crawl archived successfully. Pending upload to GCS by daemon.",
             **result
         )
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error archiving crawl '{crawl_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred during archiving.")
@@ -347,19 +358,13 @@ async def get_pending_callbacks():
     Returns all failed webhook callbacks stored in Redis after retry exhaustion.
     These can be reviewed and replayed manually or by an automated reconciliation process.
     """
-    raw_entries = await cache_service.redis_client.lrange(FAILED_CALLBACKS_KEY, 0, -1)
-    callbacks = []
-    for raw in raw_entries:
-        try:
-            callbacks.append(json.loads(raw))
-        except (json.JSONDecodeError, TypeError):
-            continue
+    callbacks = await crawler_manager.get_pending_callbacks()
     return PendingCallbacksResponse(count=len(callbacks), callbacks=callbacks)
 
 @router.delete("/pending-callbacks")
 async def clear_pending_callbacks():
     """Clears all failed webhook callbacks from Redis."""
-    deleted = await cache_service.redis_client.delete(FAILED_CALLBACKS_KEY)
+    deleted = await crawler_manager.clear_pending_callbacks()
     return {"status": "cleared", "keys_deleted": deleted}
 
 @router.post("/prune-archives", response_model=PruneResponse)
