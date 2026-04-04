@@ -103,6 +103,26 @@ docs/                 # Project documentation
 |-------|---------|
 | `Stop` | After each response: (1) check if CLAUDE.md files need updating, (2) self-review modified code for quality/security/impact |
 
+### Plugins
+
+| Plugin | Source | Purpose |
+|--------|--------|---------|
+| `superpowers` | `claude-plugins-official` | Structured development workflow: brainstorming, plan writing, TDD, subagent orchestration, verification-before-completion |
+
+**Superpowers vs. project commands — when to use which:**
+
+| Task | Use project command | Use superpowers skill |
+|------|--------------------|-----------------------|
+| Plan a task | `/plan` (lightweight, quick) | `writing-plans` (heavyweight, multi-step spec with review) |
+| Debug an error | `@debugger` (structured fix plan) | `systematic-debugging` (exhaustive hypothesis testing) |
+| Review code | `@code-reviewer` (7-dimension single-pass) | `requesting-code-review` (formal review with verification gates) |
+| Write tests | `@test-writer` (stack-agnostic generation) | `test-driven-development` (strict red-green-refactor TDD) |
+| Execute a plan | Direct implementation | `executing-plans` (subagent delegation with checkpoints) |
+
+**Rule of thumb:** Use project commands for focused, day-to-day tasks. Use superpowers skills for complex, multi-step work that benefits from structured gates and verification.
+
+**Note:** Project commands already integrate key superpowers principles (verification evidence, no-placeholder plans, root-cause-first debugging, TDD integration, anti-rationalization checks). You get the best of both by default when using project commands.
+
 ## Constraints
 
 ### Remote-Only Services

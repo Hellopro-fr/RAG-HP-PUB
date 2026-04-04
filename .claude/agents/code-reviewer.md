@@ -46,6 +46,13 @@ Internally, scan the code in multiple passes before producing output:
 
 Merge all findings into a single output. The user should never need to run `@code-reviewer` twice on the same unchanged code.
 
+## Verification Evidence
+
+For each critical finding, provide **evidence** — not just assertions:
+- If claiming "this function is vulnerable to injection", show the exact input path.
+- If claiming "this will break service X", show the import chain.
+- Never use words like "should," "probably," or "seems to" for critical findings — verify or downgrade to suggestion.
+
 ## Rules
 
 - Do NOT generate fixed code or output modified files.

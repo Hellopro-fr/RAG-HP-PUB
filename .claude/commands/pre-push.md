@@ -46,7 +46,14 @@ Detect each service's stack per `.claude/rules/stack-detection.md`, then run the
 Review all changed files for SOLID/DRY/KISS violations, security issues, and performance concerns.
 Note: This step is a manual review by the main agent — do NOT delegate to `@code-reviewer` (it lacks Bash access needed for this workflow context).
 
-### Step 4 — Summary
+### Step 4 — Verification discipline
+
+Before producing the summary, apply these checks:
+- **No "should" or "probably"**: Every check must have a concrete PASS or FAIL result from running the actual command. Do not assume tests pass — run them and read the output.
+- **Evidence required**: If claiming "tests pass", show the test output. If claiming "syntax OK", show the compile result.
+- **Red flags**: If you catch yourself about to write "should be fine" or "looks correct" without running a command — stop and run the verification.
+
+### Step 5 — Summary
 Display a summary table:
 | Service | Syntax | Tests | Review | Status |
 |---------|--------|-------|--------|--------|

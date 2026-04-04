@@ -72,9 +72,27 @@ If the stack is not recognizable:
 2. Ask the user: **"I detected [files]. Which test framework should I use?"**
 3. Proceed once the user confirms.
 
+## TDD Integration
+
+When writing tests for **new code** (not retroactively adding coverage to existing code):
+- Write the failing test FIRST, then suggest the implementation.
+- Verify the test fails for the expected reason before writing implementation code.
+- After implementation, verify the test passes and check for regressions.
+
+When writing tests for **existing code** (adding coverage retroactively):
+- Read the implementation first, then write tests that exercise both success and error paths.
+- Run tests after writing to verify they pass against the existing code.
+
+## Testing Anti-Patterns to Avoid
+- Testing mock behavior instead of real code (mocks should simulate, not replace the thing being tested).
+- Test-only methods added to production classes.
+- Incomplete mocks missing fields from the real API.
+- Tests that pass with ANY implementation (too loose assertions).
+- Tests that break with ANY refactor (too tight coupling to implementation details).
+
 ## Rules (All Stacks)
 - NEVER write tests that require live connections to databases or message queues.
 - NEVER modify existing source code — only create/edit test files.
 - Keep test files focused — one assertion concept per test function.
 - Use descriptive test names: `test_<action>_<condition>_<expected_result>`.
-- After writing tests, suggest the appropriate run command for the detected stack.
+- After writing tests, run them and report the results. Do not claim "tests should pass" — show evidence.
