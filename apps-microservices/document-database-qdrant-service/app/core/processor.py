@@ -6,6 +6,9 @@ from common_utils.autres.CollectionName import CollectionName
 
 logger = logging.getLogger(__name__)
 
+# TEMPORARY: truncation limit for DLQ reprocessing — remove after requeue is done
+MILVUS_VARCHAR_MAX = 65535
+
 # Module-level singletons — persist across messages, reuse cached connections
 base_vectorielle = MilvusDocumentCrud()
 pj_crud = MilvusPjCrud()
@@ -27,6 +30,16 @@ async def insertion_data(document_data: dict) -> dict:
         document = document_data.get("data", {})
         page_type = document.get("page_type", "")
         documents = [document]
+
+    # TEMPORARY: truncate oversized text for DLQ reprocessing — remove after requeue
+    for doc in documents:
+        text = doc.get("text", "")
+        if len(text) > MILVUS_VARCHAR_MAX:
+            logger.warning(
+                "Text truncated: %d > %d chars, fichier_source=%s",
+                len(text), MILVUS_VARCHAR_MAX, doc.get("fichier_source", "N/A"),
+            )
+            doc["text"] = text[:MILVUS_VARCHAR_MAX]
 
     nb_pages = document_data.get("nb_pages", "")
     collection = document_data.get("collection", CollectionName.DOCUMENT)
