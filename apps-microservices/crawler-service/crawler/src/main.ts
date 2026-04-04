@@ -641,6 +641,12 @@ if (crawlMode === 'update') {
     }
     console.log(`Finished seeding ${seedCount} unique URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
 
+    // Safety net: update mode with 0 URLs means previous crawl data was unavailable
+    if (seedCount === 0) {
+        console.error(`❌ Update mode produced 0 URLs from previous crawl '${previousCrawlId}'. No data to compare against. Aborting.`);
+        process.exit(4); // Exit code 4 = update mode no data (mapped to failure by orchestrator)
+    }
+
     // --- CONFIGURE CIRCUIT BREAKER ---
     // Based on Dataset count only (not total), as that represents the "previous state"
     const previousTotal = consolidationCounts.dataset;

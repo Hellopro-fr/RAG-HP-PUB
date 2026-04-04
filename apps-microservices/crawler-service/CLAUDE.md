@@ -70,10 +70,29 @@ requirements.txt
 - `POST /reconcile-jobs` -- Fix counter drift
 - `POST /prune-archives` -- Clean up old archives
 
+## Update Mode (Archived Previous Crawl Handling)
+
+When `crawl_mode=update`, the service validates and restores data from the previous crawl:
+
+1. **Pre-flight validation** (`start_crawl`): Checks `previous_crawl_id` exists, is not `failed`, and has dataset files on disk.
+2. **Auto-restore from GCS** (`_restore_archived_crawl`): If previous crawl is `archived` (data deleted), downloads the archive from GCS via the download daemon and extracts it. Uses a Redis lock (`restore_lock:{id}`) to prevent concurrent restorations.
+3. **Node.js safety net** (`main.ts`): If URL consolidation produces 0 URLs in update mode, exits with code 4 (mapped to failure webhook).
+4. **Post-crawl cleanup** (`_monitor_process`): Deletes restored data for archived previous crawls after the update crawl completes.
+
+## Exit Codes (Node.js → Python)
+
+| Code | Meaning | Python Behavior |
+|------|---------|-----------------|
+| 0 | Success | Status: `finished`, success webhook |
+| 2 | Partial success | Status: `finished`, success webhook |
+| 3 | OOM relaunch | Status: `restarting_oom`, auto-relaunch (up to `MAX_OOM_RESTARTS`) |
+| 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
+| Other | Failure | Status: `failed`, failure webhook |
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.
 
 ## Dependencies
 
-Redis (state/counters), GCS (archive), `common-utils`, `api-detection-langue-fr`.
+Redis (state/counters), GCS (archive + restore), `common-utils`, `api-detection-langue-fr`.

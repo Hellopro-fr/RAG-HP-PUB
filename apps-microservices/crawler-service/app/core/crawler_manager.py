@@ -151,6 +151,7 @@ class CrawlerManager:
             "callback_url": callback_url,
             "failure_callback_url": failure_callback_url, "pid": None,
             "crawl_mode": params.get("crawlMode", "standard"),
+            "previous_crawl_id": params.get("previousCrawlId"),
             "params": params,
             "oom_restart_count": oom_restart_count
         }
@@ -227,6 +228,53 @@ class CrawlerManager:
             await _rollback_claim(decrement_counter=True)
             logger.error(f"Failed to create/access storage directory for crawl '{crawl_id}': {e}")
             raise HTTPException(status_code=500, detail="Could not initialize crawl environment.")
+
+        # --- UPDATE MODE: VALIDATE PREVIOUS CRAWL ---
+        previous_crawl_id = params.get("previousCrawlId")
+        if params.get("crawlMode") == "update" and previous_crawl_id:
+            prev_job_key = f"{CRAWL_JOB_PREFIX}{previous_crawl_id}"
+            prev_job_info = await cache_service.get_json(prev_job_key)
+            prev_storage = os.path.join(settings.CRAWLER_STORAGE_PATH, previous_crawl_id)
+
+            if not prev_job_info and not os.path.isdir(prev_storage):
+                await _rollback_claim(decrement_counter=True)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Previous crawl '{previous_crawl_id}' not found in Redis or on disk."
+                )
+
+            prev_status = prev_job_info.get("status") if prev_job_info else None
+            if prev_status == "failed":
+                await _rollback_claim(decrement_counter=True)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Previous crawl '{previous_crawl_id}' failed and cannot be used for update mode."
+                )
+
+            # Check if dataset files exist on disk
+            prev_datasets_dir = os.path.join(prev_storage, "storage", "datasets")
+            has_local_data = os.path.isdir(prev_datasets_dir) and len(os.listdir(prev_datasets_dir)) > 0
+
+            if prev_status == "archived" and not has_local_data:
+                logger.info(f"Previous crawl '{previous_crawl_id}' is archived. Restoring from GCS before starting update crawl.")
+                try:
+                    await self._restore_archived_crawl(previous_crawl_id)
+                except HTTPException:
+                    await _rollback_claim(decrement_counter=True)
+                    raise
+                except Exception as e:
+                    await _rollback_claim(decrement_counter=True)
+                    logger.error(f"Failed to restore archived crawl '{previous_crawl_id}': {e}", exc_info=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=f"Failed to restore archived crawl '{previous_crawl_id}' from GCS: {str(e)}"
+                    )
+            elif not has_local_data:
+                await _rollback_claim(decrement_counter=True)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Previous crawl '{previous_crawl_id}' has no dataset files on disk and is not archived. Cannot proceed with update mode."
+                )
 
         # --- BUILD & LOG COMMAND ---
         command = [
@@ -489,6 +537,8 @@ class CrawlerManager:
             error_message = "Out Of Memory"  # Special exit code for OOM max restarts or shutdown
         elif exit_code == 3:
             error_message = "Out Of Memory"  # OOM_RELAUNCH exit code
+        elif exit_code == 4:
+            error_message = "Update crawl failed: previous crawl data was empty or unavailable"
         
         params = {
             "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
@@ -620,6 +670,8 @@ class CrawlerManager:
             is_success = (exit_code in (0, 2))
             # Exit code 3 is a specially dedicated code for OOM_RELAUNCH
             is_oom_relaunch = (exit_code == 3)
+            if exit_code == 4:
+                logger.warning(f"Crawl '{crawl_id}' exited with UPDATE_NO_DATA (code 4): previous crawl data was empty or unavailable.")
 
             if is_oom_relaunch:
                  # OOM path: preserve BOTH the global counter slot AND the local_processes
@@ -681,6 +733,19 @@ class CrawlerManager:
                     exit_code,
                     job_info.get("crawl_mode", "standard")
                 ))
+
+            # --- CLEANUP RESTORED PREVIOUS CRAWL DATA ---
+            prev_id = job_info.get("previous_crawl_id")
+            if prev_id and job_info.get("crawl_mode") == "update":
+                try:
+                    prev_job = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{prev_id}")
+                    if prev_job and prev_job.get("status") == "archived":
+                        prev_datasets = os.path.join(settings.CRAWLER_STORAGE_PATH, prev_id, "storage")
+                        if os.path.isdir(prev_datasets):
+                            await anyio.to_thread.run_sync(lambda: shutil.rmtree(prev_datasets, ignore_errors=True))
+                            logger.info(f"Cleaned up restored data for archived previous crawl '{prev_id}'.")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up restored data for previous crawl '{prev_id}': {e}")
 
         if crawl_id in self.local_processes:
             del self.local_processes[crawl_id]
@@ -1376,6 +1441,58 @@ class CrawlerManager:
         await cache_service.set_json(job_key, fresh_job_info)
         await self._publish_update(crawl_id, "archived")
         logger.info(f"Marked crawl '{crawl_id}' as 'archived' in Redis.")
+
+    async def _restore_archived_crawl(self, previous_crawl_id: str):
+        """
+        Restores an archived crawl's data from GCS for use by an update-mode crawl.
+        Uses the existing download daemon and extracts the archive to the storage path.
+        """
+        lock_key = f"restore_lock:{previous_crawl_id}"
+        lock_acquired = await cache_service.redis_client.set(lock_key, "1", nx=True, ex=1800)
+
+        if not lock_acquired:
+            # Another request is restoring — wait for it to complete by checking for data
+            logger.info(f"Restoration of '{previous_crawl_id}' already in progress. Waiting...")
+            deadline = time.monotonic() + settings.GCS_DOWNLOAD_TIMEOUT_SECONDS
+            target_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, previous_crawl_id, "storage", "datasets")
+            while time.monotonic() < deadline:
+                if os.path.isdir(target_dir) and len(os.listdir(target_dir)) > 0:
+                    logger.info(f"Restoration of '{previous_crawl_id}' completed by another request.")
+                    return
+                await asyncio.sleep(2)
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"Timed out waiting for restoration of archived crawl '{previous_crawl_id}'."
+            )
+
+        try:
+            target_storage = os.path.join(settings.CRAWLER_STORAGE_PATH, previous_crawl_id)
+
+            # Check if already restored (race between lock check and actual data)
+            datasets_dir = os.path.join(target_storage, "storage", "datasets")
+            if os.path.isdir(datasets_dir) and len(os.listdir(datasets_dir)) > 0:
+                logger.info(f"Data for '{previous_crawl_id}' already present. Skipping restoration.")
+                return
+
+            # Download from GCS via the existing daemon mechanism
+            logger.info(f"Requesting GCS download for archived crawl '{previous_crawl_id}'...")
+            download_path = await self._retrieve_from_gcs_daemon(previous_crawl_id)
+
+            # Extract the archive to the storage path
+            logger.info(f"Extracting archive for '{previous_crawl_id}' to '{target_storage}'...")
+            def _extract_archive():
+                os.makedirs(target_storage, exist_ok=True)
+                with tarfile.open(download_path, 'r:gz') as tar:
+                    tar.extractall(path=target_storage)
+
+            await anyio.to_thread.run_sync(_extract_archive)
+            logger.info(f"Successfully restored archived crawl '{previous_crawl_id}' from GCS.")
+
+            # Clean up the downloaded tar.gz and daemon markers
+            self.cleanup_temp_download(previous_crawl_id)
+
+        finally:
+            await cache_service.redis_client.delete(lock_key)
 
     def cleanup_temp_download(self, crawl_id: str):
         """Cleans up temporary GCS download files after serving to the client."""
