@@ -539,8 +539,8 @@ class CrawlerManager:
             error_message = "Out Of Memory"  # OOM_RELAUNCH exit code
         elif exit_code == 4:
             error_message = "Update crawl failed: previous crawl data was empty or unavailable"
-        elif exit_code == 137:
-            error_message = "Out Of Memory (OOM Kill)"  # SIGKILL by OS/container OOM killer
+        elif exit_code in (137, -9):
+            error_message = "Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé"
         elif exit_code is not None and exit_code < 0:
             error_message = f"Processus terminé par signal {abs(exit_code)}"  # Signal-killed
         elif exit_code not in (0, 2, 3, 4, -1, 137):
