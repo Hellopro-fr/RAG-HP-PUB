@@ -348,7 +348,13 @@ router.addDefaultHandler(
 
             if (isMainSite) {
                 // Process normally and store the method
-                content = await processPage(page, request.loadedUrl, log);
+                try {
+                    content = await processPage(page, request.loadedUrl, log);
+                } catch (e: any) {
+                    log.error(`Failed to extract homepage content: ${e.message}`);
+                    context.crawlErrorMessage = `Erreur lors de l'extraction du contenu de la page d'accueil`;
+                    throw e;
+                }
 
                 // Challenge page detection: check if the content is a bot protection page
                 // If detected, wait for the challenge to resolve before proceeding

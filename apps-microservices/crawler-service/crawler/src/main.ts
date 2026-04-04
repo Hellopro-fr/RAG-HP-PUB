@@ -840,7 +840,15 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
 
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
-        await generateUpdateReport(domain);
+        try {
+            await generateUpdateReport(domain);
+        } catch (e) {
+            console.error("Failed to generate update report:", e);
+            if (!payload.message_erreur_crawling) {
+                payload.message_erreur_crawling = "Erreur lors de la génération du rapport de mise à jour";
+                fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+            }
+        }
     }
 
     // 4. Persist Data (Critical Step)
@@ -871,6 +879,10 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             await context.jsonlWriter.closeAll();
         } catch (e) {
             console.error("Failed to close JSONL streams:", e);
+            if (!payload.message_erreur_crawling) {
+                payload.message_erreur_crawling = "Erreur lors de l'enregistrement du rapport de mise à jour";
+                fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+            }
         }
     }
 

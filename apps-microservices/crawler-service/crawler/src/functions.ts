@@ -612,6 +612,12 @@ export const startCrawler = async (
                 );
             }
 
+            // Set crawlErrorMessage if homepage exhausted all retries
+            if (request.url === context.config.baseUrl && !context.crawlErrorMessage) {
+                const errorSummary = String(request.errorMessages).substring(0, 150);
+                context.crawlErrorMessage = `Page d'accueil inaccessible après ${request.retryCount} tentatives: ${errorSummary}`;
+            }
+
             // Save rich error info
             let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${domain}`;
             let dataset = await Dataset.open(datasetName);
