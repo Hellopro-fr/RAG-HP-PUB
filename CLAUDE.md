@@ -63,6 +63,7 @@ docs/                 # Project documentation
 | `formatting.md` | Code style conventions per stack — references `stack-detection.md`, with unknown stack fallback |
 | `refactoring.md` | When/how to refactor safely: scope rules, shared component protocol, known duplication targets |
 | `stack-detection.md` | Single source of truth for detecting a service's stack from file indicators. All stack-dependent rules reference this. Unknown stack protocol included. |
+| `critical-thinking.md` | Anti-sycophancy, blind spot detection, evidence-based pushback, uncertainty transparency, anti-rationalization |
 
 ### Agents (`.claude/agents/`)
 
