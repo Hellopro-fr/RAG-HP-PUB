@@ -79,6 +79,15 @@ When `crawl_mode=update`, the service validates and restores data from the previ
 3. **Node.js safety net** (`main.ts`): If URL consolidation produces 0 URLs in update mode, exits with code 4 (mapped to failure webhook).
 4. **Post-crawl cleanup** (`_monitor_process`): Deletes restored data for archived previous crawls after the update crawl completes.
 
+## Archiving — GCS Fallback
+
+`POST /archive/{crawl_id}` checks three locations in order:
+1. **Local `/app/archives/`** — if `.tar.gz` exists, skip re-generation, mark as `archived`.
+2. **GCS via download daemon** — if archive was already uploaded, fix status to `archived` without re-archiving.
+3. **Fresh archive** — create new `.tar.gz` from local data, mark as `archived`, upload daemon handles GCS.
+
+The GCS fallback (step 2) handles legacy crawls stuck at `finished` due to a previous bug where `_mark_as_archived` was never called.
+
 ## Exit Codes (Node.js → Python)
 
 | Code | Meaning | Python Behavior |

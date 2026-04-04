@@ -1350,6 +1350,25 @@ class CrawlerManager:
                     "archive_size_bytes": archive_size,
                 }
 
+            # GCS fallback: if local archive is gone, check if it was already uploaded to GCS.
+            # This handles legacy crawls stuck at 'finished' due to a previous bug where
+            # _mark_as_archived was never called, but the archive was created and uploaded.
+            try:
+                download_path = await self._retrieve_from_gcs_daemon(crawl_id)
+                # Archive exists in GCS — this crawl was already archived. Just fix the status.
+                archive_size = os.path.getsize(download_path) if os.path.exists(download_path) else None
+                self.cleanup_temp_download(crawl_id)
+                await self._mark_as_archived(crawl_id)
+                logger.info(f"Archive for '{crawl_id}' found in GCS. Status corrected to 'archived'.")
+                return {
+                    "crawl_id": crawl_id,
+                    "archive_status": "already_in_gcs",
+                    "archive_size_bytes": archive_size,
+                }
+            except HTTPException:
+                # Archive not in GCS (502/504) — proceed with normal archiving
+                logger.info(f"Archive for '{crawl_id}' not found in GCS. Proceeding with fresh archiving.")
+
             # Save current status snapshot before archiving (critical: dataset files will be deleted)
             try:
                 current_status = await self.get_status(job_info)
