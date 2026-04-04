@@ -88,6 +88,10 @@ docs/                 # Project documentation
 | `/investigate` | Evidence-based statement verification: CONFIRMED / PARTIALLY TRUE / FALSE / INCONCLUSIVE |
 | `/audit-feature` | End-to-end feature audit tracing the pipeline across services |
 | `/review-task` | Tech Lead review: combined state + diff analysis, verdict APPROVED / CHANGES REQUESTED / BLOCKED |
+| `/secrets-scanner` | Full codebase scan for hardcoded secrets, API keys, passwords, connection strings |
+| `/test-coverage` | Test coverage report across all services (well-tested / minimal / none) |
+| `/dependency-mapper` | Map cross-service dependencies: imports, gRPC, RabbitMQ, HTTP calls |
+| `/architecture-review` | Architecture-level review: coupling, cohesion, scalability, observability |
 
 ### Skills (`.claude/skills/`)
 
@@ -96,12 +100,20 @@ docs/                 # Project documentation
 | `/fastapi-service-scaffold <name> <desc>` | Scaffold a new FastAPI service with all conventions |
 | `/rabbitmq-consumer-scaffold <name> <collection>` | Scaffold a new RabbitMQ processor with consumer, DLQ, metrics |
 | `/proto-sync [proto-file]` | Regenerate Python gRPC stubs from protos/ and check for breaking changes |
+| `docker-expert` | Docker troubleshooting, optimization, and security for 90+ Dockerfiles |
 
 ### Hooks (`settings.json`)
 
-| Event | Purpose |
-|-------|---------|
-| `Stop` | After each response: (1) check if CLAUDE.md files need updating, (2) self-review modified code for quality/security/impact |
+| Event | Hook | Purpose |
+|-------|------|---------|
+| `PreToolUse` (Bash) | `secret-scanner.py` | Block commits containing hardcoded secrets (60+ patterns) |
+| `PreToolUse` (Bash) | `dangerous-command-blocker.py` | Block catastrophic commands (rm -rf /, dd, mkfs) and protect critical paths |
+| `PreToolUse` (Bash) | force-push-blocker (inline) | Block `git push --force` and `git push -f` |
+| `PreToolUse` (Bash) | `conventional-commits.py` | Validate commit messages follow Conventional Commits format |
+| `PreToolUse` (Edit/Write) | `tdd-gate.sh` | Block production code edits if no corresponding test file exists |
+| `PostToolUse` (Edit) | format-python (inline) | Auto-format Python files after edits (black/ruff, graceful fallback) |
+| `Stop` | auto-review (prompt) | Check if CLAUDE.md needs updating + self-review modified code |
+| `Stop` | `scope-guard.sh` | Warn if files modified outside declared spec scope |
 
 ### Plugins
 
