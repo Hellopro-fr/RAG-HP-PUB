@@ -70,12 +70,14 @@ class MilvusPjCrud:
     def _validate_varchar_lengths(self, record: dict) -> None:
         for field_name, max_len in self._VARCHAR_MAX_LENGTHS.items():
             value = record.get(field_name)
-            if isinstance(value, str) and len(value) > max_len:
-                raise ValueError(
-                    f"Field '{field_name}' exceeds VARCHAR limit: "
-                    f"{len(value)} chars > max {max_len}. "
-                    f"Preview: {value[:100]!r}..."
-                )
+            if isinstance(value, str):
+                byte_len = len(value.encode("utf-8"))
+                if byte_len > max_len:
+                    raise ValueError(
+                        f"Field '{field_name}' exceeds VARCHAR limit: "
+                        f"{byte_len} bytes > max {max_len}. "
+                        f"Preview: {value[:100]!r}..."
+                    )
 
     def _connect_to_milvus(self):
         # Called with milvus_connection_lock already held
