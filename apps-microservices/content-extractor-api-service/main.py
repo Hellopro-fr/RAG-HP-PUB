@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.routers import clean
+from app.routers import clean, extract
 
 app = FastAPI(
     title="Content Extractor API",
@@ -9,6 +9,7 @@ app = FastAPI(
 )
 
 app.include_router(clean.router)
+app.include_router(extract.router)
 
 
 @app.get("/health")
