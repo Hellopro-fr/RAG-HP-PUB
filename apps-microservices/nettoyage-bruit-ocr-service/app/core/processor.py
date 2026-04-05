@@ -133,6 +133,7 @@ async def _process_single_message(document_item: dict) -> dict:
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if match:
             json_string = match.group(0)
+            json_string = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_string)
             parsed_json = json.loads(json_string)
             contenu = parsed_json.get("contenu")
             if not contenu:
