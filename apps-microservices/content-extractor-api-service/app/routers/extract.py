@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
 
 from app.schemas.extract import ExtractRequest, ExtractResponse, ExtractDebugResponse
+from app.core.metrics import REQUEST_COUNT, REQUEST_DURATION, EXTRACTION_METHOD
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,10 @@ async def extract_header_footer(request: ExtractRequest):
                 "Extracted header/footer (debug) in %.3fs, header_method=%s, footer_method=%s",
                 duration, header_method, footer_method,
             )
+            EXTRACTION_METHOD.labels(method=header_method).inc()
+            EXTRACTION_METHOD.labels(method=footer_method).inc()
+            REQUEST_COUNT.labels(method="POST", endpoint="/extract/header-footer", status="200").inc()
+            REQUEST_DURATION.labels(method="POST", endpoint="/extract/header-footer").observe(duration)
 
             return ExtractDebugResponse(
                 header=result.get("header_selected", ""),
@@ -66,6 +71,10 @@ async def extract_header_footer(request: ExtractRequest):
                 "Extracted header/footer in %.3fs, header_method=%s, footer_method=%s",
                 duration, result.get("header_method", "none"), result.get("footer_method", "none"),
             )
+            EXTRACTION_METHOD.labels(method=result.get("header_method", "none")).inc()
+            EXTRACTION_METHOD.labels(method=result.get("footer_method", "none")).inc()
+            REQUEST_COUNT.labels(method="POST", endpoint="/extract/header-footer", status="200").inc()
+            REQUEST_DURATION.labels(method="POST", endpoint="/extract/header-footer").observe(duration)
 
             return ExtractResponse(
                 header=result.get("header", ""),
@@ -75,6 +84,7 @@ async def extract_header_footer(request: ExtractRequest):
             )
     except Exception:
         logger.exception("Header/footer extraction failed")
+        REQUEST_COUNT.labels(method="POST", endpoint="/extract/header-footer", status="500").inc()
         raise HTTPException(
             status_code=500,
             detail={"detail": "Extraction failed", "error_code": "INTERNAL_ERROR"},
