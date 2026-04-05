@@ -632,6 +632,30 @@ services:
       - services-net
     logging: *logging_defaults
 
+  content-extractor-api-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/content-extractor-api-service/Dockerfile
+    container_name: content-extractor-api-service
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "${CONTENT_EXTRACTOR_API_PORT:-8600}:8600"
+    environment:
+      - PORT=8600
+      - LOG_LEVEL=info
+      - MAX_PAYLOAD_SIZE_MB=10
+    env_file:
+      - .env
+    networks:
+      - services-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8600/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *logging_defaults
+
   mysql:
     image: mysql:8.0
     container_name: mysql
