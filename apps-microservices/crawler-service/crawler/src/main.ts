@@ -930,9 +930,15 @@ if (typeCrawling == "sitemap") {
     // Phase 2: Seed remaining URLs after homepage completes (runs concurrently with crawler)
     if (crawlMode === 'update' && context.homepageReady) {
         const seedPhase2 = async () => {
-            const HOMEPAGE_TIMEOUT_MS = 120_000;
-            const timeout = new Promise<void>((resolve) => setTimeout(resolve, HOMEPAGE_TIMEOUT_MS));
-            await Promise.race([context.homepageReady!.promise, timeout]);
+            // If excluded paths were already restored from disk (crash/OOM restart
+            // or copied from previous crawl), skip waiting for homepage detection.
+            if (context.excludedRegionalPaths.length > 0) {
+                console.log(`[PHASE 2] Excluded paths already loaded from disk (${context.excludedRegionalPaths.length} paths). Skipping homepage wait.`);
+            } else {
+                const HOMEPAGE_TIMEOUT_MS = 120_000;
+                const timeout = new Promise<void>((resolve) => setTimeout(resolve, HOMEPAGE_TIMEOUT_MS));
+                await Promise.race([context.homepageReady!.promise, timeout]);
+            }
 
             const excluded = context.excludedRegionalPaths;
             if (excluded.length > 0) {
