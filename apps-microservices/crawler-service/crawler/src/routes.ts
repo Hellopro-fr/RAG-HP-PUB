@@ -747,6 +747,13 @@ router.addDefaultHandler(
                             return false;
                         }
 
+                        // Regional variant exclusion: block links to excluded regional paths
+                        if (context.excludedRegionalPaths.length > 0 &&
+                            DetectionLangueClient.isExcludedRegionalPath(request.url, context.excludedRegionalPaths)) {
+                            logBlocked('regional-variant', request.url);
+                            return false;
+                        }
+
                         // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)
                         // The Set was populated before enqueueLinks by batch-checking Redis.
                         // This avoids the async trap while still leveraging Redis dedup.
