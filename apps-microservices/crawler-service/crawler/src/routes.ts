@@ -430,6 +430,9 @@ router.addDefaultHandler(
                                 if (excluded.length > 0) {
                                     context.excludedRegionalPaths = excluded;
                                     log.info(`[REGIONAL_EXCLUSION] Excluded ${excluded.length} regional paths: ${excluded.join(", ")}`);
+                                    // Persist to disk (re-write {domain}.json with excludedPaths)
+                                    // so filtering survives crash/OOM restart
+                                    manageFrenchDetectionMethod(targetDomain as string, frenchDetectionMethod as string);
                                 }
                             }
                         }
