@@ -57,5 +57,13 @@ export const context = {
     countDiez: 0,
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
-    languageQueryParam: null as { key: string; value: string } | null
+    languageQueryParam: null as { key: string; value: string } | null,
+    // Regional path prefixes to exclude (e.g., ["/fr", "/fr-BE", "/fr-CA"]).
+    // Populated from alternative_urls during homepage detection.
+    // Read by transformRequestFunction to block discovered regional variant links.
+    excludedRegionalPaths: [] as string[],
+    // Promise-based signal for update mode two-phase seeding.
+    // Created in main.ts (update mode only). Resolved by homepage handler in routes.ts
+    // after storing excludedRegionalPaths. Awaited by Phase 2 seeding in main.ts.
+    homepageReady: null as { resolve: () => void; promise: Promise<void> } | null
 };
