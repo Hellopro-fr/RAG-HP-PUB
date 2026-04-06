@@ -55,7 +55,7 @@ nettoyage-bruit-ocr-service/
 ## Recent Reliability Fixes
 
 - **Content truncation**: `MAX_CONTENT_CHARS=60000` in `make_chat_request()` prevents LLM context window overflow (131K tokens) from OCR artifacts with massive repeated blocks.
-- **JSON escape sanitization**: LLM responses may contain invalid JSON escapes (`\e`, `\s`, `\a`). A regex sanitization step (`re.sub`) fixes lone backslashes before `json.loads()`.
+- **JSON escape sanitization**: LLM responses may contain invalid JSON escapes (`\e`, `\s`, `\a`). A regex sanitization step (`re.sub`) fixes lone backslashes before `json.loads()`. If parsing still fails (mixed valid/invalid escapes), fallback passes original text through unchanged rather than losing the document to DLQ.
 
 ## Dependencies on Other Services
 

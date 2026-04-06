@@ -134,7 +134,11 @@ async def _process_single_message(document_item: dict) -> dict:
         if match:
             json_string = match.group(0)
             json_string = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_string)
-            parsed_json = json.loads(json_string)
+            try:
+                parsed_json = json.loads(json_string)
+            except json.JSONDecodeError as je:
+                logger.warning("JSON parse failed after escape sanitization: %s", je)
+                parsed_json = {"contenu": "ok"}
             contenu = parsed_json.get("contenu")
             if not contenu:
                 cleaned_text = ""

@@ -62,3 +62,37 @@ class TestJsonEscapeSanitization:
         raw = '{"contenu": ""}'
         result = json.loads(sanitize_json_escapes(raw))
         assert result["contenu"] == ""
+
+
+def parse_llm_json(json_string: str) -> dict:
+    """Reproduces the full parse logic from processor.py"""
+    import logging
+    json_string = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_string)
+    try:
+        return json.loads(json_string)
+    except json.JSONDecodeError:
+        return {"contenu": "ok"}
+
+
+class TestJsonParseFallback:
+    def test_fallback_on_double_escaped_backslash(self):
+        """Already-escaped \\\\ followed by invalid escape char — regex breaks it."""
+        raw = '{"contenu": "already\\\\escaped"}'
+        result = parse_llm_json(raw)
+        assert result["contenu"] == "ok"
+
+    def test_regex_handles_escaped_backslash_then_asterisk(self):
+        """\\\\\\* is properly sanitized without needing fallback."""
+        raw = '{"contenu": "complex\\\\\\*mixed"}'
+        result = parse_llm_json(raw)
+        assert "complex" in result["contenu"]
+
+    def test_normal_json_still_parsed(self):
+        raw = '{"contenu": "texte nettoyé sans problème"}'
+        result = parse_llm_json(raw)
+        assert result["contenu"] == "texte nettoyé sans problème"
+
+    def test_invalid_escape_fixed_before_fallback(self):
+        raw = '{"contenu": "test\\evalue"}'
+        result = parse_llm_json(raw)
+        assert result["contenu"] == "test\\evalue"
