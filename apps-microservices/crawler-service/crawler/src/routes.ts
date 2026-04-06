@@ -411,6 +411,27 @@ router.addDefaultHandler(
                                 }
                             }
                             isEnqueuingLinks = true;
+
+                            // Regional path exclusion: extract alternative paths to exclude
+                            if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                                const winnerPrefix = DetectionLangueClient.extractPathPrefix(detectResult.url || url);
+                                const seedPrefix = DetectionLangueClient.extractPathPrefix(site);
+
+                                const excluded: string[] = [];
+                                for (const alt of detectResult.alternative_urls) {
+                                    const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
+                                    if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
+                                        if (!excluded.includes(altPrefix)) {
+                                            excluded.push(altPrefix);
+                                        }
+                                    }
+                                }
+
+                                if (excluded.length > 0) {
+                                    context.excludedRegionalPaths = excluded;
+                                    log.info(`[REGIONAL_EXCLUSION] Excluded ${excluded.length} regional paths: ${excluded.join(", ")}`);
+                                }
+                            }
                         }
                     } else {
                         // The API returns alternatives sorted by reliability (high > medium > low).
@@ -452,6 +473,11 @@ router.addDefaultHandler(
                 } catch (apiError: any) {
                     log.error(`Detection API error for main site ${url}: ${apiError.message}`);
                     context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
+                }
+
+                // Signal that homepage detection is complete (for update mode two-phase seeding)
+                if (context.homepageReady) {
+                    context.homepageReady.resolve();
                 }
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
