@@ -6,6 +6,9 @@ from common_utils.autres.CollectionName import CollectionName
 
 logger = logging.getLogger(__name__)
 
+# Milvus VARCHAR max_length in bytes — matches FieldSchema definitions in MilvusDocumentCrud/MilvusPjCrud
+MILVUS_VARCHAR_MAX = 65535
+
 # Module-level singletons — persist across messages, reuse cached connections
 base_vectorielle = MilvusDocumentCrud()
 pj_crud = MilvusPjCrud()
@@ -27,6 +30,17 @@ async def insertion_data(document_data: dict) -> dict:
         document = document_data.get("data", {})
         page_type = document.get("page_type", "")
         documents = [document]
+
+    # Truncate text exceeding Milvus VARCHAR byte limit (page_type=autre bypasses nettoyage-bruit-ocr)
+    for doc in documents:
+        text = doc.get("text", "")
+        text_bytes = text.encode("utf-8")
+        if len(text_bytes) > MILVUS_VARCHAR_MAX:
+            logger.warning(
+                "Text truncated: %d bytes > %d max, fichier_source=%s",
+                len(text_bytes), MILVUS_VARCHAR_MAX, doc.get("fichier_source", "N/A"),
+            )
+            doc["text"] = text_bytes[:MILVUS_VARCHAR_MAX].decode("utf-8", errors="ignore")
 
     nb_pages = document_data.get("nb_pages", "")
     collection = document_data.get("collection", CollectionName.DOCUMENT)
