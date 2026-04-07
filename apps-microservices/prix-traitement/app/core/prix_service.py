@@ -517,7 +517,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # Ex: claude-haiku-4-5-e-high → model=claude-haiku-4-5, effort=high
         # Ex: claude-haiku-4-5-b-2048 → model=claude-haiku-4-5, budget_tokens=2048
         # effor medium ou budget_token = 4096 par defaut
-        effort = "medium"
+        effort = None
         budget_tokens = None
         match_effort = re.search(r"-e-(low|medium|high)$", claude_model)
         match_budget = re.search(r"-b-(\d+)$", claude_model)
@@ -542,6 +542,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
 
         # Log LLM usage (fire-and-forget : n'attend pas la réponse pour ne pas ralentir le client)
         usage = llm_result.get("api_response", {}).get("usage", {})
+        logger.info(f"[{id_categorie}] Response Claude: {llm_result.get('api_response', {})}")
         asyncio.create_task(api_client.log_llm_usage(
             type_ia=4,  # Claude
             model=claude_model,
