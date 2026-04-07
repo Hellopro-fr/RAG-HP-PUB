@@ -509,6 +509,11 @@
           <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
           <input id="oauth2-desc" type="text" placeholder="Description optionnelle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Redirect URI</label>
+          <input id="oauth2-redirect-uri" type="url" value="https://claude.ai/api/mcp/auth_callback" placeholder="https://claude.ai/api/mcp/auth_callback" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <p class="text-xs text-gray-400 mt-1">URL de callback OAuth2 du client MCP (par défaut : Claude.ai)</p>
+        </div>
         <div id="oauth2-dnd-slot"><!-- dnd-container will be moved here when oauth2 modal opens -->
           <label class="block text-sm font-medium text-gray-700 mb-1">Accès serveurs & outils <span class="text-red-400">*</span></label>
           <p class="text-xs text-gray-400 mb-2">Glissez les serveurs et outils vers la droite, ou double-cliquez pour les déplacer</p>
@@ -1984,6 +1989,7 @@
       document.getElementById('oauth2-modal-title').textContent = "Créer un client OAuth2";
       document.getElementById('oauth2-name').value = '';
       document.getElementById('oauth2-desc').value = '';
+      document.getElementById('oauth2-redirect-uri').value = 'https://claude.ai/api/mcp/auth_callback';
       document.getElementById('oauth2-ttl').value = '86400';
       document.getElementById('oauth2-expires').value = '';
       document.getElementById('oauth2-expires').disabled = true;
@@ -2032,7 +2038,10 @@
       btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Génération...';
 
       try {
+        const redirectUri = document.getElementById('oauth2-redirect-uri').value.trim();
         const body = { name, description, server_ids: serverIDs, server_tools: serverTools, access_token_ttl: ttl };
+        if (redirectUri) body.redirect_uris = [redirectUri];
+        body.grant_types = ['authorization_code', 'client_credentials'];
         if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
 
         const result = await api('/oauth2/clients', { method: 'POST', body: JSON.stringify(body) });

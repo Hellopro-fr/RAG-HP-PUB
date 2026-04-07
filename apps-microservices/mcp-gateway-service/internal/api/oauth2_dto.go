@@ -52,8 +52,10 @@ type OAuth2ClientResponse struct {
 
 // UpdateOAuth2ClientRequest is the body for PUT /api/v1/oauth2/clients/{id}.
 type UpdateOAuth2ClientRequest struct {
-	Name        *string               `json:"name,omitempty"`
-	Description *string               `json:"description,omitempty"`
-	ServerIDs   []string              `json:"server_ids,omitempty"`
-	ServerTools []ServerToolSelection `json:"server_tools,omitempty"`
+	Name         *string               `json:"name,omitempty"`
+	Description  *string               `json:"description,omitempty"`
+	ServerIDs    []string              `json:"server_ids,omitempty"`
+	ServerTools  []ServerToolSelection `json:"server_tools,omitempty"`
+	RedirectURIs []string              `json:"redirect_uris,omitempty"`
+	GrantTypes   []string              `json:"grant_types,omitempty"`
 }

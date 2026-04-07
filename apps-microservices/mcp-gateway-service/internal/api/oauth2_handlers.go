@@ -227,6 +227,17 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 		updates["description"] = *req.Description
 	}
 
+	if len(req.RedirectURIs) > 0 {
+		redirectJSON, _ := json.Marshal(req.RedirectURIs)
+		s := string(redirectJSON)
+		updates["redirect_uris"] = &s
+	}
+	if len(req.GrantTypes) > 0 {
+		grantJSON, _ := json.Marshal(req.GrantTypes)
+		s := string(grantJSON)
+		updates["grant_types"] = &s
+	}
+
 	if len(updates) > 0 {
 		if err := h.oauth2Repo.Update(id, updates); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
