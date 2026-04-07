@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import ProgressHeader from "./ProgressHeader";
 import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
 import { useFlowStore } from "@/lib/stores/flow-store";
+import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import { validatePhoneNumber } from "@/lib/utils/phone-validation";
 import { toast } from "@/hooks/use-toast";
 import { trackFormValidationErrors } from "@/lib/analytics";
@@ -49,7 +50,7 @@ const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps
   }, [formData.email]);
 
   const leadSubmission = useLeadSubmission();
-  const { profileData, userAnswers, selectedSupplierIds, setContactData, categoryId } = useFlowStore();
+  const { profileData, userAnswers, selectedSupplierIds, setContactData, categoryId, priceEstimation } = useFlowStore();
   const { trackDbEvent } = useDbTracking();
 
    // Dynamic buyer check via API
@@ -194,6 +195,7 @@ const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps
       has_message: !!finalData.message,
       has_files: false,
       files_count: 0,
+      price_estimation: buildPriceTrackingPayload(priceEstimation),
     }, categoryId, 1);
 
     // Si acheteur connu: soumettre le lead directement

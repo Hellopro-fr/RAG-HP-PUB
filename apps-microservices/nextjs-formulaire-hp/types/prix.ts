@@ -53,3 +53,8 @@ export interface PriceEstimationState {
   data: PrixReponse | null;
   error: string | null;
 }
+
+/** Returns true when a valid price estimation with non-zero borne_basse is available. */
+export function hasPriceEstimation(pe: PriceEstimationState | null | undefined): boolean {
+  return pe?.data != null && pe.data.fourchette.borne_basse !== 0;
+}

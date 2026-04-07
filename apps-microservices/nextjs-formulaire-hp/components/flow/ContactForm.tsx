@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
 import { useBuyerCheck } from "@/hooks/api";
 import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
+import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import type { Supplier, ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
 import { validatePhoneNumber } from "@/lib/utils/phone-validation";
@@ -35,7 +36,8 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
     setFilesStore,
     addFilesStore,
     supplierIdsToSubmit: storeSupplierIdsToSubmit,
-    selectedSupplierIds
+    selectedSupplierIds,
+    priceEstimation
 
   } = useFlowStore();
 
@@ -287,7 +289,8 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
       is_known_buyer: isKnownBuyer,
       has_files: (finalData.files?.length || 0) > 0,
       files_count: finalData.files?.length || 0,
-      selected_suppliers_count: supplierIdsToSubmit.length
+      selected_suppliers_count: supplierIdsToSubmit.length,
+      price_estimation: buildPriceTrackingPayload(priceEstimation),
     }, categoryId, 1);
 
     // Si acheteur connu: soumettre le lead directement

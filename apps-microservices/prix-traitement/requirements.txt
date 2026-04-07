@@ -9,3 +9,5 @@ protobuf
 grpcio
 grpcio-tools
 googleapis-common-protos
+anthropic
+openai

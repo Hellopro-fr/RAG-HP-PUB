@@ -2173,6 +2173,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GSC_GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REFRESH_TOKEN=${GSC_GOOGLE_REFRESH_TOKEN:-}
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gsc-credentials.json
+      - GSC_CREDENTIALS_PATH=/secrets/gsc-credentials.json
       - GSC_SITE_URL=${GSC_SITE_URL:-}
       - GSC_SKIP_OAUTH=${GSC_SKIP_OAUTH:-true}
     volumes:
