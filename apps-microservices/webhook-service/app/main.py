@@ -5,10 +5,6 @@ import logging
 import aio_pika
 from webhook_service.messaging.consumer import Consumer
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -57,6 +53,12 @@ async def connect_to_rabbitmq(rabbitmq_url: str, max_retries: int = 10, retry_de
 
 
 async def main():
+    # Configuration du logging une seule fois, au point d'entrée
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
     logger.info("🚀 Démarrage du webhook-service (async)...")
 
     if not validate_environment():
@@ -72,8 +74,8 @@ async def main():
     try:
         logger.info("🎧 webhook-service: Prêt à traiter les webhooks")
         await consumer.start_consuming()
-    except KeyboardInterrupt:
-        logger.info("\n🛑 webhook-service: Arrêt demandé par l'utilisateur (Ctrl+C)")
+    except asyncio.CancelledError:
+        logger.info("🛑 webhook-service: Arrêt demandé")
     except Exception as e:
         logger.exception(f"❌ webhook-service: Erreur critique: {e}")
         sys.exit(1)

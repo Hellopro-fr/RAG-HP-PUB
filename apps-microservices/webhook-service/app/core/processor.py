@@ -8,15 +8,7 @@ import logging
 import json
 import hmac
 import aiohttp
-from dotenv import load_dotenv
 
-load_dotenv()
-
-# Configuration du logging structuré
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 # Configuration du batching
@@ -61,8 +53,10 @@ def sign_payload(payload_body: bytes, webhook_key: str) -> str:
 def build_batch_payload(payloads: List[dict]) -> dict:
     """
     Construit un payload batch à partir d'une liste de payloads individuels.
-    Regroupe les produits par URL de destination.
     """
+    if not payloads:
+        return {"batch": True, "mode": "update", "collection": "", "count": 0, "products": []}
+
     products = []
     for p in payloads:
         products.append({
@@ -86,20 +80,25 @@ class WebhookSender:
 
     def __init__(self):
         self._session: Optional[aiohttp.ClientSession] = None
+        self._session_lock = asyncio.Lock()
         self._webhook_key = get_webhook_key()
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            connector = aiohttp.TCPConnector(
-                limit=20,
-                keepalive_timeout=30,
-            )
-            self._session = aiohttp.ClientSession(connector=connector)
+        """Retourne une session HTTP, en la créant si nécessaire (thread-safe)."""
+        async with self._session_lock:
+            if self._session is None or self._session.closed:
+                connector = aiohttp.TCPConnector(
+                    limit=20,
+                    keepalive_timeout=30,
+                )
+                self._session = aiohttp.ClientSession(connector=connector)
         return self._session
 
     async def close(self):
-        if self._session and not self._session.closed:
-            await self._session.close()
+        async with self._session_lock:
+            if self._session and not self._session.closed:
+                await self._session.close()
+                self._session = None
 
     async def send_single(self, payload: dict, max_retries: int = 3, timeout: int = 10) -> bool:
         """Envoie un seul payload webhook."""
@@ -116,15 +115,25 @@ class WebhookSender:
 
         return await self._post_with_retry(url, payload_body, headers, max_retries, timeout)
 
-    async def send_batch(self, payloads: List[dict], max_retries: int = 3, timeout: int = 15) -> bool:
-        """Envoie un batch de payloads en un seul appel HTTP."""
+    async def send_batch(
+        self,
+        payloads: List[dict],
+        url: Optional[str] = None,
+        max_retries: int = 3,
+        timeout: int = 15,
+    ) -> bool:
+        """
+        Envoie un batch de payloads en un seul appel HTTP.
+        Si url est fourni, l'utilise directement (déjà résolu par le consumer).
+        """
         if not payloads:
             return True
 
         if len(payloads) == 1:
             return await self.send_single(payloads[0], max_retries, timeout)
 
-        url = resolve_webhook_url(payloads[0])
+        if not url:
+            url = resolve_webhook_url(payloads[0])
         if not url:
             return False
 

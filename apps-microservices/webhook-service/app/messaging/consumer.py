@@ -1,14 +1,10 @@
 import asyncio
 import json
 import logging
-from typing import List
+from typing import Dict, List, Optional
 import aio_pika
 from webhook_service.core.processor import WebhookSender, BATCH_SIZE, BATCH_TIMEOUT_S
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +14,8 @@ class Consumer:
 
     Accumule les messages dans un buffer et les envoie en batch
     lorsque le buffer atteint BATCH_SIZE ou après BATCH_TIMEOUT_S secondes.
+    Le lock couvre l'intégralité du flush (drain + HTTP + ACK/NACK) pour
+    éviter les double-flush et double-ACK.
     """
 
     def __init__(self, connection: aio_pika.RobustConnection):
@@ -28,11 +26,11 @@ class Consumer:
 
         self.sender = WebhookSender()
 
-        # Buffer pour le batching
+        # Buffer pour le batching — on stocke les IncomingMessage pour ACK/NACK
         self._buffer: List[dict] = []
-        self._delivery_tags: List[int] = []
-        self._channel: aio_pika.abc.AbstractChannel = None
-        self._flush_task: asyncio.Task = None
+        self._messages: List[aio_pika.IncomingMessage] = []
+        self._channel: Optional[aio_pika.abc.AbstractChannel] = None
+        self._flush_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
 
     async def _setup(self):
@@ -59,56 +57,95 @@ class Consumer:
         return queue
 
     async def _flush_buffer(self):
-        """Envoie le contenu du buffer en batch et ACK les messages."""
+        """
+        Envoie le contenu du buffer en batch et ACK/NACK les messages.
+        Le lock couvre toute l'opération pour empêcher les double-flush.
+        """
         async with self._lock:
             if not self._buffer:
                 return
 
             batch = self._buffer[:]
-            tags = self._delivery_tags[:]
+            messages = self._messages[:]
             self._buffer.clear()
-            self._delivery_tags.clear()
+            self._messages.clear()
 
-        logger.info(f"Flush batch de {len(batch)} message(s)")
+            logger.info(f"Flush batch de {len(batch)} message(s)")
 
-        try:
-            success = await self.sender.send_batch(batch)
+            try:
+                # Grouper par URL de destination pour éviter le mauvais routage
+                groups = self._group_by_url(batch, messages)
 
-            for tag in tags:
-                if success:
-                    await self._channel.default_exchange  # no-op, just to keep ref
-                    # ACK via the underlying channel
-                    await self._ack(tag)
-                else:
-                    await self._nack(tag)
+                for url, group_batch, group_messages in groups:
+                    success = await self.sender.send_batch(group_batch, url=url)
+                    for msg in group_messages:
+                        try:
+                            if success:
+                                await msg.ack()
+                            else:
+                                await msg.nack(requeue=False)
+                        except Exception as e:
+                            logger.error(f"Erreur ACK/NACK message: {e}")
 
-        except Exception as e:
-            logger.exception(f"❌ Erreur lors du flush batch: {e}")
-            for tag in tags:
-                await self._nack(tag)
+            except Exception as e:
+                logger.exception(f"❌ Erreur lors du flush batch: {e}")
+                for msg in messages:
+                    try:
+                        await msg.nack(requeue=False)
+                    except Exception as nack_err:
+                        logger.error(f"Erreur NACK message: {nack_err}")
 
-    async def _ack(self, delivery_tag: int):
-        try:
-            await self._channel.underlying_channel.basic_ack(delivery_tag)
-        except Exception as e:
-            logger.error(f"Erreur ACK delivery_tag={delivery_tag}: {e}")
+    @staticmethod
+    def _group_by_url(batch, messages):
+        """Regroupe les payloads et messages par URL de destination."""
+        from webhook_service.core.processor import resolve_webhook_url
 
-    async def _nack(self, delivery_tag: int):
-        try:
-            await self._channel.underlying_channel.basic_nack(delivery_tag, requeue=False)
-        except Exception as e:
-            logger.error(f"Erreur NACK delivery_tag={delivery_tag}: {e}")
+        groups: Dict[str, tuple] = {}
+        for data, msg in zip(batch, messages):
+            url = resolve_webhook_url(data) or "__no_url__"
+            if url not in groups:
+                groups[url] = ([], [])
+            groups[url][0].append(data)
+            groups[url][1].append(msg)
+
+        result = []
+        for url, (group_batch, group_messages) in groups.items():
+            if url == "__no_url__":
+                logger.warning(f"Aucune URL pour {len(group_messages)} message(s), NACK")
+                for msg in group_messages:
+                    # On ne peut pas appeler nack ici (hors lock dans un staticmethod)
+                    # mais on est dans le lock, donc on retourne avec success=False
+                result.append((url, group_batch, group_messages))
+            else:
+                result.append((url, group_batch, group_messages))
+        return result
 
     async def _schedule_flush(self):
-        """Planifie un flush après BATCH_TIMEOUT_S secondes."""
+        """
+        Planifie un flush après BATCH_TIMEOUT_S secondes.
+        Appelé sous le lock pour éviter la création de timers multiples.
+        """
         if self._flush_task and not self._flush_task.done():
-            return  # Un flush est déjà planifié
+            return
         self._flush_task = asyncio.create_task(self._timed_flush())
 
     async def _timed_flush(self):
         """Attend le timeout puis flush le buffer."""
-        await asyncio.sleep(BATCH_TIMEOUT_S)
-        await self._flush_buffer()
+        try:
+            await asyncio.sleep(BATCH_TIMEOUT_S)
+            await self._flush_buffer()
+        except asyncio.CancelledError:
+            pass
+
+    async def _cancel_flush_task(self):
+        """Annule proprement le timer de flush."""
+        if self._flush_task and not self._flush_task.done():
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+        self._flush_task = None
 
     async def _on_message(self, message: aio_pika.IncomingMessage):
         """Callback pour chaque message reçu."""
@@ -122,19 +159,20 @@ class Consumer:
                 logger.info(f"Message ignoré (mode={data.get('mode', 'none')} != 'update'), ACK silencieux")
                 return
 
-            # Ajouter au buffer (sans ACK pour l'instant, géré au flush)
+            # Ajouter au buffer et décider du flush (tout sous le lock)
             async with self._lock:
                 self._buffer.append(data)
-                self._delivery_tags.append(message.delivery_tag)
+                self._messages.append(message)
                 buffer_size = len(self._buffer)
 
-            # Flush si le buffer est plein
+                if buffer_size >= BATCH_SIZE:
+                    await self._cancel_flush_task()
+                else:
+                    await self._schedule_flush()
+
+            # Flush hors du lock d'ajout, mais _flush_buffer prend le lock lui-même
             if buffer_size >= BATCH_SIZE:
-                if self._flush_task and not self._flush_task.done():
-                    self._flush_task.cancel()
                 await self._flush_buffer()
-            else:
-                await self._schedule_flush()
 
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON invalide: {e}")
@@ -147,11 +185,9 @@ class Consumer:
         """Démarre la consommation asynchrone des messages."""
         queue = await self._setup()
 
-        # Consommation avec manual ACK (no_ack=False par défaut)
         await queue.consume(self._on_message)
         logger.info(f"👂 webhook-service en attente de messages sur queue '{self.queue_name}'...")
 
-        # Boucle infinie pour maintenir le consumer actif
         try:
             await asyncio.Future()
         except asyncio.CancelledError:
@@ -160,8 +196,7 @@ class Consumer:
     async def stop(self):
         """Arrêt propre : flush le buffer restant et ferme la session HTTP."""
         logger.info("🛑 Arrêt du consumer, flush du buffer restant...")
-        if self._flush_task and not self._flush_task.done():
-            self._flush_task.cancel()
+        await self._cancel_flush_task()
         await self._flush_buffer()
         await self.sender.close()
         logger.info("✅ Consumer arrêté proprement")
