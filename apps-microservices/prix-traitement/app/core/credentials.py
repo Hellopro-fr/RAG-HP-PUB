@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     # GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
     GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
 
+    # LLM - Claude (Anthropic)
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL_NAME: str = "claude-haiku-4-5"
+
     # API HelloPro
     HP_TOKEN: str
 
