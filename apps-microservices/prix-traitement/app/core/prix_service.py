@@ -516,7 +516,8 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # Parser les suffixes raccourcis : -e-{effort} ou -b-{budget_tokens}
         # Ex: claude-haiku-4-5-e-high → model=claude-haiku-4-5, effort=high
         # Ex: claude-haiku-4-5-b-2048 → model=claude-haiku-4-5, budget_tokens=2048
-        effort = None
+        # effor medium ou budget_token = 4096 par defaut
+        effort = "medium"
         budget_tokens = None
         match_effort = re.search(r"-e-(low|medium|high)$", claude_model)
         match_budget = re.search(r"-b-(\d+)$", claude_model)
