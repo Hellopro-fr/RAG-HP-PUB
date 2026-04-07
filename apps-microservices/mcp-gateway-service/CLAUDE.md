@@ -128,6 +128,7 @@ Dockerfile                   # Multi-stage build
 | `AUTH_ENABLED` | `true` | Require login (set to "false" to disable) |
 | `SCOPE_TOKEN_REQUIRED` | `true` | Require scope token on MCP endpoints (set to "false" to disable) |
 | `GATEWAY_PUBLIC_URL` | — | Public URL for generated .mcp.json snippets |
+| `ALLOW_INTERNAL_URLS` | `false` | Set to `true` to allow Docker-internal/private IP ranges (172.x.x.x, 10.x.x.x, etc.) as backend URLs — required when gateway and backends share a Docker network |
 
 ## Database
 
