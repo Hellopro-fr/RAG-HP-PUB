@@ -247,6 +247,18 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
               </button>
             )}
 
+            {/* Match Score Badge */}
+            {product.matchScore >= 60 && (
+              <div className="absolute top-3 left-3 z-10">
+                <span className={cn(
+                  "rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow-sm",
+                  product.matchScore >= 80 ? "bg-match-high" : "bg-match-medium"
+                )}>
+                  {product.matchScore >= 80 ? "Idéal" : "À considérer"}
+                </span>
+              </div>
+            )}
+
             {/* Navigation arrows */}
             {mediaItems.length > 1 && (
               <>
@@ -326,16 +338,6 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
 
           {/* Product Info */}
           <div className="p-4 sm:p-6 space-y-6">
-            {/* Match Score */}
-            <div className="rounded-xl border bg-muted/30 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Correspondance avec vos critères</span>
-                <span className={cn("text-2xl font-bold", getMatchColor())}>
-                  {product.matchScore}%
-                </span>
-              </div>
-            </div>
-
             {/* Description - Rich HTML support with expandable */}
             <div>
               <div className="flex items-center gap-2 mb-3">
