@@ -9,7 +9,7 @@ import asyncio
 import re
 from typing import Dict, Any, Optional, List
 
-from app.core.api_client import GeminiProvider, ClaudeProvider, HelloProAPIClient
+from app.core.api_client import GeminiProvider, ClaudeProvider, ChatGPTProvider, HelloProAPIClient
 from app.core.utils import extract_json_from_text, get_prompt_cached
 from app.core.search import call_search_api_async
 from app.core.credentials import settings
@@ -511,43 +511,78 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
-        claude_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CLAUDE_MODEL_NAME
-
-        # Parser les suffixes raccourcis : -e-{effort} ou -b-{budget_tokens}
-        # Ex: claude-haiku-4-5-e-high → model=claude-haiku-4-5, effort=high
-        # Ex: claude-haiku-4-5-b-2048 → model=claude-haiku-4-5, budget_tokens=2048
-        # effor medium ou budget_token = 4096 par defaut
-        effort = None
-        budget_tokens = None
-        match_effort = re.search(r"-e-(low|medium|high)$", claude_model)
-        match_budget = re.search(r"-b-(\d+)$", claude_model)
-        if match_effort:
-            effort = match_effort.group(1)
-            claude_model = claude_model[:match_effort.start()]
-        elif match_budget:
-            budget_tokens = int(match_budget.group(1))
-            claude_model = claude_model[:match_budget.start()]
+        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CLAUDE_MODEL_NAME
+        use_gemini = llm_model.startswith("gemini")
+        use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
 
         logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
-        logger.info(f"[{id_categorie}] Appel Claude (model={claude_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...")
 
-        # Utiliser ClaudeProvider
-        claude = ClaudeProvider(
-            model=claude_model,
-            effort=effort,
-            budget_tokens=budget_tokens,
-        )
+        if use_gemini:
+            # ---- Gemini ----
+            actual_model = llm_model if llm_model != "gemini" else settings.GEMINI_MODEL_NAME
+            type_ia = 3
+            logger.info(f"[{id_categorie}] Appel Gemini (model={actual_model}, {len(final_prompt)} chars)...")
 
-        llm_result = await claude.chat(final_prompt)
+            gemini = GeminiProvider(
+                model=actual_model,
+                thinking_level="low"
+            )
 
-        # Log LLM usage (fire-and-forget : n'attend pas la réponse pour ne pas ralentir le client)
+            llm_result = await gemini.chat(final_prompt)
+
+        elif use_chatgpt:
+            # ---- ChatGPT ----
+            actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
+            type_ia = 1
+            logger.info(f"[{id_categorie}] Appel ChatGPT (model={actual_model}, {len(final_prompt)} chars)...")
+
+            gpt = ChatGPTProvider(
+                model=actual_model
+            )
+
+            llm_result = await gpt.chat(final_prompt)
+
+        else:
+            # ---- Claude (défaut) ----
+            actual_model = llm_model
+            type_ia = 4
+
+            # Parser les suffixes raccourcis : -e-{effort} ou -b-{budget_tokens}
+            # Ex: claude-haiku-4-5-e-high → model=claude-haiku-4-5, effort=high
+            # Ex: claude-haiku-4-5-b-2048 → model=claude-haiku-4-5, budget_tokens=2048
+            effort = None
+            budget_tokens = None
+            match_effort = re.search(r"-e-(low|medium|high)$", actual_model)
+            match_budget = re.search(r"-b-(\d+)$", actual_model)
+            if match_effort:
+                effort = match_effort.group(1)
+                actual_model = actual_model[:match_effort.start()]
+            elif match_budget:
+                budget_tokens = int(match_budget.group(1))
+                actual_model = actual_model[:match_budget.start()]
+
+            logger.info(f"[{id_categorie}] Appel Claude (model={actual_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...")
+
+            claude = ClaudeProvider(
+                model=actual_model,
+                effort=effort,
+                budget_tokens=budget_tokens,
+            )
+
+            llm_result = await claude.chat(final_prompt)
+
+        # Extraction usage commun (format normalisé pour les 3 providers)
         usage = llm_result.get("api_response", {}).get("usage", {})
-        logger.info(f"[{id_categorie}] Response Claude: {llm_result.get('api_response', {})}")
+        input_tokens = usage.get("input_tokens") or 0
+        output_tokens = usage.get("output_tokens") or 0
+
+        # Log LLM usage commun (fire-and-forget)
+        logger.info(f"[{id_categorie}] Response LLM: {llm_result.get('api_response', {})}")
         asyncio.create_task(api_client.log_llm_usage(
-            type_ia=4,  # Claude
-            model=claude_model,
-            input_token=usage.get("input_tokens") or 0,
-            output_token=usage.get("output_tokens") or 0,
+            type_ia=type_ia,
+            model=actual_model,
+            input_token=input_tokens,
+            output_token=output_tokens,
             id_process=ID_PROCESS,
             origine="prix-traitement-questionnaire",
             etat=1 if "error" not in llm_result else 2,
@@ -558,7 +593,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         elapsed = time.time() - start_time
         # Vérifier si erreur LLM
         if "error" in llm_result:
-            error_msg = f"Erreur Claude: {llm_result.get('error', '')}"
+            error_msg = f"Erreur LLM: {llm_result.get('error', '')}"
             logger.error(f"[{id_categorie}] {error_msg}")
             return {
                 "success": False,
