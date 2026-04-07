@@ -462,8 +462,8 @@
     </div>
   </div>
 
-  <!-- Shared drag-and-drop server/tool picker (moved between modals via JS) -->
-  <div id="dnd-container" class="grid grid-cols-2 gap-3" style="min-height:300px">
+  <!-- Shared drag-and-drop server/tool picker (hidden by default, moved into modals via JS) -->
+  <div id="dnd-container" style="display:none; min-height:300px" class="grid grid-cols-2 gap-3">
     <!-- LEFT: Available -->
     <div class="border border-gray-200 rounded-lg flex flex-col">
       <div class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-lg">
@@ -1250,13 +1250,20 @@
       document.getElementById('token-name').focus();
     }
 
-    // Moves the shared dnd-container into the specified slot element
+    // Moves the shared dnd-container into the specified slot element and shows it
     function moveDndTo(slotId) {
       const container = document.getElementById('dnd-container');
       const slot = document.getElementById(slotId);
-      if (container && slot && container.parentElement !== slot) {
+      if (container && slot) {
         slot.appendChild(container);
+        container.style.display = '';
       }
+    }
+
+    // Hides the dnd-container (called when modals close)
+    function hideDnd() {
+      const container = document.getElementById('dnd-container');
+      if (container) container.style.display = 'none';
     }
 
     async function openEditTokenModal(tokenId) {
@@ -1338,6 +1345,7 @@
     function closeTokenModal() {
       document.getElementById('token-backdrop').classList.add('hidden');
       document.getElementById('token-modal').classList.add('hidden');
+      hideDnd();
     }
 
     // ── Drag-and-drop hierarchical tool picker ──────────────────────────
@@ -2088,6 +2096,7 @@
     function closeOAuth2Modal() {
       document.getElementById('oauth2-backdrop').classList.add('hidden');
       document.getElementById('oauth2-modal').classList.add('hidden');
+      hideDnd();
     }
 
     async function createOAuth2Client() {
