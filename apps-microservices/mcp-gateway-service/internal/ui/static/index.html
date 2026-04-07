@@ -1214,7 +1214,7 @@
     }
 
     // ── Scope Token modal ────────────────────────────────────────────────
-    function openTokenModal() {
+    async function openTokenModal() {
       _editingTokenId = null;
       document.getElementById('token-modal-title').textContent = "Créer un jeton d'accès";
       document.getElementById('token-name').value = '';
@@ -1237,6 +1237,13 @@
       document.getElementById('token-backdrop').classList.remove('hidden');
       document.getElementById('token-modal').classList.remove('hidden');
 
+      // Ensure servers are loaded before populating dnd
+      if (allServers.length === 0) {
+        try {
+          const data = await api('/servers?is_active=true');
+          allServers = data.servers || [];
+        } catch (e) { /* ignore */ }
+      }
       // Move shared dnd panels into token modal slot and populate
       moveDndTo('token-dnd-slot');
       dndPopulate();
