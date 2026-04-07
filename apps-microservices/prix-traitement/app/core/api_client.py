@@ -157,7 +157,7 @@ class ClaudeProvider:
     # Mapping effort → budget_tokens pour Haiku (extended thinking)
     EFFORT_TO_BUDGET = {
         "high": 10000,
-        "medium": 5000,
+        "medium": 4096,
         "low": 1024,
     }
 
@@ -165,7 +165,7 @@ class ClaudeProvider:
         self,
         api_key: Optional[str] = None,
         model: str = "claude-haiku-4-5",
-        max_tokens: int = 4096,
+        max_tokens: int = 16000,
         effort: Optional[str] = None,
         budget_tokens: Optional[int] = None,
         max_retries: int = 5,

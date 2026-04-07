@@ -494,7 +494,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
 
         logger.info(f"[{id_categorie}] chunks formatés ({len(all_chunks_text)} chars)")
-        logger.info(f"[{id_categorie}] all chunk : {all_chunks_text}")
+        # logger.info(f"[{id_categorie}] all chunk : {all_chunks_text}")
 
         prompt_text = prompt_config.get("contenu_prompt", "")        
         
