@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL_NAME: str = "claude-haiku-4-5"
 
+    # LLM - ChatGPT (OpenAI)
+    OPENAI_API_KEY: str = ""
+    CHATGPT_MODEL_NAME: str = "gpt-5.4-mini"
+
     # API HelloPro
     HP_TOKEN: str
 
