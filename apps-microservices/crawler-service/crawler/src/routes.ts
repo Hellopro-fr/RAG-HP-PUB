@@ -348,7 +348,13 @@ router.addDefaultHandler(
 
             if (isMainSite) {
                 // Process normally and store the method
-                content = await processPage(page, request.loadedUrl, log);
+                try {
+                    content = await processPage(page, request.loadedUrl, log);
+                } catch (e: any) {
+                    log.error(`Failed to extract homepage content: ${e.message}`);
+                    context.crawlErrorMessage = `Erreur lors de l'extraction du contenu de la page d'accueil`;
+                    throw e;
+                }
 
                 // Challenge page detection: check if the content is a bot protection page
                 // If detected, wait for the challenge to resolve before proceeding
@@ -405,6 +411,30 @@ router.addDefaultHandler(
                                 }
                             }
                             isEnqueuingLinks = true;
+
+                            // Regional path exclusion: extract alternative paths to exclude
+                            if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                                const winnerPrefix = DetectionLangueClient.extractPathPrefix(detectResult.url || url);
+                                const seedPrefix = DetectionLangueClient.extractPathPrefix(site);
+
+                                const excluded: string[] = [];
+                                for (const alt of detectResult.alternative_urls) {
+                                    const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
+                                    if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
+                                        if (!excluded.includes(altPrefix)) {
+                                            excluded.push(altPrefix);
+                                        }
+                                    }
+                                }
+
+                                if (excluded.length > 0) {
+                                    context.excludedRegionalPaths = excluded;
+                                    log.info(`[REGIONAL_EXCLUSION] Excluded ${excluded.length} regional paths: ${excluded.join(", ")}`);
+                                    // Persist to disk (re-write {domain}.json with excludedPaths)
+                                    // so filtering survives crash/OOM restart
+                                    manageFrenchDetectionMethod(targetDomain as string, frenchDetectionMethod as string);
+                                }
+                            }
                         }
                     } else {
                         // The API returns alternatives sorted by reliability (high > medium > low).
@@ -446,6 +476,11 @@ router.addDefaultHandler(
                 } catch (apiError: any) {
                     log.error(`Detection API error for main site ${url}: ${apiError.message}`);
                     context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
+                }
+
+                // Signal that homepage detection is complete (for update mode two-phase seeding)
+                if (context.homepageReady) {
+                    context.homepageReady.resolve();
                 }
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
@@ -712,6 +747,13 @@ router.addDefaultHandler(
 
                         } catch (e) {
                             console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
+                            return false;
+                        }
+
+                        // Regional variant exclusion: block links to excluded regional paths
+                        if (context.excludedRegionalPaths.length > 0 &&
+                            DetectionLangueClient.isExcludedRegionalPath(request.url, context.excludedRegionalPaths)) {
+                            logBlocked('regional-variant', request.url);
                             return false;
                         }
 

@@ -35,10 +35,9 @@ async function prefetchCategoryStats(
     const data = await response.json();
     // API retourne: {"id_categorie":"2007702","fournisseur":33,"produit":748}
     if (data.produit !== undefined && data.fournisseur !== undefined) {
-      setCategoryStats({
-        productsCount: Number(data.produit),
-        suppliersCount: Number(data.fournisseur),
-      });
+      const productsCount = Number(data.produit);
+      const suppliersCount = Number(data.fournisseur);
+      setCategoryStats({ productsCount, suppliersCount });
     }
   } catch (error) {
     console.error('Prefetch category stats error:', error);

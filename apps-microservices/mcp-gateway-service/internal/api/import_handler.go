@@ -153,7 +153,7 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 
 	// SSRF protection: validate remote server URLs
 	if serverURL != "" {
-		if err := urlvalidation.ValidateServerURL(serverURL); err != nil {
+		if err := urlvalidation.ValidateServerURL(serverURL, h.allowInternalURLs); err != nil {
 			result.Status = "error"
 			result.Error = "invalid server URL: " + err.Error()
 			return result

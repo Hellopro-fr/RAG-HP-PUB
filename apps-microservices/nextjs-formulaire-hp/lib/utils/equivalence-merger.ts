@@ -52,7 +52,7 @@ export interface ConsolidatedCharacteristic {
 /**
  * Détecte si une valeur est un objet numérique (min/max/exact)
  */
-function isNumericObject(val: any): val is { exact?: number; min?: number; max?: number } {
+export function isNumericObject(val: any): val is { exact?: number; min?: number; max?: number } {
   if (val === null || val === undefined) return false;
   if (Array.isArray(val)) return false;
   if (typeof val !== 'object') return false;
@@ -65,7 +65,7 @@ function isNumericObject(val: any): val is { exact?: number; min?: number; max?:
  * - Si unite est présent → numerique
  * - Sinon → textuelle
  */
-function detectTypeFromData(eq: RawEquivalence): TypeCaracteristique {
+export function detectTypeFromData(eq: RawEquivalence): TypeCaracteristique {
   // Si valeurs_cibles est un objet {min/max/exact} → numerique
   if (isNumericObject(eq.valeurs_cibles)) {
     return 'numerique';

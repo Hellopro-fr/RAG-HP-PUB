@@ -22,9 +22,6 @@ async def main():
         exit(1)
 
     logger.info("Database-Document-processor-service: Démarrage...")
-    
-    # Créer le répertoire de récupération s'il n'existe pas
-    os.makedirs('recovery_data', exist_ok=True)
 
     loop = asyncio.get_event_loop()
     

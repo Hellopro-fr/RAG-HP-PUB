@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react";
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Button } from "@/components/ui/button"
 import { apiGetDashboardStats, DashboardStats } from "@/lib/api";
@@ -13,14 +13,14 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<{ date_start?: Date; date_end?: Date }>({});
 
-  const fetchStats = async (currentFilters: { date_start?: Date; date_end?: Date }) => {
+  const fetchStats = useCallback(async (currentFilters: { date_start?: Date; date_end?: Date }) => {
     try {
         setLoading(true);
         setError(null);
         const body: { date_start?: string, date_end?: string } = {};
         if (currentFilters.date_start) body.date_start = currentFilters.date_start.toISOString();
         if (currentFilters.date_end) body.date_end = currentFilters.date_end.toISOString();
-        
+
         const response = await apiGetDashboardStats(body);
         setStats(response.data);
     } catch (err) {
@@ -29,11 +29,11 @@ export default function Dashboard() {
     } finally {
         setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchStats({});
-  }, []);
+  }, [fetchStats]);
 
   const handleApplyFilter = () => {
       fetchStats(filters);
@@ -123,7 +123,7 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={serviceData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--gris-blanc)" />
-                <XAxis dataKey="name" fontSize={12} tickFormatter={(value) => value.substring(0, 10) + '...'} />
+                <XAxis dataKey="name" fontSize={12} tickFormatter={(value: string) => value.length > 10 ? value.substring(0, 10) + '...' : value} />
                 <YAxis fontSize={12} />
                 <Tooltip contentStyle={{ backgroundColor: "#fff", border: "1px solid var(--gris-blanc)" }} />
                 <Bar dataKey="count" fill="var(--bleu-primary)" />

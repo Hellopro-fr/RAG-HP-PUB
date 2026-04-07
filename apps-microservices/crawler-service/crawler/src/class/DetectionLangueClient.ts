@@ -152,4 +152,42 @@ export class DetectionLangueClient {
         }
         return null;
     }
+
+    /**
+     * Extract the first path segment from a URL.
+     * Used to identify regional path prefixes for exclusion filtering.
+     *
+     * e.g. "https://www.manitou.com/fr-FR/products" -> "/fr-FR"
+     *      "https://www.manitou.com/fr/"             -> "/fr"
+     *      "https://www.manitou.com/"                -> null (root)
+     */
+    static extractPathPrefix(url: string): string | null {
+        try {
+            const pathname = new URL(url).pathname;
+            const cleaned = pathname.replace(/\/+$/, "");
+            if (!cleaned || cleaned === "") return null;
+            const firstSegment = cleaned.split("/").filter(Boolean)[0];
+            return firstSegment ? `/${firstSegment}` : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Check if a URL's path starts with any excluded regional prefix.
+     * Matching rule: prefix must match exactly or be followed by "/".
+     * e.g. prefix "/fr-BE" matches "/fr-BE", "/fr-BE/", "/fr-BE/products"
+     *      but NOT "/fr-BEL/" or "/france/".
+     */
+    static isExcludedRegionalPath(url: string, excludedPrefixes: string[]): boolean {
+        if (excludedPrefixes.length === 0) return false;
+        try {
+            const pathname = new URL(url).pathname;
+            return excludedPrefixes.some(
+                prefix => pathname === prefix || pathname.startsWith(prefix + "/")
+            );
+        } catch {
+            return false;
+        }
+    }
 }

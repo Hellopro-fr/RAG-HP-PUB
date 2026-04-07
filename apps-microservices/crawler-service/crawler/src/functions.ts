@@ -612,6 +612,12 @@ export const startCrawler = async (
                 );
             }
 
+            // Set crawlErrorMessage if homepage exhausted all retries
+            if (request.url === context.config.baseUrl && !context.crawlErrorMessage) {
+                const errorSummary = String(request.errorMessages).substring(0, 150);
+                context.crawlErrorMessage = `Page d'accueil inaccessible après ${request.retryCount} tentatives: ${errorSummary}`;
+            }
+
             // Save rich error info
             let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${domain}`;
             let dataset = await Dataset.open(datasetName);
@@ -1107,6 +1113,11 @@ export const copyPreviousMethod = (previousId: string, domain: string): boolean 
             if (content.method) {
                 context.frenchDetectionMethod = content.method;
                 console.log(`Loaded French detection method into memory: ${content.method}`);
+            }
+            // Restore excluded regional paths from previous crawl
+            if (content.excludedPaths && Array.isArray(content.excludedPaths)) {
+                context.excludedRegionalPaths = content.excludedPaths;
+                console.log(`Loaded ${content.excludedPaths.length} excluded regional paths from previous crawl: ${content.excludedPaths.join(", ")}`);
             }
             return true;
         } else {
@@ -1788,8 +1799,12 @@ export const manageFrenchDetectionMethod = (
             // Create directories if they don't exist
             if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true });
 
-            // Store new method (overwrite if exists)
-            fs.writeFileSync(filePath, JSON.stringify({ method: checkFrenchMethod }, null, 2));
+            // Build storage object: method + excluded paths (if any)
+            const data: Record<string, any> = { method: checkFrenchMethod };
+            if (context.excludedRegionalPaths.length > 0) {
+                data.excludedPaths = context.excludedRegionalPaths;
+            }
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
             return checkFrenchMethod;
         }
 
@@ -1797,6 +1812,10 @@ export const manageFrenchDetectionMethod = (
         if (fs.existsSync(filePath)) {
             const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
             context.frenchDetectionMethod = content.method; // Update cache
+            // Restore excluded regional paths if persisted
+            if (content.excludedPaths && Array.isArray(content.excludedPaths)) {
+                context.excludedRegionalPaths = content.excludedPaths;
+            }
             return content.method;
         }
 

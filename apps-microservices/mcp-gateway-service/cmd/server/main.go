@@ -105,7 +105,7 @@ func main() {
 	// Monte les routes REST API si le repository est disponible
 	if repo != nil && database != nil {
 		tokenRepo = repository.NewTokenRepo(database, encryptor)
-		apiHandler := api.NewHandler(repo, gw, registry)
+		apiHandler := api.NewHandler(repo, gw, registry, cfg.AllowInternalURLs)
 		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
@@ -215,6 +215,13 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
 				}
+				// Sync tool active states from DB (discovery marks all as active,
+				// but some may have been deactivated by the user)
+				toolStates := make(map[string]bool, len(s.Tools))
+				for _, t := range s.Tools {
+					toolStates[t.Name] = t.IsActive
+				}
+				reg.SyncToolActiveStates(s.ID, toolStates)
 				_ = repo.UpdateHealth(s.ID, "healthy", "")
 			}
 		}(srv)
@@ -240,6 +247,7 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.InputSchema,
+			IsActive:    t.IsActive,
 		})
 	}
 	for _, r := range srv.Resources {

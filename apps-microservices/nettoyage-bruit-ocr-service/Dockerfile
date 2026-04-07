@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler \
 
 
 COPY apps-microservices/nettoyage-bruit-ocr-service/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY libs/grpc-stubs /app/libs/grpc-stubs
 RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
@@ -24,5 +24,8 @@ RUN pip install --no-cache-dir -e ./libs/grpc-stubs
 
 
 COPY apps-microservices/nettoyage-bruit-ocr-service/app/ /app/nettoyage_bruit_ocr_service
+
+RUN useradd -m -r appuser
+USER appuser
 
 CMD ["python", "-u", "-m", "nettoyage_bruit_ocr_service.main"]

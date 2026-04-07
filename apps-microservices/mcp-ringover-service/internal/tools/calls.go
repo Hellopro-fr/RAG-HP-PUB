@@ -1,0 +1,195 @@
+package tools
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/hellopro/mcp-ringover/internal/mcp"
+)
+
+const getCallsDescription = "List recent calls from Ringover with optional limit"
+const getCallsInputSchema = `{
+	"type": "object",
+	"properties": {
+		"limit": {
+			"type": "integer",
+			"description": "Maximum number of calls to return (default: 20)",
+			"default": 20
+		}
+	}
+}`
+
+func handleGetCalls(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
+	limit := 20
+	if v, ok := args["limit"]; ok {
+		if f, ok := v.(float64); ok {
+			limit = int(f)
+		}
+	}
+
+	data, err := clients.Ringover.GetCalls(ctx, limit)
+	if err != nil {
+		return nil, fmt.Errorf("GetCalls: %w", err)
+	}
+
+	return rawJSONResult(data), nil
+}
+
+// ── list_calls_by_date ───────────────────────────────────────────────────────
+
+const listCallsByDateDescription = "List calls within a date range. Dates must be ISO 8601 (e.g. 2026-04-01T00:00:00.000Z) or YYYY-MM-DD."
+const listCallsByDateInputSchema = `{
+	"type": "object",
+	"properties": {
+		"start_date": {
+			"type": "string",
+			"description": "Start of the date range (ISO 8601 or YYYY-MM-DD)"
+		},
+		"end_date": {
+			"type": "string",
+			"description": "End of the date range (ISO 8601 or YYYY-MM-DD)"
+		},
+		"limit": {
+			"type": "integer",
+			"description": "Maximum number of calls to return (default: 50)",
+			"default": 50
+		}
+	},
+	"required": ["start_date", "end_date"]
+}`
+
+func handleListCallsByDate(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
+	startDate, ok := args["start_date"].(string)
+	if !ok || startDate == "" {
+		return errorResult("'start_date' parameter is required"), nil
+	}
+	endDate, ok := args["end_date"].(string)
+	if !ok || endDate == "" {
+		return errorResult("'end_date' parameter is required"), nil
+	}
+	limit := 50
+	if v, ok := args["limit"]; ok {
+		if f, ok := v.(float64); ok {
+			limit = int(f)
+		}
+	}
+
+	data, err := clients.Ringover.ListCallsByDate(ctx, startDate, endDate, limit)
+	if err != nil {
+		return nil, fmt.Errorf("ListCallsByDate: %w", err)
+	}
+	return rawJSONResult(data), nil
+}
+
+// ── search_calls ─────────────────────────────────────────────────────────────
+
+const searchCallsDescription = "Search and filter calls by type, phone number, or user. All parameters are optional. Use call_type to filter by ANSWERED, MISSED, OUT (outbound), or VOICEMAIL."
+const searchCallsInputSchema = `{
+	"type": "object",
+	"properties": {
+		"call_type": {
+			"type": "string",
+			"description": "Filter by call type: ANSWERED (answered inbound/outbound), MISSED (missed inbound), OUT (outbound), VOICEMAIL",
+			"enum": ["ANSWERED", "MISSED", "OUT", "VOICEMAIL"]
+		},
+		"phone_number": {
+			"type": "string",
+			"description": "Filter by phone number (caller or callee)"
+		},
+		"user_id": {
+			"type": "string",
+			"description": "Filter by Ringover user ID"
+		},
+		"limit": {
+			"type": "integer",
+			"description": "Maximum number of results (default: 20)",
+			"default": 20
+		}
+	}
+}`
+
+func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
+	callType, _ := args["call_type"].(string)
+	phoneNumber, _ := args["phone_number"].(string)
+	userID, _ := args["user_id"].(string)
+	limit := 20
+	if v, ok := args["limit"]; ok {
+		if f, ok := v.(float64); ok {
+			limit = int(f)
+		}
+	}
+
+	data, err := clients.Ringover.SearchCalls(ctx, callType, phoneNumber, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("SearchCalls: %w", err)
+	}
+	return rawJSONResult(data), nil
+}
+
+// ── get_call_stats_by_user ───────────────────────────────────────────────────
+
+const getCallStatsByUserDescription = "Get call statistics broken down by user/team member for a date range."
+const getCallStatsByUserInputSchema = `{
+	"type": "object",
+	"properties": {
+		"start_date": {
+			"type": "string",
+			"description": "Start of the period (ISO 8601 or YYYY-MM-DD)"
+		},
+		"end_date": {
+			"type": "string",
+			"description": "End of the period (ISO 8601 or YYYY-MM-DD)"
+		},
+		"user_id": {
+			"type": "string",
+			"description": "Restrict to a specific user ID (optional — omit to get all users)"
+		}
+	},
+	"required": ["start_date", "end_date"]
+}`
+
+func handleGetCallStatsByUser(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
+	startDate, ok := args["start_date"].(string)
+	if !ok || startDate == "" {
+		return errorResult("'start_date' parameter is required"), nil
+	}
+	endDate, ok := args["end_date"].(string)
+	if !ok || endDate == "" {
+		return errorResult("'end_date' parameter is required"), nil
+	}
+	userID, _ := args["user_id"].(string)
+
+	data, err := clients.Ringover.GetCallStatsByUser(ctx, startDate, endDate, userID)
+	if err != nil {
+		return nil, fmt.Errorf("GetCallStatsByUser: %w", err)
+	}
+	return rawJSONResult(data), nil
+}
+
+// ── get_call_details ─────────────────────────────────────────────────────────
+
+const getCallDetailsDescription = "Get detailed information about a specific call"
+const getCallDetailsInputSchema = `{
+	"type": "object",
+	"properties": {
+		"call_id": {
+			"type": "string",
+			"description": "The unique identifier of the call"
+		}
+	},
+	"required": ["call_id"]
+}`
+
+func handleGetCallDetails(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
+	callID, ok := args["call_id"].(string)
+	if !ok || callID == "" {
+		return errorResult("'call_id' parameter is required and must be a string"), nil
+	}
+
+	data, err := clients.Ringover.GetCallDetails(ctx, callID)
+	if err != nil {
+		return nil, fmt.Errorf("GetCallDetails: %w", err)
+	}
+
+	return rawJSONResult(data), nil
+}

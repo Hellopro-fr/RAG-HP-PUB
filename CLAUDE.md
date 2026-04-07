@@ -10,7 +10,7 @@ RAG (Retrieval-Augmented Generation) platform for HelloPro — 90+ microservices
 | Graph-RAG Python | `graph-rag-*` (17 services) | Python / FastAPI / gRPC | Remote |
 | Qdrant Databases | `*-database-qdrant-service` (7) | Python / FastAPI / Qdrant | Remote |
 | Qdrant Processors | `*-processor-service` (6) | Python / FastAPI / RabbitMQ | Remote |
-| API Services | `api-*` (16 services) | Python / FastAPI | Remote |
+| API Services | `api-*`, `content-extractor-api-service` (17) | Python / FastAPI | Remote |
 | QC Services | `QC-*` (8 services) | Python / FastAPI | Remote |
 | Prix Services | `prix-*` (6 services) | Python / FastAPI | Remote |
 | ML/LLM Services | `llm-service`, `embedding-*`, `reranking-*` | Python / FastAPI / Triton | Remote (GPU) |
@@ -43,9 +43,98 @@ docs/                 # Project documentation
 - **Messaging**: RabbitMQ (pika) for async processing; most processors consume from queues.
 - **Inter-service RPC**: gRPC via `protos/` definitions; Python stubs in `libs/grpc-stubs`, Rust in `libs/rust-common-utils`.
 - **Containerization**: Every service has a Dockerfile; root `docker-compose.yml` orchestrates infra.
-- **Type checking**: `cargo check` for Rust. [TODO: Python type checker to be decided by the team].
+- **Type checking**: `cargo check` for Rust. No Python type checker enforced yet (ruff or mypy recommended — team decision pending).
 - **CI/CD**: GitHub Actions — `ci_services_*.yml` (lint/test), `cd_build_push_*.yml` (Docker build+push).
 - **Commit messages**: Conventional Commits, bilingual EN/FR (see `.claude/rules/commit-messages.md`).
+
+## Claude Code Configuration
+
+### Rules (`.claude/rules/`)
+
+| Rule | Purpose |
+|------|---------|
+| `code-modification.md` | Surgical edit protocol: read first, minimal diff, preserve formatting, verify after |
+| `commit-messages.md` | Bilingual Conventional Commits, scope to current response, < 72 chars |
+| `language.md` | Respond in user's language, bilingual commits, English code identifiers |
+| `security.md` | No hardcoded secrets/URLs, Pydantic BaseSettings, CORS (internal vs public), JWT, input validation, all infra connection strings |
+| `impact-awareness.md` | Trade-off analysis, bigger-picture context, blast radius check on shared components before any modification |
+| `docker-security.md` | Pinned base images, no root, healthchecks, no secrets in ENV, `.dockerignore`, `--no-cache-dir` |
+| `config-freshness.md` | Re-read `.claude/` files mid-conversation before using agents/commands |
+| `formatting.md` | Code style conventions per stack — references `stack-detection.md`, with unknown stack fallback |
+| `refactoring.md` | When/how to refactor safely: scope rules, shared component protocol, known duplication targets |
+| `stack-detection.md` | Single source of truth for detecting a service's stack from file indicators. All stack-dependent rules reference this. Unknown stack protocol included. |
+| `critical-thinking.md` | Anti-sycophancy, blind spot detection, evidence-based pushback, uncertainty transparency, anti-rationalization |
+
+### Agents (`.claude/agents/`)
+
+| Agent | Purpose | Tools |
+|-------|---------|-------|
+| `code-reviewer` | SOLID/DRY/KISS, security, performance, error handling, impact awareness. Exhaustive single-pass (multi-pass internally). | Read, Glob, Grep |
+| `debugger` | Root cause analysis → structured fix plan with trade-offs and blast radius → apply after confirmation. | Read, Bash, Glob, Grep |
+| `doc-writer` | Add file-level, function-level, and inline documentation. English docstrings only. Code-immutable. | Read, Write, Edit, Glob, Grep |
+| `test-writer` | Stack-agnostic test generation: auto-detects Python (pytest), Rust (cargo test), Node.js (Jest/Vitest), or asks for unknown stacks. | Read, Write, Edit, Glob, Grep |
+
+### Commands (`.claude/commands/`)
+
+| Command | Purpose |
+|---------|---------|
+| `/commit-msg` | Generate bilingual commit message (EN/FR) |
+| `/explain` | Explain a single file or code block (no modifications) |
+| `/understand` | Absorb and summarize multiple files or broad topics |
+| `/plan` | Interactive planning with step list and optional file table |
+| `/pre-push` | Pre-push verification: syntax, tests, review, summary table |
+| `/new-service-claude-md` | Generate CLAUDE.md for a new service + update root |
+| `/new-feature-claude-md` | Update service CLAUDE.md after a feature addition |
+| `/update-claude-md` | Propose surgical CLAUDE.md updates (mistake prevention, project change, rescan) |
+| `/investigate` | Evidence-based statement verification: CONFIRMED / PARTIALLY TRUE / FALSE / INCONCLUSIVE |
+| `/audit-feature` | End-to-end feature audit tracing the pipeline across services |
+| `/review-task` | Tech Lead review: combined state + diff analysis, verdict APPROVED / CHANGES REQUESTED / BLOCKED |
+| `/secrets-scanner` | Full codebase scan for hardcoded secrets, API keys, passwords, connection strings |
+| `/test-coverage` | Test coverage report across all services (well-tested / minimal / none) |
+| `/dependency-mapper` | Map cross-service dependencies: imports, gRPC, RabbitMQ, HTTP calls |
+| `/architecture-review` | Architecture-level review: coupling, cohesion, scalability, observability |
+
+### Skills (`.claude/skills/`)
+
+| Skill | Purpose |
+|-------|---------|
+| `/fastapi-service-scaffold <name> <desc>` | Scaffold a new FastAPI service with all conventions |
+| `/rabbitmq-consumer-scaffold <name> <collection>` | Scaffold a new RabbitMQ processor with consumer, DLQ, metrics |
+| `/proto-sync [proto-file]` | Regenerate Python gRPC stubs from protos/ and check for breaking changes |
+| `docker-expert` | Docker troubleshooting, optimization, and security for 90+ Dockerfiles |
+
+### Hooks (`settings.json`)
+
+| Event | Hook | Purpose |
+|-------|------|---------|
+| `PreToolUse` (Bash) | `secret-scanner.py` | Block commits containing hardcoded secrets (60+ patterns) |
+| `PreToolUse` (Bash) | `dangerous-command-blocker.py` | Block catastrophic commands (rm -rf /, dd, mkfs) and protect critical paths |
+| `PreToolUse` (Bash) | force-push-blocker (inline) | Block `git push --force` and `git push -f` |
+| `PreToolUse` (Bash) | `conventional-commits.py` | Validate commit messages follow Conventional Commits format |
+| `PreToolUse` (Edit/Write) | `tdd-gate.sh` | Block production code edits if no corresponding test file exists |
+| `PostToolUse` (Edit) | format-python (inline) | Auto-format Python files after edits (black/ruff, graceful fallback) |
+| `Stop` | auto-review (prompt) | Check if CLAUDE.md needs updating + self-review modified code |
+| `Stop` | `scope-guard.sh` | Warn if files modified outside declared spec scope |
+
+### Plugins
+
+| Plugin | Source | Purpose |
+|--------|--------|---------|
+| `superpowers` | `claude-plugins-official` | Structured development workflow: brainstorming, plan writing, TDD, subagent orchestration, verification-before-completion |
+
+**Superpowers vs. project commands — when to use which:**
+
+| Task | Use project command | Use superpowers skill |
+|------|--------------------|-----------------------|
+| Plan a task | `/plan` (lightweight, quick) | `writing-plans` (heavyweight, multi-step spec with review) |
+| Debug an error | `@debugger` (structured fix plan) | `systematic-debugging` (exhaustive hypothesis testing) |
+| Review code | `@code-reviewer` (7-dimension single-pass) | `requesting-code-review` (formal review with verification gates) |
+| Write tests | `@test-writer` (stack-agnostic generation) | `test-driven-development` (strict red-green-refactor TDD) |
+| Execute a plan | Direct implementation | `executing-plans` (subagent delegation with checkpoints) |
+
+**Rule of thumb:** Use project commands for focused, day-to-day tasks. Use superpowers skills for complex, multi-step work that benefits from structured gates and verification.
+
+**Note:** Project commands already integrate key superpowers principles (verification evidence, no-placeholder plans, root-cause-first debugging, TDD integration, anti-rationalization checks). You get the best of both by default when using project commands.
 
 ## Constraints
 
@@ -63,9 +152,12 @@ Most Python/Rust microservices run on a remote server with GPU and network acces
 - **Qdrant**: Vector database (category/product/document search)
 - **Elasticsearch**: Full-text search (disabled by default in compose)
 
+### MCP Servers
+`settings.json` enables all project MCP servers (`enableAllProjectMcpServers: true`). When adding a new MCP server, ensure it is reviewed by the team before merging — this flag grants full tool access to every configured server.
+
 ## Sub-Agent Routing
 
-- **Rust service** (`graph-rag-api-recherche-rust-service`): use for Actix-web, Neo4j, gRPC client work.
+- **Rust service** (`graph-rag-api-recherche-rust-service`): use for Actix-web, Neo4j, gRPC client work. Note: no dedicated Rust agent exists yet — use the general-purpose agent with Rust context.
 - **Python FastAPI services**: most follow identical patterns — check one as template.
 - **Frontend services**: Next.js/React — separate Node.js toolchain.
 - **Proto changes**: update `protos/`, regenerate stubs in `libs/grpc-stubs` and `libs/rust-common-utils`.

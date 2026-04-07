@@ -70,10 +70,52 @@ requirements.txt
 - `POST /reconcile-jobs` -- Fix counter drift
 - `POST /prune-archives` -- Clean up old archives
 
+## Update Mode (Archived Previous Crawl Handling)
+
+When `crawl_mode=update`, the service validates and restores data from the previous crawl:
+
+1. **Pre-flight validation** (`start_crawl`): Checks `previous_crawl_id` exists, is not `failed`, and has dataset files on disk.
+2. **Auto-restore from GCS** (`_restore_archived_crawl`): If previous crawl is `archived` (data deleted), downloads the archive from GCS via the download daemon and extracts it. Uses a Redis lock (`restore_lock:{id}`) to prevent concurrent restorations.
+3. **Node.js safety net** (`main.ts`): If URL consolidation produces 0 URLs in update mode, exits with code 4 (mapped to failure webhook).
+4. **Post-crawl cleanup** (`_monitor_process`): Deletes restored data for archived previous crawls after the update crawl completes.
+
+## Regional Path Exclusion
+
+Prevents crawling duplicate French regional variants (e.g., `/fr-BE/`, `/fr-CA/`) when one French path (e.g., `/fr-FR/`) has been selected.
+
+**How it works:**
+1. Homepage detection (mode `"complete"`) returns `alternative_urls` with all French regional variants found via hreflang tags.
+2. The crawler extracts path prefixes from alternatives, excludes the winner's prefix, and stores the rest in `context.excludedRegionalPaths`.
+3. In **standard mode**, `transformRequestFunction` blocks discovered links matching excluded prefixes.
+4. In **update mode**, two-phase seeding processes the homepage first, then seeds remaining URLs from the previous crawl with path filtering.
+
+**Key files:** `context.ts` (fields), `routes.ts` (population + filtering), `main.ts` (two-phase seeding), `DetectionLangueClient.ts` (helpers).
+
+**Limitation:** Only path-based regional variants are filtered. Query-based variants (`?lang=fr-BE`) are not handled (deferred — see spec).
+
+## Archiving — GCS Fallback
+
+`POST /archive/{crawl_id}` checks three locations in order:
+1. **Local `/app/archives/`** — if `.tar.gz` exists, skip re-generation, mark as `archived`.
+2. **GCS via download daemon** — if archive was already uploaded, fix status to `archived` without re-archiving.
+3. **Fresh archive** — create new `.tar.gz` from local data, mark as `archived`, upload daemon handles GCS.
+
+The GCS fallback (step 2) handles legacy crawls stuck at `finished` due to a previous bug where `_mark_as_archived` was never called.
+
+## Exit Codes (Node.js → Python)
+
+| Code | Meaning | Python Behavior |
+|------|---------|-----------------|
+| 0 | Success | Status: `finished`, success webhook |
+| 2 | Partial success | Status: `finished`, success webhook |
+| 3 | OOM relaunch | Status: `restarting_oom`, auto-relaunch (up to `MAX_OOM_RESTARTS`) |
+| 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
+| Other | Failure | Status: `failed`, failure webhook |
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.
 
 ## Dependencies
 
-Redis (state/counters), GCS (archive), `common-utils`, `api-detection-langue-fr`.
+Redis (state/counters), GCS (archive + restore), `common-utils`, `api-detection-langue-fr`.

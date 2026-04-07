@@ -21,6 +21,7 @@ For each file provided:
 - **Code-Immutable:** NEVER modify, refactor, or reformat any executable code. You add comments ONLY.
 - Preserve original indentation, blank lines, and structure exactly.
 - Use the language's standard doc format (JSDoc for JS/TS, docstrings for Python, XML docs for C#, etc.).
+- **Documentation language:** Always write docstrings and comments in **French**, regardless of the conversation language. This ensures consistency across the codebase where existing documentation is in French.
 - If a comment already exists and is accurate, leave it unchanged.
 - If an existing comment is factually incorrect due to code changes, update it.
 

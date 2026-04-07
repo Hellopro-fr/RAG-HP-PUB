@@ -38,8 +38,9 @@ async def init_redis_pool():
         redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
         await redis_client.ping()
         # Register Lua scripts for EVALSHA-based execution (avoids sending raw Lua on every call)
-        global _safe_decr_script
+        global _safe_decr_script, _delete_if_terminal_script
         _safe_decr_script = redis_client.register_script(_SAFE_DECR_LUA)
+        _delete_if_terminal_script = redis_client.register_script(_DELETE_IF_TERMINAL_LUA)
         logger.info("Successfully connected to Redis.")
     except redis.RedisError as e:
         logger.warning(f"Could not connect to Redis: {e}. Caching will be unavailable.")
@@ -66,6 +67,19 @@ async def set_json(key: str, data: Dict[str, Any], ttl: Optional[int] = None):
         await redis_client.set(key, value, ex=ttl)
     except Exception as e:
         logger.error(f"Failed to set JSON for key '{key}' in Redis: {e}", exc_info=True)
+
+async def set_json_nx(key: str, data: Dict[str, Any]) -> bool:
+    """Atomically sets a key only if it does not already exist (SET NX).
+    Returns True if the key was set, False if it already existed."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        value = json.dumps(data, default=str)
+        result = await redis_client.set(key, value, nx=True)
+        return result is True
+    except Exception as e:
+        logger.error(f"Failed to SET NX for key '{key}' in Redis: {e}", exc_info=True)
+        return False
 
 async def get_json(key: str) -> Optional[Dict[str, Any]]:
     """Gets a dictionary for a key, deserializing it from JSON."""
@@ -152,8 +166,23 @@ else
     return 0
 end
 """
-# Registered script handle — set by init_redis_pool(), used by safe_decrement_key().
+
+# Lua script: atomically delete a key only if its JSON "status" field is terminal.
+# Returns 1 if the key was deleted, 0 if the key didn't exist or had a non-terminal status.
+_DELETE_IF_TERMINAL_LUA = """
+local val = redis.call('GET', KEYS[1])
+if not val then return 0 end
+local status = cjson.decode(val)["status"]
+if status == "failed" or status == "finished" then
+    redis.call('DEL', KEYS[1])
+    return 1
+end
+return 0
+"""
+
+# Registered script handles — set by init_redis_pool().
 _safe_decr_script = None
+_delete_if_terminal_script = None
 
 async def safe_decrement_key(key: str) -> int:
     """Atomically decrements a key's value by 1, with a floor of 0 (never goes negative).
@@ -173,6 +202,25 @@ async def safe_decrement_key(key: str) -> int:
     except Exception as e:
         logger.error(f"Failed to safe-decrement key '{key}' in Redis: {e}", exc_info=True)
         return 0
+
+
+async def delete_if_terminal(key: str) -> bool:
+    """Atomically deletes a key only if its JSON 'status' is 'failed' or 'finished'.
+
+    Uses a Lua script to avoid the race condition of GET-then-DELETE across replicas.
+    Returns True if the key was deleted, False if it didn't exist or had a non-terminal status.
+    """
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        if _delete_if_terminal_script is not None:
+            result = await _delete_if_terminal_script(keys=[key])
+        else:
+            result = await redis_client.eval(_DELETE_IF_TERMINAL_LUA, 1, key)
+        return int(result) == 1
+    except Exception as e:
+        logger.error(f"Failed to delete-if-terminal for key '{key}' in Redis: {e}", exc_info=True)
+        return False
 
 
 async def publish(channel: str, message: str):

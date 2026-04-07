@@ -33,6 +33,7 @@ import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
+import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 
 const execAsync = promisify(exec);
@@ -584,6 +585,9 @@ if (skipquestionmark || skipdiez) {
 export const requestQueue = await RequestQueue.open(domain);
 
 // --- SEEDING LOGIC (Update Mode Support) ---
+// Declared at outer scope so Phase 2 seeding (before startCrawler) can access it
+let remainingUrls: { url: string; source: string }[] = [];
+
 if (crawlMode === 'update') {
     if (!previousCrawlId) {
         console.error("Update mode requires --previousCrawlId");
@@ -619,27 +623,39 @@ if (crawlMode === 'update') {
         cleanUrlFn
     );
 
-    // Seed the request queue with ALL consolidated URLs
-    // IMPORTANT: In update mode, we ALWAYS enqueue — the DedupManager was pre-loaded
-    // from disk and would falsely reject known URLs. We still mark them as known
-    // so that newly discovered URLs during crawling are properly deduplicated.
-    let seedCount = 0;
-    for await (const { url, source } of allUrls) {
-        // Mark as known in DedupManager (for dedup during crawl, NOT for gating)
-        if (context.dedupManager) {
-            await context.dedupManager.addUrl(url);
-        }
+    // --- TWO-PHASE SEEDING (Regional Path Exclusion) ---
+    // Phase 1: Seed only the homepage so it gets processed first.
+    // The homepage handler populates context.excludedRegionalPaths from alternative_urls.
+    // Phase 2: After homepage completes, seed remaining URLs with path filtering.
 
-        await requestQueue.addRequest({
-            url: url,
-            userData: { source: source }
-        });
-        seedCount++;
-        if (seedCount % 1000 === 0) {
-            console.log(`Seeded ${seedCount} unique URLs...`);
-        }
+    // Create the homepageReady signal (resolved by homepage handler in routes.ts)
+    let resolveHomepage: () => void;
+    const homepagePromise = new Promise<void>((resolve) => { resolveHomepage = resolve; });
+    context.homepageReady = { resolve: resolveHomepage!, promise: homepagePromise };
+
+    // Phase 1: Seed only the homepage
+    await requestQueue.addRequest({
+        url: site,
+        userData: { source: 'seed' }
+    });
+    if (context.dedupManager) {
+        await context.dedupManager.addUrl(site);
     }
-    console.log(`Finished seeding ${seedCount} unique URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
+
+    // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
+    for await (const { url: consolidatedUrl, source } of allUrls) {
+        if (consolidatedUrl === site) continue; // Already seeded as homepage
+        remainingUrls.push({ url: consolidatedUrl, source });
+    }
+
+    const totalConsolidated = remainingUrls.length + 1; // +1 for homepage
+    console.log(`Consolidated ${totalConsolidated} URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
+
+    // Safety net: update mode with 0 URLs means previous crawl data was unavailable
+    if (totalConsolidated <= 1) {
+        console.error(`❌ Update mode produced 0 URLs from previous crawl '${previousCrawlId}'. No data to compare against. Aborting.`);
+        process.exit(4); // Exit code 4 = update mode no data (mapped to failure by orchestrator)
+    }
 
     // --- CONFIGURE CIRCUIT BREAKER ---
     // Based on Dataset count only (not total), as that represents the "previous state"
@@ -834,7 +850,15 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
 
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
-        await generateUpdateReport(domain);
+        try {
+            await generateUpdateReport(domain);
+        } catch (e) {
+            console.error("Failed to generate update report:", e);
+            if (!payload.message_erreur_crawling) {
+                payload.message_erreur_crawling = "Erreur lors de la génération du rapport de mise à jour";
+                fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+            }
+        }
     }
 
     // 4. Persist Data (Critical Step)
@@ -865,6 +889,10 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             await context.jsonlWriter.closeAll();
         } catch (e) {
             console.error("Failed to close JSONL streams:", e);
+            if (!payload.message_erreur_crawling) {
+                payload.message_erreur_crawling = "Erreur lors de l'enregistrement du rapport de mise à jour";
+                fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+            }
         }
     }
 
@@ -897,6 +925,53 @@ if (typeCrawling == "sitemap") {
         console.log(`🚀 Configuring Global Crawlee Memory Limit: ${containerMb} MB (Environment + Config)`);
         process.env.CRAWLEE_MEMORY_MBYTES = String(containerMb);
         Configuration.getGlobalConfig().set('memoryMbytes', containerMb);
+    }
+
+    // Phase 2: Seed remaining URLs after homepage completes (runs concurrently with crawler)
+    if (crawlMode === 'update' && context.homepageReady) {
+        const seedPhase2 = async () => {
+            // If excluded paths were already restored from disk (crash/OOM restart
+            // or copied from previous crawl), skip waiting for homepage detection.
+            if (context.excludedRegionalPaths.length > 0) {
+                console.log(`[PHASE 2] Excluded paths already loaded from disk (${context.excludedRegionalPaths.length} paths). Skipping homepage wait.`);
+            } else {
+                const HOMEPAGE_TIMEOUT_MS = 120_000;
+                const timeout = new Promise<void>((resolve) => setTimeout(resolve, HOMEPAGE_TIMEOUT_MS));
+                await Promise.race([context.homepageReady!.promise, timeout]);
+            }
+
+            const excluded = context.excludedRegionalPaths;
+            if (excluded.length > 0) {
+                console.log(`[PHASE 2] Homepage detected ${excluded.length} excluded regional paths: ${excluded.join(", ")}`);
+            } else {
+                console.log(`[PHASE 2] No regional paths to exclude. Seeding all URLs.`);
+            }
+
+            let seedCount = 0;
+            let skippedCount = 0;
+            for (const { url, source } of remainingUrls) {
+                if (excluded.length > 0 && DetectionLangueClient.isExcludedRegionalPath(url, excluded)) {
+                    skippedCount++;
+                    continue;
+                }
+
+                if (context.dedupManager) {
+                    await context.dedupManager.addUrl(url);
+                }
+                await requestQueue.addRequest({
+                    url: url,
+                    userData: { source: source }
+                });
+                seedCount++;
+                if (seedCount % 1000 === 0) {
+                    console.log(`[PHASE 2] Seeded ${seedCount} URLs...`);
+                }
+            }
+            console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
+        };
+
+        // Fire-and-forget: runs concurrently with the crawler
+        seedPhase2().catch(err => console.error(`[PHASE 2] Error during seeding: ${err.message}`));
     }
 
     // Launch

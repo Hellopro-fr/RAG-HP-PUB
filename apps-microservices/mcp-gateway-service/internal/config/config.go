@@ -24,6 +24,8 @@ type Config struct {
 	// Scope tokens
 	ScopeTokenRequired bool   // SCOPE_TOKEN_REQUIRED — enabled by default, set to "false" to allow unauthenticated MCP access
 	GatewayPublicURL   string // GATEWAY_PUBLIC_URL — for .mcp.json snippets
+	// URL validation
+	AllowInternalURLs bool // ALLOW_INTERNAL_URLS — set to "true" to allow Docker-internal/private IP ranges (e.g. 172.x.x.x)
 }
 
 func Load() *Config {
@@ -67,6 +69,7 @@ func Load() *Config {
 		SecureCookie:        strings.EqualFold(os.Getenv("SECURE_COOKIE"), "true"),
 		ScopeTokenRequired:  !strings.EqualFold(os.Getenv("SCOPE_TOKEN_REQUIRED"), "false"),
 		GatewayPublicURL:    getEnv("GATEWAY_PUBLIC_URL", ""),
+		AllowInternalURLs:   strings.EqualFold(os.Getenv("ALLOW_INTERNAL_URLS"), "true"),
 	}
 }
 

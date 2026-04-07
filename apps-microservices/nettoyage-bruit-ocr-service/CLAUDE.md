@@ -27,6 +27,8 @@ nettoyage-bruit-ocr-service/
     messaging/
       consumer.py            # Single-message consumer with keep-alive
       publisher.py           # Publishes cleaned text + metrics
+  tests/
+    test_processor.py        # JSON escape sanitization tests
   requirements.txt
   Dockerfile
 ```
@@ -43,8 +45,17 @@ nettoyage-bruit-ocr-service/
 - Removes 5 categories: legal mentions, contractual clauses, disclaimers, regulatory notes, marketing slogans.
 - Non-French content returns empty string (filtered out).
 - Uses `enable_thinking=True` for LLM calls (max 64K output tokens).
-- ACK-first strategy: messages acknowledged before processing (at-most-once delivery).
+- ACK-after strategy: messages acknowledged AFTER successful processing or DLQ routing (at-least-once delivery).
 - Channel keep-alive task runs every 30s to prevent timeout on long LLM calls.
+- DLQ sends the correct individual message body (not hardcoded `batch_bodies[0]`).
+- Reconnection loop restored in `main.py` (was commented out).
+- Docker: non-root user, `--no-cache-dir`, `.dockerignore`.
+- Structured logging via `common_utils.logging.setup_logging()` (no `print()`).
+
+## Recent Reliability Fixes
+
+- **Content truncation**: `MAX_CONTENT_CHARS=60000` in `make_chat_request()` prevents LLM context window overflow (131K tokens) from OCR artifacts with massive repeated blocks.
+- **JSON escape sanitization**: LLM responses may contain invalid JSON escapes (`\e`, `\s`, `\a`). A regex sanitization step (`re.sub`) fixes lone backslashes before `json.loads()`. If parsing still fails (mixed valid/invalid escapes), fallback passes original text through unchanged rather than losing the document to DLQ.
 
 ## Dependencies on Other Services
 

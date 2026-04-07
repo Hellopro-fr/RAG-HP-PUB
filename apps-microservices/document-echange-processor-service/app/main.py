@@ -1,31 +1,34 @@
 import os
 import asyncio
+import logging
+
+from common_utils.logging import setup_logging
+setup_logging("document-echange-processor-service")
+
 import aio_pika
 import aiormq
 from document_echange_processor_service.messaging.publisher import Publisher
 from document_echange_processor_service.messaging.consumer import Consumer
+
+logger = logging.getLogger(__name__)
 
 async def main():
     """
     Point d'entrée principal asynchrone du service.
     Met en place la connexion et lance les composants.
     """
+
     rabbitmq_url = os.environ.get("RABBITMQ_URL")
     if not rabbitmq_url:
-        print("❌ ERREUR: La variable d'environnement RABBITMQ_URL n'est pas définie.")
-        exit(1)
+        logger.error("❌ ERREUR: La variable d'environnement RABBITMQ_URL n'est pas définie.")
+        return
 
-    print("🚀 Document-processor-service: Démarrage...")
-    
-    # Créer le répertoire de récupération s'il n'existe pas
-    os.makedirs('recovery_data', exist_ok=True)
+    logger.info("🚀 Document-processor-service: Démarrage...")
 
-    loop = asyncio.get_event_loop()
-    
     while True:
         try:
-            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
-            print("✅ Document-processor-service: Connecté à RabbitMQ.")
+            connection = await aio_pika.connect_robust(rabbitmq_url)
+            logger.info("✅ Document-processor-service: Connecté à RabbitMQ.")
             
             async with connection:
                 publisher = Publisher(connection)
@@ -38,16 +41,15 @@ async def main():
                 await asyncio.Future()
 
         except (aiormq.exceptions.AMQPConnectionError, aiormq.exceptions.ChannelInvalidStateError) as e:
-            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
+            logger.warning(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
             await asyncio.sleep(10)
         except KeyboardInterrupt:
-            print("\n🛑 Document-processor-service: Arrêt demandé.")
-            # break
+            logger.info("🛑 Document-processor-service: Arrêt demandé.")
+            break
         except Exception as e:
-            print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
+            logger.error(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
             await asyncio.sleep(10)
     
-    # print("✅ Document-processor-service: Service arrêté.")
 
 
 if __name__ == '__main__':

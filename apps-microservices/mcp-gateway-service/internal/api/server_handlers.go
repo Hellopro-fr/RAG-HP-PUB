@@ -19,11 +19,12 @@ var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 // Handler holds dependencies for the REST API.
 type Handler struct {
-	repo       *repository.ServerRepo
-	tokenRepo  *repository.TokenRepo
-	tokenCache TokenCache
-	gw         *gateway.Gateway
-	registry   *gateway.Registry
+	repo              *repository.ServerRepo
+	tokenRepo         *repository.TokenRepo
+	tokenCache        TokenCache
+	gw                *gateway.Gateway
+	registry          *gateway.Registry
+	allowInternalURLs bool
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -32,8 +33,8 @@ type TokenCache interface {
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry) *Handler {
-	return &Handler{repo: repo, gw: gw, registry: registry}
+func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry, allowInternalURLs bool) *Handler {
+	return &Handler{repo: repo, gw: gw, registry: registry, allowInternalURLs: allowInternalURLs}
 }
 
 // SetTokenRepo sets the token repository for token CRUD operations.
@@ -56,7 +57,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// SSRF protection: validate that the URL does not point to internal/private ranges
-	if err := urlvalidation.ValidateServerURL(req.URL); err != nil {
+	if err := urlvalidation.ValidateServerURL(req.URL, h.allowInternalURLs); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid server URL: " + err.Error()})
 		return
 	}
@@ -233,7 +234,7 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.URL != nil {
 		// SSRF protection: validate that the new URL does not point to internal/private ranges
-		if err := urlvalidation.ValidateServerURL(*req.URL); err != nil {
+		if err := urlvalidation.ValidateServerURL(*req.URL, h.allowInternalURLs); err != nil {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid server URL: " + err.Error()})
 			return
 		}
@@ -443,6 +444,46 @@ func (h *Handler) handleListAllPrompts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"prompts": prompts, "total": len(prompts)})
 }
 
+// ── Enable / Disable Tool ─────────────────────────────────────────────────
+
+func (h *Handler) handleEnableTool(w http.ResponseWriter, r *http.Request, serverID, toolName string) {
+	srv, err := h.repo.GetByID(serverID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
+	if err := h.repo.SetToolActive(serverID, toolName, true); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to enable tool"})
+		return
+	}
+	// Sync the in-memory registry so MCP clients see the change immediately
+	h.registry.SetToolActive(serverID, toolName, true)
+	updated, _ := h.repo.GetByID(serverID)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
+func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serverID, toolName string) {
+	srv, err := h.repo.GetByID(serverID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
+	if err := h.repo.SetToolActive(serverID, toolName, false); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable tool"})
+		return
+	}
+	// Sync the in-memory registry so MCP clients see the change immediately
+	h.registry.SetToolActive(serverID, toolName, false)
+	updated, _ := h.repo.GetByID(serverID)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendServer) {
@@ -487,7 +528,15 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 
 	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
 		log.Printf("[api] save capabilities error for %s: %v", id, err)
+		return
 	}
+	// Sync tool active states from DB back to registry (SaveDiscoveredCapabilities
+	// preserves is_active for existing tools, but the registry has all tools as active)
+	toolStates := make(map[string]bool, len(dbSrv.Tools))
+	for _, t := range dbSrv.Tools {
+		toolStates[t.Name] = t.IsActive
+	}
+	h.registry.SyncToolActiveStates(id, toolStates)
 }
 
 // checkOwnership verifies the current user owns the server.
@@ -537,6 +586,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		toolNames = append(toolNames, ToolSummary{
 			Name:        gateway.PrefixedToolName(srv.ToolPrefix, t.Name),
 			Description: t.Description,
+			IsActive:    t.IsActive,
 		})
 	}
 
@@ -584,6 +634,7 @@ func toServerDetailResponse(srv *db.MCPServer) ServerDetailResponse {
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.InputSchema,
+			IsActive:    t.IsActive,
 		})
 	}
 	for _, res := range srv.Resources {

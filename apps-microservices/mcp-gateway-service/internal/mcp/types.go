@@ -100,6 +100,7 @@ type Tool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"inputSchema"`
+	IsActive    bool            `json:"-"` // internal only — not sent over MCP protocol
 }
 
 type ListToolsResult struct {

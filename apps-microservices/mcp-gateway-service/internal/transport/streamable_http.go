@@ -84,6 +84,13 @@ func (s *StreamableHTTPServer) handleMCP(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	// Notifications (no id or null id) must not receive a JSON-RPC response.
+	// Per MCP spec, the server returns HTTP 202 Accepted with an empty body.
+	if len(req.ID) == 0 || string(req.ID) == "null" {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
 	resp := handler.Handle(r.Context(), &req)
 
 	w.Header().Set("Content-Type", "application/json")

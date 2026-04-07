@@ -41,8 +41,13 @@ requirements.txt
 
 - Fully async (aio_pika), unlike most other database services
 - Handles two entity types: documents (`page_type=autre` -> update/insert) and PJs (dedup by `fichier_source`)
-- Creates `recovery_data/` directory for crash recovery
 - Milvus-only (no Qdrant support in practice)
+- Dedicated persistent AMQP channel for publishing (avoids channel-per-message exhaustion)
+- DLQ error messages use `repr(e)` for full exception context (via shared DLQProperties)
+- `_send_to_dlq()` wrapped in try/except to prevent silent message loss
+- `_ensure_connected()` uses real RPC health check (`utility.list_collections`) instead of `has_connection()`
+- Milvus expression injection prevented: `fichier_source` sanitized, `id` type-validated
+- Docker: non-root user, `--no-cache-dir`, `.dockerignore`
 
 ## Dependencies on Other Services
 

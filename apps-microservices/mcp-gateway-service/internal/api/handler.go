@@ -148,6 +148,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 			}
 		default:
+			// Check for tool enable/disable: /api/v1/servers/{id}/tools/{toolName}/enable|disable
+			if strings.HasPrefix(action, "tools/") {
+				h.routeToolAction(w, r, id, strings.TrimPrefix(action, "tools/"))
+				return
+			}
 			http.NotFound(w, r)
 		}
 	})
@@ -158,6 +163,27 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Applique les middlewares et monte sur le mux principal
 	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType)
 	mux.Handle("/api/", wrapped)
+}
+
+// routeToolAction routes /api/v1/servers/{id}/tools/{toolName}/{action} requests.
+func (h *Handler) routeToolAction(w http.ResponseWriter, r *http.Request, serverID, toolPath string) {
+	// toolPath is "{toolName}/enable" or "{toolName}/disable"
+	parts := strings.SplitN(toolPath, "/", 2)
+	if len(parts) != 2 || r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	toolName := parts[0]
+	action := parts[1]
+
+	switch action {
+	case "enable":
+		h.handleEnableTool(w, r, serverID, toolName)
+	case "disable":
+		h.handleDisableTool(w, r, serverID, toolName)
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 // handleDiscoverAll re-discovers all active servers.

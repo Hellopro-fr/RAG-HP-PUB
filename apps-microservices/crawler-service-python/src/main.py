@@ -224,7 +224,7 @@ async def main():
     parser.add_argument("--callbackUrl", required=True)
     
     # Standard Options
-    parser.add_argument("--breaklimit", default="False")
+    parser.add_argument("--breaklimit", default="True")
     parser.add_argument("--proxyapify", default=None)
     parser.add_argument("--dropdata", default="False")
     parser.add_argument("--method", default="prod")
