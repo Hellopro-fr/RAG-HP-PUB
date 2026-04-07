@@ -1960,6 +1960,9 @@
                       <button onclick="copyToClipboard('${esc(c.id)}','Client ID copié !')" class="copy-btn inline-flex items-center justify-center w-7 h-7 text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100" title="Copier Client ID">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                       </button>
+                      ${c.is_active ? `<button onclick="openEditOAuth2Modal('${c.id}')" class="inline-flex items-center justify-center w-7 h-7 text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100" title="Modifier le scope">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>` : ''}
                       ${c.is_active ? `<button onclick="revokeOAuth2Client('${c.id}')" class="inline-flex items-center justify-center w-7 h-7 text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100" title="Révoquer">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                       </button>` : ''}
@@ -1968,10 +1971,26 @@
                       </button>
                     </div>
                   </div>
-                  <div class="mt-2 flex items-center gap-4 text-xs text-gray-500">
-                    <span>Client ID : <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">${esc(c.id)}</code></span>
+                  <div class="mt-2 space-y-1 text-xs text-gray-500">
+                    <div class="flex items-center gap-2">
+                      <span class="text-gray-400 w-16 shrink-0">Client ID</span>
+                      <code class="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-xs">${esc(c.id.slice(0,8))}${'\\u2022'.repeat(8)}</code>
+                      <button onclick="copyToClipboard('${esc(c.id)}','Client ID copié !')" class="text-brand-600 hover:text-brand-800 shrink-0" title="Copier le Client ID complet">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                      </button>
+                    </div>
+                    ${c.client_secret ? `<div class="flex items-center gap-2">
+                      <span class="text-gray-400 w-16 shrink-0">Secret</span>
+                      <code class="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-xs">${esc(c.client_secret.slice(0,12))}${'\\u2022'.repeat(12)}</code>
+                      <button onclick="copyToClipboard('${esc(c.client_secret)}','Secret copié !')" class="text-brand-600 hover:text-brand-800 shrink-0" title="Copier le Secret complet">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                      </button>
+                    </div>` : `<div class="flex items-center gap-2">
+                      <span class="text-gray-400 w-16 shrink-0">Secret</span>
+                      <span class="text-gray-400 italic">Non disponible (clé de chiffrement non configurée)</span>
+                    </div>`}
                   </div>
-                  <div class="mt-1 flex items-center gap-4 text-xs text-gray-500">
+                  <div class="mt-1.5 flex items-center gap-4 text-xs text-gray-500">
                     <span>Serveurs : ${serverNames.length > 0 ? serverNames.map(n => '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">' + esc(n) + '</code>').join(' ') : '<em class="text-gray-400">aucun</em>'}</span>
                     <span>TTL : <code class="bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded text-xs font-medium">${ttlLabel}</code></span>
                     <span>Expire : ${expiresStr}</span>
@@ -1985,7 +2004,10 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    let _editingOAuth2Id = null;
+
     async function openOAuth2Modal() {
+      _editingOAuth2Id = null;
       document.getElementById('oauth2-modal-title').textContent = "Créer un client OAuth2";
       document.getElementById('oauth2-name').value = '';
       document.getElementById('oauth2-desc').value = '';
@@ -2001,16 +2023,59 @@
       btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> Générer les identifiants';
       document.getElementById('oauth2-backdrop').classList.remove('hidden');
       document.getElementById('oauth2-modal').classList.remove('hidden');
-      // Ensure servers are loaded
       if (allServers.length === 0) {
         try {
           const data = await api('/servers?is_active=true');
           allServers = data.servers || [];
         } catch (e) { /* ignore */ }
       }
-      // Move shared dnd panels into OAuth2 modal slot and populate
       moveDndTo('oauth2-dnd-slot');
       dndPopulate();
+    }
+
+    async function openEditOAuth2Modal(clientId) {
+      try {
+        const client = await api(`/oauth2/clients/${clientId}`);
+        _editingOAuth2Id = clientId;
+        document.getElementById('oauth2-modal-title').textContent = "Modifier le scope du client";
+        document.getElementById('oauth2-name').value = client.name || '';
+        document.getElementById('oauth2-desc').value = client.description || '';
+        document.getElementById('oauth2-redirect-uri').value = (client.redirect_uris && client.redirect_uris[0]) || 'https://claude.ai/api/mcp/auth_callback';
+        document.getElementById('oauth2-ttl').value = String(client.access_token_ttl || 86400);
+
+        if (client.expires_at) {
+          document.querySelector('input[name="oauth2_expiry_type"][value="custom"]').checked = true;
+          document.getElementById('oauth2-expires').disabled = false;
+          document.getElementById('oauth2-expires').value = new Date(client.expires_at).toISOString().slice(0, 16);
+        } else {
+          document.querySelector('input[name="oauth2_expiry_type"][value="permanent"]').checked = true;
+          document.getElementById('oauth2-expires').disabled = true;
+          document.getElementById('oauth2-expires').value = '';
+        }
+
+        document.getElementById('oauth2-created-result').classList.add('hidden');
+        const btn = document.getElementById('oauth2-submit-btn');
+        btn.disabled = false;
+        btn.classList.remove('hidden');
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications';
+
+        document.getElementById('oauth2-backdrop').classList.remove('hidden');
+        document.getElementById('oauth2-modal').classList.remove('hidden');
+
+        if (allServers.length === 0) {
+          try {
+            const data = await api('/servers?is_active=true');
+            allServers = data.servers || [];
+          } catch (e) { /* ignore */ }
+        }
+
+        moveDndTo('oauth2-dnd-slot');
+        dndPopulate();
+        dndRestoreSelection(client.server_ids || [], client.server_tools || []);
+
+      } catch (e) {
+        toast('Erreur lors du chargement du client: ' + e.message, 'error');
+      }
     }
 
     function closeOAuth2Modal() {
@@ -2023,10 +2088,10 @@
       const description = document.getElementById('oauth2-desc').value.trim();
       const ttl = parseInt(document.getElementById('oauth2-ttl').value);
       const expiresRaw = document.getElementById('oauth2-expires').value;
+      const isEditing = !!_editingOAuth2Id;
 
       if (!name) { toast('Le nom est requis', 'error'); return; }
 
-      // Collect selected servers/tools from shared dnd panels
       const { serverIDs, serverTools } = dndCollectSelection();
       if (serverIDs.length === 0) {
         toast('Sélectionnez au moins un serveur', 'error');
@@ -2035,31 +2100,44 @@
 
       const btn = document.getElementById('oauth2-submit-btn');
       btn.disabled = true;
-      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Génération...';
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> ' + (isEditing ? 'Enregistrement...' : 'Génération...');
 
       try {
         const redirectUri = document.getElementById('oauth2-redirect-uri').value.trim();
-        const body = { name, description, server_ids: serverIDs, server_tools: serverTools, access_token_ttl: ttl };
-        if (redirectUri) body.redirect_uris = [redirectUri];
-        body.grant_types = ['authorization_code', 'client_credentials'];
-        if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
 
-        const result = await api('/oauth2/clients', { method: 'POST', body: JSON.stringify(body) });
+        if (isEditing) {
+          // PUT update
+          const body = { name, description, server_ids: serverIDs, server_tools: serverTools };
+          if (redirectUri) body.redirect_uris = [redirectUri];
+          await api('/oauth2/clients/' + _editingOAuth2Id, { method: 'PUT', body: JSON.stringify(body) });
+          toast('Client OAuth2 modifié avec succès', 'success');
+          closeOAuth2Modal();
+          loadOAuth2Clients();
+        } else {
+          // POST create
+          const body = { name, description, server_ids: serverIDs, server_tools: serverTools, access_token_ttl: ttl };
+          if (redirectUri) body.redirect_uris = [redirectUri];
+          body.grant_types = ['authorization_code', 'client_credentials'];
+          if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
 
-        // Show credentials
-        document.getElementById('oauth2-client-id-value').textContent = result.id;
-        document.getElementById('oauth2-secret-value').textContent = result.client_secret;
-        const gatewayURL = window.location.origin;
-        document.getElementById('oauth2-gateway-url').textContent = gatewayURL + '/mcp';
-        document.getElementById('oauth2-token-endpoint').textContent = gatewayURL + '/oauth/token';
-        document.getElementById('oauth2-created-result').classList.remove('hidden');
+          const result = await api('/oauth2/clients', { method: 'POST', body: JSON.stringify(body) });
 
-        btn.classList.add('hidden');
-        toast('Client OAuth2 créé avec succès', 'success');
+          document.getElementById('oauth2-client-id-value').textContent = result.id;
+          document.getElementById('oauth2-secret-value').textContent = result.client_secret;
+          const gatewayURL = window.location.origin;
+          document.getElementById('oauth2-gateway-url').textContent = gatewayURL + '/mcp';
+          document.getElementById('oauth2-token-endpoint').textContent = gatewayURL + '/token';
+          document.getElementById('oauth2-created-result').classList.remove('hidden');
+
+          btn.classList.add('hidden');
+          toast('Client OAuth2 créé avec succès', 'success');
+        }
       } catch (e) {
         toast(e.message, 'error');
         btn.disabled = false;
-        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> Générer les identifiants';
+        btn.innerHTML = isEditing
+          ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications'
+          : '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> Générer les identifiants';
       }
     }
 
