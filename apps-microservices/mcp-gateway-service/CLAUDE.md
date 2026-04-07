@@ -86,6 +86,7 @@ Dockerfile                   # Multi-stage build
 - `GET/POST /servers` — List / create MCP servers
 - `GET/PUT/DELETE /servers/{id}` — Get / update / delete server
 - `POST /servers/{id}/enable|disable` — Toggle server state
+- `POST /servers/{id}/tools/{toolName}/enable|disable` — Toggle individual tool active state
 - `POST /servers/{id}/discover` — Re-discover single server capabilities
 - `POST /servers/discover-all` — Re-discover all active servers
 - `POST /servers/import` — Import from `.mcp.json` file
@@ -128,6 +129,7 @@ Dockerfile                   # Multi-stage build
 | `AUTH_ENABLED` | `true` | Require login (set to "false" to disable) |
 | `SCOPE_TOKEN_REQUIRED` | `true` | Require scope token on MCP endpoints (set to "false" to disable) |
 | `GATEWAY_PUBLIC_URL` | — | Public URL for generated .mcp.json snippets |
+| `ALLOW_INTERNAL_URLS` | `false` | Set to `true` to allow Docker-internal/private IP ranges (172.x.x.x, 10.x.x.x, etc.) as backend URLs — required when gateway and backends share a Docker network |
 
 ## Database
 
@@ -136,7 +138,7 @@ Dockerfile                   # Multi-stage build
 | Table | Purpose |
 |---|---|
 | `mcp_servers` | Backend servers (name, URL, health, capabilities) |
-| `server_tools` | Tools per server (name, description, inputSchema) |
+| `server_tools` | Tools per server (name, description, inputSchema, is_active) |
 | `server_resources` | Resources per server (URI, name, mimeType) |
 | `server_prompts` | Prompts per server |
 | `prompt_arguments` | Arguments for each prompt |
@@ -155,6 +157,7 @@ Connection pooling: max 25 open, 5 idle connections.
 - Context propagation for scope tokens and auth state.
 - Graceful shutdown (10s drain) on SIGINT/SIGTERM.
 - Encryption is optional: runs without `ENCRYPTION_KEY`, but auth headers are stored in plaintext.
+- Tools have an `is_active` flag (default `true`). Inactive tools are excluded from token scope selection in the UI. Tool active state is preserved across server rediscovery.
 - No unit tests currently — tested via integration/E2E against running backends.
 
 ## What This Provides to Other Services

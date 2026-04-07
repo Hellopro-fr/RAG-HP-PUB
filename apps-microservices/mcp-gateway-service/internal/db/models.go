@@ -53,6 +53,7 @@ type ServerTool struct {
 	Name        string          `gorm:"type:varchar(255);not null;uniqueIndex:uq_server_tool;index:idx_tool_name" json:"name"`
 	Description string          `gorm:"type:text" json:"description,omitempty"`
 	InputSchema json.RawMessage `gorm:"type:json;not null" json:"input_schema"`
+	IsActive    bool            `gorm:"not null;default:true;index:idx_tool_active" json:"is_active"`
 }
 
 func (ServerTool) TableName() string { return "server_tools" }
