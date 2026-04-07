@@ -12,7 +12,7 @@ import (
 )
 
 // hellopro auth API response
-type helloProAuthResponse struct {
+type HelloProAuthResponse struct {
 	Success     bool   `json:"success"`
 	Token       string `json:"token"`
 	Email       string `json:"email"`
@@ -67,7 +67,7 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 
 	// Authenticate against hellopro.fr API
-	authResp, err := authenticateHellopro(cfg.AuthURL, username, password)
+	authResp, err := AuthenticateHellopro(cfg.AuthURL, username, password)
 	if err != nil {
 		log.Printf("[auth] hellopro auth failed for %s: %v", username, err)
 		http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur d'authentification")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
@@ -113,7 +113,7 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 	http.Redirect(w, r, "/ui/", http.StatusSeeOther)
 }
 
-func authenticateHellopro(authURL, username, password string) (*helloProAuthResponse, error) {
+func AuthenticateHellopro(authURL, username, password string) (*HelloProAuthResponse, error) {
 	data := url.Values{
 		"login":    {username},
 		"password": {password},
@@ -135,7 +135,7 @@ func authenticateHellopro(authURL, username, password string) (*helloProAuthResp
 		return nil, fmt.Errorf("auth returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var authResp helloProAuthResponse
+	var authResp HelloProAuthResponse
 	if err := json.Unmarshal(body, &authResp); err != nil {
 		return nil, fmt.Errorf("parse response: %w (body: %s)", err, string(body))
 	}

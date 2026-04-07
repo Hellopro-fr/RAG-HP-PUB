@@ -139,3 +139,89 @@ type ScopeTokenTool struct {
 }
 
 func (ScopeTokenTool) TableName() string { return "scope_token_tools" }
+
+// OAuth2Client is the GORM model for the oauth2_clients table.
+// Supports both Authorization Code (with PKCE) and Client Credentials grants per MCP spec.
+type OAuth2Client struct {
+	ID              string     `gorm:"type:char(36);primaryKey" json:"id"` // = client_id (UUID)
+	Name            string     `gorm:"type:varchar(255);not null" json:"name"`
+	Description     string     `gorm:"type:text" json:"description,omitempty"`
+	SecretHash      string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_secret_hash" json:"-"`
+	SecretPrefix    string     `gorm:"type:varchar(16);not null" json:"secret_prefix"`
+	EncryptedSecret []byte     `gorm:"type:blob" json:"-"`
+	// OAuth2 registration fields
+	RedirectURIs          *string `gorm:"type:json" json:"redirect_uris,omitempty"`                              // JSON array of registered redirect URIs, NULL when unset
+	GrantTypes            *string `gorm:"type:json" json:"grant_types,omitempty"`                                // JSON array: ["authorization_code"], ["client_credentials"], or both, NULL when unset
+	TokenAuthMethod       string `gorm:"type:varchar(30);not null;default:'client_secret_post'" json:"token_auth_method"`
+	DynamicallyRegistered bool   `gorm:"not null;default:false" json:"dynamically_registered"`
+	AccessTokenTTL        int    `gorm:"not null;default:3600" json:"access_token_ttl"` // seconds
+	ExpiresAt             *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
+	IsActive              bool       `gorm:"not null;default:true;index:idx_oauth2_active" json:"is_active"`
+	CreatedBy             string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	CreatedAt             time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt             time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Associations
+	Servers []OAuth2ClientServer `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
+	Tools   []OAuth2ClientTool   `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+}
+
+func (OAuth2Client) TableName() string { return "oauth2_clients" }
+
+// OAuth2ClientServer is the join table between oauth2_clients and mcp_servers.
+type OAuth2ClientServer struct {
+	ClientID string `gorm:"type:char(36);not null;primaryKey" json:"client_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+}
+
+func (OAuth2ClientServer) TableName() string { return "oauth2_client_servers" }
+
+// OAuth2ClientTool records which tools are allowed for a client+server pair.
+// If no rows exist for a (client_id, server_id), ALL tools of that server are allowed.
+type OAuth2ClientTool struct {
+	ClientID string `gorm:"type:char(36);not null;primaryKey" json:"client_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey" json:"server_id"`
+	ToolName string `gorm:"type:varchar(255);not null;primaryKey" json:"tool_name"`
+}
+
+func (OAuth2ClientTool) TableName() string { return "oauth2_client_tools" }
+
+// OAuth2AuthorizationCode is the GORM model for short-lived authorization codes.
+type OAuth2AuthorizationCode struct {
+	CodeHash      string     `gorm:"type:varchar(64);primaryKey" json:"-"`
+	ClientID      string     `gorm:"type:char(36);not null;index:idx_authcode_client" json:"client_id"`
+	UserEmail     string     `gorm:"type:varchar(255);not null" json:"user_email"`
+	RedirectURI   string     `gorm:"type:varchar(2048);not null" json:"redirect_uri"`
+	CodeChallenge string     `gorm:"type:varchar(128);not null" json:"-"`
+	Scope         string     `gorm:"type:json" json:"scope,omitempty"`
+	ExpiresAt     time.Time  `gorm:"type:datetime(3);not null" json:"expires_at"`
+	UsedAt        *time.Time `gorm:"type:datetime(3)" json:"used_at,omitempty"`
+	CreatedAt     time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+}
+
+func (OAuth2AuthorizationCode) TableName() string { return "oauth2_authorization_codes" }
+
+// OAuth2RefreshToken is the GORM model for refresh tokens.
+type OAuth2RefreshToken struct {
+	TokenHash string     `gorm:"type:varchar(64);primaryKey" json:"-"`
+	ClientID  string     `gorm:"type:char(36);not null;index:idx_refresh_client" json:"client_id"`
+	UserEmail string     `gorm:"type:varchar(255);not null" json:"user_email"`
+	Scope     string     `gorm:"type:json" json:"scope,omitempty"`
+	ExpiresAt time.Time  `gorm:"type:datetime(3);not null" json:"expires_at"`
+	RevokedAt *time.Time `gorm:"type:datetime(3)" json:"revoked_at,omitempty"`
+	CreatedAt time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+}
+
+func (OAuth2RefreshToken) TableName() string { return "oauth2_refresh_tokens" }
+
+// OAuth2Consent stores per-client, per-user consent decisions.
+type OAuth2Consent struct {
+	ID        string    `gorm:"type:char(36);primaryKey" json:"id"`
+	ClientID  string    `gorm:"type:char(36);not null;uniqueIndex:uq_consent_client_user" json:"client_id"`
+	UserEmail string    `gorm:"type:varchar(255);not null;uniqueIndex:uq_consent_client_user" json:"user_email"`
+	Scope     string    `gorm:"type:json" json:"scope,omitempty"`
+	CreatedAt time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (OAuth2Consent) TableName() string { return "oauth2_consents" }
