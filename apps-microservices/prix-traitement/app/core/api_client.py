@@ -1,6 +1,6 @@
 """
 Client API pour les appels vers base.hellopro.fr
-Provider LLM: GeminiProvider
+Providers LLM: GeminiProvider, ClaudeProvider
 """
 import asyncio
 import httpx
@@ -12,6 +12,7 @@ from google import genai
 from google.genai import types, errors
 
 from google.genai.errors import APIError
+import anthropic
 from tenacity import (
     Retrying,
     stop_after_attempt,
@@ -146,6 +147,133 @@ class GeminiProvider:
         """
         Envoie un prompt à Gemini de manière asynchrone (ne bloque pas l'event loop).
         Délègue l'appel synchrone Gemini SDK à un thread séparé via asyncio.to_thread.
+        """
+        return await asyncio.to_thread(self._chat_sync, prompt)
+
+
+class ClaudeProvider:
+    """Provider pour l'API Claude (Anthropic) avec retry automatique"""
+
+    # Mapping effort → budget_tokens pour Haiku (extended thinking)
+    EFFORT_TO_BUDGET = {
+        "high": 10000,
+        "medium": 5000,
+        "low": 1024,
+    }
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "claude-haiku-4-5",
+        max_tokens: int = 4096,
+        effort: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
+        max_retries: int = 5,
+    ):
+        self.api_key = api_key or settings.ANTHROPIC_API_KEY
+        self.model = model
+        self.max_tokens = max_tokens
+        self.effort = effort
+        self.budget_tokens = budget_tokens
+        self.max_retries = max_retries
+        self.client = anthropic.Anthropic(api_key=self.api_key)
+
+    def _chat_sync(self, prompt: str) -> Dict[str, Any]:
+        """
+        Logique synchrone d'appel Claude avec retry manuel.
+        Appelée via asyncio.to_thread pour ne pas bloquer l'event loop.
+        """
+        last_error = None
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                if attempt > 1:
+                    logger.info(f"Retry Claude API... Tentative {attempt}")
+
+                logger.info(f"Claude API tentative: {attempt}")
+
+                create_kwargs = {
+                    "model": self.model,
+                    "max_tokens": self.max_tokens,
+                    "messages": [{"role": "user", "content": prompt}],
+                }
+
+                supports_effort = any(k in self.model.lower() for k in ("opus", "sonnet"))
+
+                if supports_effort and self.effort and not self.budget_tokens:
+                    # Opus/Sonnet : output_config effort natif
+                    create_kwargs["output_config"] = {"effort": self.effort}
+                elif self.budget_tokens:
+                    # budget_tokens explicite → extended thinking (tous modèles)
+                    create_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": self.budget_tokens,
+                    }
+                elif self.effort and not supports_effort:
+                    # Haiku et autres : effort converti en budget_tokens
+                    create_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": self.EFFORT_TO_BUDGET.get(self.effort, 5000),
+                    }
+                # Si ni effort ni budget_tokens → appel simple sans thinking/output_config
+
+                response = self.client.messages.create(**create_kwargs)
+
+                # Extraire le texte de la réponse
+                message_text = ""
+                for block in response.content:
+                    if block.type == "text":
+                        message_text += block.text
+
+                safe_api_response = make_serializable(response.model_dump())
+
+                return {"message": message_text, "api_response": safe_api_response}
+
+            except anthropic.RateLimitError as e:
+                last_error = e
+                logger.warning(f"Claude RateLimitError (tentative {attempt}): {e}")
+                if attempt < self.max_retries:
+                    import time as _time
+                    _time.sleep(min(2 ** attempt, 60))
+                    continue
+
+            except anthropic.APIStatusError as e:
+                last_error = e
+                if e.status_code in (503, 529) and attempt < self.max_retries:
+                    logger.warning(f"Claude APIStatusError {e.status_code} (tentative {attempt}): {e}")
+                    import time as _time
+                    _time.sleep(min(2 ** attempt, 60))
+                    continue
+                logger.error(f"Claude APIStatusError: {e.status_code} - {e.message}")
+                return {
+                    "error": e.message,
+                    "code": e.status_code,
+                    "content": None,
+                    "api_response": {},
+                }
+
+            except Exception as e:
+                logger.error(f"Erreur inattendue dans Claude: {e}")
+                return {
+                    "error": str(e),
+                    "code": 500,
+                    "content": None,
+                    "api_response": {},
+                }
+
+        # Toutes les tentatives échouées
+        logger.error(f"Échec Claude après {self.max_retries} tentatives: {last_error}")
+        return {
+            "error": str(last_error),
+            "code": 503,
+            "content": None,
+            "api_response": {},
+        }
+
+    async def chat(self, prompt: str) -> Dict[str, Any]:
+        """
+        Envoie un prompt à Claude de manière asynchrone (ne bloque pas l'event loop).
+        Délègue l'appel synchrone Anthropic SDK à un thread séparé via asyncio.to_thread.
         """
         return await asyncio.to_thread(self._chat_sync, prompt)
 
