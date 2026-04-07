@@ -444,6 +444,42 @@ func (h *Handler) handleListAllPrompts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"prompts": prompts, "total": len(prompts)})
 }
 
+// ── Enable / Disable Tool ─────────────────────────────────────────────────
+
+func (h *Handler) handleEnableTool(w http.ResponseWriter, r *http.Request, serverID, toolName string) {
+	srv, err := h.repo.GetByID(serverID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
+	if err := h.repo.SetToolActive(serverID, toolName, true); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to enable tool"})
+		return
+	}
+	updated, _ := h.repo.GetByID(serverID)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
+func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serverID, toolName string) {
+	srv, err := h.repo.GetByID(serverID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
+	if err := h.repo.SetToolActive(serverID, toolName, false); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable tool"})
+		return
+	}
+	updated, _ := h.repo.GetByID(serverID)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendServer) {
@@ -538,6 +574,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		toolNames = append(toolNames, ToolSummary{
 			Name:        gateway.PrefixedToolName(srv.ToolPrefix, t.Name),
 			Description: t.Description,
+			IsActive:    t.IsActive,
 		})
 	}
 
@@ -585,6 +622,7 @@ func toServerDetailResponse(srv *db.MCPServer) ServerDetailResponse {
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.InputSchema,
+			IsActive:    t.IsActive,
 		})
 	}
 	for _, res := range srv.Resources {

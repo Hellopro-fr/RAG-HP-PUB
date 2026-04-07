@@ -583,10 +583,11 @@
       };
       const dot = healthColors[s.health_status] || healthColors.unknown;
       const tags = (s.tags || []).map(t => `<span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">${esc(t)}</span>`).join(' ');
+      const activeToolsCount = (s.tool_names || []).filter(t => t.is_active !== false).length;
       const stats = s.health_status === 'unhealthy' && !s.tools_count && !s.resources_count && !s.prompts_count
         ? '<span class="text-red-500">Erreur de connexion</span>'
         : [
-            s.tools_count ? `${s.tools_count} outil${s.tools_count>1?'s':''}` : null,
+            s.tools_count ? (activeToolsCount < s.tools_count ? `${activeToolsCount}/${s.tools_count} outils actifs` : `${s.tools_count} outil${s.tools_count>1?'s':''}`) : null,
             s.resources_count ? `${s.resources_count} ressource${s.resources_count>1?'s':''}` : null,
             s.prompts_count ? `${s.prompts_count} prompt${s.prompts_count>1?'s':''}` : null,
           ].filter(Boolean).join(' · ') || 'Aucune capacité';
@@ -857,6 +858,15 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    async function toggleTool(serverId, toolName, enable) {
+      try {
+        await api(`/servers/${serverId}/tools/${encodeURIComponent(toolName)}/${enable ? 'enable' : 'disable'}`, { method: 'POST' });
+        toast(enable ? 'Outil activé' : 'Outil désactivé');
+        showDetail(serverId); // refresh detail view
+        loadServers(); // refresh server list counts
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
     async function discoverServer(id) {
       try {
         await api('/servers/' + id + '/discover', { method: 'POST' });
@@ -929,10 +939,24 @@
         } else {
           // Tools
           if (s.tools && s.tools.length > 0) {
-            html += `<div><h3 class="text-sm font-semibold mb-2">Outils (${s.tools.length})</h3><div class="space-y-2">`;
+            const activeCount = s.tools.filter(t => t.is_active).length;
+            html += `<div><h3 class="text-sm font-semibold mb-2">Outils (${activeCount}/${s.tools.length} actifs)</h3><div class="space-y-2">`;
             for (const t of s.tools) {
-              html += `<div class="bg-gray-50 rounded-lg p-3">
-                <p class="font-medium text-sm">${esc(t.name)}</p>
+              const activeBadge = t.is_active
+                ? '<span class="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-emerald-100 text-emerald-700">Actif</span>'
+                : '<span class="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-yellow-100 text-yellow-700">Inactif</span>';
+              const toggleBtn = t.is_active
+                ? `<button onclick="toggleTool('${s.id}','${esc(t.name)}',false)" title="Désactiver" class="p-1 rounded hover:bg-yellow-50 text-yellow-500 hover:text-yellow-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                   </button>`
+                : `<button onclick="toggleTool('${s.id}','${esc(t.name)}',true)" title="Activer" class="p-1 rounded hover:bg-emerald-50 text-emerald-500 hover:text-emerald-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                   </button>`;
+              html += `<div class="bg-gray-50 rounded-lg p-3 ${!t.is_active ? 'opacity-60' : ''}">
+                <div class="flex items-center justify-between">
+                  <p class="font-medium text-sm">${esc(t.name)}</p>
+                  <div class="flex items-center gap-2">${activeBadge} ${toggleBtn}</div>
+                </div>
                 ${t.description ? `<p class="text-xs text-gray-500 mt-0.5">${esc(t.description)}</p>` : ''}
               </div>`;
             }
@@ -1233,7 +1257,9 @@
       }
       let html = '';
       for (const s of allServers) {
-        html += dndBuildServerGroup(s, s.tool_names || [], 'avail');
+        // Only show active tools in token scope selection
+        const activeTools = (s.tool_names || []).filter(t => t.is_active !== false);
+        html += dndBuildServerGroup(s, activeTools, 'avail');
       }
       avail.innerHTML = html;
       dndUpdateCount();
@@ -1478,10 +1504,10 @@
       const serverTools = [];
       for (const sid of serverIDs) {
         const srv = allServers.find(s => s.id === sid);
-        const totalTools = (srv?.tool_names || []).length;
+        const totalActiveTools = (srv?.tool_names || []).filter(t => t.is_active !== false).length;
         const pickedTools = selectedToolsByServer[sid] || [];
-        if (totalTools === 0) continue;
-        if (pickedTools.length === totalTools) continue; // all tools — no restriction needed
+        if (totalActiveTools === 0) continue;
+        if (pickedTools.length === totalActiveTools) continue; // all active tools — no restriction needed
         serverTools.push({ server_id: sid, tool_names: pickedTools });
       }
 
