@@ -199,33 +199,96 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request, client 
 }
 
 func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Client, params *authorizeParams, userEmail string) {
+	// Check if the client has pre-configured server/tool scope (admin-assigned)
+	hasPreConfiguredScope := len(client.Servers) > 0
+
 	servers, _ := s.serverRepo.ListActive()
 
-	var checkedIDs map[string]bool
-	existing, err := s.consentRepo.FindByClientAndUser(client.ID, userEmail)
-	if err == nil && existing != nil {
-		scope, _ := ParseConsentScope(existing.Scope)
-		if scope != nil {
-			checkedIDs = make(map[string]bool)
-			for _, sid := range scope.ServerIDs {
-				checkedIDs[sid] = true
-			}
-		}
+	// Build server lookup for name resolution
+	serverMap := make(map[string]db.MCPServer, len(servers))
+	for _, srv := range servers {
+		serverMap[srv.ID] = srv
 	}
 
+	type toolEntry struct {
+		Name        string
+		Description string
+		ServerID    string
+	}
 	type serverEntry struct {
 		ID        string
 		Name      string
 		ToolCount int
 		Checked   bool
+		Tools     []toolEntry
 	}
-	entries := make([]serverEntry, len(servers))
-	for i, srv := range servers {
-		entries[i] = serverEntry{
-			ID:        srv.ID,
-			Name:      srv.Name,
-			ToolCount: len(srv.Tools),
-			Checked:   checkedIDs[srv.ID],
+
+	var entries []serverEntry
+
+	if hasPreConfiguredScope {
+		// Client has admin-assigned scope — show only those servers/tools (read-only)
+		allowedTools := make(map[string]map[string]bool)
+		for _, t := range client.Tools {
+			if allowedTools[t.ServerID] == nil {
+				allowedTools[t.ServerID] = make(map[string]bool)
+			}
+			allowedTools[t.ServerID][t.ToolName] = true
+		}
+
+		for _, cs := range client.Servers {
+			srv, ok := serverMap[cs.ServerID]
+			if !ok {
+				continue
+			}
+			entry := serverEntry{
+				ID:      srv.ID,
+				Name:    srv.Name,
+				Checked: true,
+			}
+			// If specific tools are assigned, list them; otherwise all tools
+			srvTools := allowedTools[srv.ID]
+			for _, t := range srv.Tools {
+				if srvTools != nil && !srvTools[t.Name] {
+					continue
+				}
+				entry.Tools = append(entry.Tools, toolEntry{
+					Name:        t.Name,
+					Description: t.Description,
+					ServerID:    srv.ID,
+				})
+			}
+			entry.ToolCount = len(entry.Tools)
+			entries = append(entries, entry)
+		}
+	} else {
+		// No pre-configured scope — show all servers with tool picker
+		var checkedIDs map[string]bool
+		existing, err := s.consentRepo.FindByClientAndUser(client.ID, userEmail)
+		if err == nil && existing != nil {
+			scope, _ := ParseConsentScope(existing.Scope)
+			if scope != nil {
+				checkedIDs = make(map[string]bool)
+				for _, sid := range scope.ServerIDs {
+					checkedIDs[sid] = true
+				}
+			}
+		}
+
+		for _, srv := range servers {
+			entry := serverEntry{
+				ID:        srv.ID,
+				Name:      srv.Name,
+				ToolCount: len(srv.Tools),
+				Checked:   checkedIDs[srv.ID],
+			}
+			for _, t := range srv.Tools {
+				entry.Tools = append(entry.Tools, toolEntry{
+					Name:        t.Name,
+					Description: t.Description,
+					ServerID:    srv.ID,
+				})
+			}
+			entries = append(entries, entry)
 		}
 	}
 
@@ -249,6 +312,7 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 		"State":               params.State,
 		"CSRFToken":           csrfToken,
 		"Servers":             entries,
+		"PreConfigured":       hasPreConfiguredScope,
 	})
 }
 
@@ -271,13 +335,34 @@ func (s *AuthServer) handleConsent(w http.ResponseWriter, r *http.Request, clien
 		return
 	}
 
-	serverIDs := r.Form["server_ids"]
-	if len(serverIDs) == 0 {
-		http.Error(w, "select at least one server", http.StatusBadRequest)
-		return
+	// Build scope: use pre-configured scope if client has admin-assigned servers, else from form
+	var scope ConsentScope
+	if len(client.Servers) > 0 {
+		// Pre-configured scope — use the admin-assigned servers/tools
+		for _, cs := range client.Servers {
+			scope.ServerIDs = append(scope.ServerIDs, cs.ServerID)
+		}
+		if len(client.Tools) > 0 {
+			toolsByServer := make(map[string][]string)
+			for _, t := range client.Tools {
+				toolsByServer[t.ServerID] = append(toolsByServer[t.ServerID], t.ToolName)
+			}
+			for sid, tools := range toolsByServer {
+				scope.ServerTools = append(scope.ServerTools, ServerToolSelection{
+					ServerID:  sid,
+					ToolNames: tools,
+				})
+			}
+		}
+	} else {
+		// Dynamic client — scope from user selection in the form
+		serverIDs := r.Form["server_ids"]
+		if len(serverIDs) == 0 {
+			http.Error(w, "select at least one server", http.StatusBadRequest)
+			return
+		}
+		scope.ServerIDs = serverIDs
 	}
-
-	scope := ConsentScope{ServerIDs: serverIDs}
 
 	s.consentRepo.Upsert(&db.OAuth2Consent{
 		ID:        uuid.New().String(),
