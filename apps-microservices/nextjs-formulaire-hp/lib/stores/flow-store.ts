@@ -153,7 +153,7 @@ const createSessionStorage = (): StateStorage => {
 };
 
 // Types de parcours pour le tracking GTM
-export type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | null;
+export type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | 'budget_ne_correspond_pas' | null;
 
 // Structure pour stocker les questions et réponses de l'utilisateur
 export interface UserQuestionAnswer {

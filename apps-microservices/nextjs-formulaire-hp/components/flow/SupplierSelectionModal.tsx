@@ -24,9 +24,12 @@ import BudgetEstimate from "./BudgetEstimate";
 import {
   trackComparisonModalView,
   trackProductSelectionChange,
+  trackCustomNeedPageView,
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
+import { hasPriceEstimation } from "@/types/prix";
+import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 import { getCategorySelection } from "@/data/category-static-content";
 
@@ -219,13 +222,14 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setAnimatingCount(true);
 
     // Track add/remove selection (GTM)
-    trackProductSelectionChange(id, isRemoving ? 'retirer' : 'ajouter', newIds.length);
+    trackProductSelectionChange(id, isRemoving ? 'retirer' : 'ajouter', newIds.length, hasPriceEstimation(priceEstimation));
 
     // Track DB
     trackDbEvent('selection', isRemoving ? 'deselect' : 'select', {
       product_id: id,
       action: isRemoving ? 'retirer' : 'ajouter',
-      total_selected: newIds.length
+      total_selected: newIds.length,
+      price_estimation: buildPriceTrackingPayload(priceEstimation),
     }, categoryId);
   };
 
@@ -313,7 +317,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
               />
 
               {/* Budget Estimate — affiché seulement si données prix valides */}
-              {priceEstimation?.data && priceEstimation.data.fourchette.borne_basse !== 0 && (() => {
+              {priceEstimation?.data && priceEstimation.data.fourchette.borne_basse !== 0 && priceEstimation.data.fourchette.borne_basse !== priceEstimation.data.fourchette.borne_haute && (priceEstimation.data.exemples_produits?.length ?? 0) > 2 && (() => {
                 const { fourchette, exemples_produits, phrase_prix } = priceEstimation.data!;
                 const fmtPrice = (n: number) =>
                   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
@@ -333,6 +337,9 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                     priceItems={priceItems.length > 0 ? priceItems : undefined}
                     detailDescription={phrase_prix}
                     handleClickNeCorrespondPas={() => {
+                      setStoreFlowType('budget_ne_correspond_pas');
+                      setFlowType('budget_ne_correspond_pas');
+                      trackCustomNeedPageView();
                       setCustomNeedVariant('budget');
                       setViewState("custom-need");
                     }}
