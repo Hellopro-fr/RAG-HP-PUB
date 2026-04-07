@@ -77,7 +77,10 @@ class Consumer:
                 groups = self._group_by_url(batch, messages)
 
                 for url, group_batch, group_messages in groups:
-                    success = await self.sender.send_batch(group_batch, url=url)
+                    if url == "__no_url__":
+                        success = False
+                    else:
+                        success = await self.sender.send_batch(group_batch, url=url)
                     for msg in group_messages:
                         try:
                             if success:
@@ -111,10 +114,7 @@ class Consumer:
         result = []
         for url, (group_batch, group_messages) in groups.items():
             if url == "__no_url__":
-                logger.warning(f"Aucune URL pour {len(group_messages)} message(s), NACK")
-                for msg in group_messages:
-                    # On ne peut pas appeler nack ici (hors lock dans un staticmethod)
-                    # mais on est dans le lock, donc on retourne avec success=False
+                logger.warning(f"Aucune URL pour {len(group_messages)} message(s), sera NACK au flush")
                 result.append((url, group_batch, group_messages))
             else:
                 result.append((url, group_batch, group_messages))
