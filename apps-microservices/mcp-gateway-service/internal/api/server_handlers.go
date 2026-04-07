@@ -459,6 +459,8 @@ func (h *Handler) handleEnableTool(w http.ResponseWriter, r *http.Request, serve
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to enable tool"})
 		return
 	}
+	// Sync the in-memory registry so MCP clients see the change immediately
+	h.registry.SetToolActive(serverID, toolName, true)
 	updated, _ := h.repo.GetByID(serverID)
 	writeJSON(w, http.StatusOK, toServerResponse(updated))
 }
@@ -476,6 +478,8 @@ func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serv
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable tool"})
 		return
 	}
+	// Sync the in-memory registry so MCP clients see the change immediately
+	h.registry.SetToolActive(serverID, toolName, false)
 	updated, _ := h.repo.GetByID(serverID)
 	writeJSON(w, http.StatusOK, toServerResponse(updated))
 }
@@ -524,7 +528,15 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 
 	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
 		log.Printf("[api] save capabilities error for %s: %v", id, err)
+		return
 	}
+	// Sync tool active states from DB back to registry (SaveDiscoveredCapabilities
+	// preserves is_active for existing tools, but the registry has all tools as active)
+	toolStates := make(map[string]bool, len(dbSrv.Tools))
+	for _, t := range dbSrv.Tools {
+		toolStates[t.Name] = t.IsActive
+	}
+	h.registry.SyncToolActiveStates(id, toolStates)
 }
 
 // checkOwnership verifies the current user owns the server.

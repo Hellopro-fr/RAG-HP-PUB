@@ -215,6 +215,13 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
 				}
+				// Sync tool active states from DB (discovery marks all as active,
+				// but some may have been deactivated by the user)
+				toolStates := make(map[string]bool, len(s.Tools))
+				for _, t := range s.Tools {
+					toolStates[t.Name] = t.IsActive
+				}
+				reg.SyncToolActiveStates(s.ID, toolStates)
 				_ = repo.UpdateHealth(s.ID, "healthy", "")
 			}
 		}(srv)
@@ -240,6 +247,7 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.InputSchema,
+			IsActive:    t.IsActive,
 		})
 	}
 	for _, r := range srv.Resources {
