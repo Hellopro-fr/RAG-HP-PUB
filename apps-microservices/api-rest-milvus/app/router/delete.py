@@ -13,6 +13,8 @@ from pymilvus import (
     MilvusException
 )
 
+from app.core.api_rest_milvus import get_loaded_collection
+
 router = APIRouter()
 
 
@@ -235,8 +237,7 @@ def delete_ressource_rest(
             }
 
         # Charger la collection
-        collection = Collection(collection_name)
-        collection.load()
+        collection = get_loaded_collection(collection_name)
 
         # Construction de l'expression de filtre pour la collection principale
         expr_parts = []
@@ -472,8 +473,7 @@ def _delete_cascade(
             }
 
         # Charger la collection de correspondance
-        collection_correspondance = Collection(correspondance_collection_name)
-        collection_correspondance.load()
+        collection_correspondance = get_loaded_collection(correspondance_collection_name)
 
         # Déterminer quels filtres utiliser pour la cascade
         filters_to_use = cascade_filters if cascade_filters else main_filters

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Set
 from pymilvus import Collection, utility
+from app.core.api_rest_milvus import get_loaded_collection
 import time
 import logging
 from urllib.parse import urlparse
@@ -57,8 +58,7 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
     if not utility.has_collection(COLLECTION_NAME):
         raise HTTPException(status_code=404, detail=f"La collection '{COLLECTION_NAME}' n'existe pas.")
 
-    collection = Collection(name=COLLECTION_NAME)
-    collection.load()
+    collection = get_loaded_collection(COLLECTION_NAME)
 
     # Préparation du filtre domaines
     target_domains = set()

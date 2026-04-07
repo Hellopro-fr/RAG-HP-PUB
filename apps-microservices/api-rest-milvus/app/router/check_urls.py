@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Set
 from pymilvus import Collection, utility
+from app.core.api_rest_milvus import get_loaded_collection
 
 from common_utils.database.config.settings import Configuration
 
@@ -192,8 +193,7 @@ async def check_urls_existence(request: CheckUrlsRequest):
         )
     
     try:
-        collection = Collection(collection_name)
-        collection.load()
+        collection = get_loaded_collection(collection_name)
     except Exception as e:
         logger.error(f"Erreur lors du chargement de la collection: {e}")
         raise HTTPException(
@@ -337,9 +337,8 @@ async def check_urls_simple(request: CheckUrlsSimpleRequest):
         )
     
     try:
-        collection = Collection(collection_name)
-        collection.load()
-        
+        collection = get_loaded_collection(collection_name)
+
         urls_unique = list(set(request.urls))
         result = _check_urls_batch(collection, urls_unique)
         

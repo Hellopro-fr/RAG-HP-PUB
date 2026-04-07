@@ -17,6 +17,8 @@ from pymilvus import (
     MilvusException
 )
 
+from app.core.api_rest_milvus import get_loaded_collection
+
 import json
 
 router = APIRouter()
@@ -186,8 +188,7 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     "code": 404
                 }
 
-            collection = Collection(collection_name)
-            collection.load()
+            collection = get_loaded_collection(collection_name)
 
             expr_parts = []
 

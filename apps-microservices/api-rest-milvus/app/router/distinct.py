@@ -15,6 +15,8 @@ from pymilvus import (
     MilvusException
 )
 
+from app.core.api_rest_milvus import get_loaded_collection
+
 import json
 import logging
 
@@ -83,8 +85,7 @@ Exemples: <br>
                 detail=f"La collection '{collection_name}' n'existe pas dans Milvus."
             )
 
-        collection = Collection(collection_name)
-        collection.load()
+        collection = get_loaded_collection(collection_name)
 
         # --- 4. Validation dynamique des champs via le schéma de la collection ---
         schema_field_names = [field.name for field in collection.schema.fields]
