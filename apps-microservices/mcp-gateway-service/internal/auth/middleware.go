@@ -46,9 +46,13 @@ var publicExact = map[string]bool{
 var publicPrefixes = []string{
 	"/static",
 	"/favicon",
-	"/sse",    // MCP SSE transport (machine-to-machine)
-	"/mcp",    // MCP streamable HTTP transport (machine-to-machine)
+	"/sse",          // MCP SSE transport (machine-to-machine)
+	"/mcp",          // MCP streamable HTTP transport (machine-to-machine)
 	"/openapi.json",
+	"/authorize",    // OAuth2 authorization endpoint
+	"/token",        // OAuth2 token endpoint
+	"/register",     // OAuth2 dynamic client registration
+	"/.well-known",  // OAuth2 server metadata
 }
 
 // Middleware returns an HTTP middleware that enforces authentication.

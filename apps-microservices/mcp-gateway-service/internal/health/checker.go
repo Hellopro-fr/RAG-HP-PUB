@@ -94,8 +94,8 @@ func (c *Checker) checkOne(srv *db.MCPServer, authHeaders map[string]string) {
 			log.Printf("[health] server %s (%s) became unhealthy: %v", srv.ID, srv.URL, err)
 		}
 		_ = c.repo.UpdateHealth(srv.ID, "unhealthy", err.Error())
-		// Clear stale tools/resources/prompts so UI doesn't show outdated data
-		_ = c.repo.ClearCapabilities(srv.ID)
+		// Keep cached capabilities — they are still valid, the server is just temporarily unreachable.
+		// Capabilities get refreshed on the next successful discovery.
 		return
 	}
 

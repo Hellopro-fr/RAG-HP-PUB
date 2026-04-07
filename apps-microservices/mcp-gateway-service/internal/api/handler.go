@@ -94,6 +94,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
 	}
 
+	// ── OAuth2 client routes ─────────────────────────────────────────────────
+	if h.oauth2Repo != nil {
+		apiMux.HandleFunc("/api/v1/oauth2/clients", h.handleOAuth2Clients)
+		apiMux.HandleFunc("/api/v1/oauth2/clients/", h.handleOAuth2ClientByID)
+	}
+
 	// Routes avec {id} — on utilise un handler prefix pour capturer le pattern
 	apiMux.HandleFunc("/api/v1/servers/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")

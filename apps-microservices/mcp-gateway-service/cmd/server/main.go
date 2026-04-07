@@ -15,12 +15,14 @@ import (
 
 	"github.com/hellopro/mcp-gateway/internal/api"
 	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/authserver"
 	"github.com/hellopro/mcp-gateway/internal/config"
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/health"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
+	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/transport"
@@ -102,13 +104,40 @@ func main() {
 	tokenCache := scopetoken.NewCache(60 * time.Second)
 	var tokenRepo *repository.TokenRepo
 
+	// OAuth2 cache + repo
+	oauth2Cache := oauth2pkg.NewCache(60 * time.Second)
+	var oauth2Repo *repository.OAuth2Repo
+
 	// Monte les routes REST API si le repository est disponible
 	if repo != nil && database != nil {
 		tokenRepo = repository.NewTokenRepo(database, encryptor)
+		oauth2Repo = repository.NewOAuth2Repo(database, encryptor)
+
 		apiHandler := api.NewHandler(repo, gw, registry, cfg.AllowInternalURLs)
 		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
+		apiHandler.SetOAuth2Repo(oauth2Repo, oauth2Cache)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
+
+		// OAuth2 Authorization Server (public endpoints: /authorize, /token, /register, /.well-known)
+		authCodeRepo := repository.NewAuthCodeRepo(database)
+		consentRepo := repository.NewConsentRepo(database)
+		refreshRepo := repository.NewRefreshRepo(database)
+
+		authSrv := authserver.NewAuthServer(authserver.AuthServerConfig{
+			OAuth2Repo:   oauth2Repo,
+			AuthCodeRepo: authCodeRepo,
+			ConsentRepo:  consentRepo,
+			RefreshRepo:  refreshRepo,
+			ServerRepo:   repo,
+			JWTSecret:    cfg.JWTSecret,
+			PublicURL:    cfg.GatewayPublicURL,
+			AuthURL:      cfg.AuthURL,
+			SecureCookie: cfg.SecureCookie,
+			RefreshTTL:   cfg.OAuth2RefreshTokenTTL,
+		})
+		authSrv.Register(mux)
+		log.Println("[main] OAuth2 Authorization Server mounted at /authorize, /token, /register, /.well-known/")
 	}
 
 	// Monte l'interface web
@@ -129,13 +158,13 @@ func main() {
 	streamableServer.SetScopeFactory(scopeFactory)
 	streamableServer.Register(mcpMux)
 
-	// Wrap MCP routes with scope token middleware
-	scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, cfg.ScopeTokenRequired)
-	mux.Handle("/sse", scopeMW(mcpMux))
-	mux.Handle("/message", scopeMW(mcpMux))
-	mux.Handle("/mcp", scopeMW(mcpMux))
-	mux.Handle("/mcp/", scopeMW(mcpMux))
-	log.Println("[main] streamable HTTP mounted at /mcp")
+	// Wrap MCP routes with combined OAuth2 + scope token middleware
+	combinedMW := oauth2pkg.CombinedMiddleware(oauth2Cache, oauth2Repo, tokenCache, tokenRepo, cfg.JWTSecret, cfg.GatewayPublicURL)
+	mux.Handle("/sse", combinedMW(mcpMux))
+	mux.Handle("/message", combinedMW(mcpMux))
+	mux.Handle("/mcp", combinedMW(mcpMux))
+	mux.Handle("/mcp/", combinedMW(mcpMux))
+	log.Println("[main] streamable HTTP mounted at /mcp (OAuth2 + scope token auth)")
 
 	// Wrap entire mux with auth middleware
 	authMiddleware := auth.Middleware(authCfg)

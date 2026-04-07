@@ -314,11 +314,9 @@ class ChatGPTProvider:
         self,
         api_key: Optional[str] = None,
         model: str = "gpt-4.1-mini",
-        max_tokens: int = 16000,
     ):
         self.api_key = api_key or settings.OPENAI_API_KEY
         self.model = model
-        self.max_tokens = max_tokens
         self.client = self._get_client(self.api_key)
 
     async def chat(self, prompt: str) -> Dict[str, Any]:
@@ -326,7 +324,6 @@ class ChatGPTProvider:
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
-                max_tokens=self.max_tokens,
                 messages=[{"role": "user", "content": prompt}],
             )
 

@@ -11,6 +11,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
+	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
@@ -22,6 +23,8 @@ type Handler struct {
 	repo              *repository.ServerRepo
 	tokenRepo         *repository.TokenRepo
 	tokenCache        TokenCache
+	oauth2Repo        *repository.OAuth2Repo
+	oauth2Cache       *oauth2pkg.Cache
 	gw                *gateway.Gateway
 	registry          *gateway.Registry
 	allowInternalURLs bool
@@ -41,6 +44,12 @@ func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gate
 func (h *Handler) SetTokenRepo(repo *repository.TokenRepo, cache TokenCache) {
 	h.tokenRepo = repo
 	h.tokenCache = cache
+}
+
+// SetOAuth2Repo sets the OAuth2 repository for client CRUD operations.
+func (h *Handler) SetOAuth2Repo(repo *repository.OAuth2Repo, cache *oauth2pkg.Cache) {
+	h.oauth2Repo = repo
+	h.oauth2Cache = cache
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
