@@ -247,6 +247,7 @@ const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: numbe
 let lastWarningActionTime = 0;
 let lastMemPercent = 0; // Track global memory state for persistence guard
 let persistenceInterval: ReturnType<typeof setInterval> | undefined;
+let isPersisting = false; // Mutex flag to prevent concurrent updateUrlsCrawledStreaming calls
 const handleWarningMemory = async (memPercent: number) => {
     const now = Date.now();
     if (now - lastWarningActionTime < 30000) return; // Debounce 30s
@@ -300,9 +301,14 @@ const handleCriticalMemory = async (memPercent: number) => {
 
         // 2. Emergency Persist (Save data before potential crash)
         console.log("   -> [Phase A] Emergency state persistence");
-        if (context.dedupManager) {
-            const urlIterator = context.dedupManager.getAllUrlsIterator();
-            await updateUrlsCrawledStreaming(domain, urlIterator);
+        if (context.dedupManager && !isPersisting) {
+            isPersisting = true;
+            try {
+                const urlIterator = context.dedupManager.getAllUrlsIterator();
+                await updateUrlsCrawledStreaming(domain, urlIterator);
+            } finally {
+                isPersisting = false;
+            }
         }
         if (context.statsManager) await context.statsManager.saveStateToDisk();
 
@@ -554,13 +560,17 @@ persistenceInterval = setInterval(async () => {
             return;
         }
 
-        // Only run if we have a DedupManager
-        if (context.dedupManager) {
-            // Note: This operation might be heavy on I/O, but it uses streaming/atomic writes
-            const urlIterator = context.dedupManager.getAllUrlsIterator();
-            await updateUrlsCrawledStreaming(domain, urlIterator);
+        // Only run if we have a DedupManager and no other persist is in flight
+        if (context.dedupManager && !isPersisting) {
+            isPersisting = true;
+            try {
+                const urlIterator = context.dedupManager.getAllUrlsIterator();
+                await updateUrlsCrawledStreaming(domain, urlIterator);
+            } finally {
+                isPersisting = false;
+            }
         }
-        
+
         // Generate Update Report Periodically
         if (crawlMode === 'update') {
             await generateUpdateReport(domain);
@@ -863,7 +873,14 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
 
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
+    // Wait for any in-flight persistence to complete before final write
     try {
+        if (isPersisting) {
+            console.log("Waiting for in-flight persistence to complete...");
+            while (isPersisting) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+        }
         console.log("Persisting crawled URLs history...");
         const urlIterator = context.dedupManager?.getAllUrlsIterator();
         if (urlIterator) {

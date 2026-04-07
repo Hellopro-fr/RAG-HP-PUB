@@ -972,7 +972,11 @@ export const updateUrlsCrawledStreaming = async (
     await new Promise<void>((resolve, reject) => {
         stream.on('finish', () => {
             try {
-                fs.renameSync(tempFile, fileUrls);
+                if (fs.existsSync(tempFile)) {
+                    fs.renameSync(tempFile, fileUrls);
+                } else {
+                    console.warn(`[updateUrlsCrawledStreaming] .tmp file already consumed by concurrent write — skipping rename.`);
+                }
                 resolve();
             } catch (err) {
                 reject(err);
