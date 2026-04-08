@@ -1,11 +1,9 @@
 'use client';
 
-import Image from "next/image";
 import { getAssetPath } from "@/lib/utils";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { getCategoryQuestion } from "@/data/category-static-content";
 
-// TODO: remplacer par l'image réelle de la catégorie quand l'API la fournira
 const categoryPlaceholder = getAssetPath("/images/product-lift-1.jpg");
 
 interface QuestionnaireProgressBarProps {
@@ -15,7 +13,7 @@ interface QuestionnaireProgressBarProps {
 }
 
 const QuestionnaireProgressBar = ({ categoryName, currentIndex, totalQuestions }: QuestionnaireProgressBarProps) => {
-  const { categoryId } = useFlowStore();
+  const { categoryId, categoryVignette } = useFlowStore();
 
   // Texte header depuis categoryStaticContent si disponible, sinon fallback générique
   const staticContent = categoryId ? getCategoryQuestion(categoryId) : undefined;
@@ -27,8 +25,8 @@ const QuestionnaireProgressBar = ({ categoryName, currentIndex, totalQuestions }
   return (
     <div className="px-4 py-3 sm:px-6 border-b border-border/60">
       <div className="mx-auto max-w-2xl flex items-center gap-3">
-        <Image
-          src={categoryPlaceholder}
+        <img
+          src={categoryVignette || categoryPlaceholder}
           alt={categoryName || "Catégorie"}
           width={44}
           height={44}
