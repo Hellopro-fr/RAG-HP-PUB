@@ -33,7 +33,7 @@ esac
 
 # Skip known non-testable paths
 case "$FILE_PATH" in
-    *migrations*|*schemas*|*.claude/*|*protos/*|*docs/*) exit 0 ;;
+    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*) exit 0 ;;
 esac
 
 # Search for a corresponding test file

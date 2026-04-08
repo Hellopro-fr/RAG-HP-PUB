@@ -16,15 +16,15 @@ VALID_TYPES = [
 
 def extract_commit_message(command):
     """Extract commit message from git commit command."""
+    # Check heredoc FIRST (before simple quotes, which would match the heredoc wrapper)
+    match = re.search(r'-m\s+"\$\(cat\s+<<[\'"]?EOF[\'"]?\n(.+?)\nEOF', command, re.DOTALL)
+    if match:
+        return match.group(1).strip().split('\n')[0]
+
     # Match -m "..." or -m '...'
     match = re.search(r'-m\s+["\'](.+?)["\']', command)
     if match:
         return match.group(1)
-
-    # Match heredoc: -m "$(cat <<'EOF'\n...\nEOF\n)"
-    match = re.search(r'-m\s+"\$\(cat\s+<<[\'"]?EOF[\'"]?\n(.+?)\nEOF', command, re.DOTALL)
-    if match:
-        return match.group(1).strip().split('\n')[0]
 
     return None
 
