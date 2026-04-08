@@ -70,11 +70,8 @@ func (s *AuthServer) handleAuthCodeExchange(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if authCode.UsedAt != nil {
-		writeOAuth2Error(w, http.StatusBadRequest, "invalid_grant", "authorization code already used")
-		return
-	}
-
+	// Atomic single-use enforcement: MarkUsed uses WHERE used_at IS NULL + RowsAffected check,
+	// preventing TOCTOU race conditions with concurrent requests.
 	if err := s.authCodeRepo.MarkUsed(codeHash); err != nil {
 		writeOAuth2Error(w, http.StatusBadRequest, "invalid_grant", "authorization code already used")
 		return
@@ -172,6 +169,7 @@ func (s *AuthServer) handleClientCredentials(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
 	json.NewEncoder(w).Encode(TokenResponse{
 		AccessToken: accessToken,
 		TokenType:   "Bearer",
@@ -241,6 +239,7 @@ func (s *AuthServer) handleRefreshToken(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
 	json.NewEncoder(w).Encode(TokenResponse{
 		AccessToken:  accessToken,
 		TokenType:    "Bearer",

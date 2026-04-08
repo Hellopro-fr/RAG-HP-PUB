@@ -32,6 +32,11 @@ import (
 func main() {
 	cfg := config.Load()
 
+	// Security: JWT_SECRET must be set when authentication is enabled
+	if cfg.AuthEnabled && cfg.JWTSecret == "" {
+		log.Fatalf("[main] FATAL: JWT_SECRET environment variable must be set when AUTH_ENABLED=true. Generate one with: openssl rand -hex 32")
+	}
+
 	log.Printf("[main] starting %s v%s on :%s", cfg.Name, cfg.Version, cfg.Port)
 
 	registry := gateway.NewRegistry()
@@ -171,11 +176,13 @@ func main() {
 	handler := authMiddleware(mux)
 
 	httpServer := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 0, // SSE streams need unlimited write time
-		IdleTimeout:  60 * time.Second,
+		Addr:              ":" + cfg.Port,
+		Handler:           handler,
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second, // Slowloris protection: limit header read phase
+		WriteTimeout:      0,               // SSE streams need unlimited write time
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB max header size
 	}
 
 	// Graceful shutdown on SIGINT / SIGTERM.

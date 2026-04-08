@@ -15,6 +15,9 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 )
 
+// maxResponseSize is the maximum allowed response body size from a backend (10 MB).
+const maxResponseSize = 10 * 1024 * 1024
+
 // ── transport type ────────────────────────────────────────────────────────────
 
 type backendTransport string
@@ -206,7 +209,7 @@ func (c *BackendClient) tryStreamableHTTP(ctx context.Context, url string) error
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return fmt.Errorf("read body: %w", err)
 	}
@@ -277,7 +280,7 @@ func (c *BackendClient) Call(ctx context.Context, method string, params any) (js
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}

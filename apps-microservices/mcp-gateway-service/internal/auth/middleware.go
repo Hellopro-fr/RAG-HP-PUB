@@ -51,7 +51,7 @@ var publicPrefixes = []string{
 	"/openapi.json",
 	"/authorize",    // OAuth2 authorization endpoint
 	"/token",        // OAuth2 token endpoint
-	"/register",     // OAuth2 dynamic client registration
+	// "/register" intentionally NOT public — requires admin session to prevent abuse
 	"/.well-known",  // OAuth2 server metadata
 }
 

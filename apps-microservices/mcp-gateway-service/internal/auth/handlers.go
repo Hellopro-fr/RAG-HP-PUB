@@ -114,12 +114,27 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 }
 
 func AuthenticateHellopro(authURL, username, password string) (*HelloProAuthResponse, error) {
+	// Security: validate that auth URL uses HTTPS to prevent credential interception
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid auth URL: %w", err)
+	}
+	if parsed.Scheme != "https" && parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1" {
+		return nil, fmt.Errorf("auth URL must use HTTPS (got %s)", parsed.Scheme)
+	}
+
 	data := url.Values{
 		"login":    {username},
 		"password": {password},
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		// Do not follow redirects — prevents MITM via redirect to attacker server
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.PostForm(authURL, data)
 	if err != nil {
 		return nil, fmt.Errorf("auth request: %w", err)
@@ -132,12 +147,13 @@ func AuthenticateHellopro(authURL, username, password string) (*HelloProAuthResp
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("auth returned status %d: %s", resp.StatusCode, string(body))
+		// Truncate body to avoid leaking sensitive upstream data in logs
+		return nil, fmt.Errorf("auth returned status %d (body length: %d bytes)", resp.StatusCode, len(body))
 	}
 
 	var authResp HelloProAuthResponse
 	if err := json.Unmarshal(body, &authResp); err != nil {
-		return nil, fmt.Errorf("parse response: %w (body: %s)", err, string(body))
+		return nil, fmt.Errorf("parse response: %w", err)
 	}
 
 	return &authResp, nil
@@ -145,6 +161,10 @@ func AuthenticateHellopro(authURL, username, password string) (*HelloProAuthResp
 
 func renderLoginPage(w http.ResponseWriter, errorMsg, username string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; default-src 'self' https://cdn.tailwindcss.com; script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
 
 	errorHTML := ""
 	if errorMsg != "" {

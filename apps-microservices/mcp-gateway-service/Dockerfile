@@ -9,10 +9,14 @@ RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o mcp-gateway ./cmd/server
 
 # Stage 2: Minimal runtime image
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates wget
+RUN apk add --no-cache ca-certificates wget && \
+    adduser -D -u 1000 appuser
 
 WORKDIR /app
 COPY --from=builder /src/mcp-gateway .
+RUN chown appuser:appuser ./mcp-gateway
+
+USER appuser
 
 EXPOSE 8581
 

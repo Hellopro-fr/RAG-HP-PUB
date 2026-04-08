@@ -2,6 +2,7 @@ package authserver
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 )
@@ -15,9 +16,10 @@ func GenerateS256Challenge(verifier string) string {
 }
 
 // VerifyPKCE verifies that BASE64URL(SHA256(verifier)) == challenge.
+// Uses constant-time comparison to prevent timing side-channel attacks.
 func VerifyPKCE(challenge, verifier string) error {
 	computed := GenerateS256Challenge(verifier)
-	if computed != challenge {
+	if subtle.ConstantTimeCompare([]byte(computed), []byte(challenge)) != 1 {
 		return ErrPKCEMismatch
 	}
 	return nil

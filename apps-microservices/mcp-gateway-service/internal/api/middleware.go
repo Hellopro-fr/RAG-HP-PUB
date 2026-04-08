@@ -37,6 +37,17 @@ func requestLogger(next http.Handler) http.Handler {
 	})
 }
 
+// maxRequestBodySize limits request body size to prevent resource exhaustion (1 MB).
+const maxRequestBodySize = 1 << 20
+
+// bodyLimit restricts request body size to prevent OOM from oversized payloads.
+func bodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // chain applies middleware in order (outermost first).
 func chain(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
 	for i := len(mws) - 1; i >= 0; i-- {

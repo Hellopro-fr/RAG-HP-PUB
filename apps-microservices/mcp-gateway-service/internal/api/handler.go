@@ -167,7 +167,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/openapi.json", h.handleOpenAPI)
 
 	// Applique les middlewares et monte sur le mux principal
-	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType)
+	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit)
 	mux.Handle("/api/", wrapped)
 }
 
