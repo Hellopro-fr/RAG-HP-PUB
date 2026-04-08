@@ -2289,15 +2289,11 @@ services:
   mcp-gateway-frontend:
     build:
       context: ./apps-microservices/mcp-gateway-frontend
-      target: development
     container_name: mcp-gateway-frontend
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "5173:5173"
-    volumes:
-      - ./apps-microservices/mcp-gateway-frontend:/app
-      - /app/node_modules
+      - "8080:8080"
     networks:
       - services-net
     logging: *logging_defaults
