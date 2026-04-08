@@ -35,6 +35,7 @@ import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
+import { isBlanketBlock } from "./robotsTxtGuard.js";
 
 const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
@@ -453,6 +454,13 @@ try {
     console.warn(`⚠️ Warning: Failed to retrieve robots.txt (likely timeout or block). Proceeding without it. Error: ${e.message}`);
 }
 
+// Detect blanket robots.txt block (Disallow: * or Disallow: /)
+if (robots && isBlanketBlock(robots, site)) {
+    console.warn(`⚠️ robots.txt blanket block detected (all probe URLs blocked). Bypassing robots.txt for this crawl.`);
+    robots = undefined;
+    context.robotsTxtBypassed = true;
+}
+
 // Declare the Glob of URL to include
 const siteParts = getPathAfterDomain(site);
 export const baseUrl = siteParts.baseUrl;
@@ -841,7 +849,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         method: method,
         isError: isError,
         storagePath: storagePath,
-        message_erreur_crawling: messageErreurCrawling || null
+        message_erreur_crawling: messageErreurCrawling || null,
+        robots_txt_bypassed: context.robotsTxtBypassed
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
