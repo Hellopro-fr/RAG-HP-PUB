@@ -1,5 +1,6 @@
 import pytest
 from common_utils.concurrency.config import GuardConfig
+from common_utils.concurrency.metrics import GuardMetrics
 
 
 class TestGuardConfig:
@@ -27,6 +28,39 @@ class TestGuardConfig:
         assert config.tier == 1
         assert config.service_name == "test-service"
         assert config.lease_ttl == 120
+
+
+class TestGuardMetrics:
+    def test_metrics_registered(self):
+        metrics = GuardMetrics()
+        assert metrics.slots_active is not None
+        assert metrics.slots_max is not None
+        assert metrics.write_ceiling is not None
+        assert metrics.acquire_duration is not None
+        assert metrics.acquire_timeouts is not None
+        assert metrics.lease_expirations is not None
+        assert metrics.fallback_active is not None
+
+    def test_record_acquire(self):
+        metrics = GuardMetrics()
+        metrics.record_acquire(tier="2", service="test-svc", duration=0.5)
+
+    def test_record_release(self):
+        metrics = GuardMetrics()
+        metrics.record_release(tier="2", service="test-svc")
+
+    def test_record_timeout(self):
+        metrics = GuardMetrics()
+        metrics.record_timeout(tier="2", service="test-svc")
+
+    def test_set_config_gauges(self):
+        metrics = GuardMetrics()
+        metrics.set_config_gauges(global_max=50, write_ceiling=30)
+
+    def test_set_fallback(self):
+        metrics = GuardMetrics()
+        metrics.set_fallback(service="test-svc", active=True)
+        metrics.set_fallback(service="test-svc", active=False)
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("MILVUS_GLOBAL_MAX_CONCURRENT", "200")
