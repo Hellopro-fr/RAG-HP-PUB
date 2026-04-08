@@ -50,6 +50,7 @@ export const context = {
         }
     },
     stopReason: "",
+    robotsTxtBypassed: false,
     crawlErrorMessage: "",
     // In-memory counters for URLs containing '?' and '#' pushed to the dataset.
     // Used by postNavigationHooks to avoid O(n²) full-dataset scans.
