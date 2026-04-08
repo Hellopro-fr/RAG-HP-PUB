@@ -102,6 +102,15 @@ Prevents crawling duplicate French regional variants (e.g., `/fr-BE/`, `/fr-CA/`
 
 The GCS fallback (step 2) handles legacy crawls stuck at `finished` due to a previous bug where `_mark_as_archived` was never called.
 
+## robots.txt Blanket Block Bypass
+
+At startup, after fetching robots.txt, the crawler checks if the site has a blanket block (`Disallow: *` or `Disallow: /`) using a multi-path probe (`isBlanketBlock` in `robotsTxtGuard.ts`). Three diverse URLs are tested against `isAllowed()` — if all are blocked, `robots` is set to `undefined`, disabling all robots.txt filtering for the crawl.
+
+- Detection is at startup only (not runtime)
+- Bypass is transparent to the caller — no webhook contract change
+- `robots_txt_bypassed: true` is included in `_callback_payload.json` for observability
+- Selective blocks (e.g., `Disallow: /products/`) are NOT bypassed
+
 ## Exit Codes (Node.js → Python)
 
 | Code | Meaning | Python Behavior |
