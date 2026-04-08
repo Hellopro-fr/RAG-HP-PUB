@@ -13,41 +13,12 @@ _milvus_devis_crud = MilvusDevisCrud()
 _qdrant_devis_crud = QdrantDevisCrud()
 _correspondance_devis = MilvusDevisInserer()
 
+# Initialized by main.py at startup
+_concurrency_guard = None
 
-def insertion_data(devis_data: dict) -> dict:
-    """
-    Prend toutes les resultats de l'embedding puis ensuite inserer les chunk sur bdd vectoriel
 
-    Retourne: Un dictionnaire prêt à être publié.
-    """
-
-    devis = devis_data.get("data", [])
-    collection = devis_data.get("collection", CollectionName.DEVIS)
-    bdd = devis_data.get("database", "qdrant")
-
-    try:
-        collection_enum = CollectionName(collection)
-    except ValueError:
-        logger.error("'%s' n'est pas un nom de collection valide.", collection)
-        raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
-
-    if bdd.lower() == "milvus":
-        base_vectorielle = _milvus_devis_crud
-    else:
-        base_vectorielle = _qdrant_devis_crud
-
-    processing_functions = {
-        CollectionName.DEVIS: base_vectorielle.insert_devis,
-    }
-
-    func = processing_functions.get(collection_enum)
-    result = []
-
-    if not func or len(devis) <= 0:
-        raise ValueError(
-            "Aucune donnée à insérer ou fonction de traitement non trouvée."
-        )
-
+def _do_milvus_operations(devis, bdd, collection, base_vectorielle, func):
+    """Execute all Milvus/Qdrant operations for a devis insertion."""
     lead_id = devis[0].get("lead_id", "lead_id inconnu")
     res = base_vectorielle.get_devis(lead_id=lead_id)
     correspondance_devis = _correspondance_devis
@@ -125,3 +96,43 @@ def insertion_data(devis_data: dict) -> dict:
             )
 
     return output_message
+
+
+def insertion_data(devis_data: dict) -> dict:
+    """
+    Prend toutes les resultats de l'embedding puis ensuite inserer les chunk sur bdd vectoriel
+
+    Retourne: Un dictionnaire prêt à être publié.
+    """
+
+    devis = devis_data.get("data", [])
+    collection = devis_data.get("collection", CollectionName.DEVIS)
+    bdd = devis_data.get("database", "qdrant")
+
+    try:
+        collection_enum = CollectionName(collection)
+    except ValueError:
+        logger.error("'%s' n'est pas un nom de collection valide.", collection)
+        raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
+
+    if bdd.lower() == "milvus":
+        base_vectorielle = _milvus_devis_crud
+    else:
+        base_vectorielle = _qdrant_devis_crud
+
+    processing_functions = {
+        CollectionName.DEVIS: base_vectorielle.insert_devis,
+    }
+
+    func = processing_functions.get(collection_enum)
+
+    if not func or len(devis) <= 0:
+        raise ValueError(
+            "Aucune donnée à insérer ou fonction de traitement non trouvée."
+        )
+
+    # Wrap all Milvus operations in concurrency guard
+    if _concurrency_guard:
+        with _concurrency_guard.slot():
+            return _do_milvus_operations(devis, bdd, collection, base_vectorielle, func)
+    return _do_milvus_operations(devis, bdd, collection, base_vectorielle, func)
