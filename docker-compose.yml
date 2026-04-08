@@ -2285,6 +2285,23 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP Gateway Frontend ────────────────────────────────────────────
+  mcp-gateway-frontend:
+    build:
+      context: ./apps-microservices/mcp-gateway-frontend
+      target: development
+    container_name: mcp-gateway-frontend
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps-microservices/mcp-gateway-frontend:/app
+      - /app/node_modules
+    networks:
+      - services-net
+    logging: *logging_defaults
+
 networks:
   services-net:
     driver: bridge
