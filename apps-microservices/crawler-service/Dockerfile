@@ -50,6 +50,9 @@ COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
 COPY --from=builder /app/crawler/package.json /app/crawler/package.json
 COPY --from=builder /app/crawler/package-lock.json /app/crawler/package-lock.json
 
+# Copy the Camoufox stealth browser binary from the builder stage
+COPY --from=builder /root/.cache/camoufox /root/.cache/camoufox
+
 # Expose the port for the FastAPI application
 EXPOSE 8503
 
