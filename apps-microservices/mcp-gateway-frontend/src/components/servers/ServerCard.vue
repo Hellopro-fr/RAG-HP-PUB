@@ -1,16 +1,24 @@
 <template>
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-    <div class="p-4">
+    <div class="p-5">
       <!-- Header -->
-      <div class="flex items-start justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <span
-            class="inline-block w-2.5 h-2.5 rounded-full"
-            :class="healthDotClass"
-          />
-          <h3 class="text-sm font-semibold text-gray-900 truncate max-w-[180px]">
-            {{ server.name }}
-          </h3>
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+            <i class="pi pi-server text-lg" />
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-semibold text-gray-900 truncate max-w-[200px]">
+                {{ server.name }}
+              </h3>
+              <span
+                class="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                :class="healthDotClass"
+                :title="'Santé: ' + (server.health_status || 'inconnu')"
+              />
+            </div>
+          </div>
         </div>
         <div class="flex items-center gap-1.5">
           <span
