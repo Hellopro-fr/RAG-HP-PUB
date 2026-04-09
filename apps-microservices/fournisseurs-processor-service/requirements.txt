@@ -1,5 +1,0 @@
-pika
-python-dotenv
-markdownify
-beautifulsoup4
-html5lib
