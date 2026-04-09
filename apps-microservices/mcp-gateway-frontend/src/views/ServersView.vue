@@ -4,7 +4,7 @@
 
     <!-- Loading -->
     <div v-if="serversStore.isLoading" class="text-center py-12">
-      <i class="pi pi-spinner pi-spin text-2xl text-blue-500" />
+      <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
     </div>
 
     <PageHeaderTabs
@@ -24,13 +24,13 @@
           </option>
         </select>
         <button
-          class="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50 dark:hover:bg-blue-500/10"
+          class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10"
           @click="showImportModal = true"
         >
           Importer .mcp.json
         </button>
         <button
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
           @click="router.push('/servers/new')"
         >
           Ajouter un serveur
@@ -65,7 +65,7 @@
       <!-- Empty state -->
       <div
         v-else
-        class="text-center py-12 text-gray-500"
+        class="text-center py-12 text-gray-500 dark:text-gray-400"
       >
         <i class="pi pi-server text-4xl mb-3 block" />
         <p>Aucun serveur configuré</p>

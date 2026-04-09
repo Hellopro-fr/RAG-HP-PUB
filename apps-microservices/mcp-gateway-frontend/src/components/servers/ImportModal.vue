@@ -1,24 +1,24 @@
 <template>
   <div class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center" @click.self="emit('close')">
-    <div class="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Importer .mcp.json</h2>
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Importer .mcp.json</h2>
 
       <!-- JSON textarea -->
       <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Configuration JSON</label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Configuration JSON</label>
         <textarea
           v-model="jsonInput"
           rows="12"
-          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+          class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 font-mono shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
           :placeholder="samplePlaceholder"
         />
-        <p v-if="parseError" class="text-xs text-red-500 mt-1">{{ parseError }}</p>
+        <p v-if="parseError" class="text-xs text-error-500 dark:text-error-400 mt-1">{{ parseError }}</p>
       </div>
 
       <!-- File upload / drag-drop zone -->
       <div
         class="mb-4 border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer"
-        :class="isDragging ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'"
+        :class="isDragging ? 'border-brand-400 bg-brand-50 dark:bg-brand-500/10' : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'"
         @dragover.prevent="isDragging = true"
         @dragleave.prevent="isDragging = false"
         @drop.prevent="handleDrop"
@@ -31,8 +31,8 @@
           class="hidden"
           @change="handleFileSelect"
         />
-        <i class="pi pi-upload text-2xl text-gray-400 mb-2" />
-        <p class="text-sm text-gray-500">
+        <i class="pi pi-upload text-2xl text-gray-400 dark:text-gray-500 mb-2" />
+        <p class="text-sm text-gray-500 dark:text-gray-400">
           <template v-if="fileName">
             <i class="pi pi-file mr-1" />
             {{ fileName }}
@@ -49,16 +49,16 @@
           id="import-discover"
           v-model="autoDiscover"
           type="checkbox"
-          class="rounded border-gray-300 text-blue-600"
+          class="rounded border-gray-300 text-brand-500 dark:border-gray-700"
         />
-        <label for="import-discover" class="text-sm text-gray-700">
+        <label for="import-discover" class="text-sm text-gray-700 dark:text-gray-300">
           Découvrir automatiquement après import
         </label>
       </div>
 
       <!-- Results -->
-      <div v-if="results" class="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-md">
-        <p class="text-sm font-medium text-gray-800 mb-2">
+      <div v-if="results" class="mb-4 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-800 rounded-md">
+        <p class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
           {{ results.imported }} importé{{ results.imported > 1 ? 's' : '' }},
           {{ results.skipped }} ignoré{{ results.skipped > 1 ? 's' : '' }},
           {{ results.errors }} erreur{{ results.errors > 1 ? 's' : '' }}
@@ -71,30 +71,30 @@
           >
             <i
               :class="{
-                'pi pi-check-circle text-green-600': item.status === 'imported',
-                'pi pi-question-circle text-yellow-500': item.status === 'skipped',
-                'pi pi-times-circle text-red-500': item.status === 'error'
+                'pi pi-check-circle text-success-600 dark:text-success-400': item.status === 'imported',
+                'pi pi-question-circle text-warning-500 dark:text-warning-400': item.status === 'skipped',
+                'pi pi-times-circle text-error-500 dark:text-error-400': item.status === 'error'
               }"
               class="text-sm"
             />
-            <span class="font-medium">{{ item.name }}</span>
-            <span v-if="item.message" class="text-gray-500">— {{ item.message }}</span>
+            <span class="font-medium text-gray-800 dark:text-gray-200">{{ item.name }}</span>
+            <span v-if="item.message" class="text-gray-500 dark:text-gray-400">— {{ item.message }}</span>
           </li>
         </ul>
       </div>
 
       <!-- Actions -->
-      <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+      <div class="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
         <button
           type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
           @click="emit('close')"
         >
           {{ results ? 'Fermer' : 'Annuler' }}
         </button>
         <button
           v-if="!results"
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
           :disabled="!jsonInput.trim() || submitting"
           @click="handleImport"
         >

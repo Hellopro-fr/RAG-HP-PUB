@@ -4,7 +4,7 @@
 
     <!-- Loading -->
     <div v-if="loading" class="text-center py-12">
-      <i class="pi pi-spinner pi-spin text-2xl text-blue-500" />
+      <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
     </div>
 
     <PageHeaderTabs
@@ -14,7 +14,7 @@
     >
       <template #actions>
         <button
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
           @click="router.push('/tokens/new')"
         >
           Créer un jeton
@@ -39,7 +39,7 @@
       <!-- Empty state -->
       <div
         v-else
-        class="text-center py-12 text-gray-500"
+        class="text-center py-12 text-gray-500 dark:text-gray-400"
       >
         <i class="pi pi-key text-4xl mb-3 block" />
         <p class="font-medium">Aucun jeton d'accès</p>

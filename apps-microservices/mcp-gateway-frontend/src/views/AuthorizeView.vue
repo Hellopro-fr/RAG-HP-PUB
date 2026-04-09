@@ -1,38 +1,38 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-100">
+  <div class="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950">
     <div class="w-full max-w-md">
       <!-- Loading state -->
-      <div v-if="loading" class="bg-white rounded-lg shadow-md p-8 text-center">
-        <i class="pi pi-spinner pi-spin text-2xl text-blue-600" />
-        <p class="mt-3 text-gray-600">Chargement...</p>
+      <div v-if="loading" class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-md p-8 text-center">
+        <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
+        <p class="mt-3 text-gray-600 dark:text-gray-400">Chargement...</p>
       </div>
 
       <!-- Error state (fatal, e.g. invalid client_id) -->
-      <div v-else-if="fatalError" class="bg-white rounded-lg shadow-md p-8">
+      <div v-else-if="fatalError" class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-md p-8">
         <div class="text-center">
-          <i class="pi pi-exclamation-triangle text-3xl text-red-500 mb-3" />
-          <h1 class="text-xl font-bold text-gray-900 mb-2">Erreur d'autorisation</h1>
-          <p class="text-sm text-red-600">{{ fatalError }}</p>
+          <i class="pi pi-exclamation-triangle text-3xl text-error-500 mb-3" />
+          <h1 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Erreur d'autorisation</h1>
+          <p class="text-sm text-error-600 dark:text-error-400">{{ fatalError }}</p>
         </div>
       </div>
 
       <!-- Login step -->
-      <div v-else-if="step === 'login'" class="bg-white rounded-lg shadow-md p-8">
-        <h1 class="text-2xl font-bold text-center text-gray-900 mb-2">MCP Gateway</h1>
-        <p class="text-sm text-center text-gray-600 mb-6">
+      <div v-else-if="step === 'login'" class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-md p-8">
+        <h1 class="text-2xl font-bold text-center text-gray-900 dark:text-white mb-2">MCP Gateway</h1>
+        <p class="text-sm text-center text-gray-600 dark:text-gray-400 mb-6">
           Connexion pour <strong>{{ clientName }}</strong>
         </p>
 
         <div
           v-if="errorMessage"
-          class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700"
+          class="mb-4 p-3 bg-error-50 dark:bg-error-500/15 border border-error-200 dark:border-error-500/30 rounded-md text-sm text-error-600 dark:text-error-400"
         >
           {{ errorMessage }}
         </div>
 
         <form @submit.prevent="handleLogin">
           <div class="mb-4">
-            <label for="username" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Nom d'utilisateur
             </label>
             <input
@@ -40,12 +40,12 @@
               v-model="username"
               type="text"
               required
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
             />
           </div>
 
           <div class="mb-6">
-            <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Mot de passe
             </label>
             <input
@@ -53,14 +53,14 @@
               v-model="password"
               type="password"
               required
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
             />
           </div>
 
           <button
             type="submit"
             :disabled="submitting"
-            class="w-full py-2 px-4 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            class="w-full py-2 px-4 bg-brand-500 text-white font-medium rounded-md hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <i v-if="submitting" class="pi pi-spinner pi-spin" />
             Se connecter
@@ -69,15 +69,15 @@
       </div>
 
       <!-- Consent step -->
-      <div v-else-if="step === 'consent'" class="bg-white rounded-lg shadow-md p-8">
-        <h1 class="text-xl font-bold text-center text-gray-900 mb-1">Autorisation</h1>
-        <p class="text-sm text-center text-gray-600 mb-6">
+      <div v-else-if="step === 'consent'" class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-md p-8">
+        <h1 class="text-xl font-bold text-center text-gray-900 dark:text-white mb-1">Autorisation</h1>
+        <p class="text-sm text-center text-gray-600 dark:text-gray-400 mb-6">
           <strong>{{ clientName }}</strong> demande l'acc&egrave;s aux outils suivants
         </p>
 
         <div
           v-if="errorMessage"
-          class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700"
+          class="mb-4 p-3 bg-error-50 dark:bg-error-500/15 border border-error-200 dark:border-error-500/30 rounded-md text-sm text-error-600 dark:text-error-400"
         >
           {{ errorMessage }}
         </div>
@@ -87,32 +87,32 @@
           <div
             v-for="server in servers"
             :key="server.id"
-            class="border border-gray-200 rounded-md"
+            class="border border-gray-200 dark:border-gray-800 rounded-md"
           >
             <!-- Server header -->
             <div
-              class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50"
+              class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5"
               @click="toggleServer(server.id)"
             >
               <i
-                class="pi pi-chevron-right text-xs text-gray-400 transition-transform duration-200"
+                class="pi pi-chevron-right text-xs text-gray-400 dark:text-gray-500 transition-transform duration-200"
                 :class="{ 'rotate-90': expandedServers.has(server.id) }"
               />
               <!-- Pre-configured: read-only checkmark -->
               <i
                 v-if="preConfigured"
-                class="pi pi-check-circle text-green-500"
+                class="pi pi-check-circle text-success-500"
               />
               <!-- Dynamic: interactive checkbox -->
               <input
                 v-else
                 type="checkbox"
                 :checked="isServerSelected(server.id)"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-gray-300 text-brand-500 dark:border-gray-700"
                 @click.stop="toggleServerSelection(server.id)"
               />
-              <span class="text-sm font-medium text-gray-800 flex-1">{{ server.name }}</span>
-              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              <span class="text-sm font-medium text-gray-800 dark:text-gray-200 flex-1">{{ server.name }}</span>
+              <span class="text-xs bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">
                 {{ server.tools.length }} outil{{ server.tools.length > 1 ? 's' : '' }}
               </span>
             </div>
@@ -120,7 +120,7 @@
             <!-- Tools list (collapsible) -->
             <div
               v-if="expandedServers.has(server.id)"
-              class="border-t border-gray-100 px-3 py-2 space-y-1"
+              class="border-t border-gray-100 dark:border-gray-800 px-3 py-2 space-y-1"
             >
               <div
                 v-for="tool in server.tools"
@@ -129,20 +129,20 @@
               >
                 <i
                   v-if="preConfigured"
-                  class="pi pi-check text-green-400 text-xs ml-4"
+                  class="pi pi-check text-success-400 text-xs ml-4"
                 />
                 <input
                   v-else
                   type="checkbox"
                   :checked="isToolSelected(server.id, tool.name)"
-                  class="ml-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  class="ml-4 rounded border-gray-300 text-brand-500 dark:border-gray-700"
                   @change="toggleToolSelection(server.id, tool.name)"
                 />
                 <div class="flex-1 min-w-0">
-                  <span class="text-sm text-gray-700">{{ tool.name }}</span>
+                  <span class="text-sm text-gray-700 dark:text-gray-300">{{ tool.name }}</span>
                   <p
                     v-if="tool.description"
-                    class="text-xs text-gray-400 truncate"
+                    class="text-xs text-gray-400 dark:text-gray-500 truncate"
                     :title="tool.description"
                   >
                     {{ tool.description }}
@@ -157,7 +157,7 @@
         <div class="flex gap-3">
           <button
             type="button"
-            class="flex-1 py-2 px-4 bg-gray-200 text-gray-700 font-medium rounded-md hover:bg-gray-300"
+            class="flex-1 py-2 px-4 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
             :disabled="submitting"
             @click="handleDeny"
           >
@@ -165,7 +165,7 @@
           </button>
           <button
             type="button"
-            class="flex-1 py-2 px-4 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            class="flex-1 py-2 px-4 bg-success-600 text-white font-medium rounded-md hover:bg-success-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             :disabled="submitting || (!preConfigured && selectedServerIds.length === 0)"
             @click="handleConsent"
           >

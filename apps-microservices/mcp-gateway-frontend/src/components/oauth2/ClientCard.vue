@@ -1,31 +1,31 @@
 <template>
-  <div class="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+  <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 shadow-theme-xs hover:shadow-theme-md transition-shadow">
     <div class="p-5">
       <!-- Main horizontal layout -->
       <div class="flex flex-col lg:flex-row lg:items-start gap-4">
         <!-- Left section: icon + name + status badges -->
         <div class="flex items-start gap-3 lg:w-1/4 shrink-0">
-          <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+          <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
             <i class="pi pi-lock text-lg" />
           </div>
           <div class="min-w-0">
-            <h3 class="text-sm font-semibold text-gray-900 truncate max-w-[200px] mb-1">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[200px] mb-1">
               {{ client.name }}
             </h3>
             <div class="flex items-center gap-1.5">
               <span
                 class="text-xs px-2 py-0.5 rounded-full font-medium"
                 :class="client.is_active
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-red-100 text-red-700'"
+                  ? 'bg-success-50 text-success-600 dark:bg-success-500/15 dark:text-success-400'
+                  : 'bg-error-50 text-error-600 dark:bg-error-500/15 dark:text-error-400'"
               >
                 {{ client.is_active ? 'Actif' : 'Révoqué' }}
               </span>
               <span
                 class="text-xs px-2 py-0.5 rounded-full font-medium"
                 :class="client.dynamically_registered
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'bg-gray-100 text-gray-500'"
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400'
+                  : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400'"
               >
                 {{ client.dynamically_registered ? 'Dynamic' : 'Manuel' }}
               </span>
@@ -38,12 +38,12 @@
           <!-- Client ID + Secret -->
           <div class="space-y-1.5 mb-3">
             <div class="flex items-center gap-2">
-              <span class="text-xs text-gray-500 w-16 shrink-0">Client ID</span>
-              <code class="text-xs bg-gray-50 px-2 py-1 rounded font-mono truncate flex-1">
+              <span class="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">Client ID</span>
+              <code class="text-xs bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded font-mono truncate flex-1 text-gray-800 dark:text-gray-300">
                 {{ maskedClientId }}
               </code>
               <button
-                class="shrink-0 p-1 rounded hover:bg-gray-100 text-blue-500"
+                class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-brand-500"
                 title="Copier le Client ID"
                 @click="clipboard.copy(client.id, 'Client ID')"
               >
@@ -51,14 +51,14 @@
               </button>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-xs text-gray-500 w-16 shrink-0">Secret</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 w-16 shrink-0">Secret</span>
               <code
                 v-if="client.client_secret"
-                class="text-xs bg-gray-50 px-2 py-1 rounded font-mono truncate flex-1"
+                class="text-xs bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded font-mono truncate flex-1 text-gray-800 dark:text-gray-300"
               >
                 {{ maskedSecret }}
               </code>
-              <span v-else class="text-xs text-gray-400 italic">Non disponible</span>
+              <span v-else class="text-xs text-gray-400 dark:text-gray-500 italic">Non disponible</span>
             </div>
           </div>
 
@@ -68,19 +68,19 @@
             <span
               v-for="name in serverNames"
               :key="name"
-              class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono"
+              class="text-xs bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400 px-2 py-0.5 rounded font-mono"
             >
               {{ name }}
             </span>
             <!-- TTL badge -->
-            <span class="text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium">
+            <span class="text-xs px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 font-medium">
               <i class="pi pi-clock text-[10px] mr-0.5" />
               {{ formattedTtl }}
             </span>
           </div>
 
           <!-- Info row -->
-          <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+          <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <!-- Expiration -->
             <div class="flex items-center gap-1.5">
               <i class="pi pi-calendar text-[10px]" />
@@ -89,7 +89,7 @@
               </span>
               <span
                 v-else
-                class="px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700"
+                class="px-2 py-0.5 rounded-full font-medium bg-success-50 text-success-600 dark:bg-success-500/15 dark:text-success-400"
               >
                 Permanent
               </span>
@@ -110,7 +110,7 @@
         <!-- Right section: action buttons (vertical on large screens) -->
         <div class="flex lg:flex-col items-center gap-1 shrink-0">
           <button
-            class="p-1.5 rounded hover:bg-gray-100 text-blue-500"
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-brand-500"
             title="Copier le Client ID"
             @click="clipboard.copy(client.id, 'Client ID')"
           >
@@ -118,7 +118,7 @@
           </button>
           <button
             v-if="client.is_active"
-            class="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
             title="Modifier le scope"
             @click="emit('edit', client)"
           >
@@ -126,14 +126,14 @@
           </button>
           <button
             v-if="client.is_active"
-            class="p-1.5 rounded hover:bg-gray-100 text-orange-500"
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-orange-500 dark:text-orange-400"
             title="Révoquer"
             @click="emit('revoke', client.id)"
           >
             <i class="pi pi-times text-sm" />
           </button>
           <button
-            class="p-1.5 rounded hover:bg-gray-100 text-red-500"
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-red-500 dark:text-error-400"
             title="Supprimer"
             @click="emit('delete', client.id)"
           >

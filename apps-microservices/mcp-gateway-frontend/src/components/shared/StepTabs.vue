@@ -7,8 +7,8 @@
         class="h-0.5 w-16 mx-2"
         :class="[
           index <= currentStep || completedSteps.includes(index)
-            ? 'bg-blue-600'
-            : 'bg-gray-200'
+            ? 'bg-brand-500'
+            : 'bg-gray-200 dark:bg-gray-700'
         ]"
       />
       <!-- Step circle + label -->
@@ -54,22 +54,22 @@ const emit = defineEmits<{
 
 function stepCircleClass(index: number): string {
   if (index === props.currentStep) {
-    return 'bg-blue-600 text-white'
+    return 'bg-brand-500 text-white'
   }
   if (props.completedSteps.includes(index)) {
-    return 'bg-green-500 text-white'
+    return 'bg-success-500 text-white'
   }
-  return 'bg-gray-200 text-gray-500'
+  return 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
 }
 
 function stepLabelClass(index: number): string {
   if (index === props.currentStep) {
-    return 'text-blue-600'
+    return 'text-brand-500'
   }
   if (props.completedSteps.includes(index)) {
-    return 'text-green-600'
+    return 'text-success-600 dark:text-success-400'
   }
-  return 'text-gray-400'
+  return 'text-gray-400 dark:text-gray-500'
 }
 
 function handleClick(index: number) {

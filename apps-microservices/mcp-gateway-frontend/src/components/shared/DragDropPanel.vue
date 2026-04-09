@@ -1,11 +1,11 @@
 <template>
   <div class="grid grid-cols-2 gap-4">
     <!-- Available panel -->
-    <div class="border-2 border-blue-200 rounded-lg p-4 bg-blue-50/30 min-h-[300px]">
+    <div class="border-2 border-brand-200 dark:border-brand-500/30 rounded-lg p-4 bg-brand-50/30 dark:bg-brand-500/5 min-h-[300px]">
       <div class="flex items-center justify-between mb-3">
-        <h4 class="text-sm font-semibold text-gray-700">Disponible</h4>
+        <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Disponible</h4>
         <button
-          class="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          class="text-xs text-brand-500 hover:text-brand-600 font-medium"
           @click="dragDrop.moveAllToSelected()"
         >
           Tout ajouter
@@ -15,7 +15,7 @@
         v-model="dragDrop.availableSearch.value"
         type="text"
         placeholder="Rechercher..."
-        class="w-full mb-3 px-3 py-1.5 text-sm border border-gray-300 rounded-md"
+        class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 mb-3"
       />
       <VueDraggable
         v-model="dragDrop.available.value"
@@ -26,21 +26,21 @@
       >
         <template #item="{ element: server }">
           <div
-            class="bg-white rounded-md border border-gray-200 overflow-hidden cursor-move"
+            class="bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 overflow-hidden cursor-move"
             @dblclick="moveServerToSelected(server)"
           >
             <div
-              class="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer"
+              class="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 cursor-pointer"
               @click="toggleCollapse(server.id, 'available')"
             >
               <div class="flex items-center gap-2">
                 <i
-                  class="pi pi-chevron-right text-xs transition-transform"
+                  class="pi pi-chevron-right text-xs transition-transform text-gray-500 dark:text-gray-400"
                   :class="{ 'rotate-90': isExpanded(server.id, 'available') }"
                 />
-                <span class="text-sm font-medium">{{ server.name }}</span>
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ server.name }}</span>
               </div>
-              <span class="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+              <span class="text-xs text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded-full">
                 {{ server.tools.length }} outils
               </span>
             </div>
@@ -54,10 +54,10 @@
               >
                 <template #item="{ element: tool }">
                   <div
-                    class="flex items-center gap-2 px-2 py-1 text-xs bg-gray-50 rounded cursor-move hover:bg-gray-100"
+                    class="flex items-center gap-2 px-2 py-1 text-xs bg-gray-50 dark:bg-gray-800 rounded cursor-move hover:bg-gray-100 dark:hover:bg-white/5 text-gray-800 dark:text-gray-300"
                     @dblclick.stop="moveToolToSelected(server, tool)"
                   >
-                    <i class="pi pi-wrench text-gray-400" />
+                    <i class="pi pi-wrench text-gray-400 dark:text-gray-500" />
                     <span>{{ tool.name }}</span>
                   </div>
                 </template>
@@ -69,16 +69,16 @@
     </div>
 
     <!-- Selected panel -->
-    <div class="border-2 border-blue-500 rounded-lg p-4 bg-blue-50/50 min-h-[300px]">
+    <div class="border-2 border-brand-500 dark:border-brand-500/60 rounded-lg p-4 bg-brand-50/50 dark:bg-brand-500/10 min-h-[300px]">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
-          <h4 class="text-sm font-semibold text-blue-800">Sélectionné</h4>
-          <span class="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+          <h4 class="text-sm font-semibold text-brand-800 dark:text-brand-300">Sélectionné</h4>
+          <span class="text-xs text-brand-600 dark:text-brand-400 bg-brand-100 dark:bg-brand-500/20 px-2 py-0.5 rounded-full">
             ({{ dragDrop.selectedCount.value.servers }} srv, {{ dragDrop.selectedCount.value.tools }} outils)
           </span>
         </div>
         <button
-          class="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          class="text-xs text-brand-500 hover:text-brand-600 font-medium"
           @click="dragDrop.moveAllToAvailable()"
         >
           Tout retirer
@@ -88,7 +88,7 @@
         v-model="dragDrop.selectedSearch.value"
         type="text"
         placeholder="Rechercher..."
-        class="w-full mb-3 px-3 py-1.5 text-sm border border-blue-300 rounded-md"
+        class="h-11 w-full rounded-lg border border-brand-300 dark:border-brand-500/40 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 mb-3"
       />
       <VueDraggable
         v-model="dragDrop.selected.value"
@@ -99,21 +99,21 @@
       >
         <template #item="{ element: server }">
           <div
-            class="bg-white rounded-md border border-blue-200 overflow-hidden cursor-move"
+            class="bg-white dark:bg-gray-900 rounded-md border border-brand-200 dark:border-brand-500/30 overflow-hidden cursor-move"
             @dblclick="moveServerToAvailable(server)"
           >
             <div
-              class="flex items-center justify-between px-3 py-2 bg-blue-50 cursor-pointer"
+              class="flex items-center justify-between px-3 py-2 bg-brand-50 dark:bg-brand-500/10 cursor-pointer"
               @click="toggleCollapse(server.id, 'selected')"
             >
               <div class="flex items-center gap-2">
                 <i
-                  class="pi pi-chevron-right text-xs transition-transform"
+                  class="pi pi-chevron-right text-xs transition-transform text-brand-500 dark:text-brand-400"
                   :class="{ 'rotate-90': isExpanded(server.id, 'selected') }"
                 />
-                <span class="text-sm font-medium text-blue-900">{{ server.name }}</span>
+                <span class="text-sm font-medium text-brand-900 dark:text-brand-300">{{ server.name }}</span>
               </div>
-              <span class="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+              <span class="text-xs text-brand-700 dark:text-brand-400 bg-brand-100 dark:bg-brand-500/20 px-2 py-0.5 rounded-full">
                 {{ server.tools.length }} outils
               </span>
             </div>
@@ -127,10 +127,10 @@
               >
                 <template #item="{ element: tool }">
                   <div
-                    class="flex items-center gap-2 px-2 py-1 text-xs bg-blue-50 rounded cursor-move hover:bg-blue-100"
+                    class="flex items-center gap-2 px-2 py-1 text-xs bg-brand-50 dark:bg-brand-500/10 rounded cursor-move hover:bg-brand-100 dark:hover:bg-brand-500/20 text-gray-800 dark:text-gray-300"
                     @dblclick.stop="moveToolToAvailable(server, tool)"
                   >
-                    <i class="pi pi-wrench text-blue-400" />
+                    <i class="pi pi-wrench text-brand-400 dark:text-brand-500" />
                     <span>{{ tool.name }}</span>
                   </div>
                 </template>
@@ -141,7 +141,7 @@
       </VueDraggable>
       <div
         v-if="dragDrop.selected.value.length === 0"
-        class="text-center text-sm text-blue-400 py-8"
+        class="text-center text-sm text-brand-400 dark:text-brand-500 py-8"
       >
         Glissez des serveurs et outils ici
       </div>
