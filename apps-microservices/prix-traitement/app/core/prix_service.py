@@ -511,9 +511,10 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
-        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CLAUDE_MODEL_NAME
+        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
         use_gemini = llm_model.startswith("gemini")
         use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
+        use_claude = llm_model.startswith("claude")
 
         logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
 
@@ -530,19 +531,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
 
             llm_result = await gemini.chat(final_prompt)
 
-        elif use_chatgpt:
-            # ---- ChatGPT ----
-            actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
-            type_ia = 1
-            logger.info(f"[{id_categorie}] Appel ChatGPT (model={actual_model}, {len(final_prompt)} chars)...")
-
-            gpt = ChatGPTProvider(
-                model=actual_model
-            )
-
-            llm_result = await gpt.chat(final_prompt)
-
-        else:
+        elif use_claude:
             # ---- Claude (défaut) ----
             actual_model = llm_model
             type_ia = 4
@@ -570,6 +559,19 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             )
 
             llm_result = await claude.chat(final_prompt)
+
+        else:
+
+            # ---- ChatGPT ----
+            actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
+            type_ia = 1
+            logger.info(f"[{id_categorie}] Appel ChatGPT (model={actual_model}, {len(final_prompt)} chars)...")
+
+            gpt = ChatGPTProvider(
+                model=actual_model
+            )
+
+            llm_result = await gpt.chat(final_prompt)
 
         # Extraction usage commun (format normalisé pour les 3 providers)
         usage = llm_result.get("api_response", {}).get("usage", {})
@@ -619,6 +621,14 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
                 "time_elapsed": elapsed,
                 "message": error_msg
             }
+
+        # Compatibilité prix_median <-> prix_moyen dans fourchette
+        fourchette = parsed.get("fourchette")
+        if isinstance(fourchette, dict):
+            if "prix_moyen" in fourchette and "prix_median" not in fourchette:
+                fourchette["prix_median"] = fourchette["prix_moyen"]
+            elif "prix_median" in fourchette and "prix_moyen" not in fourchette:
+                fourchette["prix_moyen"] = fourchette["prix_median"]
 
         return {
             "success": True,
