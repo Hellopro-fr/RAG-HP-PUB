@@ -34,7 +34,7 @@
         </button>
         <button
           class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-          @click="showCreateModal = true"
+          @click="router.push('/servers/new')"
         >
           Ajouter un serveur
         </button>
@@ -81,13 +81,6 @@
     </div>
 
     <!-- Modals -->
-    <ServerFormModal
-      v-if="showCreateModal || editingServer"
-      :server="editingServer"
-      @close="showCreateModal = false; editingServer = undefined"
-      @saved="handleSaved"
-    />
-
     <ServerDetailsModal
       v-if="detailsServerId"
       :server-id="detailsServerId"
@@ -113,23 +106,22 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
 import ServerCard from '@/components/servers/ServerCard.vue'
-import ServerFormModal from '@/components/servers/ServerFormModal.vue'
 import ServerDetailsModal from '@/components/servers/ServerDetailsModal.vue'
 import ImportModal from '@/components/servers/ImportModal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { Server } from '@/types/server'
 
+const router = useRouter()
 const serversStore = useServersStore()
 const toast = useToast()
 
 const statusFilter = ref('')
 const tagFilter = ref('')
-const showCreateModal = ref(false)
 const showImportModal = ref(false)
-const editingServer = ref<Server>()
 const detailsServerId = ref<string>()
 const deletingServerId = ref<string>()
 const discoveringAll = ref(false)
@@ -151,7 +143,7 @@ function handleToggle(id: string, enable: boolean) {
 }
 
 function handleEdit(server: Server) {
-  editingServer.value = server
+  router.push('/servers/' + server.id + '/edit')
 }
 
 function handleDelete(id: string) {
@@ -183,12 +175,5 @@ async function handleDiscoverAll() {
   } finally {
     discoveringAll.value = false
   }
-}
-
-function handleSaved() {
-  showCreateModal.value = false
-  editingServer.value = undefined
-  loadServers()
-  toast.success('Serveur enregistré')
 }
 </script>

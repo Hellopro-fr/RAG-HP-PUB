@@ -10,7 +10,7 @@
       </div>
       <button
         class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-        @click="showCreateModal = true"
+        @click="router.push('/oauth2/new')"
       >
         Créer un client
       </button>
@@ -24,7 +24,7 @@
     <!-- Client cards -->
     <div
       v-else-if="clients.length"
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      class="grid grid-cols-1 gap-4"
     >
       <ClientCard
         v-for="c in clients"
@@ -47,14 +47,6 @@
         Créez un client pour permettre l'authentification OAuth2 avec vos serveurs MCP.
       </p>
     </div>
-
-    <!-- Modals -->
-    <ClientFormModal
-      v-if="showCreateModal || editingClient"
-      :client="editingClient"
-      @close="showCreateModal = false; editingClient = undefined"
-      @saved="handleSaved"
-    />
 
     <!-- Revoke confirm -->
     <ConfirmDialog
@@ -80,21 +72,20 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { oauth2Api } from '@/api/oauth2'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
 import ClientCard from '@/components/oauth2/ClientCard.vue'
-import ClientFormModal from '@/components/oauth2/ClientFormModal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { OAuth2Client } from '@/types/oauth2'
 
+const router = useRouter()
 const serversStore = useServersStore()
 const toast = useToast()
 
 const clients = ref<OAuth2Client[]>([])
 const loading = ref(false)
-const showCreateModal = ref(false)
-const editingClient = ref<OAuth2Client>()
 const revokingClientId = ref<string>()
 const deletingClientId = ref<string>()
 
@@ -118,7 +109,7 @@ async function loadClients() {
 }
 
 function handleEdit(client: OAuth2Client) {
-  editingClient.value = client
+  router.push('/oauth2/' + client.id + '/edit')
 }
 
 function handleRevoke(id: string) {
@@ -155,11 +146,5 @@ async function confirmDelete() {
       deletingClientId.value = undefined
     }
   }
-}
-
-function handleSaved() {
-  showCreateModal.value = false
-  editingClient.value = undefined
-  loadClients()
 }
 </script>

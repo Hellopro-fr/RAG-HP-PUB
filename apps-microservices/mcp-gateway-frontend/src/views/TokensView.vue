@@ -10,7 +10,7 @@
       </div>
       <button
         class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-        @click="showCreateModal = true"
+        @click="router.push('/tokens/new')"
       >
         Créer un jeton d'accès
       </button>
@@ -24,7 +24,7 @@
     <!-- Token cards -->
     <div
       v-else-if="tokens.length"
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      class="grid grid-cols-1 gap-4"
     >
       <TokenCard
         v-for="t in tokens"
@@ -47,14 +47,6 @@
         Créez un jeton pour permettre aux clients MCP de se connecter à vos serveurs.
       </p>
     </div>
-
-    <!-- Modals -->
-    <TokenFormModal
-      v-if="showCreateModal || editingToken"
-      :token="editingToken"
-      @close="showCreateModal = false; editingToken = undefined"
-      @saved="handleSaved"
-    />
 
     <!-- Revoke confirm -->
     <ConfirmDialog
@@ -80,21 +72,20 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { tokensApi } from '@/api/tokens'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
 import TokenCard from '@/components/tokens/TokenCard.vue'
-import TokenFormModal from '@/components/tokens/TokenFormModal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { ScopeToken } from '@/types/token'
 
+const router = useRouter()
 const serversStore = useServersStore()
 const toast = useToast()
 
 const tokens = ref<ScopeToken[]>([])
 const loading = ref(false)
-const showCreateModal = ref(false)
-const editingToken = ref<ScopeToken>()
 const revokingTokenId = ref<string>()
 const deletingTokenId = ref<string>()
 
@@ -118,7 +109,7 @@ async function loadTokens() {
 }
 
 function handleEdit(token: ScopeToken) {
-  editingToken.value = token
+  router.push('/tokens/' + token.id + '/edit')
 }
 
 function handleRevoke(id: string) {
@@ -155,11 +146,5 @@ async function confirmDelete() {
       deletingTokenId.value = undefined
     }
   }
-}
-
-function handleSaved() {
-  showCreateModal.value = false
-  editingToken.value = undefined
-  loadTokens()
 }
 </script>
