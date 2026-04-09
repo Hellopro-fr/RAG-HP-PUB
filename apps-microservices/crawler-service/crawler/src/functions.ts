@@ -482,7 +482,7 @@ export const startCrawler = async (
             retireBrowserAfterPageCount: 25,
             preLaunchHooks: [
                 async (_pageId, launchContext) => {
-                    const opts = await camoufoxLaunchOptions({});
+                    const opts = await camoufoxLaunchOptions({ headless: true });
                     launchContext.launchOptions = {
                         ...opts,
                         args: [
