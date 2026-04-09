@@ -74,6 +74,7 @@ const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(B
 const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
 
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
+const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
 const maxErrors = Number(getArg('maxErrors', 'npm_config_maxerrors')) || 0;
 const maxRedirects = Number(getArg('maxRedirects', 'npm_config_maxredirects')) || 0;
@@ -118,6 +119,9 @@ context.config = {
         maxAbsNew: maxAbsNew
     }
 };
+
+context.camoufoxEnabled = camoufoxEnabled;
+console.log(`🦊 Browser: ${camoufoxEnabled ? 'Camoufox (stealth Firefox)' : 'Playwright (multi-browser rotation)'}`);
 
 if (!id || !domain || !site || !storagePath || !callbackUrl) {
     console.log('Missing required parameters.');
