@@ -25,8 +25,13 @@ WORKDIR /app
 
 ENV PYTHONPATH=/app
 
-# Install Python, pip, and venv module.
-RUN apt-get update && apt-get install -y python3 python3-pip python3-venv --no-install-recommends && rm -rf /var/lib/apt/lists/*
+# Install Python, pip, venv module, and Firefox/Camoufox system dependencies.
+# The Playwright base image ships with Chromium deps only; Camoufox (Firefox-based) needs GTK3, dbus, etc.
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    libgtk-3-0 libdbus-glib-1-2 libasound2t64 libxcomposite1 libxdamage1 \
+    libxrandr2 libpango-1.0-0 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # Create and activate a virtual environment
 RUN python3 -m venv /opt/venv

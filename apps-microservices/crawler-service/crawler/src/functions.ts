@@ -14,7 +14,7 @@ import {
     Request,
     Configuration,
 } from "crawlee";
-import { Page } from "playwright";
+import { Page, firefox } from "playwright";
 import fs from "fs";
 import path from "path";
 import {
@@ -479,9 +479,13 @@ export const startCrawler = async (
         // V3 Optimization: Browser Pool settings
         browserPoolOptions: camoufoxEnabled ? {
             // Camoufox mode: stealth Firefox with C++ anti-detection
+            // Disable Crawlee's JS-level fingerprinting to avoid conflicts with Camoufox's engine-level spoofing
+            useFingerprints: false,
             retireBrowserAfterPageCount: 25,
             preLaunchHooks: [
                 async (_pageId, launchContext) => {
+                    // Switch launcher to Firefox (Camoufox is Firefox-based, not Chromium)
+                    launchContext.launcher = firefox;
                     const opts = await camoufoxLaunchOptions({ headless: true });
                     launchContext.launchOptions = {
                         ...opts,
