@@ -209,9 +209,9 @@ async function confirmDelete() {
 }
 
 function initials(email: string): string {
-  const parts = email.split('@')[0].split(/[._-]/)
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase()
+  const parts = email.split('@')[0]?.split(/[._-]/) ?? []
+  if (parts.length >= 2 && parts[0] && parts[1]) {
+    return (parts[0][0]! + parts[1][0]!).toUpperCase()
   }
   return email.slice(0, 2).toUpperCase()
 }
@@ -232,7 +232,7 @@ function avatarColor(email: string): string {
   for (let i = 0; i < email.length; i++) {
     hash = (hash * 31 + email.charCodeAt(i)) & 0xffffffff
   }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]!
 }
 
 function roleBadgeClass(role: User['role']): string {
