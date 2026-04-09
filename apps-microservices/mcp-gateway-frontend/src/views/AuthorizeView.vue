@@ -319,18 +319,9 @@ async function fetchInfo(): Promise<void> {
       csrfToken.value = info.csrf_token
     }
 
-    if (info.has_session && info.has_consent) {
-      // Already authorized — skip to consent auto-approve or redirect
-      // The backend should handle this, but we show consent step as fallback
-      step.value = 'consent'
-      initializeSelections()
-    } else if (info.has_session) {
-      // Session exists, skip login
-      step.value = 'consent'
-      initializeSelections()
-    } else {
-      step.value = 'login'
-    }
+    // Always go straight to consent — no login step required
+    step.value = 'consent'
+    initializeSelections()
   } catch (e) {
     fatalError.value = e instanceof Error ? e.message : 'Impossible de charger les informations du client.'
   } finally {
