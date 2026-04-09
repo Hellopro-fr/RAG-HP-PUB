@@ -118,7 +118,9 @@ The crawler uses **Camoufox** (stealth Firefox with C++ anti-detection patches) 
 - **Default (`camoufox: true` or omitted):** Camoufox stealth Firefox via `camoufox-js` (official Apify package)
 - **Opt-out (`camoufox: false`):** Falls back to Playwright multi-browser rotation (Chrome/Firefox/Safari)
 - `camoufox_used: true/false` is included in `_callback_payload.json` for observability
+- **Headless mode required:** `camoufoxLaunchOptions({ headless: true })` — Camoufox defaults to `headless: false`, which crashes in Docker (no DISPLAY/X11)
 - Dependency: `camoufox-js` — browser binary baked into Docker image at build time
+- **Dockerfile requirement:** The Camoufox binary is fetched in Stage 1 (builder) via `npx camoufox-js fetch` and must be explicitly copied to Stage 2: `COPY --from=builder /root/.cache/camoufox /root/.cache/camoufox`
 
 ## Exit Codes (Node.js → Python)
 
