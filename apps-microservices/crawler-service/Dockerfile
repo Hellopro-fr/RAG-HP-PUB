@@ -13,6 +13,9 @@ COPY apps-microservices/crawler-service/crawler/ ./
 # Build the TypeScript project into JavaScript
 RUN npm run build
 
+# Download Camoufox stealth browser binary (~200MB, baked into image)
+RUN npx camoufox-js fetch
+
 
 # Stage 2: Create the final application image using the official Playwright image
 # This image contains Node.js, the browser binaries, and all OS dependencies for Playwright v1.56.1.
