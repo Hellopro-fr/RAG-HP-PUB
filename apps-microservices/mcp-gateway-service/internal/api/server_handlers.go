@@ -28,6 +28,8 @@ type Handler struct {
 	gw                *gateway.Gateway
 	registry          *gateway.Registry
 	allowInternalURLs bool
+	userRepo          *repository.UserRepo
+	auditRepo         *repository.AuditRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -50,6 +52,16 @@ func (h *Handler) SetTokenRepo(repo *repository.TokenRepo, cache TokenCache) {
 func (h *Handler) SetOAuth2Repo(repo *repository.OAuth2Repo, cache *oauth2pkg.Cache) {
 	h.oauth2Repo = repo
 	h.oauth2Cache = cache
+}
+
+// SetUserRepo sets the user repository for RBAC user management.
+func (h *Handler) SetUserRepo(repo *repository.UserRepo) {
+	h.userRepo = repo
+}
+
+// SetAuditRepo sets the audit repository for audit log access.
+func (h *Handler) SetAuditRepo(repo *repository.AuditRepo) {
+	h.auditRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────

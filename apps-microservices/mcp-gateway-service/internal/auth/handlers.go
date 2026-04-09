@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/hellopro/mcp-gateway/internal/repository"
 )
 
 // hellopro auth API response
@@ -20,13 +22,14 @@ type HelloProAuthResponse struct {
 }
 
 // RegisterHandlers mounts /login and /logout on the mux.
-func RegisterHandlers(mux *http.ServeMux, cfg Config) {
+// userRepo is optional: when non-nil, each successful login upserts the user record.
+func RegisterHandlers(mux *http.ServeMux, cfg Config, userRepo *repository.UserRepo) {
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handleLoginPage(w, r, cfg)
 		case http.MethodPost:
-			handleLoginAction(w, r, cfg)
+			handleLoginAction(w, r, cfg, userRepo)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -52,7 +55,7 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request, cfg Config) {
 	renderLoginPage(w, errorMsg, username)
 }
 
-func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
+func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userRepo *repository.UserRepo) {
 	// Detect if this is a JSON API request (from Vue frontend) vs form submit (from Go template)
 	isJSON := strings.Contains(r.Header.Get("Content-Type"), "application/json")
 
@@ -153,6 +156,17 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 
 	log.Printf("[auth] user %s (%s) logged in", authResp.DisplayName, authResp.Email)
 
+	// Upsert user record and retrieve role for the login response.
+	role := RoleConfigOnly
+	if userRepo != nil {
+		user, upsertErr := userRepo.UpsertOnLogin(authResp.Email, authResp.DisplayName)
+		if upsertErr != nil {
+			log.Printf("[auth] failed to upsert user on login for %s: %v", authResp.Email, upsertErr)
+		} else if user != nil {
+			role = user.Role
+		}
+	}
+
 	if isJSON {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -160,6 +174,7 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 			"token":        token,
 			"email":        authResp.Email,
 			"display_name": authResp.DisplayName,
+			"role":         role,
 		})
 	} else {
 		http.Redirect(w, r, "/ui/", http.StatusSeeOther)

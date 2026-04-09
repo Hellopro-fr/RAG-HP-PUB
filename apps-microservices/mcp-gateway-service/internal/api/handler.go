@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -100,7 +101,13 @@ func (h *Handler) Register(mux *http.ServeMux) {
 			http.Error(w, `{"error":"not authenticated"}`, http.StatusUnauthorized)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"email": email})
+		role := auth.UserRoleFromContext(r.Context())
+		displayName := auth.UserNameFromContext(r.Context())
+		writeJSON(w, http.StatusOK, map[string]string{
+			"email":        email,
+			"display_name": displayName,
+			"role":         role,
+		})
 	})
 
 	// ── Token routes ─────────────────────────────────────────────────────────
@@ -113,6 +120,17 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	if h.oauth2Repo != nil {
 		apiMux.HandleFunc("/api/v1/oauth2/clients", h.handleOAuth2Clients)
 		apiMux.HandleFunc("/api/v1/oauth2/clients/", h.handleOAuth2ClientByID)
+	}
+
+	// ── User management routes ────────────────────────────────────────────────
+	if h.userRepo != nil {
+		apiMux.HandleFunc("/api/v1/users", h.handleUsers)
+		apiMux.HandleFunc("/api/v1/users/", h.handleUserByID)
+	}
+
+	// ── Audit log routes ──────────────────────────────────────────────────────
+	if h.auditRepo != nil {
+		apiMux.HandleFunc("/api/v1/audit-logs", h.handleAuditLogs)
 	}
 
 	// Routes avec {id} — on utilise un handler prefix pour capturer le pattern
@@ -182,8 +200,66 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/openapi.json", h.handleOpenAPI)
 
 	// Applique les middlewares et monte sur le mux principal
-	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit)
+	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit, roleCheckMiddleware)
 	mux.Handle("/api/", wrapped)
+}
+
+// roleCheckMiddleware enforces role-based access control on API routes.
+func roleCheckMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		method := r.Method
+		role := auth.UserRoleFromContext(r.Context())
+
+		// Routes that require admin only
+		if isAdminOnly(path, method) {
+			if auth.RoleLevelFor(role) < auth.RoleLevelFor(auth.RoleAdmin) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{"error": "insufficient permissions"})
+				return
+			}
+		} else if isReadOnlyPlus(path, method) {
+			// Routes that require read-only or higher
+			if auth.RoleLevelFor(role) < auth.RoleLevelFor(auth.RoleReadOnly) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{"error": "insufficient permissions"})
+				return
+			}
+		}
+		// config-only and /api/v1/me: any authenticated user (role injected by auth middleware, always >= config-only)
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isAdminOnly returns true when the path+method combination requires admin role.
+func isAdminOnly(path, method string) bool {
+	// User and audit management always require admin
+	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") {
+		return true
+	}
+	// Server writes require admin
+	if strings.HasPrefix(path, "/api/v1/servers") &&
+		(method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete) {
+		return true
+	}
+	return false
+}
+
+// isReadOnlyPlus returns true when the path+method combination requires at least read-only.
+func isReadOnlyPlus(path, method string) bool {
+	// Server reads
+	if strings.HasPrefix(path, "/api/v1/servers") && method == http.MethodGet {
+		return true
+	}
+	// Aggregated views
+	if path == "/api/v1/tags" || path == "/api/v1/tools" ||
+		path == "/api/v1/resources" || path == "/api/v1/prompts" {
+		return true
+	}
+	return false
 }
 
 // routeToolAction routes /api/v1/servers/{id}/tools/{toolName}/{action} requests.
