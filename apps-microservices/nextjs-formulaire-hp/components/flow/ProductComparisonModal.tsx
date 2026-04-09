@@ -62,7 +62,20 @@ const ProductComparisonModal = ({
   const MobileProductCard = ({ product }: { product: Supplier }) => (
     <div className="flex flex-col gap-4">
       {/* Product header */}
-      <div className="flex flex-col items-center gap-3 rounded-xl bg-card border border-border p-4">
+      <div className="relative flex flex-col items-center gap-3 rounded-xl bg-card border border-border p-4">
+        {/* Badge top-left */}
+        <span
+          className={cn(
+            "absolute top-3 left-3 rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow-sm",
+            product.matchScore >= 80
+              ? "bg-match-high"
+              : product.matchScore >= 60
+              ? "bg-match-medium"
+              : "invisible"
+          )}
+        >
+          {product.matchScore >= 80 ? "Idéal" : "À considérer"}
+        </span>
         <div className="h-24 w-24 overflow-hidden rounded-lg bg-muted">
           <img
             src={getProductImageUrl(product.image)}
@@ -75,18 +88,6 @@ const ProductComparisonModal = ({
           <p className="font-semibold text-foreground">{product.productName}</p>
           <p className="text-sm text-muted-foreground">{product.supplierName}</p>
         </div>
-        <span
-          className={cn(
-            "rounded-full px-3 py-1.5 text-sm font-bold",
-            product.matchScore >= 80
-              ? "bg-match-high/10 text-match-high"
-              : product.matchScore >= 60
-              ? "bg-match-medium/10 text-match-medium"
-              : "bg-match-low/10 text-match-low"
-          )}
-        >
-          {product.matchScore}% match
-        </span>
         <button
           onClick={() => onToggle(product.id)}
           className={cn(
@@ -279,18 +280,18 @@ const ProductComparisonModal = ({
                           {product.supplierName}
                         </p>
                       </div>
-                      {/* Match score */}
+                      {/* Match score badge */}
                       <span
                         className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-bold",
+                          "rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow-sm",
                           product.matchScore >= 80
-                            ? "bg-match-high/10 text-match-high"
+                            ? "bg-match-high"
                             : product.matchScore >= 60
-                            ? "bg-match-medium/10 text-match-medium"
-                            : "bg-match-low/10 text-match-low"
+                            ? "bg-match-medium"
+                            : "invisible"
                         )}
                       >
-                        {product.matchScore}% match
+                        {product.matchScore >= 80 ? "Idéal" : "À considérer"}
                       </span>
                       {/* Add/Remove button */}
                       <button
