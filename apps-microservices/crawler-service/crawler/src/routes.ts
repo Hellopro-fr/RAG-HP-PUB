@@ -445,6 +445,12 @@ router.addDefaultHandler(
                             context.crawlErrorMessage = `Homepage non détectée en Français mais une alternative en Français a été trouvée : ${best.url} (fiabilité: ${best.reliability})`;
                         }
 
+                        // Default error message when no alternative found.
+                        // Cleared at line ~472 if URL-only fallback succeeds.
+                        if (!context.crawlErrorMessage) {
+                            context.crawlErrorMessage = "Page non détectée en Français";
+                        }
+
                         // Only fall back to URL check if NLP didn't explicitly reject.
                         // When NLP analyzed the content and said "not French", a URL pattern
                         // like .fr TLD should not override that verdict.
