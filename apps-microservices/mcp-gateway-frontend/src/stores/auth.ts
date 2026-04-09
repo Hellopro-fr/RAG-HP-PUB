@@ -1,12 +1,28 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+export type UserRole = 'admin' | 'read-only' | 'config-only'
+
+const ROLE_LEVELS: Record<UserRole, number> = {
+  'admin': 3,
+  'read-only': 2,
+  'config-only': 1,
+}
+
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<{ email: string; display_name?: string } | null>(null)
+  const user = ref<{ email: string; display_name?: string; role?: UserRole } | null>(null)
   const token = ref<string | null>(localStorage.getItem('auth_token'))
   const isLoading = ref(false)
 
   const isAuthenticated = computed(() => user.value !== null && token.value !== null)
+
+  const userRole = computed<UserRole>(() => user.value?.role ?? 'config-only')
+  const isAdmin = computed(() => userRole.value === 'admin')
+  const isReadOnly = computed(() => userRole.value === 'read-only' || isAdmin.value)
+
+  function hasRole(minRole: UserRole): boolean {
+    return ROLE_LEVELS[userRole.value] >= ROLE_LEVELS[minRole]
+  }
 
   function setToken(newToken: string) {
     token.value = newToken
@@ -31,7 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
         return false
       }
       const data = await response.json()
-      user.value = { email: data.email, display_name: data.display_name }
+      user.value = { email: data.email, display_name: data.display_name, role: data.role as UserRole | undefined }
       return true
     } catch {
       clearToken()
@@ -58,7 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       const data = await response.json()
       setToken(data.token)
-      user.value = { email: data.email, display_name: data.display_name }
+      user.value = { email: data.email, display_name: data.display_name, role: data.role as UserRole | undefined }
     } finally {
       isLoading.value = false
     }
@@ -78,5 +94,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, token, isLoading, isAuthenticated, checkSession, login, logout }
+  return { user, token, isLoading, isAuthenticated, userRole, isAdmin, isReadOnly, hasRole, checkSession, login, logout }
 })

@@ -1,5 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, type UserRole } from '@/stores/auth'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    title?: string
+    minRole?: UserRole
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(),
@@ -18,19 +26,19 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: '/servers'
+      redirect: '/tokens'
     },
     {
       path: '/servers/new',
       name: 'server-create',
       component: () => import('@/views/ServerFormView.vue'),
-      meta: { requiresAuth: true, title: 'Nouveau serveur' }
+      meta: { requiresAuth: true, title: 'Nouveau serveur', minRole: 'admin' }
     },
     {
       path: '/servers/:id/edit',
       name: 'server-edit',
       component: () => import('@/views/ServerFormView.vue'),
-      meta: { requiresAuth: true, title: 'Modifier le serveur' }
+      meta: { requiresAuth: true, title: 'Modifier le serveur', minRole: 'admin' }
     },
     {
       path: '/tokens/new',
@@ -60,7 +68,7 @@ const router = createRouter({
       path: '/servers',
       name: 'servers',
       component: () => import('@/views/ServersView.vue'),
-      meta: { requiresAuth: true, title: 'Serveurs MCP' }
+      meta: { requiresAuth: true, title: 'Serveurs MCP', minRole: 'read-only' }
     },
     {
       path: '/tokens',
@@ -79,6 +87,18 @@ const router = createRouter({
       name: 'install-guide',
       component: () => import('@/views/InstallGuideView.vue'),
       meta: { requiresAuth: true, title: "Guide d'installation" }
+    },
+    {
+      path: '/users',
+      name: 'users',
+      component: () => import('@/views/UsersView.vue'),
+      meta: { requiresAuth: true, title: 'Utilisateurs', minRole: 'admin' }
+    },
+    {
+      path: '/audit-logs',
+      name: 'audit-logs',
+      component: () => import('@/views/AuditLogView.vue'),
+      meta: { requiresAuth: true, title: "Journal d'audit", minRole: 'admin' }
     }
   ]
 })
@@ -95,6 +115,11 @@ router.beforeEach(async (to) => {
     if (!valid) {
       return { path: '/login', query: { redirect: to.fullPath } }
     }
+  }
+
+  const minRole = to.meta.minRole
+  if (minRole && !authStore.hasRole(minRole)) {
+    return { path: '/tokens' }
   }
 
   return true

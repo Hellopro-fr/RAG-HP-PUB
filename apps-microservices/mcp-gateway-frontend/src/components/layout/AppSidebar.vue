@@ -174,9 +174,11 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useSidebar } from '@/composables/useSidebar';
+import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
 const { isExpanded, isMobileOpen, isHovered, openSubmenu } = useSidebar();
+const authStore = useAuthStore();
 
 interface SubItem {
   name: string;
@@ -195,23 +197,29 @@ interface MenuGroup {
   items: MenuItem[];
 }
 
-const menuGroups: MenuGroup[] = [
-  {
-    title: 'Gestion',
-    items: [
-      {
-        icon: 'pi pi-server',
-        name: 'Serveurs',
-        path: '/servers',
-      },
-      {
-        icon: 'pi pi-key',
-        name: 'Config MCP',
-        path: '/tokens',
-      },
-    ],
-  },
-  {
+const menuGroups = computed<MenuGroup[]>(() => {
+  const groups: MenuGroup[] = []
+
+  // Gestion group — Serveurs only for read-only+, Config MCP always
+  const gestionItems: MenuItem[] = []
+  if (authStore.hasRole('read-only')) {
+    gestionItems.push({
+      icon: 'pi pi-server',
+      name: 'Serveurs',
+      path: '/servers',
+    })
+  }
+  gestionItems.push({
+    icon: 'pi pi-key',
+    name: 'Config MCP',
+    path: '/tokens',
+  })
+  if (gestionItems.length > 0) {
+    groups.push({ title: 'Gestion', items: gestionItems })
+  }
+
+  // Securite group — OAuth2 always
+  groups.push({
     title: 'Securite',
     items: [
       {
@@ -220,18 +228,41 @@ const menuGroups: MenuGroup[] = [
         path: '/oauth2',
       },
     ],
-  },
-  {
+  })
+
+  // Administration group — only for admins
+  if (authStore.isAdmin) {
+    groups.push({
+      title: 'Administration',
+      items: [
+        {
+          icon: 'pi pi-users',
+          name: 'Utilisateurs',
+          path: '/users',
+        },
+        {
+          icon: 'pi pi-list',
+          name: "Journal d'audit",
+          path: '/audit-logs',
+        },
+      ],
+    })
+  }
+
+  // Aide group — always
+  groups.push({
     title: 'Aide',
     items: [
       {
         icon: 'pi pi-book',
-        name: 'Guide d\'installation',
+        name: "Guide d'installation",
         path: '/install-guide',
       },
     ],
-  },
-];
+  })
+
+  return groups
+})
 
 const isActive = (path: string): boolean => route.path.startsWith(path);
 
@@ -241,7 +272,7 @@ const toggleSubmenu = (groupIndex: number, itemIndex: number): void => {
 };
 
 const isAnySubmenuRouteActive = computed(() => {
-  return menuGroups.some((group) =>
+  return menuGroups.value.some((group) =>
     group.items.some(
       (item) =>
         item.subItems && item.subItems.some((subItem) => isActive(subItem.path))
@@ -251,7 +282,7 @@ const isAnySubmenuRouteActive = computed(() => {
 
 const isSubmenuOpen = (groupIndex: number, itemIndex: number): boolean => {
   const key = `${groupIndex}-${itemIndex}`;
-  const item = menuGroups[groupIndex]?.items[itemIndex];
+  const item = menuGroups.value[groupIndex]?.items[itemIndex];
   return (
     openSubmenu.value === key ||
     (isAnySubmenuRouteActive.value &&
