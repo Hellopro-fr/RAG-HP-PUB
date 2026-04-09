@@ -260,6 +260,10 @@ services:
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
       - DB_BATCH_SIZE=16
       - DB_MAX_CONCURRENT_ZILLIZ_DEFAULT=2
+      - MILVUS_GLOBAL_MAX_CONCURRENT=30
+      - MILVUS_WRITE_CEILING=20
+      - MILVUS_CONCURRENCY_TIER=1
+      - MILVUS_CONCURRENCY_SERVICE_NAME=database-recherche-service
     env_file:
       - .env
     networks:
@@ -1009,6 +1013,11 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - MILVUS_GLOBAL_MAX_CONCURRENT=30
+      - MILVUS_WRITE_CEILING=20
+      - MILVUS_CONCURRENCY_TIER=2
+      - MILVUS_CONCURRENCY_SERVICE_NAME=di-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1026,6 +1035,11 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - MILVUS_GLOBAL_MAX_CONCURRENT=30
+      - MILVUS_WRITE_CEILING=20
+      - MILVUS_CONCURRENCY_TIER=3
+      - MILVUS_CONCURRENCY_SERVICE_NAME=echange-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1043,6 +1057,11 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - MILVUS_GLOBAL_MAX_CONCURRENT=30
+      - MILVUS_WRITE_CEILING=20
+      - MILVUS_CONCURRENCY_TIER=3
+      - MILVUS_CONCURRENCY_SERVICE_NAME=website-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1060,6 +1079,11 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - MILVUS_GLOBAL_MAX_CONCURRENT=30
+      - MILVUS_WRITE_CEILING=20
+      - MILVUS_CONCURRENCY_TIER=2
+      - MILVUS_CONCURRENCY_SERVICE_NAME=product-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1101,6 +1125,11 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
+    environment:
+      - MILVUS_GLOBAL_MAX_CONCURRENT=30
+      - MILVUS_WRITE_CEILING=20
+      - MILVUS_CONCURRENCY_TIER=3
+      - MILVUS_CONCURRENCY_SERVICE_NAME=document-database-qdrant-service
     env_file:
       - .env
     deploy:
