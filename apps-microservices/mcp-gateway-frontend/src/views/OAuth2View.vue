@@ -1,52 +1,53 @@
 <template>
   <div>
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Clients OAuth2</h1>
-        <p class="text-sm text-gray-500 mt-1">
-          Gérez vos clients OAuth2 pour l'authentification des services MCP externes
-        </p>
-      </div>
-      <button
-        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-        @click="router.push('/oauth2/new')"
-      >
-        Créer un client
-      </button>
-    </div>
+    <PageBreadcrumb page-title="Clients OAuth2" />
 
     <!-- Loading -->
     <div v-if="loading" class="text-center py-12">
       <i class="pi pi-spinner pi-spin text-2xl text-blue-500" />
     </div>
 
-    <!-- Client cards -->
-    <div
-      v-else-if="clients.length"
-      class="grid grid-cols-1 gap-4"
-    >
-      <ClientCard
-        v-for="c in clients"
-        :key="c.id"
-        :client="c"
-        @edit="handleEdit"
-        @revoke="handleRevoke"
-        @delete="handleDelete"
-      />
-    </div>
-
-    <!-- Empty state -->
-    <div
+    <PageHeaderTabs
       v-else
-      class="text-center py-12 text-gray-500"
+      v-model="activeTab"
+      :tabs="tabs"
     >
-      <i class="pi pi-shield text-4xl mb-3 block" />
-      <p class="font-medium">Aucun client OAuth2</p>
-      <p class="text-sm mt-1">
-        Créez un client pour permettre l'authentification OAuth2 avec vos serveurs MCP.
-      </p>
-    </div>
+      <template #actions>
+        <button
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+          @click="router.push('/oauth2/new')"
+        >
+          Créer un client
+        </button>
+      </template>
+
+      <!-- Client cards -->
+      <div
+        v-if="filteredClients.length"
+        class="grid grid-cols-1 gap-4"
+      >
+        <ClientCard
+          v-for="c in filteredClients"
+          :key="c.id"
+          :client="c"
+          @edit="handleEdit"
+          @revoke="handleRevoke"
+          @delete="handleDelete"
+        />
+      </div>
+
+      <!-- Empty state -->
+      <div
+        v-else
+        class="text-center py-12 text-gray-500"
+      >
+        <i class="pi pi-shield text-4xl mb-3 block" />
+        <p class="font-medium">Aucun client OAuth2</p>
+        <p class="text-sm mt-1">
+          Créez un client pour permettre l'authentification OAuth2 avec vos serveurs MCP.
+        </p>
+      </div>
+    </PageHeaderTabs>
 
     <!-- Revoke confirm -->
     <ConfirmDialog
@@ -71,11 +72,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { oauth2Api } from '@/api/oauth2'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
+import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
+import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ClientCard from '@/components/oauth2/ClientCard.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { OAuth2Client } from '@/types/oauth2'
@@ -86,8 +89,33 @@ const toast = useToast()
 
 const clients = ref<OAuth2Client[]>([])
 const loading = ref(false)
+const activeTab = ref('all')
 const revokingClientId = ref<string>()
 const deletingClientId = ref<string>()
+
+const activeCount = computed(() => clients.value.filter(c => c.is_active).length)
+const revokedCount = computed(() => clients.value.filter(c => !c.is_active).length)
+const dynamicCount = computed(() => clients.value.filter(c => c.dynamically_registered).length)
+
+const tabs = computed(() => [
+  { label: 'Tous', value: 'all', count: clients.value.length },
+  { label: 'Actif', value: 'active', count: activeCount.value },
+  { label: 'Révoqué', value: 'revoked', count: revokedCount.value },
+  { label: 'Dynamic', value: 'dynamic', count: dynamicCount.value },
+])
+
+const filteredClients = computed(() => {
+  if (activeTab.value === 'active') {
+    return clients.value.filter(c => c.is_active)
+  }
+  if (activeTab.value === 'revoked') {
+    return clients.value.filter(c => !c.is_active)
+  }
+  if (activeTab.value === 'dynamic') {
+    return clients.value.filter(c => c.dynamically_registered)
+  }
+  return clients.value
+})
 
 onMounted(() => {
   loadClients()

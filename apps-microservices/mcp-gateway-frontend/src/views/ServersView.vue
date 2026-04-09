@@ -1,24 +1,21 @@
 <template>
   <div>
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Serveurs MCP</h1>
-        <p class="text-sm text-gray-500 mt-1">Gérez vos serveurs MCP et leurs outils</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <select
-          v-model="statusFilter"
-          class="text-sm border border-gray-300 rounded-md px-3 py-2"
-          @change="loadServers"
-        >
-          <option value="">Tous</option>
-          <option value="true">Actif</option>
-          <option value="false">Inactif</option>
-        </select>
+    <PageBreadcrumb page-title="Serveurs MCP" />
+
+    <!-- Loading -->
+    <div v-if="serversStore.isLoading" class="text-center py-12">
+      <i class="pi pi-spinner pi-spin text-2xl text-blue-500" />
+    </div>
+
+    <PageHeaderTabs
+      v-else
+      v-model="activeTab"
+      :tabs="tabs"
+    >
+      <template #actions>
         <select
           v-model="tagFilter"
-          class="text-sm border border-gray-300 rounded-md px-3 py-2"
+          class="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:text-gray-200"
           @change="loadServers"
         >
           <option value="">Tous les tags</option>
@@ -27,7 +24,7 @@
           </option>
         </select>
         <button
-          class="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50"
+          class="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50 dark:hover:bg-blue-500/10"
           @click="showImportModal = true"
         >
           Importer .mcp.json
@@ -39,46 +36,41 @@
           Ajouter un serveur
         </button>
         <button
-          class="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
           :disabled="discoveringAll"
           @click="handleDiscoverAll"
         >
           <i v-if="discoveringAll" class="pi pi-spinner pi-spin mr-1" />
           Découvrir tout
         </button>
+      </template>
+
+      <!-- Grid -->
+      <div
+        v-if="filteredServers.length"
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      >
+        <ServerCard
+          v-for="server in filteredServers"
+          :key="server.id"
+          :server="server"
+          @toggle="handleToggle"
+          @edit="handleEdit"
+          @delete="handleDelete"
+          @details="handleDetails"
+          @discover="handleDiscover"
+        />
       </div>
-    </div>
 
-    <!-- Loading -->
-    <div v-if="serversStore.isLoading" class="text-center py-12">
-      <i class="pi pi-spinner pi-spin text-2xl text-blue-500" />
-    </div>
-
-    <!-- Grid -->
-    <div
-      v-else
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-    >
-      <ServerCard
-        v-for="server in serversStore.servers"
-        :key="server.id"
-        :server="server"
-        @toggle="handleToggle"
-        @edit="handleEdit"
-        @delete="handleDelete"
-        @details="handleDetails"
-        @discover="handleDiscover"
-      />
-    </div>
-
-    <!-- Empty state -->
-    <div
-      v-if="!serversStore.isLoading && serversStore.servers.length === 0"
-      class="text-center py-12 text-gray-500"
-    >
-      <i class="pi pi-server text-4xl mb-3 block" />
-      <p>Aucun serveur configuré</p>
-    </div>
+      <!-- Empty state -->
+      <div
+        v-else
+        class="text-center py-12 text-gray-500"
+      >
+        <i class="pi pi-server text-4xl mb-3 block" />
+        <p>Aucun serveur configuré</p>
+      </div>
+    </PageHeaderTabs>
 
     <!-- Modals -->
     <ServerDetailsModal
@@ -105,10 +97,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
+import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
+import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ServerCard from '@/components/servers/ServerCard.vue'
 import ServerDetailsModal from '@/components/servers/ServerDetailsModal.vue'
 import ImportModal from '@/components/servers/ImportModal.vue'
@@ -119,12 +113,31 @@ const router = useRouter()
 const serversStore = useServersStore()
 const toast = useToast()
 
-const statusFilter = ref('')
+const activeTab = ref('all')
 const tagFilter = ref('')
 const showImportModal = ref(false)
 const detailsServerId = ref<string>()
 const deletingServerId = ref<string>()
 const discoveringAll = ref(false)
+
+const filteredServers = computed(() => {
+  if (activeTab.value === 'active') {
+    return serversStore.servers.filter(s => s.is_active)
+  }
+  if (activeTab.value === 'inactive') {
+    return serversStore.servers.filter(s => !s.is_active)
+  }
+  return serversStore.servers
+})
+
+const activeCount = computed(() => serversStore.servers.filter(s => s.is_active).length)
+const inactiveCount = computed(() => serversStore.servers.filter(s => !s.is_active).length)
+
+const tabs = computed(() => [
+  { label: 'Tous', value: 'all', count: serversStore.servers.length },
+  { label: 'Actif', value: 'active', count: activeCount.value },
+  { label: 'Inactif', value: 'inactive', count: inactiveCount.value },
+])
 
 onMounted(() => {
   loadServers()
@@ -133,7 +146,6 @@ onMounted(() => {
 
 function loadServers() {
   const filters: Record<string, string> = {}
-  if (statusFilter.value) filters.is_active = statusFilter.value
   if (tagFilter.value) filters.tag = tagFilter.value
   serversStore.fetchServers(filters)
 }
