@@ -40,6 +40,7 @@ export interface AuthorizeInfo {
   servers: AuthorizeServer[]
   has_session: boolean
   has_consent: boolean
+  csrf_token?: string
 }
 
 export interface AuthorizeServer {

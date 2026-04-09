@@ -19,6 +19,7 @@ type authorizeInfoResponse struct {
 	Servers    []authorizeServerDTO `json:"servers"`
 	HasSession bool                `json:"has_session"`
 	HasConsent bool                `json:"has_consent"`
+	CSRFToken  string              `json:"csrf_token,omitempty"`
 }
 
 type authorizeServerDTO struct {
@@ -141,6 +142,21 @@ func (s *AuthServer) handleAuthorizeInfo(w http.ResponseWriter, r *http.Request)
 		Servers:    servers,
 		HasSession: hasSession,
 		HasConsent: hasConsent,
+	}
+
+	// If session exists, generate CSRF token so consent can proceed without login step
+	if hasSession {
+		csrfToken, _ := generateCSRFToken()
+		http.SetCookie(w, &http.Cookie{
+			Name:     "oauth2_csrf",
+			Value:    csrfToken,
+			Path:     "/",
+			MaxAge:   600,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   s.secureCookie,
+		})
+		resp.CSRFToken = csrfToken
 	}
 
 	writeJSON(w, http.StatusOK, resp)

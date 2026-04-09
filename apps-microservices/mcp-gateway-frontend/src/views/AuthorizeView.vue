@@ -314,6 +314,11 @@ async function fetchInfo(): Promise<void> {
     // If the client has servers assigned, it's pre-configured
     preConfigured.value = info.servers.length > 0
 
+    // Store CSRF token if returned (when session exists, login step is skipped)
+    if (info.csrf_token) {
+      csrfToken.value = info.csrf_token
+    }
+
     if (info.has_session && info.has_consent) {
       // Already authorized — skip to consent auto-approve or redirect
       // The backend should handle this, but we show consent step as fallback
