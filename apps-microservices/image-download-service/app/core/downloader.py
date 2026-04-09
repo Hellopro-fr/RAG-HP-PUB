@@ -6,6 +6,7 @@ import asyncio
 import re
 import unicodedata
 from datetime import datetime
+from urllib.parse import urlparse
 from typing import Optional, List, Dict, Tuple
 from image_download_service.core.image_processor import ImageProcessor
 import random
@@ -111,6 +112,18 @@ class Downloader:
         name = name.strip('-')
         
         return name
+
+    def _recupere_domaine(self, input_domain: str) -> str:
+        """
+        Equivalent Python de la fonction PHP recupere_domaine().
+        Extrait le host d'une URL et supprime le prefixe 'www.'.
+        """
+        if not input_domain:
+            return ""
+        parsed = urlparse(input_domain)
+        domain = parsed.hostname if parsed.hostname else input_domain.split('/')[0]
+        domain = re.sub(r'^www\.', '', domain, flags=re.IGNORECASE)
+        return domain.lower()
 
     def _get_expected_paths(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Dict[str, str]:
         """
@@ -309,7 +322,7 @@ class Downloader:
         Downloads and processes images for a product.
         Checks if individual image already exists before downloading.
         """
-        domain = product_data.get("domaine", "unknown")
+        domain = self._recupere_domaine(product_data.get("domaine_dspi") or product_data.get("domaine", "unknown"))
         product_id = product_data.get("id_produit", "unknown")
         # Try to find product name
         product_name = product_data.get("nom") or product_data.get("nom_produit") or product_data.get("name") or f"produit-{product_id}"
