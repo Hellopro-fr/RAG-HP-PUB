@@ -110,3 +110,14 @@ scrape_configs:
   - job_name: 'optimize-service'
     static_configs:
       - targets: ['optimize-service:8563'] # The service name and port from docker-compose
+
+  - job_name: 'document-database-qdrant-service'
+    dns_sd_configs:
+    - names:
+      - document-database-qdrant-service
+      type: 'A'
+      port: 8530
+
+  - job_name: 'database-recherche-service'
+    static_configs:
+      - targets: ['database-recherche-service:8530']
