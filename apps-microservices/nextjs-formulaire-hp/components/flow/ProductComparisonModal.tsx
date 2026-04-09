@@ -273,10 +273,10 @@ const ProductComparisonModal = ({
                       </div>
                       {/* Product name */}
                       <div className="text-center">
-                        <p className="font-semibold text-foreground text-sm line-clamp-2">
+                        <p className="font-semibold text-foreground text-sm line-clamp-2" title={product.productName}>
                           {product.productName}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5 h-8">
                           {product.supplierName}
                         </p>
                       </div>
