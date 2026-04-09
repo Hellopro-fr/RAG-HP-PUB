@@ -485,10 +485,6 @@ router.addDefaultHandler(
                     context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
                 }
 
-                // Signal that homepage detection is complete (for update mode two-phase seeding)
-                if (context.homepageReady) {
-                    context.homepageReady.resolve();
-                }
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
                 let methodOrError = manageFrenchDetectionMethod(targetDomain as string);
@@ -816,6 +812,13 @@ router.addDefaultHandler(
             }
         } else {
             console.log(`Doublon url : ${url}`);
+        }
+
+        // Signal that homepage detection is complete (for update mode two-phase seeding).
+        // Must be OUTSIDE the isDoublon check — homepage may be marked as Doublon
+        // in update mode (pre-added to DedupManager during Phase 1 seeding).
+        if (request.url === site && context.homepageReady) {
+            context.homepageReady.resolve();
         }
     }
 );
