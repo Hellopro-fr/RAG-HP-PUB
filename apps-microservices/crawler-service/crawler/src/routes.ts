@@ -446,8 +446,9 @@ router.addDefaultHandler(
                         }
 
                         // Default error message when no alternative found.
-                        // Cleared at line ~472 if URL-only fallback succeeds.
+                        // Cleared below if the URL-only fallback (checkUrl) succeeds.
                         if (!context.crawlErrorMessage) {
+                            log.error(`[NOT_FRENCH] Homepage ${url} is NOT French and no French alternative was found.`);
                             context.crawlErrorMessage = "Page non détectée en Français";
                         }
 
