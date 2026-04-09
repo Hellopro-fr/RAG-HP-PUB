@@ -1,5 +1,577 @@
 <template>
-  <div class="p-6">
-    <h1 class="text-2xl font-bold text-gray-900">TODO: Form View</h1>
+  <div class="p-6 max-w-3xl mx-auto">
+    <!-- Page header -->
+    <div class="mb-6 flex items-center gap-4">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900"
+        @click="router.push('/servers')"
+      >
+        <i class="pi pi-arrow-left text-xs" />
+        Retour
+      </button>
+      <h1 class="text-2xl font-bold text-gray-900">
+        {{ isEdit ? 'Modifier le serveur' : 'Nouveau serveur' }}
+      </h1>
+    </div>
+
+    <!-- Loading state (edit mode) -->
+    <div v-if="loading" class="flex items-center justify-center py-20">
+      <i class="pi pi-spinner pi-spin text-2xl text-gray-400" />
+    </div>
+
+    <template v-else>
+      <!-- Step tabs -->
+      <StepTabs
+        :steps="stepLabels"
+        :current-step="currentStep"
+        :completed-steps="completedSteps"
+        @update:current-step="goToStep"
+      />
+
+      <!-- Step content -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <!-- Step 1: Informations de base -->
+        <div v-show="currentStep === 0" class="space-y-4">
+          <!-- Name -->
+          <div>
+            <label for="form-name" class="block text-sm font-medium text-gray-700 mb-1">
+              Nom <span class="text-red-500">*</span>
+            </label>
+            <input
+              id="form-name"
+              v-model="form.name"
+              type="text"
+              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Mon serveur MCP"
+            />
+          </div>
+
+          <!-- Transport -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Transport</label>
+            <div class="flex items-center gap-4">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  v-model="form.mcp_transport"
+                  type="radio"
+                  value="http"
+                  class="text-blue-600"
+                />
+                <span class="text-sm">HTTP</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  v-model="form.mcp_transport"
+                  type="radio"
+                  value="stdio"
+                  class="text-blue-600"
+                />
+                <span class="text-sm">Stdio</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- HTTP fields -->
+          <template v-if="form.mcp_transport === 'http'">
+            <div>
+              <label for="form-url" class="block text-sm font-medium text-gray-700 mb-1">
+                URL <span class="text-red-500">*</span>
+              </label>
+              <input
+                id="form-url"
+                v-model="form.url"
+                type="url"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                placeholder="https://mcp-server.example.com"
+              />
+            </div>
+            <div>
+              <label for="form-transport" class="block text-sm font-medium text-gray-700 mb-1">
+                Préférence de transport
+              </label>
+              <select
+                id="form-transport"
+                v-model="form.transport_preference"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              >
+                <option value="auto">Auto</option>
+                <option value="sse">SSE</option>
+                <option value="streamable-http">Streamable HTTP</option>
+              </select>
+            </div>
+            <div>
+              <label for="form-timeout" class="block text-sm font-medium text-gray-700 mb-1">
+                Timeout (ms)
+              </label>
+              <input
+                id="form-timeout"
+                v-model.number="form.connect_timeout_ms"
+                type="number"
+                min="1000"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label for="form-auth-headers" class="block text-sm font-medium text-gray-700 mb-1">
+                En-têtes d'authentification (JSON)
+              </label>
+              <textarea
+                id="form-auth-headers"
+                v-model="authHeadersJson"
+                rows="3"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                placeholder='{"Authorization": "Bearer xxx"}'
+              />
+              <p v-if="authHeadersError" class="text-xs text-red-500 mt-1">{{ authHeadersError }}</p>
+            </div>
+          </template>
+
+          <!-- Stdio fields -->
+          <template v-if="form.mcp_transport === 'stdio'">
+            <div>
+              <label for="form-command" class="block text-sm font-medium text-gray-700 mb-1">
+                Commande <span class="text-red-500">*</span>
+              </label>
+              <input
+                id="form-command"
+                v-model="form.mcp_command"
+                type="text"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                placeholder="npx"
+              />
+            </div>
+            <div>
+              <label for="form-args" class="block text-sm font-medium text-gray-700 mb-1">
+                Arguments (un par ligne)
+              </label>
+              <textarea
+                id="form-args"
+                v-model="argsText"
+                rows="3"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
+              />
+            </div>
+            <div>
+              <label for="form-env" class="block text-sm font-medium text-gray-700 mb-1">
+                Variables d'environnement (JSON)
+              </label>
+              <textarea
+                id="form-env"
+                v-model="envJson"
+                rows="3"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                placeholder='{"API_KEY": "xxx"}'
+              />
+              <p v-if="envJsonError" class="text-xs text-red-500 mt-1">{{ envJsonError }}</p>
+            </div>
+          </template>
+        </div>
+
+        <!-- Step 2: Tags et configuration -->
+        <div v-show="currentStep === 1" class="space-y-4">
+          <!-- Tags -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+            <div class="flex flex-wrap gap-1 mb-2" v-if="form.tags.length">
+              <span
+                v-for="tag in form.tags"
+                :key="tag"
+                class="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+              >
+                {{ tag }}
+                <button type="button" class="hover:text-blue-900" @click="removeTag(tag)">
+                  <i class="pi pi-times text-[10px]" />
+                </button>
+              </span>
+            </div>
+            <div class="relative">
+              <input
+                v-model="tagSearch"
+                type="text"
+                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Rechercher ou créer un tag..."
+                @keydown.enter.prevent="addTagFromSearch"
+                @keydown.escape="tagSearch = ''; showTagDropdown = false"
+                @focus="showTagDropdown = true"
+              />
+              <div
+                v-if="showTagDropdown && filteredTags.length"
+                class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-32 overflow-y-auto"
+              >
+                <button
+                  v-for="tag in filteredTags"
+                  :key="tag"
+                  type="button"
+                  class="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100"
+                  @click="addTag(tag)"
+                >
+                  {{ tag }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool prefix -->
+          <div>
+            <label for="form-tool-prefix" class="block text-sm font-medium text-gray-700 mb-1">
+              Préfixe d'outils
+            </label>
+            <input
+              id="form-tool-prefix"
+              v-model="form.tool_prefix"
+              type="text"
+              pattern="[a-zA-Z0-9]*"
+              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              placeholder="myprefix"
+            />
+            <p class="text-xs text-gray-400 mt-1">Alphanumérique uniquement</p>
+          </div>
+
+          <!-- Auto-discover (create only) -->
+          <div v-if="!isEdit" class="flex items-center gap-2">
+            <input
+              id="form-discover"
+              v-model="form.auto_discover"
+              type="checkbox"
+              class="rounded border-gray-300 text-blue-600"
+            />
+            <label for="form-discover" class="text-sm text-gray-700">
+              Découvrir automatiquement les outils après création
+            </label>
+          </div>
+        </div>
+
+        <!-- Step 3: Vérification -->
+        <div v-show="currentStep === 2" class="space-y-4">
+          <h3 class="text-sm font-semibold text-gray-900 mb-3">Récapitulatif</h3>
+
+          <dl class="divide-y divide-gray-100">
+            <!-- Name -->
+            <div class="py-2 grid grid-cols-3 gap-4">
+              <dt class="text-sm font-medium text-gray-500">Nom</dt>
+              <dd class="text-sm text-gray-900 col-span-2">{{ form.name }}</dd>
+            </div>
+
+            <!-- Transport -->
+            <div class="py-2 grid grid-cols-3 gap-4">
+              <dt class="text-sm font-medium text-gray-500">Transport</dt>
+              <dd class="text-sm text-gray-900 col-span-2">{{ form.mcp_transport.toUpperCase() }}</dd>
+            </div>
+
+            <!-- HTTP-specific -->
+            <template v-if="form.mcp_transport === 'http'">
+              <div class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500">URL</dt>
+                <dd class="text-sm text-gray-900 col-span-2 break-all">{{ form.url }}</dd>
+              </div>
+              <div class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500">Préférence</dt>
+                <dd class="text-sm text-gray-900 col-span-2">{{ form.transport_preference }}</dd>
+              </div>
+              <div class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500">Timeout</dt>
+                <dd class="text-sm text-gray-900 col-span-2">{{ form.connect_timeout_ms }} ms</dd>
+              </div>
+              <div v-if="authHeadersJson.trim()" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500">En-têtes auth</dt>
+                <dd class="text-sm text-gray-900 col-span-2 font-mono text-xs whitespace-pre-wrap">{{ authHeadersJson }}</dd>
+              </div>
+            </template>
+
+            <!-- Stdio-specific -->
+            <template v-if="form.mcp_transport === 'stdio'">
+              <div class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500">Commande</dt>
+                <dd class="text-sm text-gray-900 col-span-2 font-mono">{{ form.mcp_command }}</dd>
+              </div>
+              <div v-if="argsText.trim()" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500">Arguments</dt>
+                <dd class="text-sm text-gray-900 col-span-2 font-mono text-xs whitespace-pre-wrap">{{ argsText }}</dd>
+              </div>
+              <div v-if="envJson.trim()" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500">Variables env</dt>
+                <dd class="text-sm text-gray-900 col-span-2 font-mono text-xs whitespace-pre-wrap">{{ envJson }}</dd>
+              </div>
+            </template>
+
+            <!-- Tags -->
+            <div class="py-2 grid grid-cols-3 gap-4">
+              <dt class="text-sm font-medium text-gray-500">Tags</dt>
+              <dd class="text-sm text-gray-900 col-span-2">
+                <div v-if="form.tags.length" class="flex flex-wrap gap-1">
+                  <span
+                    v-for="tag in form.tags"
+                    :key="tag"
+                    class="inline-flex text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+                <span v-else class="text-gray-400 italic">Aucun</span>
+              </dd>
+            </div>
+
+            <!-- Tool prefix -->
+            <div v-if="form.tool_prefix" class="py-2 grid grid-cols-3 gap-4">
+              <dt class="text-sm font-medium text-gray-500">Préfixe d'outils</dt>
+              <dd class="text-sm text-gray-900 col-span-2 font-mono">{{ form.tool_prefix }}</dd>
+            </div>
+
+            <!-- Auto-discover (create only) -->
+            <div v-if="!isEdit" class="py-2 grid grid-cols-3 gap-4">
+              <dt class="text-sm font-medium text-gray-500">Auto-découverte</dt>
+              <dd class="text-sm text-gray-900 col-span-2">{{ form.auto_discover ? 'Oui' : 'Non' }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Navigation buttons -->
+      <div class="flex justify-between mt-6">
+        <button
+          v-if="currentStep > 0"
+          type="button"
+          class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+          @click="goBack"
+        >
+          Précédent
+        </button>
+        <div v-else />
+
+        <div class="flex gap-3">
+          <button
+            type="button"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            @click="router.push('/servers')"
+          >
+            Annuler
+          </button>
+          <button
+            v-if="currentStep < 2"
+            type="button"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            :disabled="!canGoNext"
+            @click="goNext"
+          >
+            Suivant
+          </button>
+          <button
+            v-if="currentStep === 2"
+            type="button"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            :disabled="submitting"
+            @click="handleSubmit"
+          >
+            <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
+            {{ isEdit ? 'Enregistrer' : 'Créer' }}
+          </button>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useServersStore } from '@/stores/servers'
+import { useToast } from '@/composables/useToast'
+import { serversApi } from '@/api/servers'
+import StepTabs from '@/components/shared/StepTabs.vue'
+import type { CreateServerRequest } from '@/types/server'
+
+const route = useRoute()
+const router = useRouter()
+const serversStore = useServersStore()
+const toast = useToast()
+
+const stepLabels = ['Informations de base', 'Tags et configuration', 'Vérification']
+const currentStep = ref(0)
+const loading = ref(false)
+const submitting = ref(false)
+const tagSearch = ref('')
+const showTagDropdown = ref(false)
+const authHeadersJson = ref('')
+const authHeadersError = ref('')
+const argsText = ref('')
+const envJson = ref('')
+const envJsonError = ref('')
+
+const isEdit = computed(() => !!route.params.id)
+
+const form = reactive<{
+  name: string
+  mcp_transport: string
+  url: string
+  transport_preference: string
+  connect_timeout_ms: number
+  mcp_command: string
+  tags: string[]
+  tool_prefix: string
+  auto_discover: boolean
+}>({
+  name: '',
+  mcp_transport: 'http',
+  url: '',
+  transport_preference: 'auto',
+  connect_timeout_ms: 10000,
+  mcp_command: '',
+  tags: [],
+  tool_prefix: '',
+  auto_discover: true
+})
+
+const completedSteps = computed(() => {
+  const completed: number[] = []
+  if (isStep1Valid.value) completed.push(0)
+  if (isStep1Valid.value) completed.push(1)
+  return completed
+})
+
+const isStep1Valid = computed(() => {
+  if (!form.name.trim()) return false
+  if (form.mcp_transport === 'http' && !form.url.trim()) return false
+  if (form.mcp_transport === 'stdio' && !form.mcp_command.trim()) return false
+  return true
+})
+
+const canGoNext = computed(() => {
+  if (currentStep.value === 0) return isStep1Valid.value
+  if (currentStep.value === 1) return true
+  return false
+})
+
+const filteredTags = computed(() => {
+  const q = tagSearch.value.toLowerCase()
+  return serversStore.tags
+    .filter(t => !form.tags.includes(t))
+    .filter(t => !q || t.toLowerCase().includes(q))
+})
+
+onMounted(async () => {
+  serversStore.fetchTags()
+
+  if (isEdit.value) {
+    loading.value = true
+    try {
+      const server = await serversApi.get(route.params.id as string)
+      form.name = server.name
+      form.mcp_transport = server.mcp_transport || 'http'
+      form.url = server.url || ''
+      form.transport_preference = server.transport_preference || 'auto'
+      form.connect_timeout_ms = server.connect_timeout_ms || 10000
+      form.mcp_command = server.mcp_command || ''
+      form.tags = server.tags ? [...server.tags] : []
+      form.tool_prefix = server.tool_prefix || ''
+
+      if (server.mcp_args?.length) {
+        argsText.value = server.mcp_args.join('\n')
+      }
+      if (server.mcp_env) {
+        envJson.value = JSON.stringify(server.mcp_env, null, 2)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors du chargement du serveur')
+      router.push('/servers')
+    } finally {
+      loading.value = false
+    }
+  }
+})
+
+function goToStep(step: number) {
+  if (step < currentStep.value || completedSteps.value.includes(step)) {
+    currentStep.value = step
+  }
+}
+
+function goNext() {
+  if (canGoNext.value && currentStep.value < 2) {
+    currentStep.value++
+  }
+}
+
+function goBack() {
+  if (currentStep.value > 0) {
+    currentStep.value--
+  }
+}
+
+function addTag(tag: string) {
+  if (!form.tags.includes(tag)) {
+    form.tags.push(tag)
+  }
+  tagSearch.value = ''
+  showTagDropdown.value = false
+}
+
+function removeTag(tag: string) {
+  form.tags = form.tags.filter(t => t !== tag)
+}
+
+function addTagFromSearch() {
+  const tag = tagSearch.value.trim()
+  if (tag && !form.tags.includes(tag)) {
+    form.tags.push(tag)
+  }
+  tagSearch.value = ''
+  showTagDropdown.value = false
+}
+
+function parseJsonField(value: string, errorRef: { value: string }): Record<string, string> | undefined {
+  if (!value.trim()) return undefined
+  try {
+    const parsed = JSON.parse(value)
+    errorRef.value = ''
+    return parsed
+  } catch {
+    errorRef.value = 'JSON invalide'
+    return undefined
+  }
+}
+
+async function handleSubmit() {
+  submitting.value = true
+  try {
+    const data: CreateServerRequest = {
+      name: form.name,
+      mcp_transport: form.mcp_transport,
+      tags: form.tags.length ? form.tags : undefined,
+      tool_prefix: form.tool_prefix || undefined
+    }
+
+    if (form.mcp_transport === 'http') {
+      data.url = form.url
+      data.transport_preference = form.transport_preference
+      data.connect_timeout_ms = form.connect_timeout_ms
+      const headers = parseJsonField(authHeadersJson.value, authHeadersError)
+      if (authHeadersError.value) return
+      if (headers) data.auth_headers = headers
+    } else {
+      data.mcp_command = form.mcp_command
+      if (argsText.value.trim()) {
+        data.mcp_args = argsText.value.split('\n').map(l => l.trim()).filter(Boolean)
+      }
+      const env = parseJsonField(envJson.value, envJsonError)
+      if (envJsonError.value) return
+      if (env) data.mcp_env = env
+    }
+
+    if (isEdit.value) {
+      await serversStore.updateServer(route.params.id as string, data)
+    } else {
+      data.auto_discover = form.auto_discover
+      await serversStore.createServer(data)
+    }
+
+    toast.success(isEdit.value ? 'Serveur modifié' : 'Serveur créé')
+    router.push('/servers')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+  } finally {
+    submitting.value = false
+  }
+}
+</script>
