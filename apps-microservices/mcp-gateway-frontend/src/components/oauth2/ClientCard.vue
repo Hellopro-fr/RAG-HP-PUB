@@ -1,119 +1,114 @@
 <template>
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-    <div class="p-4">
-      <!-- Header -->
-      <div class="flex items-start justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <i class="pi pi-lock text-gray-400 text-sm" />
-          <h3 class="text-sm font-semibold text-gray-900 truncate max-w-[200px]">
-            {{ client.name }}
-          </h3>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <span
-            class="text-xs px-2 py-0.5 rounded-full font-medium"
-            :class="client.is_active
-              ? 'bg-green-100 text-green-700'
-              : 'bg-red-100 text-red-700'"
-          >
-            {{ client.is_active ? 'Actif' : 'Révoqué' }}
-          </span>
-          <span
-            class="text-xs px-2 py-0.5 rounded-full font-medium"
-            :class="client.dynamically_registered
-              ? 'bg-purple-100 text-purple-700'
-              : 'bg-gray-100 text-gray-500'"
-          >
-            {{ client.dynamically_registered ? 'Dynamic' : 'Manuel' }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Secret prefix -->
-      <div class="mb-3">
-        <code class="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded font-mono">
-          {{ maskedSecret }}
-        </code>
-      </div>
-
-      <!-- Client ID / Secret display -->
-      <div class="space-y-2 mb-3">
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-gray-500 w-16 shrink-0">Client ID</span>
-          <code class="text-xs bg-gray-50 px-2 py-1 rounded font-mono truncate flex-1">
-            {{ maskedClientId }}
-          </code>
-          <button
-            class="shrink-0 p-1 rounded hover:bg-gray-100 text-blue-500"
-            title="Copier le Client ID"
-            @click="clipboard.copy(client.id, 'Client ID')"
-          >
-            <i class="pi pi-copy text-xs" />
-          </button>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-gray-500 w-16 shrink-0">Secret</span>
-          <code
-            v-if="client.client_secret"
-            class="text-xs bg-gray-50 px-2 py-1 rounded font-mono truncate flex-1"
-          >
-            {{ maskedSecret }}
-          </code>
-          <span v-else class="text-xs text-gray-400 italic">Non disponible</span>
-        </div>
-      </div>
-
-      <!-- Server badges -->
-      <div v-if="serverNames.length" class="flex flex-wrap gap-1 mb-3">
-        <span
-          v-for="name in serverNames"
-          :key="name"
-          class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono"
-        >
-          {{ name }}
-        </span>
-      </div>
-
-      <!-- Info row -->
-      <div class="space-y-1.5 mb-3">
-        <!-- TTL -->
-        <div class="flex items-center gap-2 text-xs text-gray-500">
-          <i class="pi pi-clock text-[10px]" />
-          <span class="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium">
-            {{ formattedTtl }}
-          </span>
+    <div class="p-5">
+      <!-- Main horizontal layout -->
+      <div class="flex flex-col lg:flex-row lg:items-start gap-4">
+        <!-- Left section: icon + name + status badges -->
+        <div class="flex items-start gap-3 lg:w-1/4 shrink-0">
+          <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+            <i class="pi pi-lock text-lg" />
+          </div>
+          <div class="min-w-0">
+            <h3 class="text-sm font-semibold text-gray-900 truncate max-w-[200px] mb-1">
+              {{ client.name }}
+            </h3>
+            <div class="flex items-center gap-1.5">
+              <span
+                class="text-xs px-2 py-0.5 rounded-full font-medium"
+                :class="client.is_active
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-red-100 text-red-700'"
+              >
+                {{ client.is_active ? 'Actif' : 'Révoqué' }}
+              </span>
+              <span
+                class="text-xs px-2 py-0.5 rounded-full font-medium"
+                :class="client.dynamically_registered
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'bg-gray-100 text-gray-500'"
+              >
+                {{ client.dynamically_registered ? 'Dynamic' : 'Manuel' }}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <!-- Expiration -->
-        <div class="flex items-center gap-2 text-xs text-gray-500">
-          <i class="pi pi-calendar text-[10px]" />
-          <span v-if="client.expires_at">
-            Expire le {{ formatDate(client.expires_at) }}
-          </span>
-          <span
-            v-else
-            class="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700"
-          >
-            Permanent
-          </span>
+        <!-- Center section: client ID, secret, server badges, TTL, expiration, redirect URI -->
+        <div class="flex-1 min-w-0">
+          <!-- Client ID + Secret -->
+          <div class="space-y-1.5 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-gray-500 w-16 shrink-0">Client ID</span>
+              <code class="text-xs bg-gray-50 px-2 py-1 rounded font-mono truncate flex-1">
+                {{ maskedClientId }}
+              </code>
+              <button
+                class="shrink-0 p-1 rounded hover:bg-gray-100 text-blue-500"
+                title="Copier le Client ID"
+                @click="clipboard.copy(client.id, 'Client ID')"
+              >
+                <i class="pi pi-copy text-xs" />
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-gray-500 w-16 shrink-0">Secret</span>
+              <code
+                v-if="client.client_secret"
+                class="text-xs bg-gray-50 px-2 py-1 rounded font-mono truncate flex-1"
+              >
+                {{ maskedSecret }}
+              </code>
+              <span v-else class="text-xs text-gray-400 italic">Non disponible</span>
+            </div>
+          </div>
+
+          <!-- Badges row -->
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <!-- Server badges -->
+            <span
+              v-for="name in serverNames"
+              :key="name"
+              class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono"
+            >
+              {{ name }}
+            </span>
+            <!-- TTL badge -->
+            <span class="text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium">
+              <i class="pi pi-clock text-[10px] mr-0.5" />
+              {{ formattedTtl }}
+            </span>
+          </div>
+
+          <!-- Info row -->
+          <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+            <!-- Expiration -->
+            <div class="flex items-center gap-1.5">
+              <i class="pi pi-calendar text-[10px]" />
+              <span v-if="client.expires_at">
+                Expire le {{ formatDate(client.expires_at) }}
+              </span>
+              <span
+                v-else
+                class="px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700"
+              >
+                Permanent
+              </span>
+            </div>
+            <!-- Created by -->
+            <div v-if="client.created_by" class="flex items-center gap-1.5">
+              <i class="pi pi-user text-[10px]" />
+              <span>{{ client.created_by }}</span>
+            </div>
+            <!-- Redirect URI -->
+            <div v-if="client.redirect_uris?.length" class="flex items-center gap-1.5">
+              <i class="pi pi-external-link text-[10px]" />
+              <span class="truncate max-w-[250px]">{{ client.redirect_uris[0] }}</span>
+            </div>
+          </div>
         </div>
 
-        <!-- Created by -->
-        <div v-if="client.created_by" class="flex items-center gap-2 text-xs text-gray-500">
-          <i class="pi pi-user text-[10px]" />
-          <span>{{ client.created_by }}</span>
-        </div>
-
-        <!-- Redirect URI -->
-        <div v-if="client.redirect_uris?.length" class="flex items-center gap-2 text-xs text-gray-500">
-          <i class="pi pi-external-link text-[10px]" />
-          <span class="truncate">{{ client.redirect_uris[0] }}</span>
-        </div>
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center justify-between pt-3 border-t border-gray-100">
-        <div class="flex items-center gap-1">
+        <!-- Right section: action buttons (vertical on large screens) -->
+        <div class="flex lg:flex-col items-center gap-1 shrink-0">
           <button
             class="p-1.5 rounded hover:bg-gray-100 text-blue-500"
             title="Copier le Client ID"
