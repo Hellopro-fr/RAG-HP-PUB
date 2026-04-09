@@ -88,6 +88,21 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		h.handleListAllPrompts(w, r)
 	})
 
+	// ── Me route (session validation) ────────────────────────────────────────
+	apiMux.HandleFunc("/api/v1/me", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		email := auth.UserEmailFromContext(r.Context())
+		if email == "" {
+			http.Error(w, `{"error":"not authenticated"}`, http.StatusUnauthorized)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"email": email})
+	})
+
 	// ── Token routes ─────────────────────────────────────────────────────────
 	if h.tokenRepo != nil {
 		apiMux.HandleFunc("/api/v1/tokens", h.handleTokens)

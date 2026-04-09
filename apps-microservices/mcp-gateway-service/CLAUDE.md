@@ -9,7 +9,7 @@ Central MCP (Model Context Protocol) gateway that aggregates and routes requests
 - GORM v1.25 — ORM (MySQL driver)
 - AES-256-GCM — encryption for stored auth headers
 - JWT (HS256 via golang-jwt/jwt/v5) — authentication (enabled by default)
-- Docker (multi-stage: golang:1.24-alpine → alpine:3.20), exposed port **8581**
+- Docker (multi-stage: golang:1.24-alpine → alpine:3.20), exposed port **8592**
 
 ## Run
 
@@ -20,7 +20,7 @@ go run ./cmd/server/
 
 # Docker
 docker build -t mcp-gateway-service .
-docker run -p 8581:8581 -e MYSQL_DSN="..." mcp-gateway-service
+docker run -p 8592:8592 -e MYSQL_DSN="..." mcp-gateway-service
 ```
 
 ## Directory Structure
@@ -149,7 +149,7 @@ Dockerfile                   # Multi-stage build
 
 | Variable | Default | Description |
 |---|---|---|
-| `MCP_GATEWAY_PORT` | `8581` | Server listen port |
+| `MCP_GATEWAY_PORT` | `8592` | Server listen port |
 | `MCP_GATEWAY_NAME` | `hellopro-mcp-gateway` | Gateway display name |
 | `MCP_GATEWAY_VERSION` | `0.1.0` | Reported version |
 | `MCP_BACKEND_SERVERS` | — | Comma-separated legacy backend URLs |

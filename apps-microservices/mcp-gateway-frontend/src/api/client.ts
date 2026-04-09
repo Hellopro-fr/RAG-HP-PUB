@@ -3,6 +3,10 @@ import { router } from '@/router'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
+function getAuthToken(): string | null {
+  return localStorage.getItem('auth_token')
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -21,14 +25,19 @@ async function request<T>(
     headers['Content-Type'] = 'application/json'
   }
 
+  const token = getAuthToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const response = await fetch(url, {
     method,
     headers,
-    credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined
   })
 
   if (response.status === 401) {
+    localStorage.removeItem('auth_token')
     router.push({ path: '/login', query: { redirect: window.location.pathname } })
     throw new ApiError(401, 'Unauthorized')
   }

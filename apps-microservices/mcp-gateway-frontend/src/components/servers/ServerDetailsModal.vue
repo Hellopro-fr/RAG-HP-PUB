@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center" @click.self="emit('close')">
+  <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" @click.self="emit('close')">
     <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Détails du serveur</h2>
@@ -124,7 +124,8 @@
           </div>
         </div>
 
-        <!-- Resources -->
+        <!-- Resources (commented out) -->
+        <!--
         <div class="mb-6">
           <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Ressources</h3>
@@ -145,8 +146,10 @@
             </div>
           </div>
         </div>
+        -->
 
-        <!-- Prompts -->
+        <!-- Prompts (commented out) -->
+        <!--
         <div>
           <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Prompts</h3>
@@ -180,6 +183,7 @@
             </div>
           </div>
         </div>
+        -->
       </template>
     </div>
   </div>

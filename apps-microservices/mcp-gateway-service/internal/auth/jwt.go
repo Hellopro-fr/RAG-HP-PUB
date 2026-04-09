@@ -19,6 +19,7 @@ type Claims struct {
 	Exp      int64  `json:"exp,omitempty"`
 	Iat      int64  `json:"iat,omitempty"`
 	Name     string `json:"name,omitempty"`
+	Email    string `json:"email,omitempty"`
 	jwt.RegisteredClaims
 }
 

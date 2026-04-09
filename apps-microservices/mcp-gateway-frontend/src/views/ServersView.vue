@@ -48,13 +48,14 @@
       <!-- Grid -->
       <div
         v-if="filteredServers.length"
-        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+        class="grid grid-cols-1 gap-4"
       >
         <ServerCard
           v-for="server in filteredServers"
           :key="server.id"
           :server="server"
           @toggle="handleToggle"
+          @toggle-tool="handleToggleTool"
           @edit="handleEdit"
           @delete="handleDelete"
           @details="handleDetails"
@@ -100,6 +101,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useServersStore } from '@/stores/servers'
+import { serversApi } from '@/api/servers'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
@@ -152,6 +154,19 @@ function loadServers() {
 
 function handleToggle(id: string, enable: boolean) {
   serversStore.toggleServer(id, enable)
+}
+
+async function handleToggleTool(serverId: string, toolName: string, enable: boolean) {
+  try {
+    if (enable) {
+      await serversApi.enableTool(serverId, toolName)
+    } else {
+      await serversApi.disableTool(serverId, toolName)
+    }
+    await serversStore.fetchServers()
+  } catch (err) {
+    console.error('Failed to toggle tool:', err)
+  }
 }
 
 function handleEdit(server: Server) {

@@ -26,7 +26,8 @@ export function useDragDrop() {
   })
 
   function init(servers: Server[]) {
-    available.value = servers
+    console.log('[useDragDrop] init called with', servers.length, 'servers, active:', servers.filter(s => s.is_active).length, 'first server tools:', servers[0]?.tool_names?.length)
+    const mapped = servers
       .filter(s => s.is_active)
       .map(s => ({
         id: s.id,
@@ -39,10 +40,23 @@ export function useDragDrop() {
             description: t.description
           }))
       }))
+    console.log('[useDragDrop] mapped available:', mapped.length, 'servers, first tools:', mapped[0]?.tools?.length)
+    available.value = mapped
     selected.value = []
   }
 
   function initWithSelection(servers: Server[], serverIds: string[], serverTools?: { server_id: string; tool_names: string[] }[]) {
+    console.log('[useDragDrop] initWithSelection called with', servers.length, 'servers, selectedIds:', serverIds, 'serverTools:', JSON.stringify(serverTools), 'active:', servers.filter(s => s.is_active).length)
+    const firstSelected = servers.find(s => serverIds.includes(s.id))
+    if (firstSelected) {
+      console.log('[useDragDrop] first selected server tool_names:', firstSelected.tool_names?.map(t => t.name))
+    }
+    // Build a prefix map: serverId → tool_prefix
+    const prefixMap = new Map<string, string>()
+    for (const s of servers) {
+      if (s.tool_prefix) prefixMap.set(s.id, s.tool_prefix)
+    }
+
     const allServers = servers.filter(s => s.is_active).map(s => ({
       id: s.id,
       name: s.name,
@@ -56,13 +70,31 @@ export function useDragDrop() {
     selected.value = []
     available.value = []
 
+    // Helper: check if a prefixed tool name matches an unprefixed scope name
+    function toolMatchesScope(prefixedName: string, scopeName: string, serverId: string): boolean {
+      if (prefixedName === scopeName) return true
+      const prefix = prefixMap.get(serverId)
+      if (prefix) {
+        // Strip prefix: "ringovers_get_calls" → "get_calls"
+        const unprefixed = prefixedName.startsWith(prefix + '_')
+          ? prefixedName.substring(prefix.length + 1)
+          : prefixedName
+        return unprefixed === scopeName
+      }
+      return false
+    }
+
     for (const srv of allServers) {
       const isSelected = serverIds.includes(srv.id)
       if (isSelected) {
         const toolScope = serverTools?.find(st => st.server_id === srv.id)
         if (toolScope && toolScope.tool_names.length > 0) {
-          const selectedTools = srv.tools.filter(t => toolScope.tool_names.includes(t.name))
-          const remainingTools = srv.tools.filter(t => !toolScope.tool_names.includes(t.name))
+          const selectedTools = srv.tools.filter(t =>
+            toolScope.tool_names.some(scopeName => toolMatchesScope(t.name, scopeName, srv.id))
+          )
+          const remainingTools = srv.tools.filter(t =>
+            !toolScope.tool_names.some(scopeName => toolMatchesScope(t.name, scopeName, srv.id))
+          )
           if (selectedTools.length > 0) {
             selected.value.push({ ...srv, tools: selectedTools })
           }
@@ -76,6 +108,7 @@ export function useDragDrop() {
         available.value.push(srv)
       }
     }
+    console.log('[useDragDrop] result: available=', available.value.length, 'selected=', selected.value.length, 'selectedTools:', selected.value.map(s => s.id + ':' + s.tools.length))
   }
 
   function moveAllToSelected() {

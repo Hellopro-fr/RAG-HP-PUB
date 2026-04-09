@@ -3,6 +3,7 @@ package repository
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
@@ -143,6 +144,9 @@ func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
 		toolActiveState := make(map[string]bool, len(existingTools))
 		for _, t := range existingTools {
 			toolActiveState[t.Name] = t.IsActive
+			if !t.IsActive {
+				log.Printf("[repo] snapshot: tool %s is_active=%v (server %s)", t.Name, t.IsActive, srv.ID)
+			}
 		}
 
 		// Supprime les anciennes capabilities
@@ -162,10 +166,21 @@ func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
 			srv.Tools[i].ServerID = srv.ID
 			if wasActive, existed := toolActiveState[srv.Tools[i].Name]; existed {
 				srv.Tools[i].IsActive = wasActive
+				if !wasActive {
+					log.Printf("[repo] preserving: tool %s is_active=%v (server %s)", srv.Tools[i].Name, wasActive, srv.ID)
+				}
 			} else {
 				srv.Tools[i].IsActive = true // new tools default to active
+				log.Printf("[repo] new tool: %s (server %s), not in snapshot, defaulting to active", srv.Tools[i].Name, srv.ID)
 			}
-			if err := tx.Create(&srv.Tools[i]).Error; err != nil {
+			if err := tx.Exec(
+				"INSERT INTO server_tools (server_id, name, description, input_schema, is_active) VALUES (?, ?, ?, ?, ?)",
+				srv.Tools[i].ServerID,
+				srv.Tools[i].Name,
+				srv.Tools[i].Description,
+				srv.Tools[i].InputSchema,
+				srv.Tools[i].IsActive,
+			).Error; err != nil {
 				return err
 			}
 		}

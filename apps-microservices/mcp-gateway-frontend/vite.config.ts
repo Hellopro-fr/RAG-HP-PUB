@@ -13,45 +13,45 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
       '/login': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
       '/logout': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
       '/token': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
       '/register': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
       '/.well-known': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
       '/sse': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
         ws: true,
       },
       '/mcp': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
         ws: true,
       },
       '/message': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:8581',
+        target: 'http://localhost:8592',
         changeOrigin: true,
       },
     },

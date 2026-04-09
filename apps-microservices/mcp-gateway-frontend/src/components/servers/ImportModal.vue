@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center" @click.self="emit('close')">
+  <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" @click.self="emit('close')">
     <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
       <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Importer .mcp.json</h2>
 

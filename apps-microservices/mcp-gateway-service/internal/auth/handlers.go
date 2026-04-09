@@ -53,16 +53,41 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request, cfg Config) {
 }
 
 func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur de formulaire"), http.StatusSeeOther)
-		return
+	// Detect if this is a JSON API request (from Vue frontend) vs form submit (from Go template)
+	isJSON := strings.Contains(r.Header.Get("Content-Type"), "application/json")
+
+	var username, password string
+
+	if isJSON {
+		var body struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"Corps de requête invalide"}`))
+			return
+		}
+		username = strings.TrimSpace(body.Username)
+		password = body.Password
+	} else {
+		if err := r.ParseForm(); err != nil {
+			http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur de formulaire"), http.StatusSeeOther)
+			return
+		}
+		username = strings.TrimSpace(r.FormValue("username"))
+		password = r.FormValue("password")
 	}
 
-	username := strings.TrimSpace(r.FormValue("username"))
-	password := r.FormValue("password")
-
 	if username == "" || password == "" {
-		http.Redirect(w, r, "/login?error="+url.QueryEscape("Tous les champs sont obligatoires")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		if isJSON {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"Tous les champs sont obligatoires"}`))
+		} else {
+			http.Redirect(w, r, "/login?error="+url.QueryEscape("Tous les champs sont obligatoires")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		}
 		return
 	}
 
@@ -70,12 +95,24 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 	authResp, err := AuthenticateHellopro(cfg.AuthURL, username, password)
 	if err != nil {
 		log.Printf("[auth] hellopro auth failed for %s: %v", username, err)
-		http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur d'authentification")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		if isJSON {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"Erreur d'authentification"}`))
+		} else {
+			http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur d'authentification")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		}
 		return
 	}
 
 	if !authResp.Success {
-		http.Redirect(w, r, "/login?error="+url.QueryEscape("Login / Mot de passe invalide")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		if isJSON {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"Identifiants invalides"}`))
+		} else {
+			http.Redirect(w, r, "/login?error="+url.QueryEscape("Login / Mot de passe invalide")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		}
 		return
 	}
 
@@ -88,29 +125,45 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config) {
 			Exp:      time.Now().Add(24 * time.Hour).Unix(),
 			Iat:      time.Now().Unix(),
 			Name:     authResp.DisplayName,
+			Email:    authResp.Email,
 		}
 		var signErr error
 		token, signErr = SignJWT(cfg.JWTSecret, claims)
 		if signErr != nil {
 			log.Printf("[auth] failed to sign JWT: %v", signErr)
-			http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur serveur"), http.StatusSeeOther)
+			if isJSON {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":"Erreur serveur"}`))
+			} else {
+				http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur serveur"), http.StatusSeeOther)
+			}
 			return
 		}
 	}
 
-	// Set session
+	// Set session cookie (for backward compat with Go template UI)
 	if err := SetSession(w, cfg.JWTSecret, SessionData{
 		DisplayName: authResp.DisplayName,
 		Email:       authResp.Email,
 		Token:       token,
 	}, cfg.SecureCookie); err != nil {
 		log.Printf("[auth] failed to set session: %v", err)
-		http.Redirect(w, r, "/login?error="+url.QueryEscape("Erreur serveur"), http.StatusSeeOther)
-		return
 	}
 
 	log.Printf("[auth] user %s (%s) logged in", authResp.DisplayName, authResp.Email)
-	http.Redirect(w, r, "/ui/", http.StatusSeeOther)
+
+	if isJSON {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"token":        token,
+			"email":        authResp.Email,
+			"display_name": authResp.DisplayName,
+		})
+	} else {
+		http.Redirect(w, r, "/ui/", http.StatusSeeOther)
+	}
 }
 
 func AuthenticateHellopro(authURL, username, password string) (*HelloProAuthResponse, error) {

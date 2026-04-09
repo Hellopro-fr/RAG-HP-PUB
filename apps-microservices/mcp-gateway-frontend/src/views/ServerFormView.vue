@@ -1,6 +1,6 @@
 <template>
-  <div class="p-6 max-w-3xl mx-auto">
-    <!-- Page header -->
+  <div>
+    <!-- Page header (full width) -->
     <div class="mb-6 flex items-center gap-4">
       <button
         type="button"
@@ -15,24 +15,28 @@
       </h1>
     </div>
 
+    <div class="max-w-3xl mx-auto">
+
     <!-- Loading state (edit mode) -->
     <div v-if="loading" class="flex items-center justify-center py-20">
       <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
     </div>
 
     <template v-else>
-      <!-- Step tabs -->
+      <!-- Step tabs (create mode only) -->
       <StepTabs
+        v-if="!isEdit"
         :steps="stepLabels"
         :current-step="currentStep"
         :completed-steps="completedSteps"
         @update:current-step="goToStep"
       />
 
-      <!-- Step content -->
+      <!-- Form content -->
       <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xs border border-gray-200 dark:border-gray-800 p-6">
-        <!-- Step 1: Informations de base -->
-        <div v-show="currentStep === 0" class="space-y-4">
+        <!-- Section 1: Informations de base -->
+        <div v-show="isEdit || currentStep === 0" class="space-y-4">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Informations de base</h3>
           <!-- Name -->
           <div>
             <label for="form-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -169,8 +173,9 @@
           </template>
         </div>
 
-        <!-- Step 2: Tags et configuration -->
-        <div v-show="currentStep === 1" class="space-y-4">
+        <!-- Section 2: Tags et configuration -->
+        <div v-show="isEdit || currentStep === 1" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Tags et configuration</h3>
           <!-- Tags -->
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags</label>
@@ -243,8 +248,8 @@
           </div>
         </div>
 
-        <!-- Step 3: Vérification -->
-        <div v-show="currentStep === 2" class="space-y-4">
+        <!-- Step 3: Vérification (create mode only) -->
+        <div v-if="!isEdit" v-show="currentStep === 2" class="space-y-4">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Récapitulatif</h3>
 
           <dl class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -328,8 +333,28 @@
         </div>
       </div>
 
-      <!-- Navigation buttons -->
-      <div class="flex justify-between mt-6">
+      <!-- Edit mode: single submit -->
+      <div v-if="isEdit" class="flex justify-end gap-3 mt-6">
+        <button
+          type="button"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
+          @click="router.push('/servers')"
+        >
+          Annuler
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
+          :disabled="submitting || !isStep1Valid"
+          @click="handleSubmit"
+        >
+          <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
+          Enregistrer
+        </button>
+      </div>
+
+      <!-- Create mode: step navigation -->
+      <div v-else class="flex justify-between mt-6">
         <button
           v-if="currentStep > 0"
           type="button"
@@ -365,11 +390,12 @@
             @click="handleSubmit"
           >
             <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
-            {{ isEdit ? 'Enregistrer' : 'Créer' }}
+            Créer
           </button>
         </div>
       </div>
     </template>
+    </div>
   </div>
 </template>
 

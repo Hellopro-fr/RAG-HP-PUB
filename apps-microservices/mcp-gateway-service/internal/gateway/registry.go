@@ -31,6 +31,19 @@ func PrefixedToolName(prefix, name string) string {
 	return prefix + "_" + name
 }
 
+// UnprefixedToolName strips the server prefix from a tool name.
+// If the name doesn't start with the prefix, returns the original name.
+func UnprefixedToolName(prefix, name string) string {
+	if prefix == "" {
+		return name
+	}
+	p := prefix + "_"
+	if len(name) > len(p) && name[:len(p)] == p {
+		return name[len(p):]
+	}
+	return name
+}
+
 // prefixedActiveTools returns a copy of active tools with the prefix applied to their names.
 func prefixedActiveTools(prefix string, tools []mcp.Tool) []mcp.Tool {
 	var out []mcp.Tool

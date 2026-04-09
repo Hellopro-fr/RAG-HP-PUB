@@ -1,6 +1,6 @@
 <template>
-  <div class="p-6 max-w-3xl mx-auto">
-    <!-- Page header -->
+  <div>
+    <!-- Page header (full width) -->
     <div class="mb-6 flex items-center gap-4">
       <button
         type="button"
@@ -14,6 +14,8 @@
         {{ isEdit ? 'Modifier le jeton' : 'Nouveau jeton' }}
       </h1>
     </div>
+
+    <div class="max-w-3xl mx-auto">
 
     <!-- Loading state (edit mode) -->
     <div v-if="loading" class="flex items-center justify-center py-20">
@@ -76,18 +78,20 @@
 
     <!-- Step form -->
     <template v-else>
-      <!-- Step tabs -->
+      <!-- Step tabs (create mode only) -->
       <StepTabs
+        v-if="!isEdit"
         :steps="stepLabels"
         :current-step="currentStep"
         :completed-steps="completedSteps"
         @update:current-step="goToStep"
       />
 
-      <!-- Step content -->
+      <!-- Form content -->
       <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xs border border-gray-200 dark:border-gray-800 p-6">
-        <!-- Step 1: Informations de base -->
-        <div v-show="currentStep === 0" class="space-y-4">
+        <!-- Section 1: Informations de base -->
+        <div v-show="isEdit || currentStep === 0" class="space-y-4">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Informations de base</h3>
           <!-- Name -->
           <div>
             <label for="form-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -180,13 +184,21 @@
           </template>
         </div>
 
-        <!-- Step 2: Serveurs et outils -->
-        <div v-show="currentStep === 1">
-          <DragDropPanel :drag-drop="dragDrop" />
+        <!-- Section 2: Serveurs et outils -->
+        <div v-show="isEdit || currentStep === 1" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Serveurs et outils</h3>
+          <DragDropPanel
+            v-if="dragDropReady"
+            :initial-available="dragDrop.available.value"
+            :initial-selected="dragDrop.selected.value"
+            @update:available="v => dragDrop.available.value = v"
+            @update:selected="v => dragDrop.selected.value = v"
+          />
         </div>
 
-        <!-- Step 3: Expiration et verification -->
-        <div v-show="currentStep === 2" class="space-y-4">
+        <!-- Section 3: Expiration et verification -->
+        <div v-show="isEdit || currentStep === 2" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Expiration et options</h3>
           <!-- Expiration toggle -->
           <div>
             <div class="flex items-center gap-2 mb-2">
@@ -221,8 +233,8 @@
             </label>
           </div>
 
-          <!-- Summary -->
-          <div class="mt-6">
+          <!-- Summary (create mode only) -->
+          <div v-if="!isEdit" class="mt-6">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">R&eacute;capitulatif</h3>
             <dl class="divide-y divide-gray-100 dark:divide-gray-800">
               <div class="py-2 grid grid-cols-3 gap-4">
@@ -260,48 +272,30 @@
         </div>
       </div>
 
-      <!-- Navigation buttons -->
-      <div class="flex justify-between mt-6">
-        <button
-          v-if="currentStep > 0"
-          type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-          @click="goBack"
-        >
-          Pr&eacute;c&eacute;dent
+      <!-- Edit mode: single submit -->
+      <div v-if="isEdit" class="flex justify-end gap-3 mt-6">
+        <button type="button" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" @click="router.push('/tokens')">Annuler</button>
+        <button type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="submitting || !form.name.trim()" @click="handleSubmit">
+          <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
+          Enregistrer
         </button>
-        <div v-else />
+      </div>
 
+      <!-- Create mode: step navigation -->
+      <div v-else class="flex justify-between mt-6">
+        <button v-if="currentStep > 0" type="button" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" @click="goBack">Précédent</button>
+        <div v-else />
         <div class="flex gap-3">
-          <button
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-            @click="router.push('/tokens')"
-          >
-            Annuler
-          </button>
-          <button
-            v-if="currentStep < 2"
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-            :disabled="!canGoNext"
-            @click="goNext"
-          >
-            Suivant
-          </button>
-          <button
-            v-if="currentStep === 2"
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-            :disabled="submitting"
-            @click="handleSubmit"
-          >
+          <button type="button" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" @click="router.push('/tokens')">Annuler</button>
+          <button v-if="currentStep < 2" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="!canGoNext" @click="goNext">Suivant</button>
+          <button v-if="currentStep === 2" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="submitting" @click="handleSubmit">
             <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
-            {{ isEdit ? 'Enregistrer' : 'Cr&eacute;er' }}
+            Créer
           </button>
         </div>
       </div>
     </template>
+    </div>
   </div>
 </template>
 
@@ -323,6 +317,7 @@ const serversStore = useServersStore()
 const toast = useToast()
 const clipboard = useClipboard()
 const dragDrop = useDragDrop()
+const dragDropReady = ref(false)
 
 const stepLabels = ['Informations de base', 'Serveurs et outils', 'Expiration et v\u00e9rification']
 const currentStep = ref(0)
@@ -370,12 +365,14 @@ const generatedMcpJson = computed(() => {
   const tokenValue = createdToken.value.token || ''
   const gatewayUrl = window.location.origin
 
+  const headerArg = `Authorization:Bearer ${tokenValue}`
+
   const argsMap: Record<string, string[]> = {
-    npx: ['-y', 'mcp-remote', gatewayUrl + '/sse'],
-    bunx: ['mcp-remote', gatewayUrl + '/sse'],
-    deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/sse'],
-    uvx: ['mcp-remote', gatewayUrl + '/sse'],
-    docker: ['run', '-i', '--rm', 'mcp-remote', gatewayUrl + '/sse']
+    npx: ['-y', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
+    bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
+    deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
+    uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
+    docker: ['run', '-i', '--rm', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
   }
 
   let args: string[]
@@ -383,20 +380,24 @@ const generatedMcpJson = computed(() => {
     const prefixArgs = form.customArgsPrefix.trim()
       ? form.customArgsPrefix.trim().split(/\s+/)
       : []
-    args = [...prefixArgs, gatewayUrl + '/sse']
+    args = [...prefixArgs, gatewayUrl + '/mcp', '--header', headerArg]
   } else {
-    args = argsMap[form.mcp_command] || [gatewayUrl + '/sse']
+    args = argsMap[form.mcp_command] || [gatewayUrl + '/mcp', '--header', headerArg]
   }
 
   return JSON.stringify(
-    { mcpServers: { [serverName]: { command, args, env: { MCP_TOKEN: tokenValue } } } },
+    { mcpServers: { [serverName]: { command, args } } },
     null,
     2
   )
 })
 
 onMounted(async () => {
-  if (!serversStore.servers.length) await serversStore.fetchServers()
+  try {
+    await serversStore.fetchServers()
+  } catch (err) {
+    console.error('[TokenFormView] Failed to fetch servers:', err)
+  }
 
   if (isEdit.value) {
     loading.value = true
@@ -411,6 +412,7 @@ onMounted(async () => {
       }
 
       dragDrop.initWithSelection(serversStore.servers, token.server_ids, token.server_tools)
+      dragDropReady.value = true
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors du chargement du jeton')
       router.push('/tokens')
@@ -419,6 +421,7 @@ onMounted(async () => {
     }
   } else {
     dragDrop.init(serversStore.servers)
+    dragDropReady.value = true
   }
 })
 

@@ -194,6 +194,11 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		Total:   len(servers),
 	}
 	for i := range servers {
+		for _, t := range servers[i].Tools {
+			if !t.IsActive {
+				log.Printf("[api] list: server %s tool %s is_active=%v", servers[i].Name, t.Name, t.IsActive)
+			}
+		}
 		resp.Servers = append(resp.Servers, toServerResponse(&servers[i]))
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -433,6 +438,11 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, _ := h.repo.GetByID(id)
+	for _, t := range updated.Tools {
+		if !t.IsActive {
+			log.Printf("[api] discover: tool %s (server %s) is_active=%v", t.Name, id, t.IsActive)
+		}
+	}
 	writeJSON(w, http.StatusOK, toServerDetailResponse(updated))
 }
 
@@ -464,12 +474,14 @@ func (h *Handler) handleEnableTool(w http.ResponseWriter, r *http.Request, serve
 	if !checkOwnership(r, srv, w) {
 		return
 	}
-	if err := h.repo.SetToolActive(serverID, toolName, true); err != nil {
+	// Strip prefix: API receives prefixed name (e.g. "ringovers_get_calls"),
+	// but DB stores unprefixed name (e.g. "get_calls")
+	dbToolName := gateway.UnprefixedToolName(srv.ToolPrefix, toolName)
+	if err := h.repo.SetToolActive(serverID, dbToolName, true); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to enable tool"})
 		return
 	}
-	// Sync the in-memory registry so MCP clients see the change immediately
-	h.registry.SetToolActive(serverID, toolName, true)
+	h.registry.SetToolActive(serverID, dbToolName, true)
 	updated, _ := h.repo.GetByID(serverID)
 	writeJSON(w, http.StatusOK, toServerResponse(updated))
 }
@@ -483,12 +495,13 @@ func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serv
 	if !checkOwnership(r, srv, w) {
 		return
 	}
-	if err := h.repo.SetToolActive(serverID, toolName, false); err != nil {
+	// Strip prefix: API receives prefixed name, DB stores unprefixed name
+	dbToolName := gateway.UnprefixedToolName(srv.ToolPrefix, toolName)
+	if err := h.repo.SetToolActive(serverID, dbToolName, false); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable tool"})
 		return
 	}
-	// Sync the in-memory registry so MCP clients see the change immediately
-	h.registry.SetToolActive(serverID, toolName, false)
+	h.registry.SetToolActive(serverID, dbToolName, false)
 	updated, _ := h.repo.GetByID(serverID)
 	writeJSON(w, http.StatusOK, toServerResponse(updated))
 }

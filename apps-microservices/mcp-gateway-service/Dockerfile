@@ -18,9 +18,9 @@ RUN chown appuser:appuser ./mcp-gateway
 
 USER appuser
 
-EXPOSE 8581
+EXPOSE 8592
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost:8581/health || exit 1
+  CMD wget -qO- http://localhost:8592/health || exit 1
 
 CMD ["./mcp-gateway"]

@@ -14,6 +14,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 RUN chown -R appuser:appgroup /var/cache/nginx /var/log/nginx /usr/share/nginx/html \
     && touch /var/run/nginx.pid && chown appuser:appgroup /var/run/nginx.pid
 USER appuser
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8080/ || exit 1
+EXPOSE 8581
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8581/ || exit 1
 CMD ["nginx", "-g", "daemon off;"]

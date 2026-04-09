@@ -78,24 +78,50 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 				}
 			}
 
-			// Check session
+			// Try Authorization: Bearer header first (Vue frontend sends this)
+			if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+				token := strings.TrimPrefix(authHeader, "Bearer ")
+				claims, err := ValidateJWT(token, cfg.JWTSecret, cfg.JWTAudience)
+				if err == nil {
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, ContextKeyUserEmail, claims.Email)
+					ctx = context.WithValue(ctx, ContextKeyUserName, claims.Name)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				log.Printf("[auth] invalid bearer token for %s: %v", path, err)
+			}
+
+			// Fall back to session cookie
 			session, err := GetSession(r, cfg.JWTSecret)
 			if err != nil {
 				log.Printf("[auth] no valid session for %s: %v", path, err)
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				if strings.HasPrefix(path, "/api/") {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte(`{"error":"not authenticated"}`))
+				} else {
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
+				}
 				return
 			}
 
-			// Validate JWT token in session
+			// Validate JWT token in session cookie
 			_, err = ValidateJWT(session.Token, cfg.JWTSecret, cfg.JWTAudience)
 			if err != nil {
-				log.Printf("[auth] invalid token for %s: %v", path, err)
+				log.Printf("[auth] invalid session token for %s: %v", path, err)
 				ClearSession(w)
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				if strings.HasPrefix(path, "/api/") {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte(`{"error":"not authenticated"}`))
+				} else {
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
+				}
 				return
 			}
 
-			// Inject user identity into request context
+			// Inject user identity from session cookie
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, ContextKeyUserEmail, session.Email)
 			ctx = context.WithValue(ctx, ContextKeyUserName, session.DisplayName)

@@ -1,6 +1,6 @@
 <template>
-  <div class="p-6 max-w-3xl mx-auto">
-    <!-- Page header -->
+  <div>
+    <!-- Page header (full width) -->
     <div class="mb-6 flex items-center gap-4">
       <button
         type="button"
@@ -14,6 +14,8 @@
         {{ isEdit ? 'Modifier le client OAuth2' : 'Nouveau client OAuth2' }}
       </h1>
     </div>
+
+    <div class="max-w-3xl mx-auto">
 
     <!-- Post-creation display -->
     <template v-if="createdClient">
@@ -109,18 +111,20 @@
 
     <!-- Step form -->
     <template v-else>
-      <!-- Step tabs -->
+      <!-- Step tabs (create mode only) -->
       <StepTabs
+        v-if="!isEdit"
         :steps="stepLabels"
         :current-step="currentStep"
         :completed-steps="completedSteps"
         @update:current-step="goToStep"
       />
 
-      <!-- Step content -->
+      <!-- Form content -->
       <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xs border border-gray-200 dark:border-gray-800 p-6">
-        <!-- Step 1: Informations de base -->
-        <div v-show="currentStep === 0" class="space-y-4">
+        <!-- Section 1: Informations de base -->
+        <div v-show="isEdit || currentStep === 0" class="space-y-4">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Informations de base</h3>
           <!-- Name -->
           <div>
             <label for="form-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -167,16 +171,24 @@
           </div>
         </div>
 
-        <!-- Step 2: Serveurs et outils -->
-        <div v-show="currentStep === 1">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <!-- Section 2: Serveurs et outils -->
+        <div v-show="isEdit || currentStep === 1" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Serveurs et outils</h3>
+          <label v-else class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Serveurs et outils autorisés
           </label>
-          <DragDropPanel :drag-drop="dragDrop" />
+          <DragDropPanel
+            v-if="dragDropReady"
+            :initial-available="dragDrop.available.value"
+            :initial-selected="dragDrop.selected.value"
+            @update:available="v => dragDrop.available.value = v"
+            @update:selected="v => dragDrop.selected.value = v"
+          />
         </div>
 
-        <!-- Step 3: TTL, expiration et vérification -->
-        <div v-show="currentStep === 2" class="space-y-4">
+        <!-- Section 3: TTL, expiration et vérification -->
+        <div v-show="isEdit || currentStep === 2" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">TTL et expiration</h3>
           <!-- TTL -->
           <div>
             <label for="form-ttl" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -226,8 +238,8 @@
             />
           </div>
 
-          <!-- Summary -->
-          <div class="border-t border-gray-100 dark:border-gray-800 pt-4">
+          <!-- Summary (create mode only) -->
+          <div v-if="!isEdit" class="border-t border-gray-100 dark:border-gray-800 pt-4">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Récapitulatif</h3>
             <dl class="divide-y divide-gray-100 dark:divide-gray-800">
               <div class="py-2 grid grid-cols-3 gap-4">
@@ -263,48 +275,30 @@
         </div>
       </div>
 
-      <!-- Navigation buttons -->
-      <div class="flex justify-between mt-6">
-        <button
-          v-if="currentStep > 0"
-          type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-          @click="goBack"
-        >
-          Précédent
+      <!-- Edit mode: single submit -->
+      <div v-if="isEdit" class="flex justify-end gap-3 mt-6">
+        <button type="button" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" @click="router.push('/oauth2')">Annuler</button>
+        <button type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="submitting || !form.name.trim()" @click="handleSubmit">
+          <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
+          Enregistrer
         </button>
-        <div v-else />
+      </div>
 
+      <!-- Create mode: step navigation -->
+      <div v-else class="flex justify-between mt-6">
+        <button v-if="currentStep > 0" type="button" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" @click="goBack">Précédent</button>
+        <div v-else />
         <div class="flex gap-3">
-          <button
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-            @click="router.push('/oauth2')"
-          >
-            Annuler
-          </button>
-          <button
-            v-if="currentStep < 2"
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-            :disabled="!canGoNext"
-            @click="goNext"
-          >
-            Suivant
-          </button>
-          <button
-            v-if="currentStep === 2"
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-            :disabled="submitting"
-            @click="handleSubmit"
-          >
+          <button type="button" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" @click="router.push('/oauth2')">Annuler</button>
+          <button v-if="currentStep < 2" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="!canGoNext" @click="goNext">Suivant</button>
+          <button v-if="currentStep === 2" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="submitting" @click="handleSubmit">
             <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
-            {{ isEdit ? 'Enregistrer' : 'Générer les identifiants' }}
+            Générer les identifiants
           </button>
         </div>
       </div>
     </template>
+    </div>
   </div>
 </template>
 
@@ -326,6 +320,7 @@ const serversStore = useServersStore()
 const toast = useToast()
 const clipboard = useClipboard()
 const dragDrop = useDragDrop()
+const dragDropReady = ref(false)
 
 const stepLabels = ['Informations de base', 'Serveurs et outils', 'TTL, expiration et vérification']
 const currentStep = ref(0)
@@ -373,8 +368,10 @@ const canGoNext = computed(() => {
 })
 
 onMounted(async () => {
-  if (!serversStore.servers.length) {
+  try {
     await serversStore.fetchServers()
+  } catch (err) {
+    console.error('[ClientFormView] Failed to fetch servers:', err)
   }
 
   if (isEdit.value) {
@@ -394,6 +391,7 @@ onMounted(async () => {
         client.server_ids,
         client.server_tools
       )
+      dragDropReady.value = true
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors du chargement du client')
       router.push('/oauth2')
@@ -402,6 +400,7 @@ onMounted(async () => {
     }
   } else {
     dragDrop.init(serversStore.servers)
+    dragDropReady.value = true
   }
 })
 

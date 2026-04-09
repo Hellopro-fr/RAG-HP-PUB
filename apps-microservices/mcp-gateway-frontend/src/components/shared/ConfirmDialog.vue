@@ -1,7 +1,7 @@
 <template>
   <DialogRoot :open="open" @update:open="emit('update:open', $event)">
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 bg-black/50 z-40" />
+      <DialogOverlay class="fixed inset-0 bg-black/50 z-50" />
       <DialogContent
         class="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-gray-900 p-6 shadow-theme-xl"
       >

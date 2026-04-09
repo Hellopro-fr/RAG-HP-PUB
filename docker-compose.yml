@@ -2243,10 +2243,10 @@ services:
     container_name: mcp-gateway-service
     profiles: ["mcp"]
     restart: unless-stopped
-    ports:
-      - "${MCP_GATEWAY_PORT:-8581}:${MCP_GATEWAY_PORT:-8581}"
+    expose:
+      - "8592"
     environment:
-      - MCP_GATEWAY_PORT=${MCP_GATEWAY_PORT:-8581}
+      - MCP_GATEWAY_PORT=8592
       - MCP_GATEWAY_NAME=${MCP_GATEWAY_NAME:-hellopro-mcp-gateway}
       - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/${GATEWAY_MYSQL_DB:-gateway_db}?parseTime=true&multiStatements=true
       - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
@@ -2274,7 +2274,7 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${MCP_GATEWAY_PORT:-8581}:8581"
     networks:
       - services-net
     logging: *logging_defaults

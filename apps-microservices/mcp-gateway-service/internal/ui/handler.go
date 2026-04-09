@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-//go:embed static/*
+//go:embed all:static
 var staticFiles embed.FS
 
 // Register mounts the UI routes on the given mux.

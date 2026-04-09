@@ -59,8 +59,9 @@ export const serversApi = {
     return api.post<ImportResult>(`${BASE}/servers/import`, { config: json, auto_discover: autoDiscover })
   },
 
-  listTags(): Promise<string[]> {
-    return api.get<string[]>(`${BASE}/tags`)
+  async listTags(): Promise<string[]> {
+    const response = await api.get<{ tags: string[] }>(`${BASE}/tags`)
+    return response.tags || []
   },
 
   listTools(): Promise<unknown[]> {
