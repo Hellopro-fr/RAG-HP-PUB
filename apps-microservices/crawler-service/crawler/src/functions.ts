@@ -469,33 +469,39 @@ export const startCrawler = async (
         });
     }
 
+    // Camoufox: resolve launch options BEFORE constructing crawler (async)
+    const camoufoxOpts = camoufoxEnabled
+        ? await camoufoxLaunchOptions({ headless: true })
+        : null;
+
     let optionsCrawler: PlaywrightCrawlerOptions = {
         // Router to handle different URL patterns and their processing logic
         requestHandler: router,
 
         // RequestQueue
         requestQueue,
-        
+
+        // Camoufox mode: set launcher to Firefox at the top level (not in preLaunchHooks)
+        // This ensures Crawlee/BrowserPool uses Firefox flags, not Chromium flags
+        ...(camoufoxEnabled && camoufoxOpts ? {
+            launchContext: {
+                launcher: firefox,
+                launchOptions: {
+                    ...camoufoxOpts,
+                    args: [
+                        ...(camoufoxOpts.args || []),
+                        '--ignore-certificate-errors',
+                    ],
+                },
+            },
+        } : {}),
+
         // V3 Optimization: Browser Pool settings
         browserPoolOptions: camoufoxEnabled ? {
-            // Camoufox mode: stealth Firefox with C++ anti-detection
-            // Disable Crawlee's JS-level fingerprinting to avoid conflicts with Camoufox's engine-level spoofing
+            // Camoufox mode: disable Crawlee's JS-level fingerprinting
+            // to avoid conflicts with Camoufox's engine-level spoofing
             useFingerprints: false,
             retireBrowserAfterPageCount: 25,
-            preLaunchHooks: [
-                async (_pageId, launchContext) => {
-                    // Switch launcher to Firefox (Camoufox is Firefox-based, not Chromium)
-                    launchContext.launcher = firefox;
-                    const opts = await camoufoxLaunchOptions({ headless: true });
-                    launchContext.launchOptions = {
-                        ...opts,
-                        args: [
-                            ...(opts.args || []),
-                            '--ignore-certificate-errors',
-                        ],
-                    };
-                },
-            ],
         } : {
             // Fallback mode: Playwright multi-browser rotation with fingerprinting
             fingerprintOptions: {
