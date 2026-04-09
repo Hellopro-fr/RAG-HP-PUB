@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     BATCH_DEFAULT_CONCURRENCY: int = 10
     BATCH_MAX_CONCURRENCY: int = 50
     
+    # Browser
+    CAMOUFOX_ENABLED: bool = True  # Use Camoufox (stealth Firefox). False = Playwright Chromium fallback.
+
     # Redis cache
     REDIS_URL: Optional[str] = None
 

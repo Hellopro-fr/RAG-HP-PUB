@@ -5,6 +5,8 @@ import uuid
 from typing import Optional
 from urllib.parse import urlparse
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -140,6 +142,60 @@ def _parse_proxy(proxy: str) -> Optional[dict]:
         return None
 
 
+async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] = None):
+    """
+    Lance un navigateur Camoufox (stealth Firefox) ou Playwright Chromium (fallback).
+
+    Camoufox gère le fingerprinting au niveau C++ du moteur Firefox :
+    navigator.webdriver, WebGL, WebRTC, AudioContext, screen dimensions.
+    Pas besoin de rotation User-Agent manuelle — Camoufox le fait nativement.
+
+    Args:
+        playwright_instance: Instance Playwright (depuis async_playwright())
+        playwright_proxy: Dict proxy au format Playwright (optionnel pour Camoufox)
+
+    Returns:
+        Tuple (browser, is_camoufox: bool) — le browser est un objet Playwright standard.
+    """
+    if settings.CAMOUFOX_ENABLED:
+        try:
+            from camoufox import AsyncNewBrowser
+
+            # Camoufox accepts proxy in the same Playwright dict format
+            browser = await asyncio.wait_for(
+                AsyncNewBrowser(
+                    playwright_instance,
+                    headless=True,
+                    proxy=playwright_proxy,
+                ),
+                timeout=45,
+            )
+            logger.info("Navigateur Camoufox (stealth Firefox) lancé")
+            return browser, True
+
+        except ImportError:
+            logger.warning("Package camoufox non installé, fallback vers Chromium")
+        except asyncio.TimeoutError:
+            logger.warning("Timeout lancement Camoufox (45s), fallback vers Chromium")
+        except Exception as e:
+            logger.warning(f"Erreur lancement Camoufox: {e}, fallback vers Chromium")
+
+    # Fallback: Playwright Chromium
+    browser = await playwright_instance.chromium.launch(
+        headless=True,
+        proxy=playwright_proxy,
+        args=[
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-blink-features=AutomationControlled',
+        ],
+    )
+    logger.info("Navigateur Playwright Chromium lancé (fallback)")
+    return browser, False
+
+
 async def _setup_resource_blocking(page) -> None:
     """
     Configure le blocage des ressources lourdes sur une page Playwright.
@@ -232,33 +288,25 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
         logger.error(f"Proxy invalide pour {url}: {proxy}")
         return None
 
-    # Rotation aléatoire du User-Agent
-    user_agent = random.choice(_USER_AGENTS)
-
     browser = None
+    is_camoufox = False
     try:
         async with _BROWSER_SEMAPHORE:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    proxy=playwright_proxy,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--disable-blink-features=AutomationControlled',
-                    ],
-                )
+                browser, is_camoufox = await _launch_browser(p, playwright_proxy)
 
-                context = await browser.new_context(
-                    user_agent=user_agent,
-                    locale='fr-FR',
-                    ignore_https_errors=True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
-                    extra_http_headers={
+                # Camoufox handles UA/fingerprinting at engine level — only set for Chromium
+                context_options = {
+                    'locale': 'fr-FR',
+                    'ignore_https_errors': True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
+                    'extra_http_headers': {
                         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                    }
-                )
+                    },
+                }
+                if not is_camoufox:
+                    context_options['user_agent'] = random.choice(_USER_AGENTS)
+
+                context = await browser.new_context(**context_options)
 
                 # Injection cookie de consentement (comme crawler-service)
                 await _inject_cookie_consent(context, url)
@@ -430,33 +478,26 @@ async def scrape_html_with_redirects(
     if not playwright_proxy:
         return {'success': False, 'error': f'Proxy invalide: {proxy}'}
 
-    user_agent = random.choice(_USER_AGENTS)
     redirects = []
 
     browser = None
+    is_camoufox = False
     try:
         async with _BROWSER_SEMAPHORE:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    proxy=playwright_proxy,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--disable-blink-features=AutomationControlled',
-                    ],
-                )
+                browser, is_camoufox = await _launch_browser(p, playwright_proxy)
 
-                context = await browser.new_context(
-                    user_agent=user_agent,
-                    locale='fr-FR',
-                    ignore_https_errors=True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
-                    extra_http_headers={
+                context_options = {
+                    'locale': 'fr-FR',
+                    'ignore_https_errors': True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
+                    'extra_http_headers': {
                         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                    }
-                )
+                    },
+                }
+                if not is_camoufox:
+                    context_options['user_agent'] = random.choice(_USER_AGENTS)
+
+                context = await browser.new_context(**context_options)
 
                 await _inject_cookie_consent(context, url)
 
