@@ -111,6 +111,15 @@ At startup, after fetching robots.txt, the crawler checks if the site has a blan
 - `robots_txt_bypassed: true` is included in `_callback_payload.json` for observability
 - Selective blocks (e.g., `Disallow: /products/`) are NOT bypassed
 
+## Camoufox Default Browser
+
+The crawler uses **Camoufox** (stealth Firefox with C++ anti-detection patches) as the default browser. Unlike Crawlee's built-in fingerprinting (JavaScript injection), Camoufox spoofs `navigator.webdriver`, WebGL, WebRTC, AudioContext, and screen dimensions at the browser engine level — undetectable by JS inspection.
+
+- **Default (`camoufox: true` or omitted):** Camoufox stealth Firefox via `camoufox-js` (official Apify package)
+- **Opt-out (`camoufox: false`):** Falls back to Playwright multi-browser rotation (Chrome/Firefox/Safari)
+- `camoufox_used: true/false` is included in `_callback_payload.json` for observability
+- Dependency: `camoufox-js` — browser binary baked into Docker image at build time
+
 ## Exit Codes (Node.js → Python)
 
 | Code | Meaning | Python Behavior |
