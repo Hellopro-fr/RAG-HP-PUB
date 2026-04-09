@@ -620,6 +620,14 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
                 "message": error_msg
             }
 
+        # Compatibilité prix_median <-> prix_moyen dans fourchette
+        fourchette = parsed.get("fourchette")
+        if isinstance(fourchette, dict):
+            if "prix_moyen" in fourchette and "prix_median" not in fourchette:
+                fourchette["prix_median"] = fourchette["prix_moyen"]
+            elif "prix_median" in fourchette and "prix_moyen" not in fourchette:
+                fourchette["prix_moyen"] = fourchette["prix_median"]
+
         return {
             "success": True,
             "reponse": parsed,
