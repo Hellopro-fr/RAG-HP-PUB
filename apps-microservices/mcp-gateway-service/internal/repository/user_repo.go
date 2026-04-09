@@ -10,12 +10,17 @@ import (
 
 // UserRepo provides CRUD operations on gateway users via GORM.
 type UserRepo struct {
-	db *gorm.DB
+	db          *gorm.DB
+	adminEmails map[string]bool // emails that get admin role on first login
 }
 
-// NewUserRepo creates a new UserRepo.
-func NewUserRepo(database *gorm.DB) *UserRepo {
-	return &UserRepo{db: database}
+// NewUserRepo creates a new UserRepo. adminEmails are promoted to admin on first login.
+func NewUserRepo(database *gorm.DB, adminEmails []string) *UserRepo {
+	m := make(map[string]bool, len(adminEmails))
+	for _, e := range adminEmails {
+		m[e] = true
+	}
+	return &UserRepo{db: database, adminEmails: m}
 }
 
 // UpsertOnLogin creates or updates a GatewayUser on successful login.
@@ -30,11 +35,15 @@ func (r *UserRepo) UpsertOnLogin(email, displayName string) (*db.GatewayUser, er
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
-		// Create new user with defaults.
+		// Create new user — admin if in ADMIN_EMAILS, otherwise config-only.
+		role := "config-only"
+		if r.adminEmails[email] {
+			role = "admin"
+		}
 		user = db.GatewayUser{
 			Email:       email,
 			DisplayName: displayName,
-			Role:        "config-only",
+			Role:        role,
 			LoginCount:  1,
 			LastLoginAt: &now,
 		}

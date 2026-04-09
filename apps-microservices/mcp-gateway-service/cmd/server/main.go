@@ -37,6 +37,11 @@ func main() {
 		log.Fatalf("[main] FATAL: JWT_SECRET environment variable must be set when AUTH_ENABLED=true. Generate one with: openssl rand -hex 32")
 	}
 
+	// RBAC: ADMIN_EMAILS must be set to bootstrap at least one admin user
+	if len(cfg.AdminEmails) == 0 {
+		log.Fatalf("[main] FATAL: ADMIN_EMAILS environment variable must be set with at least one email address for initial admin access")
+	}
+
 	log.Printf("[main] starting %s v%s on :%s", cfg.Name, cfg.Version, cfg.Port)
 
 	registry := gateway.NewRegistry()
@@ -67,7 +72,7 @@ func main() {
 		}
 
 		repo = repository.NewServerRepo(database, encryptor)
-		userRepo = repository.NewUserRepo(database)
+		userRepo = repository.NewUserRepo(database, cfg.AdminEmails)
 		auditRepo = repository.NewAuditRepo(database)
 
 		// Charge les serveurs actifs depuis la base de données

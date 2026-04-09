@@ -27,6 +27,8 @@ type Config struct {
 	OAuth2RefreshTokenTTL int    // OAUTH2_REFRESH_TOKEN_TTL — refresh token lifetime in seconds (default 2592000 = 30 days)
 	// URL validation
 	AllowInternalURLs bool // ALLOW_INTERNAL_URLS — set to "true" to allow Docker-internal/private IP ranges (e.g. 172.x.x.x)
+	// RBAC
+	AdminEmails []string // ADMIN_EMAILS — comma-separated emails that get admin role on first login
 }
 
 func Load() *Config {
@@ -86,7 +88,22 @@ func Load() *Config {
 		OAuth2AccessTokenTTL:  oauth2TTL,
 		OAuth2RefreshTokenTTL: refreshTTL,
 		AllowInternalURLs:   strings.EqualFold(os.Getenv("ALLOW_INTERNAL_URLS"), "true"),
+		AdminEmails:         parseCSV(os.Getenv("ADMIN_EMAILS")),
 	}
+}
+
+func parseCSV(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var result []string
+	for _, s := range strings.Split(raw, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 func getEnv(key, defaultVal string) string {

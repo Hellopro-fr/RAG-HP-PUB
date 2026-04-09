@@ -250,15 +250,10 @@ func isAdminOnly(path, method string) bool {
 
 // isReadOnlyPlus returns true when the path+method combination requires at least read-only.
 func isReadOnlyPlus(path, method string) bool {
-	// Server reads
-	if strings.HasPrefix(path, "/api/v1/servers") && method == http.MethodGet {
-		return true
-	}
-	// Aggregated views
-	if path == "/api/v1/tags" || path == "/api/v1/tools" ||
-		path == "/api/v1/resources" || path == "/api/v1/prompts" {
-		return true
-	}
+	// Server reads are allowed for ALL authenticated users (config-only needs server list
+	// for token/client creation forms). The Servers PAGE is hidden in the frontend sidebar
+	// for config-only, but the API itself is open to all roles.
+	// Aggregated views are also open to all authenticated users.
 	return false
 }
 
