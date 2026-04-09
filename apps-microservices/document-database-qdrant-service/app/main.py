@@ -9,6 +9,7 @@ from document_database_qdrant_service.messaging.consumer import Consumer
 from document_database_qdrant_service.messaging.publisher import Publisher
 from common_utils.concurrency.config import GuardConfig
 from common_utils.concurrency.milvus_concurrency_guard import MilvusConcurrencyGuard
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,6 +26,9 @@ async def main():
         exit(1)
 
     logger.info("Database-Document-processor-service: Démarrage...")
+
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
 
     loop = asyncio.get_event_loop()
     

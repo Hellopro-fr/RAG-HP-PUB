@@ -7,6 +7,7 @@ import traceback
 from document_database_qdrant_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_database_qdrant_service.core.processor import insertion_data # Importe la logique métier
 from common_utils.autres.DLQProperties import DLQProperties
+from common_utils.metrics.prometheus import measure_processing_time
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class Consumer:
                     return death.get('count', 0)
         return 0
 
+    @measure_processing_time(service_name="document-database-qdrant-service")
     async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Tâche pour traiter un seul message, y compris la logique de retry/dlq."""
         try:
