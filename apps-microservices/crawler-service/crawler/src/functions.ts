@@ -23,6 +23,7 @@ import {
     UrlParameters,
 } from "./interfaces/queue.js";
 import { context } from "./context.js";
+import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -437,7 +438,8 @@ export const startCrawler = async (
     bypassDiez?: boolean,
     skipquestionmark?: boolean,
     skipdiez?: boolean,
-    containerMemoryMb?: number
+    containerMemoryMb?: number,
+    camoufoxEnabled?: boolean
 ) => {
     const requestQueue = await RequestQueue.open(domain);
 
@@ -475,7 +477,23 @@ export const startCrawler = async (
         requestQueue,
         
         // V3 Optimization: Browser Pool settings
-        browserPoolOptions: {
+        browserPoolOptions: camoufoxEnabled ? {
+            // Camoufox mode: stealth Firefox with C++ anti-detection
+            retireBrowserAfterPageCount: 25,
+            preLaunchHooks: [
+                async (_pageId, launchContext) => {
+                    const opts = await camoufoxLaunchOptions({});
+                    launchContext.launchOptions = {
+                        ...opts,
+                        args: [
+                            ...(opts.args || []),
+                            '--ignore-certificate-errors',
+                        ],
+                    };
+                },
+            ],
+        } : {
+            // Fallback mode: Playwright multi-browser rotation with fingerprinting
             fingerprintOptions: {
                 fingerprintGeneratorOptions: {
                     browsers: ["firefox", "chrome", "safari"],
@@ -484,7 +502,7 @@ export const startCrawler = async (
                     operatingSystems: ["windows", "macos", "linux"],
                 },
             },
-            retireBrowserAfterPageCount: 25, // Prevent memory leaks in Chrome
+            retireBrowserAfterPageCount: 25,
             // Ignorer les erreurs de certificat SSL (ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR)
             // Permet de crawler des sites avec certificats expirés ou auto-signés
             preLaunchHooks: [
