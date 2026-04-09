@@ -763,55 +763,6 @@ services:
       replicas: 4
     logging: *logging_defaults
 
-  categories-processor-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: categories-processor-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
-  fournisseurs-processor-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/fournisseurs-processor-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: fournisseurs-processor-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
-  ocr-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/ocr-service/Dockerfile
-    profiles: ["app"] # Profile for the main application stack
-    restart: unless-stopped
-    ports:
-      - "8559:8559"
-    environment:
-      - VLLM_DEVICE=cuda
-    env_file:
-      - .env
-    networks:
-      - services-net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["0"]
-              capabilities: [gpu]
-    logging: *logging_defaults
-
   deepseek-ocr:
     build:
       context: .
@@ -864,8 +815,6 @@ services:
       - .env
     networks:
       - services-net
-    # depends_on:
-    #   - ocr-service
     deploy:
       replicas: 2
     logging: *logging_defaults
@@ -1043,38 +992,12 @@ services:
       - services-net
     logging: *logging_defaults
 
-  categories-database-qdrant-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/categories-database-qdrant-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: categories-database-qdrant-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
-  fournisseurs-database-qdrant-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: fournisseurs-database-qdrant-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
   document-database-qdrant-service:
     build:
       context: .
       dockerfile: ./apps-microservices/document-database-qdrant-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
-    # container_name: fournisseurs-database-qdrant-service
+    # container_name: document-database-qdrant-service
     restart: unless-stopped
     expose:
       - "8530"
@@ -1129,19 +1052,6 @@ services:
     networks:
       - services-net
     restart: unless-stopped
-    logging: *logging_defaults
-
-  api-check-doublon-produit:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/api-check-doublon-produit/Dockerfile
-    container_name: api-check-doublon-produit
-    profiles: ["app"] # Profile for the main application stack
-    restart: unless-stopped
-    ports:
-      - "8516:8516"
-    env_file:
-      - .env
     logging: *logging_defaults
 
   optimize-service:
