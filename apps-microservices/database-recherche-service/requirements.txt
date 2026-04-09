@@ -7,3 +7,4 @@ uvloop
 python-dotenv
 googleapis-common-protos
 prometheus-client
+waitress
