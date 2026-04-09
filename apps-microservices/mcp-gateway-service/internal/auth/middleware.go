@@ -49,8 +49,9 @@ var publicPrefixes = []string{
 	"/sse",          // MCP SSE transport (machine-to-machine)
 	"/mcp",          // MCP streamable HTTP transport (machine-to-machine)
 	"/openapi.json",
-	"/authorize",    // OAuth2 authorization endpoint
-	"/token",        // OAuth2 token endpoint
+	"/authorize",                  // OAuth2 authorization endpoint
+	"/token",                      // OAuth2 token endpoint
+	"/api/v1/oauth2/authorize",    // OAuth2 authorize API (Vue frontend)
 	// "/register" intentionally NOT public — requires admin session to prevent abuse
 	"/.well-known",  // OAuth2 server metadata
 }
