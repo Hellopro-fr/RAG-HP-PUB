@@ -535,6 +535,7 @@ export const startCrawler = async (
                 'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
                 'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
                 'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
+                'ERR_TOO_MANY_REDIRECTS',    // Boucle de redirection infinie
                 'Download is starting',      // Playwright binary download trigger
                 'net::ERR_ABORTED',          // Navigation aborted (often binary content)
                 'Execution context was destroyed', // Page destroyed during download
