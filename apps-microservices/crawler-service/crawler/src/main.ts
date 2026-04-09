@@ -854,7 +854,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         isError: isError,
         storagePath: storagePath,
         message_erreur_crawling: messageErreurCrawling || null,
-        robots_txt_bypassed: context.robotsTxtBypassed
+        robots_txt_bypassed: context.robotsTxtBypassed,
+        camoufox_used: context.camoufoxEnabled
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
@@ -1016,7 +1017,8 @@ if (typeCrawling == "sitemap") {
         bypassDiez,
         skipquestionmark,
         skipdiez,
-        containerMemoryMb
+        containerMemoryMb,
+        camoufoxEnabled
     );
 
     process.on('SIGTERM', async () => {
