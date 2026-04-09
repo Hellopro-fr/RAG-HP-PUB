@@ -17,6 +17,13 @@
               :title="'Santé: ' + (server.health_status || 'inconnu')"
             />
           </div>
+          <span
+            v-if="server.created_by"
+            class="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[200px]"
+            :title="server.created_by"
+          >
+            par {{ server.created_by }}
+          </span>
           <div v-if="server.tags?.length" class="flex flex-wrap gap-1">
             <span
               v-for="tag in server.tags"
