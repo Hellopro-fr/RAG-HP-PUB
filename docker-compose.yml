@@ -522,52 +522,6 @@ services:
     restart: unless-stopped
     logging: *logging_defaults
 
-  api-classification-v2-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/api-classification-v2/Dockerfile
-    #container_name: api-classification-v2-service
-    profiles: ["disabled"] # Profile for the main application stack
-    restart: unless-stopped
-    environment:
-      - LLM_SERVICE_URL=llm-service:50051
-      - CLASSIFICATION_SERVICE_NAME=api-classification-v2-service
-      - CLASSIFICATION_SERVICE_PORT=8578
-      - CLASSIFICATION_NUM_REPLICAS=4
-      # Variables nécessaires pour api_recherche_lib (recherche interne)
-      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
-      - RERANKING_SERVICE_URL=reranking-model-service:50053
-      - DATABASE_SERVICE_URL=database-recherche-service:50054
-      - SERVICE_NAME=api-classification-v2-service
-      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
-    depends_on:
-      - llm-service
-      - embedding-model-service
-      - reranking-model-service
-      - database-recherche-service
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    networks:
-      - services-net
-    logging: *logging_defaults
-
-  api-classification-v2-lb:
-    image: nginx:alpine
-    container_name: api-classification-v2-lb
-    profiles: ["disabled"]
-    ports:
-      - "8578:80"
-    volumes:
-      - ./apps-microservices/api-classification-v2/nginx-classification-v2.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api-classification-v2-service
-    networks:
-      - services-net
-    restart: unless-stopped
-    logging: *logging_defaults
-
   api-transcription-service:
     build:
       context: .
