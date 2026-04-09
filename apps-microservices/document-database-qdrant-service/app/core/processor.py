@@ -13,6 +13,9 @@ MILVUS_VARCHAR_MAX = 65535
 base_vectorielle = MilvusDocumentCrud()
 pj_crud = MilvusPjCrud()
 
+# Initialized by main.py at startup
+_concurrency_guard = None
+
 
 async def insertion_data(document_data: dict) -> dict:
     """
@@ -58,6 +61,14 @@ async def insertion_data(document_data: dict) -> dict:
 
     func = processing_functions.get(collection_enum)
 
+    if _concurrency_guard:
+        async with _concurrency_guard.slot():
+            return await _do_milvus_operations(documents, page_type, nb_pages, collection, bdd, func)
+    return await _do_milvus_operations(documents, page_type, nb_pages, collection, bdd, func)
+
+
+async def _do_milvus_operations(documents, page_type, nb_pages, collection, bdd, func):
+    """Execute all Milvus CRUD calls (documents and PJs)."""
     result = []
     fichier_source = ""
     output_message = None

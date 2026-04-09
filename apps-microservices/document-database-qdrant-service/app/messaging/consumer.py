@@ -114,7 +114,7 @@ class Consumer:
 
         # 1. Crée le channel de consommation et configure le prefetch
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=100)
+        await channel.set_qos(prefetch_count=10)
 
         # 2. Crée un channel dédié à la publication (évite l'ouverture d'un channel par message)
         self._publish_channel = await self.connection.channel()
@@ -123,7 +123,7 @@ class Consumer:
         queue = await self._setup_queues(channel)
         
         # 3. Crée un semaphore pour limiter le nombre de traitements simultanés
-        semaphore = asyncio.Semaphore(100)
+        semaphore = asyncio.Semaphore(10)
         
         async def safe_process(message):
             """Wrapper pour limiter le parallélisme et capturer les erreurs."""
