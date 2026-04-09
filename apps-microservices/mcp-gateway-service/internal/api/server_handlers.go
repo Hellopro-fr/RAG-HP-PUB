@@ -180,9 +180,8 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		isActive = &b
 	}
 	tag := r.URL.Query().Get("tag")
-	userEmail := auth.UserEmailFromContext(r.Context())
 
-	servers, err := h.repo.ListAll(isActive, tag, userEmail)
+	servers, err := h.repo.ListAll(isActive, tag, "")
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
