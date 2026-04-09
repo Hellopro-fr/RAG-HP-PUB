@@ -113,7 +113,7 @@
               />
               <span class="text-sm font-medium text-gray-800 dark:text-gray-200 flex-1">{{ server.name }}</span>
               <span class="text-xs bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">
-                {{ server.tools.length }} outil{{ server.tools.length > 1 ? 's' : '' }}
+                {{ (server.tools || []).length }} outil{{ (server.tools || []).length > 1 ? 's' : '' }}
               </span>
             </div>
 
@@ -123,7 +123,7 @@
               class="border-t border-gray-100 dark:border-gray-800 px-3 py-2 space-y-1"
             >
               <div
-                v-for="tool in server.tools"
+                v-for="tool in (server.tools || [])"
                 :key="`${server.id}:${tool.name}`"
                 class="flex items-center gap-2 py-1"
               >
@@ -288,13 +288,8 @@ function toggleToolSelection(serverId: string, toolName: string): void {
 
 function initializeSelections(): void {
   for (const server of servers.value) {
-    if (preConfigured.value) {
-      // Pre-configured: all selected by default (read-only)
-      selectedTools.set(server.id, new Set(server.tools.map((t) => t.name)))
-    } else {
-      // Dynamic: all selected by default, user can deselect
-      selectedTools.set(server.id, new Set(server.tools.map((t) => t.name)))
-    }
+    const tools = server.tools || []
+    selectedTools.set(server.id, new Set(tools.map((t) => t.name)))
   }
 }
 
