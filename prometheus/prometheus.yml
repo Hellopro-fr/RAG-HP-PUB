@@ -111,7 +111,6 @@ scrape_configs:
     static_configs:
       - targets: ['optimize-service:8563'] # The service name and port from docker-compose
 
-<<<<<<< Updated upstream
   - job_name: 'document-database-qdrant-service'
     dns_sd_configs:
     - names:
@@ -122,9 +121,8 @@ scrape_configs:
   - job_name: 'database-recherche-service'
     static_configs:
       - targets: ['database-recherche-service:8530']
-=======
-  - job_name: 'ressource-vm'
 
+  - job_name: 'ressource-vm'
     scrape_interval: 5s
     static_configs:
       - targets:
@@ -136,9 +134,9 @@ scrape_configs:
     static_configs:
       - targets: ['10.0.1.197:9091']
     # Optionnel mais utile pour Grafana : ajouter un label explicite
-#    relabel_configs:
-#      - target_label: instance
-#        replacement: 'querynode-cluster'
+    # relabel_configs:
+    #   - target_label: instance
+    #     replacement: 'querynode-cluster'
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
@@ -152,4 +150,3 @@ scrape_configs:
        - targets:
           - cadvisor_exporter_vm_gpu:8080
           # - cadvisor:8080
->>>>>>> Stashed changes
