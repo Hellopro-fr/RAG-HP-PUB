@@ -4,29 +4,29 @@
     <div class="mb-6 flex items-center gap-4">
       <button
         type="button"
-        class="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900"
+        class="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
         @click="router.push('/tokens')"
       >
         <i class="pi pi-arrow-left text-xs" />
         Retour
       </button>
-      <h1 class="text-2xl font-bold text-gray-900">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
         {{ isEdit ? 'Modifier le jeton' : 'Nouveau jeton' }}
       </h1>
     </div>
 
     <!-- Loading state (edit mode) -->
     <div v-if="loading" class="flex items-center justify-center py-20">
-      <i class="pi pi-spinner pi-spin text-2xl text-gray-400" />
+      <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
     </div>
 
     <!-- Post-creation display -->
     <div v-else-if="createdToken" class="space-y-6">
       <!-- Warning banner -->
-      <div class="rounded-lg border border-amber-300 bg-amber-50 p-4">
+      <div class="rounded-lg border border-warning-300 dark:border-warning-500/30 bg-warning-50 dark:bg-warning-500/15 p-4">
         <div class="flex items-start gap-3">
-          <i class="pi pi-exclamation-triangle text-amber-600 mt-0.5" />
-          <p class="text-sm font-medium text-amber-800">
+          <i class="pi pi-exclamation-triangle text-warning-600 dark:text-warning-400 mt-0.5" />
+          <p class="text-sm font-medium text-warning-800 dark:text-warning-400">
             Copiez ce jeton maintenant — il ne sera plus affich&eacute; !
           </p>
         </div>
@@ -34,7 +34,7 @@
 
       <!-- Token value -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2">Jeton d'acc&egrave;s</label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Jeton d'acc&egrave;s</label>
         <div class="relative">
           <pre class="bg-gray-900 text-green-400 rounded-lg p-4 pr-12 text-sm font-mono overflow-x-auto whitespace-pre-wrap break-all">{{ createdToken.token }}</pre>
           <button
@@ -49,7 +49,7 @@
 
       <!-- Generated .mcp.json -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2">Configuration .mcp.json</label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Configuration .mcp.json</label>
         <div class="relative">
           <pre class="bg-gray-900 text-blue-300 rounded-lg p-4 pr-12 text-sm font-mono overflow-x-auto whitespace-pre-wrap">{{ generatedMcpJson }}</pre>
           <button
@@ -66,7 +66,7 @@
       <div class="flex justify-end">
         <button
           type="button"
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
           @click="router.push('/tokens')"
         >
           Retour aux jetons
@@ -85,61 +85,61 @@
       />
 
       <!-- Step content -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xs border border-gray-200 dark:border-gray-800 p-6">
         <!-- Step 1: Informations de base -->
         <div v-show="currentStep === 0" class="space-y-4">
           <!-- Name -->
           <div>
-            <label for="form-name" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="form-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Nom <span class="text-red-500">*</span>
             </label>
             <input
               id="form-name"
               v-model="form.name"
               type="text"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
               placeholder="Mon jeton MCP"
             />
           </div>
 
           <!-- Description -->
           <div>
-            <label for="form-description" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="form-description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Description
             </label>
             <textarea
               id="form-description"
               v-model="form.description"
               rows="2"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
               placeholder="Description optionnelle du jeton"
             />
           </div>
 
           <!-- Server name for .mcp.json -->
           <div>
-            <label for="form-server-name" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="form-server-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Nom du serveur (.mcp.json)
             </label>
             <input
               id="form-server-name"
               v-model="form.serverName"
               type="text"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
               placeholder="hellopro-gateway"
             />
-            <p class="text-xs text-gray-400 mt-1">Cl&eacute; utilis&eacute;e dans le fichier .mcp.json g&eacute;n&eacute;r&eacute;</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Cl&eacute; utilis&eacute;e dans le fichier .mcp.json g&eacute;n&eacute;r&eacute;</p>
           </div>
 
           <!-- MCP command select -->
           <div>
-            <label for="form-mcp-command" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="form-mcp-command" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Commande MCP
             </label>
             <select
               id="form-mcp-command"
               v-model="form.mcp_command"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 appearance-none"
             >
               <option value="npx">npx</option>
               <option value="bunx">bunx</option>
@@ -153,29 +153,29 @@
           <!-- Custom command fields -->
           <template v-if="form.mcp_command === 'custom'">
             <div>
-              <label for="form-custom-command" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-custom-command" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Commande personnalis&eacute;e
               </label>
               <input
                 id="form-custom-command"
                 v-model="form.customCommand"
                 type="text"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder="my-custom-command"
               />
             </div>
             <div>
-              <label for="form-custom-args" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-custom-args" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Pr&eacute;fixe d'arguments
               </label>
               <input
                 id="form-custom-args"
                 v-model="form.customArgsPrefix"
                 type="text"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder="--flag value"
               />
-              <p class="text-xs text-gray-400 mt-1">Arguments plac&eacute;s avant l'URL du gateway</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Arguments plac&eacute;s avant l'URL du gateway</p>
             </div>
           </template>
         </div>
@@ -194,9 +194,9 @@
                 id="form-expires"
                 v-model="expiresEnabled"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600"
+                class="rounded border-gray-300 text-brand-500 dark:border-gray-700"
               />
-              <label for="form-expires" class="text-sm font-medium text-gray-700">
+              <label for="form-expires" class="text-sm font-medium text-gray-700 dark:text-gray-300">
                 D&eacute;finir une date d'expiration
               </label>
             </div>
@@ -204,7 +204,7 @@
               v-if="expiresEnabled"
               v-model="form.expires_at"
               type="datetime-local"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
             />
           </div>
 
@@ -214,46 +214,46 @@
               id="form-allow-http"
               v-model="form.allow_http"
               type="checkbox"
-              class="rounded border-gray-300 text-blue-600"
+              class="rounded border-gray-300 text-brand-500 dark:border-gray-700"
             />
-            <label for="form-allow-http" class="text-sm text-gray-700">
+            <label for="form-allow-http" class="text-sm text-gray-700 dark:text-gray-300">
               Autoriser les connexions HTTP (non-HTTPS)
             </label>
           </div>
 
           <!-- Summary -->
           <div class="mt-6">
-            <h3 class="text-sm font-semibold text-gray-900 mb-3">R&eacute;capitulatif</h3>
-            <dl class="divide-y divide-gray-100">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">R&eacute;capitulatif</h3>
+            <dl class="divide-y divide-gray-100 dark:divide-gray-800">
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Nom</dt>
-                <dd class="text-sm text-gray-900 col-span-2">{{ form.name }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Nom</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.name }}</dd>
               </div>
               <div v-if="form.description" class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Description</dt>
-                <dd class="text-sm text-gray-900 col-span-2">{{ form.description }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Description</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.description }}</dd>
               </div>
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Commande</dt>
-                <dd class="text-sm text-gray-900 col-span-2 font-mono">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Commande</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono">
                   {{ form.mcp_command === 'custom' ? (form.customCommand || 'custom') : form.mcp_command }}
                 </dd>
               </div>
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Serveurs</dt>
-                <dd class="text-sm text-gray-900 col-span-2">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Serveurs</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">
                   {{ dragDrop.selectedCount.value.servers }} serveur(s), {{ dragDrop.selectedCount.value.tools }} outil(s)
                 </dd>
               </div>
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Expiration</dt>
-                <dd class="text-sm text-gray-900 col-span-2">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Expiration</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">
                   {{ expiresEnabled && form.expires_at ? form.expires_at : 'Aucune' }}
                 </dd>
               </div>
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">HTTP autoris&eacute;</dt>
-                <dd class="text-sm text-gray-900 col-span-2">{{ form.allow_http ? 'Oui' : 'Non' }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">HTTP autoris&eacute;</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.allow_http ? 'Oui' : 'Non' }}</dd>
               </div>
             </dl>
           </div>
@@ -265,7 +265,7 @@
         <button
           v-if="currentStep > 0"
           type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
           @click="goBack"
         >
           Pr&eacute;c&eacute;dent
@@ -275,7 +275,7 @@
         <div class="flex gap-3">
           <button
             type="button"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
             @click="router.push('/tokens')"
           >
             Annuler
@@ -283,7 +283,7 @@
           <button
             v-if="currentStep < 2"
             type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
             :disabled="!canGoNext"
             @click="goNext"
           >
@@ -292,7 +292,7 @@
           <button
             v-if="currentStep === 2"
             type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
             :disabled="submitting"
             @click="handleSubmit"
           >

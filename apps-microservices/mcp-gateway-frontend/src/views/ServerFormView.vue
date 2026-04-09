@@ -4,20 +4,20 @@
     <div class="mb-6 flex items-center gap-4">
       <button
         type="button"
-        class="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900"
+        class="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
         @click="router.push('/servers')"
       >
         <i class="pi pi-arrow-left text-xs" />
         Retour
       </button>
-      <h1 class="text-2xl font-bold text-gray-900">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
         {{ isEdit ? 'Modifier le serveur' : 'Nouveau serveur' }}
       </h1>
     </div>
 
     <!-- Loading state (edit mode) -->
     <div v-if="loading" class="flex items-center justify-center py-20">
-      <i class="pi pi-spinner pi-spin text-2xl text-gray-400" />
+      <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
     </div>
 
     <template v-else>
@@ -30,44 +30,44 @@
       />
 
       <!-- Step content -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xs border border-gray-200 dark:border-gray-800 p-6">
         <!-- Step 1: Informations de base -->
         <div v-show="currentStep === 0" class="space-y-4">
           <!-- Name -->
           <div>
-            <label for="form-name" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="form-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Nom <span class="text-red-500">*</span>
             </label>
             <input
               id="form-name"
               v-model="form.name"
               type="text"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
               placeholder="Mon serveur MCP"
             />
           </div>
 
           <!-- Transport -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Transport</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Transport</label>
             <div class="flex items-center gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   v-model="form.mcp_transport"
                   type="radio"
                   value="http"
-                  class="text-blue-600"
+                  class="text-brand-500"
                 />
-                <span class="text-sm">HTTP</span>
+                <span class="text-sm text-gray-800 dark:text-gray-200">HTTP</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   v-model="form.mcp_transport"
                   type="radio"
                   value="stdio"
-                  class="text-blue-600"
+                  class="text-brand-500"
                 />
-                <span class="text-sm">Stdio</span>
+                <span class="text-sm text-gray-800 dark:text-gray-200">Stdio</span>
               </label>
             </div>
           </div>
@@ -75,25 +75,25 @@
           <!-- HTTP fields -->
           <template v-if="form.mcp_transport === 'http'">
             <div>
-              <label for="form-url" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 URL <span class="text-red-500">*</span>
               </label>
               <input
                 id="form-url"
                 v-model="form.url"
                 type="url"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder="https://mcp-server.example.com"
               />
             </div>
             <div>
-              <label for="form-transport" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-transport" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Préférence de transport
               </label>
               <select
                 id="form-transport"
                 v-model="form.transport_preference"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 appearance-none"
               >
                 <option value="auto">Auto</option>
                 <option value="sse">SSE</option>
@@ -101,7 +101,7 @@
               </select>
             </div>
             <div>
-              <label for="form-timeout" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-timeout" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Timeout (ms)
               </label>
               <input
@@ -109,62 +109,62 @@
                 v-model.number="form.connect_timeout_ms"
                 type="number"
                 min="1000"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
               />
             </div>
             <div>
-              <label for="form-auth-headers" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-auth-headers" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 En-têtes d'authentification (JSON)
               </label>
               <textarea
                 id="form-auth-headers"
                 v-model="authHeadersJson"
                 rows="3"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 font-mono shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder='{"Authorization": "Bearer xxx"}'
               />
-              <p v-if="authHeadersError" class="text-xs text-red-500 mt-1">{{ authHeadersError }}</p>
+              <p v-if="authHeadersError" class="text-xs text-error-500 dark:text-error-400 mt-1">{{ authHeadersError }}</p>
             </div>
           </template>
 
           <!-- Stdio fields -->
           <template v-if="form.mcp_transport === 'stdio'">
             <div>
-              <label for="form-command" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-command" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Commande <span class="text-red-500">*</span>
               </label>
               <input
                 id="form-command"
                 v-model="form.mcp_command"
                 type="text"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder="npx"
               />
             </div>
             <div>
-              <label for="form-args" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-args" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Arguments (un par ligne)
               </label>
               <textarea
                 id="form-args"
                 v-model="argsText"
                 rows="3"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 font-mono shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
               />
             </div>
             <div>
-              <label for="form-env" class="block text-sm font-medium text-gray-700 mb-1">
+              <label for="form-env" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Variables d'environnement (JSON)
               </label>
               <textarea
                 id="form-env"
                 v-model="envJson"
                 rows="3"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 font-mono shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder='{"API_KEY": "xxx"}'
               />
-              <p v-if="envJsonError" class="text-xs text-red-500 mt-1">{{ envJsonError }}</p>
+              <p v-if="envJsonError" class="text-xs text-error-500 dark:text-error-400 mt-1">{{ envJsonError }}</p>
             </div>
           </template>
         </div>
@@ -173,15 +173,15 @@
         <div v-show="currentStep === 1" class="space-y-4">
           <!-- Tags -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags</label>
             <div class="flex flex-wrap gap-1 mb-2" v-if="form.tags.length">
               <span
                 v-for="tag in form.tags"
                 :key="tag"
-                class="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                class="inline-flex items-center gap-1 text-xs bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-400 px-2 py-0.5 rounded-full"
               >
                 {{ tag }}
-                <button type="button" class="hover:text-blue-900" @click="removeTag(tag)">
+                <button type="button" class="hover:text-brand-900 dark:hover:text-brand-300" @click="removeTag(tag)">
                   <i class="pi pi-times text-[10px]" />
                 </button>
               </span>
@@ -190,7 +190,7 @@
               <input
                 v-model="tagSearch"
                 type="text"
-                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder="Rechercher ou créer un tag..."
                 @keydown.enter.prevent="addTagFromSearch"
                 @keydown.escape="tagSearch = ''; showTagDropdown = false"
@@ -198,13 +198,13 @@
               />
               <div
                 v-if="showTagDropdown && filteredTags.length"
-                class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-32 overflow-y-auto"
+                class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md shadow-theme-lg max-h-32 overflow-y-auto"
               >
                 <button
                   v-for="tag in filteredTags"
                   :key="tag"
                   type="button"
-                  class="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100"
+                  class="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-white/5 text-gray-800 dark:text-gray-200"
                   @click="addTag(tag)"
                 >
                   {{ tag }}
@@ -215,7 +215,7 @@
 
           <!-- Tool prefix -->
           <div>
-            <label for="form-tool-prefix" class="block text-sm font-medium text-gray-700 mb-1">
+            <label for="form-tool-prefix" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Préfixe d'outils
             </label>
             <input
@@ -223,10 +223,10 @@
               v-model="form.tool_prefix"
               type="text"
               pattern="[a-zA-Z0-9]*"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
               placeholder="myprefix"
             />
-            <p class="text-xs text-gray-400 mt-1">Alphanumérique uniquement</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Alphanumérique uniquement</p>
           </div>
 
           <!-- Auto-discover (create only) -->
@@ -235,9 +235,9 @@
               id="form-discover"
               v-model="form.auto_discover"
               type="checkbox"
-              class="rounded border-gray-300 text-blue-600"
+              class="rounded border-gray-300 text-brand-500 dark:border-gray-700"
             />
-            <label for="form-discover" class="text-sm text-gray-700">
+            <label for="form-discover" class="text-sm text-gray-700 dark:text-gray-300">
               Découvrir automatiquement les outils après création
             </label>
           </div>
@@ -245,84 +245,84 @@
 
         <!-- Step 3: Vérification -->
         <div v-show="currentStep === 2" class="space-y-4">
-          <h3 class="text-sm font-semibold text-gray-900 mb-3">Récapitulatif</h3>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Récapitulatif</h3>
 
-          <dl class="divide-y divide-gray-100">
+          <dl class="divide-y divide-gray-100 dark:divide-gray-800">
             <!-- Name -->
             <div class="py-2 grid grid-cols-3 gap-4">
-              <dt class="text-sm font-medium text-gray-500">Nom</dt>
-              <dd class="text-sm text-gray-900 col-span-2">{{ form.name }}</dd>
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Nom</dt>
+              <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.name }}</dd>
             </div>
 
             <!-- Transport -->
             <div class="py-2 grid grid-cols-3 gap-4">
-              <dt class="text-sm font-medium text-gray-500">Transport</dt>
-              <dd class="text-sm text-gray-900 col-span-2">{{ form.mcp_transport.toUpperCase() }}</dd>
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Transport</dt>
+              <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.mcp_transport.toUpperCase() }}</dd>
             </div>
 
             <!-- HTTP-specific -->
             <template v-if="form.mcp_transport === 'http'">
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">URL</dt>
-                <dd class="text-sm text-gray-900 col-span-2 break-all">{{ form.url }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">URL</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2 break-all">{{ form.url }}</dd>
               </div>
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Préférence</dt>
-                <dd class="text-sm text-gray-900 col-span-2">{{ form.transport_preference }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Préférence</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.transport_preference }}</dd>
               </div>
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Timeout</dt>
-                <dd class="text-sm text-gray-900 col-span-2">{{ form.connect_timeout_ms }} ms</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Timeout</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.connect_timeout_ms }} ms</dd>
               </div>
               <div v-if="authHeadersJson.trim()" class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">En-têtes auth</dt>
-                <dd class="text-sm text-gray-900 col-span-2 font-mono text-xs whitespace-pre-wrap">{{ authHeadersJson }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">En-têtes auth</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono text-xs whitespace-pre-wrap">{{ authHeadersJson }}</dd>
               </div>
             </template>
 
             <!-- Stdio-specific -->
             <template v-if="form.mcp_transport === 'stdio'">
               <div class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Commande</dt>
-                <dd class="text-sm text-gray-900 col-span-2 font-mono">{{ form.mcp_command }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Commande</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono">{{ form.mcp_command }}</dd>
               </div>
               <div v-if="argsText.trim()" class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Arguments</dt>
-                <dd class="text-sm text-gray-900 col-span-2 font-mono text-xs whitespace-pre-wrap">{{ argsText }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Arguments</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono text-xs whitespace-pre-wrap">{{ argsText }}</dd>
               </div>
               <div v-if="envJson.trim()" class="py-2 grid grid-cols-3 gap-4">
-                <dt class="text-sm font-medium text-gray-500">Variables env</dt>
-                <dd class="text-sm text-gray-900 col-span-2 font-mono text-xs whitespace-pre-wrap">{{ envJson }}</dd>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Variables env</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono text-xs whitespace-pre-wrap">{{ envJson }}</dd>
               </div>
             </template>
 
             <!-- Tags -->
             <div class="py-2 grid grid-cols-3 gap-4">
-              <dt class="text-sm font-medium text-gray-500">Tags</dt>
-              <dd class="text-sm text-gray-900 col-span-2">
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Tags</dt>
+              <dd class="text-sm text-gray-900 dark:text-white col-span-2">
                 <div v-if="form.tags.length" class="flex flex-wrap gap-1">
                   <span
                     v-for="tag in form.tags"
                     :key="tag"
-                    class="inline-flex text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                    class="inline-flex text-xs bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-400 px-2 py-0.5 rounded-full"
                   >
                     {{ tag }}
                   </span>
                 </div>
-                <span v-else class="text-gray-400 italic">Aucun</span>
+                <span v-else class="text-gray-400 dark:text-gray-500 italic">Aucun</span>
               </dd>
             </div>
 
             <!-- Tool prefix -->
             <div v-if="form.tool_prefix" class="py-2 grid grid-cols-3 gap-4">
-              <dt class="text-sm font-medium text-gray-500">Préfixe d'outils</dt>
-              <dd class="text-sm text-gray-900 col-span-2 font-mono">{{ form.tool_prefix }}</dd>
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Préfixe d'outils</dt>
+              <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono">{{ form.tool_prefix }}</dd>
             </div>
 
             <!-- Auto-discover (create only) -->
             <div v-if="!isEdit" class="py-2 grid grid-cols-3 gap-4">
-              <dt class="text-sm font-medium text-gray-500">Auto-découverte</dt>
-              <dd class="text-sm text-gray-900 col-span-2">{{ form.auto_discover ? 'Oui' : 'Non' }}</dd>
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Auto-découverte</dt>
+              <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.auto_discover ? 'Oui' : 'Non' }}</dd>
             </div>
           </dl>
         </div>
@@ -333,7 +333,7 @@
         <button
           v-if="currentStep > 0"
           type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
           @click="goBack"
         >
           Précédent
@@ -343,7 +343,7 @@
         <div class="flex gap-3">
           <button
             type="button"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
             @click="router.push('/servers')"
           >
             Annuler
@@ -351,7 +351,7 @@
           <button
             v-if="currentStep < 2"
             type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
             :disabled="!canGoNext"
             @click="goNext"
           >
@@ -360,7 +360,7 @@
           <button
             v-if="currentStep === 2"
             type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
             :disabled="submitting"
             @click="handleSubmit"
           >
