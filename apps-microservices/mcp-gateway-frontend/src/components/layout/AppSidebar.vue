@@ -221,6 +221,16 @@ const menuGroups: MenuGroup[] = [
       },
     ],
   },
+  {
+    title: 'Aide',
+    items: [
+      {
+        icon: 'pi pi-book',
+        name: 'Guide d\'installation',
+        path: '/install-guide',
+      },
+    ],
+  },
 ];
 
 const isActive = (path: string): boolean => route.path.startsWith(path);

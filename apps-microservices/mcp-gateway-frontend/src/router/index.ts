@@ -73,6 +73,12 @@ const router = createRouter({
       name: 'oauth2',
       component: () => import('@/views/OAuth2View.vue'),
       meta: { requiresAuth: true, title: 'Clients OAuth2' }
+    },
+    {
+      path: '/install-guide',
+      name: 'install-guide',
+      component: () => import('@/views/InstallGuideView.vue'),
+      meta: { requiresAuth: true, title: "Guide d'installation" }
     }
   ]
 })
