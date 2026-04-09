@@ -254,14 +254,15 @@ services:
       context: .
       dockerfile: ./apps-microservices/database-recherche-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
+    expose:
+      - "8530"
     environment:
       - TOTAL_MAX_CONCURRENT_REQUESTS=200
       - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement,mcp-api-recherche
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
       - DB_BATCH_SIZE=16
       - DB_MAX_CONCURRENT_ZILLIZ_DEFAULT=2
-      - MILVUS_GLOBAL_MAX_CONCURRENT=30
-      - MILVUS_WRITE_CEILING=20
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - MILVUS_CONCURRENCY_TIER=1
       - MILVUS_CONCURRENCY_SERVICE_NAME=database-recherche-service
     env_file:
@@ -1014,8 +1015,7 @@ services:
     expose:
       - "8530"
     environment:
-      - MILVUS_GLOBAL_MAX_CONCURRENT=30
-      - MILVUS_WRITE_CEILING=20
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - MILVUS_CONCURRENCY_TIER=2
       - MILVUS_CONCURRENCY_SERVICE_NAME=di-database-qdrant-service
     env_file:
@@ -1036,8 +1036,7 @@ services:
     expose:
       - "8530"
     environment:
-      - MILVUS_GLOBAL_MAX_CONCURRENT=30
-      - MILVUS_WRITE_CEILING=20
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - MILVUS_CONCURRENCY_TIER=3
       - MILVUS_CONCURRENCY_SERVICE_NAME=echange-database-qdrant-service
     env_file:
@@ -1058,8 +1057,7 @@ services:
     expose:
       - "8530"
     environment:
-      - MILVUS_GLOBAL_MAX_CONCURRENT=30
-      - MILVUS_WRITE_CEILING=20
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - MILVUS_CONCURRENCY_TIER=3
       - MILVUS_CONCURRENCY_SERVICE_NAME=website-database-qdrant-service
     env_file:
@@ -1080,8 +1078,7 @@ services:
     expose:
       - "8530"
     environment:
-      - MILVUS_GLOBAL_MAX_CONCURRENT=30
-      - MILVUS_WRITE_CEILING=20
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - MILVUS_CONCURRENCY_TIER=2
       - MILVUS_CONCURRENCY_SERVICE_NAME=product-database-qdrant-service
     env_file:
@@ -1125,9 +1122,10 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
+    expose:
+      - "8530"
     environment:
-      - MILVUS_GLOBAL_MAX_CONCURRENT=30
-      - MILVUS_WRITE_CEILING=20
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - MILVUS_CONCURRENCY_TIER=3
       - MILVUS_CONCURRENCY_SERVICE_NAME=document-database-qdrant-service
     env_file:
