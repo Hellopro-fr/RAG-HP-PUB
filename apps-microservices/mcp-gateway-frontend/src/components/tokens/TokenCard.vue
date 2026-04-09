@@ -1,126 +1,121 @@
 <template>
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-    <div class="p-4">
-      <!-- Header -->
-      <div class="flex items-start justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <i class="pi pi-lock text-gray-400 text-sm" />
-          <h3 class="text-sm font-semibold text-gray-900 truncate max-w-[200px]">
-            {{ token.name }}
-          </h3>
+    <div class="p-5">
+      <!-- Main horizontal layout -->
+      <div class="flex flex-col lg:flex-row lg:items-start gap-4">
+        <!-- Left section: icon + name + status + token prefix -->
+        <div class="flex items-start gap-3 lg:w-1/4 shrink-0">
+          <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+            <i class="pi pi-lock text-lg" />
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <h3 class="text-sm font-semibold text-gray-900 truncate max-w-[200px]">
+                {{ token.name }}
+              </h3>
+              <span
+                class="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
+                :class="token.is_active
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-red-100 text-red-700'"
+              >
+                {{ token.is_active ? 'Actif' : 'Révoqué' }}
+              </span>
+            </div>
+            <code class="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded font-mono">
+              {{ maskedPrefix }}
+            </code>
+          </div>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span
-            class="text-xs px-2 py-0.5 rounded-full font-medium"
-            :class="token.is_active
-              ? 'bg-green-100 text-green-700'
-              : 'bg-red-100 text-red-700'"
-          >
-            {{ token.is_active ? 'Actif' : 'Révoqué' }}
-          </span>
+
+        <!-- Center section: server badges, MCP command, expiration, created_by -->
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <!-- Server badges -->
+            <span
+              v-for="name in serverNames"
+              :key="name"
+              class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono"
+            >
+              {{ name }}
+            </span>
+            <!-- MCP command badge -->
+            <span class="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-mono">
+              {{ token.mcp_command || 'npx' }}
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+            <!-- Expiration -->
+            <div class="flex items-center gap-1.5">
+              <i class="pi pi-calendar text-[10px]" />
+              <span v-if="token.expires_at">
+                Expire le {{ formatDate(token.expires_at) }}
+              </span>
+              <span
+                v-else
+                class="px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700"
+              >
+                Permanent
+              </span>
+            </div>
+            <!-- Created by -->
+            <div v-if="token.created_by" class="flex items-center gap-1.5">
+              <i class="pi pi-user text-[10px]" />
+              <span>{{ token.created_by }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right section: .mcp.json code block -->
+        <div class="lg:w-2/5 shrink-0">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-medium text-gray-600">.mcp.json</span>
+            <button
+              class="text-xs text-blue-600 hover:text-blue-800"
+              @click="copyMcpJson"
+            >
+              <i class="pi pi-copy text-[10px] mr-0.5" />
+              Copier
+            </button>
+          </div>
+          <pre
+            class="text-[11px] bg-gray-50 border border-gray-200 rounded-md p-3 font-mono overflow-x-auto max-h-[120px] overflow-y-auto whitespace-pre"
+          >{{ mcpJsonDisplay }}</pre>
         </div>
       </div>
 
-      <!-- Token prefix -->
-      <div class="mb-3">
-        <code class="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded font-mono">
-          {{ maskedPrefix }}
-        </code>
-      </div>
-
-      <!-- Server badges -->
-      <div v-if="serverNames.length" class="flex flex-wrap gap-1 mb-3">
-        <span
-          v-for="name in serverNames"
-          :key="name"
-          class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono"
+      <!-- Bottom row: action buttons -->
+      <div class="flex items-center gap-1 pt-3 mt-3 border-t border-gray-100">
+        <button
+          class="p-1.5 rounded hover:bg-gray-100 text-blue-500"
+          title="Copier .mcp.json"
+          @click="copyMcpJson"
         >
-          {{ name }}
-        </span>
-      </div>
-
-      <!-- Info row -->
-      <div class="space-y-1.5 mb-3">
-        <!-- Expiration -->
-        <div class="flex items-center gap-2 text-xs text-gray-500">
-          <i class="pi pi-calendar text-[10px]" />
-          <span v-if="token.expires_at">
-            Expire le {{ formatDate(token.expires_at) }}
-          </span>
-          <span
-            v-else
-            class="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700"
-          >
-            Permanent
-          </span>
-        </div>
-
-        <!-- Created by -->
-        <div v-if="token.created_by" class="flex items-center gap-2 text-xs text-gray-500">
-          <i class="pi pi-user text-[10px]" />
-          <span>{{ token.created_by }}</span>
-        </div>
-
-        <!-- MCP command -->
-        <div class="flex items-center gap-2 text-xs text-gray-500">
-          <i class="pi pi-code text-[10px]" />
-          <span class="px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-mono text-[11px]">
-            {{ token.mcp_command || 'npx' }}
-          </span>
-        </div>
-      </div>
-
-      <!-- .mcp.json display -->
-      <div class="mb-3">
-        <div class="flex items-center justify-between mb-1">
-          <span class="text-xs font-medium text-gray-600">.mcp.json</span>
-          <button
-            class="text-xs text-blue-600 hover:text-blue-800"
-            @click="copyMcpJson"
-          >
-            <i class="pi pi-copy text-[10px] mr-0.5" />
-            Copier
-          </button>
-        </div>
-        <pre
-          class="text-[11px] bg-gray-50 border border-gray-200 rounded-md p-3 font-mono overflow-x-auto max-h-[120px] overflow-y-auto whitespace-pre"
-        >{{ mcpJsonDisplay }}</pre>
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center justify-between pt-3 border-t border-gray-100">
-        <div class="flex items-center gap-1">
-          <button
-            class="p-1.5 rounded hover:bg-gray-100 text-blue-500"
-            title="Copier .mcp.json"
-            @click="copyMcpJson"
-          >
-            <i class="pi pi-file-export text-sm" />
-          </button>
-          <button
-            v-if="token.is_active"
-            class="p-1.5 rounded hover:bg-gray-100 text-gray-500"
-            title="Modifier"
-            @click="emit('edit', token)"
-          >
-            <i class="pi pi-pencil text-sm" />
-          </button>
-          <button
-            v-if="token.is_active"
-            class="p-1.5 rounded hover:bg-gray-100 text-orange-500"
-            title="Révoquer"
-            @click="emit('revoke', token.id)"
-          >
-            <i class="pi pi-times text-sm" />
-          </button>
-          <button
-            class="p-1.5 rounded hover:bg-gray-100 text-red-500"
-            title="Supprimer"
-            @click="emit('delete', token.id)"
-          >
-            <i class="pi pi-trash text-sm" />
-          </button>
-        </div>
+          <i class="pi pi-file-export text-sm" />
+        </button>
+        <button
+          v-if="token.is_active"
+          class="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+          title="Modifier"
+          @click="emit('edit', token)"
+        >
+          <i class="pi pi-pencil text-sm" />
+        </button>
+        <button
+          v-if="token.is_active"
+          class="p-1.5 rounded hover:bg-gray-100 text-orange-500"
+          title="Révoquer"
+          @click="emit('revoke', token.id)"
+        >
+          <i class="pi pi-times text-sm" />
+        </button>
+        <button
+          class="p-1.5 rounded hover:bg-gray-100 text-red-500"
+          title="Supprimer"
+          @click="emit('delete', token.id)"
+        >
+          <i class="pi pi-trash text-sm" />
+        </button>
       </div>
     </div>
   </div>
