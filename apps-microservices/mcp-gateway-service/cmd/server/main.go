@@ -142,7 +142,9 @@ func main() {
 			RefreshTTL:   cfg.OAuth2RefreshTokenTTL,
 		})
 		authSrv.Register(mux)
+		authSrv.RegisterAPI(mux)
 		log.Println("[main] OAuth2 Authorization Server mounted at /authorize, /token, /register, /.well-known/")
+		log.Println("[main] OAuth2 Authorize API mounted at /api/v1/oauth2/authorize/{info,login,consent}")
 	}
 
 	// Monte l'interface web
