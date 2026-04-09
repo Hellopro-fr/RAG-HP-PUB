@@ -2259,6 +2259,7 @@ services:
       - SCOPE_TOKEN_REQUIRED=${MCP_SCOPE_TOKEN_REQUIRED}
       - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
       - ALLOW_INTERNAL_URLS=${MCP_ALLOW_INTERNAL_URLS:-true}
+      - ADMIN_EMAILS=${MCP_ADMIN_EMAILS}
     # depends_on:
     #   mysql:
     #     condition: service_healthy

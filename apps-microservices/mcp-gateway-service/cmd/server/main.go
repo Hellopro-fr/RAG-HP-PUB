@@ -37,6 +37,11 @@ func main() {
 		log.Fatalf("[main] FATAL: JWT_SECRET environment variable must be set when AUTH_ENABLED=true. Generate one with: openssl rand -hex 32")
 	}
 
+	// RBAC: ADMIN_EMAILS must be set to bootstrap at least one admin user
+	if len(cfg.AdminEmails) == 0 {
+		log.Fatalf("[main] FATAL: ADMIN_EMAILS environment variable must be set with at least one email address for initial admin access")
+	}
+
 	log.Printf("[main] starting %s v%s on :%s", cfg.Name, cfg.Version, cfg.Port)
 
 	registry := gateway.NewRegistry()
@@ -47,6 +52,8 @@ func main() {
 	var healthChecker *health.Checker
 	var database *gorm.DB
 	var encryptor *crypto.Encryptor
+	var userRepo *repository.UserRepo
+	var auditRepo *repository.AuditRepo
 
 	if cfg.MySQLDSN != "" {
 		var err error
@@ -65,6 +72,8 @@ func main() {
 		}
 
 		repo = repository.NewServerRepo(database, encryptor)
+		userRepo = repository.NewUserRepo(database, cfg.AdminEmails)
+		auditRepo = repository.NewAuditRepo(database)
 
 		// Charge les serveurs actifs depuis la base de données
 		loadServersFromDB(gw, registry, repo)
@@ -101,7 +110,7 @@ func main() {
 
 	// Mount login/logout routes
 	if authCfg.Enabled {
-		auth.RegisterHandlers(mux, authCfg)
+		auth.RegisterHandlers(mux, authCfg, userRepo)
 		log.Println("[main] authentication enabled — login at /login")
 	}
 
@@ -121,6 +130,8 @@ func main() {
 		apiHandler := api.NewHandler(repo, gw, registry, cfg.AllowInternalURLs)
 		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
 		apiHandler.SetOAuth2Repo(oauth2Repo, oauth2Cache)
+		apiHandler.SetUserRepo(userRepo)
+		apiHandler.SetAuditRepo(auditRepo)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
 
@@ -174,8 +185,14 @@ func main() {
 	log.Println("[main] streamable HTTP mounted at /mcp (OAuth2 + scope token auth)")
 
 	// Wrap entire mux with auth middleware
-	authMiddleware := auth.Middleware(authCfg)
-	handler := authMiddleware(mux)
+	authMiddleware := auth.Middleware(authCfg, userRepo)
+	var handler http.Handler = authMiddleware(mux)
+
+	// Wrap with audit middleware if available
+	if auditRepo != nil {
+		auditMw := auth.NewAuditMiddleware(auditRepo)
+		handler = auditMw.Wrap(handler)
+	}
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

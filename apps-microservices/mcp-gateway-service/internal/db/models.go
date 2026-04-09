@@ -225,3 +225,35 @@ type OAuth2Consent struct {
 }
 
 func (OAuth2Consent) TableName() string { return "oauth2_consents" }
+
+// GatewayUser is the GORM model for admin UI users with role-based access.
+type GatewayUser struct {
+	ID          uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Email       string     `gorm:"type:varchar(255);not null;uniqueIndex:uq_user_email" json:"email"`
+	DisplayName string     `gorm:"type:varchar(255)" json:"display_name"`
+	Role        string     `gorm:"type:varchar(20);not null;default:'config-only'" json:"role"`
+	LoginCount  int        `gorm:"not null;default:0" json:"login_count"`
+	LastLoginAt *time.Time `gorm:"type:datetime(3)" json:"last_login_at,omitempty"`
+	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (GatewayUser) TableName() string { return "gateway_users" }
+
+// AuditLog records API actions for auditing.
+type AuditLog struct {
+	ID             uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserEmail      string    `gorm:"type:varchar(255);not null;index:idx_audit_user_date" json:"user_email"`
+	Action         string    `gorm:"type:varchar(50);not null;index:idx_audit_action" json:"action"`
+	ResourceType   string    `gorm:"type:varchar(50)" json:"resource_type"`
+	ResourceID     string    `gorm:"type:varchar(255)" json:"resource_id"`
+	RequestMethod  string    `gorm:"type:varchar(10)" json:"request_method"`
+	RequestPath    string    `gorm:"type:varchar(500)" json:"request_path"`
+	RequestBody    string    `gorm:"type:text" json:"request_body,omitempty"`
+	ResponseStatus int       `gorm:"not null" json:"response_status"`
+	ResponseBody   string    `gorm:"type:text" json:"response_body,omitempty"`
+	IPAddress      string    `gorm:"type:varchar(45)" json:"ip_address"`
+	CreatedAt      time.Time `gorm:"type:datetime(3);autoCreateTime;index:idx_audit_user_date" json:"created_at"`
+}
+
+func (AuditLog) TableName() string { return "audit_logs" }

@@ -24,18 +24,21 @@
           </option>
         </select>
         <button
+          v-if="authStore.isAdmin"
           class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10"
           @click="showImportModal = true"
         >
           Importer .mcp.json
         </button>
         <button
+          v-if="authStore.isAdmin"
           class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
           @click="router.push('/servers/new')"
         >
           Ajouter un serveur
         </button>
         <button
+          v-if="authStore.isAdmin"
           class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
           :disabled="discoveringAll"
           @click="handleDiscoverAll"
@@ -54,6 +57,7 @@
           v-for="server in filteredServers"
           :key="server.id"
           :server="server"
+          :is-admin="authStore.isAdmin"
           @toggle="handleToggle"
           @toggle-tool="handleToggleTool"
           @edit="handleEdit"
@@ -101,6 +105,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useServersStore } from '@/stores/servers'
+import { useAuthStore } from '@/stores/auth'
 import { serversApi } from '@/api/servers'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
@@ -113,6 +118,7 @@ import type { Server } from '@/types/server'
 
 const router = useRouter()
 const serversStore = useServersStore()
+const authStore = useAuthStore()
 const toast = useToast()
 
 const activeTab = ref('all')

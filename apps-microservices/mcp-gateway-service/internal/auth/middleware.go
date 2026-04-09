@@ -5,7 +5,14 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/hellopro/mcp-gateway/internal/db"
 )
+
+// UserRepo is the interface for user lookup used by the auth middleware.
+type UserRepo interface {
+	GetByEmail(email string) (*db.GatewayUser, error)
+}
 
 // contextKey is an unexported type for context keys in this package.
 type contextKey string
@@ -21,6 +28,15 @@ const (
 // Returns empty string if not set (e.g., auth disabled).
 func UserEmailFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(ContextKeyUserEmail).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// UserNameFromContext extracts the authenticated user's display name from the request context.
+// Returns empty string if not set.
+func UserNameFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(ContextKeyUserName).(string); ok {
 		return v
 	}
 	return ""
@@ -57,7 +73,9 @@ var publicPrefixes = []string{
 }
 
 // Middleware returns an HTTP middleware that enforces authentication.
-func Middleware(cfg Config) func(http.Handler) http.Handler {
+// userRepo is optional: when non-nil, the user's role is looked up from the DB
+// and injected into the context. If the user is not found, role defaults to config-only.
+func Middleware(cfg Config, userRepo UserRepo) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if !cfg.Enabled {
 			return next
@@ -87,6 +105,7 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 					ctx := r.Context()
 					ctx = context.WithValue(ctx, ContextKeyUserEmail, claims.Email)
 					ctx = context.WithValue(ctx, ContextKeyUserName, claims.Name)
+					ctx = injectRole(ctx, claims.Email, userRepo)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -126,7 +145,21 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, ContextKeyUserEmail, session.Email)
 			ctx = context.WithValue(ctx, ContextKeyUserName, session.DisplayName)
+			ctx = injectRole(ctx, session.Email, userRepo)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// injectRole looks up the user role from the DB and injects it into the context.
+// If userRepo is nil or the user is not found, the role defaults to config-only.
+func injectRole(ctx context.Context, email string, userRepo UserRepo) context.Context {
+	role := RoleConfigOnly
+	if userRepo != nil && email != "" {
+		user, err := userRepo.GetByEmail(email)
+		if err == nil && user != nil {
+			role = user.Role
+		}
+	}
+	return context.WithValue(ctx, ContextKeyUserRole, role)
 }

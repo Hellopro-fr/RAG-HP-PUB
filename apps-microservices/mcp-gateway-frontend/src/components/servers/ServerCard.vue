@@ -91,6 +91,7 @@
               </span>
             </div>
             <button
+              v-if="isAdmin"
               class="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
               :class="tool.is_active
                 ? 'hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
@@ -108,6 +109,7 @@
       <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
         <div class="flex items-center gap-1">
           <button
+            v-if="isAdmin"
             class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
             :title="server.is_active ? 'Désactiver' : 'Activer'"
             @click="emit('toggle', server.id, !server.is_active)"
@@ -115,6 +117,7 @@
             <i :class="server.is_active ? 'pi pi-eye' : 'pi pi-eye-slash'" class="text-sm" />
           </button>
           <button
+            v-if="isAdmin"
             class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
             title="Modifier"
             @click="emit('edit', server)"
@@ -122,6 +125,7 @@
             <i class="pi pi-pencil text-sm" />
           </button>
           <button
+            v-if="isAdmin"
             class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
             title="Découvrir"
             :disabled="discovering"
@@ -130,6 +134,7 @@
             <i class="pi pi-refresh text-sm" :class="{ 'pi-spin': discovering }" />
           </button>
           <button
+            v-if="isAdmin"
             class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-red-500 dark:text-error-400"
             title="Supprimer"
             @click="emit('delete', server.id)"
@@ -152,7 +157,7 @@
 import { computed, ref } from 'vue'
 import type { Server } from '@/types/server'
 
-const props = defineProps<{ server: Server }>()
+const props = defineProps<{ server: Server; isAdmin?: boolean }>()
 
 const emit = defineEmits<{
   toggle: [id: string, enable: boolean]

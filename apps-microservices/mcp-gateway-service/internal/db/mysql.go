@@ -43,6 +43,8 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&OAuth2AuthorizationCode{},
 		&OAuth2RefreshToken{},
 		&OAuth2Consent{},
+		&GatewayUser{},
+		&AuditLog{},
 	); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}
