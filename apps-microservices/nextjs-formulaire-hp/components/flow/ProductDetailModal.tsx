@@ -632,7 +632,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                 <Button
                   variant="ghost"
                   onClick={onClose}
-                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground shrink-0"
+                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground hover:bg-transparent shrink-0"
                   size="sm"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -684,7 +684,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                 <Button
                   variant="ghost"
                   onClick={onClose}
-                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground shrink-0"
+                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground hover:bg-transparent shrink-0"
                   size="sm"
                 >
                   <ChevronLeft className="h-4 w-4" />
