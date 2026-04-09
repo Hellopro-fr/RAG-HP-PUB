@@ -598,87 +598,103 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
 
         {/* Footer - Fixed at bottom on mobile */}
         <div className="border-t bg-background p-4 pb-6 sm:pb-4 flex-shrink-0 safe-area-inset-bottom">
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Back */}
-            <Button
-              variant="ghost"
-              onClick={onClose}
-              className="gap-1 text-muted-foreground hover:text-foreground shrink-0"
-              size="sm"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Retour</span>
-            </Button>
+          {isSelected ? (
+            /* Selected: stacked CTAs on mobile, inline row on desktop */
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              {onRequestSingleQuote && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onRequestSingleQuote();
+                  }}
+                  className="order-1 sm:order-4 gap-1.5 sm:shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Devis sur ce produit →
+                </Button>
+              )}
 
-            <div className="flex-1" />
+              {onProceed && selectedCount > 1 && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onProceed();
+                  }}
+                  className="order-2 sm:order-5 gap-1.5 sm:shrink-0 bg-accent hover:bg-accent/90 text-accent-foreground"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Devis sur ma sélection ({selectedCount} produits)
+                </Button>
+              )}
 
-            {isSelected ? (
-              <>
+              {/* Retour + Retirer: same row on mobile (bottom), unwrapped on desktop via contents */}
+              <div className="order-3 flex items-center justify-between sm:contents">
+                <Button
+                  variant="ghost"
+                  onClick={onClose}
+                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground shrink-0"
+                  size="sm"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Retour
+                </Button>
+
+                <div className="hidden sm:block sm:order-2 sm:flex-1" />
+
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     onSelect();
                   }}
-                  className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+                  className="sm:order-3 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Retirer</span>
+                  Retirer
                 </Button>
-
-                {onRequestSingleQuote && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onRequestSingleQuote();
-                    }}
-                    className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Devis sur ce produit →
-                  </Button>
-                )}
-
-                {onProceed && selectedCount > 1 && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onProceed();
-                    }}
-                    className="gap-1.5 bg-accent hover:bg-accent/90 text-accent-foreground shrink-0"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Devis sur ma sélection ({selectedCount} produits)
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                {onRequestSingleQuote && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onRequestSingleQuote();
-                    }}
-                    className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Devis sur ce produit →
-                  </Button>
-                )}
-
+              </div>
+            </div>
+          ) : (
+            /* Not selected: stacked CTAs on mobile, inline row on desktop */
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              {onRequestSingleQuote && (
                 <Button
                   size="sm"
                   onClick={() => {
-                    onSelect();
+                    onRequestSingleQuote();
                   }}
-                  className="bg-accent hover:bg-accent/90 text-accent-foreground shrink-0"
+                  className="order-1 sm:order-3 gap-1.5 sm:shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
                 >
-                  Ajouter à ma sélection
+                  <Send className="h-3.5 w-3.5" />
+                  Devis sur ce produit →
                 </Button>
-              </>
-            )}
-          </div>
+              )}
+
+              <Button
+                size="sm"
+                onClick={() => {
+                  onSelect();
+                }}
+                className="order-2 sm:order-4 bg-accent hover:bg-accent/90 text-accent-foreground sm:shrink-0"
+              >
+                Ajouter à ma sélection
+              </Button>
+
+              <div className="order-3 flex items-center sm:contents">
+                <Button
+                  variant="ghost"
+                  onClick={onClose}
+                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground shrink-0"
+                  size="sm"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Retour
+                </Button>
+
+                <div className="hidden sm:block sm:order-2 sm:flex-1" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
