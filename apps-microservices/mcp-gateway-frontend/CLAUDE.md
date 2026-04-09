@@ -7,7 +7,7 @@ Vue 3 SPA frontend for the MCP Gateway Service admin UI.
 - Vue 3.5 + TypeScript 5.7
 - Vite 6 (build + dev server)
 - PrimeVue 4 (Aura theme) + Radix Vue (headless dialogs)
-- Tailwind CSS 3.4
+- Tailwind CSS 4 (CSS-based config via @theme)
 - Pinia (auth + servers stores) + composables
 - vue-draggable-plus (nested DnD)
 - nginx 1.27-alpine (production serving + reverse proxy)
@@ -23,7 +23,7 @@ npm run dev
 
 # Docker build
 docker build -t mcp-gateway-frontend .
-docker run -p 8080:8080 mcp-gateway-frontend
+docker run -p 8581:8581 mcp-gateway-frontend
 ```
 
 ## File Inventory
