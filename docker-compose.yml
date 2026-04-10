@@ -2171,6 +2171,9 @@ services:
       - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
       - ALLOW_INTERNAL_URLS=${MCP_ALLOW_INTERNAL_URLS:-true}
       - ADMIN_EMAILS=${MCP_ADMIN_EMAILS}
+      - FALLBACK_USER=${MCP_FALLBACK_USER}
+      - FALLBACK_PASS=${MCP_FALLBACK_PASS}
+      - FALLBACK_EMAIL=${MCP_FALLBACK_EMAIL}
     # depends_on:
     #   mysql:
     #     condition: service_healthy
