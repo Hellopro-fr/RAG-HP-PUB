@@ -44,6 +44,7 @@ func NewRegistry(clients *Clients) *Registry {
 	}
 
 	r.register("search", searchDescription, searchInputSchema, handleSearch)
+	r.register("classic_search", classicSearchDescription, classicSearchInputSchema, handleClassicSearch)
 	r.register("get_collection_schema", schemaDescription, schemaInputSchema, handleGetCollectionSchema)
 	r.register("rerank", rerankDescription, rerankInputSchema, handleRerank)
 	r.register("embed_text", embedDescription, embedInputSchema, handleEmbedText)
