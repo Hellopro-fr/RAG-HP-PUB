@@ -1239,6 +1239,10 @@ export const generateUpdateReport = async (domain: string) => {
         const tempPath = `${reportPath}.tmp`;
         
         await fs.promises.writeFile(tempPath, JSON.stringify(report, null, 2));
+        // fsync the temp file before rename to guarantee content is on disk
+        const fdReport = fs.openSync(tempPath, 'r');
+        fs.fsyncSync(fdReport);
+        fs.closeSync(fdReport);
         await fs.promises.rename(tempPath, reportPath);
 
     } catch (e) {

@@ -510,27 +510,39 @@ class CrawlerManager:
         # --- END: Add Disk-Based File Count ---
 
         # --- START: Update Mode Report Inclusion ---
-        # If this is an update job, check for the update report and include specific fields in the webhook
+        # If this is an update job, check for the update report and include specific fields in the webhook.
+        # Retry logic mirrors _callback_payload.json: Node.js writes with fsync but OS delays can still occur.
         if job_info.get("crawl_mode") == "update":
-            try:
-                report_path = os.path.join(job_info["storage_path"], '_update_report.json')
+            report_path = os.path.join(job_info["storage_path"], '_update_report.json')
+            target_fields = ["mode", "health", "metrics", "rates", "thresholds", "jsonl_files"]
+            report_loaded = False
+
+            for attempt in range(max_read_attempts):
                 if os.path.exists(report_path):
-                    async with aiofiles.open(report_path, 'r') as f:
-                        report_content = await f.read()
-                        report_json = json.loads(report_content)
-                        
-                        # Extract specific fields and merge into top-level params
-                        # Requested fields: mode, health, metrics, rates, thresholds
-                        target_fields = ["mode", "health", "metrics", "rates", "thresholds", "jsonl_files"]
-                        for field in target_fields:
-                            if field in report_json:
-                                params[field] = report_json[field]
-                                
-                        logger.info(f"Included filtered update report data for '{crawl_id}' in webhook.")
+                    try:
+                        async with aiofiles.open(report_path, 'r') as f:
+                            report_content = await f.read()
+                            report_json = json.loads(report_content)
+
+                            for field in target_fields:
+                                if field in report_json:
+                                    params[field] = report_json[field]
+
+                            logger.info(f"Included filtered update report data for '{crawl_id}' in webhook.")
+                            report_loaded = True
+                            break
+                    except Exception as e:
+                        if attempt < max_read_attempts - 1:
+                            logger.warning(f"Attempt {attempt + 1}/{max_read_attempts}: Failed to read update report for '{crawl_id}'. Retrying in {retry_delays[attempt]}s... Error: {e}")
+                            await asyncio.sleep(retry_delays[attempt])
+                        else:
+                            logger.warning(f"Failed to include update report for '{crawl_id}' after {max_read_attempts} attempts: {e}")
                 else:
-                    logger.info(f"Update report not found for '{crawl_id}' (maybe finished before generation).")
-            except Exception as e:
-                logger.warning(f"Failed to include update report for '{crawl_id}': {e}")
+                    if attempt < max_read_attempts - 1:
+                        logger.info(f"Attempt {attempt + 1}/{max_read_attempts}: Update report not found for '{crawl_id}'. Retrying in {retry_delays[attempt]}s...")
+                        await asyncio.sleep(retry_delays[attempt])
+                    else:
+                        logger.info(f"Update report not found for '{crawl_id}' after {max_read_attempts} attempts (maybe finished before generation).")
         # --- END: Update Mode Report Inclusion ---
 
         # --- START: Ensure message_erreur_crawling is present ---

@@ -891,7 +891,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             console.error("Failed to generate update report:", e);
             if (!payload.message_erreur_crawling) {
                 payload.message_erreur_crawling = "Erreur lors de la génération du rapport de mise à jour";
-                fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+                const payloadRewritePath = `${storagePath}/_callback_payload.json`;
+                fs.writeFileSync(payloadRewritePath, JSON.stringify(payload, null, 2));
+                const fdRw1 = fs.openSync(payloadRewritePath, 'r');
+                fs.fsyncSync(fdRw1);
+                fs.closeSync(fdRw1);
             }
         }
     }
@@ -933,7 +937,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             console.error("Failed to close JSONL streams:", e);
             if (!payload.message_erreur_crawling) {
                 payload.message_erreur_crawling = "Erreur lors de l'enregistrement du rapport de mise à jour";
-                fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+                const payloadRewritePath2 = `${storagePath}/_callback_payload.json`;
+                fs.writeFileSync(payloadRewritePath2, JSON.stringify(payload, null, 2));
+                const fdRw2 = fs.openSync(payloadRewritePath2, 'r');
+                fs.fsyncSync(fdRw2);
+                fs.closeSync(fdRw2);
             }
         }
     }
