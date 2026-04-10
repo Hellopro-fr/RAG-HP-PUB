@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"strings"
 	"time"
 
@@ -41,8 +42,12 @@ type BackendClient struct {
 // Go's default client strips Authorization headers on redirect for security,
 // but MCP backends behind auth proxies need headers on every request.
 func newHTTPClient(timeout time.Duration) *http.Client {
+	// Cookie jar stores cookies set by redirect responses (e.g. session cookies
+	// from auth proxies like bo.hellopro.fr that require cookie-based auth).
+	jar, _ := cookiejar.New(nil)
 	return &http.Client{
 		Timeout: timeout,
+		Jar:     jar,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("stopped after 10 redirects")
