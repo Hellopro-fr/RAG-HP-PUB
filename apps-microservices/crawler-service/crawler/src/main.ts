@@ -819,6 +819,7 @@ const mapStopReasonToMessage = (errorCode: string): string => {
         "stoppedManually": "Arrêté manuellement",
         "insufficientData": "Données insuffisantes",
         "PAYLOAD_READ_ERROR": "Erreur lecture payload",
+        "interruptedShutdown": "Crawl interrompu lors de l'arrêt du service",
     };
 
     if (!errorCode) return "";
@@ -869,6 +870,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         } catch (e) {}
     }
     if (isStoppedManualy(domain, true, storagePath)) isError = "stoppedManually";
+
+    // If exiting with unfinished queue and no error, the shutdown interrupted the crawl
+    // (e.g., SIGTERM race condition, container restart). Set explicit error code so the BO
+    // can handle it properly instead of entering a silent retry loop.
+    if (isFinished === 0 && !isError) isError = "interruptedShutdown";
 
     // Get stats from instance if available, else usage functions
     const finalStats = context.crawlerInstance?.stats.state || statsFromFunctions;
