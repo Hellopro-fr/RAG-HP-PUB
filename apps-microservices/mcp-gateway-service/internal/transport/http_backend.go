@@ -37,15 +37,34 @@ type BackendClient struct {
 	extraHeaders map[string]string // additional headers sent on every request (e.g. auth)
 }
 
+// newHTTPClient creates an http.Client that preserves auth headers across redirects.
+// Go's default client strips Authorization headers on redirect for security,
+// but MCP backends behind auth proxies need headers on every request.
+func newHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			// Preserve headers from the original request on redirects
+			for key, vals := range via[0].Header {
+				if _, exists := req.Header[key]; !exists {
+					req.Header[key] = vals
+				}
+			}
+			return nil
+		},
+	}
+}
+
 // NewBackendClient creates a client that will discover its message endpoint
 // and transport type via Connect(). Call Connect() before use.
 func NewBackendClient(sseURL string, headers map[string]string) *BackendClient {
 	return &BackendClient{
 		sseURL:       strings.TrimRight(sseURL, "/"),
 		extraHeaders: headers,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		httpClient:   newHTTPClient(30 * time.Second),
 	}
 }
 
@@ -58,9 +77,7 @@ func NewBackendClientWithEndpoint(messageURL string, headers map[string]string) 
 		messageURL:   messageURL,
 		extraHeaders: headers,
 		transport:    transportStreamableHTTP,
-		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
-		},
+		httpClient:   newHTTPClient(120 * time.Second),
 	}
 }
 
@@ -135,7 +152,7 @@ func (c *BackendClient) trySSE(ctx context.Context) error {
 	c.applyHeaders(req)
 
 	// Use a client without default timeout — the context handles cancellation.
-	sseClient := &http.Client{}
+	sseClient := newHTTPClient(0)
 	resp, err := sseClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("SSE connect: %w", err)
