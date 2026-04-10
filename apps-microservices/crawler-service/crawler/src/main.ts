@@ -862,12 +862,23 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const exitReason = isOomRelaunch ? 'OOM_RELAUNCH' : (isError || reason);
 
     try {
-        fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
-        fs.writeFileSync(`${storagePath}/_exit_reason.json`, JSON.stringify({
+        const payloadPath = `${storagePath}/_callback_payload.json`;
+        const exitReasonPath = `${storagePath}/_exit_reason.json`;
+
+        fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2));
+        fs.writeFileSync(exitReasonPath, JSON.stringify({
             reason: exitReason,
             timestamp: new Date().toISOString(),
             stats: finalStats
         }, null, 2));
+
+        // Force OS disk flush so Python manager can read reliably after process.wait()
+        const fdPayload = fs.openSync(payloadPath, 'r');
+        fs.fsyncSync(fdPayload);
+        fs.closeSync(fdPayload);
+        const fdExit = fs.openSync(exitReasonPath, 'r');
+        fs.fsyncSync(fdExit);
+        fs.closeSync(fdExit);
     } catch (e) {
         console.error("Failed to write output files", e);
     }

@@ -464,19 +464,34 @@ class CrawlerManager:
 
         payload_path = os.path.join(job_info["storage_path"], '_callback_payload.json')
 
+        # Retry reading the payload file — the Node.js process writes it via fs.writeFileSync + fsync
+        # before exiting, but OS-level delays can still cause a brief window where the file is
+        # not yet visible or fully readable by Python after process.wait() returns.
         params = {}
-        if os.path.exists(payload_path):
-            try:
-                async with aiofiles.open(payload_path, 'r') as f:
-                    content = await f.read()
-                    params = json.loads(content)
-            except Exception as e:
-                logger.error(f"Failed to read callback payload for '{crawl_id}'. Error: {e}", exc_info=True)
-                # Fallback to a minimal payload indicating an error
-                params = {"id_domaine": crawl_id, "isError": "PAYLOAD_READ_ERROR"}
-        else:
-            logger.warning(f"Callback payload file not found for '{crawl_id}'. Sending minimal callback.")
-            params = {"id_domaine": crawl_id}
+        max_read_attempts = 3
+        retry_delays = [0.5, 1.0, 2.0]
+
+        for attempt in range(max_read_attempts):
+            if os.path.exists(payload_path):
+                try:
+                    async with aiofiles.open(payload_path, 'r') as f:
+                        content = await f.read()
+                        params = json.loads(content)
+                    break  # Success
+                except Exception as e:
+                    if attempt < max_read_attempts - 1:
+                        logger.warning(f"Attempt {attempt + 1}/{max_read_attempts}: Failed to read payload for '{crawl_id}'. Retrying in {retry_delays[attempt]}s... Error: {e}")
+                        await asyncio.sleep(retry_delays[attempt])
+                    else:
+                        logger.error(f"All {max_read_attempts} attempts failed to read payload for '{crawl_id}'. Error: {e}", exc_info=True)
+                        params = {"id_domaine": crawl_id, "isError": "PAYLOAD_READ_ERROR"}
+            else:
+                if attempt < max_read_attempts - 1:
+                    logger.warning(f"Attempt {attempt + 1}/{max_read_attempts}: Payload file not found for '{crawl_id}'. Retrying in {retry_delays[attempt]}s...")
+                    await asyncio.sleep(retry_delays[attempt])
+                else:
+                    logger.warning(f"Payload file not found for '{crawl_id}' after {max_read_attempts} attempts. Sending minimal callback.")
+                    params = {"id_domaine": crawl_id}
 
         # --- START: Add Disk-Based File Count ---
         try:
