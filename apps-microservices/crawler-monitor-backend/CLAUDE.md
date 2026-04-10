@@ -28,6 +28,8 @@ Express.js backend providing REST API and WebSocket for the crawler monitoring d
 
 ```
 server.js              # Single-file Express app
+tests/
+  server.test.js       # Test stubs (node:test, placeholder)
 package.json
 Dockerfile
 ```
@@ -36,10 +38,20 @@ Dockerfile
 
 - `POST /api/login` -- Password-based JWT login
 - `GET /api/jobs` -- List all crawler jobs from Redis (auth required)
-- `GET /api/jobs/:id` -- Single job details
-- `GET /api/jobs/:id/log` -- Read crawler log file
-- `GET /api/jobs/:id/stats` -- Parsed crawler stats
-- WebSocket at `/` -- Real-time crawl updates via Redis pub/sub
+- `GET /api/jobs/:id/details` -- Full job details (Redis + log parsing)
+- `GET /api/jobs/:id/request-queues` -- Paginated queue file listing with search
+- `GET /api/jobs/:id/request-queues/:domain/:filename` -- Read single queue file
+- `POST /api/jobs/:id/request-queues/:domain/:filename` -- Update queue file
+- `GET /api/jobs/:id/request-queues/analyze` -- Queue health analysis (valid vs blocked URLs)
+- `POST /api/jobs/:id/request-queues/clean-patterns` -- Remove pattern-matched URLs
+- `POST /api/jobs/:id/request-queues/repair` -- Remove URLs with domain mismatch
+- `POST /api/jobs/:id/request-queues/drop` -- Drop entire request queue
+- `GET /api/jobs/:id/dataset/analyze` -- Dataset duplicate analysis
+- `POST /api/jobs/:id/dataset/deduplicate` -- Remove duplicates (keeps newest)
+- `GET /api/capacity` -- Global crawler capacity (running/max slots)
+- `GET /api/callbacks` -- Failed webhook callbacks count and details
+- `GET /health` -- Health check
+- WebSocket at `/` -- Real-time updates via Redis pub/sub (`crawl_updates`, `crawler:heartbeat`)
 
 ## Conventions
 
@@ -53,10 +65,10 @@ Dockerfile
 
 ## Environment Variables
 
-- `REDIS_URL` (required)
+- `REDIS_URL` (required — fatal if missing)
 - `CRAWLER_STORAGE_PATH` (default: `/app/storage`)
-- `ADMIN_PASSWORD` (default: `admin`)
-- `JWT_SECRET` (default: `your-secret-key`)
+- `ADMIN_PASSWORD` (required — fatal if missing)
+- `JWT_SECRET` (required — fatal if missing)
 - `PORT` (default: `3001`)
 
 ## Dependencies
