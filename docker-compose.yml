@@ -1551,38 +1551,6 @@ services:
     networks:
       - services-net
 
-  graph-rag-question-processor:
-    build:
-      context: .
-      dockerfile: apps-microservices/graph-rag-question-processor/Dockerfile
-    profiles: ["graph-rag"]
-    expose:
-      - "8571"
-    environment:
-      RABBITMQ_URL: ${RABBITMQ_URL}
-      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
-      PROMETHEUS_PORT: 8571
-    deploy:
-      replicas: 2
-    networks:
-      - services-net
-
-  graph-rag-reponse-processor:
-    build:
-      context: .
-      dockerfile: apps-microservices/graph-rag-reponse-processor/Dockerfile
-    profiles: ["graph-rag"]
-    expose:
-      - "8572"
-    environment:
-      RABBITMQ_URL: ${RABBITMQ_URL}
-      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
-      PROMETHEUS_PORT: 8572
-    deploy:
-      replicas: 2
-    networks:
-      - services-net
-
   graph-rag-spacy-service:
     build:
       context: .
