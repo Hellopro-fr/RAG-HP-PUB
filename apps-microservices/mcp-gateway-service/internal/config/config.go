@@ -29,6 +29,10 @@ type Config struct {
 	AllowInternalURLs bool // ALLOW_INTERNAL_URLS — set to "true" to allow Docker-internal/private IP ranges (e.g. 172.x.x.x)
 	// RBAC
 	AdminEmails []string // ADMIN_EMAILS — comma-separated emails that get admin role on first login
+	// Fallback auth (for users not registered in hellopro.fr)
+	FallbackUser  string // FALLBACK_USER
+	FallbackPass  string // FALLBACK_PASS
+	FallbackEmail string // FALLBACK_EMAIL
 }
 
 func Load() *Config {
@@ -89,6 +93,9 @@ func Load() *Config {
 		OAuth2RefreshTokenTTL: refreshTTL,
 		AllowInternalURLs:   strings.EqualFold(os.Getenv("ALLOW_INTERNAL_URLS"), "true"),
 		AdminEmails:         parseCSV(os.Getenv("ADMIN_EMAILS")),
+		FallbackUser:        os.Getenv("FALLBACK_USER"),
+		FallbackPass:        os.Getenv("FALLBACK_PASS"),
+		FallbackEmail:       os.Getenv("FALLBACK_EMAIL"),
 	}
 }
 

@@ -44,12 +44,15 @@ func UserNameFromContext(ctx context.Context) string {
 
 // Config holds JWT/auth configuration.
 type Config struct {
-	JWTSecret    string
-	JWTAlgo      string // always HS256
-	JWTAudience  string
-	AuthURL      string // hellopro.fr auth endpoint
-	Enabled      bool
-	SecureCookie bool // Secure flag on session cookie (true when behind TLS)
+	JWTSecret     string
+	JWTAlgo       string // always HS256
+	JWTAudience   string
+	AuthURL       string // hellopro.fr auth endpoint
+	Enabled       bool
+	SecureCookie  bool   // Secure flag on session cookie (true when behind TLS)
+	FallbackUser  string // optional fallback username (env FALLBACK_USER)
+	FallbackPass  string // optional fallback password (env FALLBACK_PASS)
+	FallbackEmail string // optional fallback email (env FALLBACK_EMAIL)
 }
 
 // publicPaths that don't require authentication.

@@ -96,6 +96,20 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 
 	// Authenticate against hellopro.fr API
 	authResp, err := AuthenticateHellopro(cfg.AuthURL, username, password)
+
+	// Fallback: if hellopro auth fails, check env-based fallback credentials
+	if (err != nil || !authResp.Success) && cfg.FallbackUser != "" {
+		if username == cfg.FallbackUser && password == cfg.FallbackPass {
+			log.Printf("[auth] fallback auth matched for %s", username)
+			authResp = &HelloProAuthResponse{
+				Success:     true,
+				Email:       cfg.FallbackEmail,
+				DisplayName: cfg.FallbackUser,
+			}
+			err = nil
+		}
+	}
+
 	if err != nil {
 		log.Printf("[auth] hellopro auth failed for %s: %v", username, err)
 		if isJSON {
