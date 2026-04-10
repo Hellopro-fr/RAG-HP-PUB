@@ -391,20 +391,68 @@ try {
         }
     };
 
+    // Helper to read container-level memory usage from cgroups
+    const getContainerMemoryUsage = async (): Promise<number> => {
+        try {
+            // cgroups v2
+            const v2 = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
+            if (v2) return parseInt(v2.trim());
+
+            // cgroups v1
+            const v1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
+            if (v1) return parseInt(v1.trim());
+        } catch (e) { /* fallback below */ }
+
+        // Fallback: Node.js process RSS (inaccurate but better than 0)
+        return process.memoryUsage().rss;
+    };
+
+    // Helper to read container-level CPU usage from cgroups
+    // Returns cumulative CPU microseconds used by the entire container
+    const getContainerCpuUsec = async (): Promise<number | null> => {
+        try {
+            // cgroups v2: cpu.stat has "usage_usec <value>" line
+            const v2 = await fsPromises.readFile('/sys/fs/cgroup/cpu.stat', 'utf-8').catch(() => null);
+            if (v2) {
+                const match = v2.match(/usage_usec\s+(\d+)/);
+                if (match) return parseInt(match[1]);
+            }
+
+            // cgroups v1: cpuacct.usage is in nanoseconds
+            const v1 = await fsPromises.readFile('/sys/fs/cgroup/cpuacct/cpuacct.usage', 'utf-8').catch(() => null);
+            if (v1) return parseInt(v1.trim()) / 1000; // Convert ns to us
+        } catch (e) { /* fallback below */ }
+
+        return null; // No cgroup CPU available
+    };
+
+    let lastContainerCpuUsec = await getContainerCpuUsec();
+    let lastContainerCpuTime = Date.now();
+
     setInterval(async () => {
         try {
-            // Calculate CPU usage percentage for THIS process
-            const currentCpuUsage = process.cpuUsage(lastCpuUsage);
+            // Container-level CPU from cgroups
+            let cpuPercent: number;
+            const currentContainerCpuUsec = await getContainerCpuUsec();
             const currentTime = Date.now();
-            const elapsedTime = (currentTime - lastTime) * 1000; // Convert to microseconds
 
-            // CPU usage is in microseconds, convert to percentage
-            const cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
+            if (currentContainerCpuUsec !== null && lastContainerCpuUsec !== null) {
+                const deltaCpuUsec = currentContainerCpuUsec - lastContainerCpuUsec;
+                const deltaWallUsec = (currentTime - lastContainerCpuTime) * 1000;
+                cpuPercent = (deltaCpuUsec / deltaWallUsec) / numCpus;
+                lastContainerCpuUsec = currentContainerCpuUsec;
+                lastContainerCpuTime = currentTime;
+            } else {
+                // Fallback to process-level CPU
+                const currentCpuUsage = process.cpuUsage(lastCpuUsage);
+                const elapsedTime = (currentTime - lastTime) * 1000;
+                cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
+                lastCpuUsage = process.cpuUsage();
+                lastTime = currentTime;
+            }
 
-            lastCpuUsage = process.cpuUsage();
-            lastTime = currentTime;
-
-            const memoryUsage = process.memoryUsage();
+            // Container-level RAM from cgroups
+            const containerRam = await getContainerMemoryUsage();
             const topProcesses = await getTopProcesses();
 
             const heartbeat = {
@@ -412,9 +460,9 @@ try {
                 replicaId: hostname,
                 jobId: id,
                 domain: domain,
-                cpu: Math.min(cpuPercent, 1), // Cap at 100%
-                ram: memoryUsage.rss,
-                totalRam: totalMem, // Total RAM limit for dynamic percentage calculation
+                cpu: Math.min(Math.max(cpuPercent, 0), 1), // Clamp 0-1
+                ram: containerRam,
+                totalRam: totalMem,
                 topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'

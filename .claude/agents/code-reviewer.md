@@ -21,6 +21,20 @@ Analyze the provided code against these quality dimensions:
    - If the code modifies shared components (`libs/`, `protos/`, `docker-compose.yml`), list all downstream consumers.
    - Flag changes that are **breaking** (removal/rename) vs. **additive** (new field/function).
    - Note trade-offs: what does the current design gain vs. what does it cost?
+8. **Framework Runtime Correctness** — For React code:
+   - Are all hooks (`useState`, `useEffect`, `useCallback`, `useMemo`, `useRef`) called unconditionally? No hooks after early returns.
+   - Are `useEffect` dependency arrays complete? Flag stale closures where a handler references state that isn't in the deps (common with WebSocket/interval handlers).
+   - Are event handler references stable or causing unnecessary re-subscriptions?
+   For Express/Node.js:
+   - Are async error paths handled (unhandled rejections in middleware)?
+   - Are shared resources (DB connections, file handles) properly managed?
+9. **End-to-End Data Semantics** — For each value displayed to a user:
+   - Trace the value from its **source** (sensor, API, database) through any **intermediary** (backend, transform, cache) to the **display** (frontend component).
+   - Verify the **meaning** matches at each step: is "CPU" the process CPU or system/container CPU? Is "RAM" the process RSS or total container memory?
+   - Flag unit mismatches (bytes vs KB, fraction vs percentage, seconds vs milliseconds).
+10. **User Flow Walkthrough** — Walk the critical user-facing flows:
+    - For each state transition (null → value, empty → loaded, unauthenticated → authenticated), verify the UI handles it without blank screens, crashes, or stale data.
+    - Pay special attention to the first render after a state change (e.g., login sets token → what renders immediately before data loads?).
 
 ## Output Format
 
@@ -43,6 +57,9 @@ Internally, scan the code in multiple passes before producing output:
 2. **Pass 2:** Security and input validation
 3. **Pass 3:** Performance and error handling
 4. **Pass 4:** Impact awareness and trade-offs
+5. **Pass 5:** Framework runtime correctness (React hooks rules, effect dependency arrays, stale closures)
+6. **Pass 6:** End-to-end data semantics (trace values from source → intermediary → display, verify units/meaning match at each step)
+7. **Pass 7:** User flow walkthrough (login → main view → detail view → actions — check state transitions and error paths)
 
 Merge all findings into a single output. The user should never need to run `@code-reviewer` twice on the same unchanged code.
 
