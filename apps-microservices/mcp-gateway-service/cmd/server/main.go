@@ -26,7 +26,6 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/transport"
-	"github.com/hellopro/mcp-gateway/internal/ui"
 )
 
 func main() {
@@ -158,9 +157,13 @@ func main() {
 		log.Println("[main] OAuth2 Authorize API mounted at /api/v1/oauth2/authorize/{info,login,consent}")
 	}
 
-	// Monte l'interface web
-	ui.Register(mux)
-	log.Println("[main] UI mounted at /ui/")
+	// Legacy UI redirect → Vue frontend handles all UI now
+	mux.HandleFunc("/ui/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusMovedPermanently)
+	})
 
 	// Scope handler factory: creates a ScopedGateway for filtered access
 	scopeFactory := func(allowedIDs map[string]bool, allowedTools map[string]map[string]bool) transport.Handler {
