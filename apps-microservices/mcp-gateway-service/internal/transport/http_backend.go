@@ -220,8 +220,7 @@ func (c *BackendClient) tryStreamableHTTP(ctx context.Context, url string) error
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	c.applyHeaders(req)
 
-	probeClient := &http.Client{}
-	resp, err := probeClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("http call: %w", err)
 	}
