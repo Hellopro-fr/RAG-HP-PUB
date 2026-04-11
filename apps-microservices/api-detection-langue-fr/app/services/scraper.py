@@ -167,6 +167,7 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
                     playwright_instance,
                     headless=True,
                     proxy=playwright_proxy,
+                    geoip=True,
                 ),
                 timeout=45,
             )
