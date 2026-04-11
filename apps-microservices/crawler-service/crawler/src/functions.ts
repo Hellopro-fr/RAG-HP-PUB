@@ -706,15 +706,15 @@ export const startCrawler = async (
             async () => {
                 // Counter-based limit check — counters are incremented in routes.ts
                 // when URLs are pushed to the dataset (O(1) instead of O(n²) dataset scan).
-                const limitQuestionMarkDiez = 50;
+                const limitQuestionMarkDiez = 100;
 
                 if (!bypassQuestionMark && !skipquestionmark && context.countQuestionMark >= limitQuestionMarkDiez) {
                     context.stopReason = "limitQuestionMark";
-                    await stopCrawler(crawler, "Limit of 50 question marks reached.");
+                    await stopCrawler(crawler, "Limit of 100 question marks reached.");
                 }
                 if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
                     context.stopReason = "limitDiez";
-                    await stopCrawler(crawler, "Limit of 50 hashes reached.");
+                    await stopCrawler(crawler, "Limit of 100 hashes reached.");
                 }
             },
         ],
