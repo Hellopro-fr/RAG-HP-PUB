@@ -51,6 +51,13 @@ process.argv.slice(2).forEach(arg => {
 
 const getArg = (key: string, npmKey: string) => args[key] || process.env[npmKey];
 
+const parseNumericArg = (key: string, npmKey: string, defaultValue: number): number => {
+    const raw = getArg(key, npmKey);
+    if (raw === undefined) return defaultValue;
+    const parsed = Number(raw);
+    return isNaN(parsed) ? defaultValue : parsed;
+};
+
 export const domain = getArg('domain', 'npm_config_domain');
 export const site = getArg('site', 'npm_config_site') || process.argv[2];
 const id = getArg('id', 'npm_config_id');
@@ -68,26 +75,26 @@ const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerC
 const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
 const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
 
-let paramPerCrawl = Number(getArg('percrawl', 'npm_config_percrawl')) || 0;
-let paramPerMinute = Number(getArg('perminute', 'npm_config_perminute')) || 100;
+let paramPerCrawl = parseNumericArg('percrawl', 'npm_config_percrawl', 0);
+let paramPerMinute = parseNumericArg('perminute', 'npm_config_perminute', 100);
 const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
 const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
 
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
 const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
-const maxErrors = Number(getArg('maxErrors', 'npm_config_maxerrors')) || 0;
-const maxRedirects = Number(getArg('maxRedirects', 'npm_config_maxredirects')) || 0;
-const maxNewUrls = Number(getArg('maxNewUrls', 'npm_config_maxnewurls')) || 0;
+const maxErrors = parseNumericArg('maxErrors', 'npm_config_maxerrors', 0);
+const maxRedirects = parseNumericArg('maxRedirects', 'npm_config_maxredirects', 0);
+const maxNewUrls = parseNumericArg('maxNewUrls', 'npm_config_maxnewurls', 0);
 
 // V1 Circuit Breaker / Update Logic Params (with defaults)
-const minSample = Number(getArg('minSample', 'npm_config_minsample')) || 50;
-const maxErrorRate = Number(getArg('maxErrorRate', 'npm_config_maxerrorrate')) || 0.15;
-const maxRedirectRate = Number(getArg('maxRedirectRate', 'npm_config_maxredirectrate')) || 0.30;
-const maxGrowthRate = Number(getArg('maxGrowthRate', 'npm_config_maxgrowthrate')) || 0.50;
-const maxAbsErrors = Number(getArg('maxAbsErrors', 'npm_config_maxabserrors')) || 5;
-const maxAbsRedirects = Number(getArg('maxAbsRedirects', 'npm_config_maxabsredirects')) || 10;
-const maxAbsNew = Number(getArg('maxAbsNew', 'npm_config_maxabsnew')) || 20;
+const minSample = parseNumericArg('minSample', 'npm_config_minsample', 50);
+const maxErrorRate = parseNumericArg('maxErrorRate', 'npm_config_maxerrorrate', 0.15);
+const maxRedirectRate = parseNumericArg('maxRedirectRate', 'npm_config_maxredirectrate', 0.30);
+const maxGrowthRate = parseNumericArg('maxGrowthRate', 'npm_config_maxgrowthrate', 0.50);
+const maxAbsErrors = parseNumericArg('maxAbsErrors', 'npm_config_maxabserrors', 5);
+const maxAbsRedirects = parseNumericArg('maxAbsRedirects', 'npm_config_maxabsredirects', 10);
+const maxAbsNew = parseNumericArg('maxAbsNew', 'npm_config_maxabsnew', 20);
 
 // Setup Context immediately
 context.config = {
