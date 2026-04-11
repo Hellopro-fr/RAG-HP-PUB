@@ -25,7 +25,7 @@ class ImageProcessor:
 
     # Headers mimicking the PHP `isUrlAccessible` function
     DOWNLOAD_HEADERS = {
-        "Accept": "*/*",
+        "Accept": "image/*",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Sec-Fetch-Site": "none",
@@ -138,34 +138,51 @@ class ImageProcessor:
                 logger.info("Using APIFY_PROXY for image downloads.")
 
             async with httpx.AsyncClient(
-                timeout=20.0, 
-                follow_redirects=True, 
+                timeout=30.0,
+                follow_redirects=True,
                 headers=ImageProcessor.DOWNLOAD_HEADERS,
                 verify=False,
                 proxy=proxy_url
             ) as client:
-                
-                # Create coroutines
-                reqs = [client.get(str(inp.url)) for inp in download_tasks]
-                
-                # Execute concurrently
-                responses = await asyncio.gather(*reqs, return_exceptions=True)
-                
+
+                async def download_with_retry(inp):
+                    """Download an image with a single retry on failure."""
+                    for attempt in range(2):
+                        try:
+                            resp = await client.get(str(inp.url))
+                            if resp.status_code == 200:
+                                return resp
+                            if attempt == 0:
+                                await asyncio.sleep(2)
+                                continue
+                            logger.warning(f"HTTP {resp.status_code} for {inp.id} ({inp.url}) after retry")
+                            return resp
+                        except Exception as e:
+                            if attempt == 0:
+                                await asyncio.sleep(2)
+                                continue
+                            logger.warning(f"Download exception for {inp.id} ({inp.url}): {type(e).__name__} - {str(e)}")
+                            return e
+                    return None  # Should not reach here
+
+                # Execute concurrently with retry
+                responses = await asyncio.gather(
+                    *[download_with_retry(inp) for inp in download_tasks],
+                    return_exceptions=True
+                )
+
                 for i, response in enumerate(responses):
                     img_input = download_tasks[i]
                     img_id = img_input.id
-                    
+
                     if isinstance(response, Exception):
-                        # Enhanced logging to show URL and specific exception type and message
-                        logger.warning(f"Download exception for {img_id} ({img_input.url}): {type(response).__name__} - {str(response)}")
                         failed.append(FailedImage(id=img_id, url=img_input.url))
                         continue
 
-                    if response.status_code != 200:
-                        logger.warning(f"HTTP {response.status_code} for {img_id}")
+                    if response is None or response.status_code != 200:
                         failed.append(FailedImage(id=img_id, url=img_input.url))
                         continue
-                    
+
                     try:
                         image_bytes = BytesIO(response.content)
                         # Attempt decompression for downloads too (just in case content-encoding header was missed)
