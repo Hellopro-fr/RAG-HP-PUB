@@ -5,3 +5,5 @@ pymilvus
 requests
 httpx
 redis
+prometheus-client
+waitress
