@@ -20,6 +20,7 @@ interface Filters {
     status: string[];
     date_start?: Date;
     date_end?: Date;
+    error_reason?: string;
 }
 
 const loadFiltersFromStorage = (): Omit<Filters, 'date_start' | 'date_end'> => {
@@ -137,6 +138,10 @@ export default function SearchPage() {
       if (key === 'date_start' || key === 'date_end') {
         if (value instanceof Date) {
           activeFilters[key] = value.toISOString();
+        }
+      } else if (key === 'error_reason') {
+        if (value && typeof value === 'string') {
+          activeFilters[key] = value;
         }
       } else if (Array.isArray(value) && value.length > 0) {
         activeFilters[key] = value;
@@ -332,6 +337,15 @@ export default function SearchPage() {
     }
   };
 
+  const handleSelectError = (serviceName: string, errorReason: string) => {
+    setFilters(prev => ({
+      ...prev,
+      service_names: [serviceName],
+      error_reason: errorReason,
+    }));
+    setShowUniqueErrors(false);
+  };
+
   const handleArchiveByFilter = async () => {
       if (loadingAction) {
           alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
@@ -397,6 +411,23 @@ export default function SearchPage() {
                     </Popover>
                 </div>
             </div>
+
+            {filters.error_reason && (
+              <div className="md:col-span-2 flex items-center gap-2">
+                <span className="text-sm text-gris-primary">Active Error Filter:</span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-bleu-light text-bleu-primary border border-bleu-primary/20 max-w-full">
+                  <span className="truncate">{filters.error_reason}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFilters(prev => ({ ...prev, error_reason: undefined }))}
+                    className="ml-1 hover:text-rouge-primary transition-colors shrink-0"
+                    aria-label="Clear error filter"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            )}
 
             {/* Service Names */}
             <div>
@@ -591,6 +622,7 @@ export default function SearchPage() {
           totalUnique={uniqueErrorTotal}
           loading={loadingUniqueErrors}
           onClose={() => setShowUniqueErrors(false)}
+          onSelectError={handleSelectError}
         />
       )}
     </div>

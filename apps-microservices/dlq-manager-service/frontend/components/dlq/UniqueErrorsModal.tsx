@@ -12,11 +12,12 @@ interface UniqueErrorsModalProps {
   totalUnique: number;
   loading: boolean;
   onClose: () => void;
+  onSelectError?: (serviceName: string, errorReason: string) => void;
 }
 
 const PAGE_SIZE = 50;
 
-export default function UniqueErrorsModal({ buckets, totalUnique, loading, onClose }: UniqueErrorsModalProps) {
+export default function UniqueErrorsModal({ buckets, totalUnique, loading, onClose, onSelectError }: UniqueErrorsModalProps) {
   const [currentPage, setCurrentPage] = useState(1);
 
   React.useEffect(() => {
@@ -149,7 +150,12 @@ export default function UniqueErrorsModal({ buckets, totalUnique, loading, onClo
                 </thead>
                 <tbody>
                   {paginatedBuckets.map((bucket, index) => (
-                    <tr key={`${bucket.service_name}-${bucket.error_reason}`} className="border-b border-gris-blanc hover:bg-clair-4 transition-colors">
+                    <tr
+                      key={`${bucket.service_name}-${bucket.error_reason}`}
+                      className={`border-b border-gris-blanc transition-colors ${onSelectError ? 'hover:bg-bleu-light cursor-pointer' : 'hover:bg-clair-4'}`}
+                      onClick={() => onSelectError?.(bucket.service_name, bucket.error_reason)}
+                      title={onSelectError ? "Click to filter by this error" : undefined}
+                    >
                       <td className="p-3 text-gris-primary">{(currentPage - 1) * PAGE_SIZE + index + 1}</td>
                       <td className="p-3 font-medium text-noir-primary whitespace-nowrap">{bucket.service_name}</td>
                       <td className="p-3 text-noir-primary break-all">{bucket.error_reason}</td>
