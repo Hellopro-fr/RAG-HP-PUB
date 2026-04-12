@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # API authentication
     API_KEY: Optional[str] = None
 
+    # Stale job detection thresholds (seconds)
+    STALE_JOB_THRESHOLD_LOCAL: int = 180   # Local jobs: PID check + 3 min heartbeat gap
+    STALE_JOB_THRESHOLD_REMOTE: int = 600  # Remote jobs: 10 min grace period for owning replica
+
     model_config = {
         "env_file": ".env",
         "extra": "ignore",

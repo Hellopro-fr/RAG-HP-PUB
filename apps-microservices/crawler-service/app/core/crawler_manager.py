@@ -36,7 +36,7 @@ CRAWL_RUNNING_COUNT_KEY = "crawl_jobs:running_count"
 CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 
 CRAWL_UPDATES_CHANNEL = "crawl_updates"
-STALE_JOB_THRESHOLD_SECONDS = 180  # 3 minutes without heartbeat = dead
+# Stale thresholds now in config.py (settings.STALE_JOB_THRESHOLD_LOCAL / _REMOTE)
 
 # Webhook retry configuration
 WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
@@ -153,7 +153,8 @@ class CrawlerManager:
             "crawl_mode": params.get("crawlMode", "standard"),
             "previous_crawl_id": params.get("previousCrawlId"),
             "params": params,
-            "oom_restart_count": oom_restart_count
+            "oom_restart_count": oom_restart_count,
+            "replica_id": os.uname().nodename
         }
 
         # --- DISTRIBUTED LOCK via SET NX (separate from state document) ---
@@ -677,12 +678,20 @@ class CrawlerManager:
 
                 job_info = await cache_service.get_json(job_key)
                 if job_info and job_info.get("status") == "running":
-                    job_info["last_heartbeat"] = datetime.utcnow()
-                    await cache_service.set_json(job_key, job_info)
-                    # Refresh the lock TTL so it doesn't expire while the crawl is alive
                     lock_key = f"{CRAWL_LOCK_PREFIX}{crawl_id}"
-                    await cache_service.redis_client.expire(lock_key, CRAWL_LOCK_TTL_SECONDS)
-                    logger.debug(f"Heartbeat sent for running crawl '{crawl_id}'.")
+                    for hb_attempt in range(2):
+                        try:
+                            job_info["last_heartbeat"] = datetime.utcnow()
+                            await cache_service.set_json(job_key, job_info)
+                            await cache_service.redis_client.expire(lock_key, CRAWL_LOCK_TTL_SECONDS)
+                            logger.debug(f"Heartbeat sent for running crawl '{crawl_id}'.")
+                            break
+                        except Exception as hb_err:
+                            if hb_attempt == 0:
+                                logger.warning(f"Heartbeat write failed for '{crawl_id}': {hb_err}. Retrying in 5s...")
+                                await asyncio.sleep(5)
+                            else:
+                                logger.error(f"Heartbeat retry also failed for '{crawl_id}': {hb_err}")
                 elif not job_info:
                     logger.warning(f"Heartbeat for '{crawl_id}' skipped: job key disappeared from Redis mid-run. It may be recovered later.")
 
@@ -1617,13 +1626,35 @@ class CrawlerManager:
                     elif start_time_str:
                         last_activity_time = datetime.fromisoformat(str(start_time_str))
 
+                    # --- Ownership-aware stale detection ---
+                    job_replica_id = job_data.get("replica_id")
+                    my_replica_id = os.uname().nodename
+                    is_local_job = (job_replica_id == my_replica_id) if job_replica_id else False
+
+                    # Determine threshold based on ownership
+                    if is_local_job:
+                        stale_threshold = settings.STALE_JOB_THRESHOLD_LOCAL
+                    elif job_replica_id:
+                        stale_threshold = settings.STALE_JOB_THRESHOLD_REMOTE
+                    else:
+                        # Legacy job (no replica_id) — backward compatible
+                        stale_threshold = settings.STALE_JOB_THRESHOLD_LOCAL
+
                     is_stale = False
                     if last_activity_time:
                         time_since_activity = (datetime.utcnow() - last_activity_time).total_seconds()
-                        if time_since_activity > STALE_JOB_THRESHOLD_SECONDS:
+                        if time_since_activity > stale_threshold:
                             is_stale = True
                     else:
                         is_stale = True
+
+                    # Local job override: if process is alive locally, skip stale detection
+                    if is_stale and is_local_job and status != "stopping":
+                        if crawl_id in self.local_processes:
+                            proc = self.local_processes[crawl_id]
+                            if proc.returncode is None:
+                                logger.info(f"Job '{crawl_id}' heartbeat is stale but local process is alive (PID {proc.pid}). Skipping stale detection.")
+                                is_stale = False
 
                     if is_stale:
                         # Branch based on status: stopping jobs are cleaned up silently,
@@ -1635,7 +1666,8 @@ class CrawlerManager:
                             logger.info(f"Job '{crawl_id}' (status: stopping) is stale. Cleaning up as 'stopped' (stop webhook already sent).")
                         else:
                             time_info = f"{time_since_activity:.0f}s ago" if last_activity_time else "no time data"
-                            logger.warning(f"Job '{crawl_id}' (status: {status}) is stale! Last activity: {time_info}. Marking as failed.")
+                            ownership_info = f"local" if is_local_job else (f"remote (replica: {job_replica_id})" if job_replica_id else "legacy (no replica_id)")
+                            logger.warning(f"Job '{crawl_id}' (status: {status}, {ownership_info}) is stale! Last activity: {time_info}. Marking as failed.")
 
                         job_data["status"] = final_status
                         job_data["shutdown_reason"] = "Stop cleanup (stale)" if is_stopping else "Stale job detected (missing heartbeat)"
