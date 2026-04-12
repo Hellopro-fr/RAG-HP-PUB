@@ -1035,6 +1035,12 @@ services:
     #   - "8517:8517"
     env_file:
       - .env
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=1
+      - MILVUS_CONCURRENCY_SERVICE_NAME=api-rest-milvus
+    expose:
+      - "8530"
     networks:
       - services-net
     logging: *logging_defaults
