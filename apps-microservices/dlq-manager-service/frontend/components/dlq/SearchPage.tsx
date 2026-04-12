@@ -73,6 +73,10 @@ export default function SearchPage() {
   const [serviceOptions, setServiceOptions] = useState<MultiSelectOption[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  const ARCHIVED_STATUSES = ['Archived', 'Auto-Archived'];
+  const isArchivedOnlyView = filters.status.length > 0 && filters.status.every(s => ARCHIVED_STATUSES.includes(s));
+
   const [showUniqueErrors, setShowUniqueErrors] = useState(false);
   const [uniqueErrorBuckets, setUniqueErrorBuckets] = useState<UniqueErrorBucket[]>([]);
   const [uniqueErrorTotal, setUniqueErrorTotal] = useState(0);
@@ -478,15 +482,17 @@ export default function SearchPage() {
                 {loadingAction === 'requeue-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Re-queue Selected
               </Button>
-              <Button 
-                onClick={() => handleBulkAction('archive')} 
-                style={{ backgroundColor: "var(--gris-primary)", color: "white" }} 
-                className="hover:opacity-90 w-full sm:w-auto"
-                disabled={!!loadingAction}
-              >
-                {loadingAction === 'archive-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Archive Selected
-              </Button>
+              {!isArchivedOnlyView && (
+                <Button
+                  onClick={() => handleBulkAction('archive')}
+                  style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
+                  className="hover:opacity-90 w-full sm:w-auto"
+                  disabled={!!loadingAction}
+                >
+                  {loadingAction === 'archive-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Archive Selected
+                </Button>
+              )}
             </>
           ) : (
             <>
@@ -499,15 +505,17 @@ export default function SearchPage() {
               >
                 View Unique Errors
               </Button>
-              <Button
-                onClick={handleArchiveByFilter}
-                style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
-                disabled={totalResults === 0 || !!loadingAction}
-                className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
-              >
-                {loadingAction === 'archive-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Archive All Matching
-              </Button>
+              {!isArchivedOnlyView && (
+                <Button
+                  onClick={handleArchiveByFilter}
+                  style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
+                  disabled={totalResults === 0 || !!loadingAction}
+                  className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
+                >
+                  {loadingAction === 'archive-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Archive All Matching
+                </Button>
+              )}
               <Button
                 onClick={handleRequeueByFilter}
                 style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
