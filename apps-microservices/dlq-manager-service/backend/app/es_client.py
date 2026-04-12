@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import asyncio
 from elasticsearch import AsyncElasticsearch
@@ -351,19 +352,34 @@ class ElasticsearchClient:
         query = {"bool": {"must": [], "must_not": []}}
         
         if search_term:
-            # Check for advanced syntax characters
-            if any(char in search_term for char in [':', '*', '?']):
-                query_str = search_term
+            # Detect quoted field:value pattern like error_reason:'...' or error_reason:"..."
+            field_value_match = re.match(r'^(\w+):[\'"](.+)[\'"]$', search_term, re.DOTALL)
+            if field_value_match:
+                field_name = field_value_match.group(1)
+                field_value = field_value_match.group(2)
+                query["bool"]["must"].append({
+                    "match_phrase": {
+                        field_name: field_value
+                    }
+                })
+            elif any(char in search_term for char in [':', '*', '?']):
+                # Advanced query_string syntax (unquoted field:value, wildcards, etc.)
+                query["bool"]["must"].append({
+                    "query_string": {
+                        "query": search_term,
+                        "fields": ["error_reason", "original_payload.*", "service_name"],
+                        "lenient": True
+                    }
+                })
             else:
-                query_str = f"*{search_term}*"
-
-            query["bool"]["must"].append({
-                "query_string": {
-                    "query": query_str,
-                    "fields": ["error_reason", "original_payload.*", "service_name"],
-                    "lenient": True
-                }
-            })
+                # Simple search term — wrap with wildcards
+                query["bool"]["must"].append({
+                    "query_string": {
+                        "query": f"*{search_term}*",
+                        "fields": ["error_reason", "original_payload.*", "service_name"],
+                        "lenient": True
+                    }
+                })
 
         if filters:
             if filters.get("date_start") or filters.get("date_end"):
