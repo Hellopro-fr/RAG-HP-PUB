@@ -5,9 +5,29 @@ import { useState, useEffect } from "react"
 import { apiGetRules, apiToggleRule, apiDeleteRule, AutoArchiveRule } from "@/lib/api"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Trash2, AlertCircle } from "lucide-react"
+import { Trash2, AlertCircle, Eye } from "lucide-react"
 
-export default function RulesPage() {
+interface RulesPageProps {
+  onViewRuleMatches?: (rule: AutoArchiveRule) => void;
+}
+
+export default function RulesPage({ onViewRuleMatches }: RulesPageProps) {
+    const formatRelativeTime = (isoString?: string | null): string => {
+        if (!isoString) return "Never";
+        const date = new Date(isoString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffSec = Math.floor(diffMs / 1000);
+
+        if (diffSec < 60) return `${diffSec}s ago`;
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) return `${diffMin}m ago`;
+        const diffHr = Math.floor(diffMin / 60);
+        if (diffHr < 24) return `${diffHr}h ago`;
+
+        return date.toLocaleString();
+    };
+
     const [rules, setRules] = useState<AutoArchiveRule[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -69,12 +89,14 @@ export default function RulesPage() {
                 </div>
             ) : (
                 <div className="bg-white-primary rounded-lg border border-gris-blanc overflow-x-auto w-full">
-                    <table className="w-full min-w-[800px]">
+                    <table className="w-full min-w-[1100px]">
                         <thead>
                             <tr className="border-b border-gris-blanc bg-clair-4">
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-noir-primary w-1/4">Rule Name & Description</th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-noir-primary w-2/5">Target Conditions</th>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-noir-primary">Rule Name & Description</th>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-noir-primary">Target Conditions</th>
                                 <th className="px-6 py-4 text-center text-sm font-semibold text-noir-primary">Executions</th>
+                                <th className="px-6 py-4 text-center text-sm font-semibold text-noir-primary">Last Checked</th>
+                                <th className="px-6 py-4 text-center text-sm font-semibold text-noir-primary">Last Archived</th>
                                 <th className="px-6 py-4 text-center text-sm font-semibold text-noir-primary">Active</th>
                                 <th className="px-6 py-4 text-center text-sm font-semibold text-noir-primary">Actions</th>
                             </tr>
@@ -97,6 +119,12 @@ export default function RulesPage() {
                                     <td className="px-6 py-4 text-center text-sm font-medium text-bleu-primary">
                                         {rule.execution_count?.toLocaleString() || 0}
                                     </td>
+                                    <td className="px-6 py-4 text-center text-xs text-gris-primary whitespace-nowrap" title={rule.last_evaluated_at || "Never"}>
+                                        {formatRelativeTime(rule.last_evaluated_at)}
+                                    </td>
+                                    <td className="px-6 py-4 text-center text-xs text-gris-primary whitespace-nowrap" title={rule.last_archived_at || "Never"}>
+                                        {formatRelativeTime(rule.last_archived_at)}
+                                    </td>
                                     <td className="px-6 py-4 text-center">
                                         <Switch
                                             checked={rule.is_active}
@@ -104,15 +132,29 @@ export default function RulesPage() {
                                         />
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => rule._id && handleDelete(rule._id)}
-                                            className="text-rouge-primary hover:bg-rouge-light hover:text-rouge-primary"
-                                            aria-label={`Delete rule ${rule.name}`}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                        <div className="flex items-center justify-center gap-1">
+                                            {onViewRuleMatches && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => onViewRuleMatches(rule)}
+                                                    className="text-bleu-primary hover:bg-bleu-light hover:text-bleu-primary"
+                                                    aria-label={`View messages matched by rule ${rule.name}`}
+                                                    title="View matched messages"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => rule._id && handleDelete(rule._id)}
+                                                className="text-rouge-primary hover:bg-rouge-light hover:text-rouge-primary"
+                                                aria-label={`Delete rule ${rule.name}`}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

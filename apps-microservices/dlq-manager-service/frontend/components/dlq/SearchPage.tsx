@@ -14,6 +14,7 @@ import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "./DateTimePicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RuleCriteria } from "@/app/page"
 
 interface Filters {
     service_names: string[];
@@ -59,7 +60,12 @@ const statusOptions: MultiSelectOption[] = [
     { value: 'Auto-Archived', label: 'Auto-Archived' },
 ];
 
-export default function SearchPage() {
+interface SearchPageProps {
+  injectedCriteria?: RuleCriteria | null;
+  onClearInjectedCriteria?: () => void;
+}
+
+export default function SearchPage({ injectedCriteria, onClearInjectedCriteria }: SearchPageProps = {}) {
   const [filters, setFilters] = useState<Filters>(loadFiltersFromStorage);
   const [searchTerm, setSearchTerm] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
@@ -90,6 +96,23 @@ export default function SearchPage() {
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
   }, []);
+
+  // Apply injected criteria from Rules page "View Matches" button
+  useEffect(() => {
+    if (injectedCriteria) {
+      const newFilters: Filters = {
+        service_names: injectedCriteria.filters?.service_names || [],
+        status: ['Auto-Archived'],
+        date_start: injectedCriteria.filters?.date_start ? new Date(injectedCriteria.filters.date_start) : undefined,
+        date_end: injectedCriteria.filters?.date_end ? new Date(injectedCriteria.filters.date_end) : undefined,
+        error_reason: undefined,
+      };
+      setFilters(newFilters);
+      setSearchTerm(injectedCriteria.search_term || "");
+      setCurrentPage(1);
+      onClearInjectedCriteria?.();
+    }
+  }, [injectedCriteria]);
 
   // Fetch service names dynamically based on current status + date filters
   useEffect(() => {

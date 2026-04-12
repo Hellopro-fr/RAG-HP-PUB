@@ -7,11 +7,18 @@ import Dashboard from "@/components/dlq/Dashboard"
 import SearchPage from "@/components/dlq/SearchPage"
 import RulesPage from "@/components/dlq/RulesPage"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { AutoArchiveRule } from "@/lib/api"
 
 type Page = "dashboard" | "search" | "rules"
 
+export interface RuleCriteria {
+  search_term?: string;
+  filters?: Record<string, any>;
+}
+
 export default function App() {
   const[currentPage, setCurrentPage] = useState<Page>("dashboard")
+  const [injectedRuleCriteria, setInjectedRuleCriteria] = useState<RuleCriteria | null>(null);
 
   const getPageTitle = () => {
     switch (currentPage) {
@@ -20,6 +27,18 @@ export default function App() {
       case "rules": return "Auto-Archive Rules";
     }
   }
+
+  const handleViewRuleMatches = (rule: AutoArchiveRule) => {
+    setInjectedRuleCriteria({
+      search_term: rule.search_term,
+      filters: rule.filters,
+    });
+    setCurrentPage("search");
+  };
+
+  const handleClearInjectedCriteria = () => {
+    setInjectedRuleCriteria(null);
+  };
 
   return (
     <SidebarProvider>
@@ -33,8 +52,15 @@ export default function App() {
         </header>
         <main className="flex-1 overflow-auto">
             {currentPage === "dashboard" && <Dashboard />}
-            {currentPage === "search" && <SearchPage />}
-            {currentPage === "rules" && <RulesPage />}
+            {currentPage === "search" && (
+              <SearchPage
+                injectedCriteria={injectedRuleCriteria}
+                onClearInjectedCriteria={handleClearInjectedCriteria}
+              />
+            )}
+            {currentPage === "rules" && (
+              <RulesPage onViewRuleMatches={handleViewRuleMatches} />
+            )}
         </main>
       </SidebarInset>
     </SidebarProvider>
