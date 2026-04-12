@@ -4,3 +4,4 @@ python-dotenv
 pymilvus
 requests
 httpx
+redis

@@ -122,6 +122,10 @@ scrape_configs:
     static_configs:
       - targets: ['database-recherche-service:8530']
 
+  - job_name: 'api-rest-milvus'
+    static_configs:
+      - targets: ['api-rest-milvus-service:8530']
+
   - job_name: 'ressource-vm'
     scrape_interval: 5s
     static_configs:

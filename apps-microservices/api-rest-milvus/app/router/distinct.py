@@ -1,6 +1,8 @@
 from pymilvus import connections
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, HTTPException, Query, Path, Request
 from typing import Any, Dict, Optional
+
+import asyncio
 
 from common_utils.database.config.settings import Configuration
 from common_utils.database.Utils import Utils
@@ -30,6 +32,7 @@ BATCH_SIZE = 16384
 
 @router.get("/distinct/{collection_milvus}")
 async def get_distinct_values(
+    request: Request,
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     distinct_field: str = Query(..., description="Nom du champ dont on veut les valeurs uniques (ex: 'url', 'domaine', 'page_type')"),
     limit: Optional[int] = Query(None, ge=1, description="Nombre max de valeurs distinctes à retourner (défaut: tout)"),
@@ -134,6 +137,8 @@ Exemples: <br>
         if distinct_field != primary_key_field:
             output_fields.append(primary_key_field)
 
+        guard = request.app.state.concurrency_guard
+
         while True:
             # Construire l'expression pour ce batch
             expr_parts = []
@@ -145,12 +150,14 @@ Exemples: <br>
             current_expr = " and ".join(expr_parts) if expr_parts else ""
 
             try:
-                results = collection.query(
-                    expr=current_expr,
-                    output_fields=output_fields,
-                    offset=0,
-                    limit=BATCH_SIZE,
-                )
+                async with guard.slot():
+                    results = await asyncio.to_thread(
+                        collection.query,
+                        expr=current_expr,
+                        output_fields=output_fields,
+                        offset=0,
+                        limit=BATCH_SIZE,
+                    )
             except MilvusException as e:
                 logger.error(f"[distinct] Erreur Milvus lors de la requête sur '{collection_name}': {e}")
                 raise HTTPException(

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Set
 from pymilvus import Collection, utility
 from app.core.api_rest_milvus import get_loaded_collection
+import asyncio
 import time
 import logging
 from urllib.parse import urlparse
@@ -51,9 +52,9 @@ def _clean_domain(domain: str) -> str:
     clean = parsed.netloc or parsed.path
     return clean.replace('www.', '')
 
-def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
+async def _run_global_analysis(guard, domains_filter: Optional[List[str]]) -> Dict:
     """Exécute l'analyse globale sur Milvus."""
-    
+
     # Vérification collection
     if not utility.has_collection(COLLECTION_NAME):
         raise HTTPException(status_code=404, detail=f"La collection '{COLLECTION_NAME}' n'existe pas.")
@@ -67,17 +68,17 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
             cleaned = _clean_domain(d)
             if cleaned:
                 target_domains.add(cleaned)
-    
+
     # Sets pour le comptage
     all_domains_seen = set()
     domains_with_header = set()
     domains_with_footer = set()
     unique_content_urls = set()
-    
+
     base_filter_expression = "chunk_number == 1"
     last_pk = None
     total_processed = 0
-    
+
     start_time = time.time()
     logger.info(f"Démarrage analyse globale. Filtre domaines: {len(target_domains) if target_domains else 'Aucun'}")
 
@@ -87,14 +88,16 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
             if last_pk is not None:
                 current_filter += f" and {PRIMARY_KEY_FIELD_NAME} > {last_pk}"
 
-            results = collection.query(
-                expr=current_filter,
-                offset=0,
-                limit=BATCH_SIZE,
-                output_fields=[URL_FIELD_NAME, PRIMARY_KEY_FIELD_NAME, FILTER_FIELD_NAME, DOMAINE_FIELD_NAME],
-                sorted_by_field=PRIMARY_KEY_FIELD_NAME, # Important pour la pagination
-                asc=True
-            )
+            async with guard.slot():
+                results = await asyncio.to_thread(
+                    collection.query,
+                    expr=current_filter,
+                    offset=0,
+                    limit=BATCH_SIZE,
+                    output_fields=[URL_FIELD_NAME, PRIMARY_KEY_FIELD_NAME, FILTER_FIELD_NAME, DOMAINE_FIELD_NAME],
+                    sorted_by_field=PRIMARY_KEY_FIELD_NAME,  # Important pour la pagination
+                    asc=True
+                )
 
             if not results:
                 break
@@ -103,11 +106,11 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
                 url = entity.get(URL_FIELD_NAME)
                 page_type = entity.get(FILTER_FIELD_NAME)
                 url_domain = entity.get(DOMAINE_FIELD_NAME, "")
-                
+
                 # Nettoyage domaine entité
                 if url_domain:
                     url_domain = url_domain.replace('www.', '')
-                
+
                 if not url_domain:
                     # On met à jour last_pk même si on saute l'entité
                     last_pk = entity[PRIMARY_KEY_FIELD_NAME]
@@ -125,7 +128,7 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
                             if url_domain.endswith('.' + td):
                                 is_in_filter = True
                                 break
-                    
+
                     if not is_in_filter:
                         last_pk = entity[PRIMARY_KEY_FIELD_NAME]
                         continue
@@ -139,7 +142,7 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
                     domains_with_footer.add(url_domain)
                 else:
                     unique_content_urls.add(url)
-                
+
                 # Mise à jour PK pour la prochaine itération
                 last_pk = entity[PRIMARY_KEY_FIELD_NAME]
 
@@ -152,7 +155,7 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
 
     end_time = time.time()
     execution_time = end_time - start_time
-    
+
     domains_without_structure = all_domains_seen - domains_with_header - domains_with_footer
 
     return {
@@ -180,8 +183,9 @@ def _run_global_analysis(domains_filter: Optional[List[str]]) -> Dict:
     ATTENTION : Cette opération scanne toute la collection (chunk_number=1). Elle peut prendre du temps sur de gros volumes.
     """
 )
-def get_global_stats(request: StatsRequest):
+async def get_global_stats(http_request: Request, request: StatsRequest):
     """
-    Endpoint synchrone (lancé dans un threadpool par FastAPI) pour ne pas bloquer l'event loop.
+    Endpoint async that wraps each Milvus batch query with the concurrency guard.
     """
-    return _run_global_analysis(request.domains)
+    guard = http_request.app.state.concurrency_guard
+    return await _run_global_analysis(guard=guard, domains_filter=request.domains)
