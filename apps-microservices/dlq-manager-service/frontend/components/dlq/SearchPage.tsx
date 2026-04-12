@@ -8,7 +8,7 @@ import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
 import CreateRuleModal from "./CreateRuleModal";
-import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, apiGetUniqueErrors, Message, UniqueErrorBucket } from "@/lib/api";
+import { apiGetDashboardStats, apiGetServiceNames, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, apiGetUniqueErrors, Message, UniqueErrorBucket } from "@/lib/api";
 import UniqueErrorsModal from "./UniqueErrorsModal";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -90,27 +90,44 @@ export default function SearchPage() {
     };
   }, []);
 
+  // Fetch service names dynamically based on current status + date filters
   useEffect(() => {
-    apiGetDashboardStats().then(response => {
-        const options = response.data.by_service.map(bucket => ({
-            value: bucket.key,
-            label: bucket.key,
+    const debounceTimer = setTimeout(() => {
+      const serviceFilters: Record<string, any> = {};
+      if (filters.status.length > 0) {
+        serviceFilters.status = filters.status;
+      }
+      if (filters.date_start instanceof Date) {
+        serviceFilters.date_start = filters.date_start.toISOString();
+      }
+      if (filters.date_end instanceof Date) {
+        serviceFilters.date_end = filters.date_end.toISOString();
+      }
+
+      apiGetServiceNames(serviceFilters).then(response => {
+        const options = response.data.services.map(bucket => ({
+          value: bucket.key,
+          label: bucket.key,
         }));
         setServiceOptions(options);
 
         // Purge stale service_names that no longer exist in current options
-        const validKeys = new Set(options.map((o: MultiSelectOption) => o.value));
+        const validKeys = new Set(options.map((o: { value: string }) => o.value));
         setFilters((prev: Filters) => {
-            const cleaned = prev.service_names.filter((s: string) => validKeys.has(s));
-            if (cleaned.length !== prev.service_names.length) {
-                return { ...prev, service_names: cleaned };
-            }
-            return prev;
+          const cleaned = prev.service_names.filter((s: string) => validKeys.has(s));
+          if (cleaned.length !== prev.service_names.length) {
+            return { ...prev, service_names: cleaned };
+          }
+          return prev;
         });
-    }).catch(err => {
+      }).catch(err => {
         console.error("Failed to fetch service names for filters", err);
-    })
-  }, []);
+      });
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filters.status), filters.date_start?.getTime(), filters.date_end?.getTime()]);
 
   // Construct standard JSON filter payload to use consistently
   const getActiveFiltersPayload = useCallback(() => {
