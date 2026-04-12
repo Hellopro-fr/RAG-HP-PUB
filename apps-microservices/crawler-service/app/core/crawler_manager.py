@@ -1622,28 +1622,36 @@ class CrawlerManager:
                         time_since_activity = (datetime.utcnow() - last_activity_time).total_seconds()
                         if time_since_activity > STALE_JOB_THRESHOLD_SECONDS:
                             is_stale = True
-                            logger.warning(f"Job '{crawl_id}' (status: {status}) is stale! Last activity: {time_since_activity:.0f}s ago. Marking as failed.")
                     else:
                         is_stale = True
-                        logger.warning(f"Job '{crawl_id}' (status: {status}) has no time data. Marking as stale/failed.")
 
                     if is_stale:
-                        # Mark as failed
-                        job_data["status"] = "failed"
-                        job_data["shutdown_reason"] = "Stale job detected (missing heartbeat)" # V3 Logic
+                        # Branch based on status: stopping jobs are cleaned up silently,
+                        # running/restarting_oom jobs are marked as failed with webhook.
+                        is_stopping = (status == "stopping")
+                        final_status = "stopped" if is_stopping else "failed"
+
+                        if is_stopping:
+                            logger.info(f"Job '{crawl_id}' (status: stopping) is stale. Cleaning up as 'stopped' (stop webhook already sent).")
+                        else:
+                            time_info = f"{time_since_activity:.0f}s ago" if last_activity_time else "no time data"
+                            logger.warning(f"Job '{crawl_id}' (status: {status}) is stale! Last activity: {time_info}. Marking as failed.")
+
+                        job_data["status"] = final_status
+                        job_data["shutdown_reason"] = "Stop cleanup (stale)" if is_stopping else "Stale job detected (missing heartbeat)"
                         if "last_heartbeat" in job_data:
                             del job_data["last_heartbeat"]
 
-                        # Write completion marker before deleting key (for disk recovery)
+                        # Write completion marker
                         storage_path = job_data.get("storage_path", "")
                         if storage_path and os.path.isdir(storage_path):
                             marker_path = os.path.join(storage_path, '_completion_marker.json')
                             try:
                                 async with aiofiles.open(marker_path, 'w') as f:
                                     await f.write(json.dumps({
-                                        "final_status": "failed", "exit_code": -1,
+                                        "final_status": final_status, "exit_code": 0 if is_stopping else -1,
                                         "end_timestamp": datetime.utcnow().isoformat(),
-                                        "reason": "stale_heartbeat"
+                                        "reason": "stop_cleanup" if is_stopping else "stale_heartbeat"
                                     }, indent=2))
                             except Exception as marker_err:
                                 logger.warning(f"Could not write completion marker for stale job '{crawl_id}': {marker_err}")
@@ -1651,10 +1659,10 @@ class CrawlerManager:
                         # Release distributed lock and update state document
                         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
                         await cache_service.set_json(all_job_keys[i], job_data)
-                        await self._publish_update(crawl_id, "failed")
+                        await self._publish_update(crawl_id, final_status)
 
-                        # Send failure webhook
-                        if job_data.get("failure_callback_url"):
+                        # Only send failure webhook for non-stopping jobs
+                        if not is_stopping and job_data.get("failure_callback_url"):
                             asyncio.create_task(self._send_failure_webhook(
                                 str(job_data["failure_callback_url"]),
                                 crawl_id,
