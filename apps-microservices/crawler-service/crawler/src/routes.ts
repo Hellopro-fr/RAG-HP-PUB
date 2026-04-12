@@ -253,9 +253,9 @@ router.addDefaultHandler(
 
                 if (cb.isMicroMode) {
                     // --- MICRO MODE (Absolute Limits) ---
-                    if (errors >= cb.maxAbsErrors) abortReason = `Too many errors for small site (${errors} >= ${cb.maxAbsErrors})`;
-                    else if (redirects >= cb.maxAbsRedirects) abortReason = `Too many redirects for small site (${redirects} >= ${cb.maxAbsRedirects})`;
-                    else if (newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
+                    if (cb.maxAbsErrors > 0 && errors >= cb.maxAbsErrors) abortReason = `Too many errors for small site (${errors} >= ${cb.maxAbsErrors})`;
+                    else if (cb.maxAbsRedirects > 0 && redirects >= cb.maxAbsRedirects) abortReason = `Too many redirects for small site (${redirects} >= ${cb.maxAbsRedirects})`;
+                    else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
                 } else {
                     // --- STANDARD MODE (Rate Limits) ---
                     if (processed >= cb.minSample) {

@@ -1187,9 +1187,9 @@ export const generateUpdateReport = async (domain: string) => {
 
         // Determine Health Status
         if (cb.isMicroMode) {
-            if (errors >= cb.maxAbsErrors) { status = "CRITICAL"; statusMessage = `Max absolute errors reached (${errors})`; }
-            else if (redirects >= cb.maxAbsRedirects) { status = "CRITICAL"; statusMessage = `Max absolute redirects reached (${redirects})`; }
-            else if (newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
+            if (cb.maxAbsErrors > 0 && errors >= cb.maxAbsErrors) { status = "CRITICAL"; statusMessage = `Max absolute errors reached (${errors})`; }
+            else if (cb.maxAbsRedirects > 0 && redirects >= cb.maxAbsRedirects) { status = "CRITICAL"; statusMessage = `Max absolute redirects reached (${redirects})`; }
+            else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
         } else {
             if (processed >= cb.minSample) {
                 if (errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
