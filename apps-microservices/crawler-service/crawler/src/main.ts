@@ -1079,10 +1079,23 @@ if (typeCrawling == "sitemap") {
                 }
             }
             console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
+            context.phase2SeedingComplete = true;
         };
 
         // Fire-and-forget: runs concurrently with the crawler
-        seedPhase2().catch(err => console.error(`[PHASE 2] Error during seeding: ${err.message}`));
+        context.phase2SeedingComplete = false;
+        seedPhase2().catch(err => {
+            console.error(`[PHASE 2] Error during seeding: ${err.message}`);
+            context.phase2SeedingComplete = true; // Unblock crawler on error
+        });
+
+        // Safety timeout: force completion flag after 5 minutes if Phase 2 hangs
+        setTimeout(() => {
+            if (!context.phase2SeedingComplete) {
+                console.warn("[PHASE 2] Timeout: seeding not complete after 5 minutes. Forcing completion flag.");
+                context.phase2SeedingComplete = true;
+            }
+        }, 5 * 60 * 1000);
     }
 
     // Launch

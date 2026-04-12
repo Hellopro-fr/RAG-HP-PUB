@@ -724,6 +724,16 @@ export const startCrawler = async (
     if (paramPerMinute > 0) optionsCrawler.maxRequestsPerMinute = paramPerMinute;
     if (proxyConfiguration) optionsCrawler.proxyConfiguration = proxyConfiguration;
 
+    // Prevent premature shutdown while Phase 2 is seeding URLs in update mode.
+    // In standard mode, phase2SeedingComplete is true by default → no effect.
+    optionsCrawler.autoscaledPoolOptions = {
+        ...optionsCrawler.autoscaledPoolOptions,
+        isFinishedFunction: async () => {
+            const isEmpty = await requestQueue.isEmpty();
+            return isEmpty && context.phase2SeedingComplete;
+        },
+    };
+
     const crawler = new PlaywrightCrawler(optionsCrawler, configuration);
     context.crawlerInstance = crawler; // Expose instance for stopping
 

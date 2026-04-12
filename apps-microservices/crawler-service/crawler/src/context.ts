@@ -67,5 +67,8 @@ export const context = {
     // Promise-based signal for update mode two-phase seeding.
     // Created in main.ts (update mode only). Resolved by homepage handler in routes.ts
     // after storing excludedRegionalPaths. Awaited by Phase 2 seeding in main.ts.
-    homepageReady: null as { resolve: () => void; promise: Promise<void> } | null
+    homepageReady: null as { resolve: () => void; promise: Promise<void> } | null,
+    // Flag for update mode: prevents crawler from shutting down while Phase 2 is still seeding URLs.
+    // Defaults to true (standard mode has no Phase 2). Set to false before Phase 2, true when done.
+    phase2SeedingComplete: true
 };
