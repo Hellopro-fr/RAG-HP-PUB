@@ -181,8 +181,11 @@ const commands: CommandInfo[] = [
         "mcp-remote",
         "https://<gateway-url>/mcp",
         "--header",
-        "X-MCP-Scope-Token: <votre-token>"
-      ]
+        "X-MCP-Scope-Token: \${MCP_SCOPE_TOKEN}"
+      ],
+      "env": {
+        "MCP_SCOPE_TOKEN": "<votre-token>"
+      }
     }
   }
 }`,
@@ -219,8 +222,11 @@ const commands: CommandInfo[] = [
         "mcp-remote",
         "https://<gateway-url>/mcp",
         "--header",
-        "X-MCP-Scope-Token: <votre-token>"
-      ]
+        "X-MCP-Scope-Token: \${MCP_SCOPE_TOKEN}"
+      ],
+      "env": {
+        "MCP_SCOPE_TOKEN": "<votre-token>"
+      }
     }
   }
 }`,
@@ -260,8 +266,11 @@ const commands: CommandInfo[] = [
         "npm:mcp-remote",
         "https://<gateway-url>/mcp",
         "--header",
-        "X-MCP-Scope-Token: <votre-token>"
-      ]
+        "X-MCP-Scope-Token: \${MCP_SCOPE_TOKEN}"
+      ],
+      "env": {
+        "MCP_SCOPE_TOKEN": "<votre-token>"
+      }
     }
   }
 }`,
@@ -299,8 +308,11 @@ const commands: CommandInfo[] = [
         "mcp-proxy",
         "https://<gateway-url>/mcp",
         "--header",
-        "X-MCP-Scope-Token: <votre-token>"
-      ]
+        "X-MCP-Scope-Token: \${MCP_SCOPE_TOKEN}"
+      ],
+      "env": {
+        "MCP_SCOPE_TOKEN": "<votre-token>"
+      }
     }
   }
 }`,
@@ -335,11 +347,15 @@ const commands: CommandInfo[] = [
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
+        "-e", "MCP_SCOPE_TOKEN",
         "ghcr.io/anthropics/mcp-remote",
         "https://<gateway-url>/mcp",
         "--header",
-        "X-MCP-Scope-Token: <votre-token>"
-      ]
+        "X-MCP-Scope-Token: \${MCP_SCOPE_TOKEN}"
+      ],
+      "env": {
+        "MCP_SCOPE_TOKEN": "<votre-token>"
+      }
     }
   }
 }`,

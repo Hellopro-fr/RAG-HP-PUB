@@ -365,14 +365,15 @@ const generatedMcpJson = computed(() => {
   const tokenValue = createdToken.value.token || ''
   const gatewayUrl = window.location.origin
 
-  const headerArg = `Authorization:Bearer ${tokenValue}`
+  const headerArg = 'X-MCP-Scope-Token: ${MCP_SCOPE_TOKEN}'
+  const env = { MCP_SCOPE_TOKEN: tokenValue }
 
   const argsMap: Record<string, string[]> = {
     npx: ['-y', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    docker: ['run', '-i', '--rm', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
+    docker: ['run', '-i', '--rm', '-e', 'MCP_SCOPE_TOKEN', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
   }
 
   let args: string[]
@@ -386,7 +387,7 @@ const generatedMcpJson = computed(() => {
   }
 
   return JSON.stringify(
-    { mcpServers: { [serverName]: { command, args } } },
+    { mcpServers: { [serverName]: { command, args, env } } },
     null,
     2
   )

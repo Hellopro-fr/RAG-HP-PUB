@@ -135,14 +135,16 @@ function buildMcpJson(tokenValue: string) {
   const serverName = 'hellopro-gateway'
   const gatewayUrl = window.location.origin
 
-  const headerArg = `Authorization:Bearer ${tokenValue}`
+  const headerArg = 'X-MCP-Scope-Token: ${MCP_SCOPE_TOKEN}'
+  const env = { MCP_SCOPE_TOKEN: tokenValue }
 
   if (command === 'custom') {
     return {
       mcpServers: {
         [serverName]: {
           command: command,
-          args: [gatewayUrl + '/mcp', '--header', headerArg]
+          args: [gatewayUrl + '/mcp', '--header', headerArg],
+          env
         }
       }
     }
@@ -153,14 +155,15 @@ function buildMcpJson(tokenValue: string) {
     bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    docker: ['run', '-i', '--rm', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
+    docker: ['run', '-i', '--rm', '-e', 'MCP_SCOPE_TOKEN', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
   }
 
   return {
     mcpServers: {
       [serverName]: {
         command: command,
-        args: argsMap[command] || [gatewayUrl + '/mcp', '--header', headerArg]
+        args: argsMap[command] || [gatewayUrl + '/mcp', '--header', headerArg],
+        env
       }
     }
   }
