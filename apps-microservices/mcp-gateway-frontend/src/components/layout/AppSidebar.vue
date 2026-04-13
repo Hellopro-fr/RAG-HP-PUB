@@ -258,6 +258,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
         name: "Guide d'installation",
         path: '/install-guide',
       },
+      {
+        icon: 'pi pi-file',
+        name: 'Documentation des outils',
+        path: '/docs',
+      },
     ],
   })
 
