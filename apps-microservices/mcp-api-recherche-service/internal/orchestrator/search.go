@@ -13,6 +13,7 @@ import (
 	embeddingpb "github.com/hellopro/mcp-api-recherche/proto/gen/embedding"
 	rerankingpb "github.com/hellopro/mcp-api-recherche/proto/gen/reranking"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // SearchParams holds parsed parameters for a search operation.
@@ -277,6 +278,16 @@ func (so *SearchOrchestrator) executeSearch(
 	case "hybrid":
 		denseWeight := float32(0.7)
 		sparseWeight := float32(0.3)
+		// Use RRF (Reciprocal Rank Fusion) — robust to score-scale differences
+		// between dense COSINE and sparse BM25. dense_weight/sparse_weight are
+		// kept for backward compatibility but ignored when ranker_type=rrf.
+		options, optErr := structpb.NewStruct(map[string]any{
+			"rankerType": "rrf",
+			"rrfK":       float64(60),
+		})
+		if optErr != nil {
+			return nil, fmt.Errorf("build hybrid options: %w", optErr)
+		}
 		req := &databasepb.HybridSearchRequest{
 			CollectionName:  collection,
 			DenseVector:     queryVector,
@@ -286,6 +297,7 @@ func (so *SearchOrchestrator) executeSearch(
 			SparseWeight:    &sparseWeight,
 			OutputFields:    outputFields,
 			SourceService:   strPtr("mcp-api-recherche"),
+			Options:         options,
 		}
 		if filterExpr != "" {
 			req.FilterExpression = &filterExpr
