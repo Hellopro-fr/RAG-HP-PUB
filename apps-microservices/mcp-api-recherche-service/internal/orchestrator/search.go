@@ -281,13 +281,17 @@ func (so *SearchOrchestrator) executeSearch(
 		// Use RRF (Reciprocal Rank Fusion) — robust to score-scale differences
 		// between dense COSINE and sparse BM25. dense_weight/sparse_weight are
 		// kept for backward compatibility but ignored when ranker_type=rrf.
+		const rankerType = "rrf"
+		const rrfK = 60
 		options, optErr := structpb.NewStruct(map[string]any{
-			"rankerType": "rrf",
-			"rrfK":       float64(60),
+			"rankerType": rankerType,
+			"rrfK":       float64(rrfK),
 		})
 		if optErr != nil {
 			return nil, fmt.Errorf("build hybrid options: %w", optErr)
 		}
+		log.Printf("[search] hybrid request for %s: ranker_type=%s, rrf_k=%d, dense_weight=%.2f, sparse_weight=%.2f",
+			collection, rankerType, rrfK, denseWeight, sparseWeight)
 		req := &databasepb.HybridSearchRequest{
 			CollectionName:  collection,
 			DenseVector:     queryVector,
