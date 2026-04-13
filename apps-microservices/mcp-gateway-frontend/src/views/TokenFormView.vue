@@ -51,7 +51,19 @@
 
       <!-- Generated .mcp.json -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Configuration .mcp.json</label>
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Configuration .mcp.json</label>
+          <a
+            href="/install-guide"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
+            title="Ouvrir le guide d'installation dans un nouvel onglet"
+          >
+            <i class="pi pi-external-link text-[10px]" />
+            Documentation
+          </a>
+        </div>
         <div class="relative">
           <pre class="bg-gray-900 text-blue-300 rounded-lg p-4 pr-12 text-sm font-mono overflow-x-auto whitespace-pre-wrap">{{ generatedMcpJson }}</pre>
           <button

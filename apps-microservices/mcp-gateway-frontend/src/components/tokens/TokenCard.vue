@@ -86,10 +86,22 @@
       <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-medium text-gray-600 dark:text-gray-400">.mcp.json</span>
-          <button class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1" @click="copyMcpJson">
-            <i class="pi pi-copy text-[10px]" />
-            Copier
-          </button>
+          <div class="flex items-center gap-3">
+            <a
+              href="/install-guide"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
+              title="Ouvrir le guide d'installation dans un nouvel onglet"
+            >
+              <i class="pi pi-external-link text-[10px]" />
+              Documentation
+            </a>
+            <button class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1" @click="copyMcpJson">
+              <i class="pi pi-copy text-[10px]" />
+              Copier
+            </button>
+          </div>
         </div>
         <pre class="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 font-mono overflow-x-auto max-h-[160px] overflow-y-auto whitespace-pre text-gray-800 dark:text-gray-300">{{ mcpJsonDisplay }}</pre>
       </div>
