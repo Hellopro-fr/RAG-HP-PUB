@@ -6,6 +6,7 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     title?: string
     minRole?: UserRole
+    layout?: 'docs'
   }
 }
 
@@ -23,6 +24,18 @@ const router = createRouter({
       name: 'authorize',
       component: () => import('@/views/AuthorizeView.vue'),
       meta: { requiresAuth: false }
+    },
+    {
+      path: '/docs',
+      name: 'docs',
+      component: () => import('@/views/DocsServersView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: 'Documentation' }
+    },
+    {
+      path: '/docs/:serverSlug',
+      name: 'docs-server',
+      component: () => import('@/views/DocsServerDetailView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: 'Documentation serveur' }
     },
     {
       path: '/',
