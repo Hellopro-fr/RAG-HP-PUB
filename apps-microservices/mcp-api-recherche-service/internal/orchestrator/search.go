@@ -283,9 +283,13 @@ func (so *SearchOrchestrator) executeSearch(
 		// kept for backward compatibility but ignored when ranker_type=rrf.
 		const rankerType = "rrf"
 		const rrfK = 60
+		// Use snake_case keys: database-recherche-service reads camelCase for
+		// the [HybridSearch] Params log line but unpacks **kwargs into the
+		// use_case which only matches snake_case parameter names. Sending
+		// camelCase silently falls back to ranker_type="weighted".
 		options, optErr := structpb.NewStruct(map[string]any{
-			"rankerType": rankerType,
-			"rrfK":       float64(rrfK),
+			"ranker_type": rankerType,
+			"rrf_k":       float64(rrfK),
 		})
 		if optErr != nil {
 			return nil, fmt.Errorf("build hybrid options: %w", optErr)
