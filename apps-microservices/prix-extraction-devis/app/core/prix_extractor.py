@@ -669,8 +669,10 @@ class PrixExtractor:
         if ids_items_traites:
             items_filtres = []
             for item in items:
-                if item["id"] in ids_items_traites:
-                    self._log(f"Item {item['id']} déjà traité")
+                # tronqué à 255 chars si nécessaire seulement pour la verification
+                item_id = item["id"][:255]
+                if item_id in ids_items_traites:
+                    self._log(f"Item {item_id} déjà traité")
                 else:
                     items_filtres.append(item)
             items = items_filtres
