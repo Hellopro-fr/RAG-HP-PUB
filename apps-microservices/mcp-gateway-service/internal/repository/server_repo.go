@@ -3,6 +3,7 @@ package repository
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
@@ -125,10 +126,29 @@ func (r *ServerRepo) UpdateHealth(id string, status string, lastErr string) erro
 	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Updates(updates).Error
 }
 
+// SetToolActive enables or disables a specific tool within a server.
+func (r *ServerRepo) SetToolActive(serverID string, toolName string, active bool) error {
+	return r.db.Model(&db.ServerTool{}).
+		Where("server_id = ? AND name = ?", serverID, toolName).
+		Update("is_active", active).Error
+}
+
 // SaveDiscoveredCapabilities replaces tools, resources, and prompts for a server.
 // It also updates the server's discovered metadata.
+// Tool is_active status is preserved across rediscovery for tools that already exist.
 func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Snapshot existing tool active states before deletion
+		var existingTools []db.ServerTool
+		tx.Where("server_id = ?", srv.ID).Find(&existingTools)
+		toolActiveState := make(map[string]bool, len(existingTools))
+		for _, t := range existingTools {
+			toolActiveState[t.Name] = t.IsActive
+			if !t.IsActive {
+				log.Printf("[repo] snapshot: tool %s is_active=%v (server %s)", t.Name, t.IsActive, srv.ID)
+			}
+		}
+
 		// Supprime les anciennes capabilities
 		if err := tx.Where("server_id = ?", srv.ID).Delete(&db.ServerTool{}).Error; err != nil {
 			return err
@@ -141,10 +161,26 @@ func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
 			return err
 		}
 
-		// Insère les nouvelles capabilities
+		// Insère les nouvelles capabilities, preserving is_active for existing tools
 		for i := range srv.Tools {
 			srv.Tools[i].ServerID = srv.ID
-			if err := tx.Create(&srv.Tools[i]).Error; err != nil {
+			if wasActive, existed := toolActiveState[srv.Tools[i].Name]; existed {
+				srv.Tools[i].IsActive = wasActive
+				if !wasActive {
+					log.Printf("[repo] preserving: tool %s is_active=%v (server %s)", srv.Tools[i].Name, wasActive, srv.ID)
+				}
+			} else {
+				srv.Tools[i].IsActive = true // new tools default to active
+				log.Printf("[repo] new tool: %s (server %s), not in snapshot, defaulting to active", srv.Tools[i].Name, srv.ID)
+			}
+			if err := tx.Exec(
+				"INSERT INTO server_tools (server_id, name, description, input_schema, is_active) VALUES (?, ?, ?, ?, ?)",
+				srv.Tools[i].ServerID,
+				srv.Tools[i].Name,
+				srv.Tools[i].Description,
+				srv.Tools[i].InputSchema,
+				srv.Tools[i].IsActive,
+			).Error; err != nil {
 				return err
 			}
 		}

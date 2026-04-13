@@ -1048,6 +1048,22 @@ Cela signifie qu'apres chaque reponse ou du code a ete modifie, Claude Code veri
 
 **Comment ajouter un nouveau hook :** Editez `.claude/settings.json` et ajoutez des entrees sous la cle `hooks`. Types disponibles : `PreToolUse`, `PostToolUse`, `Stop`, `command`, `prompt`, `agent`.
 
+### Plugin Superpowers
+
+Le projet a le plugin `superpowers` installe au niveau projet. Il fournit 14 skills qui imposent un workflow de developpement structure : brainstorming avant le code, redaction de plans, TDD, orchestration de sous-agents, et verification avant toute declaration de completion.
+
+**Quand utiliser superpowers vs. les commandes du projet :**
+
+| Tache | Commande projet (legere) | Skill superpowers (lourde) |
+|-------|--------------------------|----------------------------|
+| Planifier une tache | `/plan` | `writing-plans` (spec multi-etapes avec revue formelle) |
+| Debugger une erreur | `@debugger` | `systematic-debugging` (test d'hypotheses exhaustif) |
+| Revoir du code | `@code-reviewer` | `requesting-code-review` (revue formelle avec portes de verification) |
+| Ecrire des tests | `@test-writer` | `test-driven-development` (TDD strict red-green-refactor) |
+| Executer un plan | Implementation directe | `executing-plans` (delegation aux sous-agents avec checkpoints) |
+
+**Regle d'or :** Utilisez les commandes du projet pour les taches ciblees du quotidien. Utilisez les skills superpowers pour le travail complexe multi-etapes qui beneficie de portes de verification structurees.
+
 ### Pattern primer.md avance
 
 Pour les projets a long terme, enrichissez votre `primer.md` avec des notes contextuelles :

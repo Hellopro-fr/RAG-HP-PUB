@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     # GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
     GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
 
+    # LLM - Claude (Anthropic)
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL_NAME: str = "claude-haiku-4-5"
+
+    # LLM - ChatGPT (OpenAI)
+    OPENAI_API_KEY: str = ""
+    CHATGPT_MODEL_NAME: str = "gpt-5.4-mini"
+
     # API HelloPro
     HP_TOKEN: str
 

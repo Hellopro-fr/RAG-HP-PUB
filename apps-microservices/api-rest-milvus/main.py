@@ -1,9 +1,15 @@
 from fastapi import FastAPI
 from app.router.api_router import api_router
 
+import os
 import logging
 import asyncio
 from contextlib import asynccontextmanager
+
+import redis.asyncio as aioredis
+from common_utils.concurrency.config import GuardConfig
+from common_utils.concurrency.milvus_concurrency_guard import MilvusConcurrencyGuard
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
 
 from app.core.api_rest_milvus import get_milvus_connection
 
@@ -36,9 +42,28 @@ async def lifespan(app: FastAPI):
     await asyncio.gather(*init_tasks)
     
     logger.info("--- Startup Complete. Application is ready. ---")
-    
+
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
+
+    # --- Initialize Milvus concurrency guard ---
+    redis_url = os.environ.get("REDIS_URL")
+    redis_client = None
+    if redis_url:
+        try:
+            redis_client = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+            await redis_client.ping()
+            logger.info("Connected to Redis for concurrency guard.")
+        except Exception as e:
+            logger.warning("Could not connect to Redis: %s — guard will use local fallback", e)
+            redis_client = None
+
+    guard_config = GuardConfig(service_name="api-rest-milvus")
+    app.state.concurrency_guard = MilvusConcurrencyGuard(redis_client, guard_config)
+    await app.state.concurrency_guard.start_correction_loop()
+
     yield
-    
+
     # --- Shutdown Logic ---
     # You can add cleanup code here if needed, like closing connections.
     logger.info("--- Application Shutdown ---")

@@ -21,11 +21,18 @@ type Config struct {
 	AuthURL      string // hellopro.fr auth endpoint
 	AuthEnabled  bool   // AUTH_ENABLED — enabled by default, set to "false" to disable login
 	SecureCookie bool   // SECURE_COOKIE — set to "true" when behind TLS (default: false for local dev)
-	// Scope tokens
-	ScopeTokenRequired bool   // SCOPE_TOKEN_REQUIRED — enabled by default, set to "false" to allow unauthenticated MCP access
-	GatewayPublicURL   string // GATEWAY_PUBLIC_URL — for .mcp.json snippets
+	// OAuth2
+	GatewayPublicURL      string // GATEWAY_PUBLIC_URL — for metadata issuer and WWW-Authenticate
+	OAuth2AccessTokenTTL  int    // OAUTH2_ACCESS_TOKEN_TTL — default access token lifetime in seconds (default 3600)
+	OAuth2RefreshTokenTTL int    // OAUTH2_REFRESH_TOKEN_TTL — refresh token lifetime in seconds (default 2592000 = 30 days)
 	// URL validation
 	AllowInternalURLs bool // ALLOW_INTERNAL_URLS — set to "true" to allow Docker-internal/private IP ranges (e.g. 172.x.x.x)
+	// RBAC
+	AdminEmails []string // ADMIN_EMAILS — comma-separated emails that get admin role on first login
+	// Fallback auth (for users not registered in hellopro.fr)
+	FallbackUser  string // FALLBACK_USER
+	FallbackPass  string // FALLBACK_PASS
+	FallbackEmail string // FALLBACK_EMAIL
 }
 
 func Load() *Config {
@@ -50,6 +57,20 @@ func Load() *Config {
 		}
 	}
 
+	oauth2TTL := 3600
+	if v := os.Getenv("OAUTH2_ACCESS_TOKEN_TTL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			oauth2TTL = n
+		}
+	}
+
+	refreshTTL := 2592000 // 30 days
+	if v := os.Getenv("OAUTH2_REFRESH_TOKEN_TTL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			refreshTTL = n
+		}
+	}
+
 	// Auth is enabled by default — set AUTH_ENABLED=false to disable
 	authEnabled := !strings.EqualFold(os.Getenv("AUTH_ENABLED"), "false")
 
@@ -67,10 +88,29 @@ func Load() *Config {
 		AuthURL:             getEnv("AUTH_URL", "https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php"),
 		AuthEnabled:         authEnabled,
 		SecureCookie:        strings.EqualFold(os.Getenv("SECURE_COOKIE"), "true"),
-		ScopeTokenRequired:  !strings.EqualFold(os.Getenv("SCOPE_TOKEN_REQUIRED"), "false"),
-		GatewayPublicURL:    getEnv("GATEWAY_PUBLIC_URL", ""),
+		GatewayPublicURL:      getEnv("GATEWAY_PUBLIC_URL", ""),
+		OAuth2AccessTokenTTL:  oauth2TTL,
+		OAuth2RefreshTokenTTL: refreshTTL,
 		AllowInternalURLs:   strings.EqualFold(os.Getenv("ALLOW_INTERNAL_URLS"), "true"),
+		AdminEmails:         parseCSV(os.Getenv("ADMIN_EMAILS")),
+		FallbackUser:        os.Getenv("FALLBACK_USER"),
+		FallbackPass:        os.Getenv("FALLBACK_PASS"),
+		FallbackEmail:       os.Getenv("FALLBACK_EMAIL"),
 	}
+}
+
+func parseCSV(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var result []string
+	for _, s := range strings.Split(raw, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 func getEnv(key, defaultVal string) string {

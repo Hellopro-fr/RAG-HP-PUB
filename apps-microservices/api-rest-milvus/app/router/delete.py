@@ -1,6 +1,7 @@
 import json
+import asyncio
 from pymilvus import connections
-from fastapi import APIRouter, HTTPException, Body, Path
+from fastapi import APIRouter, HTTPException, Body, Path, Request
 from typing import Any, Dict, List, Union, Optional
 from .mapping_rest_milvus import MILVUS_COLLECTIONS_CASCADE_MAPPING
 
@@ -13,6 +14,8 @@ from pymilvus import (
     MilvusException
 )
 
+from app.core.api_rest_milvus import get_loaded_collection
+
 router = APIRouter()
 
 
@@ -24,6 +27,7 @@ class CascadeConfig:
 
 @router.delete("/{collection_milvus}")
 async def delete_ressource(
+    request: Request,
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     body: Dict[str, Any] = Body(..., description="Critères de suppression", examples={
         "by_single_id": {
@@ -181,7 +185,9 @@ async def delete_ressource(
             )
 
     try:
-        result = delete_ressource_rest(
+        guard = request.app.state.concurrency_guard
+        result = await delete_ressource_rest(
+            guard=guard,
             collection_name=collection_name,
             ids=ids,
             filters=filters,
@@ -200,7 +206,8 @@ async def delete_ressource(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
-def delete_ressource_rest(
+async def delete_ressource_rest(
+    guard,
     collection_name: str,
     ids: Optional[Union[int, List[int]]] = None,
     filters: Optional[Dict[str, Any]] = None,
@@ -211,6 +218,7 @@ def delete_ressource_rest(
     Supprime une ou plusieurs ressources dans une collection Milvus.
 
     Args:
+        guard: MilvusConcurrencyGuard instance
         collection_name: Nom de la collection Milvus
         ids: ID unique (int), liste d'IDs (List[int]), ou None
         filters: Dictionnaire de filtres avec opérateurs optionnels
@@ -235,8 +243,7 @@ def delete_ressource_rest(
             }
 
         # Charger la collection
-        collection = Collection(collection_name)
-        collection.load()
+        collection = get_loaded_collection(collection_name)
 
         # Construction de l'expression de filtre pour la collection principale
         expr_parts = []
@@ -276,7 +283,8 @@ def delete_ressource_rest(
         print(f"Expression de suppression principale: {expr}")
 
         # Suppression dans la collection principale
-        results = collection.delete(expr=expr)
+        async with guard.slot():
+            results = await asyncio.to_thread(collection.delete, expr=expr)
 
         deleted_count = results.delete_count
         deleted_ids = list(results.primary_keys) if results.primary_keys else []
@@ -300,7 +308,8 @@ def delete_ressource_rest(
 
         # Gestion de la suppression en cascade
         if cascade_enabled:
-            cascade_result = _delete_cascade(
+            cascade_result = await _delete_cascade(
+                guard=guard,
                 collection_name=collection_name,
                 cascade_filters=cascade_filters,
                 main_filters=filters,
@@ -424,7 +433,8 @@ def _build_single_condition(field_name: str, operator: str, value: Any) -> Optio
             return f"{field_name} {milvus_op} {value}"
 
 
-def _delete_cascade(
+async def _delete_cascade(
+    guard,
     collection_name: str,
     cascade_filters: Optional[Dict[str, Any]],
     main_filters: Optional[Dict[str, Any]],
@@ -434,6 +444,7 @@ def _delete_cascade(
     Gère la suppression en cascade dans la collection de correspondance.
 
     Args:
+        guard: MilvusConcurrencyGuard instance
         collection_name: Nom de la collection principale
         cascade_filters: Filtres spécifiques pour la cascade (prioritaires)
         main_filters: Filtres de la collection principale (fallback)
@@ -472,8 +483,7 @@ def _delete_cascade(
             }
 
         # Charger la collection de correspondance
-        collection_correspondance = Collection(correspondance_collection_name)
-        collection_correspondance.load()
+        collection_correspondance = get_loaded_collection(correspondance_collection_name)
 
         # Déterminer quels filtres utiliser pour la cascade
         filters_to_use = cascade_filters if cascade_filters else main_filters
@@ -500,7 +510,8 @@ def _delete_cascade(
         print(f"Expression de suppression en cascade: {cascade_expr}")
 
         # Suppression dans la collection de correspondance
-        cascade_results = collection_correspondance.delete(expr=cascade_expr)
+        async with guard.slot():
+            cascade_results = await asyncio.to_thread(collection_correspondance.delete, expr=cascade_expr)
 
         cascade_delete_count = cascade_results.delete_count
         cascade_deleted_ids = list(cascade_results.primary_keys) if cascade_results.primary_keys else []

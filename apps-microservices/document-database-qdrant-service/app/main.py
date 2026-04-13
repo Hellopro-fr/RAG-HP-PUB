@@ -3,9 +3,13 @@ import asyncio
 import logging
 import aio_pika
 import aiormq
+import redis.asyncio as aioredis
 
 from document_database_qdrant_service.messaging.consumer import Consumer
 from document_database_qdrant_service.messaging.publisher import Publisher
+from common_utils.concurrency.config import GuardConfig
+from common_utils.concurrency.milvus_concurrency_guard import MilvusConcurrencyGuard
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -23,6 +27,9 @@ async def main():
 
     logger.info("Database-Document-processor-service: Démarrage...")
 
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
+
     loop = asyncio.get_event_loop()
     
     while True:
@@ -31,6 +38,26 @@ async def main():
             logger.info("Database-Document-processor-service: Connecté à RabbitMQ.")
             
             async with connection:
+                # --- Initialize Milvus concurrency guard ---
+                redis_url = os.environ.get("REDIS_URL")
+                redis_client = None
+                if redis_url:
+                    try:
+                        redis_client = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+                        await redis_client.ping()
+                        logger.info("Connected to Redis for concurrency guard.")
+                    except Exception as e:
+                        logger.warning("Could not connect to Redis: %s — guard will use local fallback", e)
+                        redis_client = None
+
+                guard_config = GuardConfig(service_name="document-database-qdrant-service")
+                concurrency_guard = MilvusConcurrencyGuard(redis_client, guard_config)
+                await concurrency_guard.start_correction_loop()
+
+                # Make guard available to processor
+                import document_database_qdrant_service.core.processor as proc_module
+                proc_module._concurrency_guard = concurrency_guard
+
                 publisher = Publisher(connection)
                 consumer = Consumer(connection, publisher)
                 

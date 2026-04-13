@@ -28,7 +28,7 @@ def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant",or
     output_message = {
         "data": {
             "text": text_to_embed,
-            **{k: v for k, v in product_data.items() if k not in ['text']}
+            **{k: v for k, v in product_data.items() if k not in ['text', 'domaine_dspi']}
         },
         "collection": CollectionName.PRODUIT,
         "database": bdd,

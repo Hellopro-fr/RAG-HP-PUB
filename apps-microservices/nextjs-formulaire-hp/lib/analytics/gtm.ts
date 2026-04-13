@@ -6,7 +6,7 @@
 
 type StepType = 'init' | 'question' | 'localisation' | 'choix-propart' | 'selection' | 'contact' | 'conversion';
 
-type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | null;
+type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | 'budget_ne_correspond_pas' | null;
 
 interface FunnelContext {
   rubrique_id?: number;
@@ -291,9 +291,10 @@ export function trackProfileComplete(profileType: string) {
 /**
  * Track l'affichage de la page de sélection produits
  */
-export function trackSelectionPageView(recommendedCount: number, totalCount: number) {
+export function trackSelectionPageView(recommendedCount: number, totalCount: number, hasPriceEstimation?: boolean) {
   currentStepIndex++;
-  trackQuoteFunnel(currentStepIndex, 'selection-produits', 'selection', {
+  const stepName = hasPriceEstimation ? 'selection-produits-prix' : 'selection-produits';
+  trackQuoteFunnel(currentStepIndex, stepName, 'selection', {
     recommended_count: recommendedCount,
     total_count: totalCount,
   });
@@ -305,13 +306,15 @@ export function trackSelectionPageView(recommendedCount: number, totalCount: num
 export function trackProductSelectionChange(
   productId: string,
   action: 'ajouter' | 'retirer',
-  totalSelected: number
+  totalSelected: number,
+  hasPriceEstimation?: boolean
 ) {
   // Vérifier si c'est la première action de ce type pour cet utilisateur dans la session
   const isFirstAdd = action === 'ajouter' && isFirstView('product_selection_ajouter');
   const isFirstRemove = action === 'retirer' && isFirstView('product_selection_retirer');
 
-  trackQuoteFunnel(currentStepIndex, 'product-selection', 'selection', {
+  const stepName = hasPriceEstimation ? 'product-selection-prix' : 'product-selection';
+  trackQuoteFunnel(currentStepIndex, stepName, 'selection', {
     product_id: productId,
     action,
     total_selected: totalSelected,
@@ -360,9 +363,10 @@ export function trackFormValidationErrors(
 /**
  * Track la soumission réussie du lead
  */
-export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown') {
+export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown', hasPriceEstimation?: boolean) {
   currentStepIndex++;
-  trackQuoteFunnel(currentStepIndex, 'submit-success', 'conversion', {
+  const stepName = hasPriceEstimation ? 'submit-success-prix' : 'submit-success';
+  trackQuoteFunnel(currentStepIndex, stepName, 'conversion', {
     nombre_fournisseur: suppliersCount,
     profile_type: profileType,
     user_known_status: userKnownStatus,

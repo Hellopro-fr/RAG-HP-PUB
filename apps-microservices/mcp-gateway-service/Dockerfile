@@ -9,14 +9,18 @@ RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o mcp-gateway ./cmd/server
 
 # Stage 2: Minimal runtime image
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates wget
+RUN apk add --no-cache ca-certificates wget && \
+    adduser -D -u 1000 appuser
 
 WORKDIR /app
 COPY --from=builder /src/mcp-gateway .
+RUN chown appuser:appuser ./mcp-gateway
 
-EXPOSE 8581
+USER appuser
+
+EXPOSE 8592
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost:8581/health || exit 1
+  CMD wget -qO- http://localhost:8592/health || exit 1
 
 CMD ["./mcp-gateway"]

@@ -254,12 +254,17 @@ services:
       context: .
       dockerfile: ./apps-microservices/database-recherche-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
+    expose:
+      - "8530"
     environment:
       - TOTAL_MAX_CONCURRENT_REQUESTS=200
       - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement,mcp-api-recherche
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
       - DB_BATCH_SIZE=16
       - DB_MAX_CONCURRENT_ZILLIZ_DEFAULT=2
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=1
+      - MILVUS_CONCURRENCY_SERVICE_NAME=database-recherche-service
     env_file:
       - .env
     networks:
@@ -517,52 +522,6 @@ services:
     restart: unless-stopped
     logging: *logging_defaults
 
-  api-classification-v2-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/api-classification-v2/Dockerfile
-    #container_name: api-classification-v2-service
-    profiles: ["disabled"] # Profile for the main application stack
-    restart: unless-stopped
-    environment:
-      - LLM_SERVICE_URL=llm-service:50051
-      - CLASSIFICATION_SERVICE_NAME=api-classification-v2-service
-      - CLASSIFICATION_SERVICE_PORT=8578
-      - CLASSIFICATION_NUM_REPLICAS=4
-      # Variables nécessaires pour api_recherche_lib (recherche interne)
-      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
-      - RERANKING_SERVICE_URL=reranking-model-service:50053
-      - DATABASE_SERVICE_URL=database-recherche-service:50054
-      - SERVICE_NAME=api-classification-v2-service
-      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
-    depends_on:
-      - llm-service
-      - embedding-model-service
-      - reranking-model-service
-      - database-recherche-service
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    networks:
-      - services-net
-    logging: *logging_defaults
-
-  api-classification-v2-lb:
-    image: nginx:alpine
-    container_name: api-classification-v2-lb
-    profiles: ["disabled"]
-    ports:
-      - "8578:80"
-    volumes:
-      - ./apps-microservices/api-classification-v2/nginx-classification-v2.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api-classification-v2-service
-    networks:
-      - services-net
-    restart: unless-stopped
-    logging: *logging_defaults
-
   api-transcription-service:
     build:
       context: .
@@ -630,6 +589,30 @@ services:
       - .env
     networks:
       - services-net
+    logging: *logging_defaults
+
+  content-extractor-api-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/content-extractor-api-service/Dockerfile
+    container_name: content-extractor-api-service
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "${CONTENT_EXTRACTOR_API_PORT:-8600}:8600"
+    environment:
+      - PORT=8600
+      - LOG_LEVEL=info
+      - MAX_PAYLOAD_SIZE_MB=10
+    env_file:
+      - .env
+    networks:
+      - services-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8600/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     logging: *logging_defaults
 
   mysql:
@@ -780,55 +763,6 @@ services:
       replicas: 4
     logging: *logging_defaults
 
-  categories-processor-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: categories-processor-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
-  fournisseurs-processor-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/fournisseurs-processor-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: fournisseurs-processor-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
-  ocr-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/ocr-service/Dockerfile
-    profiles: ["app"] # Profile for the main application stack
-    restart: unless-stopped
-    ports:
-      - "8559:8559"
-    environment:
-      - VLLM_DEVICE=cuda
-    env_file:
-      - .env
-    networks:
-      - services-net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["0"]
-              capabilities: [gpu]
-    logging: *logging_defaults
-
   deepseek-ocr:
     build:
       context: .
@@ -881,8 +815,6 @@ services:
       - .env
     networks:
       - services-net
-    # depends_on:
-    #   - ocr-service
     deploy:
       replicas: 2
     logging: *logging_defaults
@@ -985,6 +917,10 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=2
+      - MILVUS_CONCURRENCY_SERVICE_NAME=di-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1002,6 +938,10 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=3
+      - MILVUS_CONCURRENCY_SERVICE_NAME=echange-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1019,6 +959,10 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=3
+      - MILVUS_CONCURRENCY_SERVICE_NAME=website-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1036,6 +980,10 @@ services:
     restart: unless-stopped
     expose:
       - "8530"
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=2
+      - MILVUS_CONCURRENCY_SERVICE_NAME=product-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1044,39 +992,19 @@ services:
       - services-net
     logging: *logging_defaults
 
-  categories-database-qdrant-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/categories-database-qdrant-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: categories-database-qdrant-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
-  fournisseurs-database-qdrant-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
-    profiles: ["disabled"] # Profile for the main application stack
-    # container_name: fournisseurs-database-qdrant-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    deploy:
-      replicas: 4
-    logging: *logging_defaults
-
   document-database-qdrant-service:
     build:
       context: .
       dockerfile: ./apps-microservices/document-database-qdrant-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
-    # container_name: fournisseurs-database-qdrant-service
+    # container_name: document-database-qdrant-service
     restart: unless-stopped
+    expose:
+      - "8530"
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=3
+      - MILVUS_CONCURRENCY_SERVICE_NAME=document-database-qdrant-service
     env_file:
       - .env
     deploy:
@@ -1107,6 +1035,12 @@ services:
     #   - "8517:8517"
     env_file:
       - .env
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - MILVUS_CONCURRENCY_TIER=1
+      - MILVUS_CONCURRENCY_SERVICE_NAME=api-rest-milvus
+    expose:
+      - "8530"
     networks:
       - services-net
     logging: *logging_defaults
@@ -1124,19 +1058,6 @@ services:
     networks:
       - services-net
     restart: unless-stopped
-    logging: *logging_defaults
-
-  api-check-doublon-produit:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/api-check-doublon-produit/Dockerfile
-    container_name: api-check-doublon-produit
-    profiles: ["app"] # Profile for the main application stack
-    restart: unless-stopped
-    ports:
-      - "8516:8516"
-    env_file:
-      - .env
     logging: *logging_defaults
 
   optimize-service:
@@ -1264,6 +1185,7 @@ services:
     volumes:
       - grafana-storage:/var/lib/grafana # Persist Grafana data
       - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/etc/grafana/dashboards
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
@@ -1632,38 +1554,6 @@ services:
       PROMETHEUS_PORT: 8572
     deploy:
       replicas: 3
-    networks:
-      - services-net
-
-  graph-rag-question-processor:
-    build:
-      context: .
-      dockerfile: apps-microservices/graph-rag-question-processor/Dockerfile
-    profiles: ["graph-rag"]
-    expose:
-      - "8571"
-    environment:
-      RABBITMQ_URL: ${RABBITMQ_URL}
-      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
-      PROMETHEUS_PORT: 8571
-    deploy:
-      replicas: 2
-    networks:
-      - services-net
-
-  graph-rag-reponse-processor:
-    build:
-      context: .
-      dockerfile: apps-microservices/graph-rag-reponse-processor/Dockerfile
-    profiles: ["graph-rag"]
-    expose:
-      - "8572"
-    environment:
-      RABBITMQ_URL: ${RABBITMQ_URL}
-      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
-      PROMETHEUS_PORT: 8572
-    deploy:
-      replicas: 2
     networks:
       - services-net
 
@@ -2149,6 +2039,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GSC_GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REFRESH_TOKEN=${GSC_GOOGLE_REFRESH_TOKEN:-}
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gsc-credentials.json
+      - GSC_CREDENTIALS_PATH=/secrets/gsc-credentials.json
       - GSC_SITE_URL=${GSC_SITE_URL:-}
       - GSC_SKIP_OAUTH=${GSC_SKIP_OAUTH:-true}
     volumes:
@@ -2237,10 +2128,10 @@ services:
     container_name: mcp-gateway-service
     profiles: ["mcp"]
     restart: unless-stopped
-    ports:
-      - "${MCP_GATEWAY_PORT:-8581}:${MCP_GATEWAY_PORT:-8581}"
+    expose:
+      - "8592"
     environment:
-      - MCP_GATEWAY_PORT=${MCP_GATEWAY_PORT:-8581}
+      - MCP_GATEWAY_PORT=8592
       - MCP_GATEWAY_NAME=${MCP_GATEWAY_NAME:-hellopro-mcp-gateway}
       - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/${GATEWAY_MYSQL_DB:-gateway_db}?parseTime=true&multiStatements=true
       - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
@@ -2253,9 +2144,26 @@ services:
       - SCOPE_TOKEN_REQUIRED=${MCP_SCOPE_TOKEN_REQUIRED}
       - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
       - ALLOW_INTERNAL_URLS=${MCP_ALLOW_INTERNAL_URLS:-true}
+      - ADMIN_EMAILS=${MCP_ADMIN_EMAILS}
+      - FALLBACK_USER=${MCP_FALLBACK_USER}
+      - FALLBACK_PASS=${MCP_FALLBACK_PASS}
+      - FALLBACK_EMAIL=${MCP_FALLBACK_EMAIL}
     # depends_on:
     #   mysql:
     #     condition: service_healthy
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Gateway Frontend ────────────────────────────────────────────
+  mcp-gateway-frontend:
+    build:
+      context: ./apps-microservices/mcp-gateway-frontend
+    container_name: mcp-gateway-frontend
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "${MCP_GATEWAY_PORT:-8581}:8581"
     networks:
       - services-net
     logging: *logging_defaults

@@ -10,6 +10,7 @@ import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
 import { validatePhoneNumber } from "@/lib/utils/phone-validation";
 import { toast } from "@/hooks/use-toast";
 import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
+import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 import { ContactFormData } from "@/types";
 import { useBuyerCheck } from "@/hooks/api";
@@ -33,7 +34,8 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
     categoryId,
     files: filesStore,
     setFilesStore,
-    addFilesStore
+    addFilesStore,
+    priceEstimation
   } = useFlowStore();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -258,7 +260,8 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
       has_description: !!description,
       has_files: (finalData.files?.length || 0) > 0,
       files_count: finalData.files?.length || 0,
-      flow_type: flowType
+      flow_type: flowType,
+      price_estimation: buildPriceTrackingPayload(priceEstimation),
     }, categoryId, 1);
 
     // Si acheteur connu: soumettre le lead directement

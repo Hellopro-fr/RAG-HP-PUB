@@ -86,6 +86,15 @@ One paragraph: overall assessment, key strengths, key concerns.
 | **CHANGES REQUESTED** | Zero critical findings, but warnings or unmet criteria exist |
 | **BLOCKED** | One or more critical findings — must be resolved |
 
+## Verification Before Verdict
+
+Before issuing ANY verdict, run verification:
+1. **Run tests** for every service in scope — read the output, do not assume "should pass."
+2. **Check build** — verify syntax/compilation passes for all changed files.
+3. **Evidence required** — every PASS in the State Assessment must have a command output backing it. Never use "should," "probably," or "seems to" in a verdict.
+
+If verification cannot be run (remote-only service), explicitly note: "⚠️ Verification skipped — remote-only service. Verdict based on static analysis only."
+
 ## Rules
 
 - Be exhaustive — perform multiple internal passes before producing output (same as code-reviewer).

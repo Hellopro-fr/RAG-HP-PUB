@@ -15,20 +15,31 @@ import (
 
 	"github.com/hellopro/mcp-gateway/internal/api"
 	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/authserver"
 	"github.com/hellopro/mcp-gateway/internal/config"
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/health"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
+	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/transport"
-	"github.com/hellopro/mcp-gateway/internal/ui"
 )
 
 func main() {
 	cfg := config.Load()
+
+	// Security: JWT_SECRET must be set when authentication is enabled
+	if cfg.AuthEnabled && cfg.JWTSecret == "" {
+		log.Fatalf("[main] FATAL: JWT_SECRET environment variable must be set when AUTH_ENABLED=true. Generate one with: openssl rand -hex 32")
+	}
+
+	// RBAC: ADMIN_EMAILS must be set to bootstrap at least one admin user
+	if len(cfg.AdminEmails) == 0 {
+		log.Fatalf("[main] FATAL: ADMIN_EMAILS environment variable must be set with at least one email address for initial admin access")
+	}
 
 	log.Printf("[main] starting %s v%s on :%s", cfg.Name, cfg.Version, cfg.Port)
 
@@ -40,6 +51,8 @@ func main() {
 	var healthChecker *health.Checker
 	var database *gorm.DB
 	var encryptor *crypto.Encryptor
+	var userRepo *repository.UserRepo
+	var auditRepo *repository.AuditRepo
 
 	if cfg.MySQLDSN != "" {
 		var err error
@@ -58,6 +71,8 @@ func main() {
 		}
 
 		repo = repository.NewServerRepo(database, encryptor)
+		userRepo = repository.NewUserRepo(database, cfg.AdminEmails)
+		auditRepo = repository.NewAuditRepo(database)
 
 		// Charge les serveurs actifs depuis la base de données
 		loadServersFromDB(gw, registry, repo)
@@ -84,17 +99,20 @@ func main() {
 
 	// Configure auth
 	authCfg := auth.Config{
-		JWTSecret:    cfg.JWTSecret,
-		JWTAlgo:      cfg.JWTAlgo,
-		JWTAudience:  cfg.JWTAudience,
-		AuthURL:      cfg.AuthURL,
-		Enabled:      cfg.AuthEnabled,
-		SecureCookie: cfg.SecureCookie,
+		JWTSecret:     cfg.JWTSecret,
+		JWTAlgo:       cfg.JWTAlgo,
+		JWTAudience:   cfg.JWTAudience,
+		AuthURL:       cfg.AuthURL,
+		Enabled:       cfg.AuthEnabled,
+		SecureCookie:  cfg.SecureCookie,
+		FallbackUser:  cfg.FallbackUser,
+		FallbackPass:  cfg.FallbackPass,
+		FallbackEmail: cfg.FallbackEmail,
 	}
 
 	// Mount login/logout routes
 	if authCfg.Enabled {
-		auth.RegisterHandlers(mux, authCfg)
+		auth.RegisterHandlers(mux, authCfg, userRepo)
 		log.Println("[main] authentication enabled — login at /login")
 	}
 
@@ -102,18 +120,53 @@ func main() {
 	tokenCache := scopetoken.NewCache(60 * time.Second)
 	var tokenRepo *repository.TokenRepo
 
+	// OAuth2 cache + repo
+	oauth2Cache := oauth2pkg.NewCache(60 * time.Second)
+	var oauth2Repo *repository.OAuth2Repo
+
 	// Monte les routes REST API si le repository est disponible
 	if repo != nil && database != nil {
 		tokenRepo = repository.NewTokenRepo(database, encryptor)
+		oauth2Repo = repository.NewOAuth2Repo(database, encryptor)
+
 		apiHandler := api.NewHandler(repo, gw, registry, cfg.AllowInternalURLs)
 		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
+		apiHandler.SetOAuth2Repo(oauth2Repo, oauth2Cache)
+		apiHandler.SetUserRepo(userRepo)
+		apiHandler.SetAuditRepo(auditRepo)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
+
+		// OAuth2 Authorization Server (public endpoints: /authorize, /token, /register, /.well-known)
+		authCodeRepo := repository.NewAuthCodeRepo(database)
+		consentRepo := repository.NewConsentRepo(database)
+		refreshRepo := repository.NewRefreshRepo(database)
+
+		authSrv := authserver.NewAuthServer(authserver.AuthServerConfig{
+			OAuth2Repo:   oauth2Repo,
+			AuthCodeRepo: authCodeRepo,
+			ConsentRepo:  consentRepo,
+			RefreshRepo:  refreshRepo,
+			ServerRepo:   repo,
+			JWTSecret:    cfg.JWTSecret,
+			PublicURL:    cfg.GatewayPublicURL,
+			AuthURL:      cfg.AuthURL,
+			SecureCookie: cfg.SecureCookie,
+			RefreshTTL:   cfg.OAuth2RefreshTokenTTL,
+		})
+		authSrv.Register(mux)
+		authSrv.RegisterAPI(mux)
+		log.Println("[main] OAuth2 Authorization Server mounted at /authorize, /token, /register, /.well-known/")
+		log.Println("[main] OAuth2 Authorize API mounted at /api/v1/oauth2/authorize/{info,login,consent}")
 	}
 
-	// Monte l'interface web
-	ui.Register(mux)
-	log.Println("[main] UI mounted at /ui/")
+	// Legacy UI redirect → Vue frontend handles all UI now
+	mux.HandleFunc("/ui/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusMovedPermanently)
+	})
 
 	// Scope handler factory: creates a ScopedGateway for filtered access
 	scopeFactory := func(allowedIDs map[string]bool, allowedTools map[string]map[string]bool) transport.Handler {
@@ -129,24 +182,32 @@ func main() {
 	streamableServer.SetScopeFactory(scopeFactory)
 	streamableServer.Register(mcpMux)
 
-	// Wrap MCP routes with scope token middleware
-	scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, cfg.ScopeTokenRequired)
-	mux.Handle("/sse", scopeMW(mcpMux))
-	mux.Handle("/message", scopeMW(mcpMux))
-	mux.Handle("/mcp", scopeMW(mcpMux))
-	mux.Handle("/mcp/", scopeMW(mcpMux))
-	log.Println("[main] streamable HTTP mounted at /mcp")
+	// Wrap MCP routes with combined OAuth2 + scope token middleware
+	combinedMW := oauth2pkg.CombinedMiddleware(oauth2Cache, oauth2Repo, tokenCache, tokenRepo, cfg.JWTSecret, cfg.GatewayPublicURL)
+	mux.Handle("/sse", combinedMW(mcpMux))
+	mux.Handle("/message", combinedMW(mcpMux))
+	mux.Handle("/mcp", combinedMW(mcpMux))
+	mux.Handle("/mcp/", combinedMW(mcpMux))
+	log.Println("[main] streamable HTTP mounted at /mcp (OAuth2 + scope token auth)")
 
 	// Wrap entire mux with auth middleware
-	authMiddleware := auth.Middleware(authCfg)
-	handler := authMiddleware(mux)
+	authMiddleware := auth.Middleware(authCfg, userRepo)
+	var handler http.Handler = authMiddleware(mux)
+
+	// Wrap with audit middleware if available
+	if auditRepo != nil {
+		auditMw := auth.NewAuditMiddleware(auditRepo)
+		handler = auditMw.Wrap(handler)
+	}
 
 	httpServer := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 0, // SSE streams need unlimited write time
-		IdleTimeout:  60 * time.Second,
+		Addr:              ":" + cfg.Port,
+		Handler:           handler,
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second, // Slowloris protection: limit header read phase
+		WriteTimeout:      0,               // SSE streams need unlimited write time
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB max header size
 	}
 
 	// Graceful shutdown on SIGINT / SIGTERM.
@@ -215,6 +276,13 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
 				}
+				// Sync tool active states from DB (discovery marks all as active,
+				// but some may have been deactivated by the user)
+				toolStates := make(map[string]bool, len(s.Tools))
+				for _, t := range s.Tools {
+					toolStates[t.Name] = t.IsActive
+				}
+				reg.SyncToolActiveStates(s.ID, toolStates)
 				_ = repo.UpdateHealth(s.ID, "healthy", "")
 			}
 		}(srv)
@@ -240,6 +308,7 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.InputSchema,
+			IsActive:    t.IsActive,
 		})
 	}
 	for _, r := range srv.Resources {

@@ -58,6 +58,10 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 		if err != nil {
 			log.Printf("[gateway] warn: list tools from %s: %v", url, err)
 		} else {
+			// Mark all discovered tools as active by default
+			for i := range tools {
+				tools[i].IsActive = true
+			}
 			srv.Tools = tools
 		}
 	}

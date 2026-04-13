@@ -50,6 +50,8 @@ export const context = {
         }
     },
     stopReason: "",
+    robotsTxtBypassed: false,
+    camoufoxEnabled: true,
     crawlErrorMessage: "",
     // In-memory counters for URLs containing '?' and '#' pushed to the dataset.
     // Used by postNavigationHooks to avoid O(n²) full-dataset scans.
@@ -57,5 +59,16 @@ export const context = {
     countDiez: 0,
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
-    languageQueryParam: null as { key: string; value: string } | null
+    languageQueryParam: null as { key: string; value: string } | null,
+    // Regional path prefixes to exclude (e.g., ["/fr", "/fr-BE", "/fr-CA"]).
+    // Populated from alternative_urls during homepage detection.
+    // Read by transformRequestFunction to block discovered regional variant links.
+    excludedRegionalPaths: [] as string[],
+    // Promise-based signal for update mode two-phase seeding.
+    // Created in main.ts (update mode only). Resolved by homepage handler in routes.ts
+    // after storing excludedRegionalPaths. Awaited by Phase 2 seeding in main.ts.
+    homepageReady: null as { resolve: () => void; promise: Promise<void> } | null,
+    // Flag for update mode: prevents crawler from shutting down while Phase 2 is still seeding URLs.
+    // Defaults to true (standard mode has no Phase 2). Set to false before Phase 2, true when done.
+    phase2SeedingComplete: true
 };

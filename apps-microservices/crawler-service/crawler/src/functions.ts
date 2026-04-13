@@ -14,7 +14,7 @@ import {
     Request,
     Configuration,
 } from "crawlee";
-import { Page } from "playwright";
+import { Page, firefox } from "playwright";
 import fs from "fs";
 import path from "path";
 import {
@@ -23,6 +23,7 @@ import {
     UrlParameters,
 } from "./interfaces/queue.js";
 import { context } from "./context.js";
+import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -437,7 +438,8 @@ export const startCrawler = async (
     bypassDiez?: boolean,
     skipquestionmark?: boolean,
     skipdiez?: boolean,
-    containerMemoryMb?: number
+    containerMemoryMb?: number,
+    camoufoxEnabled?: boolean
 ) => {
     const requestQueue = await RequestQueue.open(domain);
 
@@ -467,15 +469,41 @@ export const startCrawler = async (
         });
     }
 
+    // Camoufox: resolve launch options BEFORE constructing crawler (async)
+    const camoufoxOpts = camoufoxEnabled
+        ? await camoufoxLaunchOptions({ headless: true })
+        : null;
+
     let optionsCrawler: PlaywrightCrawlerOptions = {
         // Router to handle different URL patterns and their processing logic
         requestHandler: router,
 
         // RequestQueue
         requestQueue,
-        
+
+        // Camoufox mode: set launcher to Firefox at the top level (not in preLaunchHooks)
+        // This ensures Crawlee/BrowserPool uses Firefox flags, not Chromium flags
+        ...(camoufoxEnabled && camoufoxOpts ? {
+            launchContext: {
+                launcher: firefox,
+                launchOptions: {
+                    ...camoufoxOpts,
+                    args: [
+                        ...(camoufoxOpts.args || []),
+                        '--ignore-certificate-errors',
+                    ],
+                },
+            },
+        } : {}),
+
         // V3 Optimization: Browser Pool settings
-        browserPoolOptions: {
+        browserPoolOptions: camoufoxEnabled ? {
+            // Camoufox mode: disable Crawlee's JS-level fingerprinting
+            // to avoid conflicts with Camoufox's engine-level spoofing
+            useFingerprints: false,
+            retireBrowserAfterPageCount: 25,
+        } : {
+            // Fallback mode: Playwright multi-browser rotation with fingerprinting
             fingerprintOptions: {
                 fingerprintGeneratorOptions: {
                     browsers: ["firefox", "chrome", "safari"],
@@ -484,7 +512,7 @@ export const startCrawler = async (
                     operatingSystems: ["windows", "macos", "linux"],
                 },
             },
-            retireBrowserAfterPageCount: 25, // Prevent memory leaks in Chrome
+            retireBrowserAfterPageCount: 25,
             // Ignorer les erreurs de certificat SSL (ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR)
             // Permet de crawler des sites avec certificats expirés ou auto-signés
             preLaunchHooks: [
@@ -517,6 +545,7 @@ export const startCrawler = async (
                 'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
                 'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
                 'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
+                'ERR_TOO_MANY_REDIRECTS',    // Boucle de redirection infinie
                 'Download is starting',      // Playwright binary download trigger
                 'net::ERR_ABORTED',          // Navigation aborted (often binary content)
                 'Execution context was destroyed', // Page destroyed during download
@@ -612,6 +641,12 @@ export const startCrawler = async (
                 );
             }
 
+            // Set crawlErrorMessage if homepage exhausted all retries
+            if (request.url === context.config.baseUrl && !context.crawlErrorMessage) {
+                const errorSummary = String(request.errorMessages).substring(0, 150);
+                context.crawlErrorMessage = `Page d'accueil inaccessible après ${request.retryCount} tentatives: ${errorSummary}`;
+            }
+
             // Save rich error info
             let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${domain}`;
             let dataset = await Dataset.open(datasetName);
@@ -671,15 +706,15 @@ export const startCrawler = async (
             async () => {
                 // Counter-based limit check — counters are incremented in routes.ts
                 // when URLs are pushed to the dataset (O(1) instead of O(n²) dataset scan).
-                const limitQuestionMarkDiez = 50;
+                const limitQuestionMarkDiez = 100;
 
                 if (!bypassQuestionMark && !skipquestionmark && context.countQuestionMark >= limitQuestionMarkDiez) {
                     context.stopReason = "limitQuestionMark";
-                    await stopCrawler(crawler, "Limit of 50 question marks reached.");
+                    await stopCrawler(crawler, "Limit of 100 question marks reached.");
                 }
                 if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
                     context.stopReason = "limitDiez";
-                    await stopCrawler(crawler, "Limit of 50 hashes reached.");
+                    await stopCrawler(crawler, "Limit of 100 hashes reached.");
                 }
             },
         ],
@@ -688,6 +723,16 @@ export const startCrawler = async (
     if (paramPerCrawl > 0) optionsCrawler.maxRequestsPerCrawl = paramPerCrawl;
     if (paramPerMinute > 0) optionsCrawler.maxRequestsPerMinute = paramPerMinute;
     if (proxyConfiguration) optionsCrawler.proxyConfiguration = proxyConfiguration;
+
+    // Prevent premature shutdown while Phase 2 is seeding URLs in update mode.
+    // In standard mode, phase2SeedingComplete is true by default → no effect.
+    optionsCrawler.autoscaledPoolOptions = {
+        ...optionsCrawler.autoscaledPoolOptions,
+        isFinishedFunction: async () => {
+            const isEmpty = await requestQueue.isEmpty();
+            return isEmpty && context.phase2SeedingComplete;
+        },
+    };
 
     const crawler = new PlaywrightCrawler(optionsCrawler, configuration);
     context.crawlerInstance = crawler; // Expose instance for stopping
@@ -966,7 +1011,11 @@ export const updateUrlsCrawledStreaming = async (
     await new Promise<void>((resolve, reject) => {
         stream.on('finish', () => {
             try {
-                fs.renameSync(tempFile, fileUrls);
+                if (fs.existsSync(tempFile)) {
+                    fs.renameSync(tempFile, fileUrls);
+                } else {
+                    console.warn(`[updateUrlsCrawledStreaming] .tmp file already consumed by concurrent write — skipping rename.`);
+                }
                 resolve();
             } catch (err) {
                 reject(err);
@@ -1108,6 +1157,11 @@ export const copyPreviousMethod = (previousId: string, domain: string): boolean 
                 context.frenchDetectionMethod = content.method;
                 console.log(`Loaded French detection method into memory: ${content.method}`);
             }
+            // Restore excluded regional paths from previous crawl
+            if (content.excludedPaths && Array.isArray(content.excludedPaths)) {
+                context.excludedRegionalPaths = content.excludedPaths;
+                console.log(`Loaded ${content.excludedPaths.length} excluded regional paths from previous crawl: ${content.excludedPaths.join(", ")}`);
+            }
             return true;
         } else {
             console.warn(`Previous French detection method file not found at ${previousFile}`);
@@ -1143,9 +1197,9 @@ export const generateUpdateReport = async (domain: string) => {
 
         // Determine Health Status
         if (cb.isMicroMode) {
-            if (errors >= cb.maxAbsErrors) { status = "CRITICAL"; statusMessage = `Max absolute errors reached (${errors})`; }
-            else if (redirects >= cb.maxAbsRedirects) { status = "CRITICAL"; statusMessage = `Max absolute redirects reached (${redirects})`; }
-            else if (newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
+            if (cb.maxAbsErrors > 0 && errors >= cb.maxAbsErrors) { status = "CRITICAL"; statusMessage = `Max absolute errors reached (${errors})`; }
+            else if (cb.maxAbsRedirects > 0 && redirects >= cb.maxAbsRedirects) { status = "CRITICAL"; statusMessage = `Max absolute redirects reached (${redirects})`; }
+            else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
         } else {
             if (processed >= cb.minSample) {
                 if (errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
@@ -1195,6 +1249,10 @@ export const generateUpdateReport = async (domain: string) => {
         const tempPath = `${reportPath}.tmp`;
         
         await fs.promises.writeFile(tempPath, JSON.stringify(report, null, 2));
+        // fsync the temp file before rename to guarantee content is on disk
+        const fdReport = fs.openSync(tempPath, 'r');
+        fs.fsyncSync(fdReport);
+        fs.closeSync(fdReport);
         await fs.promises.rename(tempPath, reportPath);
 
     } catch (e) {
@@ -1788,8 +1846,12 @@ export const manageFrenchDetectionMethod = (
             // Create directories if they don't exist
             if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true });
 
-            // Store new method (overwrite if exists)
-            fs.writeFileSync(filePath, JSON.stringify({ method: checkFrenchMethod }, null, 2));
+            // Build storage object: method + excluded paths (if any)
+            const data: Record<string, any> = { method: checkFrenchMethod };
+            if (context.excludedRegionalPaths.length > 0) {
+                data.excludedPaths = context.excludedRegionalPaths;
+            }
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
             return checkFrenchMethod;
         }
 
@@ -1797,6 +1859,10 @@ export const manageFrenchDetectionMethod = (
         if (fs.existsSync(filePath)) {
             const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
             context.frenchDetectionMethod = content.method; // Update cache
+            // Restore excluded regional paths if persisted
+            if (content.excludedPaths && Array.isArray(content.excludedPaths)) {
+                context.excludedRegionalPaths = content.excludedPaths;
+            }
             return content.method;
         }
 

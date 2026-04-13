@@ -1,0 +1,378 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Monitors the Redis-backed global concurrency guard for Milvus — slot usage, wait times, timeouts, and fallback status across all 6 database services.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "How to Use This Dashboard",
+      "type": "text",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "options": {
+        "mode": "markdown",
+        "content": "### Tuning Guide\n- **RAM climbing?** → Check *Slots Active* — lower `MILVUS_GLOBAL_MAX_CONCURRENT` in `.env`\n- **Ingestion slow?** → Check *Timeouts* — raise `MILVUS_WRITE_CEILING` if RAM allows\n- **Search latency?** → Check *Acquire Duration* for Tier 1 — lower `MILVUS_WRITE_CEILING`\n- **Fallback active?** → Redis is down — guard is in local-only mode, no cross-service coordination"
+      }
+    },
+    {
+      "title": "Slots Active by Tier",
+      "description": "Current Milvus operations in flight, stacked by tier. Compare against the threshold lines.",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 4 },
+      "id": 1,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "stacking": { "mode": "normal", "group": "A" },
+            "lineWidth": 2
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Global Max" },
+            "properties": [
+              { "id": "custom.drawStyle", "value": "line" },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.stacking", "value": { "mode": "none" } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Write Ceiling" },
+            "properties": [
+              { "id": "custom.drawStyle", "value": "line" },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.stacking", "value": { "mode": "none" } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Tier 1 — Search" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Tier 2 — High Writes" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Tier 3 — Low Writes" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-green" } }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum(milvus_guard_slots_active{tier=\"1\"})",
+          "legendFormat": "Tier 1 — Search",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(milvus_guard_slots_active{tier=\"2\"})",
+          "legendFormat": "Tier 2 — High Writes",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(milvus_guard_slots_active{tier=\"3\"})",
+          "legendFormat": "Tier 3 — Low Writes",
+          "refId": "C"
+        },
+        {
+          "expr": "milvus_guard_slots_max",
+          "legendFormat": "Global Max",
+          "refId": "D"
+        },
+        {
+          "expr": "milvus_guard_write_ceiling",
+          "legendFormat": "Write Ceiling",
+          "refId": "E"
+        }
+      ]
+    },
+    {
+      "title": "Slots by Service (Detail)",
+      "description": "Which service is consuming the most slots right now.",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 4 },
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "stacking": { "mode": "normal", "group": "A" },
+            "lineWidth": 1
+          },
+          "unit": "short",
+          "min": 0
+        }
+      },
+      "targets": [
+        {
+          "expr": "milvus_guard_slots_active",
+          "legendFormat": "{{service}} (tier {{tier}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Acquire Duration p95",
+      "description": "How long services wait for a slot. Tier 1 (search) > 2s = problem. Writers > 5s = starving.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, tier) (rate(milvus_guard_acquire_duration_seconds_bucket[5m])))",
+          "legendFormat": "Tier {{tier}} p95",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, tier) (rate(milvus_guard_acquire_duration_seconds_bucket[5m])))",
+          "legendFormat": "Tier {{tier}} p50",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Acquire Timeouts Rate",
+      "description": "How often services fail to get a slot. Sustained > 0 = pool too small or tier starved.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "id": 4,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 50,
+            "lineWidth": 1
+          },
+          "unit": "ops",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate(milvus_guard_acquire_timeouts_total[5m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Fallback Active",
+      "description": "1 = Redis is down, guard running in local-only mode. No cross-service coordination.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 22 },
+      "id": 5,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OK", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "FALLBACK", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(milvus_guard_fallback_active)",
+          "legendFormat": "Fallback",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Lease Expirations",
+      "description": "Slots auto-released due to crashes or ops exceeding TTL. Should be 0 in healthy state.",
+      "type": "timeseries",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 22 },
+      "id": 6,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 50
+          },
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate(milvus_guard_lease_expirations_total[5m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Current Config",
+      "description": "Live values of MILVUS_GLOBAL_MAX_CONCURRENT and MILVUS_WRITE_CEILING.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 22 },
+      "id": 7,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "milvus_guard_slots_max",
+          "legendFormat": "Global Max",
+          "refId": "A"
+        },
+        {
+          "expr": "milvus_guard_write_ceiling",
+          "legendFormat": "Write Ceiling",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Total Slots Used (Gauge)",
+      "description": "Current total slot usage as a percentage of the global max.",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 22 },
+      "id": 8,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.7 },
+              { "color": "red", "value": 0.9 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(milvus_guard_slots_active) / milvus_guard_slots_max",
+          "legendFormat": "Pool Usage",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Pipeline Processing Duration (comparison)",
+      "description": "End-to-end message processing time from the existing metric. Compare with guard acquire duration to identify bottleneck.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 26 },
+      "id": 9,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1
+          },
+          "unit": "s",
+          "min": 0
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(pipeline_processing_duration_seconds_bucket{service_name=~\".*database.*\"}[5m])))",
+          "legendFormat": "{{service_name}} p95",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["milvus", "concurrency", "guard", "rag-hp"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" }
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Milvus Concurrency Guard",
+  "uid": "milvus-concurrency-guard",
+  "version": 1
+}

@@ -68,6 +68,7 @@
           <div class="flex items-center gap-1">
             <button onclick="showPage('servers')" id="nav-servers" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Serveurs</button>
             <button onclick="showPage('mcp-config')" id="nav-mcp-config" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Config MCP</button>
+            <button onclick="showPage('oauth2')" id="nav-oauth2" class="nav-tab px-3 py-1.5 rounded-md text-sm font-medium transition-colors">OAuth2</button>
             <div class="w-px h-6 bg-gray-200 mx-2"></div>
             <a href="/logout" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Se déconnecter">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
@@ -155,6 +156,23 @@
 
       <!-- Legacy: Per-server configs (hidden) -->
       <div id="per-server-configs" class="hidden"></div>
+    </main>
+
+    <!-- Page: OAuth2 Clients -->
+    <main id="page-oauth2" class="hidden flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold">Clients OAuth2</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Générez des identifiants OAuth2 (Client ID + Secret) pour connecter Claude.ai ou d'autres clients MCP via le protocole OAuth2</p>
+        </div>
+        <button onclick="openOAuth2Modal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          Créer un client
+        </button>
+      </div>
+      <div id="oauth2-client-list" class="space-y-4">
+        <p class="text-sm text-gray-400 py-12 text-center">Chargement...</p>
+      </div>
     </main>
   </div>
 
@@ -371,37 +389,9 @@
           <input id="token-server-name" type="text" value="hellopro-gateway" placeholder="hellopro-gateway" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <p class="text-xs text-gray-400 mt-1">Nom utilisé comme clé dans le .mcp.json généré</p>
         </div>
-        <div>
+        <div id="token-dnd-slot"><!-- dnd-container will be moved here when token modal opens -->
           <label class="block text-sm font-medium text-gray-700 mb-1">Accès serveurs & outils <span class="text-red-400">*</span></label>
           <p class="text-xs text-gray-400 mb-2">Glissez les serveurs et outils vers la droite, ou double-cliquez pour les déplacer</p>
-          <div class="grid grid-cols-2 gap-3" style="min-height:300px">
-            <!-- LEFT: Available -->
-            <div class="border border-gray-200 rounded-lg flex flex-col">
-              <div class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-lg">
-                <div class="flex items-center justify-between mb-1.5">
-                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Disponible</span>
-                  <button type="button" onclick="dndAddAll()" class="text-xs text-brand-600 hover:text-brand-800 font-medium">Tout ajouter</button>
-                </div>
-                <input id="dnd-search-available" type="text" placeholder="Rechercher..." oninput="dndFilter('available')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
-              </div>
-              <div id="dnd-available" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'available')">
-                <p class="text-xs text-gray-400 p-2">Chargement...</p>
-              </div>
-            </div>
-            <!-- RIGHT: Selected -->
-            <div class="border border-brand-200 rounded-lg flex flex-col bg-brand-50/30">
-              <div class="px-3 py-2 border-b border-brand-100 bg-brand-50 rounded-t-lg">
-                <div class="flex items-center justify-between mb-1.5">
-                  <span class="text-xs font-semibold text-brand-700 uppercase tracking-wide">Sélectionné <span id="dnd-selected-count" class="text-brand-500 font-normal">(0)</span></span>
-                  <button type="button" onclick="dndRemoveAll()" class="text-xs text-red-500 hover:text-red-700 font-medium">Tout retirer</button>
-                </div>
-                <input id="dnd-search-selected" type="text" placeholder="Rechercher..." oninput="dndFilter('selected')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
-              </div>
-              <div id="dnd-selected" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'selected')">
-                <p id="dnd-empty-msg" class="text-xs text-gray-400 p-2 italic">Glissez des serveurs ou outils ici</p>
-              </div>
-            </div>
-          </div>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Commande MCP <span class="text-red-400">*</span></label>
@@ -472,6 +462,128 @@
     </div>
   </div>
 
+  <!-- Shared drag-and-drop server/tool picker (hidden by default, moved into modals via JS) -->
+  <div id="dnd-container" style="display:none; min-height:300px" class="grid grid-cols-2 gap-3">
+    <!-- LEFT: Available -->
+    <div class="border border-gray-200 rounded-lg flex flex-col">
+      <div class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-lg">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Disponible</span>
+          <button type="button" onclick="dndAddAll()" class="text-xs text-brand-600 hover:text-brand-800 font-medium">Tout ajouter</button>
+        </div>
+        <input id="dnd-search-available" type="text" placeholder="Rechercher..." oninput="dndFilter('available')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
+      </div>
+      <div id="dnd-available" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'available')">
+        <p class="text-xs text-gray-400 p-2">Chargement...</p>
+      </div>
+    </div>
+    <!-- RIGHT: Selected -->
+    <div class="border border-brand-200 rounded-lg flex flex-col bg-brand-50/30">
+      <div class="px-3 py-2 border-b border-brand-100 bg-brand-50 rounded-t-lg">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-semibold text-brand-700 uppercase tracking-wide">Sélectionné <span id="dnd-selected-count" class="text-brand-500 font-normal">(0)</span></span>
+          <button type="button" onclick="dndRemoveAll()" class="text-xs text-red-500 hover:text-red-700 font-medium">Tout retirer</button>
+        </div>
+        <input id="dnd-search-selected" type="text" placeholder="Rechercher..." oninput="dndFilter('selected')" class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 focus:border-brand-500">
+      </div>
+      <div id="dnd-selected" class="dnd-panel flex-1 overflow-y-auto p-1.5 space-y-0.5" ondragover="dndDragOver(event)" ondrop="dndDrop(event,'selected')">
+        <p id="dnd-empty-msg" class="text-xs text-gray-400 p-2 italic">Glissez des serveurs ou outils ici</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create OAuth2 Client -->
+  <div id="oauth2-backdrop" class="hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onclick="closeOAuth2Modal()"></div>
+  <div id="oauth2-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full fade-in" style="max-width:1024px" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 id="oauth2-modal-title" class="text-lg font-semibold">Créer un client OAuth2</h2>
+        <button onclick="closeOAuth2Modal()" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="px-6 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom du client <span class="text-red-400">*</span></label>
+          <input id="oauth2-name" type="text" required placeholder="ex. claude-ai-prod" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <input id="oauth2-desc" type="text" placeholder="Description optionnelle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Redirect URI</label>
+          <input id="oauth2-redirect-uri" type="url" value="https://claude.ai/api/mcp/auth_callback" placeholder="https://claude.ai/api/mcp/auth_callback" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <p class="text-xs text-gray-400 mt-1">URL de callback OAuth2 du client MCP (par défaut : Claude.ai)</p>
+        </div>
+        <div id="oauth2-dnd-slot"><!-- dnd-container will be moved here when oauth2 modal opens -->
+          <label class="block text-sm font-medium text-gray-700 mb-1">Accès serveurs & outils <span class="text-red-400">*</span></label>
+          <p class="text-xs text-gray-400 mb-2">Glissez les serveurs et outils vers la droite, ou double-cliquez pour les déplacer</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Durée du jeton d'accès</label>
+          <select id="oauth2-ttl" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            <option value="3600">1 heure</option>
+            <option value="21600">6 heures</option>
+            <option value="86400" selected>24 heures</option>
+            <option value="604800">7 jours</option>
+            <option value="2592000">30 jours</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">Durée de validité de chaque access_token obtenu via /oauth/token</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Expiration du client</label>
+          <div class="flex items-center gap-3 mb-2">
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="oauth2_expiry_type" value="permanent" checked onchange="document.getElementById('oauth2-expires').disabled=true;document.getElementById('oauth2-expires').value=''" class="text-brand-600 focus:ring-brand-500">
+              <span class="text-sm text-gray-700">Permanent</span>
+            </label>
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="oauth2_expiry_type" value="custom" onchange="document.getElementById('oauth2-expires').disabled=false;document.getElementById('oauth2-expires').focus()" class="text-brand-600 focus:ring-brand-500">
+              <span class="text-sm text-gray-700">Expiration personnalisée</span>
+            </label>
+          </div>
+          <input id="oauth2-expires" type="datetime-local" disabled class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-400">
+        </div>
+        <!-- Result area (hidden initially) -->
+        <div id="oauth2-created-result" class="hidden">
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+            <p class="text-sm font-medium text-amber-800">Copiez ces identifiants maintenant — le secret ne sera plus affiché !</p>
+            <div class="mt-2 space-y-2">
+              <div>
+                <label class="text-xs font-medium text-amber-700">Client ID</label>
+                <div class="flex items-center gap-2">
+                  <code id="oauth2-client-id-value" class="flex-1 bg-white border border-amber-300 rounded px-3 py-2 text-sm font-mono break-all select-all"></code>
+                  <button onclick="copyToClipboard(document.getElementById('oauth2-client-id-value').textContent,'Client ID copié !')" class="px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700">Copier</button>
+                </div>
+              </div>
+              <div>
+                <label class="text-xs font-medium text-amber-700">Client Secret</label>
+                <div class="flex items-center gap-2">
+                  <code id="oauth2-secret-value" class="flex-1 bg-white border border-amber-300 rounded px-3 py-2 text-sm font-mono break-all select-all"></code>
+                  <button onclick="copyToClipboard(document.getElementById('oauth2-secret-value').textContent,'Secret copié !')" class="px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700">Copier</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p class="text-xs font-medium text-blue-700 mb-2">Configuration Claude.ai</p>
+            <div class="text-xs text-blue-800 space-y-1">
+              <p><strong>URL :</strong> <code id="oauth2-gateway-url" class="bg-white px-1.5 py-0.5 rounded"></code></p>
+              <p><strong>Auth :</strong> OAuth2 Client Credentials</p>
+              <p><strong>Token Endpoint :</strong> <code id="oauth2-token-endpoint" class="bg-white px-1.5 py-0.5 rounded"></code></p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+        <button type="button" onclick="closeOAuth2Modal()" class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Annuler</button>
+        <button type="button" onclick="createOAuth2Client()" id="oauth2-submit-btn" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 inline-flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          Générer les identifiants
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ── State ────────────────────────────────────────────────────────────
     const API = '/api/v1';
@@ -518,6 +630,7 @@
       currentPage = page;
       document.getElementById('page-servers').classList.toggle('hidden', page !== 'servers');
       document.getElementById('page-mcp-config').classList.toggle('hidden', page !== 'mcp-config');
+      document.getElementById('page-oauth2').classList.toggle('hidden', page !== 'oauth2');
       document.querySelectorAll('.nav-tab').forEach(t => {
         t.classList.remove('bg-brand-50', 'text-brand-700');
         t.classList.add('text-gray-600', 'hover:bg-gray-100');
@@ -526,6 +639,7 @@
       active.classList.add('bg-brand-50', 'text-brand-700');
       active.classList.remove('text-gray-600', 'hover:bg-gray-100');
       if (page === 'mcp-config') loadMCPConfig();
+      if (page === 'oauth2') loadOAuth2Clients();
     }
 
     // ── Toast ────────────────────────────────────────────────────────────
@@ -583,10 +697,11 @@
       };
       const dot = healthColors[s.health_status] || healthColors.unknown;
       const tags = (s.tags || []).map(t => `<span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">${esc(t)}</span>`).join(' ');
+      const activeToolsCount = (s.tool_names || []).filter(t => t.is_active !== false).length;
       const stats = s.health_status === 'unhealthy' && !s.tools_count && !s.resources_count && !s.prompts_count
         ? '<span class="text-red-500">Erreur de connexion</span>'
         : [
-            s.tools_count ? `${s.tools_count} outil${s.tools_count>1?'s':''}` : null,
+            s.tools_count ? (activeToolsCount < s.tools_count ? `${activeToolsCount}/${s.tools_count} outils actifs` : `${s.tools_count} outil${s.tools_count>1?'s':''}`) : null,
             s.resources_count ? `${s.resources_count} ressource${s.resources_count>1?'s':''}` : null,
             s.prompts_count ? `${s.prompts_count} prompt${s.prompts_count>1?'s':''}` : null,
           ].filter(Boolean).join(' · ') || 'Aucune capacité';
@@ -857,6 +972,15 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    async function toggleTool(serverId, toolName, enable) {
+      try {
+        await api(`/servers/${serverId}/tools/${encodeURIComponent(toolName)}/${enable ? 'enable' : 'disable'}`, { method: 'POST' });
+        toast(enable ? 'Outil activé' : 'Outil désactivé');
+        showDetail(serverId); // refresh detail view
+        loadServers(); // refresh server list counts
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
     async function discoverServer(id) {
       try {
         await api('/servers/' + id + '/discover', { method: 'POST' });
@@ -929,10 +1053,24 @@
         } else {
           // Tools
           if (s.tools && s.tools.length > 0) {
-            html += `<div><h3 class="text-sm font-semibold mb-2">Outils (${s.tools.length})</h3><div class="space-y-2">`;
+            const activeCount = s.tools.filter(t => t.is_active).length;
+            html += `<div><h3 class="text-sm font-semibold mb-2">Outils (${activeCount}/${s.tools.length} actifs)</h3><div class="space-y-2">`;
             for (const t of s.tools) {
-              html += `<div class="bg-gray-50 rounded-lg p-3">
-                <p class="font-medium text-sm">${esc(t.name)}</p>
+              const activeBadge = t.is_active
+                ? '<span class="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-emerald-100 text-emerald-700">Actif</span>'
+                : '<span class="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-yellow-100 text-yellow-700">Inactif</span>';
+              const toggleBtn = t.is_active
+                ? `<button onclick="toggleTool('${s.id}','${esc(t.name)}',false)" title="Désactiver" class="p-1 rounded hover:bg-yellow-50 text-yellow-500 hover:text-yellow-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                   </button>`
+                : `<button onclick="toggleTool('${s.id}','${esc(t.name)}',true)" title="Activer" class="p-1 rounded hover:bg-emerald-50 text-emerald-500 hover:text-emerald-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                   </button>`;
+              html += `<div class="bg-gray-50 rounded-lg p-3 ${!t.is_active ? 'opacity-60' : ''}">
+                <div class="flex items-center justify-between">
+                  <p class="font-medium text-sm">${esc(t.name)}</p>
+                  <div class="flex items-center gap-2">${activeBadge} ${toggleBtn}</div>
+                </div>
                 ${t.description ? `<p class="text-xs text-gray-500 mt-0.5">${esc(t.description)}</p>` : ''}
               </div>`;
             }
@@ -1076,7 +1214,7 @@
     }
 
     // ── Scope Token modal ────────────────────────────────────────────────
-    function openTokenModal() {
+    async function openTokenModal() {
       _editingTokenId = null;
       document.getElementById('token-modal-title').textContent = "Créer un jeton d'accès";
       document.getElementById('token-name').value = '';
@@ -1099,9 +1237,33 @@
       document.getElementById('token-backdrop').classList.remove('hidden');
       document.getElementById('token-modal').classList.remove('hidden');
 
-      // Populate drag-and-drop panels
+      // Ensure servers are loaded before populating dnd
+      if (allServers.length === 0) {
+        try {
+          const data = await api('/servers?is_active=true');
+          allServers = data.servers || [];
+        } catch (e) { /* ignore */ }
+      }
+      // Move shared dnd panels into token modal slot and populate
+      moveDndTo('token-dnd-slot');
       dndPopulate();
       document.getElementById('token-name').focus();
+    }
+
+    // Moves the shared dnd-container into the specified slot element and shows it
+    function moveDndTo(slotId) {
+      const container = document.getElementById('dnd-container');
+      const slot = document.getElementById(slotId);
+      if (container && slot) {
+        slot.appendChild(container);
+        container.style.display = '';
+      }
+    }
+
+    // Hides the dnd-container (called when modals close)
+    function hideDnd() {
+      const container = document.getElementById('dnd-container');
+      if (container) container.style.display = 'none';
     }
 
     async function openEditTokenModal(tokenId) {
@@ -1138,7 +1300,8 @@
         document.getElementById('token-backdrop').classList.remove('hidden');
         document.getElementById('token-modal').classList.remove('hidden');
 
-        // Populate drag-and-drop panels then move selected servers/tools to the right panel
+        // Move shared dnd panels into token modal slot, populate, then restore selection
+        moveDndTo('token-dnd-slot');
         dndPopulate();
         dndRestoreSelection(token.server_ids || [], token.server_tools || []);
 
@@ -1182,6 +1345,7 @@
     function closeTokenModal() {
       document.getElementById('token-backdrop').classList.add('hidden');
       document.getElementById('token-modal').classList.add('hidden');
+      hideDnd();
     }
 
     // ── Drag-and-drop hierarchical tool picker ──────────────────────────
@@ -1233,7 +1397,9 @@
       }
       let html = '';
       for (const s of allServers) {
-        html += dndBuildServerGroup(s, s.tool_names || [], 'avail');
+        // Only show active tools in token scope selection
+        const activeTools = (s.tool_names || []).filter(t => t.is_active !== false);
+        html += dndBuildServerGroup(s, activeTools, 'avail');
       }
       avail.innerHTML = html;
       dndUpdateCount();
@@ -1409,6 +1575,31 @@
       if (emptyMsg) emptyMsg.style.display = (srvCount > 0) ? 'none' : '';
     }
 
+    // Shared helper to collect server/tool selection from dnd panels
+    function dndCollectSelection() {
+      const selectedServerIds = new Set();
+      const selectedToolsByServer = {};
+      document.querySelectorAll('#dnd-selected .dnd-server-group').forEach(grp => {
+        const sid = grp.dataset.serverId;
+        selectedServerIds.add(sid);
+        const toolEls = grp.querySelectorAll('.dnd-tool-item');
+        if (toolEls.length > 0) {
+          selectedToolsByServer[sid] = [...toolEls].map(t => t.dataset.toolName);
+        }
+      });
+      const serverIDs = [...selectedServerIds];
+      const serverTools = [];
+      for (const sid of serverIDs) {
+        const srv = allServers.find(s => s.id === sid);
+        const totalActiveTools = (srv?.tool_names || []).filter(t => t.is_active !== false).length;
+        const pickedTools = selectedToolsByServer[sid] || [];
+        if (totalActiveTools === 0) continue;
+        if (pickedTools.length === totalActiveTools) continue;
+        serverTools.push({ server_id: sid, tool_names: pickedTools });
+      }
+      return { serverIDs, serverTools };
+    }
+
     function dndFilter(panel) {
       const isAvail = panel === 'available';
       const input = document.getElementById(isAvail ? 'dnd-search-available' : 'dnd-search-selected');
@@ -1478,10 +1669,10 @@
       const serverTools = [];
       for (const sid of serverIDs) {
         const srv = allServers.find(s => s.id === sid);
-        const totalTools = (srv?.tool_names || []).length;
+        const totalActiveTools = (srv?.tool_names || []).filter(t => t.is_active !== false).length;
         const pickedTools = selectedToolsByServer[sid] || [];
-        if (totalTools === 0) continue;
-        if (pickedTools.length === totalTools) continue; // all tools — no restriction needed
+        if (totalActiveTools === 0) continue;
+        if (pickedTools.length === totalActiveTools) continue; // all active tools — no restriction needed
         serverTools.push({ server_id: sid, tool_names: pickedTools });
       }
 
@@ -1737,6 +1928,251 @@
         btn.disabled = false;
         btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Importer';
       }
+    }
+
+    // ── OAuth2 Client Management ──────────────────────────────────────────
+
+    async function loadOAuth2Clients() {
+      try {
+        const [clientData, serverData] = await Promise.all([
+          api('/oauth2/clients').catch(() => ({ clients: [] })),
+          api('/servers?is_active=true').catch(() => ({ servers: [] }))
+        ]);
+        const clients = clientData.clients || [];
+        allServers = serverData.servers || [];
+        const gatewayURL = window.location.origin + '/mcp';
+
+        const container = document.getElementById('oauth2-client-list');
+        if (clients.length === 0) {
+          container.innerHTML = `<div class="text-center py-12">
+            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            <p class="text-sm text-gray-500">Aucun client OAuth2 pour le moment</p>
+            <p class="text-xs text-gray-400 mt-1">Créez un client pour générer des identifiants OAuth2 pour Claude.ai</p>
+          </div>`;
+        } else {
+          container.innerHTML = clients.map(c => {
+            const serverNames = allServers.filter(s => c.server_ids.includes(s.id)).map(s => s.name);
+            const statusBadge = c.is_active
+              ? '<span class="px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-full">Actif</span>'
+              : '<span class="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700 rounded-full">Révoqué</span>';
+            const dynamicBadge = c.dynamically_registered
+              ? '<span class="px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded-full">Dynamic</span>'
+              : '<span class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 rounded-full">Manuel</span>';
+            const expiresStr = c.expires_at ? new Date(c.expires_at).toLocaleDateString('fr-FR') : '<span class="text-emerald-600 font-medium">Permanent</span>';
+            const ttlLabel = c.access_token_ttl >= 86400 ? Math.floor(c.access_token_ttl/86400) + 'j' : c.access_token_ttl >= 3600 ? Math.floor(c.access_token_ttl/3600) + 'h' : c.access_token_ttl + 's';
+            return `
+              <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="px-5 py-3">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                      <span class="font-semibold text-sm">${esc(c.name)}</span>
+                      <code class="text-xs text-gray-400 font-mono">${esc(c.secret_prefix)}...</code>
+                      ${statusBadge}
+                      ${dynamicBadge}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <button onclick="copyToClipboard('${esc(c.id)}','Client ID copié !')" class="copy-btn inline-flex items-center justify-center w-7 h-7 text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100" title="Copier Client ID">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                      </button>
+                      ${c.is_active ? `<button onclick="openEditOAuth2Modal('${c.id}')" class="inline-flex items-center justify-center w-7 h-7 text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100" title="Modifier le scope">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>` : ''}
+                      ${c.is_active ? `<button onclick="revokeOAuth2Client('${c.id}')" class="inline-flex items-center justify-center w-7 h-7 text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100" title="Révoquer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                      </button>` : ''}
+                      <button onclick="deleteOAuth2Client('${c.id}')" class="inline-flex items-center justify-center w-7 h-7 text-red-700 bg-red-50 rounded-md hover:bg-red-100" title="Supprimer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="mt-2 space-y-1 text-xs text-gray-500">
+                    <div class="flex items-center gap-2">
+                      <span class="text-gray-400 w-16 shrink-0">Client ID</span>
+                      <code class="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-xs">${esc(c.id.slice(0,8))}${'•'.repeat(8)}</code>
+                      <button onclick="copyToClipboard('${esc(c.id)}','Client ID copié !')" class="text-brand-600 hover:text-brand-800 shrink-0" title="Copier le Client ID complet">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                      </button>
+                    </div>
+                    ${c.client_secret ? `<div class="flex items-center gap-2">
+                      <span class="text-gray-400 w-16 shrink-0">Secret</span>
+                      <code class="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-xs">${esc(c.client_secret.slice(0,12))}${'•'.repeat(12)}</code>
+                      <button onclick="copyToClipboard('${esc(c.client_secret)}','Secret copié !')" class="text-brand-600 hover:text-brand-800 shrink-0" title="Copier le Secret complet">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                      </button>
+                    </div>` : `<div class="flex items-center gap-2">
+                      <span class="text-gray-400 w-16 shrink-0">Secret</span>
+                      <span class="text-gray-400 italic">Non disponible (clé de chiffrement non configurée)</span>
+                    </div>`}
+                  </div>
+                  <div class="mt-1.5 flex items-center gap-4 text-xs text-gray-500">
+                    <span>Serveurs : ${serverNames.length > 0 ? serverNames.map(n => '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">' + esc(n) + '</code>').join(' ') : '<em class="text-gray-400">aucun</em>'}</span>
+                    <span>TTL : <code class="bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded text-xs font-medium">${ttlLabel}</code></span>
+                    <span>Expire : ${expiresStr}</span>
+                    ${c.created_by ? '<span>Par : ' + esc(c.created_by) + '</span>' : ''}
+                    ${c.redirect_uris && c.redirect_uris.length ? '<span>Redirect : <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs">' + esc(c.redirect_uris[0]) + '</code></span>' : ''}
+                  </div>
+                </div>
+              </div>`;
+          }).join('');
+        }
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    let _editingOAuth2Id = null;
+
+    async function openOAuth2Modal() {
+      _editingOAuth2Id = null;
+      document.getElementById('oauth2-modal-title').textContent = "Créer un client OAuth2";
+      document.getElementById('oauth2-name').value = '';
+      document.getElementById('oauth2-desc').value = '';
+      document.getElementById('oauth2-redirect-uri').value = 'https://claude.ai/api/mcp/auth_callback';
+      document.getElementById('oauth2-ttl').value = '86400';
+      document.getElementById('oauth2-expires').value = '';
+      document.getElementById('oauth2-expires').disabled = true;
+      document.querySelector('input[name="oauth2_expiry_type"][value="permanent"]').checked = true;
+      document.getElementById('oauth2-created-result').classList.add('hidden');
+      const btn = document.getElementById('oauth2-submit-btn');
+      btn.disabled = false;
+      btn.classList.remove('hidden');
+      btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> Générer les identifiants';
+      document.getElementById('oauth2-backdrop').classList.remove('hidden');
+      document.getElementById('oauth2-modal').classList.remove('hidden');
+      if (allServers.length === 0) {
+        try {
+          const data = await api('/servers?is_active=true');
+          allServers = data.servers || [];
+        } catch (e) { /* ignore */ }
+      }
+      moveDndTo('oauth2-dnd-slot');
+      dndPopulate();
+    }
+
+    async function openEditOAuth2Modal(clientId) {
+      try {
+        const client = await api(`/oauth2/clients/${clientId}`);
+        _editingOAuth2Id = clientId;
+        document.getElementById('oauth2-modal-title').textContent = "Modifier le scope du client";
+        document.getElementById('oauth2-name').value = client.name || '';
+        document.getElementById('oauth2-desc').value = client.description || '';
+        document.getElementById('oauth2-redirect-uri').value = (client.redirect_uris && client.redirect_uris[0]) || 'https://claude.ai/api/mcp/auth_callback';
+        document.getElementById('oauth2-ttl').value = String(client.access_token_ttl || 86400);
+
+        if (client.expires_at) {
+          document.querySelector('input[name="oauth2_expiry_type"][value="custom"]').checked = true;
+          document.getElementById('oauth2-expires').disabled = false;
+          document.getElementById('oauth2-expires').value = new Date(client.expires_at).toISOString().slice(0, 16);
+        } else {
+          document.querySelector('input[name="oauth2_expiry_type"][value="permanent"]').checked = true;
+          document.getElementById('oauth2-expires').disabled = true;
+          document.getElementById('oauth2-expires').value = '';
+        }
+
+        document.getElementById('oauth2-created-result').classList.add('hidden');
+        const btn = document.getElementById('oauth2-submit-btn');
+        btn.disabled = false;
+        btn.classList.remove('hidden');
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications';
+
+        document.getElementById('oauth2-backdrop').classList.remove('hidden');
+        document.getElementById('oauth2-modal').classList.remove('hidden');
+
+        if (allServers.length === 0) {
+          try {
+            const data = await api('/servers?is_active=true');
+            allServers = data.servers || [];
+          } catch (e) { /* ignore */ }
+        }
+
+        moveDndTo('oauth2-dnd-slot');
+        dndPopulate();
+        dndRestoreSelection(client.server_ids || [], client.server_tools || []);
+
+      } catch (e) {
+        toast('Erreur lors du chargement du client: ' + e.message, 'error');
+      }
+    }
+
+    function closeOAuth2Modal() {
+      document.getElementById('oauth2-backdrop').classList.add('hidden');
+      document.getElementById('oauth2-modal').classList.add('hidden');
+      hideDnd();
+    }
+
+    async function createOAuth2Client() {
+      const name = document.getElementById('oauth2-name').value.trim();
+      const description = document.getElementById('oauth2-desc').value.trim();
+      const ttl = parseInt(document.getElementById('oauth2-ttl').value);
+      const expiresRaw = document.getElementById('oauth2-expires').value;
+      const isEditing = !!_editingOAuth2Id;
+
+      if (!name) { toast('Le nom est requis', 'error'); return; }
+
+      const { serverIDs, serverTools } = dndCollectSelection();
+      if (serverIDs.length === 0) {
+        toast('Sélectionnez au moins un serveur', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('oauth2-submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> ' + (isEditing ? 'Enregistrement...' : 'Génération...');
+
+      try {
+        const redirectUri = document.getElementById('oauth2-redirect-uri').value.trim();
+
+        if (isEditing) {
+          // PUT update
+          const body = { name, description, server_ids: serverIDs, server_tools: serverTools };
+          if (redirectUri) body.redirect_uris = [redirectUri];
+          await api('/oauth2/clients/' + _editingOAuth2Id, { method: 'PUT', body: JSON.stringify(body) });
+          toast('Client OAuth2 modifié avec succès', 'success');
+          closeOAuth2Modal();
+          loadOAuth2Clients();
+        } else {
+          // POST create
+          const body = { name, description, server_ids: serverIDs, server_tools: serverTools, access_token_ttl: ttl };
+          if (redirectUri) body.redirect_uris = [redirectUri];
+          body.grant_types = ['authorization_code', 'client_credentials'];
+          if (expiresRaw) body.expires_at = new Date(expiresRaw).toISOString();
+
+          const result = await api('/oauth2/clients', { method: 'POST', body: JSON.stringify(body) });
+
+          document.getElementById('oauth2-client-id-value').textContent = result.id;
+          document.getElementById('oauth2-secret-value').textContent = result.client_secret;
+          const gatewayURL = window.location.origin;
+          document.getElementById('oauth2-gateway-url').textContent = gatewayURL + '/mcp';
+          document.getElementById('oauth2-token-endpoint').textContent = gatewayURL + '/token';
+          document.getElementById('oauth2-created-result').classList.remove('hidden');
+
+          btn.classList.add('hidden');
+          toast('Client OAuth2 créé avec succès', 'success');
+        }
+      } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = isEditing
+          ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 13l4 4L19 7"/></svg> Enregistrer les modifications'
+          : '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> Générer les identifiants';
+      }
+    }
+
+    async function revokeOAuth2Client(id) {
+      if (!confirm('Révoquer ce client OAuth2 ? Les access tokens existants seront invalidés.')) return;
+      try {
+        await api('/oauth2/clients/' + id + '/revoke', { method: 'POST' });
+        toast('Client révoqué', 'info');
+        loadOAuth2Clients();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteOAuth2Client(id) {
+      if (!confirm('Supprimer définitivement ce client OAuth2 ?')) return;
+      try {
+        await api('/oauth2/clients/' + id, { method: 'DELETE' });
+        toast('Client supprimé', 'success');
+        loadOAuth2Clients();
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     // ── Init ─────────────────────────────────────────────────────────────

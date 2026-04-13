@@ -33,7 +33,9 @@ import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
+import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
+import { isBlanketBlock } from "./robotsTxtGuard.js";
 
 const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
@@ -48,6 +50,13 @@ process.argv.slice(2).forEach(arg => {
 });
 
 const getArg = (key: string, npmKey: string) => args[key] || process.env[npmKey];
+
+const parseNumericArg = (key: string, npmKey: string, defaultValue: number): number => {
+    const raw = getArg(key, npmKey);
+    if (raw === undefined) return defaultValue;
+    const parsed = Number(raw);
+    return isNaN(parsed) ? defaultValue : parsed;
+};
 
 export const domain = getArg('domain', 'npm_config_domain');
 export const site = getArg('site', 'npm_config_site') || process.argv[2];
@@ -66,25 +75,26 @@ const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerC
 const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
 const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
 
-let paramPerCrawl = Number(getArg('percrawl', 'npm_config_percrawl')) || 0;
-let paramPerMinute = Number(getArg('perminute', 'npm_config_perminute')) || 100;
+let paramPerCrawl = parseNumericArg('percrawl', 'npm_config_percrawl', 0);
+let paramPerMinute = parseNumericArg('perminute', 'npm_config_perminute', 100);
 const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
 const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
 
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
+const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
-const maxErrors = Number(getArg('maxErrors', 'npm_config_maxerrors')) || 0;
-const maxRedirects = Number(getArg('maxRedirects', 'npm_config_maxredirects')) || 0;
-const maxNewUrls = Number(getArg('maxNewUrls', 'npm_config_maxnewurls')) || 0;
+const maxErrors = parseNumericArg('maxErrors', 'npm_config_maxerrors', 0);
+const maxRedirects = parseNumericArg('maxRedirects', 'npm_config_maxredirects', 0);
+const maxNewUrls = parseNumericArg('maxNewUrls', 'npm_config_maxnewurls', 0);
 
 // V1 Circuit Breaker / Update Logic Params (with defaults)
-const minSample = Number(getArg('minSample', 'npm_config_minsample')) || 50;
-const maxErrorRate = Number(getArg('maxErrorRate', 'npm_config_maxerrorrate')) || 0.15;
-const maxRedirectRate = Number(getArg('maxRedirectRate', 'npm_config_maxredirectrate')) || 0.30;
-const maxGrowthRate = Number(getArg('maxGrowthRate', 'npm_config_maxgrowthrate')) || 0.50;
-const maxAbsErrors = Number(getArg('maxAbsErrors', 'npm_config_maxabserrors')) || 5;
-const maxAbsRedirects = Number(getArg('maxAbsRedirects', 'npm_config_maxabsredirects')) || 10;
-const maxAbsNew = Number(getArg('maxAbsNew', 'npm_config_maxabsnew')) || 20;
+const minSample = parseNumericArg('minSample', 'npm_config_minsample', 50);
+const maxErrorRate = parseNumericArg('maxErrorRate', 'npm_config_maxerrorrate', 0.15);
+const maxRedirectRate = parseNumericArg('maxRedirectRate', 'npm_config_maxredirectrate', 0.30);
+const maxGrowthRate = parseNumericArg('maxGrowthRate', 'npm_config_maxgrowthrate', 0.50);
+const maxAbsErrors = parseNumericArg('maxAbsErrors', 'npm_config_maxabserrors', 5);
+const maxAbsRedirects = parseNumericArg('maxAbsRedirects', 'npm_config_maxabsredirects', 10);
+const maxAbsNew = parseNumericArg('maxAbsNew', 'npm_config_maxabsnew', 20);
 
 // Setup Context immediately
 context.config = {
@@ -116,6 +126,9 @@ context.config = {
         maxAbsNew: maxAbsNew
     }
 };
+
+context.camoufoxEnabled = camoufoxEnabled;
+console.log(`🦊 Browser: ${camoufoxEnabled ? 'Camoufox (stealth Firefox)' : 'Playwright (multi-browser rotation)'}`);
 
 if (!id || !domain || !site || !storagePath || !callbackUrl) {
     console.log('Missing required parameters.');
@@ -246,6 +259,7 @@ const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: numbe
 let lastWarningActionTime = 0;
 let lastMemPercent = 0; // Track global memory state for persistence guard
 let persistenceInterval: ReturnType<typeof setInterval> | undefined;
+let isPersisting = false; // Mutex flag to prevent concurrent updateUrlsCrawledStreaming calls
 const handleWarningMemory = async (memPercent: number) => {
     const now = Date.now();
     if (now - lastWarningActionTime < 30000) return; // Debounce 30s
@@ -299,9 +313,14 @@ const handleCriticalMemory = async (memPercent: number) => {
 
         // 2. Emergency Persist (Save data before potential crash)
         console.log("   -> [Phase A] Emergency state persistence");
-        if (context.dedupManager) {
-            const urlIterator = context.dedupManager.getAllUrlsIterator();
-            await updateUrlsCrawledStreaming(domain, urlIterator);
+        if (context.dedupManager && !isPersisting) {
+            isPersisting = true;
+            try {
+                const urlIterator = context.dedupManager.getAllUrlsIterator();
+                await updateUrlsCrawledStreaming(domain, urlIterator);
+            } finally {
+                isPersisting = false;
+            }
         }
         if (context.statsManager) await context.statsManager.saveStateToDisk();
 
@@ -379,20 +398,68 @@ try {
         }
     };
 
+    // Helper to read container-level memory usage from cgroups
+    const getContainerMemoryUsage = async (): Promise<number> => {
+        try {
+            // cgroups v2
+            const v2 = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
+            if (v2) return parseInt(v2.trim());
+
+            // cgroups v1
+            const v1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
+            if (v1) return parseInt(v1.trim());
+        } catch (e) { /* fallback below */ }
+
+        // Fallback: Node.js process RSS (inaccurate but better than 0)
+        return process.memoryUsage().rss;
+    };
+
+    // Helper to read container-level CPU usage from cgroups
+    // Returns cumulative CPU microseconds used by the entire container
+    const getContainerCpuUsec = async (): Promise<number | null> => {
+        try {
+            // cgroups v2: cpu.stat has "usage_usec <value>" line
+            const v2 = await fsPromises.readFile('/sys/fs/cgroup/cpu.stat', 'utf-8').catch(() => null);
+            if (v2) {
+                const match = v2.match(/usage_usec\s+(\d+)/);
+                if (match) return parseInt(match[1]);
+            }
+
+            // cgroups v1: cpuacct.usage is in nanoseconds
+            const v1 = await fsPromises.readFile('/sys/fs/cgroup/cpuacct/cpuacct.usage', 'utf-8').catch(() => null);
+            if (v1) return parseInt(v1.trim()) / 1000; // Convert ns to us
+        } catch (e) { /* fallback below */ }
+
+        return null; // No cgroup CPU available
+    };
+
+    let lastContainerCpuUsec = await getContainerCpuUsec();
+    let lastContainerCpuTime = Date.now();
+
     setInterval(async () => {
         try {
-            // Calculate CPU usage percentage for THIS process
-            const currentCpuUsage = process.cpuUsage(lastCpuUsage);
+            // Container-level CPU from cgroups
+            let cpuPercent: number;
+            const currentContainerCpuUsec = await getContainerCpuUsec();
             const currentTime = Date.now();
-            const elapsedTime = (currentTime - lastTime) * 1000; // Convert to microseconds
 
-            // CPU usage is in microseconds, convert to percentage
-            const cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
+            if (currentContainerCpuUsec !== null && lastContainerCpuUsec !== null) {
+                const deltaCpuUsec = currentContainerCpuUsec - lastContainerCpuUsec;
+                const deltaWallUsec = (currentTime - lastContainerCpuTime) * 1000;
+                cpuPercent = (deltaCpuUsec / deltaWallUsec) / numCpus;
+                lastContainerCpuUsec = currentContainerCpuUsec;
+                lastContainerCpuTime = currentTime;
+            } else {
+                // Fallback to process-level CPU
+                const currentCpuUsage = process.cpuUsage(lastCpuUsage);
+                const elapsedTime = (currentTime - lastTime) * 1000;
+                cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
+                lastCpuUsage = process.cpuUsage();
+                lastTime = currentTime;
+            }
 
-            lastCpuUsage = process.cpuUsage();
-            lastTime = currentTime;
-
-            const memoryUsage = process.memoryUsage();
+            // Container-level RAM from cgroups
+            const containerRam = await getContainerMemoryUsage();
             const topProcesses = await getTopProcesses();
 
             const heartbeat = {
@@ -400,9 +467,9 @@ try {
                 replicaId: hostname,
                 jobId: id,
                 domain: domain,
-                cpu: Math.min(cpuPercent, 1), // Cap at 100%
-                ram: memoryUsage.rss,
-                totalRam: totalMem, // Total RAM limit for dynamic percentage calculation
+                cpu: Math.min(Math.max(cpuPercent, 0), 1), // Clamp 0-1
+                ram: containerRam,
+                totalRam: totalMem,
                 topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'
@@ -444,6 +511,13 @@ try {
     }
 } catch (e: any) {
     console.warn(`⚠️ Warning: Failed to retrieve robots.txt (likely timeout or block). Proceeding without it. Error: ${e.message}`);
+}
+
+// Detect blanket robots.txt block (Disallow: * or Disallow: /)
+if (robots && isBlanketBlock(robots, site)) {
+    console.warn(`⚠️ robots.txt blanket block detected (all probe URLs blocked). Bypassing robots.txt for this crawl.`);
+    robots = undefined;
+    context.robotsTxtBypassed = true;
 }
 
 // Declare the Glob of URL to include
@@ -553,13 +627,17 @@ persistenceInterval = setInterval(async () => {
             return;
         }
 
-        // Only run if we have a DedupManager
-        if (context.dedupManager) {
-            // Note: This operation might be heavy on I/O, but it uses streaming/atomic writes
-            const urlIterator = context.dedupManager.getAllUrlsIterator();
-            await updateUrlsCrawledStreaming(domain, urlIterator);
+        // Only run if we have a DedupManager and no other persist is in flight
+        if (context.dedupManager && !isPersisting) {
+            isPersisting = true;
+            try {
+                const urlIterator = context.dedupManager.getAllUrlsIterator();
+                await updateUrlsCrawledStreaming(domain, urlIterator);
+            } finally {
+                isPersisting = false;
+            }
         }
-        
+
         // Generate Update Report Periodically
         if (crawlMode === 'update') {
             await generateUpdateReport(domain);
@@ -584,6 +662,9 @@ if (skipquestionmark || skipdiez) {
 export const requestQueue = await RequestQueue.open(domain);
 
 // --- SEEDING LOGIC (Update Mode Support) ---
+// Declared at outer scope so Phase 2 seeding (before startCrawler) can access it
+let remainingUrls: { url: string; source: string }[] = [];
+
 if (crawlMode === 'update') {
     if (!previousCrawlId) {
         console.error("Update mode requires --previousCrawlId");
@@ -619,27 +700,39 @@ if (crawlMode === 'update') {
         cleanUrlFn
     );
 
-    // Seed the request queue with ALL consolidated URLs
-    // IMPORTANT: In update mode, we ALWAYS enqueue — the DedupManager was pre-loaded
-    // from disk and would falsely reject known URLs. We still mark them as known
-    // so that newly discovered URLs during crawling are properly deduplicated.
-    let seedCount = 0;
-    for await (const { url, source } of allUrls) {
-        // Mark as known in DedupManager (for dedup during crawl, NOT for gating)
-        if (context.dedupManager) {
-            await context.dedupManager.addUrl(url);
-        }
+    // --- TWO-PHASE SEEDING (Regional Path Exclusion) ---
+    // Phase 1: Seed only the homepage so it gets processed first.
+    // The homepage handler populates context.excludedRegionalPaths from alternative_urls.
+    // Phase 2: After homepage completes, seed remaining URLs with path filtering.
 
-        await requestQueue.addRequest({
-            url: url,
-            userData: { source: source }
-        });
-        seedCount++;
-        if (seedCount % 1000 === 0) {
-            console.log(`Seeded ${seedCount} unique URLs...`);
-        }
+    // Create the homepageReady signal (resolved by homepage handler in routes.ts)
+    let resolveHomepage: () => void;
+    const homepagePromise = new Promise<void>((resolve) => { resolveHomepage = resolve; });
+    context.homepageReady = { resolve: resolveHomepage!, promise: homepagePromise };
+
+    // Phase 1: Seed only the homepage
+    await requestQueue.addRequest({
+        url: site,
+        userData: { source: 'seed' }
+    });
+    if (context.dedupManager) {
+        await context.dedupManager.addUrl(site);
     }
-    console.log(`Finished seeding ${seedCount} unique URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
+
+    // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
+    for await (const { url: consolidatedUrl, source } of allUrls) {
+        if (consolidatedUrl === site) continue; // Already seeded as homepage
+        remainingUrls.push({ url: consolidatedUrl, source });
+    }
+
+    const totalConsolidated = remainingUrls.length + 1; // +1 for homepage
+    console.log(`Consolidated ${totalConsolidated} URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
+
+    // Safety net: update mode with 0 URLs means previous crawl data was unavailable
+    if (totalConsolidated <= 1) {
+        console.error(`❌ Update mode produced 0 URLs from previous crawl '${previousCrawlId}'. No data to compare against. Aborting.`);
+        process.exit(4); // Exit code 4 = update mode no data (mapped to failure by orchestrator)
+    }
 
     // --- CONFIGURE CIRCUIT BREAKER ---
     // Based on Dataset count only (not total), as that represents the "previous state"
@@ -733,6 +826,7 @@ const mapStopReasonToMessage = (errorCode: string): string => {
         "stoppedManually": "Arrêté manuellement",
         "insufficientData": "Données insuffisantes",
         "PAYLOAD_READ_ERROR": "Erreur lecture payload",
+        "interruptedShutdown": "Crawl interrompu lors de l'arrêt du service",
     };
 
     if (!errorCode) return "";
@@ -784,6 +878,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     }
     if (isStoppedManualy(domain, true, storagePath)) isError = "stoppedManually";
 
+    // If exiting with unfinished queue and no error, the shutdown interrupted the crawl
+    // (e.g., SIGTERM race condition, container restart). Set explicit error code so the BO
+    // can handle it properly instead of entering a silent retry loop.
+    if (isFinished === 0 && !isError) isError = "interruptedShutdown";
+
     // Get stats from instance if available, else usage functions
     const finalStats = context.crawlerInstance?.stats.state || statsFromFunctions;
 
@@ -815,31 +914,63 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         method: method,
         isError: isError,
         storagePath: storagePath,
-        message_erreur_crawling: messageErreurCrawling || null
+        message_erreur_crawling: messageErreurCrawling || null,
+        robots_txt_bypassed: context.robotsTxtBypassed,
+        camoufox_used: context.camoufoxEnabled
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
     const exitReason = isOomRelaunch ? 'OOM_RELAUNCH' : (isError || reason);
 
     try {
-        fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
-        fs.writeFileSync(`${storagePath}/_exit_reason.json`, JSON.stringify({
+        const payloadPath = `${storagePath}/_callback_payload.json`;
+        const exitReasonPath = `${storagePath}/_exit_reason.json`;
+
+        fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2));
+        fs.writeFileSync(exitReasonPath, JSON.stringify({
             reason: exitReason,
             timestamp: new Date().toISOString(),
             stats: finalStats
         }, null, 2));
+
+        // Force OS disk flush so Python manager can read reliably after process.wait()
+        const fdPayload = fs.openSync(payloadPath, 'r');
+        fs.fsyncSync(fdPayload);
+        fs.closeSync(fdPayload);
+        const fdExit = fs.openSync(exitReasonPath, 'r');
+        fs.fsyncSync(fdExit);
+        fs.closeSync(fdExit);
     } catch (e) {
         console.error("Failed to write output files", e);
     }
 
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
-        await generateUpdateReport(domain);
+        try {
+            await generateUpdateReport(domain);
+        } catch (e) {
+            console.error("Failed to generate update report:", e);
+            if (!payload.message_erreur_crawling) {
+                payload.message_erreur_crawling = "Erreur lors de la génération du rapport de mise à jour";
+                const payloadRewritePath = `${storagePath}/_callback_payload.json`;
+                fs.writeFileSync(payloadRewritePath, JSON.stringify(payload, null, 2));
+                const fdRw1 = fs.openSync(payloadRewritePath, 'r');
+                fs.fsyncSync(fdRw1);
+                fs.closeSync(fdRw1);
+            }
+        }
     }
 
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
+    // Wait for any in-flight persistence to complete before final write
     try {
+        if (isPersisting) {
+            console.log("Waiting for in-flight persistence to complete...");
+            while (isPersisting) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+        }
         console.log("Persisting crawled URLs history...");
         const urlIterator = context.dedupManager?.getAllUrlsIterator();
         if (urlIterator) {
@@ -865,6 +996,14 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             await context.jsonlWriter.closeAll();
         } catch (e) {
             console.error("Failed to close JSONL streams:", e);
+            if (!payload.message_erreur_crawling) {
+                payload.message_erreur_crawling = "Erreur lors de l'enregistrement du rapport de mise à jour";
+                const payloadRewritePath2 = `${storagePath}/_callback_payload.json`;
+                fs.writeFileSync(payloadRewritePath2, JSON.stringify(payload, null, 2));
+                const fdRw2 = fs.openSync(payloadRewritePath2, 'r');
+                fs.fsyncSync(fdRw2);
+                fs.closeSync(fdRw2);
+            }
         }
     }
 
@@ -899,6 +1038,66 @@ if (typeCrawling == "sitemap") {
         Configuration.getGlobalConfig().set('memoryMbytes', containerMb);
     }
 
+    // Phase 2: Seed remaining URLs after homepage completes (runs concurrently with crawler)
+    if (crawlMode === 'update' && context.homepageReady) {
+        const seedPhase2 = async () => {
+            // If excluded paths were already restored from disk (crash/OOM restart
+            // or copied from previous crawl), skip waiting for homepage detection.
+            if (context.excludedRegionalPaths.length > 0) {
+                console.log(`[PHASE 2] Excluded paths already loaded from disk (${context.excludedRegionalPaths.length} paths). Skipping homepage wait.`);
+            } else {
+                const HOMEPAGE_TIMEOUT_MS = 120_000;
+                const timeout = new Promise<void>((resolve) => setTimeout(resolve, HOMEPAGE_TIMEOUT_MS));
+                await Promise.race([context.homepageReady!.promise, timeout]);
+            }
+
+            const excluded = context.excludedRegionalPaths;
+            if (excluded.length > 0) {
+                console.log(`[PHASE 2] Homepage detected ${excluded.length} excluded regional paths: ${excluded.join(", ")}`);
+            } else {
+                console.log(`[PHASE 2] No regional paths to exclude. Seeding all URLs.`);
+            }
+
+            let seedCount = 0;
+            let skippedCount = 0;
+            for (const { url, source } of remainingUrls) {
+                if (excluded.length > 0 && DetectionLangueClient.isExcludedRegionalPath(url, excluded)) {
+                    skippedCount++;
+                    continue;
+                }
+
+                if (context.dedupManager) {
+                    await context.dedupManager.addUrl(url);
+                }
+                await requestQueue.addRequest({
+                    url: url,
+                    userData: { source: source }
+                });
+                seedCount++;
+                if (seedCount % 1000 === 0) {
+                    console.log(`[PHASE 2] Seeded ${seedCount} URLs...`);
+                }
+            }
+            console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
+            context.phase2SeedingComplete = true;
+        };
+
+        // Fire-and-forget: runs concurrently with the crawler
+        context.phase2SeedingComplete = false;
+        seedPhase2().catch(err => {
+            console.error(`[PHASE 2] Error during seeding: ${err.message}`);
+            context.phase2SeedingComplete = true; // Unblock crawler on error
+        });
+
+        // Safety timeout: force completion flag after 5 minutes if Phase 2 hangs
+        setTimeout(() => {
+            if (!context.phase2SeedingComplete) {
+                console.warn("[PHASE 2] Timeout: seeding not complete after 5 minutes. Forcing completion flag.");
+                context.phase2SeedingComplete = true;
+            }
+        }, 5 * 60 * 1000);
+    }
+
     // Launch
     const crawler = await startCrawler(
         router,
@@ -911,7 +1110,8 @@ if (typeCrawling == "sitemap") {
         bypassDiez,
         skipquestionmark,
         skipdiez,
-        containerMemoryMb
+        containerMemoryMb,
+        camoufoxEnabled
     );
 
     process.on('SIGTERM', async () => {

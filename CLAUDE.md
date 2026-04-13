@@ -10,7 +10,7 @@ RAG (Retrieval-Augmented Generation) platform for HelloPro — 90+ microservices
 | Graph-RAG Python | `graph-rag-*` (17 services) | Python / FastAPI / gRPC | Remote |
 | Qdrant Databases | `*-database-qdrant-service` (7) | Python / FastAPI / Qdrant | Remote |
 | Qdrant Processors | `*-processor-service` (6) | Python / FastAPI / RabbitMQ | Remote |
-| API Services | `api-*` (16 services) | Python / FastAPI | Remote |
+| API Services | `api-*`, `content-extractor-api-service` (17) | Python / FastAPI | Remote |
 | QC Services | `QC-*` (8 services) | Python / FastAPI | Remote |
 | Prix Services | `prix-*` (6 services) | Python / FastAPI | Remote |
 | ML/LLM Services | `llm-service`, `embedding-*`, `reranking-*` | Python / FastAPI / Triton | Remote (GPU) |
@@ -63,6 +63,7 @@ docs/                 # Project documentation
 | `formatting.md` | Code style conventions per stack — references `stack-detection.md`, with unknown stack fallback |
 | `refactoring.md` | When/how to refactor safely: scope rules, shared component protocol, known duplication targets |
 | `stack-detection.md` | Single source of truth for detecting a service's stack from file indicators. All stack-dependent rules reference this. Unknown stack protocol included. |
+| `critical-thinking.md` | Anti-sycophancy, blind spot detection, evidence-based pushback, uncertainty transparency, anti-rationalization |
 
 ### Agents (`.claude/agents/`)
 
@@ -88,6 +89,10 @@ docs/                 # Project documentation
 | `/investigate` | Evidence-based statement verification: CONFIRMED / PARTIALLY TRUE / FALSE / INCONCLUSIVE |
 | `/audit-feature` | End-to-end feature audit tracing the pipeline across services |
 | `/review-task` | Tech Lead review: combined state + diff analysis, verdict APPROVED / CHANGES REQUESTED / BLOCKED |
+| `/secrets-scanner` | Full codebase scan for hardcoded secrets, API keys, passwords, connection strings |
+| `/test-coverage` | Test coverage report across all services (well-tested / minimal / none) |
+| `/dependency-mapper` | Map cross-service dependencies: imports, gRPC, RabbitMQ, HTTP calls |
+| `/architecture-review` | Architecture-level review: coupling, cohesion, scalability, observability |
 
 ### Skills (`.claude/skills/`)
 
@@ -96,12 +101,40 @@ docs/                 # Project documentation
 | `/fastapi-service-scaffold <name> <desc>` | Scaffold a new FastAPI service with all conventions |
 | `/rabbitmq-consumer-scaffold <name> <collection>` | Scaffold a new RabbitMQ processor with consumer, DLQ, metrics |
 | `/proto-sync [proto-file]` | Regenerate Python gRPC stubs from protos/ and check for breaking changes |
+| `docker-expert` | Docker troubleshooting, optimization, and security for 90+ Dockerfiles |
 
 ### Hooks (`settings.json`)
 
-| Event | Purpose |
-|-------|---------|
-| `Stop` | After each response: (1) check if CLAUDE.md files need updating, (2) self-review modified code for quality/security/impact |
+| Event | Hook | Purpose |
+|-------|------|---------|
+| `PreToolUse` (Bash) | `secret-scanner.py` | Block commits containing hardcoded secrets (60+ patterns) |
+| `PreToolUse` (Bash) | `dangerous-command-blocker.py` | Block catastrophic commands (rm -rf /, dd, mkfs) and protect critical paths |
+| `PreToolUse` (Bash) | force-push-blocker (inline) | Block `git push --force` and `git push -f` |
+| `PreToolUse` (Bash) | `conventional-commits.py` | Validate commit messages follow Conventional Commits format |
+| `PreToolUse` (Edit/Write) | `tdd-gate.sh` | Block production code edits if no corresponding test file exists |
+| `PostToolUse` (Edit) | format-python (inline) | Auto-format Python files after edits (black/ruff, graceful fallback) |
+| `Stop` | auto-review (prompt) | Check if CLAUDE.md needs updating + self-review modified code |
+| `Stop` | `scope-guard.sh` | Warn if files modified outside declared spec scope |
+
+### Plugins
+
+| Plugin | Source | Purpose |
+|--------|--------|---------|
+| `superpowers` | `claude-plugins-official` | Structured development workflow: brainstorming, plan writing, TDD, subagent orchestration, verification-before-completion |
+
+**Superpowers vs. project commands — when to use which:**
+
+| Task | Use project command | Use superpowers skill |
+|------|--------------------|-----------------------|
+| Plan a task | `/plan` (lightweight, quick) | `writing-plans` (heavyweight, multi-step spec with review) |
+| Debug an error | `@debugger` (structured fix plan) | `systematic-debugging` (exhaustive hypothesis testing) |
+| Review code | `@code-reviewer` (7-dimension single-pass) | `requesting-code-review` (formal review with verification gates) |
+| Write tests | `@test-writer` (stack-agnostic generation) | `test-driven-development` (strict red-green-refactor TDD) |
+| Execute a plan | Direct implementation | `executing-plans` (subagent delegation with checkpoints) |
+
+**Rule of thumb:** Use project commands for focused, day-to-day tasks. Use superpowers skills for complex, multi-step work that benefits from structured gates and verification.
+
+**Note:** Project commands already integrate key superpowers principles (verification evidence, no-placeholder plans, root-cause-first debugging, TDD integration, anti-rationalization checks). You get the best of both by default when using project commands.
 
 ## Constraints
 

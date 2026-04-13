@@ -44,6 +44,7 @@ type UpdateServerRequest struct {
 type ToolSummary struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	IsActive    bool   `json:"is_active"`
 }
 
 type ServerResponse struct {
@@ -88,6 +89,7 @@ type ToolResponse struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"input_schema"`
+	IsActive    bool            `json:"is_active"`
 }
 
 type ResourceResponse struct {

@@ -11,6 +11,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
+	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
@@ -22,9 +23,13 @@ type Handler struct {
 	repo              *repository.ServerRepo
 	tokenRepo         *repository.TokenRepo
 	tokenCache        TokenCache
+	oauth2Repo        *repository.OAuth2Repo
+	oauth2Cache       *oauth2pkg.Cache
 	gw                *gateway.Gateway
 	registry          *gateway.Registry
 	allowInternalURLs bool
+	userRepo          *repository.UserRepo
+	auditRepo         *repository.AuditRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -41,6 +46,22 @@ func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gate
 func (h *Handler) SetTokenRepo(repo *repository.TokenRepo, cache TokenCache) {
 	h.tokenRepo = repo
 	h.tokenCache = cache
+}
+
+// SetOAuth2Repo sets the OAuth2 repository for client CRUD operations.
+func (h *Handler) SetOAuth2Repo(repo *repository.OAuth2Repo, cache *oauth2pkg.Cache) {
+	h.oauth2Repo = repo
+	h.oauth2Cache = cache
+}
+
+// SetUserRepo sets the user repository for RBAC user management.
+func (h *Handler) SetUserRepo(repo *repository.UserRepo) {
+	h.userRepo = repo
+}
+
+// SetAuditRepo sets the audit repository for audit log access.
+func (h *Handler) SetAuditRepo(repo *repository.AuditRepo) {
+	h.auditRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -171,9 +192,8 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		isActive = &b
 	}
 	tag := r.URL.Query().Get("tag")
-	userEmail := auth.UserEmailFromContext(r.Context())
 
-	servers, err := h.repo.ListAll(isActive, tag, userEmail)
+	servers, err := h.repo.ListAll(isActive, tag, "")
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
@@ -185,6 +205,11 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		Total:   len(servers),
 	}
 	for i := range servers {
+		for _, t := range servers[i].Tools {
+			if !t.IsActive {
+				log.Printf("[api] list: server %s tool %s is_active=%v", servers[i].Name, t.Name, t.IsActive)
+			}
+		}
 		resp.Servers = append(resp.Servers, toServerResponse(&servers[i]))
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -424,6 +449,11 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, _ := h.repo.GetByID(id)
+	for _, t := range updated.Tools {
+		if !t.IsActive {
+			log.Printf("[api] discover: tool %s (server %s) is_active=%v", t.Name, id, t.IsActive)
+		}
+	}
 	writeJSON(w, http.StatusOK, toServerDetailResponse(updated))
 }
 
@@ -442,6 +472,49 @@ func (h *Handler) handleListAllResources(w http.ResponseWriter, r *http.Request)
 func (h *Handler) handleListAllPrompts(w http.ResponseWriter, r *http.Request) {
 	prompts := h.registry.MergedPrompts()
 	writeJSON(w, http.StatusOK, map[string]interface{}{"prompts": prompts, "total": len(prompts)})
+}
+
+// ── Enable / Disable Tool ─────────────────────────────────────────────────
+
+func (h *Handler) handleEnableTool(w http.ResponseWriter, r *http.Request, serverID, toolName string) {
+	srv, err := h.repo.GetByID(serverID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
+	// Strip prefix: API receives prefixed name (e.g. "ringovers_get_calls"),
+	// but DB stores unprefixed name (e.g. "get_calls")
+	dbToolName := gateway.UnprefixedToolName(srv.ToolPrefix, toolName)
+	if err := h.repo.SetToolActive(serverID, dbToolName, true); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to enable tool"})
+		return
+	}
+	h.registry.SetToolActive(serverID, dbToolName, true)
+	updated, _ := h.repo.GetByID(serverID)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
+func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serverID, toolName string) {
+	srv, err := h.repo.GetByID(serverID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "server not found"})
+		return
+	}
+	if !checkOwnership(r, srv, w) {
+		return
+	}
+	// Strip prefix: API receives prefixed name, DB stores unprefixed name
+	dbToolName := gateway.UnprefixedToolName(srv.ToolPrefix, toolName)
+	if err := h.repo.SetToolActive(serverID, dbToolName, false); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disable tool"})
+		return
+	}
+	h.registry.SetToolActive(serverID, dbToolName, false)
+	updated, _ := h.repo.GetByID(serverID)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -488,7 +561,15 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 
 	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
 		log.Printf("[api] save capabilities error for %s: %v", id, err)
+		return
 	}
+	// Sync tool active states from DB back to registry (SaveDiscoveredCapabilities
+	// preserves is_active for existing tools, but the registry has all tools as active)
+	toolStates := make(map[string]bool, len(dbSrv.Tools))
+	for _, t := range dbSrv.Tools {
+		toolStates[t.Name] = t.IsActive
+	}
+	h.registry.SyncToolActiveStates(id, toolStates)
 }
 
 // checkOwnership verifies the current user owns the server.
@@ -538,6 +619,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		toolNames = append(toolNames, ToolSummary{
 			Name:        gateway.PrefixedToolName(srv.ToolPrefix, t.Name),
 			Description: t.Description,
+			IsActive:    t.IsActive,
 		})
 	}
 
@@ -585,6 +667,7 @@ func toServerDetailResponse(srv *db.MCPServer) ServerDetailResponse {
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.InputSchema,
+			IsActive:    t.IsActive,
 		})
 	}
 	for _, res := range srv.Resources {

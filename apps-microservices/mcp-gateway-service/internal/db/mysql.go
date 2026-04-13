@@ -37,6 +37,14 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&ScopeToken{},
 		&ScopeTokenServer{},
 		&ScopeTokenTool{},
+		&OAuth2Client{},
+		&OAuth2ClientServer{},
+		&OAuth2ClientTool{},
+		&OAuth2AuthorizationCode{},
+		&OAuth2RefreshToken{},
+		&OAuth2Consent{},
+		&GatewayUser{},
+		&AuditLog{},
 	); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}

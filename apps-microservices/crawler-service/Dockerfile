@@ -13,6 +13,9 @@ COPY apps-microservices/crawler-service/crawler/ ./
 # Build the TypeScript project into JavaScript
 RUN npm run build
 
+# Download Camoufox stealth browser binary (~200MB, baked into image)
+RUN npx camoufox-js fetch
+
 
 # Stage 2: Create the final application image using the official Playwright image
 # This image contains Node.js, the browser binaries, and all OS dependencies for Playwright v1.56.1.
@@ -22,8 +25,13 @@ WORKDIR /app
 
 ENV PYTHONPATH=/app
 
-# Install Python, pip, and venv module.
-RUN apt-get update && apt-get install -y python3 python3-pip python3-venv --no-install-recommends && rm -rf /var/lib/apt/lists/*
+# Install Python, pip, venv module, and Firefox/Camoufox system dependencies.
+# The Playwright base image ships with Chromium deps only; Camoufox (Firefox-based) needs GTK3, dbus, etc.
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    libgtk-3-0 libdbus-glib-1-2 libasound2t64 libxcomposite1 libxdamage1 \
+    libxrandr2 libpango-1.0-0 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # Create and activate a virtual environment
 RUN python3 -m venv /opt/venv
@@ -46,6 +54,9 @@ COPY --from=builder /app/crawler/dist ./crawler/dist
 COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
 COPY --from=builder /app/crawler/package.json /app/crawler/package.json
 COPY --from=builder /app/crawler/package-lock.json /app/crawler/package-lock.json
+
+# Copy the Camoufox stealth browser binary from the builder stage
+COPY --from=builder /root/.cache/camoufox /root/.cache/camoufox
 
 # Expose the port for the FastAPI application
 EXPOSE 8503

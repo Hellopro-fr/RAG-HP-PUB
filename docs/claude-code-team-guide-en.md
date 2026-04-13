@@ -1019,6 +1019,22 @@ This means after every response where code was modified, Claude Code automatical
 
 **How to add a new hook:** Edit `.claude/settings.json` and add entries under the `hooks` key. See [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) for the full hook API (PreToolUse, PostToolUse, Stop, etc.).
 
+### 12.4 Superpowers Plugin
+
+The project has the `superpowers` plugin installed project-wide. It provides 14 skills that enforce a structured development workflow: brainstorming before coding, plan writing, TDD, subagent orchestration, and verification-before-completion.
+
+**When to use superpowers vs. project commands:**
+
+| Task | Project command (lightweight) | Superpowers skill (heavyweight) |
+|------|-------------------------------|----------------------------------|
+| Plan a task | `/plan` | `writing-plans` (multi-step spec with formal review) |
+| Debug an error | `@debugger` | `systematic-debugging` (exhaustive hypothesis testing) |
+| Review code | `@code-reviewer` | `requesting-code-review` (formal review with verification gates) |
+| Write tests | `@test-writer` | `test-driven-development` (strict red-green-refactor TDD) |
+| Execute a plan | Direct implementation | `executing-plans` (subagent delegation with checkpoints) |
+
+**Rule of thumb:** Use project commands for focused, day-to-day tasks. Use superpowers skills for complex, multi-step work that benefits from structured gates and verification.
+
 ### 12.4 The `primer.md` Pattern in Depth
 
 The `primer.md` file acts as a "save state" for your Claude Code sessions. Here is how it works in practice:

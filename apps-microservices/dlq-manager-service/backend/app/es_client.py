@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import asyncio
 from elasticsearch import AsyncElasticsearch
@@ -53,7 +54,9 @@ class ElasticsearchClient:
                                 "filters": {"type": "object", "enabled": False}, # Do not index inner structure
                                 "is_active": {"type": "boolean"},
                                 "created_at": {"type": "date"},
-                                "execution_count": {"type": "integer"}
+                                "execution_count": {"type": "integer"},
+                                "last_evaluated_at": {"type": "date"},
+                                "last_archived_at": {"type": "date"}
                             }
                         }
                     }
@@ -87,6 +90,8 @@ class ElasticsearchClient:
         await self.ensure_rules_index()
         rule_data['created_at'] = datetime.now(timezone.utc).isoformat()
         rule_data['execution_count'] = 0
+        rule_data['last_evaluated_at'] = None
+        rule_data['last_archived_at'] = None
         res = await self.client.index(index=RULES_INDEX_NAME, body=rule_data)
         return res['_id']
 
@@ -144,10 +149,39 @@ class ElasticsearchClient:
                     
                     # Pressure relief valve: give ES Garbage Collector time to clean up
                     await asyncio.sleep(0.5)
+
+            # Update rule timestamps after execution
+            if rule_id:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                update_body = {"last_evaluated_at": now_iso}
+                if total_archived > 0:
+                    update_body["last_archived_at"] = now_iso
+                try:
+                    await self.client.update(
+                        index=RULES_INDEX_NAME,
+                        id=rule_id,
+                        body={"doc": update_body}
+                    )
+                except Exception as e:
+                    print(f"Error updating rule timestamps for {rule_id}: {e}")
+
             return total_archived
         except Exception as e:
             print(f"Error applying auto-archive rule {rule.get('name')}: {e}")
             return total_archived
+
+    async def get_service_names(self, filters: Dict = None) -> List[Dict[str, Any]]:
+        """Returns service name buckets respecting the full filter context (status + date range)."""
+        query = self._build_query(filters or {}, "")
+        body = {
+            "size": 0,
+            "query": query,
+            "aggs": {
+                "by_service": {"terms": {"field": "service_name", "size": 100}}
+            }
+        }
+        response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
+        return response['aggregations']['by_service']['buckets']
 
     @staticmethod
     def _build_url_query(url: str) -> Dict:
@@ -351,19 +385,34 @@ class ElasticsearchClient:
         query = {"bool": {"must": [], "must_not": []}}
         
         if search_term:
-            # Check for advanced syntax characters
-            if any(char in search_term for char in [':', '*', '?']):
-                query_str = search_term
+            # Detect quoted field:value pattern like error_reason:'...' or error_reason:"..."
+            field_value_match = re.match(r'^(\w+):[\'"](.+)[\'"]$', search_term, re.DOTALL)
+            if field_value_match:
+                field_name = field_value_match.group(1)
+                field_value = field_value_match.group(2)
+                query["bool"]["must"].append({
+                    "match_phrase": {
+                        field_name: field_value
+                    }
+                })
+            elif any(char in search_term for char in [':', '*', '?']):
+                # Advanced query_string syntax (unquoted field:value, wildcards, etc.)
+                query["bool"]["must"].append({
+                    "query_string": {
+                        "query": search_term,
+                        "fields": ["error_reason", "original_payload.*", "service_name"],
+                        "lenient": True
+                    }
+                })
             else:
-                query_str = f"*{search_term}*"
-
-            query["bool"]["must"].append({
-                "query_string": {
-                    "query": query_str,
-                    "fields": ["error_reason", "original_payload.*", "service_name"],
-                    "lenient": True
-                }
-            })
+                # Simple search term — wrap with wildcards
+                query["bool"]["must"].append({
+                    "query_string": {
+                        "query": f"*{search_term}*",
+                        "fields": ["error_reason", "original_payload.*", "service_name"],
+                        "lenient": True
+                    }
+                })
 
         if filters:
             if filters.get("date_start") or filters.get("date_end"):
@@ -377,6 +426,12 @@ class ElasticsearchClient:
             service_names = filters.get("service_names")
             if service_names and isinstance(service_names, list) and len(service_names) > 0:
                 query["bool"]["must"].append({"terms": {"service_name": service_names}})
+
+            error_reason = filters.get("error_reason")
+            if error_reason and isinstance(error_reason, str):
+                query["bool"]["must"].append({
+                    "match_phrase": {"error_reason": error_reason}
+                })
 
             status_filter = filters.get("status")
             if status_filter and isinstance(status_filter, list) and len(status_filter) > 0:

@@ -11,7 +11,7 @@ from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_c
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
     EditAndRequeueRequest, RequeueByFilterRequest, ArchiveByFilterRequest, CheckUrlsBatchRequest,
-    AutoArchiveRuleCreate, ExtractFieldRequest, UniqueErrorsRequest
+    AutoArchiveRuleCreate, ExtractFieldRequest, UniqueErrorsRequest, ServiceNamesRequest
 )
 
 router = APIRouter()
@@ -137,6 +137,12 @@ async def get_dashboard_stats(filters: Optional[Dict[str, Any]] = Body(None), es
     Provides aggregated data for the main dashboard, with optional filters.
     """
     return await es_client.get_dashboard_stats(filters=filters)
+
+@router.post("/services")
+async def get_service_names(request: ServiceNamesRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
+    """Returns the list of service names matching the given filters (status, date range)."""
+    buckets = await es_client.get_service_names(filters=request.filters)
+    return {"services": buckets}
 
 @router.post("/messages/search")
 async def search_messages(request: SearchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):

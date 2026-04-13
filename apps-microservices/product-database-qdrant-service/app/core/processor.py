@@ -15,6 +15,9 @@ _milvus_produit_crud = MilvusProduitsCrud()
 _qdrant_produit_crud = QdrantProduitsCrud()
 _correspondance_produit = MilvusProduitInserer()
 
+# Initialized by main.py at startup
+_concurrency_guard = None
+
 
 def insertion_data(produits_data: dict) -> dict:
     """
@@ -64,6 +67,19 @@ def insertion_data(produits_data: dict) -> dict:
             "Aucune donnée de produit fournie ou fonction de traitement invalide."
         )
 
+    # Wrap all Milvus operations in concurrency guard
+    if _concurrency_guard:
+        with _concurrency_guard.slot():
+            return _do_milvus_operations(
+                produits, bdd, collection, base_vectorielle, func, origin, mode
+            )
+    return _do_milvus_operations(
+        produits, bdd, collection, base_vectorielle, func, origin, mode
+    )
+
+
+def _do_milvus_operations(produits, bdd, collection, base_vectorielle, func, origin, mode):
+    """Execute all Milvus/Qdrant operations for a product insertion."""
     id_produit = produits[0].get("id_produit", "ID produit inconnu")
     # print(f"📦 Produit ID: {id_produit} | Nombre de chunks: {len(produits)}")
 

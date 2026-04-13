@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 )
@@ -68,44 +69,54 @@ func (c *Checker) checkAll() {
 	var wg sync.WaitGroup
 	for _, srv := range servers {
 		wg.Add(1)
-		go func(id, url, prevStatus, toolPrefix string, authHeadersRaw []byte) {
+		go func(s db.MCPServer) {
 			defer wg.Done()
 			var authHeaders map[string]string
-			if len(authHeadersRaw) > 0 {
-				_ = json.Unmarshal(authHeadersRaw, &authHeaders)
+			if len(s.AuthHeaders) > 0 {
+				_ = json.Unmarshal(s.AuthHeaders, &authHeaders)
 			}
-			c.checkOne(id, url, prevStatus, toolPrefix, authHeaders)
-		}(srv.ID, srv.URL, srv.HealthStatus, srv.ToolPrefix, srv.AuthHeaders)
+			c.checkOne(&s, authHeaders)
+		}(srv)
 	}
 	wg.Wait()
 }
 
-func (c *Checker) checkOne(id, url, prevStatus, toolPrefix string, authHeaders map[string]string) {
+func (c *Checker) checkOne(srv *db.MCPServer, authHeaders map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Vérifie si le serveur est joignable en tentant une re-découverte
-	err := c.gw.DiscoverAndRegister(ctx, id, url, authHeaders)
+	err := c.gw.DiscoverAndRegister(ctx, srv.ID, srv.URL, authHeaders)
 
 	if err != nil {
 		// Le serveur n'est pas joignable
-		if prevStatus != "unhealthy" {
-			log.Printf("[health] server %s (%s) became unhealthy: %v", id, url, err)
+		if srv.HealthStatus != "unhealthy" {
+			log.Printf("[health] server %s (%s) became unhealthy: %v", srv.ID, srv.URL, err)
 		}
-		_ = c.repo.UpdateHealth(id, "unhealthy", err.Error())
-		// Clear stale tools/resources/prompts so UI doesn't show outdated data
-		_ = c.repo.ClearCapabilities(id)
+		_ = c.repo.UpdateHealth(srv.ID, "unhealthy", err.Error())
+		// Keep cached capabilities — they are still valid, the server is just temporarily unreachable.
+		// Capabilities get refreshed on the next successful discovery.
 		return
 	}
 
 	// Restore tool prefix after re-discovery
-	if toolPrefix != "" {
-		c.registry.SetToolPrefix(id, toolPrefix)
+	if srv.ToolPrefix != "" {
+		c.registry.SetToolPrefix(srv.ID, srv.ToolPrefix)
+	}
+
+	// Sync tool active states from DB (discovery marks all as active,
+	// but some may have been deactivated by the user)
+	if len(srv.Tools) > 0 {
+		toolStates := make(map[string]bool, len(srv.Tools))
+		for _, t := range srv.Tools {
+			toolStates[t.Name] = t.IsActive
+		}
+		c.registry.SyncToolActiveStates(srv.ID, toolStates)
 	}
 
 	// Le serveur est joignable
-	if prevStatus == "unhealthy" || prevStatus == "unknown" {
-		log.Printf("[health] server %s (%s) is now healthy", id, url)
+	if srv.HealthStatus == "unhealthy" || srv.HealthStatus == "unknown" {
+		log.Printf("[health] server %s (%s) is now healthy", srv.ID, srv.URL)
 	}
-	_ = c.repo.UpdateHealth(id, "healthy", "")
+	_ = c.repo.UpdateHealth(srv.ID, "healthy", "")
 }

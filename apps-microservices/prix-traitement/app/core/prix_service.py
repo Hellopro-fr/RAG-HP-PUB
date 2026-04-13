@@ -6,9 +6,10 @@ import time
 import json
 import logging
 import asyncio
+import re
 from typing import Dict, Any, Optional, List
 
-from app.core.api_client import GeminiProvider, HelloProAPIClient
+from app.core.api_client import GeminiProvider, ClaudeProvider, ChatGPTProvider, HelloProAPIClient
 from app.core.utils import extract_json_from_text, get_prompt_cached
 from app.core.search import call_search_api_async
 from app.core.credentials import settings
@@ -493,7 +494,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
 
         logger.info(f"[{id_categorie}] chunks formatés ({len(all_chunks_text)} chars)")
-        logger.info(f"[{id_categorie}] all chunk : {all_chunks_text}")
+        # logger.info(f"[{id_categorie}] all chunk : {all_chunks_text}")
 
         prompt_text = prompt_config.get("contenu_prompt", "")        
         
@@ -510,37 +511,91 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
-        gemini_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.GEMINI_MODEL_NAME
+        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
+        use_gemini = llm_model.startswith("gemini")
+        use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
+        use_claude = llm_model.startswith("claude")
 
         logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
-        logger.info(f"[{id_categorie}] Appel Gemini (model={gemini_model}, {len(final_prompt)} chars)...")
 
-        # Utiliser GeminiProvider
-        gemini = GeminiProvider(
-            model=gemini_model,
-            thinking_level="low"
-        )
-        
-        llm_result = await gemini.chat(final_prompt)
-        
-        # Log LLM usage (fire-and-forget : n'attend pas la réponse pour ne pas ralentir le client)
-        usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
+        if use_gemini:
+            # ---- Gemini ----
+            actual_model = llm_model if llm_model != "gemini" else settings.GEMINI_MODEL_NAME
+            type_ia = 3
+            logger.info(f"[{id_categorie}] Appel Gemini (model={actual_model}, {len(final_prompt)} chars)...")
+
+            gemini = GeminiProvider(
+                model=actual_model,
+                thinking_level="low"
+            )
+
+            llm_result = await gemini.chat(final_prompt)
+
+        elif use_claude:
+            # ---- Claude (défaut) ----
+            actual_model = llm_model
+            type_ia = 4
+
+            # Parser les suffixes raccourcis : -e-{effort} ou -b-{budget_tokens}
+            # Ex: claude-haiku-4-5-e-high → model=claude-haiku-4-5, effort=high
+            # Ex: claude-haiku-4-5-b-2048 → model=claude-haiku-4-5, budget_tokens=2048
+            effort = None
+            budget_tokens = None
+            match_effort = re.search(r"-e-(low|medium|high)$", actual_model)
+            match_budget = re.search(r"-b-(\d+)$", actual_model)
+            if match_effort:
+                effort = match_effort.group(1)
+                actual_model = actual_model[:match_effort.start()]
+            elif match_budget:
+                budget_tokens = int(match_budget.group(1))
+                actual_model = actual_model[:match_budget.start()]
+
+            logger.info(f"[{id_categorie}] Appel Claude (model={actual_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...")
+
+            claude = ClaudeProvider(
+                model=actual_model,
+                effort=effort,
+                budget_tokens=budget_tokens,
+            )
+
+            llm_result = await claude.chat(final_prompt)
+
+        else:
+
+            # ---- ChatGPT ----
+            actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
+            type_ia = 1
+            logger.info(f"[{id_categorie}] Appel ChatGPT (model={actual_model}, {len(final_prompt)} chars)...")
+
+            gpt = ChatGPTProvider(
+                model=actual_model
+            )
+
+            llm_result = await gpt.chat(final_prompt)
+
+        # Extraction usage commun (format normalisé pour les 3 providers)
+        usage = llm_result.get("api_response", {}).get("usage", {})
+        input_tokens = usage.get("input_tokens") or 0
+        output_tokens = usage.get("output_tokens") or 0
+
+        # Log LLM usage commun (fire-and-forget)
+        logger.info(f"[{id_categorie}] Response LLM: {llm_result.get('api_response', {})}")
         asyncio.create_task(api_client.log_llm_usage(
-            type_ia=3,  # Gemini
-            model=gemini_model,
-            input_token=usage_metadata.get("prompt_token_count") or 0,
-            output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
+            type_ia=type_ia,
+            model=actual_model,
+            input_token=input_tokens,
+            output_token=output_tokens,
             id_process=ID_PROCESS,
             origine="prix-traitement-questionnaire",
             etat=1 if "error" not in llm_result else 2,
             retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else "",
-            temperature=0.1
+            temperature=0.0
         ))
 
         elapsed = time.time() - start_time
         # Vérifier si erreur LLM
         if "error" in llm_result:
-            error_msg = f"Erreur Gemini: {llm_result.get('error', '')}"
+            error_msg = f"Erreur LLM: {llm_result.get('error', '')}"
             logger.error(f"[{id_categorie}] {error_msg}")
             return {
                 "success": False,
@@ -553,7 +608,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         llm_text = llm_result.get("message", "")
         
         
-        logger.info(f"[{id_categorie}] Réponse Gemini reçue : {llm_text} en {elapsed:.1f}s")
+        logger.info(f"[{id_categorie}] Réponse Claude reçue : {llm_text} en {elapsed:.1f}s")
 
         parsed = extract_json_from_text(llm_text)
         if not parsed or not isinstance(parsed, dict):
@@ -566,6 +621,14 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
                 "time_elapsed": elapsed,
                 "message": error_msg
             }
+
+        # Compatibilité prix_median <-> prix_moyen dans fourchette
+        fourchette = parsed.get("fourchette")
+        if isinstance(fourchette, dict):
+            if "prix_moyen" in fourchette and "prix_median" not in fourchette:
+                fourchette["prix_median"] = fourchette["prix_moyen"]
+            elif "prix_median" in fourchette and "prix_moyen" not in fourchette:
+                fourchette["prix_moyen"] = fourchette["prix_median"]
 
         return {
             "success": True,

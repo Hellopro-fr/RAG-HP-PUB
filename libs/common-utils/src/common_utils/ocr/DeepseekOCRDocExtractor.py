@@ -128,7 +128,11 @@ class DeepseekOCRDocExtractor:
         """
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=self.download_timeout)
+                response = await client.get(
+                    url,
+                    timeout=self.download_timeout,
+                    headers={"User-Agent": "HelloPro-RAG-Pipeline/1.0"},
+                )
                 response.raise_for_status()
                 
                 # Extraction du nom de fichier depuis l'URL

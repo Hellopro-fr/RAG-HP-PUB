@@ -119,10 +119,22 @@ export function usePriceEstimation() {
       }
 
       if (data.reponse.fourchette.borne_basse === 0) {
-        console.warn('[usePriceEstimation] borne_basse === 0, treating as backend error');
+        console.warn('[usePriceEstimation] borne_basse === 0, treating as empty');
         trackDbEvent('pricing', 'estimation_empty', {
           request: trackingRequest,
           reason: 'borne_basse_zero',
+          response: {
+            fourchette: data.reponse.fourchette,
+            exemples_produits: data.reponse.exemples_produits?.map(p => ({
+              nom: p.nom,
+              fournisseur: p.fournisseur,
+              prix: p.prix,
+              date: p.date,
+              tva: p.tva,
+            })) || [],
+            phrase_prix: data.reponse.phrase_prix,
+            model_version: data.api_response?.model_version,
+          },
           duration_utilisateur: durationUtilisateur,
           time_elapsed: data.time_elapsed,
           message: data.message,

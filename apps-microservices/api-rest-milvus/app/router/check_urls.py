@@ -3,13 +3,15 @@
 # Reproduit la logique du script 2_check_urls_in_milvus.py
 # ==============================================================================
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Set
 from pymilvus import Collection, utility
+from app.core.api_rest_milvus import get_loaded_collection
 
 from common_utils.database.config.settings import Configuration
 
+import asyncio
 import logging
 import time
 
@@ -92,10 +94,10 @@ class CheckUrlsResponse(BaseModel):
 
 # --- FONCTIONS UTILITAIRES ---
 
-def _check_urls_batch(collection: Collection, urls_to_check: List[str]) -> Dict:
+async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[str]) -> Dict:
     """
     Vérifie une liste d'URLs dans Milvus.
-    
+
     Retourne:
     - found_urls: Set[str] - URLs trouvées (hors header/footer)
     - has_header: bool
@@ -104,44 +106,46 @@ def _check_urls_batch(collection: Collection, urls_to_check: List[str]) -> Dict:
     found_urls: Set[str] = set()
     has_header = False
     has_footer = False
-    
+
     total = len(urls_to_check)
-    
+
     for i in range(0, total, CHUNK_SIZE):
         batch = urls_to_check[i:i + CHUNK_SIZE]
-        
+
         # Echapper les backslashes PUIS les guillemets simples dans les URLs
         # Important: échapper \ d'abord, sinon on double-échappe les \' qu'on vient d'ajouter
         batch_escaped = [u.replace("\\", "\\\\").replace("'", "\\'") for u in batch]
         urls_str = ", ".join([f"'{u}'" for u in batch_escaped])
-        
+
         # Filtre chunk_number == 1 pour éviter les doublons
         expr = f"{URL_FIELD_NAME} in [{urls_str}] and chunk_number == 1"
-        
+
         try:
-            results = collection.query(
-                expr=expr,
-                output_fields=[URL_FIELD_NAME, FILTER_FIELD_NAME],
-                consistency_level="Strong"
-            )
-            
+            async with guard.slot():
+                results = await asyncio.to_thread(
+                    collection.query,
+                    expr=expr,
+                    output_fields=[URL_FIELD_NAME, FILTER_FIELD_NAME],
+                    consistency_level="Strong"
+                )
+
             for entity in results:
                 url = entity[URL_FIELD_NAME]
                 page_type = entity.get(FILTER_FIELD_NAME, "")
-                
+
                 if page_type == 'header':
                     has_header = True
                 elif page_type == 'footer':
                     has_footer = True
-                
+
                 # On considère trouvé si ce n'est pas header/footer
                 if page_type not in ['header', 'footer']:
                     found_urls.add(url)
-                    
+
         except Exception as e:
             logger.error(f"Erreur lors de la requête Milvus: {e}")
             raise
-            
+
     return {
         "found_urls": found_urls,
         "has_header": has_header,
@@ -173,45 +177,46 @@ Vérifie si les URLs fournies existent dans la collection Milvus (hors header/fo
 - Vérifier la complétude de l'indexation d'un site
 """
 )
-async def check_urls_existence(request: CheckUrlsRequest):
+async def check_urls_existence(http_request: Request, request: CheckUrlsRequest):
     """
     Vérifie l'existence des URLs dans Milvus.
-    
+
     Reproduit la logique du script 2_check_urls_in_milvus.py pour être appelé
     depuis le Back Office sans connexion directe à Milvus.
     """
     start_time = time.time()
-    
+
     collection_name = request.collection_name or COLLECTION_NAME
-    
+
     # Vérifier si la collection existe
     if not utility.has_collection(collection_name):
         raise HTTPException(
             status_code=404,
             detail=f"Collection '{collection_name}' introuvable dans Milvus."
         )
-    
+
     try:
-        collection = Collection(collection_name)
-        collection.load()
+        collection = get_loaded_collection(collection_name)
     except Exception as e:
         logger.error(f"Erreur lors du chargement de la collection: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Erreur lors du chargement de la collection: {str(e)}"
         )
-    
+
+    guard = http_request.app.state.concurrency_guard
+
     missing_urls_by_domain: Dict[str, List[str]] = {}
     header_footer_status: Dict[str, HeaderFooterStatus] = {}
-    
+
     total_urls_count = sum(len(urls) for urls in request.urls_by_domain.values())
     total_domains = len(request.urls_by_domain)
     processed_urls = 0
     total_found = 0
     total_missing = 0
-    
+
     logger.info(f"Démarrage vérification: {total_urls_count} URLs dans {total_domains} domaines")
-    
+
     for domain, urls in request.urls_by_domain.items():
         if not urls:
             missing_urls_by_domain[domain] = []
@@ -221,31 +226,31 @@ async def check_urls_existence(request: CheckUrlsRequest):
                     has_footer=False
                 )
             continue
-        
+
         # Dédupliquer les URLs
         urls_unique = list(set(urls))
-        
+
         try:
             # Vérification dans Milvus
-            result = _check_urls_batch(collection, urls_unique)
-            
+            result = await _check_urls_batch(guard, collection, urls_unique)
+
             found_urls = result["found_urls"]
             missing = set(urls_unique) - found_urls
-            
+
             if missing:
                 missing_urls_by_domain[domain] = sorted(list(missing))
                 total_missing += len(missing)
-            
+
             total_found += len(found_urls)
-            
+
             if request.report_header_footer:
                 header_footer_status[domain] = HeaderFooterStatus(
                     has_header=result["has_header"],
                     has_footer=result["has_footer"]
                 )
-            
+
             processed_urls += len(urls)
-            
+
         except Exception as e:
             logger.error(f"Erreur pour le domaine {domain}: {e}")
             raise HTTPException(
@@ -315,7 +320,7 @@ class CheckUrlsSimpleRequest(BaseModel):
     summary="Vérification simple d'une liste d'URLs",
     description="Version simplifiée pour vérifier une liste d'URLs sans groupement par domaine."
 )
-async def check_urls_simple(request: CheckUrlsSimpleRequest):
+async def check_urls_simple(http_request: Request, request: CheckUrlsSimpleRequest):
     """
     Version simplifiée pour vérifier une liste d'URLs directement.
     Retourne uniquement les URLs trouvées et manquantes.
@@ -327,25 +332,25 @@ async def check_urls_simple(request: CheckUrlsSimpleRequest):
             "missing_urls": [],
             "count": {"found": 0, "missing": 0, "total": 0}
         }
-    
+
     collection_name = request.collection_name or COLLECTION_NAME
-    
+
     if not utility.has_collection(collection_name):
         raise HTTPException(
             status_code=404,
             detail=f"Collection '{collection_name}' introuvable."
         )
-    
+
     try:
-        collection = Collection(collection_name)
-        collection.load()
-        
+        collection = get_loaded_collection(collection_name)
+        guard = http_request.app.state.concurrency_guard
+
         urls_unique = list(set(request.urls))
-        result = _check_urls_batch(collection, urls_unique)
-        
+        result = await _check_urls_batch(guard, collection, urls_unique)
+
         found_urls = sorted(list(result["found_urls"]))
         missing_urls = sorted(list(set(urls_unique) - result["found_urls"]))
-        
+
         return {
             "status": "success",
             "found_urls": found_urls,
@@ -356,7 +361,7 @@ async def check_urls_simple(request: CheckUrlsSimpleRequest):
                 "total": len(urls_unique)
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Erreur lors de la vérification: {e}")
         raise HTTPException(

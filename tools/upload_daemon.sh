@@ -27,6 +27,11 @@ DEAD_LETTER_DIR="$ARCHIVES_DIR/dead_letter"
 mkdir -p "$ARCHIVES_DIR"
 mkdir -p "$DEAD_LETTER_DIR"
 
+# Change ownership of the shared directories to the current user
+# This is necessary because Docker creates volume mount points as root
+sudo chown -R $USER:$USER "$ARCHIVES_DIR"
+sudo chown -R $USER:$USER "$DEAD_LETTER_DIR"
+
 echo "Starting Upload Daemon..."
 echo "Watching directory: $ARCHIVES_DIR"
 echo "Target Bucket: gs://$BUCKET_NAME/crawls/"

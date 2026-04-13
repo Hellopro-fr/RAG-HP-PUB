@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, ArrowRight, Info, Check, Package, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Question } from "@/types";
 import { useFlowStore } from "@/lib/stores/flow-store";
+import { getCategoryQuestion } from "@/data/category-static-content";
 
 interface QuestionScreenProps {
   question: Question;
@@ -33,41 +34,76 @@ const QuestionScreen = ({
   isFirst,
   isLast,
 }: QuestionScreenProps) => {
-  const { categoryName, categoryStats } = useFlowStore();
+  const { categoryName, categoryStats, categoryId } = useFlowStore();
   const [showJustification, setShowJustification] = useState(false);
 
-  // Stats avec fallback sur valeurs statiques
-  const productsCount = categoryStats?.productsCount ?? 347;
-  const suppliersCount = categoryStats?.suppliersCount ?? 24;
+  // Animation slide-fade : exit vers la gauche, enter depuis la droite
+  const [isExiting, setIsExiting] = useState(false);
+  const [displayedQuestion, setDisplayedQuestion] = useState(question);
+  const prevIndexRef = useRef(currentIndex);
 
-  const showOtherOption = question.id === 3;
+  useEffect(() => {
+    if (currentIndex === prevIndexRef.current) {
+      // Même index, juste mettre à jour la question (ex: re-render)
+      setDisplayedQuestion(question);
+      return;
+    }
+
+    // Phase exit : le contenu glisse vers la gauche et disparaît
+    setIsExiting(true);
+
+    const timer = setTimeout(() => {
+      // Après l'exit, afficher le nouveau contenu et lancer l'entrée
+      setDisplayedQuestion(question);
+      setIsExiting(false);
+      prevIndexRef.current = currentIndex;
+    }, 300); // même durée que transition-all duration-300
+
+    return () => clearTimeout(timer);
+  }, [currentIndex, question]);
+
+  // Stats avec fallback sur valeurs statiques
+  const productsCount = categoryStats?.productsCount ?? 1400;
+  const suppliersCount = categoryStats?.suppliersCount ?? 43;
+
+  // Texte réassurance depuis categoryStaticContent si disponible
+  const staticContent = categoryId ? getCategoryQuestion(categoryId) : undefined;
+  const reassuranceText = staticContent?.reassurance
+    ? staticContent.reassurance.replace('xx', String(productsCount)).replace('zz', String(suppliersCount))
+    : `${productsCount} modèles de ${categoryName || "produits"} comparés chez ${suppliersCount} vendeurs`;
+
+  // Utiliser displayedQuestion pour le rendu (suit l'animation exit/enter)
+  const showOtherOption = displayedQuestion.id === 3;
   const isOtherSelected = selectedAnswers.includes("other");
   const hasSelection = selectedAnswers.length > 0;
 
   const handleAnswerClick = (answerId: string) => {
     // For single select, auto-advance after selection - except for "other" which needs text input
-    const shouldAutoAdvance = !question.multiSelect && answerId !== "other";
+    const shouldAutoAdvance = !displayedQuestion.multiSelect && answerId !== "other";
     onSelectAnswer(answerId, shouldAutoAdvance);
   };
 
   return (
     <div className="flex flex-col min-h-full">
       {/* Scrollable content */}
-      <div className="flex-1 p-4 sm:p-6 lg:p-10 pb-32 sm:pb-6">
-        <div className="mx-auto max-w-[44em] space-y-6 sm:space-y-8">
-          {/* Question counter */}
-
-          {/* Question counter */}
+      <div className="flex-1 pb-32 sm:pb-6 transition-all duration-300">
+        <div className={cn(
+          "px-4 sm:px-6 lg:px-10 pt-5 sm:pt-8 transition-all duration-300",
+          isExiting ? "opacity-0 -translate-x-5" : "opacity-100 translate-x-0"
+        )}>
+        <div className="mx-auto max-w-2xl space-y-5">
+          {/* Question counter — DISABLED: remplacé par QuestionnaireProgressBar dans le header
           <div className="text-center">
             <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-1.5 text-sm font-medium text-secondary-foreground">
-              {totalQuestions == 1 ? "Question 1" : `Question ${currentIndex + 1} sur ${totalQuestions}`}              
+              {totalQuestions == 1 ? "Question 1" : `Question ${currentIndex + 1} sur ${totalQuestions}`}
             </span>
           </div>
+          */}
 
           {/* Question title */}
           <div className="text-center space-y-3 sm:space-y-4">
             <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground leading-tight">
-              {question.title}
+              {displayedQuestion.title}
             </h2>
             
             {/* Justification toggle - temporairement masqué
@@ -92,7 +128,7 @@ const QuestionScreen = ({
           <div className="space-y-3">
 
             {/* Regular answers (excluding quick option) */}
-            {question.answers
+            {displayedQuestion.answers
               .filter((answer) => answer.id !== "1-quick")
               .map((answer) => {
                 const isSelected = selectedAnswers.includes(answer.id);
@@ -114,14 +150,14 @@ const QuestionScreen = ({
                       <div
                         className={cn(
                           "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center transition-colors",
-                          question.multiSelect ? "rounded" : "rounded-full",
+                          displayedQuestion.multiSelect ? "rounded" : "rounded-full",
                           isSelected
                             ? "border-2 border-primary bg-primary"
                             : "border-2 border-muted-foreground/30"
                         )}
                       >
                         {isSelected && (
-                          question.multiSelect ? (
+                          displayedQuestion.multiSelect ? (
                             <Check className="h-3 w-3 text-primary-foreground" />
                           ) : (
                             <div className="h-2 w-2 rounded-full bg-primary-foreground" />
@@ -159,14 +195,14 @@ const QuestionScreen = ({
                     <div
                       className={cn(
                         "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center transition-colors",
-                        question.multiSelect ? "rounded" : "rounded-full",
+                        displayedQuestion.multiSelect ? "rounded" : "rounded-full",
                         isOtherSelected
                           ? "border-2 border-primary bg-primary"
                           : "border-2 border-muted-foreground/30"
                       )}
                     >
                       {isOtherSelected && (
-                        question.multiSelect ? (
+                        displayedQuestion.multiSelect ? (
                           <Check className="h-3 w-3 text-primary-foreground" />
                         ) : (
                           <div className="h-2 w-2 rounded-full bg-primary-foreground" />
@@ -207,19 +243,19 @@ const QuestionScreen = ({
 
           {/* Desktop navigation with reassurance - hidden on mobile */}
           <div className="hidden sm:block pt-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">             
               <button
                 onClick={onBack}
                 disabled={isFirst}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg border-2 border-border bg-background px-5 py-3 text-sm font-medium transition-colors",
+                  "flex items-center gap-2 text-sm font-semibold uppercase tracking-wide transition-colors",
                   isFirst
-                    ? "opacity-50 cursor-not-allowed"
-                    : "hover:bg-muted text-foreground"
+                    ? "opacity-0 cursor-default pointer-events-none"
+                    : "text-foreground hover:text-foreground/70"
                 )}
               >
                 <ArrowLeft className="h-4 w-4" />
-                Précédent
+                Retour
               </button>
 
               {/* Always show Suivant button for visual consistency */}
@@ -239,52 +275,48 @@ const QuestionScreen = ({
               </button>
             </div>
             
-            {/* Desktop reassurance - below buttons */}
-            <div className="flex items-center justify-center gap-4 text-sm">
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5">
-                <Package className="h-4 w-4 text-primary" />
-                <span className="text-foreground">
-                  <span className="font-semibold text-primary">{categoryName || ""}</span>
-                  <span className="text-muted-foreground"> : {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-2 text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>+ de 10 000 pros équipés / mois</span>
-              </div>
+            {/* Nouvelle réassurance desktop */}
+            <div className="mt-5 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3 text-center">
+              <p className="text-sm text-foreground">
+                À la fin de ce questionnaire → <span className="font-semibold text-primary">💰 Estimation de prix</span> + <span className="font-semibold text-primary">📦 Produits adaptés à votre besoin</span>
+              </p>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {reassuranceText}
+              </p>
             </div>
           </div>
+        </div>
         </div>
       </div>
 
       {/* Mobile sticky footer with reassurance */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-        {/* Reassurance line */}
-        <div className="flex flex-col items-center gap-1 px-4 py-2 border-b border-border/50 bg-primary/5">
-          <div className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden">
-            <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="font-semibold text-primary truncate">{categoryName || ""}</span>
-            <span className="text-muted-foreground shrink-0">: {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
-          </div>
-          <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
-            <Users className="h-3.5 w-3.5 shrink-0" />
-            <span>+ de 10 000 pros équipés / mois</span>
-          </div>
+
+
+        {/* Nouvelle réassurance mobile */}
+        <div className="px-4 py-2 border-b border-border/50 text-center">
+          <p className="text-xs text-foreground">
+            À la fin → <span className="font-semibold text-primary">💰 Estimation de prix</span> + <span className="font-semibold text-primary">📦 Produits adaptés</span>
+          </p>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {reassuranceText}
+          </p>
         </div>
         
         {/* Navigation buttons */}
-        <div className="flex items-center gap-3 p-4">
+        <div className="flex items-center gap-3 p-4">          
           <button
             onClick={onBack}
             disabled={isFirst}
             className={cn(
-              "flex items-center justify-center rounded-lg border-2 border-border bg-background px-4 py-3 text-sm font-medium transition-colors",
+              "flex items-center gap-2 text-sm font-semibold uppercase tracking-wide transition-colors",
               isFirst
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:bg-muted text-foreground"
+                ? "opacity-0 cursor-default pointer-events-none"
+                : "text-foreground hover:text-foreground/70"
             )}
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4" />
+            Retour
           </button>
 
           {/* Always show Suivant button for visual consistency */}

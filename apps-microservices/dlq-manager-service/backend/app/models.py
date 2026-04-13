@@ -47,3 +47,6 @@ class UniqueErrorsRequest(BaseModel):
     """Returns unique (service_name, error_reason) combinations matching filters."""
     filters: Optional[Dict[str, Any]] = None
     search_term: Optional[str] = None
+
+class ServiceNamesRequest(BaseModel):
+    filters: Optional[Dict[str, Any]] = None

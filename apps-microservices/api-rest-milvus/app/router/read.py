@@ -1,8 +1,9 @@
 from pymilvus import connections
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, HTTPException, Query, Path, Request
 from typing import Any, Dict, Optional
 from .mapping_rest_milvus import MILVUS_COLLECTIONS, MILVUS_COLLECTIONS_DEFAULT_FIELDS
 
+import asyncio
 
 from common_utils.database.config.settings import Configuration
 from common_utils.database.Utils import Utils
@@ -17,12 +18,15 @@ from pymilvus import (
     MilvusException
 )
 
+from app.core.api_rest_milvus import get_loaded_collection
+
 import json
 
 router = APIRouter()
 
 @router.get("/{collection_milvus}")
 async def get_ressource(
+    request: Request,
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     id_ressource: Optional[str] = Query(None, description="ID unique de la ressource"),
     metadata: Optional[str] = Query(None, description="""Filtres de recherche au format JSON.
@@ -55,7 +59,7 @@ Exemples: <br>
         parsed_metadata = json.loads(metadata) if metadata else {}
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Paramètre 'metadata' invalide. Doit être un JSON valide.")
-    
+
     # Utiliser directement le nom de collection fourni (suppression de la contrainte de mapping)
     collection_name = collection_milvus
 
@@ -69,7 +73,9 @@ Exemples: <br>
         raise HTTPException(status_code=400, detail="order_direction doit être 'ASC' ou 'DESC'")
 
     try:
-        result = get_ressource_rest(
+        guard = request.app.state.concurrency_guard
+        result = await get_ressource_rest(
+            guard=guard,
             collection_name=collection_name,
             id_milvus=id_ressource,
             metadata=parsed_metadata,
@@ -171,7 +177,7 @@ def _build_single_condition(field_name: str, operator: str, value: Any) -> Optio
         else:
             return f"{field_name} {milvus_op} {value}"
 
-def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0, fields: Optional[list] = None, order_by: Optional[str] = None, order_direction: str = "ASC") -> Dict[str, Any]:
+async def get_ressource_rest(guard, collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0, fields: Optional[list] = None, order_by: Optional[str] = None, order_direction: str = "ASC") -> Dict[str, Any]:
 
         print(f"get_ressource_rest - collection_name: {collection_name}, id_milvus: {id_milvus}, metadata: {metadata}")
 
@@ -186,8 +192,7 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     "code": 404
                 }
 
-            collection = Collection(collection_name)
-            collection.load()
+            collection = get_loaded_collection(collection_name)
 
             expr_parts = []
 
@@ -244,7 +249,8 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     if order_by:
                         query_params["order_by"] = f"{order_by} {order_direction}"
 
-                    results = collection.query(**query_params)
+                    async with guard.slot():
+                        results = await asyncio.to_thread(collection.query, **query_params)
                 except MilvusException as e:
                     if "invalid max query result window" in str(e):
                         return {
@@ -301,7 +307,8 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                 if order_by:
                     query_params["order_by"] = f"{order_by} {order_direction}"
 
-                results = collection.query(**query_params)
+                async with guard.slot():
+                    results = await asyncio.to_thread(collection.query, **query_params)
             except MilvusException as e:
                 if "invalid max query result window" in str(e):
                     return {

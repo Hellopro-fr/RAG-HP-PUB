@@ -153,7 +153,7 @@ const createSessionStorage = (): StateStorage => {
 };
 
 // Types de parcours pour le tracking GTM
-export type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | null;
+export type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | 'budget_ne_correspond_pas' | null;
 
 // Structure pour stocker les questions et réponses de l'utilisateur
 export interface UserQuestionAnswer {
@@ -200,6 +200,9 @@ export interface FlowState {
 
   // Statistiques de la catégorie (depuis l'API info-categorie)
   categoryStats: CategoryStats | null;
+
+  // Vignette de la catégorie (depuis l'API vignette-categorie)
+  categoryVignette: string | null;
 
   // Type de parcours (pour tracking GTM)
   flowType: FlowType;
@@ -295,6 +298,7 @@ export interface FlowState {
   setCategoryId: (id: number) => void;
   setCategoryName: (name: string | null) => void;
   setCategoryStats: (stats: CategoryStats | null) => void;
+  setCategoryVignette: (url: string | null) => void;
   setDdc: (ddc: string) => void;
   setUserAnswers: (answers: Record<number, string[]>) => void;
   setOtherTexts: (texts: Record<number, string>) => void;
@@ -328,6 +332,7 @@ const initialState = {
   categoryId: null,
   categoryName: null,
   categoryStats: null,
+  categoryVignette: null,
   flowType: null as FlowType,
   userAnswers: {},
   otherTexts: {},
@@ -366,6 +371,8 @@ export const useFlowStore = create<FlowState>()(
       setCategoryName: (name) => set({ categoryName: name }),
 
       setCategoryStats: (stats) => set({ categoryStats: stats }),
+
+      setCategoryVignette: (url) => set({ categoryVignette: url }),
 
       setUserAnswers: (answers) => set({ userAnswers: answers }),
 

@@ -6,6 +6,7 @@ import ProgressHeader from "./ProgressHeader";
 import CountryCodeSelect from "./CountryCodeSelect";
 import { useBuyerCheck } from "@/hooks/api";
 import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
+import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import { ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -45,7 +46,8 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
     profileData,
     userAnswers,
     selectedSupplierIds,
-    categoryId
+    categoryId,
+    priceEstimation
   } = useFlowStore();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -300,7 +302,8 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
       has_description: !!description,
       has_files: (finalData.files?.length || 0) > 0,
       files_count: finalData.files?.length || 0,
-      flow_type: flowType
+      flow_type: flowType,
+      price_estimation: buildPriceTrackingPayload(priceEstimation),
     }, categoryId, 1);
 
     // Si acheteur connu: soumettre le lead directement

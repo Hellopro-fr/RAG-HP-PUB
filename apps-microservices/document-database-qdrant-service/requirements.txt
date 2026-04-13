@@ -3,3 +3,5 @@ pydantic
 pika
 python-dotenv
 pymilvus
+prometheus-client
+waitress

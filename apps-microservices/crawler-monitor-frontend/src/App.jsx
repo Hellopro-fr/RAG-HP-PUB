@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
   Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
-  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu, Trash2
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu, Trash2,
+  Archive, RotateCcw
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -34,7 +35,9 @@ const JobCard = ({ job, onClick, isSelected }) => {
       case 'finished': return { color: 'green', text: 'Succès', icon: CheckCircle };
       case 'failed': return { color: 'red', text: 'Échec', icon: XCircle };
       case 'stopping': return { color: 'yellow', text: 'Arrêt...', icon: AlertTriangle };
-      default: return { color: 'gray', text: 'Autre', icon: Clock };
+      case 'archived': return { color: 'gray', text: 'Archivé', icon: Archive };
+      case 'restarting_oom': return { color: 'orange', text: 'Restart OOM', icon: RotateCcw, spin: true };
+      default: return { color: 'gray', text: status, icon: Clock };
     }
   };
 
@@ -892,8 +895,28 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-white">Job #{job.id}</h2>
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Job #{job.id}</h2>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            {job.domain && <span className="text-sm text-gray-400">{job.domain}</span>}
+            {job.crawl_mode && (
+              <span className={`text-xs px-2 py-0.5 rounded ${
+                job.crawl_mode === 'update' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
+              }`}>
+                {job.crawl_mode === 'update' ? 'Mode Update' : 'Mode Standard'}
+              </span>
+            )}
+            {job.previous_crawl_id && (
+              <span className="text-xs text-gray-500">prev: {job.previous_crawl_id}</span>
+            )}
+            {job.oom_restart_count > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded bg-orange-500/20 text-orange-400">
+                {job.oom_restart_count} OOM restart{job.oom_restart_count > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowQueueEditor(true)}
@@ -1222,6 +1245,7 @@ const App = () => {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef(null);
   const jobCache = useRef({});
+  const selectedJobRef = useRef(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -1229,6 +1253,8 @@ const App = () => {
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [replicas, setReplicas] = useState({});
+  const [capacity, setCapacity] = useState(null);
+  const [failedCallbackCount, setFailedCallbackCount] = useState(0);
 
   const filteredJobs = useMemo(() => {
     return allJobs.filter(job => {
@@ -1263,7 +1289,8 @@ const App = () => {
     const finished = filteredJobs.filter(j => j.status === 'finished').length;
     const failed = filteredJobs.filter(j => j.status === 'failed').length;
     const running = filteredJobs.filter(j => j.status === 'running').length;
-    return { finished, failed, running, total: filteredJobs.length };
+    const archived = filteredJobs.filter(j => j.status === 'archived').length;
+    return { finished, failed, running, archived, total: filteredJobs.length };
   }, [filteredJobs]);
 
   const handleLogin = (newToken) => {
@@ -1292,8 +1319,13 @@ const App = () => {
   useEffect(() => {
     if (token) {
       fetchJobs();
+      fetchCapacity();
+      fetchCallbacks();
     }
   }, [token]);
+
+  // Keep ref in sync for WebSocket handler (avoids stale closure)
+  useEffect(() => { selectedJobRef.current = selectedJob; }, [selectedJob]);
 
   useEffect(() => {
     if (!token) return;
@@ -1313,12 +1345,11 @@ const App = () => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'job_update') {
-          // Auto-refresh job list
           fetchJobs();
-
-          // Update selected job if needed
-          if (selectedJob?.id === data.job.id) {
-            fetchJobDetails(data.job.id);
+          fetchCapacity();
+          fetchCallbacks();
+          if (data.crawl_id && selectedJobRef.current?.id === data.crawl_id) {
+            fetchJobDetails(data.crawl_id);
           }
         } else if (data.type === 'replica_heartbeat') {
           setReplicas(prev => ({
@@ -1375,9 +1406,25 @@ const App = () => {
     }
   }, [token]);
 
-  if (!token) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
+  const fetchCapacity = useCallback(async () => {
+    try {
+      const response = await authFetch(`${API_URL}/capacity`);
+      const data = await response.json();
+      setCapacity(data);
+    } catch (error) {
+      console.error('Error fetching capacity:', error);
+    }
+  }, [token]);
+
+  const fetchCallbacks = useCallback(async () => {
+    try {
+      const response = await authFetch(`${API_URL}/callbacks`);
+      const data = await response.json();
+      setFailedCallbackCount(data.count);
+    } catch (error) {
+      console.error('Error fetching callbacks:', error);
+    }
+  }, [token]);
 
   const fetchJobDetails = useCallback(async (id) => {
     if (jobCache.current[id] && selectedJob?.id === id && !showRaw) {
@@ -1402,7 +1449,9 @@ const App = () => {
     }
   }, [selectedJob, showRaw]);
 
-
+  if (!token) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
@@ -1413,6 +1462,12 @@ const App = () => {
             <h1 className="text-xl font-bold text-white">Crawler Dashboard Pro</h1>
           </div>
           <div className="flex gap-2">
+            {failedCallbackCount > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-red-900/50 border border-red-500/30 rounded-lg text-sm">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                <span className="text-red-300">{failedCallbackCount} callback{failedCallbackCount > 1 ? 's' : ''} en échec</span>
+              </div>
+            )}
             <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -1424,12 +1479,34 @@ const App = () => {
       </header>
 
       <main className="container mx-auto p-4 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <StatCard title="Total" value={globalStats.total} icon={Server} color="gray" />
           <StatCard title="Succès" value={globalStats.finished} icon={CheckCircle} color="green" />
           <StatCard title="Échecs" value={globalStats.failed} icon={XCircle} color="red" />
           <StatCard title="En cours" value={globalStats.running} icon={Zap} color="blue" />
+          <StatCard title="Archivés" value={globalStats.archived} icon={Archive} color="gray" />
         </div>
+
+        {capacity && capacity.max_global_jobs > 0 && (
+          <div className="bg-gray-800 rounded-lg p-4 shadow-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-gray-400">
+                Capacité globale
+              </span>
+              <span className={`text-sm font-bold ${capacity.is_full ? 'text-red-400' : 'text-green-400'}`}>
+                {capacity.running_jobs} / {capacity.max_global_jobs} slots
+              </span>
+            </div>
+            <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  capacity.is_full ? 'bg-red-500' : capacity.running_jobs / capacity.max_global_jobs > 0.8 ? 'bg-yellow-500' : 'bg-green-500'
+                }`}
+                style={{ width: `${Math.min((capacity.running_jobs / capacity.max_global_jobs) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Replica Monitor */}
         <ReplicaMonitor replicas={replicas} />
@@ -1463,6 +1540,9 @@ const App = () => {
                 <option value="finished">Succès</option>
                 <option value="failed">Échec</option>
                 <option value="running">En cours</option>
+                <option value="stopping">Arrêt...</option>
+                <option value="archived">Archivé</option>
+                <option value="restarting_oom">Restart OOM</option>
               </select>
             </div>
             <div className="flex items-center gap-2">

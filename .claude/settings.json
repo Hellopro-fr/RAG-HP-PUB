@@ -1,15 +1,89 @@
 {
-    "enableAllProjectMcpServers": true,
-    "hooks": {
-        "Stop": [
-            {
-                "hooks": [
-                    {
-                        "type": "prompt",
-                        "prompt": "You just finished responding. Check if any of these apply:\n\n1. **CLAUDE.md refresh needed?** If you created new files, added endpoints, changed service structure, or modified shared libs — check if the relevant CLAUDE.md (service-level or root) needs updating. If yes, propose the update to the user.\n\n2. **Auto-review needed?** If you wrote or edited source code (not docs/comments/config only), do a quick self-review:\n   - Any SOLID/DRY/KISS violation introduced?\n   - Any security concern per `.claude/rules/security.md`?\n   - Any impact on shared components per `.claude/rules/impact-awareness.md`?\n   - If issues found, report them and offer to fix.\n\nIf neither applies, respond with {\"ok\": true}.\nIf something needs attention, respond with {\"ok\": false, \"reason\": \"brief description of what needs updating\"}."
-                    }
-                ]
-            }
+  "enableAllProjectMcpServers": true,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./config/credentials.json)"
+    ]
+  },
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "120000",
+    "BASH_MAX_TIMEOUT_MS": "600000",
+    "BASH_MAX_OUTPUT_LENGTH": "100000"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/secret-scanner.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dangerous-command-blocker.py"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git push *--force*)",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Force push is blocked. Use a regular push or ask the user for explicit permission.\"}}'"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git push *-f*)",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Force push (-f) is blocked. Use a regular push or ask the user for explicit permission.\"}}'"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/conventional-commits.py"
+          }
         ]
-    }
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/tdd-gate.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then black \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || ruff format \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-review-gate.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "claude-mem@thedotmack": true,
+    "context7@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true
+  }
 }

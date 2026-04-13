@@ -247,6 +247,18 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
               </button>
             )}
 
+            {/* Match Score Badge */}
+            {product.matchScore >= 60 && (
+              <div className="absolute top-3 left-3 z-10">
+                <span className={cn(
+                  "rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow-sm",
+                  product.matchScore >= 80 ? "bg-match-high" : "bg-match-medium"
+                )}>
+                  {product.matchScore >= 80 ? "Idéal" : "À considérer"}
+                </span>
+              </div>
+            )}
+
             {/* Navigation arrows */}
             {mediaItems.length > 1 && (
               <>
@@ -326,16 +338,6 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
 
           {/* Product Info */}
           <div className="p-4 sm:p-6 space-y-6">
-            {/* Match Score */}
-            <div className="rounded-xl border bg-muted/30 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Correspondance avec vos critères</span>
-                <span className={cn("text-2xl font-bold", getMatchColor())}>
-                  {product.matchScore}%
-                </span>
-              </div>
-            </div>
-
             {/* Description - Rich HTML support with expandable */}
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -596,87 +598,103 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
 
         {/* Footer - Fixed at bottom on mobile */}
         <div className="border-t bg-background p-4 pb-6 sm:pb-4 flex-shrink-0 safe-area-inset-bottom">
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Back */}
-            <Button
-              variant="ghost"
-              onClick={onClose}
-              className="gap-1 text-muted-foreground hover:text-foreground shrink-0"
-              size="sm"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Retour</span>
-            </Button>
+          {isSelected ? (
+            /* Selected: stacked CTAs on mobile, inline row on desktop */
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              {onRequestSingleQuote && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onRequestSingleQuote();
+                  }}
+                  className="order-1 sm:order-4 gap-1.5 sm:shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Devis sur ce produit →
+                </Button>
+              )}
 
-            <div className="flex-1" />
+              {onProceed && selectedCount > 1 && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onProceed();
+                  }}
+                  className="order-2 sm:order-5 gap-1.5 sm:shrink-0 bg-accent hover:bg-accent/90 text-accent-foreground"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Devis sur ma sélection ({selectedCount} produits)
+                </Button>
+              )}
 
-            {isSelected ? (
-              <>
+              {/* Retour + Retirer: same row on mobile (bottom), unwrapped on desktop via contents */}
+              <div className="order-3 flex items-center justify-between sm:contents">
+                <Button
+                  variant="ghost"
+                  onClick={onClose}
+                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground hover:bg-transparent shrink-0"
+                  size="sm"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Retour
+                </Button>
+
+                <div className="hidden sm:block sm:order-2 sm:flex-1" />
+
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     onSelect();
                   }}
-                  className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+                  className="sm:order-3 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Retirer</span>
+                  Retirer
                 </Button>
-
-                {onRequestSingleQuote && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onRequestSingleQuote();
-                    }}
-                    className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Devis sur ce produit →
-                  </Button>
-                )}
-
-                {onProceed && selectedCount > 1 && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onProceed();
-                    }}
-                    className="gap-1.5 bg-accent hover:bg-accent/90 text-accent-foreground shrink-0"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Devis sur ma sélection ({selectedCount} produits)
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                {onRequestSingleQuote && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onRequestSingleQuote();
-                    }}
-                    className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Devis sur ce produit →
-                  </Button>
-                )}
-
+              </div>
+            </div>
+          ) : (
+            /* Not selected: stacked CTAs on mobile, inline row on desktop */
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              {onRequestSingleQuote && (
                 <Button
                   size="sm"
                   onClick={() => {
-                    onSelect();
+                    onRequestSingleQuote();
                   }}
-                  className="bg-accent hover:bg-accent/90 text-accent-foreground shrink-0"
+                  className="order-1 sm:order-3 gap-1.5 sm:shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
                 >
-                  Ajouter à ma sélection
+                  <Send className="h-3.5 w-3.5" />
+                  Devis sur ce produit →
                 </Button>
-              </>
-            )}
-          </div>
+              )}
+
+              <Button
+                size="sm"
+                onClick={() => {
+                  onSelect();
+                }}
+                className="order-2 sm:order-4 bg-accent hover:bg-accent/90 text-accent-foreground sm:shrink-0"
+              >
+                Ajouter à ma sélection
+              </Button>
+
+              <div className="order-3 flex items-center sm:contents">
+                <Button
+                  variant="ghost"
+                  onClick={onClose}
+                  className="sm:order-1 gap-1 text-muted-foreground hover:text-foreground hover:bg-transparent shrink-0"
+                  size="sm"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Retour
+                </Button>
+
+                <div className="hidden sm:block sm:order-2 sm:flex-1" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

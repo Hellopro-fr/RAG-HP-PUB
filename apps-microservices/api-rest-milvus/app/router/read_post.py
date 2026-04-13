@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Any, Dict, Optional, List
 from .read import get_ressource_rest
@@ -54,7 +54,7 @@ Exemples:
 
 
 @router.post("/search")
-async def search_ressources(request: SearchRequest):
+async def search_ressources(http_request: Request, request: SearchRequest):
     """
     Endpoint POST pour rechercher des ressources dans Milvus.
 
@@ -71,7 +71,9 @@ async def search_ressources(request: SearchRequest):
         raise HTTPException(status_code=400, detail="order_direction doit être 'ASC' ou 'DESC'")
 
     try:
-        result = get_ressource_rest(
+        guard = http_request.app.state.concurrency_guard
+        result = await get_ressource_rest(
+            guard=guard,
             collection_name=request.collection_milvus,
             id_milvus=request.id_ressource,
             metadata=request.metadata,

@@ -20,6 +20,33 @@ const getApiBasePath = () => {
  * Prefetch les statistiques de catégorie (nb produits, nb fournisseurs)
  * Appelé dès le chargement de Q1 pour avoir les données prêtes
  */
+/**
+ * Prefetch la vignette de la catégorie (non-bloquant)
+ * Appelé dès le chargement de Q1 pour avoir l'image prête
+ */
+async function prefetchCategoryVignette(
+  categoryId: number,
+  setCategoryVignette: (url: string | null) => void
+): Promise<void> {
+  try {
+    const apiBase = getApiBasePath();
+    const response = await fetch(`${apiBase}/api/vignette-categorie/${categoryId}`, {
+      method: 'GET',
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    // API retourne: {"id_categorie":"2007702","vignette":"images/vignette_rubrique/s/...","vignette_large":"...","source_produit":"1"}
+    if (data.vignette) {
+      setCategoryVignette(`https://www.hellopro.fr/${data.vignette}`);
+    }
+  } catch (error) {
+    console.error('Prefetch category vignette error:', error);
+    // En cas d'erreur, on garde null (fallback sur image placeholder)
+  }
+}
+
 async function prefetchCategoryStats(
   categoryId: number,
   setCategoryStats: (stats: { productsCount: number; suppliersCount: number } | null) => void
@@ -35,10 +62,9 @@ async function prefetchCategoryStats(
     const data = await response.json();
     // API retourne: {"id_categorie":"2007702","fournisseur":33,"produit":748}
     if (data.produit !== undefined && data.fournisseur !== undefined) {
-      setCategoryStats({
-        productsCount: Number(data.produit),
-        suppliersCount: Number(data.fournisseur),
-      });
+      const productsCount = Number(data.produit);
+      const suppliersCount = Number(data.fournisseur);
+      setCategoryStats({ productsCount, suppliersCount });
     }
   } catch (error) {
     console.error('Prefetch category stats error:', error);
@@ -205,10 +231,18 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     userQuestionAnswers,
     setCategoryName,
     setCategoryStats,
+    setCategoryVignette,
     setCaracteristiquesPrix,
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
+
+  // Prefetch vignette dès que rubriqueId est disponible (en parallèle de Q1, pas après)
+  useEffect(() => {
+    if (rubriqueId) {
+      prefetchCategoryVignette(Number(rubriqueId), setCategoryVignette);
+    }
+  }, [rubriqueId, setCategoryVignette]);
 
   // Restaurer l'index à partir des réponses déjà enregistrées dans le store.
   // Si l'utilisateur revient (ex: retour depuis /profile), on affiche la question suivante.

@@ -1,236 +1,180 @@
 import hashlib
 import os
-import time
-from typing import Dict, Optional
+import asyncio
+from typing import Dict, List, Optional
 from common_utils.autres.CollectionWebhook import CollectionWebhook, CollectionWebhookUpdate
 from common_utils.autres.CollectionName import CollectionName as collections
 import logging
-import requests
 import json
 import hmac
-from dotenv import load_dotenv
+import aiohttp
 
-load_dotenv()
-
-# Configuration du logging structuré
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
-
-def validate_payload(payload: any) -> bool:
-    """
-    Valide le format et le contenu du payload.
-
-    Args:
-        payload: Le payload à valider
-
-    Returns:
-        bool: True si valide, False sinon
-    """
-    # Vérifier que le payload est un dictionnaire
-    if not isinstance(payload, dict):
-        logger.error(f"Payload invalide : type {type(payload)} au lieu de dict")
-        return False
-
-    # Vérifier que le payload n'est pas vide
-    if not payload:
-        logger.error("Payload vide reçu")
-        return False
-
-    # Vérifier que la collection est présente
-    if "collection" not in payload:
-        logger.warning("Champ 'collection' manquant dans le payload, utilisation de la valeur par défaut")
-
-    return True
+# Configuration du batching
+BATCH_SIZE = int(os.environ.get("WEBHOOK_BATCH_SIZE", "50"))
+BATCH_TIMEOUT_S = float(os.environ.get("WEBHOOK_BATCH_TIMEOUT_S", "5.0"))
 
 
-def get_webhook_key() -> Optional[str]:
-    """
-    Récupère la clé webhook depuis les variables d'environnement.
-
-    Returns:
-        str: La clé webhook
-
-    Raises:
-        ValueError: Si KEY_WEBHOOK n'est pas définie
-    """
+def get_webhook_key() -> str:
     webhook_key = os.environ.get("KEY_WEBHOOK")
-
     if not webhook_key:
         logger.critical("KEY_WEBHOOK environment variable is not set")
-        raise ValueError(
-            "KEY_WEBHOOK environment variable is required. "
-            "Please set it in your .env file or environment variables."
-        )
-
+        raise ValueError("KEY_WEBHOOK environment variable is required.")
     return webhook_key
 
 
-def send_webhook_with_retry(
-    url: str,
-    payload_body: bytes,
-    headers: Dict[str, str],
-    max_retries: int = 3,
-    timeout: int = 10
-) -> bool:
-    """
-    Envoie un webhook avec retry logic et exponential backoff.
-
-    Args:
-        url: L'URL du webhook
-        payload_body: Le corps de la requête (bytes)
-        headers: Les en-têtes HTTP
-        max_retries: Nombre maximum de tentatives
-        timeout: Timeout en secondes
-
-    Returns:
-        bool: True si succès, False sinon
-    """
-    for attempt in range(max_retries):
-        try:
-            logger.info(f"Tentative {attempt + 1}/{max_retries} d'envoi du webhook vers {url}")
-
-            response = requests.post(
-                url,
-                data=payload_body,
-                headers=headers,
-                timeout=timeout
-            )
-
-            # Vérifier le statut de la réponse
-            response.raise_for_status()
-
-            logger.info(
-                f"✅ Webhook envoyé avec succès à {url} "
-                f"(statut: {response.status_code}, tentative: {attempt + 1})"
-            )
-            return True
-
-        except requests.exceptions.Timeout as e:
-            logger.warning(
-                f"⏱️ Timeout lors de l'envoi du webhook (tentative {attempt + 1}/{max_retries}): {e}"
-            )
-
-        except requests.exceptions.HTTPError as e:
-            logger.error(
-                f"❌ Erreur HTTP lors de l'envoi du webhook "
-                f"(tentative {attempt + 1}/{max_retries}, status: {e.response.status_code}): {e}"
-            )
-
-        except requests.exceptions.ConnectionError as e:
-            logger.error(
-                f"🔌 Erreur de connexion lors de l'envoi du webhook "
-                f"(tentative {attempt + 1}/{max_retries}): {e}"
-            )
-
-        except requests.exceptions.RequestException as e:
-            logger.error(
-                f"⚠️ Erreur lors de l'envoi du webhook "
-                f"(tentative {attempt + 1}/{max_retries}): {e}"
-            )
-
-        # Exponential backoff si ce n'est pas la dernière tentative
-        if attempt < max_retries - 1:
-            wait_time = 2 ** attempt  # 1s, 2s, 4s, 8s...
-            logger.info(f"⏳ Attente de {wait_time}s avant la prochaine tentative...")
-            time.sleep(wait_time)
-        else:
-            logger.error(
-                f"❌ Échec de l'envoi du webhook après {max_retries} tentatives. "
-                f"URL: {url}"
-            )
-            # TODO: Envoyer vers Dead Letter Queue ici
-
-    return False
-
-
-def send_webhook(payload: dict) -> bool:
-    """
-    Traite et envoie un webhook avec les données fournies.
-
-    Cette fonction :
-    1. Valide le payload
-    2. Récupère l'URL du webhook selon la collection
-    3. Calcule la signature HMAC-SHA256
-    4. Envoie le webhook avec retry logic
-
-    Args:
-        payload: Dictionnaire contenant les données à envoyer
-
-    Returns:
-        bool: True si le webhook a été envoyé avec succès, False sinon
-    """
-    # Validation du payload
-    if not validate_payload(payload):
-        logger.error("Validation du payload échouée, webhook non envoyé")
-        return False
-
-    # Récupération de la collection
+def resolve_webhook_url(payload: dict) -> Optional[str]:
+    """Résout l'URL du webhook selon la collection et le mode."""
     collection = payload.get("collection", collections.PRODUIT)
-    logger.info(f"Traitement du webhook pour la collection: {collection}")
+    mode = payload.get("mode", "")
 
-    # Récupération de l'URL du webhook (mode update prioritaire)
-    try:
-        mode = payload.get("mode", "")
-        if mode == "update":
-            url_webhook = CollectionWebhookUpdate.get(collection, "")
-            if url_webhook:
-                logger.info(f"Mode 'update' détecté → utilisation de l'URL update pour '{collection}'")
-            else:
-                logger.warning(f"Aucune URL update configurée pour '{collection}', fallback sur l'URL standard")
-                url_webhook = CollectionWebhook.get(collection)
-        else:
-            url_webhook = CollectionWebhook.get(collection)
+    if mode == "update":
+        url = CollectionWebhookUpdate.get(collection, "")
+        if url:
+            return url
+        logger.warning(f"Aucune URL update pour '{collection}', fallback sur l'URL standard")
 
-        if not url_webhook:
-            logger.error(f"Aucune URL de webhook configurée pour la collection '{collection}'")
+    url = CollectionWebhook.get(collection)
+    if not url:
+        logger.error(f"Aucune URL de webhook configurée pour '{collection}'")
+    return url
+
+
+def sign_payload(payload_body: bytes, webhook_key: str) -> str:
+    """Calcule la signature HMAC-SHA256."""
+    return hmac.new(
+        webhook_key.encode('utf-8'),
+        payload_body,
+        hashlib.sha256
+    ).hexdigest()
+
+
+def build_batch_payload(payloads: List[dict]) -> dict:
+    """
+    Construit un payload batch à partir d'une liste de payloads individuels.
+    """
+    if not payloads:
+        return {"batch": True, "mode": "update", "collection": "", "count": 0, "products": []}
+
+    products = []
+    for p in payloads:
+        products.append({
+            "id_produit": p.get("id_produit"),
+            "chunk_ids": p.get("chunk_ids", ""),
+            "origin": p.get("origin", ""),
+            "update_reason": p.get("update_reason", ""),
+        })
+
+    return {
+        "batch": True,
+        "mode": "update",
+        "collection": payloads[0].get("collection", ""),
+        "count": len(products),
+        "products": products,
+    }
+
+
+class WebhookSender:
+    """Envoi de webhooks avec session HTTP réutilisable (connection pooling)."""
+
+    def __init__(self):
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._session_lock = asyncio.Lock()
+        self._webhook_key = get_webhook_key()
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Retourne une session HTTP, en la créant si nécessaire (thread-safe)."""
+        async with self._session_lock:
+            if self._session is None or self._session.closed:
+                connector = aiohttp.TCPConnector(
+                    limit=20,
+                    keepalive_timeout=30,
+                )
+                self._session = aiohttp.ClientSession(connector=connector)
+        return self._session
+
+    async def close(self):
+        async with self._session_lock:
+            if self._session and not self._session.closed:
+                await self._session.close()
+                self._session = None
+
+    async def send_single(self, payload: dict, max_retries: int = 3, timeout: int = 10) -> bool:
+        """Envoie un seul payload webhook."""
+        url = resolve_webhook_url(payload)
+        if not url:
             return False
 
-    except (KeyError, AttributeError) as e:
-        logger.error(f"Erreur lors de la récupération de l'URL du webhook pour '{collection}': {e}")
-        return False
-
-    try:
-        # Récupération de la clé webhook (avec validation)
-        webhook_key = get_webhook_key()
-
-        # Conversion du payload en JSON compact
         payload_body = json.dumps(payload, separators=(',', ':')).encode('utf-8')
-        logger.debug(f"Taille du payload: {len(payload_body)} bytes")
-
-        # Calcul de la signature HMAC-SHA256
-        signature = hmac.new(
-            webhook_key.encode('utf-8'),
-            payload_body,
-            hashlib.sha256
-        ).hexdigest()
-
-        # Préparation des en-têtes
+        signature = sign_payload(payload_body, self._webhook_key)
         headers = {
             'Content-Type': 'application/json',
-            'X-Webhook-Signature': signature
+            'X-Webhook-Signature': signature,
         }
 
-        # Envoi du webhook avec retry logic
-        success = send_webhook_with_retry(
-            url=url_webhook,
-            payload_body=payload_body,
-            headers=headers,
-            max_retries=3,
-            timeout=10
-        )
+        return await self._post_with_retry(url, payload_body, headers, max_retries, timeout)
 
-        return success
+    async def send_batch(
+        self,
+        payloads: List[dict],
+        url: Optional[str] = None,
+        max_retries: int = 3,
+        timeout: int = 15,
+    ) -> bool:
+        """
+        Envoie un batch de payloads en un seul appel HTTP.
+        Si url est fourni, l'utilise directement (déjà résolu par le consumer).
+        """
+        if not payloads:
+            return True
 
-    except ValueError as e:
-        # Erreur de validation (ex: KEY_WEBHOOK manquante)
-        logger.critical(f"Erreur de configuration: {e}")
-        return False
+        if len(payloads) == 1:
+            return await self.send_single(payloads[0], max_retries, timeout)
 
-    except Exception as e:
-        # Erreur inattendue
-        logger.exception(f"Erreur inattendue lors de l'envoi du webhook: {e}")
+        if not url:
+            url = resolve_webhook_url(payloads[0])
+        if not url:
+            return False
+
+        batch_payload = build_batch_payload(payloads)
+        payload_body = json.dumps(batch_payload, separators=(',', ':')).encode('utf-8')
+        signature = sign_payload(payload_body, self._webhook_key)
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Webhook-Signature': signature,
+        }
+
+        logger.info(f"Envoi batch de {len(payloads)} produits vers {url}")
+        return await self._post_with_retry(url, payload_body, headers, max_retries, timeout)
+
+    async def _post_with_retry(
+        self, url: str, payload_body: bytes, headers: Dict[str, str],
+        max_retries: int, timeout: int
+    ) -> bool:
+        session = await self._get_session()
+        client_timeout = aiohttp.ClientTimeout(total=timeout)
+
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Tentative {attempt + 1}/{max_retries} d'envoi vers {url}")
+                async with session.post(url, data=payload_body, headers=headers, timeout=client_timeout) as resp:
+                    if resp.status < 400:
+                        logger.info(f"✅ Webhook envoyé (status: {resp.status}, tentative: {attempt + 1})")
+                        return True
+                    else:
+                        body = await resp.text()
+                        logger.error(f"❌ HTTP {resp.status} (tentative {attempt + 1}/{max_retries}): {body[:200]}")
+
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️ Timeout (tentative {attempt + 1}/{max_retries})")
+            except aiohttp.ClientError as e:
+                logger.error(f"🔌 Erreur connexion (tentative {attempt + 1}/{max_retries}): {e}")
+
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.info(f"⏳ Attente de {wait_time}s avant la prochaine tentative...")
+                await asyncio.sleep(wait_time)
+
+        logger.error(f"❌ Échec après {max_retries} tentatives. URL: {url}")
         return False

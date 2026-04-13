@@ -9,6 +9,7 @@ from common_utils.database.MilvusFournisseursCrud import MilvusFournisseursCrud
 import logging
 import requests
 import httpx
+from functools import lru_cache
 
 
 logger = logging.getLogger(__name__)
@@ -24,3 +25,19 @@ def get_milvus_connection():
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")
         raise e
+
+
+@lru_cache(maxsize=16)
+def get_collection(collection_name: str) -> Collection:
+    """Return a cached Collection object for the given name."""
+    return Collection(collection_name)
+
+
+def get_loaded_collection(collection_name: str) -> Collection:
+    """Return a Collection that is guaranteed to be loaded into Milvus memory."""
+    collection = get_collection(collection_name)
+    load_state = utility.load_state(collection_name)
+    if str(load_state) != "Loaded":
+        logger.info(f"Collection '{collection_name}' not loaded (state={load_state}), loading...")
+        collection.load()
+    return collection

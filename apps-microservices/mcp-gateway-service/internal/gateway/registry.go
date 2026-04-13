@@ -31,18 +31,32 @@ func PrefixedToolName(prefix, name string) string {
 	return prefix + "_" + name
 }
 
-// prefixedTools returns a copy of tools with the prefix applied to their names.
-func prefixedTools(prefix string, tools []mcp.Tool) []mcp.Tool {
+// UnprefixedToolName strips the server prefix from a tool name.
+// If the name doesn't start with the prefix, returns the original name.
+func UnprefixedToolName(prefix, name string) string {
 	if prefix == "" {
-		return tools
+		return name
 	}
-	out := make([]mcp.Tool, len(tools))
-	for i, t := range tools {
-		out[i] = mcp.Tool{
-			Name:        prefix + "_" + t.Name,
+	p := prefix + "_"
+	if len(name) > len(p) && name[:len(p)] == p {
+		return name[len(p):]
+	}
+	return name
+}
+
+// prefixedActiveTools returns a copy of active tools with the prefix applied to their names.
+func prefixedActiveTools(prefix string, tools []mcp.Tool) []mcp.Tool {
+	var out []mcp.Tool
+	for _, t := range tools {
+		if !t.IsActive {
+			continue
+		}
+		out = append(out, mcp.Tool{
+			Name:        PrefixedToolName(prefix, t.Name),
 			Description: t.Description,
 			InputSchema: t.InputSchema,
-		}
+			IsActive:    true,
+		})
 	}
 	return out
 }
@@ -73,6 +87,34 @@ func (r *Registry) SetToolPrefix(id, prefix string) {
 	}
 }
 
+// SyncToolActiveStates updates the IsActive flag for all tools of a server
+// based on the provided map of tool_name → is_active.
+func (r *Registry) SyncToolActiveStates(serverID string, activeStates map[string]bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.servers[serverID]; ok {
+		for i := range s.Tools {
+			if active, exists := activeStates[s.Tools[i].Name]; exists {
+				s.Tools[i].IsActive = active
+			}
+		}
+	}
+}
+
+// SetToolActive sets the IsActive flag for a specific tool on a registered server.
+func (r *Registry) SetToolActive(serverID, toolName string, active bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.servers[serverID]; ok {
+		for i := range s.Tools {
+			if s.Tools[i].Name == toolName {
+				s.Tools[i].IsActive = active
+				return
+			}
+		}
+	}
+}
+
 // Unregister removes a backend server by ID.
 func (r *Registry) Unregister(id string) {
 	r.mu.Lock()
@@ -100,12 +142,13 @@ func (r *Registry) All() []*BackendServer {
 
 // FindByTool returns the backend that owns the named tool (with prefix matching), or nil.
 // It also returns the original (unprefixed) tool name for forwarding to the backend.
+// Only active tools are matched.
 func (r *Registry) FindByTool(name string) (*BackendServer, string) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, s := range r.servers {
 		for _, t := range s.Tools {
-			if PrefixedToolName(s.ToolPrefix, t.Name) == name {
+			if t.IsActive && PrefixedToolName(s.ToolPrefix, t.Name) == name {
 				return s, t.Name
 			}
 		}
@@ -153,12 +196,13 @@ func (r *Registry) MergedCapabilities() mcp.ServerCapabilities {
 }
 
 // MergedTools returns the combined tool list from all backends, with prefixes applied.
+// Only active tools are included.
 func (r *Registry) MergedTools() []mcp.Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var tools []mcp.Tool
 	for _, s := range r.servers {
-		tools = append(tools, prefixedTools(s.ToolPrefix, s.Tools)...)
+		tools = append(tools, prefixedActiveTools(s.ToolPrefix, s.Tools)...)
 	}
 	return tools
 }
@@ -200,14 +244,14 @@ func (r *Registry) MergedCapabilitiesFiltered(allowed map[string]bool) mcp.Serve
 	return mcp.AggregateCapabilities(caps)
 }
 
-// MergedToolsFiltered returns tools from allowed servers only, with prefixes applied.
+// MergedToolsFiltered returns active tools from allowed servers only, with prefixes applied.
 func (r *Registry) MergedToolsFiltered(allowed map[string]bool) []mcp.Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var tools []mcp.Tool
 	for _, s := range r.servers {
 		if allowed[s.ID] {
-			tools = append(tools, prefixedTools(s.ToolPrefix, s.Tools)...)
+			tools = append(tools, prefixedActiveTools(s.ToolPrefix, s.Tools)...)
 		}
 	}
 	return tools
@@ -229,11 +273,15 @@ func (r *Registry) MergedToolsFilteredWithTools(allowed map[string]bool, allowed
 		}
 		serverToolSet := allowedTools[s.ID]
 		for _, t := range s.Tools {
+			if !t.IsActive {
+				continue
+			}
 			if serverToolSet == nil || serverToolSet[t.Name] {
 				tools = append(tools, mcp.Tool{
 					Name:        PrefixedToolName(s.ToolPrefix, t.Name),
 					Description: t.Description,
 					InputSchema: t.InputSchema,
+					IsActive:    true,
 				})
 			}
 		}
@@ -242,7 +290,7 @@ func (r *Registry) MergedToolsFilteredWithTools(allowed map[string]bool, allowed
 }
 
 // FindByToolFiltered returns the backend owning the tool (matching prefixed name),
-// only if it's in the allowed set. Also returns the original unprefixed tool name.
+// only if it's in the allowed set and the tool is active. Also returns the original unprefixed tool name.
 func (r *Registry) FindByToolFiltered(name string, allowed map[string]bool) (*BackendServer, string) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -251,7 +299,7 @@ func (r *Registry) FindByToolFiltered(name string, allowed map[string]bool) (*Ba
 			continue
 		}
 		for _, t := range s.Tools {
-			if PrefixedToolName(s.ToolPrefix, t.Name) == name {
+			if t.IsActive && PrefixedToolName(s.ToolPrefix, t.Name) == name {
 				return s, t.Name
 			}
 		}
@@ -275,6 +323,9 @@ func (r *Registry) FindByToolFilteredWithTools(name string, allowed map[string]b
 		serverToolSet := allowedTools[s.ID]
 		for _, t := range s.Tools {
 			if PrefixedToolName(s.ToolPrefix, t.Name) == name {
+				if !t.IsActive {
+					return nil, "" // tool exists but inactive
+				}
 				if serverToolSet == nil || serverToolSet[t.Name] {
 					return s, t.Name
 				}

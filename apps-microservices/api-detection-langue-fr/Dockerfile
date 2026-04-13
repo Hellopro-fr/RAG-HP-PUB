@@ -4,26 +4,29 @@ WORKDIR /app
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
 ENV PYTHONPATH=/app
 
-# Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
-# D'abord, on copie et installe notre librairie partagée
-# COPY libs/common-utils /app/libs/common-utils
-# RUN pip install -e /app/libs/common-utils
+# Étape 2: Installer les dépendances système pour Firefox/Camoufox et Chromium (fallback)
+# Camoufox is a stealth Firefox — needs GTK3, dbus, etc.
+# Chromium kept as fallback via CAMOUFOX_ENABLED=false
+RUN apt-get update && apt-get install -y \
+    libgtk-3-0 libdbus-glib-1-2 libasound2t64 libxcomposite1 libxdamage1 \
+    libxrandr2 libpango-1.0-0 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# Ensuite, on copie et installe les requirements spécifiques à ce service
+# Étape 3: Installer les dépendances Python
 COPY apps-microservices/api-detection-langue-fr/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Installer les navigateurs Playwright (Chromium uniquement pour le scraping)
+# Installer Playwright Chromium (fallback when CAMOUFOX_ENABLED=false)
 RUN python -m playwright install --with-deps chromium
 
-# Étape 3: Copier le code source de manière propre
-# On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
+# Télécharger le navigateur Camoufox (stealth Firefox, ~200MB)
+RUN python -m camoufox fetch
+
+# Étape 4: Copier le code source
 COPY apps-microservices/api-detection-langue-fr .
 
-# Étape 4: Exposer le port
+# Étape 5: Exposer le port
 EXPOSE 8999
 
-# Étape 5: Définir la commande de lancement directement
-# On lance Uvicorn en lui disant de trouver le module 'main' dans le paquet 'api_ingestion_service'
-# Le port est défini dynamiquement par la variable $PORT de Render, avec une valeur par défaut de 8509.
+# Étape 6: Lancement
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8999", "--proxy-headers", "--timeout-keep-alive", "300"]

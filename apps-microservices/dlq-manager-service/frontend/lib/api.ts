@@ -77,6 +77,8 @@ export interface AutoArchiveRule {
     is_active: boolean;
     created_at?: string;
     execution_count?: number;
+    last_evaluated_at?: string;
+    last_archived_at?: string;
 }
 
 export interface UniqueErrorBucket {
@@ -94,6 +96,10 @@ export interface UniqueErrorsResponse {
 
 export const apiGetDashboardStats = (filters?: { date_start?: string; date_end?: string }) => {
     return api.post<DashboardStats>('/dashboard-stats', filters || {});
+};
+
+export const apiGetServiceNames = (filters?: Record<string, any>) => {
+    return api.post<{ services: ServiceBucket[] }>('/services', { filters: filters || {} });
 };
 
 export const apiSearchMessages = (searchParams: SearchParams) => {

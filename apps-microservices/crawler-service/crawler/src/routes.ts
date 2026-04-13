@@ -253,9 +253,9 @@ router.addDefaultHandler(
 
                 if (cb.isMicroMode) {
                     // --- MICRO MODE (Absolute Limits) ---
-                    if (errors >= cb.maxAbsErrors) abortReason = `Too many errors for small site (${errors} >= ${cb.maxAbsErrors})`;
-                    else if (redirects >= cb.maxAbsRedirects) abortReason = `Too many redirects for small site (${redirects} >= ${cb.maxAbsRedirects})`;
-                    else if (newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
+                    if (cb.maxAbsErrors > 0 && errors >= cb.maxAbsErrors) abortReason = `Too many errors for small site (${errors} >= ${cb.maxAbsErrors})`;
+                    else if (cb.maxAbsRedirects > 0 && redirects >= cb.maxAbsRedirects) abortReason = `Too many redirects for small site (${redirects} >= ${cb.maxAbsRedirects})`;
+                    else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
                 } else {
                     // --- STANDARD MODE (Rate Limits) ---
                     if (processed >= cb.minSample) {
@@ -348,7 +348,13 @@ router.addDefaultHandler(
 
             if (isMainSite) {
                 // Process normally and store the method
-                content = await processPage(page, request.loadedUrl, log);
+                try {
+                    content = await processPage(page, request.loadedUrl, log);
+                } catch (e: any) {
+                    log.error(`Failed to extract homepage content: ${e.message}`);
+                    context.crawlErrorMessage = `Erreur lors de l'extraction du contenu de la page d'accueil`;
+                    throw e;
+                }
 
                 // Challenge page detection: check if the content is a bot protection page
                 // If detected, wait for the challenge to resolve before proceeding
@@ -405,6 +411,30 @@ router.addDefaultHandler(
                                 }
                             }
                             isEnqueuingLinks = true;
+
+                            // Regional path exclusion: extract alternative paths to exclude
+                            if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                                const winnerPrefix = DetectionLangueClient.extractPathPrefix(detectResult.url || url);
+                                const seedPrefix = DetectionLangueClient.extractPathPrefix(site);
+
+                                const excluded: string[] = [];
+                                for (const alt of detectResult.alternative_urls) {
+                                    const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
+                                    if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
+                                        if (!excluded.includes(altPrefix)) {
+                                            excluded.push(altPrefix);
+                                        }
+                                    }
+                                }
+
+                                if (excluded.length > 0) {
+                                    context.excludedRegionalPaths = excluded;
+                                    log.info(`[REGIONAL_EXCLUSION] Excluded ${excluded.length} regional paths: ${excluded.join(", ")}`);
+                                    // Persist to disk (re-write {domain}.json with excludedPaths)
+                                    // so filtering survives crash/OOM restart
+                                    manageFrenchDetectionMethod(targetDomain as string, frenchDetectionMethod as string);
+                                }
+                            }
                         }
                     } else {
                         // The API returns alternatives sorted by reliability (high > medium > low).
@@ -413,6 +443,13 @@ router.addDefaultHandler(
                             const best = detectResult.alternative_urls[0];
                             log.error(`[ALTERNATIVE_URL] Homepage ${url} is NOT French, but a French alternative was found: ${best.url} (method: ${best.method}, reliability: ${best.reliability}, validated: ${best.validated})`);
                             context.crawlErrorMessage = `Homepage non détectée en Français mais une alternative en Français a été trouvée : ${best.url} (fiabilité: ${best.reliability})`;
+                        }
+
+                        // Default error message when no alternative found.
+                        // Cleared below if the URL-only fallback (checkUrl) succeeds.
+                        if (!context.crawlErrorMessage) {
+                            log.error(`[NOT_FRENCH] Homepage ${url} is NOT French and no French alternative was found.`);
+                            context.crawlErrorMessage = "Page non détectée en Français";
                         }
 
                         // Only fall back to URL check if NLP didn't explicitly reject.
@@ -447,6 +484,7 @@ router.addDefaultHandler(
                     log.error(`Detection API error for main site ${url}: ${apiError.message}`);
                     context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
                 }
+
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
                 let methodOrError = manageFrenchDetectionMethod(targetDomain as string);
@@ -715,6 +753,13 @@ router.addDefaultHandler(
                             return false;
                         }
 
+                        // Regional variant exclusion: block links to excluded regional paths
+                        if (context.excludedRegionalPaths.length > 0 &&
+                            DetectionLangueClient.isExcludedRegionalPath(request.url, context.excludedRegionalPaths)) {
+                            logBlocked('regional-variant', request.url);
+                            return false;
+                        }
+
                         // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)
                         // The Set was populated before enqueueLinks by batch-checking Redis.
                         // This avoids the async trap while still leveraging Redis dedup.
@@ -767,6 +812,13 @@ router.addDefaultHandler(
             }
         } else {
             console.log(`Doublon url : ${url}`);
+        }
+
+        // Signal that homepage detection is complete (for update mode two-phase seeding).
+        // Must be OUTSIDE the isDoublon check — homepage may be marked as Doublon
+        // in update mode (pre-added to DedupManager during Phase 1 seeding).
+        if (request.url === site && context.homepageReady) {
+            context.homepageReady.resolve();
         }
     }
 );

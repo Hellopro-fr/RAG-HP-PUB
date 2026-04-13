@@ -1,14 +1,10 @@
 import 'dotenv/config';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-const execAsync = promisify(exec);
-
 import express from 'express';
 import cors from 'cors';
 import { createClient } from 'redis';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFile, readdir, writeFile, unlink, stat, mkdir } from 'fs/promises';
+import { readFile, readdir, writeFile, unlink, stat, mkdir, rm } from 'fs/promises';
 import { join, normalize } from 'path';
 import { existsSync } from 'fs';
 import helmet from 'helmet';
@@ -19,15 +15,34 @@ import jwt from 'jsonwebtoken';
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
 const CRAWLER_STORAGE_PATH = process.env.CRAWLER_STORAGE_PATH || '/app/storage';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin'; // Default password
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'; // Change in production
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const CRAWL_UPDATES_CHANNEL = 'crawl_updates';
 const CRAWL_JOB_PREFIX = 'crawl_job:';
+const CRAWL_RUNNING_COUNT_KEY = 'crawl_jobs:running_count';
+const CRAWL_MAX_GLOBAL_KEY = 'crawl_jobs:max_global_crawls';
+const FAILED_CALLBACKS_KEY = 'crawl_jobs:failed_callbacks';
 
-if (!REDIS_URL) {
-  console.error("FATAL ERROR: REDIS_URL environment variable is not set.");
+const missingVars = [];
+if (!REDIS_URL) missingVars.push('REDIS_URL');
+if (!ADMIN_PASSWORD) missingVars.push('ADMIN_PASSWORD');
+if (!JWT_SECRET) missingVars.push('JWT_SECRET');
+
+if (missingVars.length > 0) {
+  console.error(`FATAL ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
   process.exit(1);
+}
+
+// --- Persistent Redis Client ---
+const redisClient = createClient({ url: REDIS_URL });
+redisClient.on('error', err => console.error('Redis Client Error:', err));
+
+async function ensureRedisConnected() {
+  if (!redisClient.isOpen) {
+    await redisClient.connect();
+  }
+  return redisClient;
 }
 
 const app = express();
@@ -170,13 +185,12 @@ function broadcast(data) {
 }
 
 app.get('/api/jobs', async (req, res) => {
-  const redisClient = createClient({ url: REDIS_URL });
   try {
-    await redisClient.connect();
-    const jobKeys = await redisClient.keys(`${CRAWL_JOB_PREFIX}*`);
+    const client = await ensureRedisConnected();
+    const jobKeys = await client.keys(`${CRAWL_JOB_PREFIX}*`);
     if (jobKeys.length === 0) return res.json([]);
 
-    const jobsData = await redisClient.mGet(jobKeys);
+    const jobsData = await client.mGet(jobKeys);
     const jobs = jobsData
       .map(str => str ? JSON.parse(str) : null)
       .filter(Boolean)
@@ -191,19 +205,16 @@ app.get('/api/jobs', async (req, res) => {
   } catch (error) {
     console.error('Error fetching initial jobs from Redis:', error);
     res.status(500).json({ error: 'Failed to fetch jobs' });
-  } finally {
-    if (redisClient.isOpen) await redisClient.quit();
   }
 });
 
 app.get('/api/jobs/:id/details', async (req, res) => {
   const { id } = req.params;
-  const redisClient = createClient({ url: REDIS_URL });
   try {
-    await redisClient.connect();
+    const client = await ensureRedisConnected();
 
     // 1. Récupérer les infos de base du job depuis Redis
-    const jobDataString = await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`);
+    const jobDataString = await client.get(`${CRAWL_JOB_PREFIX}${id}`);
     if (!jobDataString) {
       console.log(`Job ${id} not found in Redis`);
       return res.status(404).json({ error: 'Job not found in Redis' });
@@ -216,10 +227,18 @@ app.get('/api/jobs/:id/details', async (req, res) => {
     console.log(`Looking for log file at: ${logPath}`);
 
     // 3. Lire et analyser le fichier de log
-    const content = await readFile(logPath, 'utf-8');
-    console.log(`Log file read successfully, size: ${content.length} bytes`);
-
-    const parsedData = parseLogFile(content);
+    let parsedData = { stats: null, errors: [], warnings: [], rawContent: '', hasStats: false };
+    try {
+      const content = await readFile(logPath, 'utf-8');
+      console.log(`Log file read successfully, size: ${content.length} bytes`);
+      parsedData = parseLogFile(content);
+    } catch (fileError) {
+      if (fileError.code === 'ENOENT') {
+        console.log(`Log file not found for job ${id}, returning job data without log`);
+      } else {
+        throw fileError;
+      }
+    }
 
     // 4. Fusionner les données de Redis et du log
     const fullDetails = {
@@ -232,20 +251,10 @@ app.get('/api/jobs/:id/details', async (req, res) => {
 
   } catch (error) {
     console.error(`Error fetching details for job ${id}:`, error);
-    if (error.code === 'ENOENT') {
-      res.status(404).json({
-        error: 'Log file not found',
-        id: id,
-        hasStats: false
-      });
-    } else {
-      res.status(500).json({
-        error: 'Failed to fetch job details',
-        message: error.message
-      });
-    }
-  } finally {
-    if (redisClient.isOpen) await redisClient.quit();
+    res.status(500).json({
+      error: 'Failed to fetch job details',
+      message: error.message
+    });
   }
 });
 
@@ -360,12 +369,6 @@ const matchesPattern = (url, pattern) => {
   }
 };
 
-// Improved search sanitization
-function sanitizeSearchTerm(term) {
-  // Remove or escape shell metacharacters
-  return term.replace(/[`$();&|<>{}[\]\\!]/g, '\\$&');
-}
-
 // --- API Routes ---
 
 app.get('/api/jobs/:id/request-queues', async (req, res) => {
@@ -383,31 +386,31 @@ app.get('/api/jobs/:id/request-queues', async (req, res) => {
     let matchingFiles = [];
 
     if (search) {
-      try {
-        // Sanitize search term to prevent command injection
-        const safeSearch = sanitizeSearchTerm(search);
-        // BusyBox grep doesn't support --include, so we use find + xargs
-        const { stdout } = await execAsync(`find "${baseDir}" -type f -name "*.json" -exec grep -l -i "${safeSearch}" {} +`);
+      // Native FS search — no shell exec, no injection risk
+      const entries = await readdir(baseDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const domainDir = join(baseDir, entry.name);
+          const domainFiles = await readdir(domainDir);
 
-        if (stdout) {
-          const absolutePaths = stdout.trim().split('\n');
-          for (const fullPath of absolutePaths) {
-            const relativePath = fullPath.replace(baseDir + '/', '');
-            const parts = relativePath.split('/');
-            if (parts.length >= 2) {
-              matchingFiles.push({
-                name: parts[parts.length - 1],
-                domain: parts[parts.length - 2],
-                fullPath: fullPath,
-                relativePath: relativePath
-              });
+          for (const file of domainFiles) {
+            if (file.endsWith('.json')) {
+              try {
+                const filePath = join(domainDir, file);
+                const content = await readFile(filePath, 'utf-8');
+                if (content.toLowerCase().includes(search)) {
+                  matchingFiles.push({
+                    name: file,
+                    domain: entry.name,
+                    fullPath: filePath,
+                    relativePath: join(entry.name, file)
+                  });
+                }
+              } catch (e) {
+                // Skip unreadable files
+              }
             }
           }
-        }
-      } catch (e) {
-        // grep returns exit code 1 if no matches found
-        if (e.code !== 1) {
-          console.error('Grep error:', e);
         }
       }
     } else {
@@ -605,7 +608,7 @@ app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
       console.log(`[Drop] Deleting domain queue: ${domainQueuePath}`);
 
       // Delete the domain-specific queue folder
-      await execAsync(`rm -rf "${domainQueuePath}"`);
+      await rm(domainQueuePath, { recursive: true, force: true });
 
       // Recreate empty folder
       await mkdir(domainQueuePath, { recursive: true });
@@ -770,14 +773,11 @@ async function findDatasetDir(jobId, datasetName = null) {
 }
 
 app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
-  console.log('🔍 DATASET ANALYZE ENDPOINT HIT (DEBUG: FS FIX APPLIED)');
   const { id } = req.params;
   try {
     // Get job data to find domain
-    const redisClient = createClient({ url: REDIS_URL });
-    await redisClient.connect();
-    const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
-    await redisClient.quit();
+    const client = await ensureRedisConnected();
+    const jobData = JSON.parse(await client.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
 
     if (!jobData || !jobData.domain) {
       return res.status(404).json({ error: 'Job not found or domain missing' });
@@ -854,10 +854,8 @@ app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
   const { id } = req.params;
   try {
     // Get job data to find domain
-    const redisClient = createClient({ url: REDIS_URL });
-    await redisClient.connect();
-    const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
-    await redisClient.quit();
+    const client = await ensureRedisConnected();
+    const jobData = JSON.parse(await client.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
 
     if (!jobData || !jobData.domain) {
       return res.status(404).json({ error: 'Job not found or domain missing' });
@@ -1003,6 +1001,41 @@ app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
   }
 });
 
+app.get('/api/capacity', authenticateToken, async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+    const runningRaw = await client.get(CRAWL_RUNNING_COUNT_KEY);
+    const maxRaw = await client.get(CRAWL_MAX_GLOBAL_KEY);
+
+    const running = parseInt(runningRaw, 10) || 0;
+    const max = parseInt(maxRaw, 10) || 0;
+
+    res.json({
+      running_jobs: running,
+      max_global_jobs: max,
+      is_full: max > 0 && running >= max
+    });
+  } catch (error) {
+    console.error('Error fetching capacity:', error);
+    res.status(500).json({ error: 'Failed to fetch capacity' });
+  }
+});
+
+app.get('/api/callbacks', authenticateToken, async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+    const callbacks = await client.lRange(FAILED_CALLBACKS_KEY, 0, -1);
+    const parsed = callbacks.map(c => {
+      try { return JSON.parse(c); }
+      catch { return { raw: c }; }
+    });
+    res.json({ count: parsed.length, items: parsed });
+  } catch (error) {
+    console.error('Error fetching pending callbacks:', error);
+    res.status(500).json({ error: 'Failed to fetch callbacks' });
+  }
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 async function setupRedisListener() {
@@ -1015,7 +1048,7 @@ async function setupRedisListener() {
       console.log(`Received update: ${message}`);
       try {
         const updateData = JSON.parse(message);
-        broadcast({ type: 'file_changed', path: updateData.crawl_id });
+        broadcast({ type: 'job_update', crawl_id: updateData.crawl_id });
       } catch (e) {
         console.error('Failed to parse update message:', e);
       }
@@ -1035,7 +1068,15 @@ async function setupRedisListener() {
   }
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Crawler Monitor Backend running on port ${PORT}`);
-  setupRedisListener();
-});
+ensureRedisConnected()
+  .then(() => {
+    console.log('Connected to Redis (persistent client).');
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Crawler Monitor Backend running on port ${PORT}`);
+      setupRedisListener();
+    });
+  })
+  .catch(err => {
+    console.error('Failed to connect to Redis:', err);
+    process.exit(1);
+  });

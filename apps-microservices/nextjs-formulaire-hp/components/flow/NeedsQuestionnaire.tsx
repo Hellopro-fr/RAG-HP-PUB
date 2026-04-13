@@ -1,8 +1,14 @@
 'use client';
 
 import { useEffect, useRef } from "react";
-import ProgressHeader from "./ProgressHeader";
+import Image from "next/image";
+// DISABLED: ProgressHeader remplacé par un header simplifié (logo seul) pour l'étape questionnaire
+// import ProgressHeader from "./ProgressHeader";
+import QuestionnaireProgressBar from "./QuestionnaireProgressBar";
 import QuestionScreen from "./QuestionScreen";
+import { getAssetPath } from "@/lib/utils";
+
+const hpLogo = getAssetPath("/images/hp-logo.svg");
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { useDynamicQuestionnaire } from "@/hooks/api/useDynamicQuestionnaire";
 import {
@@ -18,11 +24,12 @@ interface NeedsQuestionnaireProps {
   rubriqueId?: string;
 }
 
-const STEPS = [
-  { id: 1, label: "Votre besoin" },
-  { id: 2, label: "Sélection" },
-  { id: 3, label: "Demande de devis" },
-];
+// DISABLED: STEPS n'est plus utilisé ici — le header questionnaire est simplifié (logo seul)
+// const STEPS = [
+//   { id: 1, label: "Votre besoin" },
+//   { id: 2, label: "Sélection" },
+//   { id: 3, label: "Demande de devis" },
+// ];
 
 const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps) => {
   // Store Zustand pour persistance dans sessionStorage
@@ -41,7 +48,10 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
   if (!rubriqueId) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
-        <ProgressHeader steps={STEPS} currentStep={1} progress={0} />
+        {/* Header simplifié — logo seul */}
+        <div className="px-4 py-2.5 sm:px-6 border-b border-border">
+          <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
+        </div>        
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4">
             <p className="text-destructive">Identifiant de catégorie manquant</p>
@@ -200,7 +210,10 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
 
   const LoadingScreen = ({ progress = 0 }: { progress?: number }) => (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
-        <ProgressHeader steps={STEPS} currentStep={1} progress={progress} />
+        {/* Header simplifié — logo seul */}
+        <div className="px-4 py-2.5 sm:px-6 border-b border-border">
+          <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
+        </div>       
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
@@ -219,7 +232,10 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     if (error) {
       return (
         <div className="fixed inset-0 z-50 flex flex-col bg-background">
-          <ProgressHeader steps={STEPS} currentStep={1} progress={0} />
+          {/* Header simplifié — logo seul */}
+        <div className="px-4 py-2.5 sm:px-6 border-b border-border">
+          <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
+        </div>         
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-4">
               <p className="text-destructive">Erreur lors du chargement des questions</p>
@@ -243,7 +259,10 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
 
       return (
         <div className="fixed inset-0 z-50 flex flex-col bg-background">
-          <ProgressHeader steps={STEPS} currentStep={1} progress={0} />
+          {/* Header simplifié — logo seul */}
+        <div className="px-4 py-2.5 sm:px-6 border-b border-border">
+          <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
+        </div>          
           <div className="flex-1 flex items-center justify-center">
             <p className="text-muted-foreground">Aucune question disponible</p>
           </div>
@@ -251,8 +270,8 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
       );
     }
 
-    // Calculate progress for step 1 (0-33%)
-    const questionProgress = progress.percent * 0.33;
+    // DISABLED: questionProgress n'est plus utilisé — remplacé par QuestionnaireProgressBar
+    // const questionProgress = progress.percent * 0.33;
 
     const handleDynamicSelectAnswer = (answerCode: string) => {
       const questionCode = currentQuestion.code || `Q${currentIndex + 1}`;
@@ -304,10 +323,14 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
 
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
-        <ProgressHeader
-          steps={STEPS}
-          currentStep={1}
-          progress={questionProgress}
+        {/* Header simplifié — logo seul */}
+        <div className="px-4 py-2.5 sm:px-6 border-b border-border">
+          <Image src={hpLogo} alt="Hellopro" width={120} height={28} className="h-6 sm:h-7 w-auto" />
+        </div>
+        <QuestionnaireProgressBar
+          categoryName={categoryName || ""}
+          currentIndex={currentIndex}
+          totalQuestions={progress.total}
         />
 
         <div className="flex-1 overflow-y-auto">

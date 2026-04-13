@@ -83,7 +83,7 @@ class CrawlRequest(BaseModel):
     per_minute: Optional[int] = Field(100, description="Crawling speed in URLs per minute. 0 means unlimited.", example=100, alias="perminute")
     
     # Camoufox Integration
-    camoufox: Optional[bool] = Field(False, description="Use Camoufox stealth browser.")
+    camoufox: Optional[bool] = Field(True, description="Use Camoufox stealth browser (default). Set to false to fall back to Playwright multi-browser rotation.")
 
 class CrawlResponse(BaseModel):
     message: str

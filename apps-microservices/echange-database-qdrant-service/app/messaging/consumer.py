@@ -123,6 +123,7 @@ class Consumer:
         attempt = 0
         while True:
             try:
+                self.channel.basic_qos(prefetch_count=10)
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
                 logger.info("Database-Echange-Processor: En attente de messages...")
                 self.channel.start_consuming()

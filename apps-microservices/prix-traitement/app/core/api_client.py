@@ -1,6 +1,6 @@
 """
 Client API pour les appels vers base.hellopro.fr
-Provider LLM: GeminiProvider
+Providers LLM: GeminiProvider, ClaudeProvider, ChatGPTProvider
 """
 import asyncio
 import httpx
@@ -12,6 +12,8 @@ from google import genai
 from google.genai import types, errors
 
 from google.genai.errors import APIError
+import anthropic
+from openai import AsyncOpenAI
 from tenacity import (
     Retrying,
     stop_after_attempt,
@@ -136,11 +138,22 @@ class GeminiProvider:
                 "response": {}
             }
 
-        # Succès
-        api_response_dict = response.model_dump()
-        safe_api_response = make_serializable(api_response_dict)
+        # Succès — format normalisé identique à Claude/ChatGPT
+        usage_meta = response.usage_metadata
+        input_tokens = usage_meta.prompt_token_count or 0
+        output_tokens = (usage_meta.candidates_token_count or 0) + (usage_meta.thoughts_token_count or 0)
 
-        return {"message": response.text, "api_response": safe_api_response}
+        api_response = {
+            "id": None,
+            "model": self.model,
+            "finish_reason": response.candidates[0].finish_reason if response.candidates else None,
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+        }
+
+        return {"message": response.text, "api_response": api_response}
 
     async def chat(self, prompt: str) -> Dict[str, Any]:
         """
@@ -148,6 +161,194 @@ class GeminiProvider:
         Délègue l'appel synchrone Gemini SDK à un thread séparé via asyncio.to_thread.
         """
         return await asyncio.to_thread(self._chat_sync, prompt)
+
+
+class ClaudeProvider:
+    """Provider pour l'API Claude (Anthropic) avec retry automatique.
+
+    Utilise AsyncAnthropic pour éviter l'overhead de asyncio.to_thread.
+    Le client async est partagé (singleton) pour réutiliser le pool de connexions HTTP.
+    """
+
+    # Mapping effort → budget_tokens pour Haiku (extended thinking)
+    EFFORT_TO_BUDGET = {
+        "high": 10000,
+        "medium": 4096,
+        "low": 1024,
+    }
+
+    # Client async partagé (singleton) pour réutiliser le pool de connexions
+    _async_client: Optional[anthropic.AsyncAnthropic] = None
+
+    @classmethod
+    def _get_client(cls, api_key: str) -> anthropic.AsyncAnthropic:
+        if cls._async_client is None:
+            cls._async_client = anthropic.AsyncAnthropic(api_key=api_key)
+        return cls._async_client
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "claude-haiku-4-5",
+        max_tokens: int = 16000,
+        effort: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
+        max_retries: int = 5,
+    ):
+        self.api_key = api_key or settings.ANTHROPIC_API_KEY
+        self.model = model
+        self.max_tokens = max_tokens
+        self.effort = effort
+        self.budget_tokens = budget_tokens
+        self.max_retries = max_retries
+        self.client = self._get_client(self.api_key)
+
+    async def chat(self, prompt: str) -> Dict[str, Any]:
+        """
+        Envoie un prompt à Claude de manière asynchrone via AsyncAnthropic.
+        """
+        last_error = None
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                if attempt > 1:
+                    logger.info(f"Retry Claude API... Tentative {attempt}")
+
+                logger.info(f"Claude API tentative: {attempt}")
+
+                create_kwargs = {
+                    "model": self.model,
+                    "max_tokens": self.max_tokens,
+                    "messages": [{"role": "user", "content": prompt}],
+                }
+
+                supports_effort = any(k in self.model.lower() for k in ("opus", "sonnet"))
+
+                if supports_effort and self.effort and not self.budget_tokens:
+                    create_kwargs["output_config"] = {"effort": self.effort}
+                elif self.budget_tokens:
+                    create_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": self.budget_tokens,
+                        "display": "omitted",
+                    }
+                elif self.effort and not supports_effort:
+                    create_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": self.EFFORT_TO_BUDGET.get(self.effort, 5000),
+                        "display": "omitted",
+                    }
+
+                response = await self.client.messages.create(**create_kwargs)
+
+                # Extraire le texte de la réponse
+                message_text = ""
+                for block in response.content:
+                    if block.type == "text":
+                        message_text += block.text
+
+                # Extraire uniquement les champs utiles (évite model_dump() lourd)
+                api_response = {
+                    "id": response.id,
+                    "model": response.model,
+                    "finish_reason": response.stop_reason,
+                    "usage": {
+                        "input_tokens": response.usage.input_tokens,
+                        "output_tokens": response.usage.output_tokens,
+                    },
+                }
+
+                return {"message": message_text, "api_response": api_response}
+
+            except anthropic.RateLimitError as e:
+                last_error = e
+                logger.warning(f"Claude RateLimitError (tentative {attempt}): {e}")
+                if attempt < self.max_retries:
+                    await asyncio.sleep(min(2 ** attempt, 60))
+                    continue
+
+            except anthropic.APIStatusError as e:
+                last_error = e
+                if e.status_code in (503, 529) and attempt < self.max_retries:
+                    logger.warning(f"Claude APIStatusError {e.status_code} (tentative {attempt}): {e}")
+                    await asyncio.sleep(min(2 ** attempt, 60))
+                    continue
+                logger.error(f"Claude APIStatusError: {e.status_code} - {e.message}")
+                return {
+                    "error": e.message,
+                    "code": e.status_code,
+                    "content": None,
+                    "api_response": {},
+                }
+
+            except Exception as e:
+                logger.error(f"Erreur inattendue dans Claude: {e}")
+                return {
+                    "error": str(e),
+                    "code": 500,
+                    "content": None,
+                    "api_response": {},
+                }
+
+        logger.error(f"Échec Claude après {self.max_retries} tentatives: {last_error}")
+        return {
+            "error": str(last_error),
+            "code": 503,
+            "content": None,
+            "api_response": {},
+        }
+
+
+class ChatGPTProvider:
+    """Provider pour l'API ChatGPT (OpenAI) async."""
+
+    _async_client: Optional[AsyncOpenAI] = None
+
+    @classmethod
+    def _get_client(cls, api_key: str) -> AsyncOpenAI:
+        if cls._async_client is None:
+            cls._async_client = AsyncOpenAI(api_key=api_key)
+        return cls._async_client
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "gpt-4.1-mini",
+    ):
+        self.api_key = api_key or settings.OPENAI_API_KEY
+        self.model = model
+        self.client = self._get_client(self.api_key)
+
+    async def chat(self, prompt: str) -> Dict[str, Any]:
+        """Envoie un prompt à ChatGPT de manière asynchrone."""
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            message_text = response.choices[0].message.content or ""
+
+            api_response = {
+                "id": response.id,
+                "model": response.model,
+                "usage": {
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens,
+                },
+                "finish_reason": response.choices[0].finish_reason,
+            }
+
+            return {"message": message_text, "api_response": api_response}
+
+        except Exception as e:
+            logger.error(f"Erreur ChatGPT: {e}")
+            return {
+                "error": str(e),
+                "code": getattr(e, "status_code", 500),
+                "content": None,
+                "api_response": {},
+            }
 
 
 class HelloProAPIClient:

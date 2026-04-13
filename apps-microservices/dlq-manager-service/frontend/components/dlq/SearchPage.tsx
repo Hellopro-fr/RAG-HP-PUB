@@ -8,18 +8,20 @@ import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
 import CreateRuleModal from "./CreateRuleModal";
-import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, apiGetUniqueErrors, Message, UniqueErrorBucket } from "@/lib/api";
+import { apiGetDashboardStats, apiGetServiceNames, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, apiGetUniqueErrors, Message, UniqueErrorBucket } from "@/lib/api";
 import UniqueErrorsModal from "./UniqueErrorsModal";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "./DateTimePicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RuleCriteria } from "@/app/page"
 
 interface Filters {
     service_names: string[];
     status: string[];
     date_start?: Date;
     date_end?: Date;
+    error_reason?: string;
 }
 
 const loadFiltersFromStorage = (): Omit<Filters, 'date_start' | 'date_end'> => {
@@ -58,7 +60,12 @@ const statusOptions: MultiSelectOption[] = [
     { value: 'Auto-Archived', label: 'Auto-Archived' },
 ];
 
-export default function SearchPage() {
+interface SearchPageProps {
+  injectedCriteria?: RuleCriteria | null;
+  onClearInjectedCriteria?: () => void;
+}
+
+export default function SearchPage({ injectedCriteria, onClearInjectedCriteria }: SearchPageProps = {}) {
   const [filters, setFilters] = useState<Filters>(loadFiltersFromStorage);
   const [searchTerm, setSearchTerm] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
@@ -73,6 +80,10 @@ export default function SearchPage() {
   const [serviceOptions, setServiceOptions] = useState<MultiSelectOption[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  const ARCHIVED_STATUSES = ['Archived', 'Auto-Archived'];
+  const isArchivedOnlyView = filters.status.length > 0 && filters.status.every(s => ARCHIVED_STATUSES.includes(s));
+
   const [showUniqueErrors, setShowUniqueErrors] = useState(false);
   const [uniqueErrorBuckets, setUniqueErrorBuckets] = useState<UniqueErrorBucket[]>([]);
   const [uniqueErrorTotal, setUniqueErrorTotal] = useState(0);
@@ -86,27 +97,61 @@ export default function SearchPage() {
     };
   }, []);
 
+  // Apply injected criteria from Rules page "View Matches" button
   useEffect(() => {
-    apiGetDashboardStats().then(response => {
-        const options = response.data.by_service.map(bucket => ({
-            value: bucket.key,
-            label: bucket.key,
+    if (injectedCriteria) {
+      const newFilters: Filters = {
+        service_names: injectedCriteria.filters?.service_names || [],
+        status: ['Auto-Archived'],
+        date_start: injectedCriteria.filters?.date_start ? new Date(injectedCriteria.filters.date_start) : undefined,
+        date_end: injectedCriteria.filters?.date_end ? new Date(injectedCriteria.filters.date_end) : undefined,
+        error_reason: undefined,
+      };
+      setFilters(newFilters);
+      setSearchTerm(injectedCriteria.search_term || "");
+      setCurrentPage(1);
+      onClearInjectedCriteria?.();
+    }
+  }, [injectedCriteria]);
+
+  // Fetch service names dynamically based on current status + date filters
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      const serviceFilters: Record<string, any> = {};
+      if (filters.status.length > 0) {
+        serviceFilters.status = filters.status;
+      }
+      if (filters.date_start instanceof Date) {
+        serviceFilters.date_start = filters.date_start.toISOString();
+      }
+      if (filters.date_end instanceof Date) {
+        serviceFilters.date_end = filters.date_end.toISOString();
+      }
+
+      apiGetServiceNames(serviceFilters).then(response => {
+        const options = response.data.services.map(bucket => ({
+          value: bucket.key,
+          label: bucket.key,
         }));
         setServiceOptions(options);
 
         // Purge stale service_names that no longer exist in current options
-        const validKeys = new Set(options.map((o: MultiSelectOption) => o.value));
+        const validKeys = new Set(options.map((o: { value: string }) => o.value));
         setFilters((prev: Filters) => {
-            const cleaned = prev.service_names.filter((s: string) => validKeys.has(s));
-            if (cleaned.length !== prev.service_names.length) {
-                return { ...prev, service_names: cleaned };
-            }
-            return prev;
+          const cleaned = prev.service_names.filter((s: string) => validKeys.has(s));
+          if (cleaned.length !== prev.service_names.length) {
+            return { ...prev, service_names: cleaned };
+          }
+          return prev;
         });
-    }).catch(err => {
+      }).catch(err => {
         console.error("Failed to fetch service names for filters", err);
-    })
-  }, []);
+      });
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filters.status), filters.date_start?.getTime(), filters.date_end?.getTime()]);
 
   // Construct standard JSON filter payload to use consistently
   const getActiveFiltersPayload = useCallback(() => {
@@ -116,6 +161,10 @@ export default function SearchPage() {
       if (key === 'date_start' || key === 'date_end') {
         if (value instanceof Date) {
           activeFilters[key] = value.toISOString();
+        }
+      } else if (key === 'error_reason') {
+        if (value && typeof value === 'string') {
+          activeFilters[key] = value;
         }
       } else if (Array.isArray(value) && value.length > 0) {
         activeFilters[key] = value;
@@ -311,6 +360,15 @@ export default function SearchPage() {
     }
   };
 
+  const handleSelectError = (serviceName: string, errorReason: string) => {
+    setFilters(prev => ({
+      ...prev,
+      service_names: [serviceName],
+      error_reason: errorReason,
+    }));
+    setShowUniqueErrors(false);
+  };
+
   const handleArchiveByFilter = async () => {
       if (loadingAction) {
           alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
@@ -376,6 +434,23 @@ export default function SearchPage() {
                     </Popover>
                 </div>
             </div>
+
+            {filters.error_reason && (
+              <div className="md:col-span-2 flex items-center gap-2">
+                <span className="text-sm text-gris-primary">Active Error Filter:</span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-bleu-light text-bleu-primary border border-bleu-primary/20 max-w-full">
+                  <span className="truncate">{filters.error_reason}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFilters(prev => ({ ...prev, error_reason: undefined }))}
+                    className="ml-1 hover:text-rouge-primary transition-colors shrink-0"
+                    aria-label="Clear error filter"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            )}
 
             {/* Service Names */}
             <div>
@@ -478,15 +553,17 @@ export default function SearchPage() {
                 {loadingAction === 'requeue-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Re-queue Selected
               </Button>
-              <Button 
-                onClick={() => handleBulkAction('archive')} 
-                style={{ backgroundColor: "var(--gris-primary)", color: "white" }} 
-                className="hover:opacity-90 w-full sm:w-auto"
-                disabled={!!loadingAction}
-              >
-                {loadingAction === 'archive-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Archive Selected
-              </Button>
+              {!isArchivedOnlyView && (
+                <Button
+                  onClick={() => handleBulkAction('archive')}
+                  style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
+                  className="hover:opacity-90 w-full sm:w-auto"
+                  disabled={!!loadingAction}
+                >
+                  {loadingAction === 'archive-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Archive Selected
+                </Button>
+              )}
             </>
           ) : (
             <>
@@ -499,15 +576,17 @@ export default function SearchPage() {
               >
                 View Unique Errors
               </Button>
-              <Button
-                onClick={handleArchiveByFilter}
-                style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
-                disabled={totalResults === 0 || !!loadingAction}
-                className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
-              >
-                {loadingAction === 'archive-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Archive All Matching
-              </Button>
+              {!isArchivedOnlyView && (
+                <Button
+                  onClick={handleArchiveByFilter}
+                  style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
+                  disabled={totalResults === 0 || !!loadingAction}
+                  className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
+                >
+                  {loadingAction === 'archive-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Archive All Matching
+                </Button>
+              )}
               <Button
                 onClick={handleRequeueByFilter}
                 style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
@@ -566,6 +645,7 @@ export default function SearchPage() {
           totalUnique={uniqueErrorTotal}
           loading={loadingUniqueErrors}
           onClose={() => setShowUniqueErrors(false)}
+          onSelectError={handleSelectError}
         />
       )}
     </div>
