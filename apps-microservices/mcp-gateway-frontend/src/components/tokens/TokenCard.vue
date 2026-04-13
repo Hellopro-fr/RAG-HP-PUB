@@ -51,6 +51,13 @@
             <span class="text-xs px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-400 font-mono">
               {{ token.mcp_command || 'npx' }}
             </span>
+            <span
+              v-if="leexiBadge"
+              class="text-xs px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400"
+              :title="`Filtre Leexi : ${leexiBadge}`"
+            >
+              <i class="pi pi-filter text-[10px] mr-1" />Leexi: {{ leexiBadge }}
+            </span>
           </div>
           <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <div class="flex items-center gap-1.5">
@@ -140,6 +147,22 @@ const serverNames = computed(() => {
       const server = serversStore.servers.find(s => s.id === id)
       return server?.name ?? id
     })
+})
+
+// Compact one-line summary of the Leexi ownership filter for the badge.
+const leexiBadge = computed<string | null>(() => {
+  const f = props.token.leexi_filter
+  if (!f || f.mode === 'none') return null
+  switch (f.mode) {
+    case 'users':
+      return `${(f.user_uuids || []).length} user(s)`
+    case 'teams':
+      return `${(f.team_uuids || []).length} team(s)`
+    case 'creator':
+      return 'creator only'
+    default:
+      return null
+  }
 })
 
 function buildMcpJson(tokenValue: string) {

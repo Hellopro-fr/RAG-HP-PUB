@@ -115,6 +115,18 @@ type ScopeToken struct {
 	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 
+	// Leexi ownership scope. When LeexiFilterMode is "none" (default) the
+	// token is unrestricted; other modes narrow access to calls whose owner
+	// belongs to the configured set:
+	//   - "users":   LeexiAllowedUserUUIDs is authoritative.
+	//   - "teams":   LeexiAllowedTeamUUIDs is resolved to user UUIDs at
+	//                runtime (dynamic — new team members inherit access).
+	//   - "creator": LeexiAllowedUserUUIDs holds a single UUID resolved from
+	//                the creator's email at token creation time.
+	LeexiFilterMode       string          `gorm:"type:varchar(16);not null;default:'none'" json:"leexi_filter_mode"`
+	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
+	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
+
 	// Associations
 	Servers []ScopeTokenServer `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools   []ScopeTokenTool   `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
@@ -160,6 +172,11 @@ type OAuth2Client struct {
 	CreatedBy             string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
 	CreatedAt             time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt             time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Leexi ownership scope — see ScopeToken for semantics.
+	LeexiFilterMode       string          `gorm:"type:varchar(16);not null;default:'none'" json:"leexi_filter_mode"`
+	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
+	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
 
 	// Associations
 	Servers []OAuth2ClientServer `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`

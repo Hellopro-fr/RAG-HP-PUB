@@ -33,6 +33,14 @@ type Config struct {
 	FallbackUser  string // FALLBACK_USER
 	FallbackPass  string // FALLBACK_PASS
 	FallbackEmail string // FALLBACK_EMAIL
+
+	// Leexi admin integration. LeexiInternalURL points to the in-cluster
+	// mcp-leexi-service base URL (e.g. http://mcp-leexi-service:8589).
+	// LeexiAdminToken is the shared secret sent as X-Admin-Token on
+	// /admin/users and /admin/teams requests. Both must be set to enable the
+	// /api/v1/leexi/* proxy and the Leexi-scoped token filters.
+	LeexiInternalURL string // LEEXI_INTERNAL_URL
+	LeexiAdminToken  string // LEEXI_ADMIN_TOKEN
 }
 
 func Load() *Config {
@@ -96,6 +104,9 @@ func Load() *Config {
 		FallbackUser:        os.Getenv("FALLBACK_USER"),
 		FallbackPass:        os.Getenv("FALLBACK_PASS"),
 		FallbackEmail:       os.Getenv("FALLBACK_EMAIL"),
+
+		LeexiInternalURL: os.Getenv("LEEXI_INTERNAL_URL"),
+		LeexiAdminToken:  os.Getenv("LEEXI_ADMIN_TOKEN"),
 	}
 }
 

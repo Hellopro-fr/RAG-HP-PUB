@@ -11,6 +11,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
+	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
@@ -30,6 +31,10 @@ type Handler struct {
 	allowInternalURLs bool
 	userRepo          *repository.UserRepo
 	auditRepo         *repository.AuditRepo
+	// leexiAdmin is the in-cluster client used to resolve users/teams for the
+	// per-token Leexi filter UI and the runtime header injection. nil when the
+	// integration is disabled (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
+	leexiAdmin *leexiadmin.Client
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -62,6 +67,12 @@ func (h *Handler) SetUserRepo(repo *repository.UserRepo) {
 // SetAuditRepo sets the audit repository for audit log access.
 func (h *Handler) SetAuditRepo(repo *repository.AuditRepo) {
 	h.auditRepo = repo
+}
+
+// SetLeexiAdmin wires the Leexi admin client used by the Leexi-scoped token
+// filter UI and the proxy at /api/v1/leexi/*. Pass nil to disable.
+func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
+	h.leexiAdmin = client
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────

@@ -14,6 +14,12 @@ type CachedClient struct {
 	IsActive     bool
 	TTL          int // access token TTL in seconds
 	FetchedAt    time.Time
+
+	// Leexi ownership scope — mirrors scopetoken.CachedToken. See that struct
+	// for the semantics of each mode.
+	LeexiFilterMode       string
+	LeexiAllowedUserUUIDs []string
+	LeexiAllowedTeamUUIDs []string
 }
 
 // Cache provides an in-memory TTL cache for OAuth2 client scope lookups.

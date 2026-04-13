@@ -2,6 +2,7 @@ package scopetoken
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -17,6 +18,24 @@ const AllowedServersContextKey = "scope_allowed_servers"
 // Value is map[string]map[string]bool: server_id → tool_name → true.
 // A nil inner map for a server means all tools are allowed.
 const AllowedToolsContextKey = "scope_allowed_tools"
+
+// LeexiFilterContextKey carries a *LeexiFilterContext describing the
+// per-request Leexi ownership scope. Read by gateway.ScopedGateway when
+// forwarding a tools/call to a Leexi-tagged backend.
+const LeexiFilterContextKey = "scope_leexi_filter"
+
+// LeexiFilterContext is the runtime view of the persisted scope.
+type LeexiFilterContext struct {
+	Mode             string
+	AllowedUserUUIDs []string
+	AllowedTeamUUIDs []string
+}
+
+// LeexiFilterFromContext returns the typed filter info if any was set.
+func LeexiFilterFromContext(ctx context.Context) (*LeexiFilterContext, bool) {
+	v, ok := ctx.Value(LeexiFilterContextKey).(*LeexiFilterContext)
+	return v, ok
+}
 
 // Middleware returns an HTTP middleware that validates X-MCP-Scope-Token
 // and stores the allowed server IDs and tool selections in the request context.
@@ -76,6 +95,16 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 					ExpiresAt:    dbToken.ExpiresAt,
 					IsActive:     dbToken.IsActive,
 				}
+
+				// Decode persisted Leexi filter (JSON columns) into typed slices.
+				ct.LeexiFilterMode = dbToken.LeexiFilterMode
+				if len(dbToken.LeexiAllowedUserUUIDs) > 0 {
+					_ = json.Unmarshal(dbToken.LeexiAllowedUserUUIDs, &ct.LeexiAllowedUserUUIDs)
+				}
+				if len(dbToken.LeexiAllowedTeamUUIDs) > 0 {
+					_ = json.Unmarshal(dbToken.LeexiAllowedTeamUUIDs, &ct.LeexiAllowedTeamUUIDs)
+				}
+
 				cache.Set(hash, ct)
 			}
 
@@ -93,6 +122,13 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 			ctx := context.WithValue(r.Context(), AllowedServersContextKey, ct.ServerIDs)
 			if ct.AllowedTools != nil {
 				ctx = context.WithValue(ctx, AllowedToolsContextKey, ct.AllowedTools)
+			}
+			if ct.LeexiFilterMode != "" && ct.LeexiFilterMode != "none" {
+				ctx = context.WithValue(ctx, LeexiFilterContextKey, &LeexiFilterContext{
+					Mode:             ct.LeexiFilterMode,
+					AllowedUserUUIDs: ct.LeexiAllowedUserUUIDs,
+					AllowedTeamUUIDs: ct.LeexiAllowedTeamUUIDs,
+				})
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

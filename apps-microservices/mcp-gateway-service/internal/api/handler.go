@@ -116,6 +116,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
 	}
 
+	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
+	//    user/team picker). Always mounted; the handlers themselves return
+	//    503 when LEEXI_INTERNAL_URL / LEEXI_ADMIN_TOKEN are unset.
+	apiMux.HandleFunc("/api/v1/leexi/users", h.handleLeexiUsers)
+	apiMux.HandleFunc("/api/v1/leexi/teams", h.handleLeexiTeams)
+
 	// ── OAuth2 client routes ─────────────────────────────────────────────────
 	if h.oauth2Repo != nil {
 		apiMux.HandleFunc("/api/v1/oauth2/clients", h.handleOAuth2Clients)

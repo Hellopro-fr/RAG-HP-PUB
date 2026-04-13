@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
 
 // Gateway routes MCP JSON-RPC requests to the appropriate backend servers.
 type Gateway struct {
-	name     string
-	version  string
-	registry *Registry
+	name       string
+	version    string
+	registry   *Registry
+	leexiAdmin *leexiadmin.Client // optional; nil disables team expansion
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -23,6 +25,13 @@ func New(name, version string, registry *Registry) *Gateway {
 		version:  version,
 		registry: registry,
 	}
+}
+
+// SetLeexiAdmin attaches the Leexi admin client used by ScopedGateway to
+// resolve "teams" filter mode into user UUIDs at request time. Pass nil to
+// disable team expansion.
+func (g *Gateway) SetLeexiAdmin(c *leexiadmin.Client) {
+	g.leexiAdmin = c
 }
 
 // DiscoverAndRegister connects to a backend MCP server, performs the handshake,

@@ -4,10 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"strings"
 
+	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
+
+// leexiToolPrefix is the convention used when registering the Leexi backend.
+// When a backend's ToolPrefix matches this string, the scoped gateway treats
+// it as the Leexi backend for the purposes of owner-scope header injection.
+const leexiToolPrefix = "leexi"
+
+// LeexiAllowedOwnersHeader mirrors the constant defined in mcp-leexi-service
+// (transport.AllowedOwnersHeader). Duplicated here to avoid a cross-module
+// import; both sides MUST stay in sync.
+const LeexiAllowedOwnersHeader = "X-Leexi-Allowed-Owners"
 
 // ScopedGateway wraps a Gateway but filters results to only the allowed server IDs
 // and optionally to specific tools per server.
@@ -18,6 +32,9 @@ type ScopedGateway struct {
 	registry     *Registry
 	allowedIDs   map[string]bool
 	allowedTools map[string]map[string]bool // server_id → tool_name → true; nil = all tools
+	// leexiAdmin (optional) is used to expand "teams" filter mode to user
+	// UUIDs at request time. nil = no team expansion (treat empty list).
+	leexiAdmin *leexiadmin.Client
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -29,6 +46,7 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 		registry:     gw.registry,
 		allowedIDs:   allowedServerIDs,
 		allowedTools: allowedTools,
+		leexiAdmin:   gw.leexiAdmin,
 	}
 }
 
@@ -86,14 +104,75 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
 	}
 
+	// Compute per-request backend headers, starting from the static auth
+	// headers configured at registration. Augment with the Leexi owner-scope
+	// header when the request is bound for the Leexi backend AND the active
+	// scope token / OAuth2 client declares an ownership filter.
+	headers := sg.requestHeadersFor(ctx, backend)
+
 	// Forward with the original (unprefixed) tool name to the backend
 	backendParams := mcp.CallToolParams{Name: originalName, Arguments: params.Arguments}
-	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)
+	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, headers)
 	result, err := client.CallTool(ctx, backendParams)
 	if err != nil {
 		return errorResp(req.ID, mcp.ErrInternalError, err.Error())
 	}
 	return okResp(req.ID, result)
+}
+
+// requestHeadersFor returns the set of headers to send to backend on this
+// particular tool call. It clones backend.AuthHeaders so the static map is
+// never mutated, and adds X-Leexi-Allowed-Owners when applicable.
+func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *BackendServer) map[string]string {
+	headers := make(map[string]string, len(backend.AuthHeaders)+1)
+	for k, v := range backend.AuthHeaders {
+		headers[k] = v
+	}
+	if backend.ToolPrefix != leexiToolPrefix {
+		return headers
+	}
+	filter, ok := scopetoken.LeexiFilterFromContext(ctx)
+	if !ok || filter == nil {
+		return headers
+	}
+
+	owners := sg.resolveLeexiOwners(ctx, filter)
+	if len(owners) == 0 {
+		// Resolution returned nothing — for "users"/"creator" this means an
+		// empty allow-list (deny everything); pass a sentinel that the
+		// downstream service interprets as "no calls allowed". Sending an
+		// empty header would be ambiguous, so we send a clearly invalid
+		// UUID that cannot match any real owner.
+		log.Printf("[scoped] leexi filter mode=%q resolved to empty allow-list — sending deny sentinel", filter.Mode)
+		headers[LeexiAllowedOwnersHeader] = "00000000-0000-0000-0000-000000000000"
+		return headers
+	}
+	headers[LeexiAllowedOwnersHeader] = strings.Join(owners, ",")
+	return headers
+}
+
+// resolveLeexiOwners turns a (mode, allowed-users, allowed-teams) tuple into a
+// flat list of owner UUIDs to authorise. For "teams" mode it consults the
+// leexiadmin client cache; for the other modes it simply returns the stored
+// user UUIDs.
+func (sg *ScopedGateway) resolveLeexiOwners(ctx context.Context, f *scopetoken.LeexiFilterContext) []string {
+	switch f.Mode {
+	case "users", "creator":
+		return f.AllowedUserUUIDs
+	case "teams":
+		if sg.leexiAdmin == nil || !sg.leexiAdmin.Enabled() {
+			log.Printf("[scoped] leexi filter mode=teams but leexiadmin client is not configured")
+			return nil
+		}
+		uuids, err := sg.leexiAdmin.ResolveTeamMembers(ctx, f.AllowedTeamUUIDs)
+		if err != nil {
+			log.Printf("[scoped] resolve team members: %v", err)
+			return nil
+		}
+		return uuids
+	default:
+		return nil
+	}
 }
 
 func (sg *ScopedGateway) handleResourcesList(req *mcp.Request) *mcp.Response {

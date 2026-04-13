@@ -6,7 +6,96 @@ import (
 	"fmt"
 
 	"github.com/hellopro/mcp-leexi/internal/mcp"
+	"github.com/hellopro/mcp-leexi/internal/transport"
 )
+
+// effectiveOwnerUUIDs computes the final owner_uuid[] list sent to the Leexi
+// API, combining any user-supplied filter with the gateway-enforced scope.
+//
+// Returns:
+//   - owners: the intersection to pass to the API (may be empty = unrestricted)
+//   - err:    non-nil when the caller requested an owner UUID outside the
+//             scope allowed by the token (access denial).
+func effectiveOwnerUUIDs(ctx context.Context, requested string) ([]string, error) {
+	allowed, restricted := transport.AllowedOwnersFromContext(ctx)
+	if !restricted {
+		// No scope enforcement — honour the user-supplied filter as before.
+		if requested == "" {
+			return nil, nil
+		}
+		return []string{requested}, nil
+	}
+	if requested == "" {
+		// User did not specify — force the full allowed list.
+		return allowed, nil
+	}
+	// User did specify — only accept if it intersects the allowed set.
+	for _, a := range allowed {
+		if a == requested {
+			return []string{requested}, nil
+		}
+	}
+	return nil, fmt.Errorf("owner_uuid %q is not permitted by the current token scope", requested)
+}
+
+// isOwnerAllowed reports whether a single ownerUUID is within the scope
+// declared by the gateway (or true when no scope is declared).
+func isOwnerAllowed(ctx context.Context, ownerUUID string) bool {
+	allowed, restricted := transport.AllowedOwnersFromContext(ctx)
+	if !restricted {
+		return true
+	}
+	for _, a := range allowed {
+		if a == ownerUUID {
+			return true
+		}
+	}
+	return false
+}
+
+// checkCallOwnerAllowed extracts the owner UUID from a Leexi call payload and
+// denies access when the gateway declared a restricted scope and the owner is
+// not in it. The owner identifier is accepted in several shapes to cope with
+// Leexi API variations: a top-level "owner_uuid", a nested {"owner":{"uuid":…}}
+// object, or a nested {"user":{"uuid":…}} object.
+func checkCallOwnerAllowed(ctx context.Context, call map[string]json.RawMessage) error {
+	if _, restricted := transport.AllowedOwnersFromContext(ctx); !restricted {
+		return nil
+	}
+
+	ownerUUID := extractOwnerUUID(call)
+	if ownerUUID == "" {
+		// We cannot verify ownership for a call that exposes no owner — refuse
+		// rather than leak it to a restricted caller.
+		return fmt.Errorf("call owner could not be determined; access denied by token scope")
+	}
+	if !isOwnerAllowed(ctx, ownerUUID) {
+		return fmt.Errorf("call owner %q is not permitted by the current token scope", ownerUUID)
+	}
+	return nil
+}
+
+// extractOwnerUUID tolerates the three common shapes Leexi uses to expose the
+// owning user on a call payload.
+func extractOwnerUUID(call map[string]json.RawMessage) string {
+	if raw, ok := call["owner_uuid"]; ok {
+		var s string
+		if json.Unmarshal(raw, &s) == nil && s != "" {
+			return s
+		}
+	}
+	for _, key := range []string{"owner", "user"} {
+		if raw, ok := call[key]; ok && len(raw) > 0 && string(raw) != "null" {
+			var nested struct {
+				UUID string `json:"uuid"`
+			}
+			if json.Unmarshal(raw, &nested) == nil && nested.UUID != "" {
+				return nested.UUID
+			}
+		}
+	}
+	return ""
+}
 
 // ── search_calls ─────────────────────────────────────────────────────────────
 
@@ -72,7 +161,12 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 		}
 	}
 
-	data, err := clients.Leexi.SearchCalls(ctx, from, to, order, ownerUUID, withTranscript, page, items)
+	ownerUUIDs, err := effectiveOwnerUUIDs(ctx, ownerUUID)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	data, err := clients.Leexi.SearchCalls(ctx, from, to, order, ownerUUIDs, withTranscript, page, items)
 	if err != nil {
 		return nil, fmt.Errorf("SearchCalls: %w", err)
 	}
@@ -115,6 +209,12 @@ func handleGetCallTranscript(ctx context.Context, clients *Clients, args map[str
 		if err := json.Unmarshal(inner, &full); err == nil {
 			// full now contains the actual call fields
 		}
+	}
+
+	// Enforce owner-based scope: if the request context declares a restricted
+	// set, reject calls belonging to any owner outside it.
+	if err := checkCallOwnerAllowed(ctx, full); err != nil {
+		return errorResult(err.Error()), nil
 	}
 
 	transcript := map[string]json.RawMessage{}
@@ -167,6 +267,11 @@ func handleGetCallSummary(ctx context.Context, clients *Clients, args map[string
 		if err := json.Unmarshal(inner, &full); err == nil {
 			// full now contains the actual call fields
 		}
+	}
+
+	// Enforce owner-based scope before returning anything.
+	if err := checkCallOwnerAllowed(ctx, full); err != nil {
+		return errorResult(err.Error()), nil
 	}
 
 	summary := map[string]json.RawMessage{}
