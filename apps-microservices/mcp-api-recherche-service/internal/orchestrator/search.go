@@ -276,26 +276,37 @@ func (so *SearchOrchestrator) executeSearch(
 		resp, err = so.databaseClient.ClassicSearch(ctx, req)
 
 	case "hybrid":
+		// Hybrid search options — mirrors the canonical defaults from
+		// api-recherche/app/schemas/search.py::HybridSearchOptions so both
+		// services use the same RRF + BM25 configuration.
 		denseWeight := float32(0.7)
 		sparseWeight := float32(0.3)
-		// Use RRF (Reciprocal Rank Fusion) — robust to score-scale differences
-		// between dense COSINE and sparse BM25. dense_weight/sparse_weight are
-		// kept for backward compatibility but ignored when ranker_type=rrf.
-		const rankerType = "rrf"
-		const rrfK = 60
-		// Use snake_case keys: database-recherche-service reads camelCase for
-		// the [HybridSearch] Params log line but unpacks **kwargs into the
-		// use_case which only matches snake_case parameter names. Sending
-		// camelCase silently falls back to ranker_type="weighted".
+		const (
+			rankerType           = "rrf" // "weighted" or "rrf" (Reciprocal Rank Fusion)
+			rrfK                 = 60    // RRF smoothing constant (10–100)
+			dropRatioSearch      = 0.0   // BM25: proportion of low-weight terms to ignore
+			denseLimitMultiplier = 1     // over-fetch factor for fusion (3+ = wider candidate pool)
+		)
+		// snake_case keys required: database-recherche-service unpacks **kwargs
+		// into the use_case, which only binds snake_case parameter names.
+		// camelCase keys silently fall back to ranker_type="weighted".
+		// Optional fields ef / radius / range_filter are intentionally omitted
+		// (their defaults are None in api-recherche, no-ops on the DB side).
 		options, optErr := structpb.NewStruct(map[string]any{
-			"ranker_type": rankerType,
-			"rrf_k":       float64(rrfK),
+			"ranker_type":            rankerType,
+			"rrf_k":                  float64(rrfK),
+			"drop_ratio_search":      dropRatioSearch,
+			"dense_limit_multiplier": float64(denseLimitMultiplier),
 		})
 		if optErr != nil {
 			return nil, fmt.Errorf("build hybrid options: %w", optErr)
 		}
-		log.Printf("[search] hybrid request for %s: ranker_type=%s, rrf_k=%d, dense_weight=%.2f, sparse_weight=%.2f",
-			collection, rankerType, rrfK, denseWeight, sparseWeight)
+		log.Printf("[search] hybrid request for %s: ranker_type=%s, rrf_k=%d, "+
+			"drop_ratio_search=%.2f, dense_limit_multiplier=%d, "+
+			"dense_weight=%.2f, sparse_weight=%.2f",
+			collection, rankerType, rrfK,
+			dropRatioSearch, denseLimitMultiplier,
+			denseWeight, sparseWeight)
 		req := &databasepb.HybridSearchRequest{
 			CollectionName:  collection,
 			DenseVector:     queryVector,
