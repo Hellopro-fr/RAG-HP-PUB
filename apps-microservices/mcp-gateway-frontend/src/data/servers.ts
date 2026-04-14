@@ -1,11 +1,25 @@
 import type { PublicToolDetail } from '@/types/public'
 
+export interface ConfigStep {
+  title: string
+  description: string
+  link?: string
+  image?: string
+}
+
+export interface DocServerConfigGuide {
+  authType: string
+  steps: ConfigStep[]
+}
+
 export interface DocServer {
   slug: string
   name: string
   description: string
+  icon?: string
   toolsCount: number
   tools: PublicToolDetail[]
+  configGuide?: DocServerConfigGuide
 }
 
 export const docServers: DocServer[] = [
@@ -13,6 +27,7 @@ export const docServers: DocServer[] = [
     slug: "bdd",
     name: "Base de données",
     description: "Exploration et interrogation en lecture seule de la base de données relationnelle.",
+    icon: "/images/servers/bdd.svg",
     toolsCount: 6,
     tools: [
       {
@@ -51,7 +66,35 @@ export const docServers: DocServer[] = [
     slug: "google",
     name: "Google Analytics",
     description: "Rapports et configuration Google Analytics 4 : propriétés, dimensions, métriques et rapports temps réel.",
+    icon: "/images/servers/google-analytics.svg",
     toolsCount: 7,
+    configGuide: {
+      authType: "Service Account",
+      steps: [
+        {
+          title: "Créer un projet Google Cloud",
+          description: "Accédez à Google Cloud Console et créez un nouveau projet (ou sélectionnez un projet existant).",
+          link: "https://console.cloud.google.com/"
+        },
+        {
+          title: "Activer l'API Google Analytics",
+          description: "Dans « APIs & Services > Library », recherchez et activez « Google Analytics Data API » et « Google Analytics Admin API »."
+        },
+        {
+          title: "Créer un compte de service",
+          description: "Dans « IAM & Admin > Service Accounts », créez un nouveau compte de service. Téléchargez le fichier de clé JSON généré.",
+          link: "https://console.cloud.google.com/iam-admin/serviceaccounts"
+        },
+        {
+          title: "Accorder l'accès à la propriété GA4",
+          description: "Dans Google Analytics, allez dans « Administration > Gestion des accès à la propriété » et ajoutez l'adresse e-mail du compte de service (ex : mon-service@projet.iam.gserviceaccount.com) avec le rôle « Lecteur »."
+        },
+        {
+          title: "Configurer le serveur MCP",
+          description: "Renseignez le contenu du fichier de clé JSON du compte de service dans la configuration du serveur MCP Google Analytics via le panneau d'administration du Gateway."
+        },
+      ]
+    },
     tools: [
       {
         name: "google_get_account_summaries",
@@ -94,7 +137,36 @@ export const docServers: DocServer[] = [
     slug: "googlesearchconsole",
     name: "Google Search Console",
     description: "Données de performance de recherche, inspection d'URL, sitemaps et analyses SEO.",
+    icon: "/images/servers/google-search-console.svg",
     toolsCount: 15,
+    configGuide: {
+      authType: "Service Account",
+      steps: [
+        {
+          title: "Créer un projet Google Cloud",
+          description: "Accédez à Google Cloud Console et créez un nouveau projet (ou réutilisez celui de Google Analytics).",
+          link: "https://console.cloud.google.com/"
+        },
+        {
+          title: "Activer l'API Search Console",
+          description: "Dans « APIs & Services > Library », recherchez et activez « Google Search Console API »."
+        },
+        {
+          title: "Créer un compte de service",
+          description: "Dans « IAM & Admin > Service Accounts », créez un nouveau compte de service (ou réutilisez celui de Google Analytics). Téléchargez le fichier de clé JSON.",
+          link: "https://console.cloud.google.com/iam-admin/serviceaccounts"
+        },
+        {
+          title: "Ajouter le compte de service à Search Console",
+          description: "Dans Google Search Console, allez dans « Paramètres > Utilisateurs et autorisations » et ajoutez l'adresse e-mail du compte de service avec le rôle « Propriétaire » ou « Utilisateur complet ».",
+          link: "https://search.google.com/search-console"
+        },
+        {
+          title: "Configurer le serveur MCP",
+          description: "Renseignez le contenu du fichier de clé JSON du compte de service dans la configuration du serveur MCP Google Search Console via le panneau d'administration du Gateway."
+        },
+      ]
+    },
     tools: [
       {
         name: "googlesearchconsole_batch_url_inspection",
@@ -177,7 +249,26 @@ export const docServers: DocServer[] = [
     slug: "leexi",
     name: "Leexi",
     description: "Accès aux appels et réunions Leexi : recherche, transcriptions et résumés IA.",
+    icon: "/images/servers/leexi.svg",
     toolsCount: 3,
+    configGuide: {
+      authType: "Clé API",
+      steps: [
+        {
+          title: "Accéder aux paramètres Leexi",
+          description: "Connectez-vous à votre compte Leexi et accédez à la section « Paramètres > Intégrations » ou « API ».",
+          link: "https://app.leexi.ai/"
+        },
+        {
+          title: "Générer une clé API",
+          description: "Créez une nouvelle clé API depuis le tableau de bord Leexi. Copiez la clé générée — elle ne sera plus affichée par la suite."
+        },
+        {
+          title: "Configurer le serveur MCP",
+          description: "Renseignez la clé API dans la configuration du serveur MCP Leexi via le panneau d'administration du Gateway (champ LEEXI_API_KEY)."
+        },
+      ]
+    },
     tools: [
       {
         name: "leexi_get_call_summary",
@@ -200,6 +291,7 @@ export const docServers: DocServer[] = [
     slug: "neo4j",
     name: "Neo4j Graph Database",
     description: "Lecture du graphe Neo4j : schéma et requêtes Cypher en lecture seule.",
+    icon: "/images/servers/neo4j.svg",
     toolsCount: 2,
     tools: [
       {
@@ -218,6 +310,7 @@ export const docServers: DocServer[] = [
     slug: "rag",
     name: "RAG Pipeline",
     description: "Pipeline RAG HelloPro : embeddings, recherche vectorielle, recherche par filtres, reranking et chat LLM.",
+    icon: "/images/servers/rag.svg",
     toolsCount: 6,
     tools: [
       {
@@ -256,7 +349,26 @@ export const docServers: DocServer[] = [
     slug: "ringover",
     name: "Ringover",
     description: "Accès aux appels téléphoniques Ringover : historique, détails et recherche.",
+    icon: "/images/servers/ringover.svg",
     toolsCount: 3,
+    configGuide: {
+      authType: "Clé API",
+      steps: [
+        {
+          title: "Accéder au Dashboard Ringover",
+          description: "Connectez-vous à votre compte Ringover et accédez au Dashboard d'administration.",
+          link: "https://dashboard.ringover.com/"
+        },
+        {
+          title: "Générer un token API",
+          description: "Allez dans « Développeurs > API » et générez un nouveau token d'accès. Copiez le token — il ne sera plus affiché par la suite."
+        },
+        {
+          title: "Configurer le serveur MCP",
+          description: "Renseignez le token API dans la configuration du serveur MCP Ringover via le panneau d'administration du Gateway (champ RINGOVER_API_TOKEN)."
+        },
+      ]
+    },
     tools: [
       {
         name: "ringover_get_call_details",
@@ -279,7 +391,26 @@ export const docServers: DocServer[] = [
     slug: "semrush",
     name: "SEMrush",
     description: "Données SEO et SEM : mots-clés, backlinks, concurrents, annonces et analyses de domaines.",
+    icon: "/images/servers/semrush.svg",
     toolsCount: 16,
+    configGuide: {
+      authType: "Clé API",
+      steps: [
+        {
+          title: "Accéder aux paramètres SEMrush",
+          description: "Connectez-vous à votre compte SEMrush et accédez à « Subscription Info » ou « API » dans les paramètres du compte.",
+          link: "https://www.semrush.com/accounts/subscription-info/"
+        },
+        {
+          title: "Copier la clé API",
+          description: "Votre clé API est affichée dans la section « API key ». Un plan SEMrush Business ou supérieur est requis pour certaines fonctionnalités (backlinks, domaines référents)."
+        },
+        {
+          title: "Configurer le serveur MCP",
+          description: "Renseignez la clé API dans la configuration du serveur MCP SEMrush via le panneau d'administration du Gateway (champ SEMRUSH_API_KEY)."
+        },
+      ]
+    },
     tools: [
       {
         name: "semrush_backlinks",
@@ -367,7 +498,30 @@ export const docServers: DocServer[] = [
     slug: "zohocrm",
     name: "Zoho CRM",
     description: "Outils d'accès au CRM Zoho : modules, enregistrements, notes, requêtes COQL et listes liées.",
+    icon: "/images/servers/zoho.svg",
     toolsCount: 15,
+    configGuide: {
+      authType: "OAuth2 (Zoho MCP)",
+      steps: [
+        {
+          title: "Accéder au portail Zoho MCP",
+          description: "Rendez-vous sur mcp.zoho.eu et connectez-vous avec votre compte Zoho.",
+          link: "https://mcp.zoho.eu/"
+        },
+        {
+          title: "Créer une connexion MCP",
+          description: "Depuis le portail, créez une nouvelle connexion MCP pour Zoho CRM. Sélectionnez les modules et permissions souhaités (lecture des enregistrements, COQL, etc.)."
+        },
+        {
+          title: "Récupérer les identifiants de connexion",
+          description: "Copiez le Client ID et le Client Secret générés par le portail Zoho MCP."
+        },
+        {
+          title: "Configurer le serveur MCP",
+          description: "Renseignez le Client ID et le Client Secret dans la configuration du serveur MCP Zoho CRM via le panneau d'administration du Gateway."
+        },
+      ]
+    },
     tools: [
       {
         name: "ZohoCRM_executeCOQLQuery",

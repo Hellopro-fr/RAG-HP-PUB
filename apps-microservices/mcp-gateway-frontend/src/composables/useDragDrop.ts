@@ -4,6 +4,7 @@ import type { Server } from '@/types/server'
 export interface DragDropServer {
   id: string
   name: string
+  icon?: string
   tools: DragDropTool[]
 }
 
@@ -32,6 +33,7 @@ export function useDragDrop() {
       .map(s => ({
         id: s.id,
         name: s.name,
+        icon: s.icon,
         tools: (s.tool_names || [])
           .filter(t => t.is_active)
           .map(t => ({
@@ -60,6 +62,7 @@ export function useDragDrop() {
     const allServers = servers.filter(s => s.is_active).map(s => ({
       id: s.id,
       name: s.name,
+      icon: s.icon,
       tools: (s.tool_names || []).filter(t => t.is_active).map(t => ({
         serverId: s.id,
         name: t.name,

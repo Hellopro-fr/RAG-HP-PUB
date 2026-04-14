@@ -26,9 +26,17 @@
         class="block p-5 rounded-lg border border-gray-200 bg-white hover:border-brand-300 hover:shadow-sm transition dark:border-gray-800 dark:bg-gray-900 dark:hover:border-brand-600 no-underline"
       >
         <div class="mb-2">
-          <h3 class="text-base font-semibold text-gray-900 dark:text-white">
-            {{ server.name }}
-          </h3>
+          <div class="flex items-center gap-3">
+            <img
+              v-if="server.icon"
+              :src="server.icon"
+              :alt="server.name"
+              class="w-8 h-8 flex-shrink-0 rounded"
+            />
+            <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+              {{ server.name }}
+            </h3>
+          </div>
           <p v-if="server.description" class="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {{ server.description }}
           </p>

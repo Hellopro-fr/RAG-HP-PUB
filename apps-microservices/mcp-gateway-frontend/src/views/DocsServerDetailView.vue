@@ -29,7 +29,15 @@
     <div v-else>
       <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ server.name }}</h1>
+        <div class="flex items-center gap-4">
+          <img
+            v-if="server.icon"
+            :src="server.icon"
+            :alt="server.name"
+            class="w-10 h-10 flex-shrink-0 rounded"
+          />
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ server.name }}</h1>
+        </div>
         <p v-if="server.description" class="text-sm text-gray-500 dark:text-gray-400 mt-1">
           {{ server.description }}
         </p>
@@ -37,6 +45,49 @@
           {{ server.toolsCount }} outil{{ server.toolsCount !== 1 ? 's' : '' }}
         </div>
       </div>
+
+      <!-- Config Guide -->
+      <section v-if="server.configGuide" class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Configuration
+          <span class="ml-2 inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+            {{ server.configGuide.authType }}
+          </span>
+        </h2>
+        <ol class="space-y-4">
+          <li
+            v-for="(step, index) in server.configGuide.steps"
+            :key="index"
+            class="flex gap-3"
+          >
+            <span class="flex-shrink-0 w-7 h-7 rounded-full bg-brand-500 text-white text-sm font-semibold flex items-center justify-center">
+              {{ index + 1 }}
+            </span>
+            <div class="pt-0.5">
+              <p class="font-medium text-gray-900 dark:text-white text-sm">{{ step.title }}</p>
+              <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{{ step.description }}</p>
+              <a
+                v-if="step.link"
+                :href="step.link"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1 mt-1 text-xs text-brand-500 hover:text-brand-600 dark:text-brand-400"
+              >
+                {{ step.link }}
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+              </a>
+              <img
+                v-if="step.image"
+                :src="step.image"
+                :alt="step.title"
+                class="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 max-w-full shadow-sm"
+              />
+            </div>
+          </li>
+        </ol>
+      </section>
 
       <!-- Search tools -->
       <div v-if="server.tools.length > 3" class="mb-6">

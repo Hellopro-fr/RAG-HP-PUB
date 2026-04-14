@@ -35,6 +35,8 @@ type Handler struct {
 	// per-token Leexi filter UI and the runtime header injection. nil when the
 	// integration is disabled (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
 	leexiAdmin *leexiadmin.Client
+	// uploadDir is the base directory for uploaded files (icons, etc.)
+	uploadDir string
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -73,6 +75,11 @@ func (h *Handler) SetAuditRepo(repo *repository.AuditRepo) {
 // filter UI and the proxy at /api/v1/leexi/*. Pass nil to disable.
 func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
 	h.leexiAdmin = client
+}
+
+// SetUploadDir sets the base directory for uploaded files.
+func (h *Handler) SetUploadDir(dir string) {
+	h.uploadDir = dir
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -130,6 +137,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
 		ToolPrefix:          req.ToolPrefix,
+		Icon:                req.Icon,
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 	if req.ConnectTimeoutMs != nil {
@@ -313,6 +321,9 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updates["tool_prefix"] = *req.ToolPrefix
+	}
+	if req.Icon != nil {
+		updates["icon"] = *req.Icon
 	}
 
 	if len(updates) > 0 {
@@ -650,6 +661,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
 		ToolPrefix:          srv.ToolPrefix,
+		Icon:                srv.Icon,
 		ToolsCount:          len(srv.Tools),
 		ToolNames:           toolNames,
 		ResourcesCount:      len(srv.Resources),

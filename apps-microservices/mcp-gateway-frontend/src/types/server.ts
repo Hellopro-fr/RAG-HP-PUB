@@ -46,6 +46,7 @@ export interface Server {
   last_error?: string
   last_discovered_at?: string
   tool_prefix: string
+  icon?: string
   tools_count: number
   tool_names: ServerToolName[]
   resources_count: number
@@ -85,6 +86,7 @@ export interface CreateServerRequest {
   auth_headers?: Record<string, string>
   tags?: string[]
   tool_prefix?: string
+  icon?: string
   auto_discover?: boolean
 }
 

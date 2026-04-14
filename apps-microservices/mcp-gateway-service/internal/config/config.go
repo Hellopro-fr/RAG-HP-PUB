@@ -34,6 +34,9 @@ type Config struct {
 	FallbackPass  string // FALLBACK_PASS
 	FallbackEmail string // FALLBACK_EMAIL
 
+	// Upload directory for server icons
+	UploadDir string // UPLOAD_DIR — directory for uploaded files (default /data/uploads)
+
 	// Leexi admin integration. LeexiInternalURL points to the in-cluster
 	// mcp-leexi-service base URL (e.g. http://mcp-leexi-service:8589).
 	// LeexiAdminToken is the shared secret sent as X-Admin-Token on
@@ -104,6 +107,8 @@ func Load() *Config {
 		FallbackUser:        os.Getenv("FALLBACK_USER"),
 		FallbackPass:        os.Getenv("FALLBACK_PASS"),
 		FallbackEmail:       os.Getenv("FALLBACK_EMAIL"),
+
+		UploadDir:        getEnv("UPLOAD_DIR", "/data/uploads"),
 
 		LeexiInternalURL: os.Getenv("LEEXI_INTERNAL_URL"),
 		LeexiAdminToken:  os.Getenv("LEEXI_ADMIN_TOKEN"),

@@ -14,7 +14,8 @@ RUN apk add --no-cache ca-certificates wget && \
 
 WORKDIR /app
 COPY --from=builder /src/mcp-gateway .
-RUN chown appuser:appuser ./mcp-gateway
+RUN mkdir -p /data/uploads/icons && \
+    chown -R appuser:appuser ./mcp-gateway /data/uploads
 
 USER appuser
 

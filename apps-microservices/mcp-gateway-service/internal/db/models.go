@@ -28,6 +28,9 @@ type MCPServer struct {
 	// ToolPrefix is an optional alphanumeric prefix prepended to all tool names as {prefix}_{tool_name}.
 	ToolPrefix string `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
 
+	// Icon is a URL or path to the server's icon image.
+	Icon string `gorm:"type:varchar(512);not null;default:''" json:"icon"`
+
 	IsActive            bool            `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
 	HealthStatus        string          `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
 	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`

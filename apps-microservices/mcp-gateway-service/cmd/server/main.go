@@ -145,8 +145,13 @@ func main() {
 		apiHandler.SetUserRepo(userRepo)
 		apiHandler.SetAuditRepo(auditRepo)
 		apiHandler.SetLeexiAdmin(leexiAdminClient)
+		apiHandler.SetUploadDir(cfg.UploadDir)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
+
+		// Serve uploaded files (icons, etc.) as static assets
+		mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadDir))))
+		log.Printf("[main] serving uploads from %s at /uploads/", cfg.UploadDir)
 
 		// OAuth2 Authorization Server (public endpoints: /authorize, /token, /register, /.well-known)
 		authCodeRepo := repository.NewAuthCodeRepo(database)
