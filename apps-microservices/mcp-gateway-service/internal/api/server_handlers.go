@@ -1,11 +1,14 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
@@ -18,6 +21,44 @@ import (
 )
 
 var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+var nonSlugRe = regexp.MustCompile(`[^a-z0-9-]+`)
+var multiDashRe = regexp.MustCompile(`-{2,}`)
+
+// generateDocSlug creates a URL-safe slug from a name and appends a short hash for uniqueness.
+func generateDocSlug(name, id string) string {
+	// Lowercase and replace non-alphanumeric with dashes
+	slug := strings.ToLower(name)
+	// Replace common accented chars
+	replacer := strings.NewReplacer(
+		"é", "e", "è", "e", "ê", "e", "ë", "e",
+		"à", "a", "â", "a", "ä", "a",
+		"ù", "u", "û", "u", "ü", "u",
+		"ô", "o", "ö", "o",
+		"î", "i", "ï", "i",
+		"ç", "c",
+		" ", "-",
+	)
+	slug = replacer.Replace(slug)
+	// Remove remaining non-slug characters
+	slug = nonSlugRe.ReplaceAllString(slug, "")
+	slug = multiDashRe.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	// Remove any remaining unicode
+	clean := make([]rune, 0, len(slug))
+	for _, r := range slug {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' {
+			clean = append(clean, r)
+		}
+	}
+	slug = string(clean)
+	if slug == "" {
+		slug = "server"
+	}
+	// Append short hash from ID for uniqueness
+	hash := sha256.Sum256([]byte(id))
+	slug = slug + "-" + hex.EncodeToString(hash[:])[:6]
+	return slug
+}
 
 // Handler holds dependencies for the REST API.
 type Handler struct {
@@ -138,6 +179,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		MCPCommand:          req.MCPCommand,
 		ToolPrefix:          req.ToolPrefix,
 		Icon:                req.Icon,
+		DocSlug:             generateDocSlug(req.Name, id),
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 	if req.ConnectTimeoutMs != nil {
@@ -324,6 +366,23 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Icon != nil {
 		updates["icon"] = *req.Icon
+	}
+	if req.DocSlug != nil {
+		// Check for duplicate doc_slug (skip if empty — clearing is always allowed)
+		if *req.DocSlug != "" {
+			existing, err := h.repo.GetByDocSlug(*req.DocSlug)
+			if err == nil && existing != nil && existing.ID != id {
+				writeJSON(w, http.StatusConflict, ErrorResponse{Error: "doc_slug '" + *req.DocSlug + "' is already used by server '" + existing.Name + "'"})
+				return
+			}
+		}
+		updates["doc_slug"] = *req.DocSlug
+	}
+	if req.DocDescription != nil {
+		updates["doc_description"] = *req.DocDescription
+	}
+	if req.DocConfigGuide != nil {
+		updates["doc_config_guide"] = *req.DocConfigGuide
 	}
 
 	if len(updates) > 0 {
@@ -671,6 +730,9 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		MCPArgs:             mcpArgs,
 		MCPEnv:              mcpEnv,
 		HasAuthHeaders:      len(srv.AuthHeaders) > 0,
+		DocSlug:             srv.DocSlug,
+		DocDescription:      srv.DocDescription,
+		DocConfigGuide:      srv.DocConfigGuide,
 		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,

@@ -54,6 +54,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Modifier le serveur', minRole: 'admin' }
     },
     {
+      path: '/servers/:id/documentation',
+      name: 'server-doc',
+      component: () => import('@/views/ServerDocView.vue'),
+      meta: { requiresAuth: true, title: 'Documentation serveur', minRole: 'admin' }
+    },
+    {
       path: '/tokens/new',
       name: 'token-create',
       component: () => import('@/views/TokenFormView.vue'),
@@ -82,6 +88,12 @@ const router = createRouter({
       name: 'servers',
       component: () => import('@/views/ServersView.vue'),
       meta: { requiresAuth: true, title: 'Serveurs MCP', minRole: 'read-only' }
+    },
+    {
+      path: '/docs-admin',
+      name: 'docs-admin',
+      component: () => import('@/views/DocsAdminView.vue'),
+      meta: { requiresAuth: true, title: 'Documentation', minRole: 'admin' }
     },
     {
       path: '/tokens',

@@ -238,6 +238,13 @@ const menuGroups = computed<MenuGroup[]>(() => {
       path: '/servers',
     })
   }
+  if (authStore.isAdmin) {
+    gestionItems.push({
+      icon: 'pi pi-book',
+      name: 'Documentation',
+      path: '/docs-admin',
+    })
+  }
   gestionItems.push({
     icon: 'pi pi-key',
     name: 'Config MCP',

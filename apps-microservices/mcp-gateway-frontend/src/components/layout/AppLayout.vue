@@ -3,7 +3,7 @@
     <AppSidebar />
     <Backdrop />
     <div
-      class="flex-1 transition-all duration-300 ease-in-out"
+      class="flex-1 transition-all duration-300 ease-in-out overflow-x-hidden"
       :class="[isExpanded || isHovered ? 'lg:ml-[290px]' : 'lg:ml-[90px]']"
     >
       <AppHeader />

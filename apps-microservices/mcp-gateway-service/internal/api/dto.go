@@ -33,6 +33,10 @@ type UpdateServerRequest struct {
 	Tags                *[]string         `json:"tags,omitempty"`
 	ToolPrefix          *string           `json:"tool_prefix,omitempty"` // alphanumeric prefix for tool names
 	Icon                *string           `json:"icon,omitempty"`        // URL or path to the server icon
+	// Documentation fields
+	DocSlug        *string          `json:"doc_slug,omitempty"`
+	DocDescription *string          `json:"doc_description,omitempty"`
+	DocConfigGuide *json.RawMessage `json:"doc_config_guide,omitempty"`
 	// MCP client config
 	MCPTransport *string           `json:"mcp_transport,omitempty"`
 	MCPCommand   *string           `json:"mcp_command,omitempty"`
@@ -76,6 +80,10 @@ type ServerResponse struct {
 	MCPArgs             []string          `json:"mcp_args,omitempty"`
 	MCPEnv              map[string]string `json:"mcp_env,omitempty"`
 	HasAuthHeaders      bool              `json:"has_auth_headers"`
+	// Documentation fields
+	DocSlug        string          `json:"doc_slug,omitempty"`
+	DocDescription string          `json:"doc_description,omitempty"`
+	DocConfigGuide json.RawMessage `json:"doc_config_guide,omitempty"`
 	CreatedBy           string            `json:"created_by,omitempty"`
 	CreatedAt           time.Time         `json:"created_at"`
 	UpdatedAt           time.Time         `json:"updated_at"`
@@ -121,4 +129,20 @@ type ListServersResponse struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+// ── Public Docs DTOs ─────────────────────────────────────────────────────────
+
+type DocsServerSummary struct {
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Icon        string `json:"icon,omitempty"`
+	ToolsCount  int    `json:"tools_count"`
+}
+
+type DocsServerDetail struct {
+	DocsServerSummary
+	Tools       []ToolResponse  `json:"tools"`
+	ConfigGuide json.RawMessage `json:"config_guide,omitempty"`
 }

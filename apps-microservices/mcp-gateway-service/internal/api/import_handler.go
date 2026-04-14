@@ -188,6 +188,7 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 		HealthStatus:        "unknown",
 		MCPTransport:        mcpTransport,
 		MCPCommand:          mcpCommand,
+		DocSlug:             generateDocSlug(name, id),
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 

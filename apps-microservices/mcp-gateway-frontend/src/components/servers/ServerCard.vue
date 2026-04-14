@@ -130,6 +130,14 @@
           <button
             v-if="isAdmin"
             class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
+            title="Documentation"
+            @click="emit('documentation', server.id)"
+          >
+            <i class="pi pi-book text-sm" />
+          </button>
+          <button
+            v-if="isAdmin"
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
             title="Découvrir"
             :disabled="discovering"
             @click="handleDiscover"
@@ -169,6 +177,7 @@ const emit = defineEmits<{
   delete: [id: string]
   details: [id: string]
   discover: [id: string]
+  documentation: [id: string]
 }>()
 
 const discovering = ref(false)

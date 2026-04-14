@@ -57,6 +57,9 @@ export interface Server {
   mcp_args?: string[]
   mcp_env?: Record<string, string>
   has_auth_headers: boolean
+  doc_slug?: string
+  doc_description?: string
+  doc_config_guide?: { authType: string; steps: { type?: string; title: string; description: string; link?: string; image?: string }[] }
   created_by?: string
   created_at: string
   updated_at: string
@@ -87,6 +90,9 @@ export interface CreateServerRequest {
   tags?: string[]
   tool_prefix?: string
   icon?: string
+  doc_slug?: string
+  doc_description?: string
+  doc_config_guide?: { authType: string; steps: { type?: string; title: string; description: string; link?: string; image?: string }[] }
   auto_discover?: boolean
 }
 

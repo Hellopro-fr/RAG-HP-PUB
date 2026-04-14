@@ -31,6 +31,11 @@ type MCPServer struct {
 	// Icon is a URL or path to the server's icon image.
 	Icon string `gorm:"type:varchar(512);not null;default:''" json:"icon"`
 
+	// Documentation fields — used by the public /docs pages.
+	DocSlug        string          `gorm:"type:varchar(128);uniqueIndex:uq_doc_slug" json:"doc_slug,omitempty"`
+	DocDescription string          `gorm:"type:text" json:"doc_description,omitempty"`
+	DocConfigGuide json.RawMessage `gorm:"type:json" json:"doc_config_guide,omitempty"`
+
 	IsActive            bool            `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
 	HealthStatus        string          `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
 	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
