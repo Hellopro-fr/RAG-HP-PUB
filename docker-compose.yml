@@ -1625,6 +1625,37 @@ services:
       - services-ext-net
       - services-global-net
 
+  # --- OPTIM: copie isolée pour agent-optim-scoring (ne pas modifier en prod) ---
+  graph-rag-api-recherche-optim-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-api-recherche-optim-service/Dockerfile
+    profiles: ["graph-rag-optim"]
+    ports:
+      - "8625:8525"
+      - "8665:8565"
+    environment:
+      API_PORT: 8525
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      RERANKING_SERVICE_URL: reranking-model-service:50053
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PROMETHEUS_PORT: 8565
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
+    networks:
+      - services-net
+      - services-ext-net
+      - services-global-net
+
   graph-rag-api-recherche-service-debug:
     build:
       context: .
