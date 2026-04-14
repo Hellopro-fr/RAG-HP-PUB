@@ -59,6 +59,24 @@ mcp-leexi-service/
 | `/message` | POST | Send JSON-RPC request (requires `sessionId` query param) |
 | `/mcp` | POST | Streamable HTTP transport (stateless) |
 | `/health` | GET | Liveness probe |
+| `/admin/users` | GET | Internal: list Leexi workspace users (requires `X-Admin-Token`) |
+| `/admin/teams` | GET | Internal: list Leexi teams derived from users (requires `X-Admin-Token`) |
+
+## Participant-scope enforcement
+
+The gateway may restrict a request to a subset of Leexi users by setting the
+`X-Leexi-Allowed-Participants` header with a comma-separated list of user UUIDs.
+When present:
+
+- `search_calls` force-injects the allowed list as `participating_user_uuid[]`
+  query params, or rejects the call if the user-supplied
+  `participating_user_uuid` is not in the set.
+- `get_call_transcript` and `get_call_summary` verify that at least one allowed
+  UUID appears in the call's `speakers[].uuid` (falling back to `owner_uuid`),
+  and refuse with an MCP error if no match is found.
+
+When the header is absent (e.g. direct non-gateway callers), the service runs
+unrestricted — preserving its historical behaviour.
 
 ## Environment Variables
 
@@ -70,6 +88,7 @@ mcp-leexi-service/
 | `LEEXI_API_KEY_ID` | — | Leexi API Key ID (required) |
 | `LEEXI_API_KEY_SECRET` | — | Leexi API Key Secret (required) |
 | `LEEXI_API_BASE_URL` | `https://public-api.leexi.ai/v1` | Leexi API base URL |
+| `MCP_LEEXI_ADMIN_TOKEN` | — | Shared secret enabling `/admin/*` endpoints. When empty the endpoints are disabled. |
 
 ## Prerequisites
 

@@ -48,6 +48,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		h.handleDiscoverAll(w, r)
 	})
 
+	apiMux.HandleFunc("/api/v1/servers/generate-slugs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleGenerateSlugs(w, r)
+	})
+
 	apiMux.HandleFunc("/api/v1/tags", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
@@ -116,6 +125,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
 	}
 
+	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
+	//    user/team picker). Always mounted; the handlers themselves return
+	//    503 when LEEXI_INTERNAL_URL / LEEXI_ADMIN_TOKEN are unset.
+	apiMux.HandleFunc("/api/v1/leexi/users", h.handleLeexiUsers)
+	apiMux.HandleFunc("/api/v1/leexi/teams", h.handleLeexiTeams)
+
 	// ── OAuth2 client routes ─────────────────────────────────────────────────
 	if h.oauth2Repo != nil {
 		apiMux.HandleFunc("/api/v1/oauth2/clients", h.handleOAuth2Clients)
@@ -132,6 +147,19 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	if h.auditRepo != nil {
 		apiMux.HandleFunc("/api/v1/audit-logs", h.handleAuditLogs)
 	}
+
+	// ── Server icons routes ──────────────────────────────────────────────────
+	apiMux.HandleFunc("/api/v1/server-icons", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.handleListIcons(w, r)
+		case http.MethodPost:
+			h.handleUploadIcon(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
 
 	// Routes avec {id} — on utilise un handler prefix pour capturer le pattern
 	apiMux.HandleFunc("/api/v1/servers/", func(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +226,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	// OpenAPI spec (hors middleware API pour ne pas nécessiter le préfixe /api/)
 	mux.HandleFunc("/openapi.json", h.handleOpenAPI)
+
+	// Public docs endpoints (no auth, no role check)
+	mux.HandleFunc("/api/v1/public/docs", h.handleListDocServers)
+	mux.HandleFunc("/api/v1/public/docs/", h.handleGetDocServer)
 
 	// Applique les middlewares et monte sur le mux principal
 	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit, roleCheckMiddleware)

@@ -27,12 +27,25 @@ type Config struct {
 	OAuth2RefreshTokenTTL int    // OAUTH2_REFRESH_TOKEN_TTL — refresh token lifetime in seconds (default 2592000 = 30 days)
 	// URL validation
 	AllowInternalURLs bool // ALLOW_INTERNAL_URLS — set to "true" to allow Docker-internal/private IP ranges (e.g. 172.x.x.x)
+	// Access control
+	AllowedEmails []string // ALLOWED_EMAILS — comma-separated emails allowed to log in (empty = all allowed)
 	// RBAC
 	AdminEmails []string // ADMIN_EMAILS — comma-separated emails that get admin role on first login
 	// Fallback auth (for users not registered in hellopro.fr)
 	FallbackUser  string // FALLBACK_USER
 	FallbackPass  string // FALLBACK_PASS
 	FallbackEmail string // FALLBACK_EMAIL
+
+	// Upload directory for server icons
+	UploadDir string // UPLOAD_DIR — directory for uploaded files (default /data/uploads)
+
+	// Leexi admin integration. LeexiInternalURL points to the in-cluster
+	// mcp-leexi-service base URL (e.g. http://mcp-leexi-service:8589).
+	// LeexiAdminToken is the shared secret sent as X-Admin-Token on
+	// /admin/users and /admin/teams requests. Both must be set to enable the
+	// /api/v1/leexi/* proxy and the Leexi-scoped token filters.
+	LeexiInternalURL string // LEEXI_INTERNAL_URL
+	LeexiAdminToken  string // LEEXI_ADMIN_TOKEN
 }
 
 func Load() *Config {
@@ -92,10 +105,16 @@ func Load() *Config {
 		OAuth2AccessTokenTTL:  oauth2TTL,
 		OAuth2RefreshTokenTTL: refreshTTL,
 		AllowInternalURLs:   strings.EqualFold(os.Getenv("ALLOW_INTERNAL_URLS"), "true"),
+		AllowedEmails:       parseCSV(os.Getenv("ALLOWED_EMAILS")),
 		AdminEmails:         parseCSV(os.Getenv("ADMIN_EMAILS")),
 		FallbackUser:        os.Getenv("FALLBACK_USER"),
 		FallbackPass:        os.Getenv("FALLBACK_PASS"),
 		FallbackEmail:       os.Getenv("FALLBACK_EMAIL"),
+
+		UploadDir:        getEnv("UPLOAD_DIR", "/data/uploads"),
+
+		LeexiInternalURL: os.Getenv("LEEXI_INTERNAL_URL"),
+		LeexiAdminToken:  os.Getenv("LEEXI_ADMIN_TOKEN"),
 	}
 }
 

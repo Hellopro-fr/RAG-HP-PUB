@@ -268,6 +268,29 @@ func (r *ServerRepo) EncryptAuthHeaders(srv *db.MCPServer) error {
 	return nil
 }
 
+// ListWithDocs returns all active servers that have a doc_slug set.
+func (r *ServerRepo) ListWithDocs() ([]db.MCPServer, error) {
+	var servers []db.MCPServer
+	err := r.db.
+		Where("is_active = ? AND doc_slug != '' AND doc_slug IS NOT NULL", true).
+		Preload("Tools").
+		Find(&servers).Error
+	return servers, err
+}
+
+// GetByDocSlug returns a server by its documentation slug.
+func (r *ServerRepo) GetByDocSlug(slug string) (*db.MCPServer, error) {
+	var srv db.MCPServer
+	err := r.db.
+		Where("doc_slug = ?", slug).
+		Preload("Tools").
+		First(&srv).Error
+	if err != nil {
+		return nil, err
+	}
+	return &srv, nil
+}
+
 // decryptAuthHeaders decrypts auth_headers after DB read.
 func (r *ServerRepo) decryptAuthHeaders(srv *db.MCPServer) error {
 	if len(srv.AuthHeaders) == 0 {

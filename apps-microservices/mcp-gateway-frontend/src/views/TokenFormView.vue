@@ -51,7 +51,19 @@
 
       <!-- Generated .mcp.json -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Configuration .mcp.json</label>
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Configuration .mcp.json</label>
+          <a
+            href="/install-guide"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
+            title="Ouvrir le guide d'installation dans un nouvel onglet"
+          >
+            <i class="pi pi-external-link text-[10px]" />
+            Documentation
+          </a>
+        </div>
         <div class="relative">
           <pre class="bg-gray-900 text-blue-300 rounded-lg p-4 pr-12 text-sm font-mono overflow-x-auto whitespace-pre-wrap">{{ generatedMcpJson }}</pre>
           <button
@@ -196,8 +208,18 @@
           />
         </div>
 
-        <!-- Section 3: Expiration et verification -->
-        <div v-show="isEdit || currentStep === 2" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
+        <!-- Section 3: Acc\u00e8s Leexi (only when a Leexi server is selected) -->
+        <div
+          v-if="hasLeexiServer"
+          v-show="isEdit || currentStep === leexiStepIndex"
+          :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
+        >
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Leexi</h3>
+          <LeexiFilterPanel v-model="form.leexi_filter" />
+        </div>
+
+        <!-- Section 4: Expiration et verification -->
+        <div v-show="isEdit || currentStep === expirationStepIndex" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Expiration et options</h3>
           <!-- Expiration toggle -->
           <div>
@@ -267,6 +289,10 @@
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">HTTP autoris&eacute;</dt>
                 <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ form.allow_http ? 'Oui' : 'Non' }}</dd>
               </div>
+              <div v-if="hasLeexiServer" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Leexi</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ leexiFilterSummary }}</dd>
+              </div>
             </dl>
           </div>
         </div>
@@ -287,8 +313,8 @@
         <div v-else />
         <div class="flex gap-3">
           <button type="button" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" @click="router.push('/tokens')">Annuler</button>
-          <button v-if="currentStep < 2" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="!canGoNext" @click="goNext">Suivant</button>
-          <button v-if="currentStep === 2" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="submitting" @click="handleSubmit">
+          <button v-if="currentStep < lastStepIndex" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="!canGoNext" @click="goNext">Suivant</button>
+          <button v-if="currentStep === lastStepIndex" type="button" class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50" :disabled="submitting" @click="handleSubmit">
             <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
             Créer
           </button>
@@ -300,7 +326,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
@@ -309,7 +335,9 @@ import { useDragDrop } from '@/composables/useDragDrop'
 import { tokensApi } from '@/api/tokens'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import DragDropPanel from '@/components/shared/DragDropPanel.vue'
+import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
 import type { ScopeToken, CreateTokenRequest } from '@/types/token'
+import type { LeexiFilter } from '@/types/leexi'
 
 const route = useRoute()
 const router = useRouter()
@@ -319,7 +347,18 @@ const clipboard = useClipboard()
 const dragDrop = useDragDrop()
 const dragDropReady = ref(false)
 
-const stepLabels = ['Informations de base', 'Serveurs et outils', 'Expiration et v\u00e9rification']
+// Step labels are dynamic: the "Acc\u00e8s Leexi" step is only shown when the
+// selected servers include the Leexi backend (detected via tool_prefix === 'leexi').
+const stepLabels = computed(() => {
+  const labels = ['Informations de base', 'Serveurs et outils']
+  if (hasLeexiServer.value) labels.push('Acc\u00e8s Leexi')
+  labels.push('Expiration et v\u00e9rification')
+  return labels
+})
+// Computed step indices that account for the optional Leexi step.
+const leexiStepIndex = computed(() => (hasLeexiServer.value ? 2 : -1))
+const expirationStepIndex = computed(() => (hasLeexiServer.value ? 3 : 2))
+const lastStepIndex = computed(() => stepLabels.value.length - 1)
 const currentStep = ref(0)
 const loading = ref(false)
 const submitting = ref(false)
@@ -327,6 +366,16 @@ const expiresEnabled = ref(false)
 const createdToken = ref<ScopeToken | null>(null)
 
 const isEdit = computed(() => !!route.params.id)
+
+// hasLeexiServer is true when at least one selected server is the Leexi
+// backend (identified by tool_prefix === 'leexi'). Drives whether the Leexi
+// access step is shown and whether the filter is sent on submit.
+const hasLeexiServer = computed(() => {
+  return dragDrop.selected.value.some(s => {
+    const srv = serversStore.servers.find(x => x.id === s.id)
+    return srv?.tool_prefix === 'leexi'
+  })
+})
 
 const form = reactive({
   name: '',
@@ -336,14 +385,13 @@ const form = reactive({
   customCommand: '',
   customArgsPrefix: '',
   expires_at: '',
-  allow_http: true
+  allow_http: true,
+  leexi_filter: { mode: 'none' } as LeexiFilter
 })
 
 const completedSteps = computed(() => {
-  const completed: number[] = []
-  if (isStep1Valid.value) completed.push(0)
-  if (isStep1Valid.value) completed.push(1)
-  return completed
+  if (!isStep1Valid.value) return []
+  return Array.from({ length: lastStepIndex.value }, (_, i) => i)
 })
 
 const isStep1Valid = computed(() => {
@@ -352,8 +400,29 @@ const isStep1Valid = computed(() => {
 
 const canGoNext = computed(() => {
   if (currentStep.value === 0) return isStep1Valid.value
-  if (currentStep.value === 1) return true
-  return false
+  return currentStep.value < lastStepIndex.value
+})
+
+// If the user removes the Leexi server while sitting on the (now-gone) Leexi
+// step, snap back to the new last step so the form remains navigable.
+watch(hasLeexiServer, (has) => {
+  if (!has && currentStep.value > lastStepIndex.value) {
+    currentStep.value = lastStepIndex.value
+  }
+})
+
+const leexiFilterSummary = computed(() => {
+  const f = form.leexi_filter
+  switch (f.mode) {
+    case 'users':
+      return `${(f.user_uuids || []).length} utilisateur(s)`
+    case 'teams':
+      return `${(f.team_uuids || []).length} \u00e9quipe(s)`
+    case 'creator':
+      return 'Cr\u00e9ateur du jeton uniquement'
+    default:
+      return 'Aucune restriction'
+  }
 })
 
 const generatedMcpJson = computed(() => {
@@ -365,14 +434,15 @@ const generatedMcpJson = computed(() => {
   const tokenValue = createdToken.value.token || ''
   const gatewayUrl = window.location.origin
 
-  const headerArg = `Authorization:Bearer ${tokenValue}`
+  const headerArg = 'X-MCP-Scope-Token: ${MCP_SCOPE_TOKEN}'
+  const env = { MCP_SCOPE_TOKEN: tokenValue }
 
   const argsMap: Record<string, string[]> = {
     npx: ['-y', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    docker: ['run', '-i', '--rm', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
+    docker: ['run', '-i', '--rm', '-e', 'MCP_SCOPE_TOKEN', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
   }
 
   let args: string[]
@@ -386,7 +456,7 @@ const generatedMcpJson = computed(() => {
   }
 
   return JSON.stringify(
-    { mcpServers: { [serverName]: { command, args } } },
+    { mcpServers: { [serverName]: { command, args, env } } },
     null,
     2
   )
@@ -410,6 +480,9 @@ onMounted(async () => {
         expiresEnabled.value = true
         form.expires_at = token.expires_at.slice(0, 16)
       }
+      if (token.leexi_filter) {
+        form.leexi_filter = { ...token.leexi_filter }
+      }
 
       dragDrop.initWithSelection(serversStore.servers, token.server_ids, token.server_tools)
       dragDropReady.value = true
@@ -432,7 +505,7 @@ function goToStep(step: number) {
 }
 
 function goNext() {
-  if (canGoNext.value && currentStep.value < 2) {
+  if (canGoNext.value && currentStep.value < lastStepIndex.value) {
     currentStep.value++
   }
 }
@@ -460,7 +533,13 @@ async function handleSubmit() {
       expires_at: expiresEnabled.value && form.expires_at
         ? new Date(form.expires_at).toISOString()
         : undefined,
-      allow_http: form.allow_http
+      allow_http: form.allow_http,
+      // Only send the filter when a Leexi server is actually in scope —
+      // otherwise the backend would reject mode=teams/users/creator without
+      // any matching backend, and 'none' is the safe default.
+      leexi_filter: hasLeexiServer.value
+        ? (form.leexi_filter.mode === 'none' ? { mode: 'none' } : form.leexi_filter)
+        : { mode: 'none' }
     }
 
     if (isEdit.value) {

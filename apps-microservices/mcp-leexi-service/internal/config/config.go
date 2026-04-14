@@ -10,6 +10,11 @@ type Config struct {
 	LeexiAPIKeyID     string
 	LeexiAPIKeySecret string
 	LeexiAPIBaseURL   string
+
+	// AdminToken is the shared secret required on the X-Admin-Token header to
+	// reach the non-MCP /admin/* endpoints. When empty, those endpoints are
+	// disabled entirely.
+	AdminToken string
 }
 
 func Load() *Config {
@@ -21,6 +26,8 @@ func Load() *Config {
 		LeexiAPIKeyID:     getEnv("LEEXI_API_KEY_ID", ""),
 		LeexiAPIKeySecret: getEnv("LEEXI_API_KEY_SECRET", ""),
 		LeexiAPIBaseURL:   getEnv("LEEXI_API_BASE_URL", "https://public-api.leexi.ai/v1"),
+
+		AdminToken: getEnv("MCP_LEEXI_ADMIN_TOKEN", ""),
 	}
 }
 

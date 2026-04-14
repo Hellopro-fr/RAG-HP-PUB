@@ -28,6 +28,14 @@ type MCPServer struct {
 	// ToolPrefix is an optional alphanumeric prefix prepended to all tool names as {prefix}_{tool_name}.
 	ToolPrefix string `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
 
+	// Icon is a URL or path to the server's icon image.
+	Icon string `gorm:"type:varchar(512);not null;default:''" json:"icon"`
+
+	// Documentation fields — used by the public /docs pages.
+	DocSlug        string          `gorm:"type:varchar(128);uniqueIndex:uq_doc_slug" json:"doc_slug,omitempty"`
+	DocDescription string          `gorm:"type:text" json:"doc_description,omitempty"`
+	DocConfigGuide json.RawMessage `gorm:"type:json" json:"doc_config_guide,omitempty"`
+
 	IsActive            bool            `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
 	HealthStatus        string          `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
 	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
@@ -115,6 +123,18 @@ type ScopeToken struct {
 	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 
+	// Leexi ownership scope. When LeexiFilterMode is "none" (default) the
+	// token is unrestricted; other modes narrow access to calls whose owner
+	// belongs to the configured set:
+	//   - "users":   LeexiAllowedUserUUIDs is authoritative.
+	//   - "teams":   LeexiAllowedTeamUUIDs is resolved to user UUIDs at
+	//                runtime (dynamic — new team members inherit access).
+	//   - "creator": LeexiAllowedUserUUIDs holds a single UUID resolved from
+	//                the creator's email at token creation time.
+	LeexiFilterMode       string          `gorm:"type:varchar(16);not null;default:'none'" json:"leexi_filter_mode"`
+	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
+	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
+
 	// Associations
 	Servers []ScopeTokenServer `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools   []ScopeTokenTool   `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
@@ -160,6 +180,11 @@ type OAuth2Client struct {
 	CreatedBy             string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
 	CreatedAt             time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt             time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Leexi ownership scope — see ScopeToken for semantics.
+	LeexiFilterMode       string          `gorm:"type:varchar(16);not null;default:'none'" json:"leexi_filter_mode"`
+	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
+	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
 
 	// Associations
 	Servers []OAuth2ClientServer `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
@@ -232,6 +257,7 @@ type GatewayUser struct {
 	Email       string     `gorm:"type:varchar(255);not null;uniqueIndex:uq_user_email" json:"email"`
 	DisplayName string     `gorm:"type:varchar(255)" json:"display_name"`
 	Role        string     `gorm:"type:varchar(20);not null;default:'config-only'" json:"role"`
+	IsAllowed   bool       `gorm:"not null;default:false" json:"is_allowed"`
 	LoginCount  int        `gorm:"not null;default:0" json:"login_count"`
 	LastLoginAt *time.Time `gorm:"type:datetime(3)" json:"last_login_at,omitempty"`
 	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`

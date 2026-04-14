@@ -2128,6 +2128,8 @@ services:
       - LEEXI_API_KEY_SECRET=${LEEXI_API_KEY_SECRET}
       - LEEXI_API_BASE_URL=${LEEXI_API_BASE_URL:-https://public-api.leexi.ai/v1}
       - MCP_PORT=8589
+      # Shared secret enabling /admin/users + /admin/teams (consumed by mcp-gateway-service)
+      - MCP_LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
     networks:
       - services-net
     logging: *logging_defaults
@@ -2179,6 +2181,12 @@ services:
       - FALLBACK_USER=${MCP_FALLBACK_USER}
       - FALLBACK_PASS=${MCP_FALLBACK_PASS}
       - FALLBACK_EMAIL=${MCP_FALLBACK_EMAIL}
+      # Leexi admin proxy (users/teams listing + ownership filter on tokens)
+      - LEEXI_INTERNAL_URL=${LEEXI_INTERNAL_URL}
+      - LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
+      - ALLOWED_EMAILS=${MCP_ALLOWED_EMAILS}
+    volumes:
+      - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:
     #   mysql:
     #     condition: service_healthy

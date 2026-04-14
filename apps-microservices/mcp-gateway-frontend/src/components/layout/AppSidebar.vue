@@ -98,6 +98,34 @@
                   />
                 </button>
 
+                <!-- External link (new tab) -->
+                <a
+                  v-else-if="item.path && item.newTab"
+                  :href="item.path"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :class="[
+                    'menu-item group menu-item-inactive',
+                    !isExpanded && !isHovered
+                      ? 'lg:justify-center'
+                      : 'lg:justify-start',
+                  ]"
+                >
+                  <span class="menu-item-icon-inactive">
+                    <i :class="[item.icon, 'text-base']" />
+                  </span>
+                  <span
+                    v-if="isExpanded || isHovered || isMobileOpen"
+                    class="menu-item-text"
+                  >
+                    {{ item.name }}
+                  </span>
+                  <i
+                    v-if="isExpanded || isHovered || isMobileOpen"
+                    class="pi pi-external-link ml-auto text-[10px] opacity-60"
+                  />
+                </a>
+
                 <!-- Direct link (no submenu) -->
                 <router-link
                   v-else-if="item.path"
@@ -190,6 +218,7 @@ interface MenuItem {
   name: string;
   path?: string;
   subItems?: SubItem[];
+  newTab?: boolean;
 }
 
 interface MenuGroup {
@@ -207,6 +236,13 @@ const menuGroups = computed<MenuGroup[]>(() => {
       icon: 'pi pi-server',
       name: 'Serveurs',
       path: '/servers',
+    })
+  }
+  if (authStore.isAdmin) {
+    gestionItems.push({
+      icon: 'pi pi-book',
+      name: 'Documentation',
+      path: '/docs-admin',
     })
   }
   gestionItems.push({
@@ -257,6 +293,12 @@ const menuGroups = computed<MenuGroup[]>(() => {
         icon: 'pi pi-book',
         name: "Guide d'installation",
         path: '/install-guide',
+      },
+      {
+        icon: 'pi pi-file',
+        name: 'Documentation des outils',
+        path: '/docs',
+        newTab: true,
       },
     ],
   })

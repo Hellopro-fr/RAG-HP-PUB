@@ -51,6 +51,13 @@
             <span class="text-xs px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-400 font-mono">
               {{ token.mcp_command || 'npx' }}
             </span>
+            <span
+              v-if="leexiBadge"
+              class="text-xs px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400"
+              :title="`Filtre Leexi : ${leexiBadge}`"
+            >
+              <i class="pi pi-filter text-[10px] mr-1" />Leexi: {{ leexiBadge }}
+            </span>
           </div>
           <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <div class="flex items-center gap-1.5">
@@ -86,10 +93,22 @@
       <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-medium text-gray-600 dark:text-gray-400">.mcp.json</span>
-          <button class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1" @click="copyMcpJson">
-            <i class="pi pi-copy text-[10px]" />
-            Copier
-          </button>
+          <div class="flex items-center gap-3">
+            <a
+              href="/install-guide"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
+              title="Ouvrir le guide d'installation dans un nouvel onglet"
+            >
+              <i class="pi pi-external-link text-[10px]" />
+              Documentation
+            </a>
+            <button class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1" @click="copyMcpJson">
+              <i class="pi pi-copy text-[10px]" />
+              Copier
+            </button>
+          </div>
         </div>
         <pre class="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 font-mono overflow-x-auto max-h-[160px] overflow-y-auto whitespace-pre text-gray-800 dark:text-gray-300">{{ mcpJsonDisplay }}</pre>
       </div>
@@ -130,19 +149,37 @@ const serverNames = computed(() => {
     })
 })
 
+// Compact one-line summary of the Leexi ownership filter for the badge.
+const leexiBadge = computed<string | null>(() => {
+  const f = props.token.leexi_filter
+  if (!f || f.mode === 'none') return null
+  switch (f.mode) {
+    case 'users':
+      return `${(f.user_uuids || []).length} user(s)`
+    case 'teams':
+      return `${(f.team_uuids || []).length} team(s)`
+    case 'creator':
+      return 'creator only'
+    default:
+      return null
+  }
+})
+
 function buildMcpJson(tokenValue: string) {
   const command = props.token.mcp_command || 'npx'
   const serverName = 'hellopro-gateway'
   const gatewayUrl = window.location.origin
 
-  const headerArg = `Authorization:Bearer ${tokenValue}`
+  const headerArg = 'X-MCP-Scope-Token: ${MCP_SCOPE_TOKEN}'
+  const env = { MCP_SCOPE_TOKEN: tokenValue }
 
   if (command === 'custom') {
     return {
       mcpServers: {
         [serverName]: {
           command: command,
-          args: [gatewayUrl + '/mcp', '--header', headerArg]
+          args: [gatewayUrl + '/mcp', '--header', headerArg],
+          env
         }
       }
     }
@@ -153,14 +190,15 @@ function buildMcpJson(tokenValue: string) {
     bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
     uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    docker: ['run', '-i', '--rm', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
+    docker: ['run', '-i', '--rm', '-e', 'MCP_SCOPE_TOKEN', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
   }
 
   return {
     mcpServers: {
       [serverName]: {
         command: command,
-        args: argsMap[command] || [gatewayUrl + '/mcp', '--header', headerArg]
+        args: argsMap[command] || [gatewayUrl + '/mcp', '--header', headerArg],
+        env
       }
     }
   }

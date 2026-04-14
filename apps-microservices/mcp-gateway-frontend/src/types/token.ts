@@ -1,3 +1,5 @@
+import type { LeexiFilter } from './leexi'
+
 export interface ServerToolScope {
   server_id: string
   tool_names: string[]
@@ -17,6 +19,7 @@ export interface ScopeToken {
   created_at: string
   updated_at: string
   expires_at?: string
+  leexi_filter?: LeexiFilter
 }
 
 export interface TokenListResponse {
@@ -31,6 +34,7 @@ export interface CreateTokenRequest {
   mcp_command?: string
   expires_at?: string
   allow_http?: boolean
+  leexi_filter?: LeexiFilter
 }
 
 export interface UpdateTokenRequest extends Partial<CreateTokenRequest> {}

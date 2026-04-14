@@ -218,6 +218,9 @@
             </div>
           </div>
 
+          <!-- Icon picker -->
+          <IconPicker v-model="form.icon" />
+
           <!-- Tool prefix -->
           <div>
             <label for="form-tool-prefix" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -318,6 +321,14 @@
               </dd>
             </div>
 
+            <!-- Icon -->
+            <div v-if="form.icon" class="py-2 grid grid-cols-3 gap-4">
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Icone</dt>
+              <dd class="col-span-2">
+                <img :src="form.icon" alt="Icon" class="w-8 h-8 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 object-contain p-0.5" />
+              </dd>
+            </div>
+
             <!-- Tool prefix -->
             <div v-if="form.tool_prefix" class="py-2 grid grid-cols-3 gap-4">
               <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Préfixe d'outils</dt>
@@ -406,6 +417,7 @@ import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
 import { serversApi } from '@/api/servers'
 import StepTabs from '@/components/shared/StepTabs.vue'
+import IconPicker from '@/components/servers/IconPicker.vue'
 import type { CreateServerRequest } from '@/types/server'
 
 const route = useRoute()
@@ -436,6 +448,7 @@ const form = reactive<{
   mcp_command: string
   tags: string[]
   tool_prefix: string
+  icon: string
   auto_discover: boolean
 }>({
   name: '',
@@ -446,6 +459,7 @@ const form = reactive<{
   mcp_command: '',
   tags: [],
   tool_prefix: '',
+  icon: '',
   auto_discover: true
 })
 
@@ -491,6 +505,7 @@ onMounted(async () => {
       form.mcp_command = server.mcp_command || ''
       form.tags = server.tags ? [...server.tags] : []
       form.tool_prefix = server.tool_prefix || ''
+      form.icon = server.icon || ''
 
       if (server.mcp_args?.length) {
         argsText.value = server.mcp_args.join('\n')
@@ -565,7 +580,8 @@ async function handleSubmit() {
       name: form.name,
       mcp_transport: form.mcp_transport,
       tags: form.tags.length ? form.tags : undefined,
-      tool_prefix: form.tool_prefix || undefined
+      tool_prefix: form.tool_prefix || undefined,
+      icon: form.icon || undefined
     }
 
     if (form.mcp_transport === 'http') {

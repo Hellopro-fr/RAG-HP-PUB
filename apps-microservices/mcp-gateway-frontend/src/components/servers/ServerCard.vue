@@ -4,7 +4,10 @@
       <!-- Row 1: Icon + name + tags | transport + status -->
       <div class="flex items-start justify-between gap-4">
         <div class="flex items-center gap-3 min-w-0 flex-wrap">
-          <div class="w-10 h-10 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-500 flex items-center justify-center shrink-0">
+          <div v-if="server.icon" class="w-10 h-10 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 p-1">
+            <img :src="server.icon" :alt="server.name" class="w-7 h-7 object-contain" />
+          </div>
+          <div v-else class="w-10 h-10 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-500 flex items-center justify-center shrink-0">
             <i class="pi pi-server text-lg" />
           </div>
           <div class="flex items-center gap-2 min-w-0">
@@ -127,6 +130,14 @@
           <button
             v-if="isAdmin"
             class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
+            title="Documentation"
+            @click="emit('documentation', server.id)"
+          >
+            <i class="pi pi-book text-sm" />
+          </button>
+          <button
+            v-if="isAdmin"
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400"
             title="Découvrir"
             :disabled="discovering"
             @click="handleDiscover"
@@ -166,6 +177,7 @@ const emit = defineEmits<{
   delete: [id: string]
   details: [id: string]
   discover: [id: string]
+  documentation: [id: string]
 }>()
 
 const discovering = ref(false)

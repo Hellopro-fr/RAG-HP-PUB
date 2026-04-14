@@ -40,8 +40,16 @@
               </div>
             </div>
 
-            <!-- Role badge + stats -->
+            <!-- Status + Role badge + stats -->
             <div class="flex flex-wrap items-center gap-3">
+              <span
+                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                :class="user.is_allowed
+                  ? 'bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400'
+                  : 'bg-error-100 text-error-700 dark:bg-error-500/20 dark:text-error-400'"
+              >
+                {{ user.is_allowed ? 'Autorisé' : 'Bloqué' }}
+              </span>
               <span
                 class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                 :class="roleBadgeClass(user.role)"
@@ -64,6 +72,21 @@
 
           <!-- Row 2: actions -->
           <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 dark:border-gray-700 pt-4">
+            <!-- Access toggle -->
+            <button
+              v-if="user.email !== authStore.user?.email"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border"
+              :class="user.is_allowed
+                ? 'text-error-600 border-error-300 hover:bg-error-50 dark:hover:bg-error-500/10'
+                : 'text-success-600 border-success-300 hover:bg-success-50 dark:hover:bg-success-500/10'"
+              :disabled="togglingId === user.id"
+              @click="handleToggleAllowed(user)"
+            >
+              <i class="pi text-xs" :class="user.is_allowed ? 'pi-lock' : 'pi-lock-open'" />
+              {{ user.is_allowed ? 'Bloquer' : 'Autoriser' }}
+              <i v-if="togglingId === user.id" class="pi pi-spinner pi-spin text-xs" />
+            </button>
+
             <!-- Role selector -->
             <div class="flex items-center gap-2">
               <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Rôle :</label>
@@ -148,13 +171,18 @@ const loading = ref(false)
 const activeTab = ref('all')
 const deletingUserId = ref<number | undefined>()
 const updatingId = ref<number | undefined>()
+const togglingId = ref<number | undefined>()
 
 const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length)
 const readOnlyCount = computed(() => users.value.filter(u => u.role === 'read-only').length)
 const configOnlyCount = computed(() => users.value.filter(u => u.role === 'config-only').length)
+const allowedCount = computed(() => users.value.filter(u => u.is_allowed).length)
+const blockedCount = computed(() => users.value.filter(u => !u.is_allowed).length)
 
 const tabs = computed(() => [
   { label: 'Tous', value: 'all', count: users.value.length },
+  { label: 'Autorisé', value: 'allowed', count: allowedCount.value },
+  { label: 'Bloqué', value: 'blocked', count: blockedCount.value },
   { label: 'Admin', value: 'admin', count: adminCount.value },
   { label: 'Lecture seule', value: 'read-only', count: readOnlyCount.value },
   { label: 'Config seule', value: 'config-only', count: configOnlyCount.value },
@@ -162,6 +190,8 @@ const tabs = computed(() => [
 
 const filteredUsers = computed(() => {
   if (activeTab.value === 'all') return users.value
+  if (activeTab.value === 'allowed') return users.value.filter(u => u.is_allowed)
+  if (activeTab.value === 'blocked') return users.value.filter(u => !u.is_allowed)
   return users.value.filter(u => u.role === activeTab.value)
 })
 
@@ -178,6 +208,20 @@ async function loadUsers() {
     toast.error('Impossible de charger les utilisateurs')
   } finally {
     loading.value = false
+  }
+}
+
+async function handleToggleAllowed(user: User) {
+  togglingId.value = user.id
+  try {
+    await usersApi.toggleAllowed(user.id, !user.is_allowed)
+    user.is_allowed = !user.is_allowed
+    toast.success(`${user.email} ${user.is_allowed ? 'autorisé' : 'bloqué'}`)
+  } catch (err: any) {
+    const msg = err?.body?.error || 'Impossible de modifier l\'accès'
+    toast.error(msg)
+  } finally {
+    togglingId.value = undefined
   }
 }
 

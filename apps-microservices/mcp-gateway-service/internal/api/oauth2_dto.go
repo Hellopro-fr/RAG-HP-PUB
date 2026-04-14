@@ -10,6 +10,7 @@ type CreateOAuth2ClientRequest struct {
 	ExpiresAt      *string               `json:"expires_at,omitempty"`       // RFC3339
 	RedirectURIs   []string              `json:"redirect_uris,omitempty"`
 	GrantTypes     []string              `json:"grant_types,omitempty"`
+	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"` // shares semantics with ScopeToken.LeexiFilter
 }
 
 // CreateOAuth2ClientResponse is returned once on creation (includes raw client_secret).
@@ -28,6 +29,7 @@ type CreateOAuth2ClientResponse struct {
 	RedirectURIs         []string              `json:"redirect_uris,omitempty"`
 	GrantTypes           []string              `json:"grant_types,omitempty"`
 	DynamicallyRegistered bool                 `json:"dynamically_registered"`
+	LeexiFilter          *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 }
 
 // OAuth2ClientResponse is the standard client response (no raw secret).
@@ -48,6 +50,7 @@ type OAuth2ClientResponse struct {
 	RedirectURIs         []string              `json:"redirect_uris,omitempty"`
 	GrantTypes           []string              `json:"grant_types,omitempty"`
 	DynamicallyRegistered bool                 `json:"dynamically_registered"`
+	LeexiFilter          *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 }
 
 // UpdateOAuth2ClientRequest is the body for PUT /api/v1/oauth2/clients/{id}.
@@ -58,4 +61,5 @@ type UpdateOAuth2ClientRequest struct {
 	ServerTools  []ServerToolSelection `json:"server_tools,omitempty"`
 	RedirectURIs []string              `json:"redirect_uris,omitempty"`
 	GrantTypes   []string              `json:"grant_types,omitempty"`
+	LeexiFilter  *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 }

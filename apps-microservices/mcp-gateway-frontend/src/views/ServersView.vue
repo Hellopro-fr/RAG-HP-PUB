@@ -64,6 +64,7 @@
           @delete="handleDelete"
           @details="handleDetails"
           @discover="handleDiscover"
+          @documentation="handleDocumentation"
         />
       </div>
 
@@ -179,6 +180,10 @@ function handleEdit(server: Server) {
   router.push('/servers/' + server.id + '/edit')
 }
 
+function handleDocumentation(id: string) {
+  router.push('/servers/' + id + '/documentation')
+}
+
 function handleDelete(id: string) {
   deletingServerId.value = id
 }
@@ -209,4 +214,5 @@ async function handleDiscoverAll() {
     discoveringAll.value = false
   }
 }
+
 </script>

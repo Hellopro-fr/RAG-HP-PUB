@@ -20,6 +20,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
+	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/health"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
@@ -71,7 +72,7 @@ func main() {
 		}
 
 		repo = repository.NewServerRepo(database, encryptor)
-		userRepo = repository.NewUserRepo(database, cfg.AdminEmails)
+		userRepo = repository.NewUserRepo(database, cfg.AdminEmails, cfg.AllowedEmails)
 		auditRepo = repository.NewAuditRepo(database)
 
 		// Charge les serveurs actifs depuis la base de données
@@ -124,6 +125,15 @@ func main() {
 	oauth2Cache := oauth2pkg.NewCache(60 * time.Second)
 	var oauth2Repo *repository.OAuth2Repo
 
+	// Leexi admin client (used by token/OAuth2 filter UI + runtime header
+	// injection). Disabled when env vars are unset; the proxy handlers and
+	// scoped gateway tolerate a nil/disabled client gracefully.
+	leexiAdminClient := leexiadmin.NewClient(cfg.LeexiInternalURL, cfg.LeexiAdminToken)
+	if leexiAdminClient.Enabled() {
+		gw.SetLeexiAdmin(leexiAdminClient)
+		log.Println("[main] Leexi admin client configured for ownership-scoped tokens")
+	}
+
 	// Monte les routes REST API si le repository est disponible
 	if repo != nil && database != nil {
 		tokenRepo = repository.NewTokenRepo(database, encryptor)
@@ -134,8 +144,14 @@ func main() {
 		apiHandler.SetOAuth2Repo(oauth2Repo, oauth2Cache)
 		apiHandler.SetUserRepo(userRepo)
 		apiHandler.SetAuditRepo(auditRepo)
+		apiHandler.SetLeexiAdmin(leexiAdminClient)
+		apiHandler.SetUploadDir(cfg.UploadDir)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
+
+		// Serve uploaded files (icons, etc.) as static assets
+		mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadDir))))
+		log.Printf("[main] serving uploads from %s at /uploads/", cfg.UploadDir)
 
 		// OAuth2 Authorization Server (public endpoints: /authorize, /token, /register, /.well-known)
 		authCodeRepo := repository.NewAuthCodeRepo(database)

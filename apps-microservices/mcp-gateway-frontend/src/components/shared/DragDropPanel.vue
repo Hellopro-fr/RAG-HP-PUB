@@ -38,7 +38,13 @@
               class="pi pi-chevron-right text-xs transition-transform text-gray-400 dark:text-gray-500"
               :class="{ 'rotate-90': expanded.has(server.id) }"
             />
-            <i class="pi pi-server text-sm text-gray-400 dark:text-gray-500" />
+            <img
+              v-if="server.icon"
+              :src="server.icon"
+              :alt="server.name"
+              class="w-5 h-5 object-contain rounded shrink-0"
+            />
+            <i v-else class="pi pi-server text-sm text-gray-400 dark:text-gray-500" />
             <span class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{{ server.name }}</span>
           </button>
           <span class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-white/5 px-2 py-0.5 rounded-full shrink-0">
@@ -102,6 +108,7 @@ const emit = defineEmits<{
 interface ServerItem {
   id: string
   name: string
+  icon?: string
   tools: { name: string; description?: string }[]
 }
 
@@ -120,7 +127,7 @@ function buildAllServers(): ServerItem[] {
       }
     } else {
       order.push(s.id)
-      serverMap.set(s.id, { id: s.id, name: s.name, tools: s.tools.map(t => ({ name: t.name, description: t.description })) })
+      serverMap.set(s.id, { id: s.id, name: s.name, icon: s.icon, tools: s.tools.map(t => ({ name: t.name, description: t.description })) })
     }
   }
 
@@ -248,6 +255,7 @@ function emitChanges() {
       selectedMap.set(server.id, {
         id: server.id,
         name: server.name,
+        icon: server.icon,
         tools: selTools.map(t => ({ serverId: server.id, name: t.name, description: t.description }))
       })
     }
@@ -255,6 +263,7 @@ function emitChanges() {
       availableMap.set(server.id, {
         id: server.id,
         name: server.name,
+        icon: server.icon,
         tools: availTools.map(t => ({ serverId: server.id, name: t.name, description: t.description }))
       })
     }
