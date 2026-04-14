@@ -9,15 +9,16 @@ import (
 	"github.com/hellopro/mcp-leexi/internal/transport"
 )
 
-// effectiveOwnerUUIDs computes the final owner_uuid[] list sent to the Leexi
-// API, combining any user-supplied filter with the gateway-enforced scope.
+// effectiveParticipantUUIDs computes the final participating_user_uuid[] list
+// sent to the Leexi API, combining any user-supplied filter with the
+// gateway-enforced scope.
 //
 // Returns:
-//   - owners: the intersection to pass to the API (may be empty = unrestricted)
-//   - err:    non-nil when the caller requested an owner UUID outside the
-//             scope allowed by the token (access denial).
-func effectiveOwnerUUIDs(ctx context.Context, requested string) ([]string, error) {
-	allowed, restricted := transport.AllowedOwnersFromContext(ctx)
+//   - participants: the intersection to pass to the API (may be empty = unrestricted)
+//   - err:          non-nil when the caller requested a participant UUID outside
+//                   the scope allowed by the token (access denial).
+func effectiveParticipantUUIDs(ctx context.Context, requested string) ([]string, error) {
+	allowed, restricted := transport.AllowedParticipantsFromContext(ctx)
 	if !restricted {
 		// No scope enforcement — honour the user-supplied filter as before.
 		if requested == "" {
@@ -35,48 +36,90 @@ func effectiveOwnerUUIDs(ctx context.Context, requested string) ([]string, error
 			return []string{requested}, nil
 		}
 	}
-	return nil, fmt.Errorf("owner_uuid %q is not permitted by the current token scope", requested)
+	return nil, fmt.Errorf("participating_user_uuid %q is not permitted by the current token scope", requested)
 }
 
-// isOwnerAllowed reports whether a single ownerUUID is within the scope
+// isParticipantAllowed reports whether a single UUID is within the scope
 // declared by the gateway (or true when no scope is declared).
-func isOwnerAllowed(ctx context.Context, ownerUUID string) bool {
-	allowed, restricted := transport.AllowedOwnersFromContext(ctx)
+func isParticipantAllowed(ctx context.Context, uuid string) bool {
+	allowed, restricted := transport.AllowedParticipantsFromContext(ctx)
 	if !restricted {
 		return true
 	}
 	for _, a := range allowed {
-		if a == ownerUUID {
+		if a == uuid {
 			return true
 		}
 	}
 	return false
 }
 
-// checkCallOwnerAllowed extracts the owner UUID from a Leexi call payload and
-// denies access when the gateway declared a restricted scope and the owner is
-// not in it. The owner identifier is accepted in several shapes to cope with
-// Leexi API variations: a top-level "owner_uuid", a nested {"owner":{"uuid":…}}
-// object, or a nested {"user":{"uuid":…}} object.
-func checkCallOwnerAllowed(ctx context.Context, call map[string]json.RawMessage) error {
-	if _, restricted := transport.AllowedOwnersFromContext(ctx); !restricted {
+// checkCallParticipantAllowed verifies that at least one of the allowed
+// participant UUIDs appears in the call's participants/speakers list. Falls
+// back to checking owner_uuid when participant data is unavailable.
+// Denies access when the gateway declared a restricted scope and no match is found.
+func checkCallParticipantAllowed(ctx context.Context, call map[string]json.RawMessage) error {
+	allowed, restricted := transport.AllowedParticipantsFromContext(ctx)
+	if !restricted {
 		return nil
 	}
 
-	ownerUUID := extractOwnerUUID(call)
-	if ownerUUID == "" {
-		// We cannot verify ownership for a call that exposes no owner — refuse
-		// rather than leak it to a restricted caller.
-		return fmt.Errorf("call owner could not be determined; access denied by token scope")
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, a := range allowed {
+		allowedSet[a] = struct{}{}
 	}
-	if !isOwnerAllowed(ctx, ownerUUID) {
-		return fmt.Errorf("call owner %q is not permitted by the current token scope", ownerUUID)
+
+	// Try speakers[].uuid first (most reliable participant data).
+	if uuids := extractSpeakerUUIDs(call); len(uuids) > 0 {
+		for _, u := range uuids {
+			if _, ok := allowedSet[u]; ok {
+				return nil
+			}
+		}
+		return fmt.Errorf("none of the call participants are permitted by the current token scope")
+	}
+
+	// Fallback: check owner_uuid (the owner is always a participant).
+	ownerUUID := extractOwnerUUID(call)
+	if ownerUUID != "" {
+		if _, ok := allowedSet[ownerUUID]; ok {
+			return nil
+		}
+		return fmt.Errorf("call participant/owner %q is not permitted by the current token scope", ownerUUID)
+	}
+
+	// Neither speakers nor owner could be determined — fail closed.
+	return fmt.Errorf("call participants could not be determined; access denied by token scope")
+}
+
+// extractSpeakerUUIDs returns the UUIDs from the call's "speakers" array.
+// Tolerates both {uuid: "..."} objects and plain string entries.
+func extractSpeakerUUIDs(call map[string]json.RawMessage) []string {
+	raw, ok := call["speakers"]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	// Try array of objects with uuid field.
+	var speakers []struct {
+		UUID string `json:"uuid"`
+	}
+	if json.Unmarshal(raw, &speakers) == nil {
+		uuids := make([]string, 0, len(speakers))
+		for _, s := range speakers {
+			if s.UUID != "" {
+				uuids = append(uuids, s.UUID)
+			}
+		}
+		if len(uuids) > 0 {
+			return uuids
+		}
 	}
 	return nil
 }
 
-// extractOwnerUUID tolerates the three common shapes Leexi uses to expose the
-// owning user on a call payload.
+// extractOwnerUUID tolerates the common shapes Leexi uses to expose the
+// owning user on a call payload: top-level "owner_uuid", nested
+// {"owner":{"uuid":…}}, or nested {"user":{"uuid":…}}.
 func extractOwnerUUID(call map[string]json.RawMessage) string {
 	if raw, ok := call["owner_uuid"]; ok {
 		var s string
@@ -99,7 +142,7 @@ func extractOwnerUUID(call map[string]json.RawMessage) string {
 
 // ── search_calls ─────────────────────────────────────────────────────────────
 
-const searchCallsDescription = "Search and list calls/meetings from Leexi. Supports date range filtering, sorting, owner filtering, and pagination."
+const searchCallsDescription = "Search and list calls/meetings from Leexi. Supports date range filtering, sorting, participant filtering, and pagination."
 const searchCallsInputSchema = `{
 	"type": "object",
 	"properties": {
@@ -117,9 +160,9 @@ const searchCallsInputSchema = `{
 			"enum": ["created_at desc", "created_at asc", "performed_at desc", "performed_at asc", "updated_at desc", "updated_at asc"],
 			"default": "created_at desc"
 		},
-		"owner_uuid": {
+		"participating_user_uuid": {
 			"type": "string",
-			"description": "Filter by call owner UUID"
+			"description": "Filter by participating user UUID"
 		},
 		"with_simple_transcript": {
 			"type": "boolean",
@@ -143,7 +186,7 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 	from, _ := args["from"].(string)
 	to, _ := args["to"].(string)
 	order, _ := args["order"].(string)
-	ownerUUID, _ := args["owner_uuid"].(string)
+	participantUUID, _ := args["participating_user_uuid"].(string)
 	withTranscript := false
 	if v, ok := args["with_simple_transcript"].(bool); ok {
 		withTranscript = v
@@ -161,12 +204,12 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 		}
 	}
 
-	ownerUUIDs, err := effectiveOwnerUUIDs(ctx, ownerUUID)
+	participantUUIDs, err := effectiveParticipantUUIDs(ctx, participantUUID)
 	if err != nil {
 		return errorResult(err.Error()), nil
 	}
 
-	data, err := clients.Leexi.SearchCalls(ctx, from, to, order, ownerUUIDs, withTranscript, page, items)
+	data, err := clients.Leexi.SearchCalls(ctx, from, to, order, participantUUIDs, withTranscript, page, items)
 	if err != nil {
 		return nil, fmt.Errorf("SearchCalls: %w", err)
 	}
@@ -211,9 +254,9 @@ func handleGetCallTranscript(ctx context.Context, clients *Clients, args map[str
 		}
 	}
 
-	// Enforce owner-based scope: if the request context declares a restricted
-	// set, reject calls belonging to any owner outside it.
-	if err := checkCallOwnerAllowed(ctx, full); err != nil {
+	// Enforce participant-based scope: if the request context declares a
+	// restricted set, reject calls whose participants are outside it.
+	if err := checkCallParticipantAllowed(ctx, full); err != nil {
 		return errorResult(err.Error()), nil
 	}
 
@@ -269,8 +312,8 @@ func handleGetCallSummary(ctx context.Context, clients *Clients, args map[string
 		}
 	}
 
-	// Enforce owner-based scope before returning anything.
-	if err := checkCallOwnerAllowed(ctx, full); err != nil {
+	// Enforce participant-based scope before returning anything.
+	if err := checkCallParticipantAllowed(ctx, full); err != nil {
 		return errorResult(err.Error()), nil
 	}
 

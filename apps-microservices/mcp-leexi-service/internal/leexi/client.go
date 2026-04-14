@@ -75,9 +75,9 @@ func (c *Client) ListCalls(ctx context.Context, page, items int) (json.RawMessag
 // Leexi API: GET /calls with query params.
 // from/to: ISO 8601 dates (e.g. "2026-04-01T00:00:00.000Z").
 // order: sorting (e.g. "created_at desc", "performed_at asc").
-// ownerUUIDs: filter by one or many call owners (repeated owner_uuid[] params).
+// participantUUIDs: filter by participating users (repeated participating_user_uuid[] params).
 // withTranscript: include simple_transcript in list response.
-func (c *Client) SearchCalls(ctx context.Context, from, to, order string, ownerUUIDs []string, withTranscript bool, page, items int) (json.RawMessage, error) {
+func (c *Client) SearchCalls(ctx context.Context, from, to, order string, participantUUIDs []string, withTranscript bool, page, items int) (json.RawMessage, error) {
 	q := url.Values{}
 	q.Set("page", strconv.Itoa(page))
 	q.Set("items", strconv.Itoa(items))
@@ -90,9 +90,9 @@ func (c *Client) SearchCalls(ctx context.Context, from, to, order string, ownerU
 	if order != "" {
 		q.Set("order", order)
 	}
-	for _, uuid := range ownerUUIDs {
+	for _, uuid := range participantUUIDs {
 		if uuid != "" {
-			q.Add("owner_uuid[]", uuid)
+			q.Add("participating_user_uuid[]", uuid)
 		}
 	}
 	if withTranscript {

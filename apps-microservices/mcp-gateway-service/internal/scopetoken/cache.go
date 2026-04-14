@@ -14,7 +14,7 @@ type CachedToken struct {
 	IsActive     bool
 	FetchedAt    time.Time
 
-	// Leexi ownership scope (echoed from the DB row). Resolution from "teams"
+	// Leexi participant scope (echoed from the DB row). Resolution from "teams"
 	// to user UUIDs is done at request time by the runtime header injector,
 	// so team membership changes are reflected without cache invalidation.
 	LeexiFilterMode       string   // "none" | "users" | "teams" | "creator"

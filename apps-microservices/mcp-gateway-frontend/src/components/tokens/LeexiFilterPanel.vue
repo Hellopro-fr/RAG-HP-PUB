@@ -17,7 +17,7 @@
         <option value="creator">Cr&eacute;ateur du jeton uniquement</option>
       </select>
       <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-        Limite les appels Leexi accessibles par ce jeton selon le propri&eacute;taire (<code>owner_uuid</code>) des appels.
+        Limite les appels Leexi accessibles par ce jeton selon les participants (<code>participating_user_uuid</code>) des appels.
       </p>
     </div>
 
@@ -99,7 +99,7 @@
       class="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-sm text-gray-600 dark:text-gray-400"
     >
       <i class="pi pi-info-circle mr-1" />
-      L'identifiant Leexi du cr&eacute;ateur du jeton sera r&eacute;solu &agrave; partir de son adresse email lors de la cr&eacute;ation, puis utilis&eacute; comme filtre <code>owner_uuid</code>.
+      L'identifiant Leexi du cr&eacute;ateur du jeton sera r&eacute;solu &agrave; partir de son adresse email lors de la cr&eacute;ation, puis utilis&eacute; comme filtre <code>participating_user_uuid</code>.
     </div>
   </div>
 </template>

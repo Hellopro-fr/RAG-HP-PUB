@@ -15,7 +15,7 @@ type CachedClient struct {
 	TTL          int // access token TTL in seconds
 	FetchedAt    time.Time
 
-	// Leexi ownership scope — mirrors scopetoken.CachedToken. See that struct
+	// Leexi participant scope — mirrors scopetoken.CachedToken. See that struct
 	// for the semantics of each mode.
 	LeexiFilterMode       string
 	LeexiAllowedUserUUIDs []string

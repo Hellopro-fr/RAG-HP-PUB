@@ -133,7 +133,7 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Capture the allowed-owners header into the context before detaching
+	// Capture the allowed-participants header into the context before detaching
 	// from the HTTP request cancellation (context.WithoutCancel strips it).
 	msgCtx := enrichRequestContext(r)
 

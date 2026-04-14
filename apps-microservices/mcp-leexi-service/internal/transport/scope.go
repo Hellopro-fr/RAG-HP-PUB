@@ -6,41 +6,41 @@ import (
 	"strings"
 )
 
-// AllowedOwnersHeader is the HTTP header the gateway sets to restrict a
-// request to a specific set of Leexi owner UUIDs. When absent or empty the
-// service runs unrestricted (preserving current behaviour for direct callers).
-const AllowedOwnersHeader = "X-Leexi-Allowed-Owners"
+// AllowedParticipantsHeader is the HTTP header the gateway sets to restrict a
+// request to a specific set of Leexi participant UUIDs. When absent or empty
+// the service runs unrestricted (preserving current behaviour for direct callers).
+const AllowedParticipantsHeader = "X-Leexi-Allowed-Participants"
 
 // ctxKey is an unexported type for context keys defined in this package so
 // collisions with keys defined elsewhere are impossible.
 type ctxKey int
 
 const (
-	allowedOwnersKey ctxKey = iota
+	allowedParticipantsKey ctxKey = iota
 )
 
-// withAllowedOwners embeds the parsed allowed-owners slice in the context.
-func withAllowedOwners(ctx context.Context, owners []string) context.Context {
-	if len(owners) == 0 {
+// withAllowedParticipants embeds the parsed allowed-participants slice in the context.
+func withAllowedParticipants(ctx context.Context, participants []string) context.Context {
+	if len(participants) == 0 {
 		return ctx
 	}
-	return context.WithValue(ctx, allowedOwnersKey, owners)
+	return context.WithValue(ctx, allowedParticipantsKey, participants)
 }
 
-// AllowedOwnersFromContext returns the allowed owner UUIDs attached to ctx by
-// the transport layer. The second return value is false when no restriction
-// was declared (unrestricted access).
-func AllowedOwnersFromContext(ctx context.Context) ([]string, bool) {
-	v, ok := ctx.Value(allowedOwnersKey).([]string)
+// AllowedParticipantsFromContext returns the allowed participant UUIDs attached
+// to ctx by the transport layer. The second return value is false when no
+// restriction was declared (unrestricted access).
+func AllowedParticipantsFromContext(ctx context.Context) ([]string, bool) {
+	v, ok := ctx.Value(allowedParticipantsKey).([]string)
 	if !ok || len(v) == 0 {
 		return nil, false
 	}
 	return v, true
 }
 
-// parseAllowedOwnersHeader splits a comma-separated list, trims whitespace,
-// and discards empty entries.
-func parseAllowedOwnersHeader(h string) []string {
+// parseAllowedParticipantsHeader splits a comma-separated list, trims
+// whitespace, and discards empty entries.
+func parseAllowedParticipantsHeader(h string) []string {
 	if h == "" {
 		return nil
 	}
@@ -55,9 +55,9 @@ func parseAllowedOwnersHeader(h string) []string {
 	return out
 }
 
-// enrichRequestContext reads the allowed-owners header from r and returns a
-// new context carrying that slice. Safe to call on every transport entry point.
+// enrichRequestContext reads the allowed-participants header from r and returns
+// a new context carrying that slice. Safe to call on every transport entry point.
 func enrichRequestContext(r *http.Request) context.Context {
-	owners := parseAllowedOwnersHeader(r.Header.Get(AllowedOwnersHeader))
-	return withAllowedOwners(r.Context(), owners)
+	participants := parseAllowedParticipantsHeader(r.Header.Get(AllowedParticipantsHeader))
+	return withAllowedParticipants(r.Context(), participants)
 }

@@ -20,7 +20,7 @@ const AllowedServersContextKey = "scope_allowed_servers"
 const AllowedToolsContextKey = "scope_allowed_tools"
 
 // LeexiFilterContextKey carries a *LeexiFilterContext describing the
-// per-request Leexi ownership scope. Read by gateway.ScopedGateway when
+// per-request Leexi participant scope. Read by gateway.ScopedGateway when
 // forwarding a tools/call to a Leexi-tagged backend.
 const LeexiFilterContextKey = "scope_leexi_filter"
 

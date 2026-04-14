@@ -62,17 +62,18 @@ mcp-leexi-service/
 | `/admin/users` | GET | Internal: list Leexi workspace users (requires `X-Admin-Token`) |
 | `/admin/teams` | GET | Internal: list Leexi teams derived from users (requires `X-Admin-Token`) |
 
-## Owner-scope enforcement
+## Participant-scope enforcement
 
 The gateway may restrict a request to a subset of Leexi users by setting the
-`X-Leexi-Allowed-Owners` header with a comma-separated list of `owner_uuid`s.
+`X-Leexi-Allowed-Participants` header with a comma-separated list of user UUIDs.
 When present:
 
-- `search_calls` force-injects the allowed list as `owner_uuid[]` query params,
-  or rejects the call if the user-supplied `owner_uuid` is not in the set.
-- `get_call_transcript` and `get_call_summary` validate the call's owner
-  against the allowed set and refuse with an MCP error if the owner is outside
-  the scope.
+- `search_calls` force-injects the allowed list as `participating_user_uuid[]`
+  query params, or rejects the call if the user-supplied
+  `participating_user_uuid` is not in the set.
+- `get_call_transcript` and `get_call_summary` verify that at least one allowed
+  UUID appears in the call's `speakers[].uuid` (falling back to `owner_uuid`),
+  and refuse with an MCP error if no match is found.
 
 When the header is absent (e.g. direct non-gateway callers), the service runs
 unrestricted — preserving its historical behaviour.
