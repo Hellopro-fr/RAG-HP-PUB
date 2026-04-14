@@ -72,7 +72,7 @@ func main() {
 		}
 
 		repo = repository.NewServerRepo(database, encryptor)
-		userRepo = repository.NewUserRepo(database, cfg.AdminEmails)
+		userRepo = repository.NewUserRepo(database, cfg.AdminEmails, cfg.AllowedEmails)
 		auditRepo = repository.NewAuditRepo(database)
 
 		// Charge les serveurs actifs depuis la base de données

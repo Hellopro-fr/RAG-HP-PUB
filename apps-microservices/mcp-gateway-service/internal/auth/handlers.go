@@ -133,6 +133,33 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 		return
 	}
 
+	// Upsert user record BEFORE access check so the user exists in DB even if not allowed.
+	// This lets admins see and authorize users from the UI.
+	role := RoleConfigOnly
+	isAllowed := true // default: allowed when no userRepo (DB disabled)
+	if userRepo != nil {
+		user, upsertErr := userRepo.UpsertOnLogin(authResp.Email, authResp.DisplayName)
+		if upsertErr != nil {
+			log.Printf("[auth] failed to upsert user on login for %s: %v", authResp.Email, upsertErr)
+		} else if user != nil {
+			role = user.Role
+			isAllowed = user.IsAllowed
+		}
+	}
+
+	// Check if user is allowed to access the UI (from DB is_allowed field)
+	if !isAllowed {
+		log.Printf("[auth] user %s (%s) is not allowed (is_allowed=false)", authResp.DisplayName, authResp.Email)
+		if isJSON {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"Accès non autorisé. Votre compte n'est pas dans la liste des utilisateurs autorisés. Contactez un administrateur."}`))
+		} else {
+			http.Redirect(w, r, "/login?error="+url.QueryEscape("Accès non autorisé. Contactez un administrateur.")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		}
+		return
+	}
+
 	// Generate our own JWT for the session (or use the one from hellopro)
 	token := authResp.Token
 	if token == "" {
@@ -169,17 +196,6 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 	}
 
 	log.Printf("[auth] user %s (%s) logged in", authResp.DisplayName, authResp.Email)
-
-	// Upsert user record and retrieve role for the login response.
-	role := RoleConfigOnly
-	if userRepo != nil {
-		user, upsertErr := userRepo.UpsertOnLogin(authResp.Email, authResp.DisplayName)
-		if upsertErr != nil {
-			log.Printf("[auth] failed to upsert user on login for %s: %v", authResp.Email, upsertErr)
-		} else if user != nil {
-			role = user.Role
-		}
-	}
 
 	if isJSON {
 		w.Header().Set("Content-Type", "application/json")

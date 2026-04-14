@@ -51,8 +51,8 @@ type Config struct {
 	Enabled       bool
 	SecureCookie  bool   // Secure flag on session cookie (true when behind TLS)
 	FallbackUser  string // optional fallback username (env FALLBACK_USER)
-	FallbackPass  string // optional fallback password (env FALLBACK_PASS)
-	FallbackEmail string // optional fallback email (env FALLBACK_EMAIL)
+	FallbackPass  string   // optional fallback password (env FALLBACK_PASS)
+	FallbackEmail string   // optional fallback email (env FALLBACK_EMAIL)
 }
 
 // publicPaths that don't require authentication.

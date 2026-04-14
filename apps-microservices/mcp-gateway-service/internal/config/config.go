@@ -27,6 +27,8 @@ type Config struct {
 	OAuth2RefreshTokenTTL int    // OAUTH2_REFRESH_TOKEN_TTL — refresh token lifetime in seconds (default 2592000 = 30 days)
 	// URL validation
 	AllowInternalURLs bool // ALLOW_INTERNAL_URLS — set to "true" to allow Docker-internal/private IP ranges (e.g. 172.x.x.x)
+	// Access control
+	AllowedEmails []string // ALLOWED_EMAILS — comma-separated emails allowed to log in (empty = all allowed)
 	// RBAC
 	AdminEmails []string // ADMIN_EMAILS — comma-separated emails that get admin role on first login
 	// Fallback auth (for users not registered in hellopro.fr)
@@ -103,6 +105,7 @@ func Load() *Config {
 		OAuth2AccessTokenTTL:  oauth2TTL,
 		OAuth2RefreshTokenTTL: refreshTTL,
 		AllowInternalURLs:   strings.EqualFold(os.Getenv("ALLOW_INTERNAL_URLS"), "true"),
+		AllowedEmails:       parseCSV(os.Getenv("ALLOWED_EMAILS")),
 		AdminEmails:         parseCSV(os.Getenv("ADMIN_EMAILS")),
 		FallbackUser:        os.Getenv("FALLBACK_USER"),
 		FallbackPass:        os.Getenv("FALLBACK_PASS"),

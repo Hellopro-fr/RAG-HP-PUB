@@ -257,6 +257,7 @@ type GatewayUser struct {
 	Email       string     `gorm:"type:varchar(255);not null;uniqueIndex:uq_user_email" json:"email"`
 	DisplayName string     `gorm:"type:varchar(255)" json:"display_name"`
 	Role        string     `gorm:"type:varchar(20);not null;default:'config-only'" json:"role"`
+	IsAllowed   bool       `gorm:"not null;default:false" json:"is_allowed"`
 	LoginCount  int        `gorm:"not null;default:0" json:"login_count"`
 	LastLoginAt *time.Time `gorm:"type:datetime(3)" json:"last_login_at,omitempty"`
 	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`

@@ -2153,6 +2153,7 @@ services:
       # Leexi admin proxy (users/teams listing + ownership filter on tokens)
       - LEEXI_INTERNAL_URL=${LEEXI_INTERNAL_URL}
       - LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
+      - ALLOWED_EMAILS=${MCP_ALLOWED_EMAILS}
     volumes:
       - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:

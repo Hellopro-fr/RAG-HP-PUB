@@ -32,13 +32,27 @@ func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"users": resp, "total": len(resp)})
 }
 
-// handleUserByID handles GET/PUT/DELETE /api/v1/users/{id}.
+// handleUserByID handles GET/PUT/DELETE /api/v1/users/{id} and sub-routes.
 func (h *Handler) handleUserByID(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/users/")
-	idStr = strings.TrimSuffix(idStr, "/")
+	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/users/")
+	rest = strings.TrimSuffix(rest, "/")
+
+	// Check for sub-route: {id}/toggle-allowed
+	parts := strings.SplitN(rest, "/", 2)
+	idStr := parts[0]
+	subRoute := ""
+	if len(parts) > 1 {
+		subRoute = parts[1]
+	}
+
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil || id == 0 {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid user id"})
+		return
+	}
+
+	if subRoute == "toggle-allowed" {
+		h.handleToggleUserAllowed(w, r, id)
 		return
 	}
 
@@ -89,6 +103,42 @@ func (h *Handler) handleUpdateUserRole(w http.ResponseWriter, r *http.Request, i
 	writeJSON(w, http.StatusOK, toUserResponse(user))
 }
 
+func (h *Handler) handleToggleUserAllowed(w http.ResponseWriter, r *http.Request, id uint64) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	var req UpdateUserAllowedRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON body"})
+		return
+	}
+
+	// Prevent self-disable
+	currentEmail := auth.UserEmailFromContext(r.Context())
+	if currentEmail != "" && !req.IsAllowed {
+		user, err := h.userRepo.GetByID(id)
+		if err == nil && user != nil && user.Email == currentEmail {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{Error: "impossible de désactiver votre propre accès"})
+			return
+		}
+	}
+
+	if err := h.userRepo.UpdateAllowed(id, req.IsAllowed); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to update user access"})
+		return
+	}
+
+	user, err := h.userRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+		return
+	}
+	writeJSON(w, http.StatusOK, toUserResponse(user))
+}
+
 func (h *Handler) handleDeleteUser(w http.ResponseWriter, r *http.Request, id uint64) {
 	// Prevent self-deletion
 	currentEmail := auth.UserEmailFromContext(r.Context())
@@ -114,6 +164,7 @@ func toUserResponse(u *db.GatewayUser) UserResponse {
 		Email:       u.Email,
 		DisplayName: u.DisplayName,
 		Role:        u.Role,
+		IsAllowed:   u.IsAllowed,
 		LoginCount:  u.LoginCount,
 		CreatedAt:   u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
