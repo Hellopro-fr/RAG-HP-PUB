@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+grpcio
+grpcio-tools
+protobuf
+httpx
+pydantic
+pydantic-settings
+prometheus-client
+waitress
+langgraph
+langchain-core
+langchain-community
+neo4j
+google-genai
+tenacity
+toon-format>=0.9.0b1
