@@ -37,11 +37,17 @@ export function useJobsQuery(token, options = {}) {
   });
 }
 
+// A route param can come back as the literal string "undefined" / "null" if
+// a Link/navigate was given a falsy id. Treat those as no-id to avoid firing
+// a doomed GET /api/jobs/undefined/details that always 404s.
+const isValidJobId = (id) =>
+  typeof id === 'string' && id.length > 0 && id !== 'undefined' && id !== 'null';
+
 export function useJobDetailsQuery(token, id, options = {}) {
   return useQuery({
     queryKey: queryKeys.jobDetails(id),
     queryFn: () => api.get(`/jobs/${id}/details`, token),
-    enabled: !!token && !!id,
+    enabled: !!token && isValidJobId(id),
     // job details can change as the crawler runs — slightly shorter staleness
     staleTime: 10 * 1000,
     ...options,

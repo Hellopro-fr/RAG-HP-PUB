@@ -281,8 +281,14 @@ app.get('/api/jobs', async (req, res) => {
 
     const jobsData = await client.mGet(jobKeys);
     const jobs = jobsData
-      .map(str => str ? JSON.parse(str) : null)
+      .map(str => {
+        if (!str) return null;
+        try { return JSON.parse(str); } catch { return null; }
+      })
       .filter(Boolean)
+      // Skip malformed entries without a crawl_id — they would surface as
+      // id: undefined on the front and trigger /api/jobs/undefined/details 404s.
+      .filter(job => job && typeof job.crawl_id === 'string' && job.crawl_id.length > 0)
       .map(job => ({
         ...job,
         id: job.crawl_id,
@@ -1361,7 +1367,11 @@ async function loadAllJobs(client) {
   const raw = await client.mGet(jobKeys);
   return raw
     .map(s => { try { return s ? JSON.parse(s) : null; } catch { return null; } })
-    .filter(Boolean);
+    .filter(Boolean)
+    // Skip malformed entries without a crawl_id (same hardening as /api/jobs).
+    // Also expose .id for downstream aggregators that read job.id.
+    .filter(job => job && typeof job.crawl_id === 'string' && job.crawl_id.length > 0)
+    .map(job => ({ ...job, id: job.crawl_id }));
 }
 
 // Aggregated stats over a time window (1h | 24h | 7d). Used by the dashboard

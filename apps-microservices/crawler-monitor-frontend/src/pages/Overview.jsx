@@ -48,6 +48,9 @@ const Overview = ({ token, replicas }) => {
 
   const filteredJobs = useMemo(() => {
     return allJobs.filter(job => {
+      // Skip malformed entries — protects every onClick / Link from emitting
+      // /jobs/undefined navigations.
+      if (!job || !job.id) return false;
       const jobDate = new Date(job.start_time);
       const start = startDate ? new Date(startDate) : null;
       const end = endDate ? new Date(endDate) : null;
@@ -83,7 +86,12 @@ const Overview = ({ token, replicas }) => {
     return { finished, failed, running, archived, total: filteredJobs.length };
   }, [filteredJobs]);
 
-  const handleSelectJob = (id) => navigate(`/jobs/${id}`);
+  const handleSelectJob = (id) => {
+    // Defensive: never navigate to /jobs/undefined or /jobs/null which would
+    // trigger a 404 fetch loop.
+    if (!id || id === 'undefined' || id === 'null') return;
+    navigate(`/jobs/${id}`);
+  };
 
   // Click on a timeline bucket → narrow the date filters to that bucket
   const handleTimelineBucketClick = ({ from, to }) => {
