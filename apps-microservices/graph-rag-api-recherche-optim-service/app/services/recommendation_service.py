@@ -1906,14 +1906,7 @@ class RecommendationService:
             ### ÉTAPE 2 — Évaluer chaque produit
             Évalue chaque produit **indépendamment**, en le comparant uniquement au besoin reformulé.
 
-            **⚠️ Sources à lire pour CHAQUE produit, dans cet ordre (ne te limite jamais au titre) :**
-            1. Le **descriptif** (champ `description`) — c'est la source primaire pour identifier le **type précis, sous-type, usage, format, gabarit** du produit. Un titre générique comme "Tracteur" ne suffit JAMAIS à conclure ; lis le descriptif pour vérifier s'il s'agit d'un tracteur vigneron, standard, espaces verts, etc.
-            2. Les **caractéristiques** (champ `caracteristiques`) — pour les valeurs techniques chiffrées/textuelles.
-            3. Le **titre** (champ `titre`) — indice de surface uniquement, à corroborer par le descriptif.
-
-            Si le descriptif contredit le sous-type attendu, c'est une incompatibilité factuelle (score 1 possible). Si le titre seul suggère un écart mais que le descriptif ne le confirme pas, reste au score 2 ou 3.
-
-            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage, en te fondant sur le **descriptif** (type/sous-type/gabarit) puis sur les caractéristiques. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans la fiche (descriptif + caractéristiques)** — pas inféré ou supposé à partir du seul titre. Si ambigu ou non confirmé : pas de score 1.
+            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans la fiche** — pas inféré ou supposé. Si ambigu ou non confirmé : pas de score 1.
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
@@ -1993,8 +1986,7 @@ class RecommendationService:
             
             ## CHECKLIST AVANT SORTIE
             - [ ] Besoin reformulé avant toute évaluation
-            - [ ] **Descriptif lu pour chaque produit** (pas jugé sur le titre seul) — type/sous-type/usage identifiés depuis le descriptif
-            - [ ] Usage vérifié en premier, écart éliminatoire uniquement si factuel et lisible dans la fiche (descriptif + caractéristiques)
+            - [ ] Usage vérifié en premier, écart éliminatoire uniquement si factuel et lisible dans la fiche
             - [ ] Chaque produit évalué indépendamment
             - [ ] Critiques vérifiés avant secondaires — écart critique = impact fort, secondaire = léger
             - [ ] Tolérance numérique 20% appliquée
