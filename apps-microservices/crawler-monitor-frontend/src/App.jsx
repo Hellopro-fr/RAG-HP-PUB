@@ -432,6 +432,7 @@ const App = () => {
                 onToggleRaw={() => setShowRaw(!showRaw)}
                 showRaw={showRaw}
                 token={token}
+                onSelectJob={fetchJobDetails}
               />
             ) : (
               <div className="text-center py-20 text-gray-400">

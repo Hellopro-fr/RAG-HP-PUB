@@ -8,7 +8,7 @@ import AdvancedLogViewer from './AdvancedLogViewer';
 import RequestQueueEditor from './RequestQueueEditor';
 import DatasetAnalyzer from './DatasetAnalyzer';
 
-const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
+const JobDetails = ({ job, onToggleRaw, showRaw, token, onSelectJob }) => {
   const [showQueueEditor, setShowQueueEditor] = useState(false);
   const [showDatasetAnalyzer, setShowDatasetAnalyzer] = useState(false);
 
@@ -38,7 +38,17 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
               </span>
             )}
             {job.previous_crawl_id && (
-              <span className="text-xs text-gray-500">prev: {job.previous_crawl_id}</span>
+              onSelectJob ? (
+                <button
+                  onClick={() => onSelectJob(job.previous_crawl_id)}
+                  className="text-xs text-blue-400 hover:text-blue-300 underline decoration-dotted"
+                  title="Voir le job précédent (chaîne de retries)"
+                >
+                  ← prev: {job.previous_crawl_id}
+                </button>
+              ) : (
+                <span className="text-xs text-gray-500">prev: {job.previous_crawl_id}</span>
+              )
             )}
             {job.oom_restart_count > 0 && (
               <span className="text-xs px-2 py-0.5 rounded bg-orange-500/20 text-orange-400">
