@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { AlertTriangle, AlertCircle, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { AlertTriangle, AlertCircle, ChevronDown, ChevronUp, X, Bell, BellOff } from 'lucide-react';
 import { useAlertsQuery } from '../hooks/queries';
+import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
 
 /**
  * AlertsBanner — top-of-Overview banner aggregating active alerts.
@@ -47,10 +48,28 @@ const fmtSince = (ts) => {
 const AlertsBanner = ({ token }) => {
   const [expanded, setExpanded] = useState(false);
   const [dismissedIds, setDismissedIds] = useState(() => new Set());
+  const notif = useBrowserNotifications();
+  const notifiedIdsRef = useRef(new Set());
 
   const query = useAlertsQuery(token);
   const allAlerts = query.data?.alerts || [];
   const visible = allAlerts.filter(a => !dismissedIds.has(a.id));
+
+  // Browser notifications: notify on NEW critical alerts that we haven't notified yet.
+  useEffect(() => {
+    const currentCriticalIds = new Set(allAlerts.filter(a => a.severity === 'critical').map(a => a.id));
+    // Notify each newly-appeared critical alert
+    for (const a of allAlerts) {
+      if (a.severity !== 'critical') continue;
+      if (notifiedIdsRef.current.has(a.id)) continue;
+      notifiedIdsRef.current.add(a.id);
+      notif.notify(`Crawler: ${a.kind}`, { body: a.message, tag: a.id });
+    }
+    // Garbage-collect IDs that are no longer active so they re-notify if they come back
+    for (const id of notifiedIdsRef.current) {
+      if (!currentCriticalIds.has(id)) notifiedIdsRef.current.delete(id);
+    }
+  }, [allAlerts, notif]);
 
   if (visible.length === 0) return null;
 
@@ -69,18 +88,40 @@ const AlertsBanner = ({ token }) => {
 
   return (
     <div className={`rounded-lg border ${styles.bg} ${styles.text}`}>
-      <button
-        type="button"
-        onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center gap-3 px-3 py-2 text-left"
-      >
-        <TopIcon className="w-5 h-5 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <span className="font-semibold">{visible.length} alerte{visible.length > 1 ? 's' : ''}</span>
-          <span className="ml-2 text-sm opacity-80 truncate">— {visible[0].message}</span>
-        </div>
-        {expanded ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
-      </button>
+      <div className="w-full flex items-center gap-3 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          className="flex-1 min-w-0 flex items-center gap-3 text-left"
+        >
+          <TopIcon className="w-5 h-5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="font-semibold">{visible.length} alerte{visible.length > 1 ? 's' : ''}</span>
+            <span className="ml-2 text-sm opacity-80 truncate">— {visible[0].message}</span>
+          </div>
+          {expanded ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+        </button>
+        {notif.supported && (
+          <button
+            type="button"
+            onClick={notif.toggle}
+            className="opacity-70 hover:opacity-100 shrink-0"
+            title={
+              notif.enabled
+                ? (notif.permission === 'granted'
+                    ? 'Notifications navigateur activées (cliquer pour couper)'
+                    : notif.permission === 'denied'
+                      ? 'Notifications bloquées par le navigateur'
+                      : 'Cliquer pour autoriser les notifications')
+                : 'Notifications navigateur muettes (cliquer pour activer)'
+            }
+          >
+            {notif.enabled && notif.permission === 'granted'
+              ? <Bell className="w-4 h-4" />
+              : <BellOff className="w-4 h-4" />}
+          </button>
+        )}
+      </div>
       {expanded && (
         <ul className="px-3 pb-3 space-y-2">
           {visible.map(a => {
