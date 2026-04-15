@@ -46,7 +46,7 @@ class PrixExtractor:
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
     # Nombre max de traitements parallèles pour les items
-    MAX_PARALLEL_ITEMS = 5
+    MAX_PARALLEL_ITEMS = 20
 
     ETAPE = "10"
 
@@ -155,10 +155,11 @@ class PrixExtractor:
         if provider == "deepseek":
             # Récupérer la température depuis le prompt config
             temperature = float(self.prompt_config.get("temperature", 0.1))
-            deepseek = DeepSeek(temperature=temperature)
+            deepseek = DeepSeek(temperature=temperature, max_retries=5)
             result = await asyncio.to_thread(deepseek.chat, prompt_text)
 
-            # Log LLM usage pour DeepSeek
+            # Log LLM usage pour DeepSeek (etat=2 si erreur après retries)
+            is_error = "code" in result
             response_obj = result.get("response")
             input_tokens = 0
             output_tokens = 0
@@ -173,11 +174,17 @@ class PrixExtractor:
                 output_token=output_tokens,
                 id_process=self.ID_PROCESS,
                 origine="prix-extraction-produits",
-                etat=1,
+                etat=2 if is_error else 1,
+                retour_erreur=str(result.get("error", "")) if is_error else "",
                 temperature=temperature
             )
 
-            # Normaliser le format de retour
+            # Si erreur : propager le dict {code, error, ...} pour que _process_single_item
+            # détecte la panne et raise proprement (pattern identique à Gemini).
+            if is_error:
+                return result
+
+            # Succès : normaliser vers {message, api_response}
             return {
                 "message": result.get("content", ""),
                 "api_response": {}

@@ -70,8 +70,8 @@
       "Write(/prometheus/**)",
       "Edit(/grafana/**)",
       "Write(/grafana/**)",
-      "Edit(/.claude/**)",
-      "Write(/.claude/**)",
+      // "Edit(/.claude/**)",
+      // "Write(/.claude/**)",
 
       "Bash(git push --force *)",
       "Bash(git push -f *)",

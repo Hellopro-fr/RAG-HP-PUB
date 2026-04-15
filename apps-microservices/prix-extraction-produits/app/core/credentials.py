@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # RabbitMQ
     RABBITMQ_URL: str = "amqp://user:password@localhost:5672/"
-    MAX_CONCURRENCY: int = 10  # Nombre de messages traités en parallèle
+    MAX_CONCURRENCY: int = 2  # Nombre de messages traités en parallèle
 
     # LLM Provider selection - "gemini" ou "deepseek"
     LLM_PROVIDER: str = "deepseek"
