@@ -11,7 +11,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import jwt from 'jsonwebtoken';
-import { auditMiddleware, readAuditEntries, rotateOldLogs } from './src/lib/auditLog.js';
+import { auditMiddleware, readAuditEntries, rotateOldLogs, logAuditEntry } from './src/lib/auditLog.js';
 import { replayCallback } from './src/lib/callbacks.js';
 import {
   parseWindow as parseCapacityWindow,
@@ -20,12 +20,14 @@ import {
   SNAPSHOT_INTERVAL_MS,
 } from './src/lib/capacityHistory.js';
 import { parseStatsWindow, computeSystemStats } from './src/lib/systemStats.js';
+import { verifyPassword, looksLikeScryptHash } from './src/lib/password.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
 const CRAWLER_STORAGE_PATH = process.env.CRAWLER_STORAGE_PATH || '/app/storage';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const JWT_SECRET = process.env.JWT_SECRET;
+const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS; // comma-separated, optional
 
 const CRAWL_UPDATES_CHANNEL = 'crawl_updates';
 const CRAWL_JOB_PREFIX = 'crawl_job:';
@@ -35,12 +37,29 @@ const FAILED_CALLBACKS_KEY = 'crawl_jobs:failed_callbacks';
 
 const missingVars = [];
 if (!REDIS_URL) missingVars.push('REDIS_URL');
-if (!ADMIN_PASSWORD) missingVars.push('ADMIN_PASSWORD');
+if (!ADMIN_PASSWORD_HASH) missingVars.push('ADMIN_PASSWORD_HASH');
 if (!JWT_SECRET) missingVars.push('JWT_SECRET');
 
 if (missingVars.length > 0) {
   console.error(`FATAL ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
+  if (missingVars.includes('ADMIN_PASSWORD_HASH')) {
+    console.error('');
+    console.error('Generate a hash with:');
+    console.error('  node -e "import(\'./src/lib/password.js\').then(m => m.hashPassword(process.argv[1]).then(console.log))" YOUR_PASSWORD');
+    console.error('');
+    console.error('NOTE: legacy ADMIN_PASSWORD (plain text) is no longer accepted — set ADMIN_PASSWORD_HASH instead.');
+  }
   process.exit(1);
+}
+
+if (!looksLikeScryptHash(ADMIN_PASSWORD_HASH)) {
+  console.error('FATAL ERROR: ADMIN_PASSWORD_HASH does not look like a scrypt$ hash.');
+  console.error('It must be generated with src/lib/password.js hashPassword().');
+  process.exit(1);
+}
+
+if (process.env.ADMIN_PASSWORD) {
+  console.warn('WARN: legacy ADMIN_PASSWORD env var detected — it is ignored. Remove it from your env.');
 }
 
 // --- Persistent Redis Client ---
@@ -68,7 +87,23 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use(cors());
+// CORS: allowlist if CORS_ALLOWED_ORIGINS is set, else permissive with a warning.
+// Same-origin requests (no Origin header) and tools like curl/postman are always allowed.
+if (CORS_ALLOWED_ORIGINS) {
+  const allowed = CORS_ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+  console.log(`[cors] allowlist active (${allowed.length} origins)`);
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // server-to-server / curl
+      if (allowed.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+  }));
+} else {
+  console.warn('WARN: CORS_ALLOWED_ORIGINS not set — allowing all origins. Set it for production.');
+  app.use(cors());
+}
 app.use(express.json({ limit: '50mb' })); // Support large JSON payloads for request_urls
 
 // Authentication Middleware
@@ -85,13 +120,34 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Login Endpoint
-app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
+// Login Endpoint — verifies password against scrypt hash in ADMIN_PASSWORD_HASH.
+// Stricter rate-limit on this endpoint specifically (defend against brute-force).
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // max 10 login attempts per IP per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Try again later.' },
+});
+
+app.post('/api/login', loginLimiter, async (req, res) => {
+  const { password } = req.body || {};
+  if (typeof password !== 'string' || password.length === 0) {
+    await logAuditEntry({ user: 'anonymous', action: 'login_attempt', status: 'error', ip: req.ip, metadata: { reason: 'missing_password' } });
+    return res.status(400).json({ error: 'Password required' });
+  }
+  let ok = false;
+  try {
+    ok = await verifyPassword(password, ADMIN_PASSWORD_HASH);
+  } catch (err) {
+    console.error('Login verification error:', err);
+  }
+  if (ok) {
     const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    await logAuditEntry({ user: 'admin', action: 'login_success', status: 'ok', ip: req.ip });
     res.json({ token });
   } else {
+    await logAuditEntry({ user: 'anonymous', action: 'login_failure', status: 'error', ip: req.ip });
     res.status(401).json({ error: 'Invalid password' });
   }
 });
