@@ -515,7 +515,9 @@ app.get('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/:domain/:filename',
+  auditMiddleware('queue_file_edit', { captureParams: ['id', 'domain', 'filename'] }),
+  async (req, res) => {
   const { id, domain, filename } = req.params;
   const content = req.body;
 
@@ -540,7 +542,9 @@ app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/repair',
+  auditMiddleware('queue_repair', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
@@ -597,7 +601,9 @@ app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
 });
 
 // Endpoint to DROP the entire request queue (RESET)
-app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/drop',
+  auditMiddleware('queue_drop', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
@@ -858,7 +864,9 @@ app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
+app.post('/api/jobs/:id/dataset/deduplicate',
+  auditMiddleware('dataset_deduplicate', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     // Get job data to find domain
@@ -941,7 +949,9 @@ app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/clean-patterns',
+  auditMiddleware('queue_clean_patterns', { captureParams: ['id'] }),
+  async (req, res) => {
 
   const { id } = req.params;
   try {
