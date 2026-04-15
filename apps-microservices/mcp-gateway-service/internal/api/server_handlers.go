@@ -386,10 +386,10 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		updates["doc_slug"] = *req.DocSlug
 	}
 	if req.DocDescription != nil {
-		updates["doc_description"] = *req.DocDescription
+		updates["doc_description"] = decodeEntitiesString(*req.DocDescription)
 	}
 	if req.DocConfigGuide != nil {
-		updates["doc_config_guide"] = *req.DocConfigGuide
+		updates["doc_config_guide"] = decodeEntitiesJSON(*req.DocConfigGuide)
 	}
 
 	if len(updates) > 0 {

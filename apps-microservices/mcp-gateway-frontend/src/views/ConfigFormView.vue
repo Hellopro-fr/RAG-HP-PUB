@@ -89,6 +89,14 @@
           {{ submitting ? 'Enregistrement...' : (isEdit ? 'Mettre a jour' : 'Creer') }}
         </button>
         <button
+          class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 inline-flex items-center gap-1.5"
+          title="Convertir tous les accents en entites HTML"
+          @click="encodeAllEntities"
+        >
+          <span class="font-mono font-semibold">&amp;</span>
+          Encoder accents
+        </button>
+        <button
           class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
           @click="$router.push('/install-guides-admin')"
         >
@@ -110,6 +118,7 @@ import StepBuilder from '@/components/install-guides/StepBuilder.vue'
 import PrimeIconPicker from '@/components/shared/PrimeIconPicker.vue'
 import ColorClassPicker from '@/components/shared/ColorClassPicker.vue'
 import type { ConfigStep, ConfigStepTable } from '@/types/install-guide'
+import { encodeHtmlEntities, encodeTextEntities } from '@/utils/htmlEntities'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,6 +165,32 @@ onMounted(async () => {
     }
   }
 })
+
+// Fields that must NOT be entity-encoded.
+const skipEncodingKeys = new Set(['slug', 'icon', 'color', 'display_order', 'is_active', 'codeField', 'code', 'image', 'link', 'src', 'url'])
+
+function encodeAllEntities() {
+  if (form.value.label) form.value.label = encodeTextEntities(form.value.label)
+  if (form.value.description) form.value.description = encodeHtmlEntities(form.value.description)
+
+  steps.value = steps.value.map(step => {
+    const newStep: any = { ...step }
+    for (const [k, v] of Object.entries(step)) {
+      if (skipEncodingKeys.has(k) || typeof v !== 'string') continue
+      const isHtmlish = /<[a-zA-Z\/!]/.test(v)
+      newStep[k] = isHtmlish ? encodeHtmlEntities(v) : encodeTextEntities(v)
+    }
+    // Encode table cells (field/value)
+    if (Array.isArray(step.table)) {
+      newStep.table = step.table.map((row: ConfigStepTable) => ({
+        field: row.field ? encodeTextEntities(row.field) : row.field,
+        value: row.value, // values often contain URLs/templates → leave as-is
+      }))
+    }
+    return newStep
+  })
+  toast.success('Accents convertis en entites HTML')
+}
 
 async function handleSave() {
   if (!form.value.slug || !form.value.label) {

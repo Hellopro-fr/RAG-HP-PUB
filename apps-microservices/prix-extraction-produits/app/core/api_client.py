@@ -199,30 +199,98 @@ class GeminiProvider:
 
 
 class DeepSeek:
-    def __init__(self, temperature=0.1, config=None):
+    """Provider pour l'API DeepSeek avec retry automatique sur 429/503"""
+
+    def __init__(self, temperature=0.1, max_retries: int = 5, config=None):
         config = config or {}
         self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
         self.BASE_URL = "https://api.deepseek.com"
         self.MODEL = "deepseek-chat"
         self.TEMPERATURE = temperature
+        self.max_retries = max_retries
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
 
     def chat(self, message, stream=False):
-        response = self.client.chat.completions.create(
-            model=self.MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Tu es un assistant intelligent et serviable.",
-                },
-                {"role": "user", "content": message},
-            ],
-            temperature=self.TEMPERATURE,
-            stream=stream,
-        )
+        """
+        Envoie un prompt à DeepSeek avec retry automatique sur 429/503.
+
+        Args:
+            message: Le prompt à envoyer
+            stream: Si True, retourne le stream brut (pas de retry)
+
+        Returns:
+            Dict avec 'content', 'response' en cas de succès,
+            ou 'code', 'error', 'content', 'response' en cas d'échec.
+        """
         if stream:
-            return response
+            return self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Tu es un assistant intelligent et serviable.",
+                    },
+                    {"role": "user", "content": message},
+                ],
+                temperature=self.TEMPERATURE,
+                stream=True,
+            )
+
+        response = None
+
+        try:
+            # Configure Tenacity pour les retries
+            retryer = Retrying(
+                stop=stop_after_attempt(self.max_retries),
+                wait=wait_exponential(multiplier=1, min=1, max=60),
+                retry=retry_if_exception(is_retryable_error),
+                reraise=True,
+            )
+
+            for attempt in retryer:
+                with attempt:
+                    # Log seulement sur les retries
+                    if attempt.retry_state.attempt_number > 1:
+                        logger.info(
+                            f"Retry DeepSeek API... Tentative {attempt.retry_state.attempt_number}"
+                        )
+
+                    logger.info(
+                        f"DeepSeek API tentative: {attempt.retry_state.attempt_number}"
+                    )
+
+                    response = self.client.chat.completions.create(
+                        model=self.MODEL,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "Tu es un assistant intelligent et serviable.",
+                            },
+                            {"role": "user", "content": message},
+                        ],
+                        temperature=self.TEMPERATURE,
+                        stream=False,
+                    )
+
+        except Exception as e:
+            code = getattr(e, "status_code", None) or getattr(e, "code", None) or 500
+            msg = getattr(e, "message", None) or str(e)
+            logger.error(
+                f"DeepSeek error: {msg} (Code: {code}) type: {type(e)}"
+            )
+            return {
+                "code": code,
+                "error": msg,
+                "content": None,
+                "response": {
+                    "code": code,
+                    "message": str(msg),
+                    "status": getattr(e, "status", "UNKNOWN"),
+                }
+            }
+
+        # Succès
         return {"content": response.choices[0].message.content, "response": response}
 
     def set_temperature(self, temperature):

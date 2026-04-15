@@ -11,6 +11,14 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import jwt from 'jsonwebtoken';
+import { auditMiddleware, readAuditEntries, rotateOldLogs } from './src/lib/auditLog.js';
+import { replayCallback } from './src/lib/callbacks.js';
+import {
+  parseWindow as parseCapacityWindow,
+  snapshotCapacity,
+  readCapacityHistory,
+  SNAPSHOT_INTERVAL_MS,
+} from './src/lib/capacityHistory.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1021,6 +1029,19 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/capacity/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseCapacityWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const points = await readCapacityHistory(client, windowMs);
+    res.json({ window: windowStr, count: points.length, points });
+  } catch (error) {
+    console.error('Error fetching capacity history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch capacity history' });
+  }
+});
+
 app.get('/api/callbacks', authenticateToken, async (req, res) => {
   try {
     const client = await ensureRedisConnected();
@@ -1033,6 +1054,114 @@ app.get('/api/callbacks', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching pending callbacks:', error);
     res.status(500).json({ error: 'Failed to fetch callbacks' });
+  }
+});
+
+// Replay a single failed callback by index (HTTP GET to its url + params).
+// On success, LREM the entry. On failure, increment manual_retry_attempts.
+app.post('/api/callbacks/:index/retry', authenticateToken,
+  auditMiddleware('callback_retry', { captureParams: ['index'] }),
+  async (req, res) => {
+    const index = parseInt(req.params.index, 10);
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).json({ error: 'Invalid index' });
+    }
+    try {
+      const client = await ensureRedisConnected();
+      const original = await client.lIndex(FAILED_CALLBACKS_KEY, index);
+      if (original === null) return res.status(404).json({ error: 'Entry not found' });
+
+      let entry;
+      try { entry = JSON.parse(original); }
+      catch { return res.status(400).json({ error: 'Stored entry is not valid JSON' }); }
+
+      const result = await replayCallback(entry);
+
+      if (result.ok) {
+        // Remove first occurrence matching the original payload
+        const removed = await client.lRem(FAILED_CALLBACKS_KEY, 1, original);
+        return res.json({
+          success: true,
+          status: result.status,
+          error: null,
+          removed: removed > 0,
+          manual_retry_attempts: (entry.manual_retry_attempts || 0) + 1,
+        });
+      } else {
+        // Persist the failure attempt back at the same index
+        const updated = {
+          ...entry,
+          manual_retry_attempts: (entry.manual_retry_attempts || 0) + 1,
+          last_manual_retry_error: result.error,
+          last_manual_retry_at: new Date().toISOString(),
+        };
+        await client.lSet(FAILED_CALLBACKS_KEY, index, JSON.stringify(updated));
+        return res.status(502).json({
+          success: false,
+          status: result.status,
+          error: result.error,
+          manual_retry_attempts: updated.manual_retry_attempts,
+        });
+      }
+    } catch (error) {
+      console.error('Error retrying callback:', error);
+      res.status(500).json({ error: 'Failed to retry callback' });
+    }
+  }
+);
+
+// Delete a single failed callback entry by index.
+app.delete('/api/callbacks/:index', authenticateToken,
+  auditMiddleware('callback_delete', { captureParams: ['index'] }),
+  async (req, res) => {
+    const index = parseInt(req.params.index, 10);
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).json({ error: 'Invalid index' });
+    }
+    try {
+      const client = await ensureRedisConnected();
+      const original = await client.lIndex(FAILED_CALLBACKS_KEY, index);
+      if (original === null) return res.status(404).json({ error: 'Entry not found' });
+      const removed = await client.lRem(FAILED_CALLBACKS_KEY, 1, original);
+      res.json({ deleted: removed > 0 });
+    } catch (error) {
+      console.error('Error deleting callback:', error);
+      res.status(500).json({ error: 'Failed to delete callback' });
+    }
+  }
+);
+
+// Clear the entire failed-callbacks list.
+app.post('/api/callbacks/clear', authenticateToken,
+  auditMiddleware('callback_clear_all'),
+  async (req, res) => {
+    try {
+      const client = await ensureRedisConnected();
+      const cleared = await client.lLen(FAILED_CALLBACKS_KEY);
+      await client.del(FAILED_CALLBACKS_KEY);
+      res.json({ cleared });
+    } catch (error) {
+      console.error('Error clearing callbacks:', error);
+      res.status(500).json({ error: 'Failed to clear callbacks' });
+    }
+  }
+);
+
+app.get('/api/audit', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, action, user, limit, offset } = req.query;
+    const result = await readAuditEntries({
+      from: from || undefined,
+      to: to || undefined,
+      action: action || undefined,
+      user: user || undefined,
+      limit: limit !== undefined ? Number(limit) : undefined,
+      offset: offset !== undefined ? Number(offset) : undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error reading audit log:', error);
+    res.status(400).json({ error: error.message || 'Failed to read audit log' });
   }
 });
 
@@ -1074,6 +1203,25 @@ ensureRedisConnected()
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Crawler Monitor Backend running on port ${PORT}`);
       setupRedisListener();
+      // Audit log: prune old files at boot, then once a day
+      rotateOldLogs().then(r => {
+        if (r.deleted) console.log(`[audit] pruned ${r.deleted} old log files`);
+      }).catch(err => console.error('[audit] initial rotation failed:', err.message));
+      setInterval(() => {
+        rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
+      }, 24 * 60 * 60 * 1000);
+
+      // Capacity history snapshot: every 60s into Redis sorted set (capped at 24h)
+      const takeCapacitySnapshot = async () => {
+        try {
+          const client = await ensureRedisConnected();
+          await snapshotCapacity(client, CRAWL_RUNNING_COUNT_KEY, CRAWL_MAX_GLOBAL_KEY);
+        } catch (err) {
+          console.error('[capacity] snapshot failed:', err.message);
+        }
+      };
+      takeCapacitySnapshot();
+      setInterval(takeCapacitySnapshot, SNAPSHOT_INTERVAL_MS);
     });
   })
   .catch(err => {

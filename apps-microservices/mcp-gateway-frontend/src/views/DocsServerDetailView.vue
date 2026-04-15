@@ -57,10 +57,17 @@
       </div>
 
       <!-- Config Guide -->
-      <section v-if="server.config_guide && server.config_guide.steps && server.config_guide.steps.length > 0" class="mb-8">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Configuration
-          <span class="ml-2 inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+      <section
+        v-if="server.config_guide && server.config_guide.steps && server.config_guide.steps.length > 0"
+        id="configuration"
+        class="mb-8 scroll-mt-20"
+      >
+        <h2 class="group text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <a href="#configuration" class="inline-flex items-center gap-1.5 hover:underline">
+            Configuration
+            <i class="pi pi-link text-xs text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
+          <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
             {{ server.config_guide.authType }}
           </span>
         </h2>
@@ -73,7 +80,7 @@
               </span>
               <div class="pt-0.5">
                 <p class="font-medium text-gray-900 dark:text-white text-sm">{{ step.title }}</p>
-                <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{{ step.description }}</p>
+                <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5 doc-step-body" v-html="step.description" />
                 <a
                   v-if="step.link"
                   :href="step.link"
@@ -96,9 +103,11 @@
             </div>
 
             <!-- Text element -->
-            <p v-else-if="step.type === 'text'" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
-              {{ step.description }}
-            </p>
+            <div
+              v-else-if="step.type === 'text'"
+              class="text-sm text-gray-700 dark:text-gray-300 doc-step-body"
+              v-html="step.description"
+            />
 
             <!-- Image element -->
             <img
@@ -139,8 +148,13 @@
       </div>
 
       <!-- Tools list -->
-      <section v-if="filteredTools.length > 0">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Outils</h2>
+      <section v-if="filteredTools.length > 0" id="tools" class="scroll-mt-20">
+        <h2 class="group text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <a href="#tools" class="inline-flex items-center gap-1.5 hover:underline">
+            Outils
+            <i class="pi pi-link text-xs text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
+        </h2>
         <div class="space-y-4">
           <ToolDocCard
             v-for="tool in filteredTools"
@@ -160,7 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { docsApi } from '@/api/docs';
 import type { DocsServerDetail } from '@/types/docs';
@@ -180,6 +194,15 @@ onMounted(async () => {
     server.value = null;
   } finally {
     loading.value = false;
+  }
+  // The page data loads asynchronously after mount, so the browser's native
+  // anchor-scroll has already run when the target <section> didn't exist yet.
+  // Re-trigger the scroll once the DOM is up-to-date.
+  if (route.hash) {
+    await nextTick()
+    const id = route.hash.slice(1)
+    const el = document.getElementById(id)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 });
 
@@ -203,3 +226,21 @@ const filteredTools = computed(() => {
   );
 });
 </script>
+
+<style scoped>
+/* Render HTML from rich-text step descriptions with sensible defaults. */
+.doc-step-body :deep(ul) { list-style: disc; margin-left: 1.25rem; margin-top: 0.35rem; }
+.doc-step-body :deep(ol) { list-style: decimal; margin-left: 1.25rem; margin-top: 0.35rem; }
+.doc-step-body :deep(li) { margin-top: 0.15rem; }
+.doc-step-body :deep(strong) { font-weight: 600; color: inherit; }
+.doc-step-body :deep(em) { font-style: italic; }
+.doc-step-body :deep(p) { margin-top: 0.35rem; }
+.doc-step-body :deep(p:first-child) { margin-top: 0; }
+.doc-step-body :deep(a) { color: rgb(var(--color-brand-500) / 1); text-decoration: underline; }
+.doc-step-body :deep(code) {
+  background: rgb(0 0 0 / 0.05);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+</style>
