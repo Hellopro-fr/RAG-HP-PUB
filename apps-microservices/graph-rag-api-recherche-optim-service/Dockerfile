@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 WORKDIR /app
 ENV PYTHONPATH=/app
 
-COPY apps-microservices/graph-rag-api-recherche-service/requirements.txt .
+COPY apps-microservices/graph-rag-api-recherche-optim-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # --- Install Dependencies ---
@@ -15,7 +15,7 @@ RUN pip install -e /app/libs/grpc-stubs
 RUN pip install -e /app/libs/common-utils
 
 # --- Copy Source Code ---
-COPY apps-microservices/graph-rag-api-recherche-service/app ./app
+COPY apps-microservices/graph-rag-api-recherche-optim-service/app ./app
 
 EXPOSE 8525
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8525"]
