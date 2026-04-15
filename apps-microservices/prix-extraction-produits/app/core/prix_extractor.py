@@ -320,7 +320,14 @@ class PrixExtractor:
         """
         async with self._semaphore:
             item_id = str(produit.get("id_produit", f"item_{item_index}"))
-            item_content = utils.to_json_string(produit)
+            # Retirer les champs de pré-calcul algo pour ne pas biaiser le LLM
+            # (structure_prix, valeur_prix, devise, taxe sont ré-extraits par le LLM lui-même).
+            # Les valeurs d'origine restent dans `produit` pour la fusion finale.
+            produit_for_llm = {
+                k: v for k, v in produit.items()
+                if k not in ("structure_prix", "valeur_prix", "devise", "taxe")
+            }
+            item_content = utils.to_json_string(produit_for_llm)
 
             # Activer le contexte item pour bufferiser les logs
             token = self._current_item_id.set(item_id)
