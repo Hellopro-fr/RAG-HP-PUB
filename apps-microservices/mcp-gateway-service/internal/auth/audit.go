@@ -82,11 +82,18 @@ func (m *AuditMiddleware) Wrap(next http.Handler) http.Handler {
 		}
 
 		// Read request body for write operations (capped at 10 KB).
+		// Skip binary multipart uploads — capturing only the first 10 KB
+		// would corrupt the body for the downstream handler, and the binary
+		// payload is not useful in audit logs anyway.
 		var requestBody string
-		if isAPIWrite && r.Body != nil {
+		ct := r.Header.Get("Content-Type")
+		isMultipart := strings.HasPrefix(ct, "multipart/form-data")
+		if isAPIWrite && r.Body != nil && !isMultipart {
 			raw, _ := io.ReadAll(io.LimitReader(r.Body, auditMaxBodyBytes))
 			r.Body = io.NopCloser(bytes.NewReader(raw))
 			requestBody = sanitizeBody(string(raw))
+		} else if isAPIWrite && isMultipart {
+			requestBody = "[multipart upload: " + ct + "]"
 		}
 
 		// Capture response.
