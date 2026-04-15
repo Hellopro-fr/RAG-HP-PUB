@@ -54,7 +54,7 @@
         <div class="flex items-center justify-between mb-2">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Configuration .mcp.json</label>
           <a
-            href="/install-guide"
+            :href="`/install-guide/${form.mcp_command || ''}`"
             target="_blank"
             rel="noopener noreferrer"
             class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
@@ -147,23 +147,82 @@
             <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Cl&eacute; utilis&eacute;e dans le fichier .mcp.json g&eacute;n&eacute;r&eacute;</p>
           </div>
 
-          <!-- MCP command select -->
+          <!-- MCP command picker (cards) -->
           <div>
-            <label for="form-mcp-command" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Commande MCP
             </label>
-            <select
-              id="form-mcp-command"
-              v-model="form.mcp_command"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 appearance-none"
-            >
-              <option value="npx">npx</option>
-              <option value="bunx">bunx</option>
-              <option value="deno">deno</option>
-              <option value="uvx">uvx</option>
-              <option value="docker">docker</option>
-              <option value="custom">Personnalis&eacute;e</option>
-            </select>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                v-for="exec in executors"
+                :key="exec.slug"
+                type="button"
+                class="group relative text-left rounded-lg border p-3 transition-colors"
+                :class="form.mcp_command === exec.slug
+                  ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10 dark:border-brand-400'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 bg-white dark:bg-gray-900'"
+                @click="form.mcp_command = exec.slug"
+              >
+                <div class="flex items-start gap-2">
+                  <div
+                    v-if="exec.icon"
+                    class="shrink-0 w-8 h-8 rounded-md flex items-center justify-center"
+                    :class="exec.color || 'bg-gray-100 dark:bg-gray-800 text-gray-500'"
+                  >
+                    <i class="pi text-sm" :class="exec.icon" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-sm font-semibold text-gray-900 dark:text-white truncate">{{ exec.label }}</span>
+                      <span v-if="exec.sub" class="text-[11px] text-gray-500 dark:text-gray-400 truncate">{{ exec.sub }}</span>
+                    </div>
+                    <p
+                      v-if="exec.description"
+                      class="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2"
+                    >{{ exec.description }}</p>
+                  </div>
+                  <i
+                    v-if="form.mcp_command === exec.slug"
+                    class="pi pi-check-circle text-brand-500 text-base shrink-0"
+                  />
+                </div>
+                <a
+                  :href="`/install-guide/${exec.slug}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="absolute bottom-2 right-2 inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 hover:text-brand-500 dark:text-gray-500 dark:hover:text-brand-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  :class="form.mcp_command === exec.slug ? 'opacity-100' : ''"
+                  title="Voir le guide d'installation"
+                  @click.stop
+                >
+                  Guide <i class="pi pi-external-link text-[9px]" />
+                </a>
+              </button>
+
+              <!-- Custom option -->
+              <button
+                type="button"
+                class="text-left rounded-lg border p-3 transition-colors"
+                :class="form.mcp_command === 'custom'
+                  ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10 dark:border-brand-400'
+                  : 'border-dashed border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 bg-white dark:bg-gray-900'"
+                @click="form.mcp_command = 'custom'"
+              >
+                <div class="flex items-start gap-2">
+                  <div class="shrink-0 w-8 h-8 rounded-md flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-500">
+                    <i class="pi pi-pencil text-sm" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-sm font-semibold text-gray-900 dark:text-white">Personnalis&eacute;e</div>
+                    <p class="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">Saisir une commande et des arguments libres.</p>
+                  </div>
+                  <i
+                    v-if="form.mcp_command === 'custom'"
+                    class="pi pi-check-circle text-brand-500 text-base shrink-0"
+                  />
+                </div>
+              </button>
+            </div>
           </div>
 
           <!-- Custom command fields -->
@@ -333,6 +392,8 @@ import { useToast } from '@/composables/useToast'
 import { useClipboard } from '@/composables/useClipboard'
 import { useDragDrop } from '@/composables/useDragDrop'
 import { tokensApi } from '@/api/tokens'
+import { installGuidesPublicApi } from '@/api/install-guides'
+import type { InstallExecutor } from '@/types/install-guide'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import DragDropPanel from '@/components/shared/DragDropPanel.vue'
 import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
@@ -346,6 +407,7 @@ const toast = useToast()
 const clipboard = useClipboard()
 const dragDrop = useDragDrop()
 const dragDropReady = ref(false)
+const executors = ref<InstallExecutor[]>([])
 
 // Step labels are dynamic: the "Acc\u00e8s Leexi" step is only shown when the
 // selected servers include the Leexi backend (detected via tool_prefix === 'leexi').
@@ -381,7 +443,7 @@ const form = reactive({
   name: '',
   description: '',
   serverName: 'hellopro-gateway',
-  mcp_command: 'npx',
+  mcp_command: '',
   customCommand: '',
   customArgsPrefix: '',
   expires_at: '',
@@ -427,23 +489,38 @@ const leexiFilterSummary = computed(() => {
 
 const generatedMcpJson = computed(() => {
   if (!createdToken.value) return ''
+  const tokenValue = createdToken.value.token || ''
+  const gatewayUrl = window.location.origin
+  const serverName = form.serverName || 'hellopro-gateway'
+
+  // Try to use mcp_config from the selected executor (from API)
+  const selectedExec = executors.value.find(e => e.slug === form.mcp_command)
+
+  // Prefer the dedicated top-level `mcp_config` field; fall back to page-builder element
+  const mcpEl = Array.isArray(selectedExec?.content)
+    ? selectedExec!.content.find((el: any) => el?.type === 'mcp-config')
+    : null
+  const mcpTemplate = (selectedExec?.mcp_config as string) || (mcpEl?.props?.code as string) || ''
+
+  if (mcpTemplate) {
+    const withAllowHttp = form.allow_http
+      ? mcpTemplate.replace(/"<allow-http>"/g, '"--allow-http"')
+      // Remove the entire line that contains the placeholder (with trailing comma)
+      : mcpTemplate.replace(/^[ \t]*"<allow-http>"[ \t]*,?[ \t]*\r?\n/gm, '')
+    return withAllowHttp
+      .replace(/https?:\/\/<gateway-url>/g, gatewayUrl)
+      .replace(/<gateway-url>/g, gatewayUrl.replace(/^https?:\/\//, ''))
+      .replace(/<server-name>/g, serverName)
+      .replace(/<token>/g, tokenValue)
+      .replace(/<votre-token>/g, tokenValue)
+  }
+
+  // Fallback for custom command
   const command = form.mcp_command === 'custom'
     ? form.customCommand || 'custom-command'
     : form.mcp_command
-  const serverName = form.serverName || 'hellopro-gateway'
-  const tokenValue = createdToken.value.token || ''
-  const gatewayUrl = window.location.origin
-
   const headerArg = 'X-MCP-Scope-Token: ${MCP_SCOPE_TOKEN}'
   const env = { MCP_SCOPE_TOKEN: tokenValue }
-
-  const argsMap: Record<string, string[]> = {
-    npx: ['-y', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    docker: ['run', '-i', '--rm', '-e', 'MCP_SCOPE_TOKEN', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
-  }
 
   let args: string[]
   if (form.mcp_command === 'custom') {
@@ -452,7 +529,7 @@ const generatedMcpJson = computed(() => {
       : []
     args = [...prefixArgs, gatewayUrl + '/mcp', '--header', headerArg]
   } else {
-    args = argsMap[form.mcp_command] || [gatewayUrl + '/mcp', '--header', headerArg]
+    args = [gatewayUrl + '/mcp', '--header', headerArg]
   }
 
   return JSON.stringify(
@@ -464,7 +541,15 @@ const generatedMcpJson = computed(() => {
 
 onMounted(async () => {
   try {
-    await serversStore.fetchServers()
+    const [, execs] = await Promise.all([
+      serversStore.fetchServers(),
+      installGuidesPublicApi.listExecutors().catch(() => [] as InstallExecutor[]),
+    ])
+    executors.value = execs
+    // Default to first executor if not already set (e.g. from edit load)
+    if (execs.length && !form.mcp_command) {
+      form.mcp_command = execs[0]!.slug
+    }
   } catch (err) {
     console.error('[TokenFormView] Failed to fetch servers:', err)
   }
@@ -475,7 +560,13 @@ onMounted(async () => {
       const token = await tokensApi.get(route.params.id as string)
       form.name = token.name
       form.description = token.description || ''
-      form.mcp_command = token.mcp_command || 'npx'
+      form.mcp_command = token.mcp_command || executors.value[0]?.slug || 'npx'
+      if (token.server_name) {
+        form.serverName = token.server_name
+      }
+      if (typeof token.allow_http === 'boolean') {
+        form.allow_http = token.allow_http
+      }
       if (token.expires_at) {
         expiresEnabled.value = true
         form.expires_at = token.expires_at.slice(0, 16)
@@ -530,6 +621,7 @@ async function handleSubmit() {
       mcp_command: form.mcp_command === 'custom'
         ? form.customCommand || 'custom'
         : form.mcp_command,
+      server_name: form.serverName || undefined,
       expires_at: expiresEnabled.value && form.expires_at
         ? new Date(form.expires_at).toISOString()
         : undefined,

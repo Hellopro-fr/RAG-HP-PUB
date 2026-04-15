@@ -244,6 +244,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
       name: 'Documentation',
       path: '/docs-admin',
     })
+    gestionItems.push({
+      icon: 'pi pi-map',
+      name: "Guides d'installation",
+      path: '/install-guides-admin',
+    })
   }
   gestionItems.push({
     icon: 'pi pi-key',
@@ -293,6 +298,7 @@ const menuGroups = computed<MenuGroup[]>(() => {
         icon: 'pi pi-book',
         name: "Guide d'installation",
         path: '/install-guide',
+        newTab: true,
       },
       {
         icon: 'pi pi-file',

@@ -54,6 +54,7 @@ func main() {
 	var encryptor *crypto.Encryptor
 	var userRepo *repository.UserRepo
 	var auditRepo *repository.AuditRepo
+	var installGuideRepo *repository.InstallGuideRepo
 
 	if cfg.MySQLDSN != "" {
 		var err error
@@ -74,6 +75,7 @@ func main() {
 		repo = repository.NewServerRepo(database, encryptor)
 		userRepo = repository.NewUserRepo(database, cfg.AdminEmails, cfg.AllowedEmails)
 		auditRepo = repository.NewAuditRepo(database)
+		installGuideRepo = repository.NewInstallGuideRepo(database)
 
 		// Charge les serveurs actifs depuis la base de données
 		loadServersFromDB(gw, registry, repo)
@@ -146,6 +148,7 @@ func main() {
 		apiHandler.SetAuditRepo(auditRepo)
 		apiHandler.SetLeexiAdmin(leexiAdminClient)
 		apiHandler.SetUploadDir(cfg.UploadDir)
+		apiHandler.SetInstallGuideRepo(installGuideRepo)
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
 

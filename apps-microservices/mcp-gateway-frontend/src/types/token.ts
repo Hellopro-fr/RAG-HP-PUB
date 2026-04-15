@@ -14,6 +14,8 @@ export interface ScopeToken {
   server_ids: string[]
   server_tools: ServerToolScope[]
   mcp_command: string
+  server_name?: string
+  allow_http?: boolean
   is_active: boolean
   created_by?: string
   created_at: string
@@ -32,6 +34,7 @@ export interface CreateTokenRequest {
   server_ids: string[]
   server_tools?: ServerToolScope[]
   mcp_command?: string
+  server_name?: string
   expires_at?: string
   allow_http?: boolean
   leexi_filter?: LeexiFilter

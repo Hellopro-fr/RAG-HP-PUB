@@ -78,6 +78,8 @@ type Handler struct {
 	leexiAdmin *leexiadmin.Client
 	// uploadDir is the base directory for uploaded files (icons, etc.)
 	uploadDir string
+	// installGuideRepo is the repository for install guide CRUD (executors + configs).
+	installGuideRepo *repository.InstallGuideRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -121,6 +123,11 @@ func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
 // SetUploadDir sets the base directory for uploaded files.
 func (h *Handler) SetUploadDir(dir string) {
 	h.uploadDir = dir
+}
+
+// SetInstallGuideRepo sets the install guide repository.
+func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
+	h.installGuideRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────

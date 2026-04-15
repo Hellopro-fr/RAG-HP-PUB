@@ -33,6 +33,8 @@ type CreateTokenRequest struct {
 	ServerIDs   []string              `json:"server_ids"`
 	ServerTools []ServerToolSelection `json:"server_tools,omitempty"` // optional per-server tool selection
 	MCPCommand  string                `json:"mcp_command"`            // npx, bunx, deno, uvx, docker, custom
+	ServerName  string                `json:"server_name,omitempty"`  // key used in the generated .mcp.json
+	AllowHTTP   bool                  `json:"allow_http,omitempty"`   // include --allow-http in generated mcp.json
 	ExpiresAt   *string               `json:"expires_at,omitempty"`   // RFC3339
 	LeexiFilter *LeexiFilterDTO       `json:"leexi_filter,omitempty"` // nil = unrestricted (mode=none)
 }
@@ -47,6 +49,8 @@ type CreateTokenResponse struct {
 	ServerIDs   []string              `json:"server_ids"`
 	ServerTools []ServerToolSelection `json:"server_tools,omitempty"`
 	MCPCommand  string                `json:"mcp_command"`
+	ServerName  string                `json:"server_name,omitempty"`
+	AllowHTTP   bool                  `json:"allow_http,omitempty"`
 	IsActive    bool                  `json:"is_active"`
 	CreatedAt   string                `json:"created_at"`
 	ExpiresAt   *string               `json:"expires_at,omitempty"`
@@ -63,6 +67,8 @@ type TokenResponse struct {
 	ServerIDs   []string              `json:"server_ids"`
 	ServerTools []ServerToolSelection `json:"server_tools,omitempty"`
 	MCPCommand  string                `json:"mcp_command"`
+	ServerName  string                `json:"server_name,omitempty"`
+	AllowHTTP   bool                  `json:"allow_http,omitempty"`
 	IsActive    bool                  `json:"is_active"`
 	CreatedBy   string                `json:"created_by,omitempty"`
 	CreatedAt   string                `json:"created_at"`
@@ -77,6 +83,9 @@ type UpdateTokenRequest struct {
 	Description *string               `json:"description,omitempty"`
 	ServerIDs   []string              `json:"server_ids,omitempty"`
 	ServerTools []ServerToolSelection `json:"server_tools,omitempty"`
+	MCPCommand  *string               `json:"mcp_command,omitempty"`
+	ServerName  *string               `json:"server_name,omitempty"`
+	AllowHTTP   *bool                 `json:"allow_http,omitempty"`
 	LeexiFilter *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 }
 

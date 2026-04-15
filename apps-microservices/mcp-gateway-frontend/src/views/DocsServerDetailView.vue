@@ -9,6 +9,13 @@
       <span class="text-gray-600 dark:text-gray-300">{{ server?.name || '...' }}</span>
     </nav>
 
+    <CrossSectionLink
+      to="/install-guide"
+      icon="pi-download"
+      message="Configurez votre client MCP pour acceder a ces outils."
+      link-label="Suivre le guide d'installation"
+    />
+
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-20">
       <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
@@ -158,6 +165,7 @@ import { useRoute } from 'vue-router';
 import { docsApi } from '@/api/docs';
 import type { DocsServerDetail } from '@/types/docs';
 import ToolDocCard from '@/components/docs/ToolDocCard.vue';
+import CrossSectionLink from '@/components/shared/CrossSectionLink.vue';
 
 const route = useRoute();
 const slug = route.params.serverSlug as string;

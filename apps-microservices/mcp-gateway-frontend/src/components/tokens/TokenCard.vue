@@ -119,10 +119,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ScopeToken } from '@/types/token'
+import type { InstallExecutor } from '@/types/install-guide'
 import { useClipboard } from '@/composables/useClipboard'
 import { useServersStore } from '@/stores/servers'
 
-const props = defineProps<{ token: ScopeToken }>()
+const props = withDefaults(
+  defineProps<{ token: ScopeToken; executors?: InstallExecutor[] }>(),
+  { executors: () => [] }
+)
 
 const emit = defineEmits<{
   edit: [token: ScopeToken]
@@ -165,43 +169,54 @@ const leexiBadge = computed<string | null>(() => {
   }
 })
 
-function buildMcpJson(tokenValue: string) {
+// Build the .mcp.json string. Prefer the template stored on the selected
+// Package Executor (top-level mcp_config field → falls back to the
+// page-builder `mcp-config` element for legacy data). When no template is
+// available, fall back to a synthetic builder for built-in commands.
+function buildMcpJsonString(tokenValue: string): string {
   const command = props.token.mcp_command || 'npx'
-  const serverName = 'hellopro-gateway'
-  const gatewayUrl = window.location.origin
+  const serverName = props.token.server_name || 'hellopro-gateway'
+  const origin = window.location.origin
+  const host = origin.replace(/^https?:\/\//, '')
 
+  // 1. Try the executor's persisted template
+  const exec = props.executors.find(e => e.slug === command)
+  const mcpEl = Array.isArray(exec?.content)
+    ? exec!.content.find((el: any) => el?.type === 'mcp-config')
+    : null
+  const template = (exec?.mcp_config as string) || (mcpEl?.props?.code as string) || ''
+
+  if (template) {
+    const allowHttp = !!props.token.allow_http
+    const withAllowHttp = allowHttp
+      ? template.replace(/"<allow-http>"/g, '"--allow-http"')
+      : template.replace(/^[ \t]*"<allow-http>"[ \t]*,?[ \t]*\r?\n/gm, '')
+    return withAllowHttp
+      .replace(/https?:\/\/<gateway-url>/g, origin)
+      .replace(/<gateway-url>/g, host)
+      .replace(/<server-name>/g, serverName)
+      .replace(/<token>/g, tokenValue)
+      .replace(/<votre-token>/g, tokenValue)
+  }
+
+  // 2. Synthetic fallback for custom commands / missing executor
   const headerArg = 'X-MCP-Scope-Token: ${MCP_SCOPE_TOKEN}'
   const env = { MCP_SCOPE_TOKEN: tokenValue }
+  const defaultArgs = [origin + '/mcp', '--header', headerArg]
 
-  if (command === 'custom') {
-    return {
+  return JSON.stringify(
+    {
       mcpServers: {
         [serverName]: {
-          command: command,
-          args: [gatewayUrl + '/mcp', '--header', headerArg],
-          env
-        }
-      }
-    }
-  }
-
-  const argsMap: Record<string, string[]> = {
-    npx: ['-y', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    docker: ['run', '-i', '--rm', '-e', 'MCP_SCOPE_TOKEN', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
-  }
-
-  return {
-    mcpServers: {
-      [serverName]: {
-        command: command,
-        args: argsMap[command] || [gatewayUrl + '/mcp', '--header', headerArg],
-        env
-      }
-    }
-  }
+          command,
+          args: defaultArgs,
+          env,
+        },
+      },
+    },
+    null,
+    2
+  )
 }
 
 const maskedToken = computed(() => {
@@ -211,15 +226,12 @@ const maskedToken = computed(() => {
 })
 
 // Display version uses masked token
-const mcpJsonDisplay = computed(() => {
-  return JSON.stringify(buildMcpJson(maskedToken.value), null, 2)
-})
+const mcpJsonDisplay = computed(() => buildMcpJsonString(maskedToken.value))
 
 // Copy version uses full token if available, otherwise masked
 function copyMcpJson() {
   const tokenValue = props.token.token || maskedToken.value
-  const fullJson = JSON.stringify(buildMcpJson(tokenValue), null, 2)
-  clipboard.copy(fullJson, 'Configuration .mcp.json')
+  clipboard.copy(buildMcpJsonString(tokenValue), 'Configuration .mcp.json')
 }
 
 function formatDate(dateStr: string): string {
