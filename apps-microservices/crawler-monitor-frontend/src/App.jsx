@@ -1,18 +1,24 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
-  Activity, AlertCircle, RefreshCw, LogOut, Server, CheckCircle, XCircle,
-  Zap, Archive, Search, Filter, Calendar, ChevronLeft, ChevronRight, TrendingUp
+  Activity, AlertCircle, RefreshCw, LogOut,
 } from 'lucide-react';
-import { JOBS_PER_PAGE } from './lib/constants';
 import { api, setOnUnauthorized } from './lib/api';
 import LoginPage from './components/LoginPage';
-import StatCard from './components/StatCard';
-import ReplicaMonitor from './components/ReplicaMonitor';
-import JobCard from './components/JobCard';
-import JobDetails from './components/JobDetails';
 import CallbacksPanel from './components/CallbacksPanel';
-import CapacityBar from './components/CapacityBar';
+import Overview from './pages/Overview';
 
+/**
+ * App is the auth gate + layout shell + router.
+ *
+ * - Holds auth state (token in localStorage) and exposes login/logout
+ * - Holds shared dashboard state: jobs, capacity, replicas, callbacks count,
+ *   currently-selected job (URL-driven via /jobs/:id)
+ * - Manages the WebSocket connection (job_update, replica_heartbeat)
+ * - Renders the top header + <Routes>
+ *
+ * Data layer (manual fetches + state) will be migrated to React Query in W3.1.
+ */
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [allJobs, setAllJobs] = useState([]);
@@ -20,72 +26,93 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [, setIsConnected] = useState(false);
   const wsRef = useRef(null);
   const jobCache = useRef({});
   const selectedJobRef = useRef(null);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [replicas, setReplicas] = useState({});
   const [capacity, setCapacity] = useState(null);
   const [failedCallbackCount, setFailedCallbackCount] = useState(0);
   const [showCallbacksPanel, setShowCallbacksPanel] = useState(false);
 
-  const filteredJobs = useMemo(() => {
-    return allJobs.filter(job => {
-      const jobDate = new Date(job.start_time);
-      const start = startDate ? new Date(startDate) : null;
-      const end = endDate ? new Date(endDate) : null;
-
-      if (start && jobDate < start) return false;
-      if (end) {
-        const endOfDay = new Date(end);
-        endOfDay.setHours(23, 59, 59, 999);
-        if (jobDate > endOfDay) return false;
-      }
-
-      const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
-      const matchesSearch = searchTerm === '' ||
-        job.id.includes(searchTerm) ||
-        (job.domain && job.domain.toLowerCase().includes(searchTerm.toLowerCase()));
-
-      return matchesStatus && matchesSearch;
-    }).sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
-  }, [allJobs, searchTerm, statusFilter, startDate, endDate]);
-
-  const paginatedJobs = useMemo(() => {
-    const startIndex = (currentPage - 1) * JOBS_PER_PAGE;
-    return filteredJobs.slice(startIndex, startIndex + JOBS_PER_PAGE);
-  }, [filteredJobs, currentPage]);
-
-  const totalPages = Math.ceil(filteredJobs.length / JOBS_PER_PAGE);
-
-  const globalStats = useMemo(() => {
-    const finished = filteredJobs.filter(j => j.status === 'finished').length;
-    const failed = filteredJobs.filter(j => j.status === 'failed').length;
-    const running = filteredJobs.filter(j => j.status === 'running').length;
-    const archived = filteredJobs.filter(j => j.status === 'archived').length;
-    return { finished, failed, running, archived, total: filteredJobs.length };
-  }, [filteredJobs]);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogin = (newToken) => {
     localStorage.setItem('authToken', newToken);
     setToken(newToken);
+    navigate('/', { replace: true });
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('authToken');
     setToken(null);
-  };
+    setSelectedJob(null);
+    jobCache.current = {};
+    navigate('/', { replace: true });
+  }, [navigate]);
 
   // Centralized 401 handler — called by lib/api when any request returns 401.
   useEffect(() => {
     setOnUnauthorized(handleLogout);
     return () => setOnUnauthorized(null);
+  }, [handleLogout]);
+
+  const fetchJobs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get('/jobs', token);
+      setAllJobs(data);
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  const fetchCapacity = useCallback(async () => {
+    try {
+      const data = await api.get('/capacity', token);
+      setCapacity(data);
+    } catch (error) {
+      console.error('Error fetching capacity:', error);
+    }
+  }, [token]);
+
+  const fetchCallbacks = useCallback(async () => {
+    try {
+      const data = await api.get('/callbacks', token);
+      setFailedCallbackCount(data.count);
+    } catch (error) {
+      console.error('Error fetching callbacks:', error);
+    }
+  }, [token]);
+
+  const fetchJobDetails = useCallback(async (id) => {
+    if (jobCache.current[id] && selectedJobRef.current?.id === id && !showRaw) {
+      // Already loaded — no-op (avoids redundant fetch when navigating back to same job)
+      if (selectedJob?.id !== id) setSelectedJob(jobCache.current[id]);
+      return;
+    }
+
+    setShowRaw(false);
+    setLoadingDetails(true);
+    try {
+      const data = await api.get(`/jobs/${id}/details`, token);
+      jobCache.current[id] = data;
+      setSelectedJob(data);
+    } catch (error) {
+      console.error('Error fetching job details:', error);
+      setSelectedJob({ id, error: error.message });
+    } finally {
+      setLoadingDetails(false);
+    }
+  }, [token, showRaw, selectedJob]);
+
+  const clearSelectedJob = useCallback(() => {
+    setSelectedJob(null);
+    setShowRaw(false);
   }, []);
 
   useEffect(() => {
@@ -94,7 +121,7 @@ const App = () => {
       fetchCapacity();
       fetchCallbacks();
     }
-  }, [token]);
+  }, [token, fetchJobs, fetchCapacity, fetchCallbacks]);
 
   // Keep ref in sync for WebSocket handler (avoids stale closure)
   useEffect(() => { selectedJobRef.current = selectedJob; }, [selectedJob]);
@@ -142,7 +169,7 @@ const App = () => {
     return () => {
       if (wsRef.current) wsRef.current.close();
     };
-  }, [token]);
+  }, [token, fetchJobs, fetchCapacity, fetchCallbacks, fetchJobDetails]);
 
   // Clean up zombie replicas (older than 30s)
   useEffect(() => {
@@ -152,7 +179,6 @@ const App = () => {
         const next = {};
         let changed = false;
         Object.entries(prev).forEach(([id, data]) => {
-          // Keep if heartbeat is recent (< 30s)
           if (now - data.timestamp < 30000) {
             next[id] = data;
           } else {
@@ -165,59 +191,23 @@ const App = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const fetchJobs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await api.get('/jobs', token);
-      setAllJobs(data);
-    } catch (error) {
-      console.error('Error fetching jobs:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  const fetchCapacity = useCallback(async () => {
-    try {
-      const data = await api.get('/capacity', token);
-      setCapacity(data);
-    } catch (error) {
-      console.error('Error fetching capacity:', error);
-    }
-  }, [token]);
-
-  const fetchCallbacks = useCallback(async () => {
-    try {
-      const data = await api.get('/callbacks', token);
-      setFailedCallbackCount(data.count);
-    } catch (error) {
-      console.error('Error fetching callbacks:', error);
-    }
-  }, [token]);
-
-  const fetchJobDetails = useCallback(async (id) => {
-    if (jobCache.current[id] && selectedJob?.id === id && !showRaw) {
-      return;
-    }
-
-    setShowRaw(false);
-    setLoadingDetails(true);
-
-    try {
-      const data = await api.get(`/jobs/${id}/details`, token);
-      jobCache.current[id] = data;
-      setSelectedJob(data);
-    } catch (error) {
-      console.error('Error fetching job details:', error);
-      setSelectedJob({ id, error: error.message });
-    } finally {
-      setLoadingDetails(false);
-    }
-  }, [selectedJob, showRaw, token]);
-
   if (!token) {
     return <LoginPage onLogin={handleLogin} />;
   }
+
+  const overviewProps = {
+    token,
+    allJobs,
+    loading,
+    capacity,
+    replicas,
+    selectedJob,
+    loadingDetails,
+    showRaw,
+    setShowRaw,
+    fetchJobDetails,
+    clearSelectedJob,
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
@@ -229,10 +219,10 @@ const App = () => {
       )}
       <header className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-20">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <Link to="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity">
             <Activity className="w-8 h-8 text-blue-400" />
             <h1 className="text-xl font-bold text-white">Crawler Dashboard Pro</h1>
-          </div>
+          </Link>
           <div className="flex gap-2">
             {failedCallbackCount > 0 && (
               <button
@@ -254,178 +244,15 @@ const App = () => {
         </div>
       </header>
 
-      <main className="container mx-auto p-4 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <StatCard title="Total" value={globalStats.total} icon={Server} color="gray" />
-          <StatCard title="Succès" value={globalStats.finished} icon={CheckCircle} color="green" />
-          <StatCard title="Échecs" value={globalStats.failed} icon={XCircle} color="red" />
-          <StatCard title="En cours" value={globalStats.running} icon={Zap} color="blue" />
-          <StatCard title="Archivés" value={globalStats.archived} icon={Archive} color="gray" />
-        </div>
-
-        <CapacityBar capacity={capacity} token={token} />
-
-        {/* Replica Monitor */}
-        <ReplicaMonitor replicas={replicas} />
-
-        <div className="bg-gray-800 p-3 rounded-lg space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-grow min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Filtrer par ID ou domaine..."
-                value={searchTerm}
-                onChange={e => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <select
-                value={statusFilter}
-                onChange={e => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 appearance-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="all">Tous les statuts</option>
-                <option value="finished">Succès</option>
-                <option value="failed">Échec</option>
-                <option value="running">En cours</option>
-                <option value="stopping">Arrêt...</option>
-                <option value="archived">Archivé</option>
-                <option value="restarting_oom">Restart OOM</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-gray-500" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => {
-                  setStartDate(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-              />
-              <span className="text-gray-500">à</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => {
-                  setEndDate(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-              />
-              {(startDate || endDate) && (
-                <button
-                  onClick={() => {
-                    setStartDate('');
-                    setEndDate('');
-                    setCurrentPage(1);
-                  }}
-                  className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-md text-sm text-white transition-colors"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between text-sm text-gray-400 pt-2 border-t border-gray-700">
-              <span>{filteredJobs.length} jobs trouvés</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <span className="hidden sm:inline">Page</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalPages}
-                    value={currentPage}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      if (!isNaN(val) && val >= 1 && val <= totalPages) {
-                        setCurrentPage(val);
-                      }
-                    }}
-                    className="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                  <span className="text-gray-500">/ {totalPages}</span>
-                </div>
-
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-4 items-start">
-          <div className="w-1/3 space-y-3 max-h-[calc(100vh-20rem)] overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <RefreshCw className="w-8 h-8 animate-spin text-blue-400" />
-              </div>
-            ) : paginatedJobs.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Aucun job trouvé</p>
-              </div>
-            ) : (
-              paginatedJobs.map(job => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  onClick={() => fetchJobDetails(job.id)}
-                  isSelected={selectedJob?.id === job.id}
-                />
-              ))
-            )}
-          </div>
-
-          <div className="flex-1 bg-gray-800 rounded-lg p-6">
-            {loadingDetails ? (
-              <div className="flex items-center justify-center py-20">
-                <RefreshCw className="w-12 h-12 animate-spin text-blue-400" />
-              </div>
-            ) : selectedJob ? (
-              <JobDetails
-                job={selectedJob}
-                onToggleRaw={() => setShowRaw(!showRaw)}
-                showRaw={showRaw}
-                token={token}
-                onSelectJob={fetchJobDetails}
-              />
-            ) : (
-              <div className="text-center py-20 text-gray-400">
-                <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg">Sélectionnez un job pour voir les détails</p>
-                <p className="text-sm mt-2">Cliquez sur un job dans la liste de gauche</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
+      <Routes>
+        <Route path="/" element={<Overview {...overviewProps} />}>
+          {/* Sub-routes for modals will be added in next commits:
+              <Route path="jobs/:id/queue" element={<QueuePage/>} />
+              <Route path="jobs/:id/dataset" element={<DatasetPage/>} /> */}
+        </Route>
+        <Route path="/jobs/:id" element={<Overview {...overviewProps} />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </div>
   );
 }
