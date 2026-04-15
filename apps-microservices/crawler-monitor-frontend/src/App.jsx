@@ -5,10 +5,10 @@ import {
 } from 'lucide-react';
 import { api, setOnUnauthorized } from './lib/api';
 import LoginPage from './components/LoginPage';
-import CallbacksPanel from './components/CallbacksPanel';
 import Overview from './pages/Overview';
 import QueuePage from './pages/QueuePage';
 import DatasetPage from './pages/DatasetPage';
+import CallbacksPage from './pages/CallbacksPage';
 
 /**
  * App is the auth gate + layout shell + router.
@@ -36,7 +36,6 @@ const App = () => {
   const [replicas, setReplicas] = useState({});
   const [capacity, setCapacity] = useState(null);
   const [failedCallbackCount, setFailedCallbackCount] = useState(0);
-  const [showCallbacksPanel, setShowCallbacksPanel] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -213,12 +212,6 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
-      {showCallbacksPanel && (
-        <CallbacksPanel
-          token={token}
-          onClose={() => { setShowCallbacksPanel(false); fetchCallbacks(); }}
-        />
-      )}
       <header className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-20">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity">
@@ -227,14 +220,14 @@ const App = () => {
           </Link>
           <div className="flex gap-2">
             {failedCallbackCount > 0 && (
-              <button
-                onClick={() => setShowCallbacksPanel(true)}
-                className="flex items-center gap-2 px-3 py-1 bg-red-900/50 hover:bg-red-900/70 border border-red-500/30 rounded-lg text-sm cursor-pointer transition-colors"
+              <Link
+                to="/callbacks"
+                className="flex items-center gap-2 px-3 py-1 bg-red-900/50 hover:bg-red-900/70 border border-red-500/30 rounded-lg text-sm transition-colors"
                 title="Voir les callbacks en échec"
               >
                 <AlertCircle className="w-4 h-4 text-red-400" />
                 <span className="text-red-300">{failedCallbackCount} callback{failedCallbackCount > 1 ? 's' : ''} en échec</span>
-              </button>
+              </Link>
             )}
             <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -252,6 +245,7 @@ const App = () => {
           <Route path="queue" element={<QueuePage token={token} />} />
           <Route path="dataset" element={<DatasetPage token={token} />} />
         </Route>
+        <Route path="/callbacks" element={<CallbacksPage token={token} onClose={fetchCallbacks} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
