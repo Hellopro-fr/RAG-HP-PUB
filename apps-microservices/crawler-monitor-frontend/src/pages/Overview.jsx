@@ -61,7 +61,7 @@ const Overview = ({ token, replicas }) => {
 
       const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
       const matchesSearch = searchTerm === '' ||
-        job.id.includes(searchTerm) ||
+        (job.id && String(job.id).includes(searchTerm)) ||
         (job.domain && job.domain.toLowerCase().includes(searchTerm.toLowerCase()));
 
       return matchesStatus && matchesSearch;

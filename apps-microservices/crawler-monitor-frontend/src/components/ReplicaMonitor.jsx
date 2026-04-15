@@ -82,7 +82,11 @@ const ReplicaMonitor = ({ replicas, token }) => {
     );
   };
 
-  const activeReplicas = Object.values(replicas).filter(r => Date.now() - r.timestamp < 30000);
+  // Defensive: drop replicas without a replicaId (partial heartbeats) so we never
+  // crash when calling .substring/.slice on undefined later in the render.
+  const activeReplicas = Object.values(replicas).filter(
+    r => r && r.replicaId && Date.now() - (r.timestamp || 0) < 30000
+  );
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
@@ -123,7 +127,7 @@ const ReplicaMonitor = ({ replicas, token }) => {
                       statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'
                       }`} />
                     <span className="text-white font-semibold text-sm truncate">
-                      {replica.replicaId.substring(0, 12)}
+                      {String(replica.replicaId || '').substring(0, 12)}
                     </span>
                   </div>
                   <Cpu className="w-4 h-4 text-blue-400 shrink-0" />
@@ -179,7 +183,7 @@ const ReplicaMonitor = ({ replicas, token }) => {
                     )}
                     {replica.jobId && (
                       <div className="text-gray-500 font-mono text-[10px] truncate" title={replica.jobId}>
-                        #{replica.jobId.slice(0, 12)}
+                        #{String(replica.jobId).slice(0, 12)}
                       </div>
                     )}
                   </div>

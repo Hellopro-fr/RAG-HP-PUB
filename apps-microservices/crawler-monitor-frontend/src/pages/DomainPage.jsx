@@ -20,6 +20,7 @@ const STATUS_META = {
 const fmtDate = (s) => s ? new Date(s).toLocaleString('fr-FR') : '—';
 
 const ChainNode = ({ entry, isFirst }) => {
+  if (!entry || !entry.id) return null;
   const meta = STATUS_META[(entry.status || '').toLowerCase()] || { color: 'gray', text: entry.status, Icon: Clock };
   const Icon = meta.Icon;
   return (
@@ -31,8 +32,8 @@ const ChainNode = ({ entry, isFirst }) => {
       <div className={`w-12 h-12 flex items-center justify-center rounded-full bg-${meta.color}-500/20 border-2 border-${meta.color}-500/40 group-hover:border-${meta.color}-400 transition-colors`}>
         <Icon className={`w-5 h-5 text-${meta.color}-400`} />
       </div>
-      <div className="text-xs text-gray-300 font-mono truncate max-w-[110px]">#{entry.id.slice(0, 10)}</div>
-      <div className="text-[10px] text-gray-500">{fmtDate(entry.start_time).slice(0, 16)}</div>
+      <div className="text-xs text-gray-300 font-mono truncate max-w-[110px]">#{String(entry.id || '').slice(0, 10)}</div>
+      <div className="text-[10px] text-gray-500">{String(fmtDate(entry.start_time) || '').slice(0, 16)}</div>
       {entry.crawl_mode === 'update' && (
         <span className="text-[9px] px-1 py-0 rounded bg-purple-500/20 text-purple-400">↻ update</span>
       )}
@@ -184,7 +185,7 @@ const DomainPage = ({ token }) => {
                       className="border-t border-gray-700 hover:bg-gray-700/30 cursor-pointer"
                     >
                       <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{fmtDate(j.start_time)}</td>
-                      <td className="px-3 py-2 text-white font-mono text-xs">{j.id.slice(0, 12)}</td>
+                      <td className="px-3 py-2 text-white font-mono text-xs">{String(j.id || '').slice(0, 12)}</td>
                       <td className="px-3 py-2">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded bg-${meta.color}-500/20 text-${meta.color}-400`}>
                           {meta.text}
