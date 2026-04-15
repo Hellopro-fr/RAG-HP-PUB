@@ -148,6 +148,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/audit-logs", h.handleAuditLogs)
 	}
 
+	// ── Install guide admin routes ────────────────────────────────────────────
+	if h.installGuideRepo != nil {
+		apiMux.HandleFunc("/api/v1/install-guides/executors", h.handleExecutors)
+		apiMux.HandleFunc("/api/v1/install-guides/executors/", h.handleExecutorByID)
+		apiMux.HandleFunc("/api/v1/install-guides/configs", h.handleConfigs)
+		apiMux.HandleFunc("/api/v1/install-guides/configs/", h.handleConfigByID)
+	}
+
 	// ── Server icons routes ──────────────────────────────────────────────────
 	apiMux.HandleFunc("/api/v1/server-icons", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -231,6 +239,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/public/docs", h.handleListDocServers)
 	mux.HandleFunc("/api/v1/public/docs/", h.handleGetDocServer)
 
+	// Public install guide endpoints (no auth)
+	if h.installGuideRepo != nil {
+		mux.HandleFunc("/api/v1/public/install-guides/executors", h.handlePublicExecutors)
+		mux.HandleFunc("/api/v1/public/install-guides/executors/", h.handlePublicExecutorBySlug)
+		mux.HandleFunc("/api/v1/public/install-guides/configs", h.handlePublicConfigs)
+		mux.HandleFunc("/api/v1/public/install-guides/configs/", h.handlePublicConfigBySlug)
+	}
+
 	// Applique les middlewares et monte sur le mux principal
 	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit, roleCheckMiddleware)
 	mux.Handle("/api/", wrapped)
@@ -268,8 +284,8 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
-	// User and audit management always require admin
-	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") {
+	// User, audit, and install guide management always require admin
+	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") {
 		return true
 	}
 	// Server writes require admin

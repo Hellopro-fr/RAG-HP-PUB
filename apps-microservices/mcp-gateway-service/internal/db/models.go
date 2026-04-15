@@ -117,6 +117,8 @@ type ScopeToken struct {
 	TokenPrefix string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
 	CreatedBy   string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
 	MCPCommand     string     `gorm:"type:varchar(64);not null;default:'npx'" json:"mcp_command"`
+	ServerName     string     `gorm:"type:varchar(255);not null;default:''" json:"server_name"`
+	AllowHTTP      bool       `gorm:"not null;default:false" json:"allow_http"`
 	EncryptedToken []byte     `gorm:"type:blob" json:"-"`
 	ExpiresAt      *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
 	IsActive    bool       `gorm:"not null;default:true;index:idx_scope_active" json:"is_active"`
@@ -283,3 +285,48 @@ type AuditLog struct {
 }
 
 func (AuditLog) TableName() string { return "audit_logs" }
+
+// ── Install Guide Models ───────────────────────────────────────────
+
+// InstallExecutor represents a package executor (npx, bunx, deno, uvx, docker).
+type InstallExecutor struct {
+	ID           uint64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	Slug         string          `gorm:"type:varchar(64);not null;uniqueIndex:uq_executor_slug" json:"slug"`
+	Label        string          `gorm:"type:varchar(64);not null" json:"label"`
+	Sub          string          `gorm:"type:varchar(64)" json:"sub"`
+	Description  string          `gorm:"type:varchar(512)" json:"description"`
+	Intro        string          `gorm:"type:text" json:"intro"`
+	Icon         string          `gorm:"type:varchar(64)" json:"icon"`
+	Color        string          `gorm:"type:varchar(255)" json:"color"`
+	Install      json.RawMessage `gorm:"type:json" json:"install"`
+	Verify       string          `gorm:"type:text" json:"verify"`
+	McpConfig    string          `gorm:"type:text" json:"mcp_config"`
+	CliAddCmd    string          `gorm:"type:text" json:"cli_add_cmd"`
+	NoteLabel    string          `gorm:"type:varchar(64)" json:"note_label"`
+	NoteText     string          `gorm:"type:text" json:"note_text"`
+	NoteClass    string          `gorm:"type:varchar(255)" json:"note_class"`
+	Content      json.RawMessage `gorm:"type:json" json:"content"`
+	DisplayOrder int             `gorm:"not null;default:0;index:idx_executor_order" json:"display_order"`
+	IsActive     bool            `gorm:"not null;default:true" json:"is_active"`
+	CreatedAt    time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (InstallExecutor) TableName() string { return "install_executors" }
+
+// InstallConfig represents an MCP configuration page (Claude Code, Claude Desktop, etc.).
+type InstallConfig struct {
+	ID           uint64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	Slug         string          `gorm:"type:varchar(64);not null;uniqueIndex:uq_config_slug" json:"slug"`
+	Label        string          `gorm:"type:varchar(128);not null" json:"label"`
+	Description  string          `gorm:"type:text" json:"description"`
+	Icon         string          `gorm:"type:varchar(64)" json:"icon"`
+	Color        string          `gorm:"type:varchar(255)" json:"color"`
+	Content      json.RawMessage `gorm:"type:json" json:"content"`
+	DisplayOrder int             `gorm:"not null;default:0;index:idx_config_order" json:"display_order"`
+	IsActive     bool            `gorm:"not null;default:true" json:"is_active"`
+	CreatedAt    time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (InstallConfig) TableName() string { return "install_configs" }

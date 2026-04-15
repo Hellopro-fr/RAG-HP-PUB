@@ -110,8 +110,50 @@ const router = createRouter({
     {
       path: '/install-guide',
       name: 'install-guide',
-      component: () => import('@/views/InstallGuideView.vue'),
-      meta: { requiresAuth: true, title: "Guide d'installation" }
+      component: () => import('@/views/InstallGuidesListView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: "Guide d'installation" }
+    },
+    {
+      path: '/install-guide/config/:slug',
+      name: 'install-guide-config',
+      component: () => import('@/views/InstallConfigDetailView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: 'Configuration MCP' }
+    },
+    {
+      path: '/install-guide/:slug',
+      name: 'install-guide-detail',
+      component: () => import('@/views/InstallGuideDetailView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: "Guide d'installation" }
+    },
+    {
+      path: '/install-guides-admin',
+      name: 'install-guides-admin',
+      component: () => import('@/views/InstallGuidesAdminView.vue'),
+      meta: { requiresAuth: true, title: "Guides d'installation", minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/executors/new',
+      name: 'executor-create',
+      component: () => import('@/views/ExecutorFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvel executeur', minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/executors/:id/edit',
+      name: 'executor-edit',
+      component: () => import('@/views/ExecutorFormView.vue'),
+      meta: { requiresAuth: true, title: 'Modifier executeur', minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/configs/new',
+      name: 'config-create',
+      component: () => import('@/views/ConfigFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle configuration', minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/configs/:id/edit',
+      name: 'config-edit',
+      component: () => import('@/views/ConfigFormView.vue'),
+      meta: { requiresAuth: true, title: 'Modifier configuration', minRole: 'admin' }
     },
     {
       path: '/users',

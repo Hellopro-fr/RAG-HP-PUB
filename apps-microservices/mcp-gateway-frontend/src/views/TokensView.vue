@@ -30,6 +30,7 @@
           v-for="t in filteredTokens"
           :key="t.id"
           :token="t"
+          :executors="executors"
           @edit="handleEdit"
           @revoke="handleRevoke"
           @delete="handleDelete"
@@ -75,6 +76,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { tokensApi } from '@/api/tokens'
+import { installGuidesPublicApi } from '@/api/install-guides'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
@@ -82,12 +84,14 @@ import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import TokenCard from '@/components/tokens/TokenCard.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { ScopeToken } from '@/types/token'
+import type { InstallExecutor } from '@/types/install-guide'
 
 const router = useRouter()
 const serversStore = useServersStore()
 const toast = useToast()
 
 const tokens = ref<ScopeToken[]>([])
+const executors = ref<InstallExecutor[]>([])
 const loading = ref(false)
 const activeTab = ref('all')
 const revokingTokenId = ref<string>()
@@ -117,6 +121,9 @@ onMounted(() => {
   if (!serversStore.servers.length) {
     serversStore.fetchServers()
   }
+  installGuidesPublicApi.listExecutors()
+    .then(list => { executors.value = list || [] })
+    .catch(() => { executors.value = [] })
 })
 
 async function loadTokens() {

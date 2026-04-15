@@ -97,6 +97,8 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		TokenHash:      hash,
 		TokenPrefix:    prefix,
 		MCPCommand:     req.MCPCommand,
+		ServerName:     req.ServerName,
+		AllowHTTP:      req.AllowHTTP,
 		EncryptedToken: []byte(rawToken),
 		IsActive:       true,
 	}
@@ -179,6 +181,8 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		ServerIDs:   req.ServerIDs,
 		ServerTools: buildServerToolsResponse(token.Tools),
 		MCPCommand:  token.MCPCommand,
+		ServerName:  token.ServerName,
+		AllowHTTP:   token.AllowHTTP,
 		IsActive:    token.IsActive,
 		CreatedAt:   token.CreatedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:   expiresStr,
@@ -222,6 +226,15 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 	}
 	if req.Description != nil {
 		updates["description"] = *req.Description
+	}
+	if req.MCPCommand != nil {
+		updates["mcp_command"] = *req.MCPCommand
+	}
+	if req.ServerName != nil {
+		updates["server_name"] = *req.ServerName
+	}
+	if req.AllowHTTP != nil {
+		updates["allow_http"] = *req.AllowHTTP
 	}
 
 	// Allow rotating the Leexi ownership filter on an existing token. The
@@ -420,6 +433,8 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		ServerIDs:   serverIDs,
 		ServerTools: buildServerToolsResponse(t.Tools),
 		MCPCommand:  t.MCPCommand,
+		ServerName:  t.ServerName,
+		AllowHTTP:   t.AllowHTTP,
 		IsActive:    t.IsActive,
 		CreatedBy:   t.CreatedBy,
 		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
