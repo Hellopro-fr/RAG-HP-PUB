@@ -95,11 +95,25 @@ app.set('trust proxy', Number.isFinite(TRUST_PROXY_HOPS) ? TRUST_PROXY_HOPS : 1)
 
 // Security Middleware
 app.use(helmet());
+
+// Global rate limit. Tuned for a live dashboard (React Query background
+// refetch every 30s on multiple endpoints + WebSocket-driven invalidations
+// can easily reach ~30 req/min/user). The previous 100 req/15min was too low
+// and caused 429s after a few minutes of normal use.
+//
+// /api/login is explicitly skipped at the user's request (internal tool,
+// shared NAT egress IP). Audit log still records every login attempt.
+//
+// Configurable via env: RATE_LIMIT_MAX (default 600), RATE_LIMIT_WINDOW_MS
+// (default 900000 = 15 min).
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '600', 10);
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/api/login',
 });
 app.use(limiter);
 
