@@ -11,6 +11,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import jwt from 'jsonwebtoken';
+import { auditMiddleware, readAuditEntries, rotateOldLogs } from './src/lib/auditLog.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1036,6 +1037,24 @@ app.get('/api/callbacks', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/audit', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, action, user, limit, offset } = req.query;
+    const result = await readAuditEntries({
+      from: from || undefined,
+      to: to || undefined,
+      action: action || undefined,
+      user: user || undefined,
+      limit: limit !== undefined ? Number(limit) : undefined,
+      offset: offset !== undefined ? Number(offset) : undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error reading audit log:', error);
+    res.status(400).json({ error: error.message || 'Failed to read audit log' });
+  }
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 async function setupRedisListener() {
@@ -1074,6 +1093,13 @@ ensureRedisConnected()
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Crawler Monitor Backend running on port ${PORT}`);
       setupRedisListener();
+      // Audit log: prune old files at boot, then once a day
+      rotateOldLogs().then(r => {
+        if (r.deleted) console.log(`[audit] pruned ${r.deleted} old log files`);
+      }).catch(err => console.error('[audit] initial rotation failed:', err.message));
+      setInterval(() => {
+        rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
+      }, 24 * 60 * 60 * 1000);
     });
   })
   .catch(err => {
