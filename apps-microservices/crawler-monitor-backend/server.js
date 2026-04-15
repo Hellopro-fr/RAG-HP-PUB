@@ -19,6 +19,7 @@ import {
   readCapacityHistory,
   SNAPSHOT_INTERVAL_MS,
 } from './src/lib/capacityHistory.js';
+import { parseStatsWindow, computeSystemStats } from './src/lib/systemStats.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1156,6 +1157,31 @@ app.post('/api/callbacks/clear', authenticateToken,
     }
   }
 );
+
+// Helper used by /api/system/stats: load all jobs in the same shape /api/jobs returns.
+async function loadAllJobs(client) {
+  const jobKeys = await client.keys(`${CRAWL_JOB_PREFIX}*`);
+  if (jobKeys.length === 0) return [];
+  const raw = await client.mGet(jobKeys);
+  return raw
+    .map(s => { try { return s ? JSON.parse(s) : null; } catch { return null; } })
+    .filter(Boolean);
+}
+
+// Aggregated stats over a time window (1h | 24h | 7d). Used by the dashboard
+// for KPI cards and tendances.
+app.get('/api/system/stats', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '24h';
+    const windowMs = parseStatsWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const stats = await computeSystemStats(client, windowMs, { loadJobs: loadAllJobs });
+    res.json({ window: windowStr, ...stats, generated_at: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error computing system stats:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute stats' });
+  }
+});
 
 // System health detail (authenticated) — for dashboard "system" view.
 // Note: /health (below) remains unauthenticated for k8s/LB probes.
