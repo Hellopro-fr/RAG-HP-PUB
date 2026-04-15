@@ -1910,6 +1910,7 @@ class RecommendationService:
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
+            - **Sous-type explicitement différent du sous-type demandé** (ex: distributeur comptoir vs sur-pied, tracteur vigneron vs standard, pont 2 colonnes vs ciseaux) — si le besoin précise un sous-type et que la fiche produit (titre + caractéristiques) indique factuellement un autre sous-type, score 1.
             - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans la fiche.
             
             **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité.
