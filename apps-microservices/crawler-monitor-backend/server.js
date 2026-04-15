@@ -1157,6 +1157,48 @@ app.post('/api/callbacks/clear', authenticateToken,
   }
 );
 
+// System health detail (authenticated) — for dashboard "system" view.
+// Note: /health (below) remains unauthenticated for k8s/LB probes.
+app.get('/api/system/health', authenticateToken, async (req, res) => {
+  const startedAt = Date.now();
+  const checks = {};
+
+  // Redis ping (with a small timeout via Promise.race)
+  try {
+    const client = await ensureRedisConnected();
+    const pingPromise = client.ping();
+    const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1500));
+    await Promise.race([pingPromise, timeoutPromise]);
+    checks.redis = { status: 'ok' };
+  } catch (err) {
+    checks.redis = { status: 'down', error: err.message };
+  }
+
+  // Storage path readability
+  try {
+    const st = await stat(CRAWLER_STORAGE_PATH);
+    checks.storage = { status: st.isDirectory() ? 'ok' : 'down', path: CRAWLER_STORAGE_PATH };
+  } catch (err) {
+    checks.storage = { status: 'down', path: CRAWLER_STORAGE_PATH, error: err.message };
+  }
+
+  // WebSocket clients count
+  checks.ws_clients = clients.size;
+
+  // Process info
+  const overall = checks.redis.status === 'ok' && checks.storage.status === 'ok' ? 'ok' : 'degraded';
+  res.json({
+    status: overall,
+    checks,
+    process: {
+      uptime_seconds: Math.floor(process.uptime()),
+      node_version: process.version,
+      pid: process.pid,
+    },
+    response_time_ms: Date.now() - startedAt,
+  });
+});
+
 app.get('/api/audit', authenticateToken, async (req, res) => {
   try {
     const { from, to, action, user, limit, offset } = req.query;
