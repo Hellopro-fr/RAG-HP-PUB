@@ -13,6 +13,8 @@ class QCServiceStep(str, Enum):
     ENRICHISSEMENT = "enrichissement"            # Step 5
     EQUIVALENCE = "equivalence"                  # Step 6
     CARACTERISATION = "caracterisation"          # Step 7
+    # Hors pipeline QC 1-7 — routing & exchange distincts
+    CARACTERISATION_PRIX = "caracterisation_prix"
 
 
 # Mapping des services vers leurs routing keys
@@ -24,6 +26,12 @@ QC_ROUTING_KEYS = {
     QCServiceStep.ENRICHISSEMENT: "qc.step5.start",
     QCServiceStep.EQUIVALENCE: "qc.step6.start",
     QCServiceStep.CARACTERISATION: "qc.step7.start",
+    QCServiceStep.CARACTERISATION_PRIX: "prix.caracterisation.start",
+}
+
+# Exchange distinct pour la caractérisation prix (indépendante du pipeline QC)
+QC_EXCHANGES = {
+    QCServiceStep.CARACTERISATION_PRIX: "prix_pipeline_exchange",
 }
 
 
