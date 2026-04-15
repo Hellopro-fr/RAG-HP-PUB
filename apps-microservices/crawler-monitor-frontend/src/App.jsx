@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
-  Activity, AlertCircle, RefreshCw, LogOut,
+  Activity, AlertCircle, RefreshCw, LogOut, FileText,
 } from 'lucide-react';
 import { api, setOnUnauthorized } from './lib/api';
 import LoginPage from './components/LoginPage';
@@ -9,6 +9,7 @@ import Overview from './pages/Overview';
 import QueuePage from './pages/QueuePage';
 import DatasetPage from './pages/DatasetPage';
 import CallbacksPage from './pages/CallbacksPage';
+import AuditPage from './pages/AuditPage';
 
 /**
  * App is the auth gate + layout shell + router.
@@ -229,6 +230,13 @@ const App = () => {
                 <span className="text-red-300">{failedCallbackCount} callback{failedCallbackCount > 1 ? 's' : ''} en échec</span>
               </Link>
             )}
+            <Link
+              to="/audit"
+              className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
+              title="Audit log"
+            >
+              <FileText className="w-5 h-5" />
+            </Link>
             <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -246,6 +254,7 @@ const App = () => {
           <Route path="dataset" element={<DatasetPage token={token} />} />
         </Route>
         <Route path="/callbacks" element={<CallbacksPage token={token} onClose={fetchCallbacks} />} />
+        <Route path="/audit" element={<AuditPage token={token} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
