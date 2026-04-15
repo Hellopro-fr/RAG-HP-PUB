@@ -169,6 +169,16 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		}
 	})
 
+	// ── Documentation image upload ───────────────────────────────────────────
+	apiMux.HandleFunc("/api/v1/doc-images", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleUploadImage(w, r)
+	})
+
 	// Routes avec {id} — on utilise un handler prefix pour capturer le pattern
 	apiMux.HandleFunc("/api/v1/servers/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/api/v1/servers/")

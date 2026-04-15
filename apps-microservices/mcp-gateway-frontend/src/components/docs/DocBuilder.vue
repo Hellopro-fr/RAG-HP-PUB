@@ -29,7 +29,7 @@
           : 'border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30'"
         @dragover.prevent="dragOverCanvas = true"
         @dragleave="dragOverCanvas = false"
-        @drop="onCanvasDrop"
+        @drop.prevent="onCanvasDrop"
       >
         <!-- Empty state -->
         <div v-if="elements.length === 0" class="flex flex-col items-center justify-center h-full py-16 text-gray-400 dark:text-gray-500">
@@ -43,15 +43,29 @@
             v-for="(el, index) in elements"
             :key="el.id"
             class="group relative rounded-lg border transition-all cursor-pointer"
-            :class="selectedId === el.id
-              ? 'border-brand-500 bg-white dark:bg-gray-900 shadow-sm ring-2 ring-brand-500/20'
-              : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700'"
+            :class="[
+              selectedId === el.id
+                ? 'border-brand-500 bg-white dark:bg-gray-900 shadow-sm ring-2 ring-brand-500/20'
+                : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700',
+              dragElementIndex === index ? 'opacity-40' : ''
+            ]"
             draggable="true"
             @dragstart="onElementDragStart($event, index)"
             @dragover.prevent="onElementDragOver($event, index)"
-            @drop.stop="onElementDrop($event, index)"
+            @dragleave="onElementDragLeave($event, index)"
+            @drop.stop.prevent="onElementDrop($event, index)"
             @click="selectedId = el.id"
           >
+            <!-- Drop indicator: line above -->
+            <div
+              v-if="dropTargetIndex === index && dropPosition === 'before' && dragElementIndex !== index"
+              class="absolute -top-1 left-0 right-0 h-1 rounded-full bg-brand-500 pointer-events-none z-10"
+            />
+            <!-- Drop indicator: line below -->
+            <div
+              v-if="dropTargetIndex === index && dropPosition === 'after' && dragElementIndex !== index"
+              class="absolute -bottom-1 left-0 right-0 h-1 rounded-full bg-brand-500 pointer-events-none z-10"
+            />
             <!-- Element header bar -->
             <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800">
               <div class="flex items-center gap-2">
@@ -142,6 +156,20 @@
           <div>
             <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Image</label>
             <input v-model="selectedElement.props.image" type="text" placeholder="URL de l'image" class="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30" />
+            <label
+              class="mt-1 flex items-center justify-center gap-1 px-3 py-2 rounded-md border-2 border-dashed cursor-pointer transition-colors text-[11px]"
+              :class="imageDragOver
+                ? 'border-brand-400 bg-brand-50/50 dark:bg-brand-500/5 text-brand-600 dark:text-brand-400'
+                : 'border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600'"
+              @dragover.prevent="imageDragOver = true"
+              @dragleave="imageDragOver = false"
+              @drop.prevent="handleImageDrop($event, 'image')"
+            >
+              <i v-if="uploadingImage" class="pi pi-spinner pi-spin text-xs" />
+              <i v-else class="pi pi-upload text-xs" />
+              <span>{{ uploadingImage ? 'Envoi...' : 'ou glisser/cliquer pour importer' }}</span>
+              <input type="file" accept="image/svg+xml,image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="handleImageFileSelect($event, 'image')" />
+            </label>
           </div>
         </template>
 
@@ -158,6 +186,24 @@
           <div>
             <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">URL</label>
             <input v-model="selectedElement.props.src" type="text" placeholder="https://... ou /uploads/..." class="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30" />
+          </div>
+          <!-- Upload zone -->
+          <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">ou importer un fichier</label>
+            <label
+              class="flex flex-col items-center justify-center gap-1 px-3 py-3 rounded-md border-2 border-dashed cursor-pointer transition-colors text-[11px]"
+              :class="imageDragOver
+                ? 'border-brand-400 bg-brand-50/50 dark:bg-brand-500/5 text-brand-600 dark:text-brand-400'
+                : 'border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600'"
+              @dragover.prevent="imageDragOver = true"
+              @dragleave="imageDragOver = false"
+              @drop.prevent="handleImageDrop($event, 'src')"
+            >
+              <i v-if="uploadingImage" class="pi pi-spinner pi-spin text-base" />
+              <i v-else class="pi pi-upload text-base" />
+              <span>{{ uploadingImage ? 'Envoi...' : 'Glisser un fichier ou cliquer (svg, png, jpg, webp, gif - max 5MB)' }}</span>
+              <input type="file" accept="image/svg+xml,image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="handleImageFileSelect($event, 'src')" />
+            </label>
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Texte alternatif</label>
@@ -191,6 +237,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 export type DocElementType = 'step' | 'text' | 'image' | 'divider' | 'link'
 
@@ -216,6 +265,8 @@ const elements = computed({
 const selectedId = ref<string | null>(null)
 const dragOverCanvas = ref(false)
 const dragElementIndex = ref<number | null>(null)
+const dropTargetIndex = ref<number | null>(null)
+const dropPosition = ref<'before' | 'after'>('before')
 const canvasRef = ref<HTMLElement | null>(null)
 
 const paletteElements = [
@@ -261,22 +312,42 @@ function onElementDragStart(event: DragEvent, index: number) {
   dragElementIndex.value = index
 }
 
-function onElementDragOver(event: DragEvent, _index: number) {
+function onElementDragOver(event: DragEvent, index: number) {
   if (dragElementIndex.value === null) return
   event.dataTransfer!.dropEffect = 'move'
+  // Compute insert position based on cursor Y vs element midpoint
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const isBelow = event.clientY - rect.top > rect.height / 2
+  dropTargetIndex.value = index
+  dropPosition.value = isBelow ? 'after' : 'before'
+}
+
+function onElementDragLeave(event: DragEvent, index: number) {
+  // Only clear if leaving to a non-child element
+  const related = event.relatedTarget as Node | null
+  const current = event.currentTarget as HTMLElement
+  if (related && current.contains(related)) return
+  if (dropTargetIndex.value === index) {
+    dropTargetIndex.value = null
+  }
 }
 
 function onElementDrop(event: DragEvent, targetIndex: number) {
   const moveIndex = event.dataTransfer!.getData('move-index')
   if (moveIndex !== '') {
     const from = parseInt(moveIndex)
-    if (from === targetIndex) return
-    const copy = [...elements.value]
-    const [moved] = copy.splice(from, 1)
-    copy.splice(targetIndex, 0, moved!)
-    elements.value = copy
+    // Compute final insert index based on drop position
+    let to = dropPosition.value === 'after' ? targetIndex + 1 : targetIndex
+    if (from < to) to-- // account for removal shift
+    if (from !== to) {
+      const copy = [...elements.value]
+      const [moved] = copy.splice(from, 1)
+      copy.splice(to, 0, moved!)
+      elements.value = copy
+    }
   }
   dragElementIndex.value = null
+  dropTargetIndex.value = null
 }
 
 function onCanvasDrop(event: DragEvent) {
@@ -303,6 +374,56 @@ function removeElement(index: number) {
   const copy = [...elements.value]
   copy.splice(index, 1)
   elements.value = copy
+}
+
+// ── Image upload ───────────────────────────────────────────────────
+const uploadingImage = ref(false)
+const imageDragOver = ref(false)
+
+async function uploadImage(file: File): Promise<string | null> {
+  if (!file) return null
+  const allowed = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp', 'image/gif']
+  if (!allowed.includes(file.type)) {
+    toast.error('Type de fichier non supporte (svg, png, jpg, webp, gif)')
+    return null
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error('Fichier trop volumineux (max 5 MB)')
+    return null
+  }
+  uploadingImage.value = true
+  try {
+    const fd = new FormData()
+    fd.append('image', file)
+    const res = await fetch('/api/v1/doc-images', { method: 'POST', body: fd })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Echec de l\'envoi')
+    }
+    const data = await res.json()
+    return data.image as string
+  } catch (e: any) {
+    toast.error(e?.message || 'Echec de l\'envoi de l\'image')
+    return null
+  } finally {
+    uploadingImage.value = false
+  }
+}
+
+async function handleImageFileSelect(e: Event, target: 'src' | 'image' = 'src') {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file || !selectedElement.value) return
+  const url = await uploadImage(file)
+  if (url) selectedElement.value.props[target] = url
+  ;(e.target as HTMLInputElement).value = ''
+}
+
+async function handleImageDrop(e: DragEvent, target: 'src' | 'image' = 'src') {
+  imageDragOver.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (!file || !selectedElement.value) return
+  const url = await uploadImage(file)
+  if (url) selectedElement.value.props[target] = url
 }
 </script>
 

@@ -29,7 +29,7 @@
           : 'border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30'"
         @dragover.prevent="dragOverCanvas = true"
         @dragleave="dragOverCanvas = false"
-        @drop="onCanvasDrop"
+        @drop.prevent="onCanvasDrop"
       >
         <div v-if="elements.length === 0" class="flex flex-col items-center justify-center h-full py-16 text-gray-400 dark:text-gray-500">
           <i class="pi pi-inbox text-3xl mb-3" />
@@ -41,15 +41,29 @@
             v-for="(el, index) in elements"
             :key="el.id"
             class="group relative rounded-lg border transition-all cursor-pointer"
-            :class="selectedIndex === index
-              ? 'border-brand-500 bg-white dark:bg-gray-900 shadow-sm ring-2 ring-brand-500/20'
-              : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700'"
+            :class="[
+              selectedIndex === index
+                ? 'border-brand-500 bg-white dark:bg-gray-900 shadow-sm ring-2 ring-brand-500/20'
+                : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700',
+              dragElementIndex === index ? 'opacity-40' : ''
+            ]"
             draggable="true"
             @dragstart="onElementDragStart($event, index)"
             @dragover.prevent="onElementDragOver($event, index)"
-            @drop.stop="onElementDrop($event, index)"
+            @dragleave="onElementDragLeave($event, index)"
+            @drop.stop.prevent="onElementDrop($event, index)"
             @click="selectedIndex = index"
           >
+            <!-- Drop indicator: line above -->
+            <div
+              v-if="dropTargetIndex === index && dropPosition === 'before' && dragElementIndex !== index"
+              class="absolute -top-1 left-0 right-0 h-1 rounded-full bg-brand-500 pointer-events-none z-10"
+            />
+            <!-- Drop indicator: line below -->
+            <div
+              v-if="dropTargetIndex === index && dropPosition === 'after' && dragElementIndex !== index"
+              class="absolute -bottom-1 left-0 right-0 h-1 rounded-full bg-brand-500 pointer-events-none z-10"
+            />
             <!-- Header bar -->
             <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800">
               <div class="flex items-center gap-2">
@@ -228,6 +242,8 @@ const elements = computed({
 const selectedIndex = ref<number | null>(null)
 const dragOverCanvas = ref(false)
 const dragElementIndex = ref<number | null>(null)
+const dropTargetIndex = ref<number | null>(null)
+const dropPosition = ref<'before' | 'after'>('before')
 
 const selectedElement = computed(() =>
   selectedIndex.value !== null ? elements.value[selectedIndex.value] || null : null
@@ -302,23 +318,40 @@ function onElementDragStart(event: DragEvent, index: number) {
   dragElementIndex.value = index
 }
 
-function onElementDragOver(event: DragEvent, _index: number) {
+function onElementDragOver(event: DragEvent, index: number) {
   if (dragElementIndex.value === null) return
   event.dataTransfer!.dropEffect = 'move'
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const isBelow = event.clientY - rect.top > rect.height / 2
+  dropTargetIndex.value = index
+  dropPosition.value = isBelow ? 'after' : 'before'
+}
+
+function onElementDragLeave(event: DragEvent, index: number) {
+  const related = event.relatedTarget as Node | null
+  const current = event.currentTarget as HTMLElement
+  if (related && current.contains(related)) return
+  if (dropTargetIndex.value === index) {
+    dropTargetIndex.value = null
+  }
 }
 
 function onElementDrop(event: DragEvent, targetIndex: number) {
   const moveIndex = event.dataTransfer!.getData('move-index')
   if (moveIndex !== '') {
     const from = parseInt(moveIndex)
-    if (from === targetIndex) return
-    const copy = [...elements.value]
-    const [moved] = copy.splice(from, 1)
-    copy.splice(targetIndex, 0, moved!)
-    elements.value = copy
-    if (selectedIndex.value === from) selectedIndex.value = targetIndex
+    let to = dropPosition.value === 'after' ? targetIndex + 1 : targetIndex
+    if (from < to) to--
+    if (from !== to) {
+      const copy = [...elements.value]
+      const [moved] = copy.splice(from, 1)
+      copy.splice(to, 0, moved!)
+      elements.value = copy
+      if (selectedIndex.value === from) selectedIndex.value = to
+    }
   }
   dragElementIndex.value = null
+  dropTargetIndex.value = null
 }
 
 function onCanvasDrop(event: DragEvent) {
