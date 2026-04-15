@@ -10,6 +10,7 @@ import ReplicaMonitor from './components/ReplicaMonitor';
 import JobCard from './components/JobCard';
 import JobDetails from './components/JobDetails';
 import CallbacksPanel from './components/CallbacksPanel';
+import CapacityBar from './components/CapacityBar';
 
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
@@ -274,26 +275,7 @@ const App = () => {
           <StatCard title="Archivés" value={globalStats.archived} icon={Archive} color="gray" />
         </div>
 
-        {capacity && capacity.max_global_jobs > 0 && (
-          <div className="bg-gray-800 rounded-lg p-4 shadow-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-400">
-                Capacité globale
-              </span>
-              <span className={`text-sm font-bold ${capacity.is_full ? 'text-red-400' : 'text-green-400'}`}>
-                {capacity.running_jobs} / {capacity.max_global_jobs} slots
-              </span>
-            </div>
-            <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  capacity.is_full ? 'bg-red-500' : capacity.running_jobs / capacity.max_global_jobs > 0.8 ? 'bg-yellow-500' : 'bg-green-500'
-                }`}
-                style={{ width: `${Math.min((capacity.running_jobs / capacity.max_global_jobs) * 100, 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
+        <CapacityBar capacity={capacity} token={token} />
 
         {/* Replica Monitor */}
         <ReplicaMonitor replicas={replicas} />
