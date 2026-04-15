@@ -22,6 +22,7 @@ export const queryKeys = {
   timeline:           (window) => ['timeline', window],
   domains:            (window) => ['domains', window],
   domainDetail:       (domain, window) => ['domains', domain, window],
+  alerts:             () => ['alerts'],
 };
 
 /* ---------- Jobs ---------- */
@@ -143,6 +144,18 @@ export function useTimelineQuery(token, window = '6h', options = {}) {
   });
 }
 
+/* ---------- Alerts ---------- */
+
+export function useAlertsQuery(token, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.alerts(),
+    queryFn: () => api.get('/alerts', token, { retry: { attempts: 1 } }),
+    enabled: !!token,
+    refetchInterval: 30 * 1000, // re-evaluate every 30s
+    ...options,
+  });
+}
+
 /* ---------- WS invalidation helper ---------- */
 
 /**
@@ -162,6 +175,7 @@ export function useWsInvalidator() {
       // Invalidate all timeline + domain windows (prefix match across windows)
       queryClient.invalidateQueries({ queryKey: ['timeline'] });
       queryClient.invalidateQueries({ queryKey: ['domains'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerts() });
       if (crawlId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.jobDetails(crawlId) });
       }

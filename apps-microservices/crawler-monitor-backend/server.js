@@ -29,6 +29,7 @@ import {
 } from './src/lib/replicaHistory.js';
 import { computeTimeline } from './src/lib/timeline.js';
 import { parseDomainWindow, aggregateDomains, jobsForDomain } from './src/lib/domains.js';
+import { evaluateAlerts, DEFAULT_THRESHOLDS } from './src/lib/alerts.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1101,6 +1102,45 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching capacity:', error);
     res.status(500).json({ error: 'Failed to fetch capacity' });
+  }
+});
+
+// Active alerts evaluated NOW from current state (jobs + capacity + replicas + callbacks).
+// Phase 3 thresholds = env vars (see src/lib/alerts.js DEFAULT_THRESHOLDS).
+app.get('/api/alerts', authenticateToken, async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+
+    // Gather inputs in parallel
+    const [jobs, capacityRaw, callbacksRaw, replicasHistory] = await Promise.all([
+      loadAllJobs(client),
+      readCapacityHistory(client, 60 * 60 * 1000), // last 1h
+      client.lLen(FAILED_CALLBACKS_KEY).catch(() => 0),
+      readAllReplicasHistory(client, 60 * 60 * 1000),
+    ]);
+
+    // Map replica points to {ts, cpu} only (alerts engine only needs cpu)
+    const replicasForAlerts = {};
+    for (const [id, points] of Object.entries(replicasHistory)) {
+      replicasForAlerts[id] = points.map(p => ({ ts: p.ts, cpu: p.cpu }));
+    }
+
+    const alerts = evaluateAlerts({
+      jobs,
+      capacityPoints: capacityRaw,
+      replicasHistory: replicasForAlerts,
+      failedCallbackCount: callbacksRaw,
+    });
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      thresholds: DEFAULT_THRESHOLDS,
+      count: alerts.length,
+      alerts,
+    });
+  } catch (error) {
+    console.error('Error evaluating alerts:', error);
+    res.status(500).json({ error: error.message || 'Failed to evaluate alerts' });
   }
 });
 

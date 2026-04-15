@@ -12,6 +12,7 @@ import JobCard from '../components/JobCard';
 import JobDetails from '../components/JobDetails';
 import CapacityBar from '../components/CapacityBar';
 import Timeline from '../components/Timeline';
+import AlertsBanner from '../components/AlertsBanner';
 
 /**
  * Overview page (`/` and `/jobs/:id`).
@@ -96,6 +97,7 @@ const Overview = ({ token, replicas }) => {
 
   return (
     <main className="container mx-auto p-4 space-y-4">
+      <AlertsBanner token={token} />
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard title="Total" value={globalStats.total} icon={Server} color="gray" />
         <StatCard title="Succès" value={globalStats.finished} icon={CheckCircle} color="green" />
