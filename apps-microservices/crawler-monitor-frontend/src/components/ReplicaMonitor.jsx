@@ -161,20 +161,47 @@ const ReplicaMonitor = ({ replicas }) => {
                   </div>
                 )}
 
-                {/* Top Processes */}
-                {replica.topProcesses && replica.topProcesses.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-700">
-                    <div className="text-xs text-gray-400 mb-2">Top RAM Processes:</div>
-                    <div className="space-y-1">
-                      {replica.topProcesses.map((proc, idx) => (
-                        <div key={idx} className="flex justify-between text-xs">
-                          <span className="text-gray-300 truncate flex-1 font-mono">{proc.name}</span>
-                          <span className="text-purple-400 ml-2">{formatBytes(proc.ram)}</span>
-                        </div>
-                      ))}
+                {/* Top Processes (sorted desc by RAM, top 5, with proportion bars) */}
+                {replica.topProcesses && replica.topProcesses.length > 0 && (() => {
+                  const totalRam = replica.totalRam || (6 * 1024 * 1024 * 1024);
+                  const sorted = [...replica.topProcesses].sort((a, b) => (b.ram || 0) - (a.ram || 0)).slice(0, 5);
+                  const measured = sorted.reduce((acc, p) => acc + (p.ram || 0), 0);
+                  const measuredPct = totalRam > 0 ? Math.min((measured / totalRam) * 100, 100) : 0;
+                  return (
+                    <div className="mt-3 pt-3 border-t border-gray-700">
+                      <div className="text-xs text-gray-400 mb-2">Top RAM Processes:</div>
+                      <div className="space-y-1.5">
+                        {sorted.map((proc, idx) => {
+                          const procPct = totalRam > 0 ? Math.min(((proc.ram || 0) / totalRam) * 100, 100) : 0;
+                          const isCritical = procPct > 75;
+                          const isHigh = procPct > 50;
+                          const nameClass = isCritical
+                            ? 'text-red-400 font-semibold'
+                            : isHigh
+                              ? 'text-orange-400 font-semibold'
+                              : 'text-gray-300';
+                          const barClass = isCritical ? 'bg-red-500' : isHigh ? 'bg-orange-500' : 'bg-purple-500';
+                          return (
+                            <div key={idx}>
+                              <div className="flex justify-between text-xs">
+                                <span className={`truncate flex-1 font-mono ${nameClass}`}>
+                                  {isCritical ? '⚠ ' : ''}{proc.name}
+                                </span>
+                                <span className="text-purple-400 ml-2">{formatBytes(proc.ram)}</span>
+                              </div>
+                              <div className="h-0.5 mt-0.5 bg-gray-700 rounded-full overflow-hidden">
+                                <div className={`h-full ${barClass}`} style={{ width: `${procPct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-2">
+                        Total mesuré: {formatBytes(measured)} / {formatBytes(totalRam)} ({measuredPct.toFixed(0)}%)
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             );
           })}
