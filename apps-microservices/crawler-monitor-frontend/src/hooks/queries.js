@@ -20,6 +20,8 @@ export const queryKeys = {
   systemStats:        (window) => ['system', 'stats', window],
   replicasHistoryAll: (window) => ['replicas', 'history', 'all', window],
   timeline:           (window) => ['timeline', window],
+  domains:            (window) => ['domains', window],
+  domainDetail:       (domain, window) => ['domains', domain, window],
 };
 
 /* ---------- Jobs ---------- */
@@ -109,6 +111,26 @@ export function useReplicasHistoryQuery(token, window = '1h', options = {}) {
   });
 }
 
+/* ---------- Domains ---------- */
+
+export function useDomainsQuery(token, window = '7d', options = {}) {
+  return useQuery({
+    queryKey: queryKeys.domains(window),
+    queryFn: () => api.get('/domains', token, { query: { window } }),
+    enabled: !!token,
+    ...options,
+  });
+}
+
+export function useDomainDetailQuery(token, domain, window = '7d', options = {}) {
+  return useQuery({
+    queryKey: queryKeys.domainDetail(domain, window),
+    queryFn: () => api.get(`/domains/${encodeURIComponent(domain)}`, token, { query: { window } }),
+    enabled: !!token && !!domain,
+    ...options,
+  });
+}
+
 /* ---------- Timeline ---------- */
 
 export function useTimelineQuery(token, window = '6h', options = {}) {
@@ -137,8 +159,9 @@ export function useWsInvalidator() {
       queryClient.invalidateQueries({ queryKey: queryKeys.jobs() });
       queryClient.invalidateQueries({ queryKey: queryKeys.capacity() });
       queryClient.invalidateQueries({ queryKey: queryKeys.callbacks() });
-      // Invalidate all timeline windows (1h/6h/24h/7d) — prefix match
+      // Invalidate all timeline + domain windows (prefix match across windows)
       queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['domains'] });
       if (crawlId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.jobDetails(crawlId) });
       }

@@ -28,6 +28,7 @@ import {
   readAllReplicasHistory,
 } from './src/lib/replicaHistory.js';
 import { computeTimeline } from './src/lib/timeline.js';
+import { parseDomainWindow, aggregateDomains, jobsForDomain } from './src/lib/domains.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1100,6 +1101,42 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching capacity:', error);
     res.status(500).json({ error: 'Failed to fetch capacity' });
+  }
+});
+
+// Aggregated list of domains over a window (default 7d).
+app.get('/api/domains', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '7d';
+    const windowMs = parseDomainWindow(windowKey);
+    const client = await ensureRedisConnected();
+    const jobs = await loadAllJobs(client);
+    const domains = aggregateDomains(jobs, Date.now(), windowMs);
+    res.json({ window: windowKey, count: domains.length, domains });
+  } catch (error) {
+    console.error('Error fetching domains:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch domains' });
+  }
+});
+
+// Per-domain detail: jobs in the window + run chain via previous_crawl_id.
+app.get('/api/domains/:domain', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '7d';
+    const windowMs = parseDomainWindow(windowKey);
+    const client = await ensureRedisConnected();
+    const jobs = await loadAllJobs(client);
+    const detail = jobsForDomain(jobs, req.params.domain, windowMs);
+    res.json({
+      domain: req.params.domain,
+      window: windowKey,
+      total_jobs: detail.jobs.length,
+      jobs: detail.jobs,
+      chain: detail.chain,
+    });
+  } catch (error) {
+    console.error('Error fetching domain detail:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch domain detail' });
   }
 });
 

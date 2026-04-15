@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Activity, AlertCircle, RefreshCw, LogOut, FileText,
+  Activity, AlertCircle, RefreshCw, LogOut, FileText, Globe,
 } from 'lucide-react';
 import { setOnUnauthorized } from './lib/api';
 import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
@@ -12,6 +12,8 @@ import QueuePage from './pages/QueuePage';
 import DatasetPage from './pages/DatasetPage';
 import CallbacksPage from './pages/CallbacksPage';
 import AuditPage from './pages/AuditPage';
+import DomainsPage from './pages/DomainsPage';
+import DomainPage from './pages/DomainPage';
 
 /**
  * App — auth gate + layout shell + router.
@@ -150,6 +152,13 @@ const App = () => {
               </Link>
             )}
             <Link
+              to="/domains"
+              className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
+              title="Domains"
+            >
+              <Globe className="w-5 h-5" />
+            </Link>
+            <Link
               to="/audit"
               className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
               title="Audit log"
@@ -174,6 +183,8 @@ const App = () => {
         </Route>
         <Route path="/callbacks" element={<CallbacksPage token={token} onClose={() => callbacksQuery.refetch()} />} />
         <Route path="/audit" element={<AuditPage token={token} />} />
+        <Route path="/domains" element={<DomainsPage token={token} />} />
+        <Route path="/domains/:domain" element={<DomainPage token={token} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
