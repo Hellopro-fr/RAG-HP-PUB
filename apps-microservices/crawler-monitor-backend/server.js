@@ -137,16 +137,10 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Login Endpoint — verifies password against scrypt hash in ADMIN_PASSWORD_HASH.
-// Stricter rate-limit on this endpoint specifically (defend against brute-force).
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10, // max 10 login attempts per IP per 15 min
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many login attempts. Try again later.' },
-});
-
-app.post('/api/login', loginLimiter, async (req, res) => {
+// (No per-endpoint IP rate-limit: removed at user request because the dashboard
+// is internal and shared NAT IPs were causing self-DoS. The global limiter
+// above still applies in addition to the audit log of every attempt.)
+app.post('/api/login', async (req, res) => {
   const { password } = req.body || {};
   if (typeof password !== 'string' || password.length === 0) {
     await logAuditEntry({ user: 'anonymous', action: 'login_attempt', status: 'error', ip: req.ip, metadata: { reason: 'missing_password' } });
