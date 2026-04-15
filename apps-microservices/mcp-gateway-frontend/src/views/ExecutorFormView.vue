@@ -120,6 +120,14 @@
           {{ submitting ? 'Enregistrement...' : (isEdit ? 'Mettre a jour' : 'Creer') }}
         </button>
         <button
+          class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 inline-flex items-center gap-1.5"
+          title="Convertir tous les accents en entites HTML"
+          @click="encodeAllEntities"
+        >
+          <span class="font-mono font-semibold">&amp;</span>
+          Encoder accents
+        </button>
+        <button
           class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
           @click="$router.push('/install-guides-admin')"
         >
@@ -141,6 +149,7 @@ import ExecutorPageBuilder from '@/components/install-guides/ExecutorPageBuilder
 import PrimeIconPicker from '@/components/shared/PrimeIconPicker.vue'
 import ColorClassPicker from '@/components/shared/ColorClassPicker.vue'
 import type { ExecutorElement } from '@/types/install-guide'
+import { encodeHtmlEntities, encodeTextEntities } from '@/utils/htmlEntities'
 
 const route = useRoute()
 const router = useRouter()
@@ -197,6 +206,37 @@ onMounted(async () => {
     }
   }
 })
+
+// Fields that must NOT be entity-encoded — slugs, technical IDs, URLs, file paths,
+// CSS classes, icon names, and machine-readable code blocks.
+const skipEncodingKeys = new Set([
+  'slug', 'icon', 'color', 'display_order', 'is_active',
+  'src', 'image', 'link', 'url', 'cssClass', 'class',
+  'mcp_config', 'cli_add_cmd', 'verify', 'code',
+])
+
+function encodeAllEntities() {
+  // Top-level form fields
+  if (form.value.label) form.value.label = encodeTextEntities(form.value.label)
+  if (form.value.sub) form.value.sub = encodeTextEntities(form.value.sub)
+  if (form.value.description) form.value.description = encodeHtmlEntities(form.value.description)
+  if (form.value.intro) form.value.intro = encodeHtmlEntities(form.value.intro)
+
+  // Page-builder elements
+  contentElements.value = contentElements.value.map(el => {
+    const newProps: Record<string, any> = {}
+    for (const [k, v] of Object.entries(el.props || {})) {
+      if (skipEncodingKeys.has(k) || typeof v !== 'string') {
+        newProps[k] = v
+        continue
+      }
+      const isHtmlish = /<[a-zA-Z\/!]/.test(v)
+      newProps[k] = isHtmlish ? encodeHtmlEntities(v) : encodeTextEntities(v)
+    }
+    return { ...el, props: newProps }
+  })
+  toast.success('Accents convertis en entites HTML')
+}
 
 async function handleSave() {
   if (!form.value.slug || !form.value.label) {

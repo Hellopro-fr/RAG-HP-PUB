@@ -73,7 +73,7 @@
               </span>
               <div class="pt-0.5">
                 <p class="font-medium text-gray-900 dark:text-white text-sm">{{ step.title }}</p>
-                <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{{ step.description }}</p>
+                <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5 doc-step-body" v-html="step.description" />
                 <a
                   v-if="step.link"
                   :href="step.link"
@@ -96,9 +96,11 @@
             </div>
 
             <!-- Text element -->
-            <p v-else-if="step.type === 'text'" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
-              {{ step.description }}
-            </p>
+            <div
+              v-else-if="step.type === 'text'"
+              class="text-sm text-gray-700 dark:text-gray-300 doc-step-body"
+              v-html="step.description"
+            />
 
             <!-- Image element -->
             <img
@@ -203,3 +205,21 @@ const filteredTools = computed(() => {
   );
 });
 </script>
+
+<style scoped>
+/* Render HTML from rich-text step descriptions with sensible defaults. */
+.doc-step-body :deep(ul) { list-style: disc; margin-left: 1.25rem; margin-top: 0.35rem; }
+.doc-step-body :deep(ol) { list-style: decimal; margin-left: 1.25rem; margin-top: 0.35rem; }
+.doc-step-body :deep(li) { margin-top: 0.15rem; }
+.doc-step-body :deep(strong) { font-weight: 600; color: inherit; }
+.doc-step-body :deep(em) { font-style: italic; }
+.doc-step-body :deep(p) { margin-top: 0.35rem; }
+.doc-step-body :deep(p:first-child) { margin-top: 0; }
+.doc-step-body :deep(a) { color: rgb(var(--color-brand-500) / 1); text-decoration: underline; }
+.doc-step-body :deep(code) {
+  background: rgb(0 0 0 / 0.05);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+</style>

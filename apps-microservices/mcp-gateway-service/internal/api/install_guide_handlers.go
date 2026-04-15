@@ -37,20 +37,20 @@ func (h *Handler) handleExecutors(w http.ResponseWriter, r *http.Request) {
 		}
 		e := db.InstallExecutor{
 			Slug:         req.Slug,
-			Label:        req.Label,
-			Sub:          req.Sub,
-			Description:  req.Description,
-			Intro:        req.Intro,
+			Label:        decodeEntitiesString(req.Label),
+			Sub:          decodeEntitiesString(req.Sub),
+			Description:  decodeEntitiesString(req.Description),
+			Intro:        decodeEntitiesString(req.Intro),
 			Icon:         req.Icon,
 			Color:        req.Color,
 			Install:      req.Install,
 			Verify:       req.Verify,
 			McpConfig:    req.McpConfig,
 			CliAddCmd:    req.CliAddCmd,
-			NoteLabel:    req.NoteLabel,
-			NoteText:     req.NoteText,
+			NoteLabel:    decodeEntitiesString(req.NoteLabel),
+			NoteText:     decodeEntitiesString(req.NoteText),
 			NoteClass:    req.NoteClass,
-			Content:      req.Content,
+			Content:      decodeEntitiesJSON(req.Content),
 			DisplayOrder: req.DisplayOrder,
 			IsActive:     isActive,
 		}
@@ -98,16 +98,16 @@ func (h *Handler) handleExecutorByID(w http.ResponseWriter, r *http.Request) {
 			updates["slug"] = *req.Slug
 		}
 		if req.Label != nil {
-			updates["label"] = *req.Label
+			updates["label"] = decodeEntitiesString(*req.Label)
 		}
 		if req.Sub != nil {
-			updates["sub"] = *req.Sub
+			updates["sub"] = decodeEntitiesString(*req.Sub)
 		}
 		if req.Description != nil {
-			updates["description"] = *req.Description
+			updates["description"] = decodeEntitiesString(*req.Description)
 		}
 		if req.Intro != nil {
-			updates["intro"] = *req.Intro
+			updates["intro"] = decodeEntitiesString(*req.Intro)
 		}
 		if req.Icon != nil {
 			updates["icon"] = *req.Icon
@@ -128,16 +128,16 @@ func (h *Handler) handleExecutorByID(w http.ResponseWriter, r *http.Request) {
 			updates["cli_add_cmd"] = *req.CliAddCmd
 		}
 		if req.NoteLabel != nil {
-			updates["note_label"] = *req.NoteLabel
+			updates["note_label"] = decodeEntitiesString(*req.NoteLabel)
 		}
 		if req.NoteText != nil {
-			updates["note_text"] = *req.NoteText
+			updates["note_text"] = decodeEntitiesString(*req.NoteText)
 		}
 		if req.NoteClass != nil {
 			updates["note_class"] = *req.NoteClass
 		}
 		if req.Content != nil {
-			updates["content"] = *req.Content
+			updates["content"] = decodeEntitiesJSON(*req.Content)
 		}
 		if req.DisplayOrder != nil {
 			updates["display_order"] = *req.DisplayOrder
@@ -195,11 +195,11 @@ func (h *Handler) handleConfigs(w http.ResponseWriter, r *http.Request) {
 		}
 		c := db.InstallConfig{
 			Slug:         req.Slug,
-			Label:        req.Label,
-			Description:  req.Description,
+			Label:        decodeEntitiesString(req.Label),
+			Description:  decodeEntitiesString(req.Description),
 			Icon:         req.Icon,
 			Color:        req.Color,
-			Content:      req.Content,
+			Content:      decodeEntitiesJSON(req.Content),
 			DisplayOrder: req.DisplayOrder,
 			IsActive:     isActive,
 		}
@@ -247,10 +247,10 @@ func (h *Handler) handleConfigByID(w http.ResponseWriter, r *http.Request) {
 			updates["slug"] = *req.Slug
 		}
 		if req.Label != nil {
-			updates["label"] = *req.Label
+			updates["label"] = decodeEntitiesString(*req.Label)
 		}
 		if req.Description != nil {
-			updates["description"] = *req.Description
+			updates["description"] = decodeEntitiesString(*req.Description)
 		}
 		if req.Icon != nil {
 			updates["icon"] = *req.Icon
@@ -259,7 +259,7 @@ func (h *Handler) handleConfigByID(w http.ResponseWriter, r *http.Request) {
 			updates["color"] = *req.Color
 		}
 		if req.Content != nil {
-			updates["content"] = *req.Content
+			updates["content"] = decodeEntitiesJSON(*req.Content)
 		}
 		if req.DisplayOrder != nil {
 			updates["display_order"] = *req.DisplayOrder
