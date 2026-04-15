@@ -4,6 +4,7 @@ import {
   ChevronLeft, ChevronRight, AlignLeft, CheckCircle
 } from 'lucide-react';
 import { API_URL } from '../lib/constants';
+import ConfirmDestructive from './ConfirmDestructive';
 
 const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [files, setFiles] = useState([]);
@@ -167,11 +168,9 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     }
   };
 
-  const dropQueue = async () => {
-    if (!window.confirm('☠️ DANGER : Êtes-vous sûr de vouloir TOUT SUPPRIMER ?\n\nCela va vider entièrement la queue de requêtes. Le crawler repartira de zéro (mais l\'historique des URLs déjà visitées est conservé).\n\nCette action est irréversible pour la queue actuelle.')) {
-      return;
-    }
+  const [showDropConfirm, setShowDropConfirm] = useState(false);
 
+  const performDrop = async () => {
     setRepairing(true);
     setError(null);
     setSuccessMsg(null);
@@ -183,12 +182,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
       setSuccessMsg(`Queue entièrement vidée avec succès !`);
       fetchFiles(); // Refresh list - should be empty
       setQueueAnalysis(null); // Clear analysis
+      setShowDropConfirm(false);
     } catch (err) {
       setError(`Erreur lors du "Drop" : ${err.message}`);
     } finally {
       setRepairing(false);
     }
   };
+
+  const dropQueue = () => setShowDropConfirm(true);
 
   // Search is now handled server-side via fetchFiles
   const handleSearchChange = (e) => {
@@ -198,6 +200,23 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <ConfirmDestructive
+        open={showDropConfirm}
+        title="Drop entire queue"
+        description={
+          <>
+            Cela va supprimer <strong>{totalItems}</strong> requête{totalItems > 1 ? 's' : ''} en attente
+            pour le job <code className="text-orange-300">{jobId}</code>.
+            <br /><br />
+            Le crawler repartira de zéro (l&apos;historique des URLs déjà visitées est conservé).
+            Cette action est <strong>irréversible</strong> pour la queue actuelle.
+          </>
+        }
+        shortId={String(jobId).slice(0, 8)}
+        onConfirm={performDrop}
+        onCancel={() => setShowDropConfirm(false)}
+        busy={repairing}
+      />
       <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col transition-all">
         <div className="flex justify-between items-center p-4 border-b border-gray-700">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">

@@ -3,6 +3,7 @@ import {
   Server, XCircle, RefreshCw, AlertTriangle, Trash2, CheckCircle
 } from 'lucide-react';
 import { API_URL } from '../lib/constants';
+import ConfirmDestructive from './ConfirmDestructive';
 
 const DatasetAnalyzer = ({ jobId, onClose, token }) => {
   const [stats, setStats] = useState(null);
@@ -32,9 +33,9 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
     }
   };
 
-  const purgeDuplicates = async () => {
-    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer ${stats.duplicateCount} doublons ? Cette action est irréversible.`)) return;
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
 
+  const performPurge = async () => {
     setPurging(true);
     setError(null);
     try {
@@ -42,6 +43,7 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
       const data = await res.json();
       setSuccess(`Opération réussie: ${data.removedCount} fichiers supprimés.`);
       analyzeDataset(); // Refresh stats
+      setShowPurgeConfirm(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -49,12 +51,31 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
     }
   };
 
+  const purgeDuplicates = () => setShowPurgeConfirm(true);
+
   useEffect(() => {
     analyzeDataset();
   }, [jobId]);
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <ConfirmDestructive
+        open={showPurgeConfirm}
+        title="Purge duplicates"
+        description={
+          <>
+            Va supprimer <strong>{stats?.duplicateCount || 0}</strong> fichier{(stats?.duplicateCount || 0) > 1 ? 's' : ''} doublon
+            pour le job <code className="text-orange-300">{jobId}</code>.
+            <br /><br />
+            Le dataset garde la copie la plus récente de chaque URL.
+            Cette action est <strong>irréversible</strong>.
+          </>
+        }
+        shortId={String(jobId).slice(0, 8)}
+        onConfirm={performPurge}
+        onCancel={() => setShowPurgeConfirm(false)}
+        busy={purging}
+      />
       <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
         <div className="flex justify-between items-center p-4 border-b border-gray-700 bg-gray-750">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
