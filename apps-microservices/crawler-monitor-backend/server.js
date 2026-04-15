@@ -13,6 +13,12 @@ import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { auditMiddleware, readAuditEntries, rotateOldLogs } from './src/lib/auditLog.js';
 import { replayCallback } from './src/lib/callbacks.js';
+import {
+  parseWindow as parseCapacityWindow,
+  snapshotCapacity,
+  readCapacityHistory,
+  SNAPSHOT_INTERVAL_MS,
+} from './src/lib/capacityHistory.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1023,6 +1029,19 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/capacity/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseCapacityWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const points = await readCapacityHistory(client, windowMs);
+    res.json({ window: windowStr, count: points.length, points });
+  } catch (error) {
+    console.error('Error fetching capacity history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch capacity history' });
+  }
+});
+
 app.get('/api/callbacks', authenticateToken, async (req, res) => {
   try {
     const client = await ensureRedisConnected();
@@ -1191,6 +1210,18 @@ ensureRedisConnected()
       setInterval(() => {
         rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
       }, 24 * 60 * 60 * 1000);
+
+      // Capacity history snapshot: every 60s into Redis sorted set (capped at 24h)
+      const takeCapacitySnapshot = async () => {
+        try {
+          const client = await ensureRedisConnected();
+          await snapshotCapacity(client, CRAWL_RUNNING_COUNT_KEY, CRAWL_MAX_GLOBAL_KEY);
+        } catch (err) {
+          console.error('[capacity] snapshot failed:', err.message);
+        }
+      };
+      takeCapacitySnapshot();
+      setInterval(takeCapacitySnapshot, SNAPSHOT_INTERVAL_MS);
     });
   })
   .catch(err => {
