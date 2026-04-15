@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Activity, AlertCircle, RefreshCw, LogOut, FileText, Globe,
+  Activity, RefreshCw, LogOut, FileText, Globe, Mail,
 } from 'lucide-react';
 import { setOnUnauthorized } from './lib/api';
 import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
@@ -140,23 +140,33 @@ const App = () => {
             <Activity className="w-8 h-8 text-blue-400" />
             <h1 className="text-xl font-bold text-white">Crawler Dashboard Pro</h1>
           </Link>
-          <div className="flex gap-2">
-            {failedCallbackCount > 0 && (
-              <Link
-                to="/callbacks"
-                className="flex items-center gap-2 px-3 py-1 bg-red-900/50 hover:bg-red-900/70 border border-red-500/30 rounded-lg text-sm transition-colors"
-                title="Voir les callbacks en échec"
-              >
-                <AlertCircle className="w-4 h-4 text-red-400" />
-                <span className="text-red-300">{failedCallbackCount} callback{failedCallbackCount > 1 ? 's' : ''} en échec</span>
-              </Link>
-            )}
+          <div className="flex gap-2 items-center">
             <Link
               to="/domains"
               className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
               title="Domains"
             >
               <Globe className="w-5 h-5" />
+            </Link>
+            <Link
+              to="/callbacks"
+              className={
+                failedCallbackCount > 0
+                  ? 'relative p-2 rounded-md bg-red-900/40 hover:bg-red-900/60 border border-red-500/40 transition-colors text-red-300'
+                  : 'relative p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white'
+              }
+              title={
+                failedCallbackCount > 0
+                  ? `${failedCallbackCount} callback${failedCallbackCount > 1 ? 's' : ''} en échec`
+                  : 'Callbacks (aucun en échec)'
+              }
+            >
+              <Mail className="w-5 h-5" />
+              {failedCallbackCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full bg-red-500 text-white">
+                  {failedCallbackCount > 99 ? '99+' : failedCallbackCount}
+                </span>
+              )}
             </Link>
             <Link
               to="/audit"
