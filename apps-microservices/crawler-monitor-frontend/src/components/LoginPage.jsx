@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Activity } from 'lucide-react';
-import { API_URL } from '../lib/constants';
+import { apiFetch, ApiError } from '../lib/api';
 
 const LoginPage = ({ onLogin }) => {
   const [password, setPassword] = useState('');
@@ -12,19 +12,20 @@ const LoginPage = ({ onLogin }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_URL}/login`, {
+      const data = await apiFetch('/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: { password },
+        retry: { attempts: 1 }, // don't retry login failures
       });
-      const data = await res.json();
-      if (res.ok) {
-        onLogin(data.token);
-      } else {
-        setError(data.error || 'Login failed');
-      }
+      onLogin(data.token);
     } catch (err) {
-      setError('Connection error');
+      if (err instanceof ApiError && err.body && err.body.error) {
+        setError(err.body.error);
+      } else if (err instanceof ApiError && err.status === 429) {
+        setError('Trop de tentatives. Réessayez dans quelques minutes.');
+      } else {
+        setError('Connection error');
+      }
     } finally {
       setLoading(false);
     }

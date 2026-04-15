@@ -3,7 +3,7 @@ import {
   Code, XCircle, RefreshCw, Search, Trash2, Filter,
   ChevronLeft, ChevronRight, AlignLeft, CheckCircle
 } from 'lucide-react';
-import { API_URL } from '../lib/constants';
+import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
 
 const RequestQueueEditor = ({ jobId, onClose, token }) => {
@@ -23,19 +23,6 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
-  const authFetch = async (url, options = {}) => {
-    const headers = {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`,
-    };
-    const res = await fetch(url, { ...options, headers });
-    if (!res.ok) {
-      if (res.status === 401) throw new Error('Unauthorized');
-      throw new Error('Request failed');
-    }
-    return res;
-  };
-
   useEffect(() => {
     fetchFiles();
   }, [jobId, page, searchTerm]); // Refetch on page or search change
@@ -43,14 +30,11 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const query = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        search: searchTerm
-      });
-
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues?${query}`);
-      const data = await res.json();
+      const data = await api.get(
+        `/jobs/${jobId}/request-queues`,
+        token,
+        { query: { page: String(page), limit: String(limit), search: searchTerm } }
+      );
 
       // Handle paginated response
       if (data.items) {
@@ -76,8 +60,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/${file.domain}/${file.name}`);
-      const data = await res.json();
+      const data = await api.get(`/jobs/${jobId}/request-queues/${file.domain}/${file.name}`, token);
       setContent(JSON.stringify(data, null, 2));
     } catch (err) {
       setError(err.message);
@@ -110,11 +93,11 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
         throw new Error('JSON Invalide: ' + e.message);
       }
 
-      await authFetch(`${API_URL}/jobs/${jobId}/request-queues/${selectedFile.domain}/${selectedFile.name}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(jsonContent)
-      });
+      await api.post(
+        `/jobs/${jobId}/request-queues/${selectedFile.domain}/${selectedFile.name}`,
+        token,
+        jsonContent
+      );
 
       setSuccessMsg('Fichier sauvegardé avec succès !');
       // Refresh list to update metadata if changed
@@ -134,8 +117,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/analyze`);
-      const data = await res.json();
+      const data = await api.get(`/jobs/${jobId}/request-queues/analyze`, token);
       setQueueAnalysis(data);
       setSuccessMsg(`Analyse terminée : ${data.total} URLs analysées`);
     } catch (err) {
@@ -154,10 +136,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/clean-patterns`, {
-        method: 'POST'
-      });
-      const data = await res.json();
+      const data = await api.post(`/jobs/${jobId}/request-queues/clean-patterns`, token);
       setSuccessMsg(`Nettoyage patterns terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
       setQueueAnalysis(null); // Reset analysis after cleanup
       fetchFiles(); // Refresh list
@@ -175,10 +154,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/drop`, {
-        method: 'POST'
-      });
-      const data = await res.json();
+      await api.post(`/jobs/${jobId}/request-queues/drop`, token);
       setSuccessMsg(`Queue entièrement vidée avec succès !`);
       fetchFiles(); // Refresh list - should be empty
       setQueueAnalysis(null); // Clear analysis
