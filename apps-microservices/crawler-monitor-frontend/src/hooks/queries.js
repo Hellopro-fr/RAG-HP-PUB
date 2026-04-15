@@ -11,13 +11,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
 export const queryKeys = {
-  jobs:           () => ['jobs'],
-  jobDetails:     (id) => ['jobs', id, 'details'],
-  capacity:       () => ['capacity'],
-  capacityHistory:(window) => ['capacity', 'history', window],
-  callbacks:      () => ['callbacks'],
-  systemHealth:   () => ['system', 'health'],
-  systemStats:    (window) => ['system', 'stats', window],
+  jobs:               () => ['jobs'],
+  jobDetails:         (id) => ['jobs', id, 'details'],
+  capacity:           () => ['capacity'],
+  capacityHistory:    (window) => ['capacity', 'history', window],
+  callbacks:          () => ['callbacks'],
+  systemHealth:       () => ['system', 'health'],
+  systemStats:        (window) => ['system', 'stats', window],
+  replicasHistoryAll: (window) => ['replicas', 'history', 'all', window],
 };
 
 /* ---------- Jobs ---------- */
@@ -91,6 +92,18 @@ export function useSystemStatsQuery(token, window = '24h', options = {}) {
     queryKey: queryKeys.systemStats(window),
     queryFn: () => api.get('/system/stats', token, { query: { window } }),
     enabled: !!token,
+    ...options,
+  });
+}
+
+/* ---------- Replicas ---------- */
+
+export function useReplicasHistoryQuery(token, window = '1h', options = {}) {
+  return useQuery({
+    queryKey: queryKeys.replicasHistoryAll(window),
+    queryFn: () => api.get('/replicas/history', token, { query: { window }, retry: { attempts: 1 } }),
+    enabled: !!token,
+    refetchInterval: 30 * 1000, // background refresh every 30s for sparklines
     ...options,
   });
 }

@@ -21,6 +21,12 @@ import {
 } from './src/lib/capacityHistory.js';
 import { parseStatsWindow, computeSystemStats } from './src/lib/systemStats.js';
 import { verifyPassword, looksLikeScryptHash } from './src/lib/password.js';
+import {
+  parseReplicaWindow,
+  persistHeartbeat,
+  readReplicaHistory,
+  readAllReplicasHistory,
+} from './src/lib/replicaHistory.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1096,6 +1102,33 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   }
 });
 
+// Per-replica CPU/RAM history (single replica or batch for all known)
+app.get('/api/replicas/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseReplicaWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const data = await readAllReplicasHistory(client, windowMs);
+    res.json({ window: windowStr, replicas: data });
+  } catch (error) {
+    console.error('Error fetching all replicas history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch replica history' });
+  }
+});
+
+app.get('/api/replicas/:replicaId/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseReplicaWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const points = await readReplicaHistory(client, req.params.replicaId, windowMs);
+    res.json({ replicaId: req.params.replicaId, window: windowStr, count: points.length, points });
+  } catch (error) {
+    console.error('Error fetching replica history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch replica history' });
+  }
+});
+
 app.get('/api/capacity/history', authenticateToken, async (req, res) => {
   try {
     const windowStr = req.query.window || '1h';
@@ -1317,10 +1350,16 @@ async function setupRedisListener() {
       }
     });
 
-    await subscriber.subscribe('crawler:heartbeat', (message) => {
+    await subscriber.subscribe('crawler:heartbeat', async (message) => {
       try {
         const heartbeat = JSON.parse(message);
         broadcast({ type: 'replica_heartbeat', data: heartbeat });
+        // Persist into per-replica time series for the /api/replicas/history endpoints.
+        // Uses the persistent client (not the subscriber) since SUBSCRIBE clients
+        // cannot run other commands.
+        ensureRedisConnected()
+          .then(c => persistHeartbeat(c, heartbeat))
+          .catch(err => console.error('[replicaHistory] persist error:', err.message));
       } catch (e) {
         console.error('Failed to parse heartbeat:', e);
       }

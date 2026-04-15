@@ -95,7 +95,7 @@ const Overview = ({ token, replicas }) => {
 
       <CapacityBar capacity={capacity} token={token} />
 
-      <ReplicaMonitor replicas={replicas} />
+      <ReplicaMonitor replicas={replicas} token={token} />
 
       <div className="bg-gray-800 p-3 rounded-lg space-y-3">
         <div className="flex flex-wrap items-center gap-3">
