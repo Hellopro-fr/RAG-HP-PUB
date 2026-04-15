@@ -9,6 +9,7 @@ import StatCard from './components/StatCard';
 import ReplicaMonitor from './components/ReplicaMonitor';
 import JobCard from './components/JobCard';
 import JobDetails from './components/JobDetails';
+import CallbacksPanel from './components/CallbacksPanel';
 
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
@@ -30,6 +31,7 @@ const App = () => {
   const [replicas, setReplicas] = useState({});
   const [capacity, setCapacity] = useState(null);
   const [failedCallbackCount, setFailedCallbackCount] = useState(0);
+  const [showCallbacksPanel, setShowCallbacksPanel] = useState(false);
 
   const filteredJobs = useMemo(() => {
     return allJobs.filter(job => {
@@ -230,6 +232,12 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
+      {showCallbacksPanel && (
+        <CallbacksPanel
+          token={token}
+          onClose={() => { setShowCallbacksPanel(false); fetchCallbacks(); }}
+        />
+      )}
       <header className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-20">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -238,10 +246,14 @@ const App = () => {
           </div>
           <div className="flex gap-2">
             {failedCallbackCount > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1 bg-red-900/50 border border-red-500/30 rounded-lg text-sm">
+              <button
+                onClick={() => setShowCallbacksPanel(true)}
+                className="flex items-center gap-2 px-3 py-1 bg-red-900/50 hover:bg-red-900/70 border border-red-500/30 rounded-lg text-sm cursor-pointer transition-colors"
+                title="Voir les callbacks en échec"
+              >
                 <AlertCircle className="w-4 h-4 text-red-400" />
                 <span className="text-red-300">{failedCallbackCount} callback{failedCallbackCount > 1 ? 's' : ''} en échec</span>
-              </div>
+              </button>
             )}
             <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
