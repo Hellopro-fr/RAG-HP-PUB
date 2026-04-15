@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { AlertTriangle } from 'lucide-react';
-import { API_URL } from '../lib/constants';
+import { api, ApiError } from '../lib/api';
 
 const HISTORY_REFRESH_MS = 60 * 1000;
 const SATURATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
@@ -29,19 +29,13 @@ const CapacityBar = ({ capacity, token }) => {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/capacity/history?window=1h`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        // Endpoint not available (B3 not deployed yet): hide silently
-        if (res.status === 404) setHistoryAvailable(false);
-        return;
-      }
-      const data = await res.json();
+      const data = await api.get('/capacity/history', token, { query: { window: '1h' }, retry: { attempts: 1 } });
       setHistory(data.points || []);
       setHistoryAvailable(true);
-    } catch {
-      setHistoryAvailable(false);
+    } catch (err) {
+      // Endpoint not available (404) → hide silently. Other errors → also hide (best-effort).
+      if (err instanceof ApiError && err.status === 404) setHistoryAvailable(false);
+      else setHistoryAvailable(false);
     }
   }, [token]);
 

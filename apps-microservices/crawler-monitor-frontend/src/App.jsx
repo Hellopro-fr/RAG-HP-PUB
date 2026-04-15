@@ -3,7 +3,8 @@ import {
   Activity, AlertCircle, RefreshCw, LogOut, Server, CheckCircle, XCircle,
   Zap, Archive, Search, Filter, Calendar, ChevronLeft, ChevronRight, TrendingUp
 } from 'lucide-react';
-import { API_URL, JOBS_PER_PAGE } from './lib/constants';
+import { JOBS_PER_PAGE } from './lib/constants';
+import { api, setOnUnauthorized } from './lib/api';
 import LoginPage from './components/LoginPage';
 import StatCard from './components/StatCard';
 import ReplicaMonitor from './components/ReplicaMonitor';
@@ -81,18 +82,11 @@ const App = () => {
     setToken(null);
   };
 
-  const authFetch = async (url, options = {}) => {
-    const headers = {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`,
-    };
-    const res = await fetch(url, { ...options, headers });
-    if (res.status === 401) {
-      handleLogout();
-      throw new Error('Unauthorized');
-    }
-    return res;
-  };
+  // Centralized 401 handler — called by lib/api when any request returns 401.
+  useEffect(() => {
+    setOnUnauthorized(handleLogout);
+    return () => setOnUnauthorized(null);
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -174,8 +168,7 @@ const App = () => {
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await authFetch(`${API_URL}/jobs`);
-      const data = await response.json();
+      const data = await api.get('/jobs', token);
       setAllJobs(data);
     } catch (error) {
       console.error('Error fetching jobs:', error);
@@ -186,8 +179,7 @@ const App = () => {
 
   const fetchCapacity = useCallback(async () => {
     try {
-      const response = await authFetch(`${API_URL}/capacity`);
-      const data = await response.json();
+      const data = await api.get('/capacity', token);
       setCapacity(data);
     } catch (error) {
       console.error('Error fetching capacity:', error);
@@ -196,8 +188,7 @@ const App = () => {
 
   const fetchCallbacks = useCallback(async () => {
     try {
-      const response = await authFetch(`${API_URL}/callbacks`);
-      const data = await response.json();
+      const data = await api.get('/callbacks', token);
       setFailedCallbackCount(data.count);
     } catch (error) {
       console.error('Error fetching callbacks:', error);
@@ -213,10 +204,7 @@ const App = () => {
     setLoadingDetails(true);
 
     try {
-      const response = await authFetch(`${API_URL}/jobs/${id}/details`);
-      if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-      const data = await response.json();
-
+      const data = await api.get(`/jobs/${id}/details`, token);
       jobCache.current[id] = data;
       setSelectedJob(data);
     } catch (error) {
@@ -225,7 +213,7 @@ const App = () => {
     } finally {
       setLoadingDetails(false);
     }
-  }, [selectedJob, showRaw]);
+  }, [selectedJob, showRaw, token]);
 
   if (!token) {
     return <LoginPage onLogin={handleLogin} />;
