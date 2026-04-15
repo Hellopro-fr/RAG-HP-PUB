@@ -86,6 +86,13 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Trust the first reverse proxy (nginx in front of us). Required so that
+// req.ip / req.ips / X-Forwarded-For are interpreted correctly by
+// express-rate-limit and the audit log. Configurable via TRUST_PROXY env var
+// (number of proxy hops; default 1 for our nginx -> backend setup).
+const TRUST_PROXY_HOPS = parseInt(process.env.TRUST_PROXY || '1', 10);
+app.set('trust proxy', Number.isFinite(TRUST_PROXY_HOPS) ? TRUST_PROXY_HOPS : 1);
+
 // Security Middleware
 app.use(helmet());
 const limiter = rateLimit({
