@@ -7,6 +7,7 @@
  *  - WebSocket-driven invalidation lives in App.jsx via queryClient.invalidateQueries
  */
 
+import { useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
@@ -164,21 +165,24 @@ export function useAlertsQuery(token, options = {}) {
  *
  *   handleJobUpdate(crawlId)  → invalidates jobs list, capacity, callbacks count,
  *                                and the job details if it's the affected id.
+ *
+ * IMPORTANT: returns a STABLE object/callback (memoized). This avoids the
+ * App.jsx WebSocket effect re-running on every render — which used to
+ * reconnect the WS in a loop and miss heartbeats (regression fixed).
  */
 export function useWsInvalidator() {
   const queryClient = useQueryClient();
-  return {
-    handleJobUpdate: (crawlId) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.jobs() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.capacity() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.callbacks() });
-      // Invalidate all timeline + domain windows (prefix match across windows)
-      queryClient.invalidateQueries({ queryKey: ['timeline'] });
-      queryClient.invalidateQueries({ queryKey: ['domains'] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.alerts() });
-      if (crawlId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.jobDetails(crawlId) });
-      }
-    },
-  };
+  const handleJobUpdate = useCallback((crawlId) => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.jobs() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.capacity() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.callbacks() });
+    // Invalidate all timeline + domain windows (prefix match across windows)
+    queryClient.invalidateQueries({ queryKey: ['timeline'] });
+    queryClient.invalidateQueries({ queryKey: ['domains'] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.alerts() });
+    if (crawlId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.jobDetails(crawlId) });
+    }
+  }, [queryClient]);
+  return useMemo(() => ({ handleJobUpdate }), [handleJobUpdate]);
 }

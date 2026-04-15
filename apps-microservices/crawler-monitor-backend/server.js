@@ -86,6 +86,13 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Trust the first reverse proxy (nginx in front of us). Required so that
+// req.ip / req.ips / X-Forwarded-For are interpreted correctly by
+// express-rate-limit and the audit log. Configurable via TRUST_PROXY env var
+// (number of proxy hops; default 1 for our nginx -> backend setup).
+const TRUST_PROXY_HOPS = parseInt(process.env.TRUST_PROXY || '1', 10);
+app.set('trust proxy', Number.isFinite(TRUST_PROXY_HOPS) ? TRUST_PROXY_HOPS : 1);
+
 // Security Middleware
 app.use(helmet());
 const limiter = rateLimit({
@@ -130,16 +137,10 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Login Endpoint — verifies password against scrypt hash in ADMIN_PASSWORD_HASH.
-// Stricter rate-limit on this endpoint specifically (defend against brute-force).
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10, // max 10 login attempts per IP per 15 min
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many login attempts. Try again later.' },
-});
-
-app.post('/api/login', loginLimiter, async (req, res) => {
+// (No per-endpoint IP rate-limit: removed at user request because the dashboard
+// is internal and shared NAT IPs were causing self-DoS. The global limiter
+// above still applies in addition to the audit log of every attempt.)
+app.post('/api/login', async (req, res) => {
   const { password } = req.body || {};
   if (typeof password !== 'string' || password.length === 0) {
     await logAuditEntry({ user: 'anonymous', action: 'login_attempt', status: 'error', ip: req.ip, metadata: { reason: 'missing_password' } });
