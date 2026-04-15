@@ -13,6 +13,13 @@
       <span class="text-gray-600 dark:text-gray-300">{{ cmd?.label || '...' }}</span>
     </nav>
 
+    <CrossSectionLink
+      to="/docs"
+      icon="pi-book"
+      message="Decouvrez les outils MCP et leur configuration."
+      link-label="Voir la documentation"
+    />
+
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-20">
       <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
@@ -175,6 +182,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import CodeBlock from '@/components/shared/CodeBlock.vue'
+import CrossSectionLink from '@/components/shared/CrossSectionLink.vue'
 import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { installGuidesPublicApi } from '@/api/install-guides'

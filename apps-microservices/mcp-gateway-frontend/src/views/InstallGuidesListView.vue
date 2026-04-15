@@ -10,12 +10,19 @@
     </nav>
 
     <!-- Header -->
-    <div class="mb-10">
+    <div class="mb-6">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Guide d'installation</h1>
       <p class="mt-2 text-gray-600 dark:text-gray-400">
         Installez un package executor puis configurez votre client MCP pour se connecter au gateway.
       </p>
     </div>
+
+    <CrossSectionLink
+      to="/docs"
+      icon="pi-book"
+      message="Vous cherchez la documentation des outils MCP disponibles ?"
+      link-label="Voir la documentation"
+    />
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-20">
@@ -103,6 +110,7 @@
 import { ref, onMounted } from 'vue'
 import { installGuidesPublicApi } from '@/api/install-guides'
 import type { InstallExecutor, InstallConfig } from '@/types/install-guide'
+import CrossSectionLink from '@/components/shared/CrossSectionLink.vue'
 
 const commands = ref<InstallExecutor[]>([])
 const mcpConfigs = ref<InstallConfig[]>([])

@@ -1,11 +1,18 @@
 <template>
   <div>
-    <div class="mb-8">
+    <div class="mb-6">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Serveurs MCP disponibles</h1>
       <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
         Documentation des outils disponibles via le MCP Gateway.
       </p>
     </div>
+
+    <CrossSectionLink
+      to="/install-guide"
+      icon="pi-download"
+      message="Pret a connecter votre client MCP au gateway ?"
+      link-label="Suivre le guide d'installation"
+    />
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-20">
@@ -79,6 +86,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { docsApi } from '@/api/docs';
 import type { DocsServerSummary } from '@/types/docs';
+import CrossSectionLink from '@/components/shared/CrossSectionLink.vue';
 
 const servers = ref<DocsServerSummary[]>([]);
 const loading = ref(true);
