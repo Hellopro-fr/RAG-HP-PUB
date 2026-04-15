@@ -27,6 +27,7 @@ import {
   readReplicaHistory,
   readAllReplicasHistory,
 } from './src/lib/replicaHistory.js';
+import { computeTimeline } from './src/lib/timeline.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -1099,6 +1100,20 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching capacity:', error);
     res.status(500).json({ error: 'Failed to fetch capacity' });
+  }
+});
+
+// Stacked timeline of jobs by start_time bucket. Used by Overview to plot
+// success/failure/running per minute (or coarser) on a sliding window.
+app.get('/api/timeline', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '6h';
+    const client = await ensureRedisConnected();
+    const result = await computeTimeline(client, windowKey, { loadJobs: loadAllJobs });
+    res.json(result);
+  } catch (error) {
+    console.error('Error computing timeline:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute timeline' });
   }
 });
 

@@ -11,6 +11,7 @@ import ReplicaMonitor from '../components/ReplicaMonitor';
 import JobCard from '../components/JobCard';
 import JobDetails from '../components/JobDetails';
 import CapacityBar from '../components/CapacityBar';
+import Timeline from '../components/Timeline';
 
 /**
  * Overview page (`/` and `/jobs/:id`).
@@ -83,6 +84,16 @@ const Overview = ({ token, replicas }) => {
 
   const handleSelectJob = (id) => navigate(`/jobs/${id}`);
 
+  // Click on a timeline bucket → narrow the date filters to that bucket
+  const handleTimelineBucketClick = ({ from, to }) => {
+    const fromDate = new Date(from);
+    const toDate = new Date(to - 1);
+    const yyyymmdd = (d) => `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
+    setStartDate(yyyymmdd(fromDate));
+    setEndDate(yyyymmdd(toDate));
+    setCurrentPage(1);
+  };
+
   return (
     <main className="container mx-auto p-4 space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -92,6 +103,8 @@ const Overview = ({ token, replicas }) => {
         <StatCard title="En cours" value={globalStats.running} icon={Zap} color="blue" />
         <StatCard title="Archivés" value={globalStats.archived} icon={Archive} color="gray" />
       </div>
+
+      <Timeline token={token} onBucketClick={handleTimelineBucketClick} />
 
       <CapacityBar capacity={capacity} token={token} />
 

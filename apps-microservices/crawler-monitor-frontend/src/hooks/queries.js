@@ -19,6 +19,7 @@ export const queryKeys = {
   systemHealth:       () => ['system', 'health'],
   systemStats:        (window) => ['system', 'stats', window],
   replicasHistoryAll: (window) => ['replicas', 'history', 'all', window],
+  timeline:           (window) => ['timeline', window],
 };
 
 /* ---------- Jobs ---------- */
@@ -108,6 +109,18 @@ export function useReplicasHistoryQuery(token, window = '1h', options = {}) {
   });
 }
 
+/* ---------- Timeline ---------- */
+
+export function useTimelineQuery(token, window = '6h', options = {}) {
+  return useQuery({
+    queryKey: queryKeys.timeline(window),
+    queryFn: () => api.get('/timeline', token, { query: { window } }),
+    enabled: !!token,
+    refetchInterval: 30 * 1000, // background refresh
+    ...options,
+  });
+}
+
 /* ---------- WS invalidation helper ---------- */
 
 /**
@@ -124,6 +137,8 @@ export function useWsInvalidator() {
       queryClient.invalidateQueries({ queryKey: queryKeys.jobs() });
       queryClient.invalidateQueries({ queryKey: queryKeys.capacity() });
       queryClient.invalidateQueries({ queryKey: queryKeys.callbacks() });
+      // Invalidate all timeline windows (1h/6h/24h/7d) — prefix match
+      queryClient.invalidateQueries({ queryKey: ['timeline'] });
       if (crawlId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.jobDetails(crawlId) });
       }
