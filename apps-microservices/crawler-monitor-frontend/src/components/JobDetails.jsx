@@ -1,17 +1,18 @@
-import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   XCircle, Code, Server, Clock, CheckCircle, AlertCircle
 } from 'lucide-react';
 import StatCard from './StatCard';
 import ErrorVisualization from './ErrorVisualization';
 import AdvancedLogViewer from './AdvancedLogViewer';
-import RequestQueueEditor from './RequestQueueEditor';
-import DatasetAnalyzer from './DatasetAnalyzer';
 
-const JobDetails = ({ job, onToggleRaw, showRaw, token, onSelectJob }) => {
-  const [showQueueEditor, setShowQueueEditor] = useState(false);
-  const [showDatasetAnalyzer, setShowDatasetAnalyzer] = useState(false);
-
+/**
+ * JobDetails — right panel of the Overview.
+ *
+ * Queue and Dataset are now sub-routes (/jobs/:id/queue, /jobs/:id/dataset)
+ * rather than internal modals. Their <Outlet/> is rendered by Overview.
+ */
+const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob }) => {
   if (!job) return null;
   if (job.error) {
     return (
@@ -58,20 +59,20 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token, onSelectJob }) => {
           </div>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowQueueEditor(true)}
+          <Link
+            to={`/jobs/${job.id}/queue`}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-white"
           >
             <Code className="w-4 h-4" />
             Explorer la Queue
-          </button>
-          <button
-            onClick={() => setShowDatasetAnalyzer(true)}
+          </Link>
+          <Link
+            to={`/jobs/${job.id}/dataset`}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors text-white"
           >
             <Server className="w-4 h-4" />
             Analyser Dataset
-          </button>
+          </Link>
           <button
             onClick={onToggleRaw}
             className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
@@ -81,9 +82,6 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token, onSelectJob }) => {
           </button>
         </div>
       </div>
-
-      {showQueueEditor && <RequestQueueEditor jobId={job.id} onClose={() => setShowQueueEditor(false)} token={token} />}
-      {showDatasetAnalyzer && <DatasetAnalyzer jobId={job.id} onClose={() => setShowDatasetAnalyzer(false)} token={token} />}
 
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />

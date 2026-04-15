@@ -7,6 +7,8 @@ import { api, setOnUnauthorized } from './lib/api';
 import LoginPage from './components/LoginPage';
 import CallbacksPanel from './components/CallbacksPanel';
 import Overview from './pages/Overview';
+import QueuePage from './pages/QueuePage';
+import DatasetPage from './pages/DatasetPage';
 
 /**
  * App is the auth gate + layout shell + router.
@@ -245,12 +247,11 @@ const App = () => {
       </header>
 
       <Routes>
-        <Route path="/" element={<Overview {...overviewProps} />}>
-          {/* Sub-routes for modals will be added in next commits:
-              <Route path="jobs/:id/queue" element={<QueuePage/>} />
-              <Route path="jobs/:id/dataset" element={<DatasetPage/>} /> */}
+        <Route path="/" element={<Overview {...overviewProps} />} />
+        <Route path="/jobs/:id" element={<Overview {...overviewProps} />}>
+          <Route path="queue" element={<QueuePage token={token} />} />
+          <Route path="dataset" element={<DatasetPage token={token} />} />
         </Route>
-        <Route path="/jobs/:id" element={<Overview {...overviewProps} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
