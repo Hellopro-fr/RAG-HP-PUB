@@ -46,7 +46,7 @@ class PrixExtractor:
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
     # Nombre max de traitements parallèles pour les items
-    MAX_PARALLEL_ITEMS = 5
+    MAX_PARALLEL_ITEMS = 10
 
     ETAPE = "10"
 
