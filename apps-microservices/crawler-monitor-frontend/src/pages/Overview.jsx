@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Outlet } from 'react-router-dom';
 import {
   RefreshCw, Server, CheckCircle, XCircle, Zap, Archive,
   Search, Filter, Calendar, ChevronLeft, ChevronRight, TrendingUp,
 } from 'lucide-react';
 import { JOBS_PER_PAGE } from '../lib/constants';
+import { useJobsQuery, useCapacityQuery, useJobDetailsQuery } from '../hooks/queries';
 import StatCard from '../components/StatCard';
 import ReplicaMonitor from '../components/ReplicaMonitor';
 import JobCard from '../components/JobCard';
@@ -14,52 +15,34 @@ import CapacityBar from '../components/CapacityBar';
 /**
  * Overview page (`/` and `/jobs/:id`).
  *
- * Renders the full dashboard:
- *  - 5 KPI cards
- *  - Capacity bar
- *  - Replica monitor
- *  - Filters
- *  - Split view: paginated job list (left) | selected job details (right)
- *
- * The currently-selected job is driven by the `:id` URL param:
- *   `/`                   → no job selected, right panel shows the empty placeholder
- *   `/jobs/c8f2`          → loads & shows job c8f2 in the right panel
- *
- * This is NOT yet React Query — that migration is W3.1. For now, props provide
- * the data fetched centrally by App.jsx so the WebSocket-driven refresh keeps
- * working unchanged.
+ * Data via React Query hooks; no manual fetching here.
+ * `replicas` still comes from props (it is WebSocket-only, lives in App.jsx).
  */
-const Overview = ({
-  token,
-  allJobs,
-  loading,
-  capacity,
-  replicas,
-  selectedJob,
-  loadingDetails,
-  showRaw,
-  setShowRaw,
-  fetchJobDetails,
-  clearSelectedJob,
-}) => {
+const Overview = ({ token, replicas }) => {
   const { id: routeJobId } = useParams();
   const navigate = useNavigate();
 
-  // Local UI state (filters, pagination)
+  // Local UI state (filters, pagination, raw-log toggle)
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showRaw, setShowRaw] = useState(false);
 
-  // URL → state sync: load job details when the URL :id changes
-  useEffect(() => {
-    if (routeJobId) {
-      fetchJobDetails(routeJobId);
-    } else {
-      clearSelectedJob();
-    }
-  }, [routeJobId, fetchJobDetails, clearSelectedJob]);
+  // Data layer
+  const jobsQuery = useJobsQuery(token);
+  const allJobs = jobsQuery.data || [];
+  const loading = jobsQuery.isLoading;
+
+  const capacityQuery = useCapacityQuery(token);
+  const capacity = capacityQuery.data || null;
+
+  const detailsQuery = useJobDetailsQuery(token, routeJobId);
+  const selectedJob = routeJobId
+    ? (detailsQuery.data ?? (detailsQuery.error ? { id: routeJobId, error: detailsQuery.error.message } : null))
+    : null;
+  const loadingDetails = !!routeJobId && detailsQuery.isLoading;
 
   const filteredJobs = useMemo(() => {
     return allJobs.filter(job => {
@@ -225,7 +208,7 @@ const Overview = ({
                 key={job.id}
                 job={job}
                 onClick={() => handleSelectJob(job.id)}
-                isSelected={selectedJob?.id === job.id || routeJobId === job.id}
+                isSelected={routeJobId === job.id}
               />
             ))
           )}
@@ -254,7 +237,6 @@ const Overview = ({
         </div>
       </div>
 
-      {/* Sub-routes (queue/dataset) render here as full-screen overlays */}
       <Outlet />
     </main>
   );

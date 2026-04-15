@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { AlertTriangle } from 'lucide-react';
-import { api, ApiError } from '../lib/api';
+import { useCapacityHistoryQuery } from '../hooks/queries';
 
-const HISTORY_REFRESH_MS = 60 * 1000;
 const SATURATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -12,7 +11,7 @@ const SATURATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
  */
 function currentSaturationStreak(points) {
   if (!points || points.length === 0) return 0;
-  // points are ordered chronologically (B3 returns ZRANGEBYSCORE order)
+  // points are ordered chronologically
   const last = points[points.length - 1];
   if (!last.full) return 0;
   let start = last.ts;
@@ -24,27 +23,10 @@ function currentSaturationStreak(points) {
 }
 
 const CapacityBar = ({ capacity, token }) => {
-  const [history, setHistory] = useState([]);
-  const [historyAvailable, setHistoryAvailable] = useState(true);
-
-  const fetchHistory = useCallback(async () => {
-    try {
-      const data = await api.get('/capacity/history', token, { query: { window: '1h' }, retry: { attempts: 1 } });
-      setHistory(data.points || []);
-      setHistoryAvailable(true);
-    } catch (err) {
-      // Endpoint not available (404) → hide silently. Other errors → also hide (best-effort).
-      if (err instanceof ApiError && err.status === 404) setHistoryAvailable(false);
-      else setHistoryAvailable(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) return;
-    fetchHistory();
-    const id = setInterval(fetchHistory, HISTORY_REFRESH_MS);
-    return () => clearInterval(id);
-  }, [token, fetchHistory]);
+  const historyQuery = useCapacityHistoryQuery(token, '1h');
+  const history = historyQuery.data?.points || [];
+  // Hide sparkline silently if endpoint is unavailable (404 or other error)
+  const historyAvailable = !historyQuery.isError;
 
   const saturationMs = useMemo(() => currentSaturationStreak(history), [history]);
   const showSaturationBanner = saturationMs > SATURATION_THRESHOLD_MS;

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Activity, AlertCircle, RefreshCw, LogOut, FileText,
 } from 'lucide-react';
-import { api, setOnUnauthorized } from './lib/api';
+import { setOnUnauthorized } from './lib/api';
+import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
 import LoginPage from './components/LoginPage';
 import Overview from './pages/Overview';
 import QueuePage from './pages/QueuePage';
@@ -12,34 +14,27 @@ import CallbacksPage from './pages/CallbacksPage';
 import AuditPage from './pages/AuditPage';
 
 /**
- * App is the auth gate + layout shell + router.
+ * App — auth gate + layout shell + router.
  *
- * - Holds auth state (token in localStorage) and exposes login/logout
- * - Holds shared dashboard state: jobs, capacity, replicas, callbacks count,
- *   currently-selected job (URL-driven via /jobs/:id)
- * - Manages the WebSocket connection (job_update, replica_heartbeat)
- * - Renders the top header + <Routes>
+ * Data layer is now React Query. App still holds:
+ *   - token (auth)
+ *   - replicas (WebSocket-only state, no REST endpoint)
+ *   - WS connection lifecycle
  *
- * Data layer (manual fetches + state) will be migrated to React Query in W3.1.
+ * Everything else (jobs, capacity, callbacks count, job details) is fetched
+ * via hooks (src/hooks/queries.js) directly in the page that needs them.
+ * WebSocket job_update events trigger queryClient.invalidateQueries via
+ * useWsInvalidator().
  */
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
-  const [allJobs, setAllJobs] = useState([]);
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [showRaw, setShowRaw] = useState(false);
+  const [replicas, setReplicas] = useState({});
   const [, setIsConnected] = useState(false);
   const wsRef = useRef(null);
-  const jobCache = useRef({});
-  const selectedJobRef = useRef(null);
-
-  const [replicas, setReplicas] = useState({});
-  const [capacity, setCapacity] = useState(null);
-  const [failedCallbackCount, setFailedCallbackCount] = useState(0);
 
   const navigate = useNavigate();
-  const location = useLocation();
+  const queryClient = useQueryClient();
+  const { handleJobUpdate } = useWsInvalidator();
 
   const handleLogin = (newToken) => {
     localStorage.setItem('authToken', newToken);
@@ -50,10 +45,9 @@ const App = () => {
   const handleLogout = useCallback(() => {
     localStorage.removeItem('authToken');
     setToken(null);
-    setSelectedJob(null);
-    jobCache.current = {};
+    queryClient.clear(); // drop cached data so a different user starts fresh
     navigate('/', { replace: true });
-  }, [navigate]);
+  }, [navigate, queryClient]);
 
   // Centralized 401 handler — called by lib/api when any request returns 401.
   useEffect(() => {
@@ -61,79 +55,17 @@ const App = () => {
     return () => setOnUnauthorized(null);
   }, [handleLogout]);
 
-  const fetchJobs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await api.get('/jobs', token);
-      setAllJobs(data);
-    } catch (error) {
-      console.error('Error fetching jobs:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+  // Header badge: number of failed callbacks (drives the visual cue).
+  const callbacksQuery = useCallbacksQuery(token);
+  const failedCallbackCount = callbacksQuery.data?.count || 0;
+  const isJobsLoading = !!queryClient.isFetching({ queryKey: queryKeys.jobs() });
 
-  const fetchCapacity = useCallback(async () => {
-    try {
-      const data = await api.get('/capacity', token);
-      setCapacity(data);
-    } catch (error) {
-      console.error('Error fetching capacity:', error);
-    }
-  }, [token]);
-
-  const fetchCallbacks = useCallback(async () => {
-    try {
-      const data = await api.get('/callbacks', token);
-      setFailedCallbackCount(data.count);
-    } catch (error) {
-      console.error('Error fetching callbacks:', error);
-    }
-  }, [token]);
-
-  const fetchJobDetails = useCallback(async (id) => {
-    if (jobCache.current[id] && selectedJobRef.current?.id === id && !showRaw) {
-      // Already loaded — no-op (avoids redundant fetch when navigating back to same job)
-      if (selectedJob?.id !== id) setSelectedJob(jobCache.current[id]);
-      return;
-    }
-
-    setShowRaw(false);
-    setLoadingDetails(true);
-    try {
-      const data = await api.get(`/jobs/${id}/details`, token);
-      jobCache.current[id] = data;
-      setSelectedJob(data);
-    } catch (error) {
-      console.error('Error fetching job details:', error);
-      setSelectedJob({ id, error: error.message });
-    } finally {
-      setLoadingDetails(false);
-    }
-  }, [token, showRaw, selectedJob]);
-
-  const clearSelectedJob = useCallback(() => {
-    setSelectedJob(null);
-    setShowRaw(false);
-  }, []);
-
-  useEffect(() => {
-    if (token) {
-      fetchJobs();
-      fetchCapacity();
-      fetchCallbacks();
-    }
-  }, [token, fetchJobs, fetchCapacity, fetchCallbacks]);
-
-  // Keep ref in sync for WebSocket handler (avoids stale closure)
-  useEffect(() => { selectedJobRef.current = selectedJob; }, [selectedJob]);
-
+  // WebSocket connection
   useEffect(() => {
     if (!token) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api?token=${token}`;
-
     console.log('Connecting to WebSocket:', wsUrl);
     wsRef.current = new WebSocket(wsUrl);
 
@@ -146,12 +78,7 @@ const App = () => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'job_update') {
-          fetchJobs();
-          fetchCapacity();
-          fetchCallbacks();
-          if (data.crawl_id && selectedJobRef.current?.id === data.crawl_id) {
-            fetchJobDetails(data.crawl_id);
-          }
+          handleJobUpdate(data.crawl_id);
         } else if (data.type === 'replica_heartbeat') {
           setReplicas(prev => ({
             ...prev,
@@ -171,7 +98,7 @@ const App = () => {
     return () => {
       if (wsRef.current) wsRef.current.close();
     };
-  }, [token, fetchJobs, fetchCapacity, fetchCallbacks, fetchJobDetails]);
+  }, [token, handleJobUpdate]);
 
   // Clean up zombie replicas (older than 30s)
   useEffect(() => {
@@ -197,18 +124,10 @@ const App = () => {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  const overviewProps = {
-    token,
-    allJobs,
-    loading,
-    capacity,
-    replicas,
-    selectedJob,
-    loadingDetails,
-    showRaw,
-    setShowRaw,
-    fetchJobDetails,
-    clearSelectedJob,
+  const handleManualRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.jobs() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.capacity() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.callbacks() });
   };
 
   return (
@@ -237,8 +156,8 @@ const App = () => {
             >
               <FileText className="w-5 h-5" />
             </Link>
-            <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            <button onClick={handleManualRefresh} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
+              <RefreshCw className={`w-5 h-5 ${isJobsLoading ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={handleLogout} className="p-2 rounded-md hover:bg-red-700 transition-colors text-red-400 hover:text-white" title="Déconnexion">
               <LogOut className="w-5 h-5" />
@@ -248,12 +167,12 @@ const App = () => {
       </header>
 
       <Routes>
-        <Route path="/" element={<Overview {...overviewProps} />} />
-        <Route path="/jobs/:id" element={<Overview {...overviewProps} />}>
+        <Route path="/" element={<Overview token={token} replicas={replicas} />} />
+        <Route path="/jobs/:id" element={<Overview token={token} replicas={replicas} />}>
           <Route path="queue" element={<QueuePage token={token} />} />
           <Route path="dataset" element={<DatasetPage token={token} />} />
         </Route>
-        <Route path="/callbacks" element={<CallbacksPage token={token} onClose={fetchCallbacks} />} />
+        <Route path="/callbacks" element={<CallbacksPage token={token} onClose={() => callbacksQuery.refetch()} />} />
         <Route path="/audit" element={<AuditPage token={token} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
