@@ -116,7 +116,29 @@ class Consumer:
 
                 request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
                 api_client = HelloProAPIClient()
-                extractor = PrixExtractor(api_client)
+
+                # Callback pour publier les résultats de chaque batch vers embedding
+                published_count = 0
+                async def on_batch_publish(batch_results, cat_id):
+                    nonlocal published_count
+                    count = 0
+                    for item_result in batch_results:
+                        if item_result.status == "success" and item_result.prix_data:
+                            try:
+                                embedding_message = process_product_data_for_embedding(
+                                    prix_data=item_result.prix_data,
+                                    id_categorie=cat_id,
+                                    source=item_result.source,
+                                    origin="prix-extraction-produits"
+                                )
+                                await self.publisher.publish_message(embedding_message)
+                                count += 1
+                                published_count += 1
+                            except Exception as pub_err:
+                                logger.warning(f"[CAT-{cat_id}] ⚠️ Publication skip item {item_result.item_id}: {pub_err}")
+                    return count
+
+                extractor = PrixExtractor(api_client, on_batch_publish=on_batch_publish)
 
                 try:
                     result = await extractor.extract_prix_for_category(request)
@@ -124,22 +146,6 @@ class Consumer:
                         logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {extractor.tracking_file}")
                 finally:
                     await extractor.close()
-
-                # Publier chaque item réussi vers data.ready_for_embedding
-                published_count = 0
-                for item_result in result.item_results:
-                    if item_result.status == "success" and item_result.prix_data:
-                        try:
-                            embedding_message = process_product_data_for_embedding(
-                                prix_data=item_result.prix_data,
-                                id_categorie=id_categorie,
-                                source=item_result.source,
-                                origin="prix-extraction-produits"
-                            )
-                            await self.publisher.publish_message(embedding_message)
-                            published_count += 1
-                        except Exception as pub_err:
-                            logger.warning(f"[CAT-{id_categorie}] ⚠️ Publication skip item {item_result.item_id}: {pub_err}")
 
                 logger.info(f"[CAT-{id_categorie}] 📊 Bilan: {result.success}/{result.total_chunks} succès, {result.errors} erreurs, {published_count} messages publiés vers embedding")
                 await message.ack()

@@ -141,6 +141,15 @@
         <div class="flex gap-3">
           <button
             type="button"
+            class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 inline-flex items-center gap-1.5"
+            title="Convertir tous les accents en entites HTML (description + tous les elements)"
+            @click="encodeAllEntities"
+          >
+            <span class="font-mono font-semibold">&amp;</span>
+            Encoder accents
+          </button>
+          <button
+            type="button"
             class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
             @click="router.push('/docs-admin')"
           >
@@ -171,6 +180,7 @@ import DocBuilder from '@/components/docs/DocBuilder.vue'
 import WysiwygEditor from '@/components/shared/WysiwygEditor.vue'
 import { useSidebar } from '@/composables/useSidebar'
 import type { DocElement } from '@/components/docs/DocBuilder.vue'
+import { encodeHtmlEntities, encodeTextEntities } from '@/utils/htmlEntities'
 
 const route = useRoute()
 const router = useRouter()
@@ -195,6 +205,31 @@ const form = reactive({
 })
 
 const builderElements = ref<DocElement[]>([])
+
+// Fields whose values must NOT be entity-encoded (URLs, slugs, image paths, CSS classes, etc.)
+const skipEncodingProps = new Set(['link', 'image', 'src', 'url', 'cssClass', 'class'])
+
+function encodeAllEntities() {
+  // 1) Encode the rich-text description (HTML aware).
+  if (form.doc_description) {
+    form.doc_description = encodeHtmlEntities(form.doc_description)
+  }
+  // 2) Walk each builder element and encode its props.
+  builderElements.value = builderElements.value.map(el => {
+    const newProps: Record<string, string> = {}
+    for (const [k, v] of Object.entries(el.props)) {
+      if (skipEncodingProps.has(k) || typeof v !== 'string') {
+        newProps[k] = v as string
+        continue
+      }
+      // Step descriptions / text content are HTML-ish; titles/labels are plain text.
+      const isHtmlish = /<[a-zA-Z\/!]/.test(v)
+      newProps[k] = isHtmlish ? encodeHtmlEntities(v) : encodeTextEntities(v)
+    }
+    return { ...el, props: newProps }
+  })
+  toast.success('Accents convertis en entites HTML')
+}
 
 // Convert builder elements → backend config guide
 function elementsToConfigGuide(): { authType: string; steps: Record<string, string>[] } | undefined {

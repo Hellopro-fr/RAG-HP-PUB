@@ -4,8 +4,16 @@
       <h3 class="text-base font-semibold text-gray-900 dark:text-white font-mono">
         {{ tool.name }}
       </h3>
-      <p v-if="tool.description" class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-        {{ tool.description }}
+      <p v-if="tool.description" class="mt-1 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">
+        {{ truncate(tool.description, showFullDesc) }}<button
+          v-if="isLong(tool.description)"
+          type="button"
+          class="ml-1 text-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 inline-flex items-center gap-0.5"
+          @click="showFullDesc = !showFullDesc"
+        >
+          {{ showFullDesc ? 'Voir moins' : 'Voir plus' }}
+          <i :class="showFullDesc ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="text-[9px]" />
+        </button>
       </p>
     </div>
     <div class="p-5">
@@ -50,10 +58,32 @@
                   <span v-else class="text-xs text-gray-400">Non</span>
                 </td>
                 <td class="py-2 align-top text-gray-600 dark:text-gray-400">
-                  <span>{{ prop.description }}</span>
-                  <span v-if="prop.enumValues" class="block mt-0.5 text-xs text-gray-500 dark:text-gray-500">
-                    Valeurs : {{ prop.enumValues.join(', ') }}
-                  </span>
+                  <div class="whitespace-pre-line">
+                    {{ truncate(prop.description, expandedProps.has(prop.name)) }}
+                  </div>
+                  <button
+                    v-if="isLong(prop.description)"
+                    type="button"
+                    class="mt-1 text-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 inline-flex items-center gap-0.5"
+                    @click="toggleProp(prop.name)"
+                  >
+                    {{ expandedProps.has(prop.name) ? 'Voir moins' : 'Voir plus' }}
+                    <i :class="expandedProps.has(prop.name) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="text-[9px]" />
+                  </button>
+                  <div v-if="prop.enumValues" class="mt-1 text-xs text-gray-500 dark:text-gray-500">
+                    <span class="font-medium">Valeurs :</span>
+                    <span v-if="expandedEnums.has(prop.name)">{{ prop.enumValues.join(', ') }}</span>
+                    <span v-else>{{ truncateList(prop.enumValues) }}</span>
+                    <button
+                      v-if="prop.enumValues.length > MAX_ENUM_PREVIEW"
+                      type="button"
+                      class="ml-1 font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400 inline-flex items-center gap-0.5"
+                      @click="toggleEnum(prop.name)"
+                    >
+                      {{ expandedEnums.has(prop.name) ? 'Voir moins' : `Voir plus (${prop.enumValues.length - MAX_ENUM_PREVIEW})` }}
+                      <i :class="expandedEnums.has(prop.name) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="text-[9px]" />
+                    </button>
+                  </div>
                   <span v-if="prop.defaultValue !== undefined" class="block mt-0.5 text-xs text-gray-500 dark:text-gray-500">
                     Defaut : <code class="font-mono">{{ prop.defaultValue }}</code>
                   </span>
@@ -77,12 +107,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, reactive } from 'vue';
 import type { PublicToolDetail, JsonSchema, JsonSchemaProperty } from '@/types/public';
 
 const props = defineProps<{
   tool: PublicToolDetail
 }>();
+
+// Truncate threshold — descriptions shorter than this never show the toggle.
+const MAX_PREVIEW = 200
+// How many enum values to show before collapsing the "Valeurs" list.
+const MAX_ENUM_PREVIEW = 10
+const showFullDesc = ref(false)
+const expandedProps = reactive(new Set<string>())
+const expandedEnums = reactive(new Set<string>())
+
+function isLong(s?: string): boolean {
+  return !!s && s.length > MAX_PREVIEW
+}
+
+function truncate(s: string | undefined, expanded: boolean): string {
+  if (!s) return ''
+  if (expanded || !isLong(s)) return s
+  // Cut at word boundary close to MAX_PREVIEW for a cleaner look
+  const slice = s.slice(0, MAX_PREVIEW)
+  const lastSpace = slice.lastIndexOf(' ')
+  const cutoff = lastSpace > MAX_PREVIEW * 0.6 ? lastSpace : MAX_PREVIEW
+  return s.slice(0, cutoff) + '…'
+}
+
+function toggleProp(name: string) {
+  if (expandedProps.has(name)) expandedProps.delete(name)
+  else expandedProps.add(name)
+}
+
+function toggleEnum(name: string) {
+  if (expandedEnums.has(name)) expandedEnums.delete(name)
+  else expandedEnums.add(name)
+}
+
+function truncateList(list: string[]): string {
+  if (list.length <= MAX_ENUM_PREVIEW) return list.join(', ')
+  return list.slice(0, MAX_ENUM_PREVIEW).join(', ') + ', …'
+}
 
 interface FlatProperty {
   name: string

@@ -129,7 +129,7 @@ func (h *Handler) handleUploadImage(w http.ResponseWriter, r *http.Request) {
 
 	imagesDir := filepath.Join(h.uploadDir, "images")
 	if err := os.MkdirAll(imagesDir, 0755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to create images directory"})
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to create images directory: " + err.Error()})
 		return
 	}
 

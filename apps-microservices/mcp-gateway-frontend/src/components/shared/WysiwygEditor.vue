@@ -40,6 +40,18 @@
 
       <div class="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
 
+      <!-- Encode accents to HTML entities -->
+      <button
+        type="button"
+        class="px-1.5 h-7 flex items-center justify-center rounded transition text-[11px] font-mono font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+        title="Convertir les accents en entites HTML (e -> &amp;eacute;)"
+        @click="encodeAccentsToEntities"
+      >
+        &amp;
+      </button>
+
+      <div class="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+
       <!-- Alignment -->
       <button
         v-for="align in alignButtons"
@@ -69,6 +81,7 @@ import Image from '@tiptap/extension-image'
 import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
 import Placeholder from '@tiptap/extension-placeholder'
+import { encodeHtmlEntities } from '@/utils/htmlEntities'
 
 const props = defineProps<{
   modelValue: string
@@ -164,5 +177,15 @@ function insertImage() {
   if (url) {
     editor.value.chain().focus().setImage({ src: url }).run()
   }
+}
+
+function encodeAccentsToEntities() {
+  if (!editor.value) return
+  const html = editor.value.getHTML()
+  const encoded = encodeHtmlEntities(html)
+  // Re-set content so the editor stays in sync; entities are decoded back to
+  // chars in the display, but the emitted modelValue carries the encoded form.
+  editor.value.commands.setContent(encoded, false)
+  emit('update:modelValue', encoded)
 }
 </script>
