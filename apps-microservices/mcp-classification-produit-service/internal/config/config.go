@@ -13,7 +13,7 @@ type Config struct {
 
 func Load() *Config {
 	return &Config{
-		Port:    getEnv("MCP_PORT", "8590"),
+		Port:    getEnv("MCP_PORT", "8591"),
 		Name:    getEnv("MCP_SERVICE_NAME", "mcp-classification-produit"),
 		Version: getEnv("MCP_SERVICE_VERSION", "0.1.0"),
 

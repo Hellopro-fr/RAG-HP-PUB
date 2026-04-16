@@ -11,7 +11,7 @@ MCP server exposing HelloPro product classification capabilities as MCP tools. A
 
 ## Build / Run
 
-- **Port:** 8590
+- **Port:** 8591
 - **Docker build:** Multi-stage (builder → runtime Alpine)
 - **Run:** `/bin/mcp-classification-produit` (binary, no arguments needed)
 - **Health check:** `GET /health`
@@ -69,7 +69,7 @@ mcp-classification-produit-service/
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MCP_PORT` | 8590 | HTTP server port |
+| `MCP_PORT` | 8591 | HTTP server port |
 | `MCP_SERVICE_NAME` | mcp-classification-produit | Service name for MCP handshake |
 | `MCP_SERVICE_VERSION` | 0.1.0 | Service version |
 | `CLASSIFICATION_API_URL` | http://api-classification-service:8577 | Classification API base URL |

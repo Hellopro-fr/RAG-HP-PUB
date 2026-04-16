@@ -2162,9 +2162,9 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8590:8590"
+      - "8591:8591"
     environment:
-      - MCP_PORT=8590
+      - MCP_PORT=8591
       - MCP_SERVICE_NAME=mcp-classification-produit
       - MCP_SERVICE_VERSION=0.1.0
       - CLASSIFICATION_API_URL=http://api-classification-lb:80
