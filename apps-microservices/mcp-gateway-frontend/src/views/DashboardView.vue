@@ -386,7 +386,8 @@ function healthDotClass(status: string): string {
 const usersByRole = computed(() => {
   const counts: Record<string, number> = { admin: 0, 'read-only': 0, 'config-only': 0 }
   users.value.forEach(u => {
-    if (counts[u.role] !== undefined) counts[u.role]++
+    const role = u.role
+    if (role in counts) counts[role]!++
   })
   return counts
 })
