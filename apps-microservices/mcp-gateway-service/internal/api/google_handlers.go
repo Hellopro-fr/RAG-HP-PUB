@@ -188,6 +188,35 @@ func (h *Handler) handleGoogleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, GoogleStatusResponse{Connected: true, Email: token.Email})
 }
 
+// handleListSpreadsheets lists the user's Google Spreadsheets from Drive.
+func (h *Handler) handleListSpreadsheets(w http.ResponseWriter, r *http.Request) {
+	client, err := h.getGoogleHTTPClient(r)
+	if err != nil {
+		h.writeGoogleError(w, err)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	items, err := goGoogle.ListSpreadsheets(r.Context(), client, query)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "failed to list spreadsheets: " + err.Error()})
+		return
+	}
+
+	resp := SpreadsheetListResponse{
+		Spreadsheets: make([]SpreadsheetListItemResponse, 0, len(items)),
+	}
+	for _, item := range items {
+		resp.Spreadsheets = append(resp.Spreadsheets, SpreadsheetListItemResponse{
+			ID:           item.ID,
+			Name:         item.Name,
+			ModifiedTime: item.ModifiedTime,
+			WebViewLink:  item.WebViewLink,
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // ── Spreadsheet Operations ──────────────────────────────────────────────────
 
 // handleSheetInfo retrieves spreadsheet metadata (title, sheet names).

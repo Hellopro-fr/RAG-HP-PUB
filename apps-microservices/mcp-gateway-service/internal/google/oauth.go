@@ -23,7 +23,10 @@ func NewOAuthClient(clientID, clientSecret, redirectURL string) *OAuthClient {
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			RedirectURL:  redirectURL,
-			Scopes:       []string{"https://www.googleapis.com/auth/spreadsheets.readonly"},
+			Scopes: []string{
+				"https://www.googleapis.com/auth/spreadsheets.readonly",
+				"https://www.googleapis.com/auth/drive.readonly",
+			},
 			Endpoint:     google.Endpoint,
 		},
 	}

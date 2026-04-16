@@ -75,3 +75,16 @@ type GoogleStatusResponse struct {
 	Connected bool   `json:"connected"`
 	Email     string `json:"email,omitempty"`
 }
+
+// SpreadsheetListItemResponse represents a spreadsheet in the list response.
+type SpreadsheetListItemResponse struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	ModifiedTime string `json:"modified_time"`
+	WebViewLink  string `json:"web_view_link"`
+}
+
+// SpreadsheetListResponse is the response for GET /api/v1/google/spreadsheets.
+type SpreadsheetListResponse struct {
+	Spreadsheets []SpreadsheetListItemResponse `json:"spreadsheets"`
+}

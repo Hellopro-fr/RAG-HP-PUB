@@ -6,9 +6,53 @@ import (
 	"net/http"
 	"regexp"
 
+	drive "google.golang.org/api/drive/v3"
 	sheets "google.golang.org/api/sheets/v4"
 	"google.golang.org/api/option"
 )
+
+// SpreadsheetListItem represents a spreadsheet in the user's Google Drive.
+type SpreadsheetListItem struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	ModifiedTime string `json:"modified_time"`
+	WebViewLink  string `json:"web_view_link"`
+}
+
+// ListSpreadsheets lists the user's Google Spreadsheets from Drive.
+func ListSpreadsheets(ctx context.Context, client *http.Client, query string) ([]SpreadsheetListItem, error) {
+	srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("create drive service: %w", err)
+	}
+
+	q := "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
+	if query != "" {
+		q += " and name contains '" + query + "'"
+	}
+
+	resp, err := srv.Files.List().
+		Q(q).
+		Fields("files(id,name,modifiedTime,webViewLink)").
+		OrderBy("modifiedTime desc").
+		PageSize(50).
+		Context(ctx).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("list spreadsheets: %w", err)
+	}
+
+	items := make([]SpreadsheetListItem, 0, len(resp.Files))
+	for _, f := range resp.Files {
+		items = append(items, SpreadsheetListItem{
+			ID:           f.Id,
+			Name:         f.Name,
+			ModifiedTime: f.ModifiedTime,
+			WebViewLink:  f.WebViewLink,
+		})
+	}
+	return items, nil
+}
 
 // SheetInfo holds metadata about a Google Spreadsheet.
 type SheetInfo struct {

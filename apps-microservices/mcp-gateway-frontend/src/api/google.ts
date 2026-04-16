@@ -1,6 +1,7 @@
 import { api } from './client'
 import type {
   GoogleStatus,
+  SpreadsheetListItem,
   SheetInfo,
   SheetPreview,
   SheetImportRequest,
@@ -20,6 +21,11 @@ export const googleApi = {
 
   disconnect(): Promise<void> {
     return api.del<void>(`${BASE}/google/disconnect`)
+  },
+
+  listSpreadsheets(query?: string): Promise<SpreadsheetListItem[]> {
+    const params = query ? { q: query } : undefined
+    return api.get<{ spreadsheets: SpreadsheetListItem[] }>(`${BASE}/google/spreadsheets`, params).then(r => r.spreadsheets)
   },
 
   getSheetInfo(spreadsheetUrl: string): Promise<SheetInfo> {

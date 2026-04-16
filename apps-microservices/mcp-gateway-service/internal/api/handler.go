@@ -189,6 +189,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 			}
 			h.handleGoogleStatus(w, r)
 		})
+		apiMux.HandleFunc("/api/v1/google/spreadsheets", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleListSpreadsheets(w, r)
+		})
 		apiMux.HandleFunc("/api/v1/google/sheets/info", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
 				w.Header().Set("Allow", "POST")

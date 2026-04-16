@@ -5,6 +5,13 @@ export interface GoogleStatus {
   email?: string
 }
 
+export interface SpreadsheetListItem {
+  id: string
+  name: string
+  modified_time: string
+  web_view_link: string
+}
+
 export interface SheetInfo {
   spreadsheet_id: string
   title: string

@@ -100,6 +100,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Serveurs MCP', minRole: 'read-only' }
     },
     {
+      path: '/servers/import-google',
+      name: 'google-sheets-import',
+      component: () => import('@/views/GoogleSheetsImportView.vue'),
+      meta: { requiresAuth: true, title: 'Import Google Sheets', minRole: 'admin' }
+    },
+    {
       path: '/docs-admin',
       name: 'docs-admin',
       component: () => import('@/views/DocsAdminView.vue'),
