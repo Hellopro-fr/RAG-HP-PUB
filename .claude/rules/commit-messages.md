@@ -1,39 +1,13 @@
 # Commit Message Protocol
 
-## When to Generate
-
-- Automatically after any response that creates or modifies files.
-- Manually when asked via `/commit-msg` command.
-
 ## Format
 
 Default: **Conventional Commits** (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`).
-If the user specifies a different format, use that instead.
+User-specified format overrides this.
 
-## Output Structure
+## Rules
 
-```
-#### 📝 Commit Message
-
-**🇬🇧 English**
-\`\`\`
-type(scope): concise description
-
-- Detail 1
-- Detail 2
-\`\`\`
-
-**🇫🇷 French**
-\`\`\`
-type(scope): description concise
-
-- Détail 1
-- Détail 2
-\`\`\`
-```
-
-## Scope Rules
-
-- Describe ONLY changes made in the current response.
-- Never reference unrelated prior work.
-- Keep the subject line under 72 characters.
+- Generate automatically after any response that creates or modifies files.
+- Describe ONLY changes in the current response — never reference unrelated prior work.
+- Subject line under 72 characters.
+- Always bilingual (EN + FR). See global CLAUDE.md for output template.
