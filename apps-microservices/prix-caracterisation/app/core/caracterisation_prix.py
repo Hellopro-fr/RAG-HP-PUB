@@ -50,7 +50,7 @@ class CaracterisationPrixGenerator:
     ID_PROCESS = "37"
 
     # Traitement parallèle
-    MAX_PARALLEL_ITEMS = 5
+    MAX_PARALLEL_ITEMS = 10
 
     # Ordre de traitement des sources (produit en premier car copie simple)
     SOURCES_ORDER = ["produit", "devis", "message", "siteweb"]
