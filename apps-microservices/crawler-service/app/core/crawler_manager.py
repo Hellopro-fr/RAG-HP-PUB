@@ -1381,6 +1381,12 @@ class CrawlerManager:
             )
 
         try:
+            # Cleanup orphaned temp file from a previous failed attempt
+            tmp_archive_path = os.path.join(archives_dir, f"{crawl_id}.tmp.tar.gz")
+            if os.path.exists(tmp_archive_path):
+                os.remove(tmp_archive_path)
+                logger.info(f"Removed orphaned temp archive for '{crawl_id}'.")
+
             # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
             if os.path.exists(target_archive_path):
                 archive_size = os.path.getsize(target_archive_path)
@@ -1428,23 +1434,32 @@ class CrawlerManager:
 
             try:
                 def _create_archive():
-                    """Create tar.gz archive in shared volume."""
+                    """Create tar.gz archive in shared volume.
+                    Uses a .tmp extension during creation to prevent the upload daemon
+                    from picking up a partially written file. Atomic rename at the end."""
                     os.makedirs(archives_dir, exist_ok=True)
-                    base_name = os.path.join(archives_dir, crawl_id)
-                    final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
-                    archive_size = os.path.getsize(final_path)
-                    if archive_size == 0:
-                        raise RuntimeError(f"Archive at '{final_path}' is empty (0 bytes).")
+                    tmp_base_name = os.path.join(archives_dir, f"{crawl_id}.tmp")
+                    final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
 
-                    # Verify archive is readable
+                    # Write to .tmp.tar.gz (daemon only watches *.tar.gz, not *.tmp.tar.gz)
+                    tmp_path = shutil.make_archive(tmp_base_name, 'gztar', root_dir=job_storage_path)
+                    archive_size = os.path.getsize(tmp_path)
+                    if archive_size == 0:
+                        os.remove(tmp_path)
+                        raise RuntimeError(f"Archive at '{tmp_path}' is empty (0 bytes).")
+
+                    # Verify archive is readable before renaming
                     try:
-                        with tarfile.open(final_path, 'r:gz') as t:
+                        with tarfile.open(tmp_path, 'r:gz') as t:
                             t.getnames()  # Force read of the archive index
                     except Exception as e:
-                        os.remove(final_path)
+                        os.remove(tmp_path)
                         raise RuntimeError(f"Archive integrity check failed: {e}")
 
-                    return final_path, archive_size
+                    # Atomic rename to final path — daemon can now pick it up safely
+                    os.rename(tmp_path, final_target)
+
+                    return final_target, archive_size
 
                 def _cleanup_local_data():
                     """Remove crawl data files, keeping only logs and markers."""
