@@ -84,6 +84,10 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
         </div>
       </div>
 
+      {/* Performance chart — ALWAYS visible regardless of log stats.
+          Data comes from heartbeats (independent of CrawlingStats in the log). */}
+      <JobPerformance token={token} jobId={job.id} />
+
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
       ) : !job.hasStats && !job.stats ? (
@@ -106,8 +110,6 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
             <StatCard title="Échecs" value={job.stats.requestsFailed || 0} icon={XCircle} color="red" />
             <StatCard title="Durée" value={`${((job.stats.crawlerRuntimeMillis || 0) / 1000).toFixed(2)}s`} icon={Clock} color="purple" />
           </div>
-
-          <JobPerformance token={token} jobId={job.id} />
 
           {job.errors && job.errors.length > 0 && (
             <>
