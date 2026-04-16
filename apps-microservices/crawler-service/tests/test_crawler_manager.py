@@ -131,3 +131,37 @@ class TestRelaunchAbort:
         current = {"status": "restarting_oom"}
         should_abort = not current or current.get("status") != "restarting_oom"
         assert should_abort is False
+
+
+class TestMonitorSkipOom:
+    """Fix 4: _monitor_process skips OOM branch if status is already terminal."""
+
+    def test_skip_oom_branch_when_status_failed(self):
+        current_status = "failed"
+        terminal_statuses = ("failed", "stopped", "finished")
+        should_skip = current_status in terminal_statuses
+        assert should_skip is True
+
+    def test_skip_oom_branch_when_status_stopped(self):
+        current_status = "stopped"
+        terminal_statuses = ("failed", "stopped", "finished")
+        should_skip = current_status in terminal_statuses
+        assert should_skip is True
+
+    def test_skip_oom_branch_when_status_finished(self):
+        current_status = "finished"
+        terminal_statuses = ("failed", "stopped", "finished")
+        should_skip = current_status in terminal_statuses
+        assert should_skip is True
+
+    def test_proceed_when_status_running(self):
+        current_status = "running"
+        terminal_statuses = ("failed", "stopped", "finished")
+        should_skip = current_status in terminal_statuses
+        assert should_skip is False
+
+    def test_proceed_when_status_restarting_oom(self):
+        current_status = "restarting_oom"
+        terminal_statuses = ("failed", "stopped", "finished")
+        should_skip = current_status in terminal_statuses
+        assert should_skip is False

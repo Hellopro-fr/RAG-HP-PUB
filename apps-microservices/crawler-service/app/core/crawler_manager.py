@@ -730,6 +730,18 @@ class CrawlerManager:
                  # entry so no other crawl can steal the reserved slot before relaunch.
                  # The slot will be released by _relaunch_oom_crawl if max restarts is
                  # reached or if the relaunch itself fails.
+
+                 # Fix 4: Before entering the OOM relaunch flow, re-read the current
+                 # status from Redis. If stale detection (or force-finish) already
+                 # transitioned the job to a terminal state, skip the OOM branch
+                 # entirely. Otherwise we'd overwrite the terminal status with
+                 # 'restarting_oom' and schedule a ghost relaunch.
+                 current = await cache_service.get_json(job_key)
+                 current_status = current.get("status") if current else None
+                 if current_status in ("failed", "stopped", "finished"):
+                    logger.info(f"Skipping OOM relaunch for '{crawl_id}': status is already '{current_status}' (likely stale detection or force-finish ran first).")
+                    return
+
                  logger.warning(f"Crawl '{crawl_id}' exited with OOM_RELAUNCH (code 3). Slot preserved. Auto-relaunching...")
 
                  job_info["status"] = "restarting_oom"
