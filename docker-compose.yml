@@ -2153,6 +2153,25 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP Classification Produit Service ──────────────────────────────────
+  mcp-classification-produit-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-classification-produit-service/Dockerfile
+    container_name: mcp-classification-produit-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8590:8590"
+    environment:
+      - MCP_PORT=8590
+      - MCP_SERVICE_NAME=mcp-classification-produit
+      - MCP_SERVICE_VERSION=0.1.0
+      - CLASSIFICATION_API_URL=http://api-classification-lb:80
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Neo4j Service ─────────────────────────────────────────────────
   mcp-neo4j-service:
     build:
