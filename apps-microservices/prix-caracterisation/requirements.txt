@@ -1,0 +1,7 @@
+aio_pika>=9.0.0
+httpx
+python-dotenv
+pydantic-settings
+tenacity
+openai
+pymilvus

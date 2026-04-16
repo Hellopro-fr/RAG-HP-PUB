@@ -1766,6 +1766,7 @@ services:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking/prix-extraction-siteweb:ro
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking/prix-extraction-message:ro
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking/prix-extraction-devis:ro
+      - /mnt/data/docker/images/prix-extraction/prix-caracterisation:/app/tracking/prix-caracterisation:ro
     networks:
       - services-net
     logging: *logging_defaults
@@ -1917,7 +1918,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking
     deploy:
@@ -1938,7 +1938,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     env_file:
       - .env
     volumes:
@@ -1961,7 +1960,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking
     deploy:
@@ -1982,7 +1980,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking
     deploy:
@@ -2006,6 +2003,28 @@ services:
       SERVICE_NAME: prix-traitement
     env_file:
       - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # Caractérisation des prix Milvus (collection `prix`) → table caracterisation_prix_produit_ia (_cppi)
+  # Pipeline indépendant du QC 1-7 (exchange dédié `prix_pipeline_exchange`).
+  prix-caracterisation:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-caracterisation/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
+    env_file:
+      - .env
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-caracterisation:/app/tracking
+    deploy:
+      replicas: 1
     networks:
       - services-net
     logging: *logging_defaults
