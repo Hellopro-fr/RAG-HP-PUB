@@ -1,0 +1,44 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-16-crawler-capacity-counter-fixes.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Fix 1 — Decrement counter in stale handler",
+      "status": "completed",
+      "description": "Decrement global running counter when stale detection transitions job to terminal status. Commit 4f4bb320.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager.py::TestStaleHandlerCounter -v\", \"commitSha\": \"4f4bb320\"}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Fix 2 — Kill subprocess in stale handler",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "SIGKILL subprocess when stale detection marks job failed. Commit a0920c61.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager.py::TestStaleHandlerKillProcess -v\", \"commitSha\": \"a0920c61\"}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Fix 3 — Abort _relaunch_oom_crawl if status not restarting_oom",
+      "status": "completed",
+      "description": "Re-read Redis status at top of _relaunch_oom_crawl; abort if not restarting_oom. Commit c1fca671.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager.py::TestRelaunchAbort -v\", \"commitSha\": \"c1fca671\"}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Fix 4 — Skip OOM path in _monitor_process if status is terminal",
+      "status": "completed",
+      "description": "Check current status before entering OOM branch; skip if terminal. Commit 7a9dc002.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager.py::TestMonitorSkipOom -v\", \"commitSha\": \"7a9dc002\"}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Fix 5 — Make force_finish_crawl idempotent",
+      "status": "completed",
+      "description": "Re-read current status before decrement in force_finish_crawl. Commit 4efdc124.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager.py::TestForceFinishIdempotent -v\", \"commitSha\": \"4efdc124\"}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Update CLAUDE.md with counter invariants",
+      "status": "completed",
+      "blockedBy": [1, 2, 3, 4, 5],
+      "description": "Document counter invariants and state-transition guards in CLAUDE.md. Commit 66a7e9c3.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"commitSha\": \"66a7e9c3\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-16T22:45:00Z"
+}
