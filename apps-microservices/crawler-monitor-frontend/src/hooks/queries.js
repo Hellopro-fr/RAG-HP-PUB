@@ -24,6 +24,7 @@ export const queryKeys = {
   domains:            (window) => ['domains', window],
   domainDetail:       (domain, window) => ['domains', domain, window],
   alerts:             () => ['alerts'],
+  jobPerformance:     (id) => ['jobs', id, 'performance'],
 };
 
 /* ---------- Jobs ---------- */
@@ -115,6 +116,18 @@ export function useReplicasHistoryQuery(token, window = '1h', options = {}) {
     queryFn: () => api.get('/replicas/history', token, { query: { window }, retry: { attempts: 1 } }),
     enabled: !!token,
     refetchInterval: 30 * 1000, // background refresh every 30s for sparklines
+    ...options,
+  });
+}
+
+/* ---------- Job Performance ---------- */
+
+export function useJobPerformanceQuery(token, jobId, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.jobPerformance(jobId),
+    queryFn: () => api.get(`/jobs/${jobId}/performance`, token),
+    enabled: !!token && isValidJobId(jobId),
+    refetchInterval: 15 * 1000, // refresh every 15s while viewing a running job
     ...options,
   });
 }

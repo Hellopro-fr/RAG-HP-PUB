@@ -5,6 +5,7 @@ import {
 import StatCard from './StatCard';
 import ErrorVisualization from './ErrorVisualization';
 import AdvancedLogViewer from './AdvancedLogViewer';
+import JobPerformance from './JobPerformance';
 
 /**
  * JobDetails — right panel of the Overview.
@@ -12,7 +13,7 @@ import AdvancedLogViewer from './AdvancedLogViewer';
  * Queue and Dataset are now sub-routes (/jobs/:id/queue, /jobs/:id/dataset)
  * rather than internal modals. Their <Outlet/> is rendered by Overview.
  */
-const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob }) => {
+const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
   if (!job) return null;
   if (job.error) {
     return (
@@ -105,6 +106,8 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob }) => {
             <StatCard title="Échecs" value={job.stats.requestsFailed || 0} icon={XCircle} color="red" />
             <StatCard title="Durée" value={`${((job.stats.crawlerRuntimeMillis || 0) / 1000).toFixed(2)}s`} icon={Clock} color="purple" />
           </div>
+
+          <JobPerformance token={token} jobId={job.id} />
 
           {job.errors && job.errors.length > 0 && (
             <>

@@ -221,8 +221,13 @@ const ReplicaMonitor = ({ replicas, token }) => {
                           );
                         })}
                       </div>
-                      <div className="text-[10px] text-gray-500 mt-2">
-                        Total mesuré: {formatBytes(measured)} / {formatBytes(totalRam)} ({measuredPct.toFixed(0)}%)
+                      <div className="text-[10px] text-gray-500 mt-2 space-y-0.5">
+                        <div>
+                          Container: {formatBytes(replica.ram)} / {formatBytes(totalRam)} ({(totalRam > 0 ? Math.min((replica.ram || 0) / totalRam * 100, 100) : 0).toFixed(0)}%)
+                        </div>
+                        <div className="text-gray-600">
+                          Top {sorted.length} process RSS: {formatBytes(measured)} <span title="La somme des RSS process est souvent supérieure au total container car la mémoire partagée (libs, shared pages) est comptée dans chaque process.">ⓘ</span>
+                        </div>
                       </div>
                     </div>
                   );

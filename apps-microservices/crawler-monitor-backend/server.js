@@ -27,6 +27,7 @@ import {
   readReplicaHistory,
   readAllReplicasHistory,
 } from './src/lib/replicaHistory.js';
+import { persistJobPerf, readJobPerf } from './src/lib/jobPerformance.js';
 import { computeTimeline } from './src/lib/timeline.js';
 import { parseDomainWindow, aggregateDomains, jobsForDomain } from './src/lib/domains.js';
 import { evaluateAlerts, DEFAULT_THRESHOLDS } from './src/lib/alerts.js';
@@ -300,6 +301,18 @@ app.get('/api/jobs', async (req, res) => {
   } catch (error) {
     console.error('Error fetching initial jobs from Redis:', error);
     res.status(500).json({ error: 'Failed to fetch jobs' });
+  }
+});
+
+// Per-job CPU/RAM performance history (from heartbeats). Retained 24h.
+app.get('/api/jobs/:id/performance', async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+    const result = await readJobPerf(client, req.params.id);
+    res.json({ job_id: req.params.id, ...result });
+  } catch (error) {
+    console.error('Error fetching job performance:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch performance' });
   }
 });
 
@@ -1477,12 +1490,15 @@ async function setupRedisListener() {
       try {
         const heartbeat = JSON.parse(message);
         broadcast({ type: 'replica_heartbeat', data: heartbeat });
-        // Persist into per-replica time series for the /api/replicas/history endpoints.
+        // Persist into per-replica AND per-job time series.
         // Uses the persistent client (not the subscriber) since SUBSCRIBE clients
-        // cannot run other commands.
+        // cannot run other commands. Fire-and-forget — never blocks broadcast.
         ensureRedisConnected()
-          .then(c => persistHeartbeat(c, heartbeat))
-          .catch(err => console.error('[replicaHistory] persist error:', err.message));
+          .then(c => Promise.all([
+            persistHeartbeat(c, heartbeat),
+            persistJobPerf(c, heartbeat),
+          ]))
+          .catch(err => console.error('[heartbeatPersist] error:', err.message));
       } catch (e) {
         console.error('Failed to parse heartbeat:', e);
       }
