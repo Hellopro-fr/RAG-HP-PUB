@@ -72,16 +72,51 @@ export function aggregateTimeline(jobs, nowMs, windowMs, granularityMs) {
 }
 
 /**
- * Top-level: load jobs (via injected loader for tests) and aggregate.
+ * Derive a sensible granularity for a given window size.
+ * Returns the granularityMs that keeps the chart at ~60-180 buckets.
  */
-export async function computeTimeline(client, windowKey, { loadJobs }) {
-  const w = parseTimelineWindow(windowKey);
+export function autoGranularity(windowMs) {
+  if (windowMs <= 60 * 60 * 1000)          return 60 * 1000;          // ≤1h → 1 min
+  if (windowMs <= 6 * 60 * 60 * 1000)      return 5 * 60 * 1000;     // ≤6h → 5 min
+  if (windowMs <= 24 * 60 * 60 * 1000)     return 15 * 60 * 1000;    // ≤24h → 15 min
+  if (windowMs <= 7 * 24 * 60 * 60 * 1000) return 60 * 60 * 1000;    // ≤7d → 1h
+  return 6 * 60 * 60 * 1000;                                          // >7d → 6h
+}
+
+/**
+ * Top-level: load jobs (via injected loader for tests) and aggregate.
+ *
+ * Accepts either:
+ *   windowKey    — preset string like '6h'
+ *   from/to      — ISO dates for a custom range (windowKey is ignored)
+ */
+export async function computeTimeline(client, windowKey, { loadJobs, from, to } = {}) {
+  let windowMs, granularityMs, now;
+
+  if (from && to) {
+    const fromMs = Date.parse(from);
+    const toMs = Date.parse(to);
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+      throw new Error("Invalid 'from'/'to' dates.");
+    }
+    windowMs = toMs - fromMs;
+    granularityMs = autoGranularity(windowMs);
+    now = toMs; // anchor at 'to' so the last bucket is aligned there
+  } else {
+    const w = parseTimelineWindow(windowKey);
+    windowMs = w.ms;
+    granularityMs = w.granularityMs;
+    now = Date.now();
+  }
+
   const jobs = await loadJobs(client);
-  const buckets = aggregateTimeline(jobs, Date.now(), w.ms, w.granularityMs);
+  const buckets = aggregateTimeline(jobs, now, windowMs, granularityMs);
   return {
-    window: windowKey,
-    window_ms: w.ms,
-    granularity_ms: w.granularityMs,
+    window: from ? 'custom' : windowKey,
+    window_ms: windowMs,
+    granularity_ms: granularityMs,
+    from: from || null,
+    to: to || null,
     buckets,
     generated_at: new Date().toISOString(),
   };

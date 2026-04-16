@@ -141,12 +141,19 @@ export function useDomainDetailQuery(token, domain, window = '7d', options = {})
 
 /* ---------- Timeline ---------- */
 
-export function useTimelineQuery(token, window = '6h', options = {}) {
+/**
+ * Accepts either a preset window ('1h','6h',...) OR custom {from, to} ISO dates.
+ * When custom dates are passed, the window preset is ignored.
+ */
+export function useTimelineQuery(token, window = '6h', { from, to, ...options } = {}) {
+  const isCustom = !!from && !!to;
   return useQuery({
-    queryKey: queryKeys.timeline(window),
-    queryFn: () => api.get('/timeline', token, { query: { window } }),
+    queryKey: isCustom ? queryKeys.timeline(`custom:${from}:${to}`) : queryKeys.timeline(window),
+    queryFn: () => isCustom
+      ? api.get('/timeline', token, { query: { from, to } })
+      : api.get('/timeline', token, { query: { window } }),
     enabled: !!token,
-    refetchInterval: 30 * 1000, // background refresh
+    refetchInterval: isCustom ? false : 30 * 1000, // no auto-refresh on custom range
     ...options,
   });
 }

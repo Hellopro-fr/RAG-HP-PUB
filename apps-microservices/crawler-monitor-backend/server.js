@@ -1203,11 +1203,17 @@ app.get('/api/domains/:domain', authenticateToken, async (req, res) => {
 
 // Stacked timeline of jobs by start_time bucket. Used by Overview to plot
 // success/failure/running per minute (or coarser) on a sliding window.
+// Accepts either ?window=1h|6h|24h|7d OR ?from=ISO&to=ISO for a custom range.
+// Custom range gets auto-granularity (1min–6h depending on span width).
 app.get('/api/timeline', authenticateToken, async (req, res) => {
   try {
-    const windowKey = req.query.window || '6h';
+    const { window: windowKey, from, to } = req.query;
     const client = await ensureRedisConnected();
-    const result = await computeTimeline(client, windowKey, { loadJobs: loadAllJobs });
+    const result = await computeTimeline(client, windowKey || '6h', {
+      loadJobs: loadAllJobs,
+      from: from || undefined,
+      to: to || undefined,
+    });
     res.json(result);
   } catch (error) {
     console.error('Error computing timeline:', error);
