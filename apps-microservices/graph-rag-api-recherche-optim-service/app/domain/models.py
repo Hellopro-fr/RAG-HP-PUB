@@ -307,7 +307,7 @@ class ScoringOptions(BaseModel):
         2, description="Nombre maximum de produits par fournisseur (passe primaire)"
     )
     max_per_supplier_extended: int = Field(
-        3, description="Nombre maximum de produits par fournisseur (passe étendue)"
+        2, description="Nombre maximum de produits par fournisseur (passe étendue) — P7 fix: réduire surreprésentation"
     )
     score_step: float = Field(
         0.2, description="Pas de score pour les tranches de diversité fournisseur"
