@@ -1686,6 +1686,13 @@ class CrawlerManager:
                             ownership_info = f"local" if is_local_job else (f"remote (replica: {job_replica_id})" if job_replica_id else "legacy (no replica_id)")
                             logger.warning(f"Job '{crawl_id}' (status: {status}, {ownership_info}) is stale! Last activity: {time_info}. Marking as failed.")
 
+                        # Fix 1: Release the global slot if this job was holding one.
+                        # Without this, the counter drifts: job is marked failed but
+                        # the slot stays reserved until the next reconciliation bulk reset.
+                        if status in ("running", "restarting_oom", "stopping"):
+                            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                            logger.info(f"Stale detection: released global slot for '{crawl_id}' (was '{status}').")
+
                         job_data["status"] = final_status
                         job_data["shutdown_reason"] = "Stop cleanup (stale)" if is_stopping else "Stale job detected (missing heartbeat)"
                         if "last_heartbeat" in job_data:
