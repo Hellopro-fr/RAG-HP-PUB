@@ -180,6 +180,7 @@ class CaracterisationPrixGenerator:
         self,
         description: str,
         item: Dict[str, Any],
+        nom_rubrique: str,
     ) -> str:
         """
         Enrichit la description produit avec les infos prix Milvus de l'item courant.
@@ -188,18 +189,18 @@ class CaracterisationPrixGenerator:
         price_lines: List[str] = []
 
         for key, label in [
-            ("valeur_reponse_q1",  "Réponse Q1"),
-            ("caracteristique",    "Caractéristique"),
+            ("valeur_reponse_q1",  nom_rubrique),
+            ("caracteristique",    "Caractéristique du produit :"),
             # ("prix_original",      "Prix brut"),
-            ("structure_prix",     "Structure prix"),
-            ("type_transaction",   "Type transaction"),
-            ("perimetre",          "Périmètre"),
+            ("structure_prix",     "Structure prix :"),
+            ("type_transaction",   "Type transaction :"),
+            ("perimetre",          "Périmètre :"),
             # ("date_prix",          "Date prix"),
             # ("fournisseur",        "Fournisseur"),
         ]:
             val = item.get(key)
             if val:
-                price_lines.append(f"{label}: {val}")
+                price_lines.append(f"{label} {val}.")
 
         valeur_prix = item.get("valeur_prix")
         if valeur_prix:
@@ -215,11 +216,11 @@ class CaracterisationPrixGenerator:
         if not price_lines:
             return description or ""
 
-        prix_block = "\n".join(price_lines)
+        prix_block = "  ".join(price_lines)
         base = (description or "").strip()
         if base:
-            return f"{base} \n {prix_block}"
-        return f"{prix_block}"
+            return f"{base}.  {prix_block}."
+        return f"{prix_block}."
 
     async def _load_prompts(self, id_categorie: str):
         """Charge les 2 prompts (caractérisation + repasse) une seule fois."""
@@ -273,7 +274,7 @@ class CaracterisationPrixGenerator:
         description = str(item.get("description_produit", "") or item.get("text", "") or "")
 
         # Enrichir la description produit avec les infos prix Milvus
-        enriched_description = self._build_enriched_descriptif(description, item)
+        enriched_description = self._build_enriched_descriptif(description, item, nom_rubrique)
 
         self._log(f"Titre: {titre}")
         self._log(f"Enriched description: {enriched_description}")
