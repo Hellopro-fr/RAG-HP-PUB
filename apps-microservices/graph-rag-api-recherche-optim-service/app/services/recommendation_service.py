@@ -1899,7 +1899,17 @@ class RecommendationService:
             - **[BESOIN_ACHETEUR]** : questions + réponses de l'acheteur
             - **[CARACTERISTIQUES]** : critères du besoin, chacun tagué **critique** ou **secondaire**. Un écart sur un critique est grave. Un écart sur un secondaire n'est pas éliminatoire.
             - **[LISTE_PRODUITS]** : titre, descriptif, caractéristiques de chaque produit
-            
+
+            ## ⚠️ RÈGLE CRITIQUE — Lire la description complète, JAMAIS juger sur le titre seul
+
+            Le titre est souvent générique (ex: "Tracteur"). Seul le descriptif technique révèle le type précis (ex: "tracteur vigneron spécialisé pour vignobles en pente").
+
+            **Tu DOIS obligatoirement :**
+            1. Lire le **descriptif complet** de chaque produit (pas juste le titre)
+            2. Identifier le **type/sous-type précis** dans le descriptif
+            3. Comparer le descriptif technique aux critères du besoin
+            4. Ne JAMAIS conclure à la compatibilité sur la base du titre seul — si le descriptif contredit le titre, c'est le descriptif qui prime
+
             ## TRAITEMENT
             
             ### ÉTAPE 1 — Comprendre le besoin
@@ -1912,7 +1922,7 @@ class RecommendationService:
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
-            - **Sous-type explicitement différent du sous-type demandé** (ex: distributeur comptoir vs sur-pied, tracteur vigneron vs standard, pont 2 colonnes vs ciseaux) — si le besoin précise un sous-type et que la fiche produit (titre + caractéristiques) indique factuellement un autre sous-type, score 1.
+            - **Sous-type explicitement différent du sous-type demandé** (ex: distributeur comptoir vs sur-pied, tracteur vigneron vs standard, pont 2 colonnes vs ciseaux) — si le besoin précise un sous-type et que la fiche produit (titre + description + caractéristiques) indique factuellement un autre sous-type, score 1.
             - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans la fiche.
             
             **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité.
@@ -1988,6 +1998,7 @@ class RecommendationService:
             }}
             
             ## CHECKLIST AVANT SORTIE
+            - [ ] Descriptif complet de chaque produit lu (pas juste le titre)
             - [ ] Besoin reformulé avant toute évaluation
             - [ ] Usage vérifié en premier, écart éliminatoire uniquement si factuel et lisible dans la fiche
             - [ ] Chaque produit évalué indépendamment
