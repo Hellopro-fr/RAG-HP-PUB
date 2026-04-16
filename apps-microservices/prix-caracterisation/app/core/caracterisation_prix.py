@@ -275,6 +275,9 @@ class CaracterisationPrixGenerator:
         # Enrichir la description produit avec les infos prix Milvus
         enriched_description = self._build_enriched_descriptif(description, item)
 
+        self._log(f"Titre: {titre}")
+        self._log(f"Enriched description: {enriched_description}")
+
         # Pass 1 : extraction
         prompt_config = self.prompt_caracterisation.copy()
         prompt_text = prompt_config["contenu_prompt"]
@@ -574,11 +577,12 @@ class CaracterisationPrixGenerator:
                 by_source[source] = 0
                 continue
 
-            # 1b. Dédoublonnage par id_cible (fusion des chunks d'un même document)
-            raw_count = len(milvus_items)
-            milvus_items = self._deduplicate_by_id_cible(milvus_items)
-            if len(milvus_items) < raw_count:
-                self._log(f"{raw_count} chunks Milvus → {len(milvus_items)} items uniques (dédoublonnage par id_cible)")
+            # 1b. Dédoublonnage par id_cible (source produit uniquement)
+            if source == "produit":
+                raw_count = len(milvus_items)
+                milvus_items = self._deduplicate_by_id_cible(milvus_items)
+                if len(milvus_items) < raw_count:
+                    self._log(f"{raw_count} chunks Milvus → {len(milvus_items)} items uniques (dédoublonnage par id_cible)")
             total_prix += len(milvus_items)
 
             # 2. Existants côté BDD
