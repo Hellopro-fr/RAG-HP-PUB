@@ -275,6 +275,9 @@ class CaracterisationPrixGenerator:
         # Enrichir la description produit avec les infos prix Milvus
         enriched_description = self._build_enriched_descriptif(description, item)
 
+        self._log(f"Titre: {titre}")
+        self._log(f"Enriched description: {enriched_description}")
+
         # Pass 1 : extraction
         prompt_config = self.prompt_caracterisation.copy()
         prompt_text = prompt_config["contenu_prompt"]
