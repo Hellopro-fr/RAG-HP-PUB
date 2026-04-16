@@ -1,0 +1,529 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/google/uuid"
+	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
+	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/db"
+	"github.com/hellopro/mcp-gateway/internal/repository"
+	"golang.org/x/oauth2"
+)
+
+// SetGoogleTokenRepo injects the Google token repository and OAuth client.
+func (h *Handler) SetGoogleTokenRepo(repo *repository.GoogleTokenRepo, oauthClient *goGoogle.OAuthClient) {
+	h.googleTokenRepo = repo
+	h.googleOAuth = oauthClient
+}
+
+// ── Google Account Management ────────────────────────────────────────────────
+
+// handleGoogleAuthURL returns the Google OAuth2 consent URL.
+func (h *Handler) handleGoogleAuthURL(w http.ResponseWriter, r *http.Request) {
+	if h.googleOAuth == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Google OAuth2 not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set)"})
+		return
+	}
+
+	state, err := goGoogle.GenerateState()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to generate state"})
+		return
+	}
+
+	// Store state in a short-lived cookie for CSRF validation on callback
+	http.SetCookie(w, &http.Cookie{
+		Name:     "google_oauth_state",
+		Value:    state,
+		Path:     "/api/v1/google/callback",
+		MaxAge:   600, // 10 minutes
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	url := h.googleOAuth.BuildAuthURL(state)
+	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+}
+
+// handleGoogleCallback handles the Google OAuth2 callback, exchanges the code
+// for tokens, stores them encrypted, and redirects to the frontend settings page.
+func (h *Handler) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+	if h.googleOAuth == nil {
+		http.Error(w, "Google OAuth2 not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Validate CSRF state
+	stateCookie, err := r.Cookie("google_oauth_state")
+	if err != nil || stateCookie.Value == "" {
+		http.Error(w, "missing state cookie", http.StatusBadRequest)
+		return
+	}
+	if r.URL.Query().Get("state") != stateCookie.Value {
+		http.Error(w, "state mismatch", http.StatusBadRequest)
+		return
+	}
+	// Clear the state cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "google_oauth_state",
+		Value:    "",
+		Path:     "/api/v1/google/callback",
+		MaxAge:   -1,
+		HttpOnly: true,
+	})
+
+	// Check for error from Google
+	if errParam := r.URL.Query().Get("error"); errParam != "" {
+		http.Redirect(w, r, "/settings?google=error&message="+errParam, http.StatusFound)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "missing authorization code", http.StatusBadRequest)
+		return
+	}
+
+	// Exchange code for tokens
+	token, err := h.googleOAuth.ExchangeCode(r.Context(), code)
+	if err != nil {
+		log.Printf("[google] failed to exchange code: %v", err)
+		http.Redirect(w, r, "/settings?google=error&message=token_exchange_failed", http.StatusFound)
+		return
+	}
+
+	// Get the user's Google email using the userinfo endpoint
+	client := h.googleOAuth.BuildHTTPClient(r.Context(), token)
+	googleEmail, err := fetchGoogleEmail(client)
+	if err != nil {
+		log.Printf("[google] failed to fetch email: %v", err)
+		googleEmail = "unknown"
+	}
+
+	// Find the gateway user
+	email := auth.UserEmailFromContext(r.Context())
+	user, err := h.userRepo.GetByEmail(email)
+	if err != nil || user == nil {
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
+
+	// Store or update tokens
+	existing, err := h.googleTokenRepo.GetByUserID(user.ID)
+	if err != nil {
+		log.Printf("[google] failed to check existing token: %v", err)
+		http.Redirect(w, r, "/settings?google=error&message=db_error", http.StatusFound)
+		return
+	}
+
+	expiry := token.Expiry
+	if existing == nil {
+		// Create new record
+		gt := &db.UserGoogleToken{
+			UserID:       user.ID,
+			Email:        googleEmail,
+			AccessToken:  []byte(token.AccessToken),
+			RefreshToken: []byte(token.RefreshToken),
+			TokenExpiry:  &expiry,
+		}
+		if err := h.googleTokenRepo.Create(gt); err != nil {
+			log.Printf("[google] failed to store token: %v", err)
+			http.Redirect(w, r, "/settings?google=error&message=db_error", http.StatusFound)
+			return
+		}
+	} else {
+		// Update existing record
+		existing.Email = googleEmail
+		existing.AccessToken = []byte(token.AccessToken)
+		existing.RefreshToken = []byte(token.RefreshToken)
+		existing.TokenExpiry = &expiry
+		if err := h.googleTokenRepo.Update(existing); err != nil {
+			log.Printf("[google] failed to update token: %v", err)
+			http.Redirect(w, r, "/settings?google=error&message=db_error", http.StatusFound)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/settings?google=connected", http.StatusFound)
+}
+
+// handleGoogleDisconnect removes stored Google tokens for the authenticated admin.
+func (h *Handler) handleGoogleDisconnect(w http.ResponseWriter, r *http.Request) {
+	email := auth.UserEmailFromContext(r.Context())
+	user, err := h.userRepo.GetByEmail(email)
+	if err != nil || user == nil {
+		writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "user not found"})
+		return
+	}
+
+	if err := h.googleTokenRepo.DeleteByUserID(user.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to disconnect"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+}
+
+// handleGoogleStatus returns the Google connection status for the authenticated admin.
+func (h *Handler) handleGoogleStatus(w http.ResponseWriter, r *http.Request) {
+	email := auth.UserEmailFromContext(r.Context())
+	user, err := h.userRepo.GetByEmail(email)
+	if err != nil || user == nil {
+		writeJSON(w, http.StatusOK, GoogleStatusResponse{Connected: false})
+		return
+	}
+
+	token, err := h.googleTokenRepo.GetByUserID(user.ID)
+	if err != nil || token == nil {
+		writeJSON(w, http.StatusOK, GoogleStatusResponse{Connected: false})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, GoogleStatusResponse{Connected: true, Email: token.Email})
+}
+
+// ── Spreadsheet Operations ──────────────────────────────────────────────────
+
+// handleSheetInfo retrieves spreadsheet metadata (title, sheet names).
+func (h *Handler) handleSheetInfo(w http.ResponseWriter, r *http.Request) {
+	client, err := h.getGoogleHTTPClient(r)
+	if err != nil {
+		h.writeGoogleError(w, err)
+		return
+	}
+
+	var req SheetInfoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	if req.SpreadsheetURL == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "spreadsheet_url is required"})
+		return
+	}
+
+	spreadsheetID, err := goGoogle.ParseSpreadsheetURL(req.SpreadsheetURL)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid spreadsheet URL"})
+		return
+	}
+
+	info, err := goGoogle.GetSpreadsheetInfo(r.Context(), client, spreadsheetID)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "failed to access spreadsheet: " + err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, SheetInfoResponse{
+		SpreadsheetID: info.SpreadsheetID,
+		Title:         info.Title,
+		Sheets:        info.Sheets,
+	})
+}
+
+// handleSheetPreview returns column headers and first N rows from a sheet.
+func (h *Handler) handleSheetPreview(w http.ResponseWriter, r *http.Request) {
+	client, err := h.getGoogleHTTPClient(r)
+	if err != nil {
+		h.writeGoogleError(w, err)
+		return
+	}
+
+	var req SheetPreviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	if req.SpreadsheetID == "" || req.SheetName == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "spreadsheet_id and sheet_name are required"})
+		return
+	}
+
+	preview, err := goGoogle.GetSheetPreview(r.Context(), client, req.SpreadsheetID, req.SheetName, 10)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "failed to read sheet: " + err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, SheetPreviewResponse{
+		Headers:   preview.Headers,
+		Rows:      preview.Rows,
+		TotalRows: preview.TotalRows,
+	})
+}
+
+// handleSheetImport reads all rows, applies column mapping, and creates MCP servers.
+func (h *Handler) handleSheetImport(w http.ResponseWriter, r *http.Request) {
+	client, err := h.getGoogleHTTPClient(r)
+	if err != nil {
+		h.writeGoogleError(w, err)
+		return
+	}
+
+	var req SheetImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	if req.SpreadsheetID == "" || req.SheetName == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "spreadsheet_id and sheet_name are required"})
+		return
+	}
+	if req.ColumnMapping.Name == "" || req.ColumnMapping.URL == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "column_mapping.name and column_mapping.url are required"})
+		return
+	}
+
+	headers, rows, err := goGoogle.ReadAllRows(r.Context(), client, req.SpreadsheetID, req.SheetName)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "failed to read sheet: " + err.Error()})
+		return
+	}
+	if len(rows) == 0 {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "spreadsheet has no data rows"})
+		return
+	}
+
+	// Build column index: header name → column index
+	colIndex := make(map[string]int, len(headers))
+	for i, h := range headers {
+		colIndex[h] = i
+	}
+
+	userEmail := auth.UserEmailFromContext(r.Context())
+	resp := SheetImportResponse{
+		Total:   len(rows),
+		Results: make([]SheetImportResultEntry, 0, len(rows)),
+	}
+
+	for rowIdx, row := range rows {
+		result := h.importSheetRow(r, rowIdx+2, row, colIndex, &req.ColumnMapping, userEmail, req.AutoDiscover) // +2: 1-based + header row
+		switch result.Status {
+		case "imported":
+			resp.Imported++
+		case "skipped":
+			resp.Skipped++
+		default:
+			resp.Errors++
+		}
+		resp.Results = append(resp.Results, result)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+// getGoogleHTTPClient builds an authenticated Google HTTP client for the current user.
+func (h *Handler) getGoogleHTTPClient(r *http.Request) (*http.Client, error) {
+	if h.googleOAuth == nil {
+		return nil, fmt.Errorf("google_not_configured")
+	}
+
+	email := auth.UserEmailFromContext(r.Context())
+	user, err := h.userRepo.GetByEmail(email)
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("user_not_found")
+	}
+
+	gt, err := h.googleTokenRepo.GetByUserID(user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("db_error")
+	}
+	if gt == nil {
+		return nil, fmt.Errorf("google_not_connected")
+	}
+
+	token := &oauth2.Token{
+		AccessToken:  string(gt.AccessToken),
+		RefreshToken: string(gt.RefreshToken),
+		TokenType:    "Bearer",
+	}
+	if gt.TokenExpiry != nil {
+		token.Expiry = *gt.TokenExpiry
+	}
+
+	// Use a TokenSource that auto-refreshes
+	ts := h.googleOAuth.TokenSource(r.Context(), token)
+	newToken, err := ts.Token()
+	if err != nil {
+		return nil, fmt.Errorf("google_token_revoked")
+	}
+
+	// If the token was refreshed, update the DB
+	if newToken.AccessToken != token.AccessToken {
+		expiry := newToken.Expiry
+		gt.AccessToken = []byte(newToken.AccessToken)
+		gt.RefreshToken = []byte(newToken.RefreshToken)
+		gt.TokenExpiry = &expiry
+		_ = h.googleTokenRepo.Update(gt)
+	}
+
+	return oauth2.NewClient(r.Context(), ts), nil
+}
+
+// writeGoogleError writes an appropriate error response based on the error type.
+func (h *Handler) writeGoogleError(w http.ResponseWriter, err error) {
+	switch err.Error() {
+	case "google_not_configured":
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Google OAuth2 not configured"})
+	case "user_not_found":
+		writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "user not found"})
+	case "google_not_connected":
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Google account not connected. Please connect in Settings."})
+	case "google_token_revoked":
+		writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "Google access revoked. Please reconnect in Settings."})
+	default:
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+	}
+}
+
+// importSheetRow creates a single MCP server from a spreadsheet row.
+func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colIndex map[string]int, mapping *ColumnMapping, userEmail string, autoDiscover bool) SheetImportResultEntry {
+	result := SheetImportResultEntry{Row: rowNum}
+
+	getVal := func(header string) string {
+		if header == "" {
+			return ""
+		}
+		if idx, ok := colIndex[header]; ok && idx < len(row) {
+			return strings.TrimSpace(row[idx])
+		}
+		return ""
+	}
+
+	name := getVal(mapping.Name)
+	serverURL := getVal(mapping.URL)
+
+	if name == "" || serverURL == "" {
+		result.Status = "error"
+		result.Message = "missing required field: name or url"
+		result.Name = name
+		return result
+	}
+	result.Name = name
+
+	// Check for duplicate URL or name
+	existing, _ := h.repo.ListAll(nil, "", "")
+	for _, s := range existing {
+		if s.URL == strings.TrimRight(serverURL, "/") || s.Name == name {
+			result.Status = "skipped"
+			result.Message = fmt.Sprintf("server already exists (id: %s)", s.ID)
+			return result
+		}
+	}
+
+	id := uuid.New().String()
+	srv := db.MCPServer{
+		ID:                  id,
+		Name:                name,
+		URL:                 strings.TrimRight(serverURL, "/"),
+		TransportPreference: "auto",
+		ConnectTimeoutMs:    10000,
+		IsActive:            true,
+		HealthStatus:        "unknown",
+		MCPTransport:        "http",
+		DocSlug:             generateDocSlug(name, id),
+		CreatedBy:           userEmail,
+	}
+
+	// Apply optional mapped fields
+	if v := getVal(mapping.TransportPreference); v != "" {
+		srv.TransportPreference = v
+	}
+	if v := getVal(mapping.ConnectTimeoutMs); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			srv.ConnectTimeoutMs = uint(n)
+		}
+	}
+	if v := getVal(mapping.ToolPrefix); v != "" {
+		srv.ToolPrefix = v
+	}
+	if v := getVal(mapping.Icon); v != "" {
+		srv.Icon = v
+	}
+	if v := getVal(mapping.MCPTransport); v != "" {
+		srv.MCPTransport = v
+	}
+	if v := getVal(mapping.MCPCommand); v != "" {
+		srv.MCPCommand = v
+	}
+	if v := getVal(mapping.MCPArgs); v != "" {
+		srv.MCPArgs = json.RawMessage(v)
+	}
+	if v := getVal(mapping.MCPEnv); v != "" {
+		srv.MCPEnv = json.RawMessage(v)
+	}
+	if v := getVal(mapping.DocSlug); v != "" {
+		srv.DocSlug = v
+	}
+	if v := getVal(mapping.DocDescription); v != "" {
+		srv.DocDescription = v
+	}
+
+	// Auth headers: expect JSON string like {"Authorization": "Bearer xxx"}
+	if v := getVal(mapping.AuthHeaders); v != "" {
+		srv.AuthHeaders = []byte(v)
+	}
+
+	// Tags
+	if v := getVal(mapping.Tags); v != "" {
+		for _, tag := range strings.Split(v, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				srv.Tags = append(srv.Tags, db.ServerTag{ServerID: id, Tag: tag})
+			}
+		}
+	}
+
+	if err := h.repo.Create(&srv); err != nil {
+		if strings.Contains(err.Error(), "Duplicate") {
+			result.Status = "skipped"
+			result.Message = "duplicate URL or slug"
+			return result
+		}
+		result.Status = "error"
+		result.Message = err.Error()
+		return result
+	}
+
+	result.Status = "imported"
+
+	// Auto-discover for remote servers
+	if autoDiscover && srv.MCPTransport != "stdio" && serverURL != "" {
+		authHeaders := parseAuthHeaders(srv.AuthHeaders)
+		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, authHeaders); err != nil {
+			log.Printf("[google] auto-discover failed for %s (%s): %v", name, srv.URL, err)
+			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
+		} else {
+			if backend := h.registry.FindByID(id); backend != nil {
+				h.saveBackendCapabilities(id, backend)
+			}
+		}
+	}
+
+	return result
+}
+
+// fetchGoogleEmail retrieves the user's email from Google's userinfo endpoint.
+func fetchGoogleEmail(client *http.Client) (string, error) {
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var info struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return "", err
+	}
+	return info.Email, nil
+}

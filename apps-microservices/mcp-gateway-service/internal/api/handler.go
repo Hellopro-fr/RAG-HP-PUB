@@ -156,6 +156,65 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/install-guides/configs/", h.handleConfigByID)
 	}
 
+	// ── Google Sheets import routes ──────────────────────────────────────────
+	if h.googleTokenRepo != nil {
+		apiMux.HandleFunc("/api/v1/google/auth-url", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleAuthURL(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/callback", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleCallback(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/disconnect", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodDelete {
+				w.Header().Set("Allow", "DELETE")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleDisconnect(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/status", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleStatus(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/sheets/info", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleSheetInfo(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/sheets/preview", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleSheetPreview(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/sheets/import", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleSheetImport(w, r)
+		})
+	}
+
 	// ── Server icons routes ──────────────────────────────────────────────────
 	apiMux.HandleFunc("/api/v1/server-icons", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -294,8 +353,8 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
-	// User, audit, and install guide management always require admin
-	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") {
+	// User, audit, install guide, and Google management always require admin
+	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") {
 		return true
 	}
 	// Server writes require admin

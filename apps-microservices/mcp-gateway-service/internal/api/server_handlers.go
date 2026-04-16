@@ -14,6 +14,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
+	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
@@ -80,6 +81,9 @@ type Handler struct {
 	uploadDir string
 	// installGuideRepo is the repository for install guide CRUD (executors + configs).
 	installGuideRepo *repository.InstallGuideRepo
+	// Google Sheets import
+	googleTokenRepo *repository.GoogleTokenRepo
+	googleOAuth     *goGoogle.OAuthClient
 }
 
 // TokenCache is an interface for scope token cache operations.
