@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
+	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/health"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
@@ -149,6 +151,16 @@ func main() {
 		apiHandler.SetLeexiAdmin(leexiAdminClient)
 		apiHandler.SetUploadDir(cfg.UploadDir)
 		apiHandler.SetInstallGuideRepo(installGuideRepo)
+
+		// Google Sheets import (optional — only enabled when GOOGLE_CLIENT_ID is set)
+		if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
+			redirectURL := strings.TrimRight(cfg.GatewayPublicURL, "/") + "/api/v1/google/callback"
+			googleOAuth := goGoogle.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, redirectURL)
+			googleTokenRepo := repository.NewGoogleTokenRepo(database, encryptor)
+			apiHandler.SetGoogleTokenRepo(googleTokenRepo, googleOAuth)
+			log.Printf("[main] Google Sheets import enabled (redirect: %s)", redirectURL)
+		}
+
 		apiHandler.Register(mux)
 		log.Println("[main] REST API mounted at /api/v1/")
 

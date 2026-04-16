@@ -1129,6 +1129,8 @@ class RecommendationService:
             if request.scoring.c_unknown_score is not None
             else 0
         )
+        # P1 fix: penalize missing characteristics (cap at -0.5 — aligned with V2)
+        c_unknown_score = min(c_unknown_score, -0.5)
         t_unmatched = (
             request.scoring.t_unmatched
             if request.scoring.t_unmatched is not None
@@ -1897,7 +1899,17 @@ class RecommendationService:
             - **[BESOIN_ACHETEUR]** : questions + réponses de l'acheteur
             - **[CARACTERISTIQUES]** : critères du besoin, chacun tagué **critique** ou **secondaire**. Un écart sur un critique est grave. Un écart sur un secondaire n'est pas éliminatoire.
             - **[LISTE_PRODUITS]** : titre, descriptif, caractéristiques de chaque produit
-            
+
+            ## ⚠️ RÈGLE CRITIQUE — Lire la description complète, JAMAIS juger sur le titre seul
+
+            Le titre est souvent générique (ex: "Tracteur"). Seul le descriptif technique révèle le type précis (ex: "tracteur vigneron spécialisé pour vignobles en pente").
+
+            **Tu DOIS obligatoirement :**
+            1. Lire le **descriptif complet** de chaque produit (pas juste le titre)
+            2. Identifier le **type/sous-type précis** dans le descriptif
+            3. Comparer le descriptif technique aux critères du besoin
+            4. Ne JAMAIS conclure à la compatibilité sur la base du titre seul — si le descriptif contredit le titre, c'est le descriptif qui prime
+
             ## TRAITEMENT
             
             ### ÉTAPE 1 — Comprendre le besoin
@@ -1905,11 +1917,12 @@ class RecommendationService:
             
             ### ÉTAPE 2 — Évaluer chaque produit
             Évalue chaque produit **indépendamment**, en le comparant uniquement au besoin reformulé.
-            
+
             **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans la fiche** — pas inféré ou supposé. Si ambigu ou non confirmé : pas de score 1.
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
+            - **Sous-type explicitement différent du sous-type demandé** (ex: distributeur comptoir vs sur-pied, tracteur vigneron vs standard, pont 2 colonnes vs ciseaux) — si le besoin précise un sous-type et que la fiche produit (titre + description + caractéristiques) indique factuellement un autre sous-type, score 1.
             - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans la fiche.
             
             **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité.
@@ -1985,6 +1998,7 @@ class RecommendationService:
             }}
             
             ## CHECKLIST AVANT SORTIE
+            - [ ] Descriptif complet de chaque produit lu (pas juste le titre)
             - [ ] Besoin reformulé avant toute évaluation
             - [ ] Usage vérifié en premier, écart éliminatoire uniquement si factuel et lisible dans la fiche
             - [ ] Chaque produit évalué indépendamment

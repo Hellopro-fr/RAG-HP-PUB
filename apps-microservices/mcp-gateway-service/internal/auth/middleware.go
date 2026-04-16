@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/hellopro/mcp-gateway/internal/db"
@@ -126,7 +127,7 @@ func Middleware(cfg Config, userRepo UserRepo) func(http.Handler) http.Handler {
 					w.WriteHeader(http.StatusUnauthorized)
 					w.Write([]byte(`{"error":"not authenticated"}`))
 				} else {
-					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					http.Redirect(w, r, "/login?redirect="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 				}
 				return
 			}
@@ -141,7 +142,7 @@ func Middleware(cfg Config, userRepo UserRepo) func(http.Handler) http.Handler {
 					w.WriteHeader(http.StatusUnauthorized)
 					w.Write([]byte(`{"error":"not authenticated"}`))
 				} else {
-					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					http.Redirect(w, r, "/login?redirect="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 				}
 				return
 			}

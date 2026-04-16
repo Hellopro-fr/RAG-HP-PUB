@@ -461,7 +461,10 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             nom_produit = meta.get("nom_produit", "N/A")
             fournisseur = meta.get("fournisseur", "N/A")
             nom_categorie = meta.get("nom_categorie", meta.get("categorie", "N/A"))
-            text = meta.get("text", "")
+            description_produit = meta.get("description_produit", "")
+            valeur_reponse_q1 = meta.get("valeur_reponse_q1", "")
+            type_transaction = meta.get("type_transaction", "")
+            structure_prix = meta.get("structure_prix", "")
 
             # Construction de la ligne de prix
             prix_line = ""
@@ -479,14 +482,16 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             caracteristique = meta.get("caracteristique", "")
             date_prix = meta.get("date_prix", "")
 
-            chunk_text = f"""Titre : {nom_produit}
-            Source : Prix
+            chunk_text = f"""Titre du produit : {nom_produit}
+            Description du produit : {description_produit}
+            Réponse Question 1 : {valeur_reponse_q1}
+            Caractéristiques : {caracteristique}
             Fournisseur : {fournisseur}
-            Catégorie : {nom_categorie}
-            Texte : {text}
+            Nom de la catégorie : {nom_categorie}
+            Type de transaction : {type_transaction}
             Prix : {prix_line}
-            Date_prix : {date_prix}
-            Caractéristiques : {caracteristique}"""
+            Date du prix : {date_prix}
+            Structure du prix : {structure_prix}"""
 
             formatted_chunks.append(chunk_text)
 
@@ -644,6 +649,247 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         return {
             "success": False,
             "reponse": None,
+            "api_response": {},
+            "time_elapsed": elapsed,
+            "message": f"Erreur inattendue: {str(e)}"
+        }
+
+
+async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Version 2 du questionnaire prix : remplace la recherche RAG par le matching
+    via l'endpoint BO matching_prix.php (correspondance équivalences × _cppi).
+
+    Étapes :
+    1. Appel BO matching_prix/matching/get avec les équivalences filtrées
+    2. Formate les résultats matchés en texte structuré (même format que v1)
+    3. Récupère le prompt 114
+    4. Injecte les résultats formatés + requête dans le prompt, appelle LLM
+    5. Retourne la réponse LLM structurée
+
+    Args:
+        equivalences: Équivalences prix filtrées (textuelles uniquement)
+        id_categorie: ID de la catégorie
+        nom_categorie: Nom de la catégorie
+        texte_prompt: Texte optionnel à injecter comme {requete_rag} dans le prompt
+        model: Modèle LLM à utiliser
+
+    Returns:
+        Dict avec 'success', 'reponse', 'matching', 'api_response', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    prompt_id = settings.PROMPT_ID_QUESTIONNAIRE
+
+    api_client = HelloProAPIClient()
+    ID_PROCESS = "37"
+
+    try:
+        # =====================================================================
+        # ÉTAPE 1 : Matching prix via BO + récupération prompt EN PARALLÈLE
+        # =====================================================================
+        logger.info(f"[{id_categorie}] V2 — Matching prix + prompt en parallèle ({len(equivalences)} équivalences)")
+
+        matching_response, prompt_config = await asyncio.gather(
+            api_client.post(
+                "matching_prix", "matching", "get",
+                {"id_categorie": id_categorie, "equivalences": equivalences}
+            ),
+            get_prompt_cached(prompt_id)
+        )
+
+        if not matching_response or matching_response.get("erreur"):
+            elapsed = time.time() - start_time
+            err_msg = (matching_response or {}).get("message", "Erreur appel matching_prix")
+            logger.warning(f"[{id_categorie}] V2 — Matching échoué: {err_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": err_msg
+            }
+
+        results = matching_response.get("results", [])
+        if not results:
+            elapsed = time.time() - start_time
+            logger.warning(f"[{id_categorie}] V2 — Aucun prix matché")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": f"Aucun prix correspondant trouvé pour la catégorie {id_categorie}"
+            }
+
+        if not prompt_config:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] V2 — Impossible de récupérer le prompt id={prompt_id}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer le prompt id={prompt_id}"
+            }
+
+        logger.info(f"[{id_categorie}] V2 — {len(results)} prix matchés")
+
+        # =====================================================================
+        # ÉTAPE 2 : Formater les résultats matchés (même format que v1 chunks)
+        # =====================================================================
+        formatted_chunks = []
+
+        for item in results:
+            prix = item.get("prix", {})
+
+            prix_line = prix.get("prix", "")
+            caracteristiques = item.get("caracteristiques", prix.get("caracteristique", ""))
+
+            chunk_text = f"""Titre du produit : {prix.get("nom_produit", "N/A")}
+            Description du produit : {prix.get("description_produit", "")}
+            Réponse Question 1 : {prix.get("valeur_reponse_q1", "")}
+            Caractéristiques : {caracteristiques}
+            Fournisseur : {prix.get("fournisseur", "N/A")}
+            Nom de la catégorie : {prix.get("nom_categorie", "N/A")}
+            Type de transaction : {prix.get("type_transaction", "")}
+            Prix : {prix_line}
+            Date du prix : {prix.get("date_prix", "")}
+            Structure du prix : {prix.get("structure_prix", "")}"""
+
+            formatted_chunks.append(chunk_text)
+
+        all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
+
+        logger.info(f"[{id_categorie}] V2 — {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars)")
+
+        prompt_text = prompt_config.get("contenu_prompt", "")
+
+        # =====================================================================
+        # ÉTAPE 3 : Construire le prompt final et appeler LLM
+        # =====================================================================
+        final_prompt = prompt_text
+        final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
+
+        # {requete_rag} = texte_prompt si fourni     
+        requete_rag_value = texte_prompt.strip()
+        logger.info(f"[{id_categorie}] V2 — Requête prompt surchargée: {requete_rag_value}")
+
+        final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
+        final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+
+        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
+        use_gemini = llm_model.startswith("gemini")
+        use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
+        use_claude = llm_model.startswith("claude")
+
+        logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
+
+        if use_gemini:
+            actual_model = llm_model if llm_model != "gemini" else settings.GEMINI_MODEL_NAME
+            type_ia = 3
+            logger.info(f"[{id_categorie}] V2 — Appel Gemini (model={actual_model}, {len(final_prompt)} chars)...")
+            gemini = GeminiProvider(model=actual_model, thinking_level="low")
+            llm_result = await gemini.chat(final_prompt)
+
+        elif use_claude:
+            actual_model = llm_model
+            type_ia = 4
+            effort = None
+            budget_tokens = None
+            match_effort = re.search(r"-e-(low|medium|high)$", actual_model)
+            match_budget = re.search(r"-b-(\d+)$", actual_model)
+            if match_effort:
+                effort = match_effort.group(1)
+                actual_model = actual_model[:match_effort.start()]
+            elif match_budget:
+                budget_tokens = int(match_budget.group(1))
+                actual_model = actual_model[:match_budget.start()]
+            logger.info(f"[{id_categorie}] V2 — Appel Claude (model={actual_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...")
+            claude = ClaudeProvider(model=actual_model, effort=effort, budget_tokens=budget_tokens)
+            llm_result = await claude.chat(final_prompt)
+
+        else:
+            actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
+            type_ia = 1
+            logger.info(f"[{id_categorie}] V2 — Appel ChatGPT (model={actual_model}, {len(final_prompt)} chars)...")
+            gpt = ChatGPTProvider(model=actual_model)
+            llm_result = await gpt.chat(final_prompt)
+
+        # Extraction usage commun
+        usage = llm_result.get("api_response", {}).get("usage", {})
+        input_tokens = usage.get("input_tokens") or 0
+        output_tokens = usage.get("output_tokens") or 0
+
+        # Log LLM usage (fire-and-forget)
+        asyncio.create_task(api_client.log_llm_usage(
+            type_ia=type_ia,
+            model=actual_model,
+            input_token=input_tokens,
+            output_token=output_tokens,
+            id_process=ID_PROCESS,
+            origine="prix-traitement-questionnaire-v2",
+            etat=1 if "error" not in llm_result else 2,
+            retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else "",
+            temperature=0.0
+        ))
+
+        elapsed = time.time() - start_time
+
+        if "error" in llm_result:
+            error_msg = f"Erreur LLM: {llm_result.get('error', '')}"
+            logger.error(f"[{id_categorie}] V2 — {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+
+        llm_text = llm_result.get("message", "")
+        logger.info(f"[{id_categorie}] V2 — Réponse LLM reçue: {llm_text[:200]}... en {elapsed:.1f}s")
+
+        parsed = extract_json_from_text(llm_text)
+        if not parsed or not isinstance(parsed, dict):
+            error_msg = f"Réponse JSON vide ou malformée: '{llm_text[:100]}'"
+            logger.error(f"[{id_categorie}] V2 — {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+
+        # Compatibilité prix_median <-> prix_moyen dans fourchette
+        fourchette = parsed.get("fourchette")
+        if isinstance(fourchette, dict):
+            if "prix_moyen" in fourchette and "prix_median" not in fourchette:
+                fourchette["prix_median"] = fourchette["prix_moyen"]
+            elif "prix_median" in fourchette and "prix_moyen" not in fourchette:
+                fourchette["prix_moyen"] = fourchette["prix_median"]
+
+        return {
+            "success": True,
+            "reponse": parsed,
+            "matching": matching_response,
+            "api_response": llm_result.get("api_response", {}),
+            "time_elapsed": elapsed,
+            "message": f"{len(results)} prix matchés traités en {elapsed:.1f}s"
+        }
+
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[{id_categorie}] Erreur inattendue dans run_questionnaire_v2: {e}", exc_info=True)
+        return {
+            "success": False,
+            "reponse": None,
+            "matching": None,
             "api_response": {},
             "time_elapsed": elapsed,
             "message": f"Erreur inattendue: {str(e)}"

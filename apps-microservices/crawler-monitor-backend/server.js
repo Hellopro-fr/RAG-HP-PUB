@@ -11,7 +11,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import jwt from 'jsonwebtoken';
-import { auditMiddleware, readAuditEntries, rotateOldLogs } from './src/lib/auditLog.js';
+import { auditMiddleware, readAuditEntries, rotateOldLogs, logAuditEntry } from './src/lib/auditLog.js';
 import { replayCallback } from './src/lib/callbacks.js';
 import {
   parseWindow as parseCapacityWindow,
@@ -19,12 +19,25 @@ import {
   readCapacityHistory,
   SNAPSHOT_INTERVAL_MS,
 } from './src/lib/capacityHistory.js';
+import { parseStatsWindow, computeSystemStats } from './src/lib/systemStats.js';
+import { verifyPassword, looksLikeScryptHash } from './src/lib/password.js';
+import {
+  parseReplicaWindow,
+  persistHeartbeat,
+  readReplicaHistory,
+  readAllReplicasHistory,
+} from './src/lib/replicaHistory.js';
+import { persistJobPerf, readJobPerf } from './src/lib/jobPerformance.js';
+import { computeTimeline } from './src/lib/timeline.js';
+import { parseDomainWindow, aggregateDomains, jobsForDomain } from './src/lib/domains.js';
+import { evaluateAlerts, DEFAULT_THRESHOLDS } from './src/lib/alerts.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
 const CRAWLER_STORAGE_PATH = process.env.CRAWLER_STORAGE_PATH || '/app/storage';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const JWT_SECRET = process.env.JWT_SECRET;
+const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS; // comma-separated, optional
 
 const CRAWL_UPDATES_CHANNEL = 'crawl_updates';
 const CRAWL_JOB_PREFIX = 'crawl_job:';
@@ -34,12 +47,29 @@ const FAILED_CALLBACKS_KEY = 'crawl_jobs:failed_callbacks';
 
 const missingVars = [];
 if (!REDIS_URL) missingVars.push('REDIS_URL');
-if (!ADMIN_PASSWORD) missingVars.push('ADMIN_PASSWORD');
+if (!ADMIN_PASSWORD_HASH) missingVars.push('ADMIN_PASSWORD_HASH');
 if (!JWT_SECRET) missingVars.push('JWT_SECRET');
 
 if (missingVars.length > 0) {
   console.error(`FATAL ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
+  if (missingVars.includes('ADMIN_PASSWORD_HASH')) {
+    console.error('');
+    console.error('Generate a hash with:');
+    console.error('  node -e "import(\'./src/lib/password.js\').then(m => m.hashPassword(process.argv[1]).then(console.log))" YOUR_PASSWORD');
+    console.error('');
+    console.error('NOTE: legacy ADMIN_PASSWORD (plain text) is no longer accepted — set ADMIN_PASSWORD_HASH instead.');
+  }
   process.exit(1);
+}
+
+if (!looksLikeScryptHash(ADMIN_PASSWORD_HASH)) {
+  console.error('FATAL ERROR: ADMIN_PASSWORD_HASH does not look like a scrypt$ hash.');
+  console.error('It must be generated with src/lib/password.js hashPassword().');
+  process.exit(1);
+}
+
+if (process.env.ADMIN_PASSWORD) {
+  console.warn('WARN: legacy ADMIN_PASSWORD env var detected — it is ignored. Remove it from your env.');
 }
 
 // --- Persistent Redis Client ---
@@ -57,17 +87,54 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Trust the first reverse proxy (nginx in front of us). Required so that
+// req.ip / req.ips / X-Forwarded-For are interpreted correctly by
+// express-rate-limit and the audit log. Configurable via TRUST_PROXY env var
+// (number of proxy hops; default 1 for our nginx -> backend setup).
+const TRUST_PROXY_HOPS = parseInt(process.env.TRUST_PROXY || '1', 10);
+app.set('trust proxy', Number.isFinite(TRUST_PROXY_HOPS) ? TRUST_PROXY_HOPS : 1);
+
 // Security Middleware
 app.use(helmet());
+
+// Global rate limit. Tuned for a live dashboard (React Query background
+// refetch every 30s on multiple endpoints + WebSocket-driven invalidations
+// can easily reach ~30 req/min/user). The previous 100 req/15min was too low
+// and caused 429s after a few minutes of normal use.
+//
+// /api/login is explicitly skipped at the user's request (internal tool,
+// shared NAT egress IP). Audit log still records every login attempt.
+//
+// Configurable via env: RATE_LIMIT_MAX (default 600), RATE_LIMIT_WINDOW_MS
+// (default 900000 = 15 min).
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '600', 10);
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/api/login',
 });
 app.use(limiter);
 
-app.use(cors());
+// CORS: allowlist if CORS_ALLOWED_ORIGINS is set, else permissive with a warning.
+// Same-origin requests (no Origin header) and tools like curl/postman are always allowed.
+if (CORS_ALLOWED_ORIGINS) {
+  const allowed = CORS_ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+  console.log(`[cors] allowlist active (${allowed.length} origins)`);
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // server-to-server / curl
+      if (allowed.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+  }));
+} else {
+  console.warn('WARN: CORS_ALLOWED_ORIGINS not set — allowing all origins. Set it for production.');
+  app.use(cors());
+}
 app.use(express.json({ limit: '50mb' })); // Support large JSON payloads for request_urls
 
 // Authentication Middleware
@@ -84,13 +151,28 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Login Endpoint
-app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
+// Login Endpoint — verifies password against scrypt hash in ADMIN_PASSWORD_HASH.
+// (No per-endpoint IP rate-limit: removed at user request because the dashboard
+// is internal and shared NAT IPs were causing self-DoS. The global limiter
+// above still applies in addition to the audit log of every attempt.)
+app.post('/api/login', async (req, res) => {
+  const { password } = req.body || {};
+  if (typeof password !== 'string' || password.length === 0) {
+    await logAuditEntry({ user: 'anonymous', action: 'login_attempt', status: 'error', ip: req.ip, metadata: { reason: 'missing_password' } });
+    return res.status(400).json({ error: 'Password required' });
+  }
+  let ok = false;
+  try {
+    ok = await verifyPassword(password, ADMIN_PASSWORD_HASH);
+  } catch (err) {
+    console.error('Login verification error:', err);
+  }
+  if (ok) {
     const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    await logAuditEntry({ user: 'admin', action: 'login_success', status: 'ok', ip: req.ip });
     res.json({ token });
   } else {
+    await logAuditEntry({ user: 'anonymous', action: 'login_failure', status: 'error', ip: req.ip });
     res.status(401).json({ error: 'Invalid password' });
   }
 });
@@ -200,8 +282,14 @@ app.get('/api/jobs', async (req, res) => {
 
     const jobsData = await client.mGet(jobKeys);
     const jobs = jobsData
-      .map(str => str ? JSON.parse(str) : null)
+      .map(str => {
+        if (!str) return null;
+        try { return JSON.parse(str); } catch { return null; }
+      })
       .filter(Boolean)
+      // Skip malformed entries without a crawl_id — they would surface as
+      // id: undefined on the front and trigger /api/jobs/undefined/details 404s.
+      .filter(job => job && typeof job.crawl_id === 'string' && job.crawl_id.length > 0)
       .map(job => ({
         ...job,
         id: job.crawl_id,
@@ -213,6 +301,18 @@ app.get('/api/jobs', async (req, res) => {
   } catch (error) {
     console.error('Error fetching initial jobs from Redis:', error);
     res.status(500).json({ error: 'Failed to fetch jobs' });
+  }
+});
+
+// Per-job CPU/RAM performance history (from heartbeats). Retained 24h.
+app.get('/api/jobs/:id/performance', async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+    const result = await readJobPerf(client, req.params.id);
+    res.json({ job_id: req.params.id, ...result });
+  } catch (error) {
+    console.error('Error fetching job performance:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch performance' });
   }
 });
 
@@ -515,7 +615,9 @@ app.get('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/:domain/:filename',
+  auditMiddleware('queue_file_edit', { captureParams: ['id', 'domain', 'filename'] }),
+  async (req, res) => {
   const { id, domain, filename } = req.params;
   const content = req.body;
 
@@ -540,7 +642,9 @@ app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/repair',
+  auditMiddleware('queue_repair', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
@@ -597,7 +701,9 @@ app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
 });
 
 // Endpoint to DROP the entire request queue (RESET)
-app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/drop',
+  auditMiddleware('queue_drop', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
@@ -858,7 +964,9 @@ app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
+app.post('/api/jobs/:id/dataset/deduplicate',
+  auditMiddleware('dataset_deduplicate', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     // Get job data to find domain
@@ -941,7 +1049,9 @@ app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/clean-patterns',
+  auditMiddleware('queue_clean_patterns', { captureParams: ['id'] }),
+  async (req, res) => {
 
   const { id } = req.params;
   try {
@@ -1026,6 +1136,128 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching capacity:', error);
     res.status(500).json({ error: 'Failed to fetch capacity' });
+  }
+});
+
+// Active alerts evaluated NOW from current state (jobs + capacity + replicas + callbacks).
+// Phase 3 thresholds = env vars (see src/lib/alerts.js DEFAULT_THRESHOLDS).
+app.get('/api/alerts', authenticateToken, async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+
+    // Gather inputs in parallel
+    const [jobs, capacityRaw, callbacksRaw, replicasHistory] = await Promise.all([
+      loadAllJobs(client),
+      readCapacityHistory(client, 60 * 60 * 1000), // last 1h
+      client.lLen(FAILED_CALLBACKS_KEY).catch(() => 0),
+      readAllReplicasHistory(client, 60 * 60 * 1000),
+    ]);
+
+    // Map replica points to {ts, cpu} only (alerts engine only needs cpu)
+    const replicasForAlerts = {};
+    for (const [id, points] of Object.entries(replicasHistory)) {
+      replicasForAlerts[id] = points.map(p => ({ ts: p.ts, cpu: p.cpu }));
+    }
+
+    const alerts = evaluateAlerts({
+      jobs,
+      capacityPoints: capacityRaw,
+      replicasHistory: replicasForAlerts,
+      failedCallbackCount: callbacksRaw,
+    });
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      thresholds: DEFAULT_THRESHOLDS,
+      count: alerts.length,
+      alerts,
+    });
+  } catch (error) {
+    console.error('Error evaluating alerts:', error);
+    res.status(500).json({ error: error.message || 'Failed to evaluate alerts' });
+  }
+});
+
+// Aggregated list of domains over a window (default 7d).
+app.get('/api/domains', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '7d';
+    const windowMs = parseDomainWindow(windowKey);
+    const client = await ensureRedisConnected();
+    const jobs = await loadAllJobs(client);
+    const domains = aggregateDomains(jobs, Date.now(), windowMs);
+    res.json({ window: windowKey, count: domains.length, domains });
+  } catch (error) {
+    console.error('Error fetching domains:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch domains' });
+  }
+});
+
+// Per-domain detail: jobs in the window + run chain via previous_crawl_id.
+app.get('/api/domains/:domain', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '7d';
+    const windowMs = parseDomainWindow(windowKey);
+    const client = await ensureRedisConnected();
+    const jobs = await loadAllJobs(client);
+    const detail = jobsForDomain(jobs, req.params.domain, windowMs);
+    res.json({
+      domain: req.params.domain,
+      window: windowKey,
+      total_jobs: detail.jobs.length,
+      jobs: detail.jobs,
+      chain: detail.chain,
+    });
+  } catch (error) {
+    console.error('Error fetching domain detail:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch domain detail' });
+  }
+});
+
+// Stacked timeline of jobs by start_time bucket. Used by Overview to plot
+// success/failure/running per minute (or coarser) on a sliding window.
+// Accepts either ?window=1h|6h|24h|7d OR ?from=ISO&to=ISO for a custom range.
+// Custom range gets auto-granularity (1min–6h depending on span width).
+app.get('/api/timeline', authenticateToken, async (req, res) => {
+  try {
+    const { window: windowKey, from, to } = req.query;
+    const client = await ensureRedisConnected();
+    const result = await computeTimeline(client, windowKey || '6h', {
+      loadJobs: loadAllJobs,
+      from: from || undefined,
+      to: to || undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error computing timeline:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute timeline' });
+  }
+});
+
+// Per-replica CPU/RAM history (single replica or batch for all known)
+app.get('/api/replicas/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseReplicaWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const data = await readAllReplicasHistory(client, windowMs);
+    res.json({ window: windowStr, replicas: data });
+  } catch (error) {
+    console.error('Error fetching all replicas history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch replica history' });
+  }
+});
+
+app.get('/api/replicas/:replicaId/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseReplicaWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const points = await readReplicaHistory(client, req.params.replicaId, windowMs);
+    res.json({ replicaId: req.params.replicaId, window: windowStr, count: points.length, points });
+  } catch (error) {
+    console.error('Error fetching replica history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch replica history' });
   }
 });
 
@@ -1147,6 +1379,77 @@ app.post('/api/callbacks/clear', authenticateToken,
   }
 );
 
+// Helper used by /api/system/stats: load all jobs in the same shape /api/jobs returns.
+async function loadAllJobs(client) {
+  const jobKeys = await client.keys(`${CRAWL_JOB_PREFIX}*`);
+  if (jobKeys.length === 0) return [];
+  const raw = await client.mGet(jobKeys);
+  return raw
+    .map(s => { try { return s ? JSON.parse(s) : null; } catch { return null; } })
+    .filter(Boolean)
+    // Skip malformed entries without a crawl_id (same hardening as /api/jobs).
+    // Also expose .id for downstream aggregators that read job.id.
+    .filter(job => job && typeof job.crawl_id === 'string' && job.crawl_id.length > 0)
+    .map(job => ({ ...job, id: job.crawl_id }));
+}
+
+// Aggregated stats over a time window (1h | 24h | 7d). Used by the dashboard
+// for KPI cards and tendances.
+app.get('/api/system/stats', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '24h';
+    const windowMs = parseStatsWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const stats = await computeSystemStats(client, windowMs, { loadJobs: loadAllJobs });
+    res.json({ window: windowStr, ...stats, generated_at: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error computing system stats:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute stats' });
+  }
+});
+
+// System health detail (authenticated) — for dashboard "system" view.
+// Note: /health (below) remains unauthenticated for k8s/LB probes.
+app.get('/api/system/health', authenticateToken, async (req, res) => {
+  const startedAt = Date.now();
+  const checks = {};
+
+  // Redis ping (with a small timeout via Promise.race)
+  try {
+    const client = await ensureRedisConnected();
+    const pingPromise = client.ping();
+    const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1500));
+    await Promise.race([pingPromise, timeoutPromise]);
+    checks.redis = { status: 'ok' };
+  } catch (err) {
+    checks.redis = { status: 'down', error: err.message };
+  }
+
+  // Storage path readability
+  try {
+    const st = await stat(CRAWLER_STORAGE_PATH);
+    checks.storage = { status: st.isDirectory() ? 'ok' : 'down', path: CRAWLER_STORAGE_PATH };
+  } catch (err) {
+    checks.storage = { status: 'down', path: CRAWLER_STORAGE_PATH, error: err.message };
+  }
+
+  // WebSocket clients count
+  checks.ws_clients = clients.size;
+
+  // Process info
+  const overall = checks.redis.status === 'ok' && checks.storage.status === 'ok' ? 'ok' : 'degraded';
+  res.json({
+    status: overall,
+    checks,
+    process: {
+      uptime_seconds: Math.floor(process.uptime()),
+      node_version: process.version,
+      pid: process.pid,
+    },
+    response_time_ms: Date.now() - startedAt,
+  });
+});
+
 app.get('/api/audit', authenticateToken, async (req, res) => {
   try {
     const { from, to, action, user, limit, offset } = req.query;
@@ -1183,10 +1486,19 @@ async function setupRedisListener() {
       }
     });
 
-    await subscriber.subscribe('crawler:heartbeat', (message) => {
+    await subscriber.subscribe('crawler:heartbeat', async (message) => {
       try {
         const heartbeat = JSON.parse(message);
         broadcast({ type: 'replica_heartbeat', data: heartbeat });
+        // Persist into per-replica AND per-job time series.
+        // Uses the persistent client (not the subscriber) since SUBSCRIBE clients
+        // cannot run other commands. Fire-and-forget — never blocks broadcast.
+        ensureRedisConnected()
+          .then(c => Promise.all([
+            persistHeartbeat(c, heartbeat),
+            persistJobPerf(c, heartbeat),
+          ]))
+          .catch(err => console.error('[heartbeatPersist] error:', err.message));
       } catch (e) {
         console.error('Failed to parse heartbeat:', e);
       }

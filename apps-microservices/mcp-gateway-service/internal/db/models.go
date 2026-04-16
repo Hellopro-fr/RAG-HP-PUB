@@ -330,3 +330,17 @@ type InstallConfig struct {
 }
 
 func (InstallConfig) TableName() string { return "install_configs" }
+
+// UserGoogleToken stores per-admin Google OAuth2 tokens for Sheets API access.
+type UserGoogleToken struct {
+	ID           string     `gorm:"type:char(36);primaryKey" json:"id"`
+	UserID       uint64     `gorm:"not null;uniqueIndex:uq_user_google" json:"user_id"`
+	Email        string     `gorm:"type:varchar(255);not null" json:"email"` // Google account email
+	AccessToken  []byte     `gorm:"type:blob;not null" json:"-"`            // Encrypted
+	RefreshToken []byte     `gorm:"type:blob;not null" json:"-"`            // Encrypted
+	TokenExpiry  *time.Time `gorm:"type:datetime(3)" json:"token_expiry,omitempty"`
+	CreatedAt    time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (UserGoogleToken) TableName() string { return "user_google_tokens" }

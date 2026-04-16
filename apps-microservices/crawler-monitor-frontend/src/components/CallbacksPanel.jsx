@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   XCircle, RefreshCw, RotateCcw, Trash2, AlertCircle, CheckCircle, Mail
 } from 'lucide-react';
-import { API_URL } from '../lib/constants';
+import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
 
 const typeBadgeClasses = (type) => {
@@ -28,26 +28,18 @@ const CallbacksPanel = ({ token, onClose }) => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
 
-  const authFetch = useCallback(async (url, options = {}) => {
-    const headers = { ...(options.headers || {}), 'Authorization': `Bearer ${token}` };
-    const res = await fetch(url, { ...options, headers });
-    return res;
-  }, [token]);
-
   const fetchItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await authFetch(`${API_URL}/callbacks`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await api.get('/callbacks', token);
       setItems(data.items || []);
     } catch (err) {
       setError(`Erreur de chargement : ${err.message}`);
     } finally {
       setLoading(false);
     }
-  }, [authFetch]);
+  }, [token]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -56,17 +48,18 @@ const CallbacksPanel = ({ token, onClose }) => {
     setError(null);
     setSuccess(null);
     try {
-      const res = await authFetch(`${API_URL}/callbacks/${index}/retry`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
+      const data = await api.post(`/callbacks/${index}/retry`, token);
+      if (data && data.success) {
         setSuccess(`Callback #${index} relancé avec succès (${data.status}).`);
-        await fetchItems();
       } else {
-        setError(`Échec retry #${index} : ${data.error || `HTTP ${res.status}`}`);
-        await fetchItems(); // refresh to show updated manual_retry_attempts
+        setError(`Échec retry #${index} : ${(data && data.error) || 'inconnu'}`);
       }
+      await fetchItems();
     } catch (err) {
-      setError(`Erreur retry : ${err.message}`);
+      // 502 from backend means retry attempted but webhook still failed — surface it nicely
+      const msg = err.body && err.body.error ? err.body.error : err.message;
+      setError(`Échec retry #${index} : ${msg}`);
+      await fetchItems(); // refresh to show updated manual_retry_attempts
     } finally {
       setBusyIndex(null);
     }
@@ -78,8 +71,7 @@ const CallbacksPanel = ({ token, onClose }) => {
     setError(null);
     setSuccess(null);
     try {
-      const res = await authFetch(`${API_URL}/callbacks/${index}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.delete(`/callbacks/${index}`, token);
       setSuccess(`Callback #${index} supprimé.`);
       await fetchItems();
     } catch (err) {
@@ -94,10 +86,8 @@ const CallbacksPanel = ({ token, onClose }) => {
     setError(null);
     setSuccess(null);
     try {
-      const res = await authFetch(`${API_URL}/callbacks/clear`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setSuccess(`Liste vidée (${data.cleared || 0} entrées).`);
+      const data = await api.post('/callbacks/clear', token);
+      setSuccess(`Liste vidée (${(data && data.cleared) || 0} entrées).`);
       setShowClearConfirm(false);
       await fetchItems();
     } catch (err) {

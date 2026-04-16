@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Server, XCircle, RefreshCw, AlertTriangle, Trash2, CheckCircle
 } from 'lucide-react';
-import { API_URL } from '../lib/constants';
+import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
 
 const DatasetAnalyzer = ({ jobId, onClose, token }) => {
@@ -12,19 +12,11 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  const authFetch = async (url, options = {}) => {
-    const headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-    const res = await fetch(url, { ...options, headers });
-    if (!res.ok) throw new Error('Request failed');
-    return res;
-  };
-
   const analyzeDataset = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/dataset/analyze`);
-      const data = await res.json();
+      const data = await api.get(`/jobs/${jobId}/dataset/analyze`, token);
       setStats(data);
     } catch (err) {
       setError(err.message);
@@ -39,8 +31,7 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
     setPurging(true);
     setError(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/dataset/deduplicate`, { method: 'POST' });
-      const data = await res.json();
+      const data = await api.post(`/jobs/${jobId}/dataset/deduplicate`, token);
       setSuccess(`Opération réussie: ${data.removedCount} fichiers supprimés.`);
       analyzeDataset(); // Refresh stats
       setShowPurgeConfirm(false);
