@@ -553,6 +553,8 @@ class CaracterisationPrixGenerator:
             f"({len(caracteristiques_cleaned)} après nettoyage pour prompt)"
         )
 
+        self._log(f"Jeu de caractéristiques: {caracteristiques_cleaned}")
+
         # Sources à traiter (filtre si demandé, sinon toutes)
         sources_to_process = [filter_source] if filter_source else self.SOURCES_ORDER
 
