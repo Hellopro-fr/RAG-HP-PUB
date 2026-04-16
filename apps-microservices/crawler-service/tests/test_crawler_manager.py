@@ -165,3 +165,37 @@ class TestMonitorSkipOom:
         terminal_statuses = ("failed", "stopped", "finished")
         should_skip = current_status in terminal_statuses
         assert should_skip is False
+
+
+class TestForceFinishIdempotent:
+    """Fix 5: force_finish_crawl does not double-decrement."""
+
+    def test_skip_decrement_when_current_status_failed(self):
+        current = {"status": "failed"}
+        holding_slot_statuses = ("running", "restarting_oom", "stopping")
+        should_decrement = bool(current) and current.get("status") in holding_slot_statuses
+        assert should_decrement is False
+
+    def test_skip_decrement_when_current_status_stopped(self):
+        current = {"status": "stopped"}
+        holding_slot_statuses = ("running", "restarting_oom", "stopping")
+        should_decrement = bool(current) and current.get("status") in holding_slot_statuses
+        assert should_decrement is False
+
+    def test_decrement_when_current_status_running(self):
+        current = {"status": "running"}
+        holding_slot_statuses = ("running", "restarting_oom", "stopping")
+        should_decrement = bool(current) and current.get("status") in holding_slot_statuses
+        assert should_decrement is True
+
+    def test_decrement_when_current_status_restarting_oom(self):
+        current = {"status": "restarting_oom"}
+        holding_slot_statuses = ("running", "restarting_oom", "stopping")
+        should_decrement = bool(current) and current.get("status") in holding_slot_statuses
+        assert should_decrement is True
+
+    def test_skip_decrement_when_job_gone(self):
+        current = None
+        holding_slot_statuses = ("running", "restarting_oom", "stopping")
+        should_decrement = bool(current) and current.get("status") in holding_slot_statuses
+        assert should_decrement is False

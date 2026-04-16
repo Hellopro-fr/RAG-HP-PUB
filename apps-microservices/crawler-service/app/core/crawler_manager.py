@@ -862,10 +862,18 @@ class CrawlerManager:
         if target_status not in ("finished", "failed"):
             target_status = "finished"
 
-        # Release the global concurrency slot if the job was holding one
-        if old_status in ("running", "restarting_oom", "stopping"):
+        # Fix 5: Make the decrement idempotent. Another actor (stale detection or
+        # a concurrent force-finish) may have already released the slot. Re-read
+        # the current status from Redis; only decrement if the job is still
+        # holding a slot. old_status is the status we read when this function
+        # was called — it can be stale if concurrent activity updated Redis since.
+        current = await cache_service.get_json(job_key)
+        current_status = current.get("status") if current else None
+        if current_status in ("running", "restarting_oom", "stopping"):
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
-            logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{old_status}').")
+            logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{current_status}').")
+        else:
+            logger.info(f"Force-finish: slot already released for '{crawl_id}' (current status: '{current_status}'). Skipping decrement.")
 
         # Update status
         job_info["status"] = target_status
