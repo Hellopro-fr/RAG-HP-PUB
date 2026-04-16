@@ -26,7 +26,7 @@ from collections import defaultdict
 from typing import Dict, List, Any, Optional, Tuple
 
 from app.core.api_client import HelloProAPIClient, DeepSeek
-from app.core.milvus_client import MilvusPrixClient, SOURCE_STRING_TO_TINYINT
+from app.core.milvus_client import MilvusPrixClient, SOURCE_STRING_TO_TINYINT, PRIX_CIBLE_FIELDS
 from app.core import utils
 from app.schemas.caracterisation_prix import RequestProcessus, CaracterisationPrixResult
 from app.core.credentials import settings
@@ -253,6 +253,10 @@ class CaracterisationPrixGenerator:
         # devis / siteweb
         return str(item.get("source_chunk_id", "") or "")[:255]
 
+    def _build_prix_cible(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """Extrait les champs Milvus destinés à la table prix_cible_ia."""
+        return {f: item.get(f) for f in PRIX_CIBLE_FIELDS}
+
     # ======================================================================
     # Appel LLM (DeepSeek + repasse) pour sources non-produit
     # ======================================================================
@@ -427,6 +431,7 @@ class CaracterisationPrixGenerator:
                         "id_cible":       id_cible,
                         "id_categorie":   str(id_categorie),
                         "mode":           "copy_from_cpi",
+                        "prix_cible":     self._build_prix_cible(item),
                     }
 
                 # ============================================================
@@ -441,6 +446,8 @@ class CaracterisationPrixGenerator:
                     jeu_carac_dict=jeu_carac_dict,
                 )
 
+                prix_cible = self._build_prix_cible(item)
+
                 if not caracs_llm:
                     self._log("Aucune caractéristique extraite par le LLM")
                     return {
@@ -450,6 +457,7 @@ class CaracterisationPrixGenerator:
                         "id_categorie":     str(id_categorie),
                         "mode":             "llm",
                         "caracteristiques": [],
+                        "prix_cible":       prix_cible,
                     }
 
                 self._log(f"✅ {len(caracs_llm)} caracs extraites via LLM")
@@ -460,6 +468,7 @@ class CaracterisationPrixGenerator:
                     "id_categorie":     str(id_categorie),
                     "mode":             "llm",
                     "caracteristiques": caracs_llm,
+                    "prix_cible":       prix_cible,
                 }
             finally:
                 self._flush_item_logs(id_milvus)

@@ -75,6 +75,11 @@ MILVUS_PRIX_FIELDS = [
     "chunk_id",
 ]
 
+# Champs Milvus envoyés au BO pour la table prix_cible_ia (MILVUS_PRIX_FIELDS sans id, chunk_id, text)
+PRIX_CIBLE_FIELDS = [
+    f for f in MILVUS_PRIX_FIELDS if f not in ("id", "chunk_id", "text")
+]
+
 
 # ======================================================================
 # Connexion Milvus (partagée au niveau module — pattern api-rest-milvus)
