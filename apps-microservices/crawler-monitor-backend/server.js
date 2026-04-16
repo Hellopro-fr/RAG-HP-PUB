@@ -947,6 +947,67 @@ app.get('/api/jobs/:id/dataset/counts', async (req, res) => {
   }
 });
 
+/** Derive a human-readable error string from an error-dataset entry. */
+function deriveErrorMessage(entry) {
+  if (Array.isArray(entry.errorMessages) && entry.errorMessages.length > 0) {
+    return String(entry.errorMessages[0]);
+  }
+  if (entry.statusCode !== undefined) {
+    const text = entry.statusText ? ` ${entry.statusText}` : '';
+    return `HTTP ${entry.statusCode}${text}`;
+  }
+  return 'Unknown error';
+}
+
+app.get('/api/jobs/:id/dataset/urls', async (req, res) => {
+  const { id } = req.params;
+  const category = String(req.query.category || '');
+  if (!['success', 'error', 'nfr'].includes(category)) {
+    return res.status(400).json({ error: 'Invalid category. Must be one of: success, error, nfr' });
+  }
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+  const search = String(req.query.search || '').toLowerCase();
+
+  try {
+    const dirs = await listDatasetDirs(id);
+    const dir = category === 'success' ? dirs.mainDir
+              : category === 'error'   ? dirs.errorDir
+              :                          dirs.nfrDir;
+
+    if (!dir || !existsSync(dir)) {
+      return res.json({ category, total: 0, page, totalPages: 0, items: [] });
+    }
+
+    const filenames = (await readdir(dir)).filter(n => n.endsWith('.json'));
+
+    // Single pass: read every file, skip malformed, apply optional search, then paginate.
+    // Gives an accurate `total` (malformed files excluded) regardless of search.
+    const valid = [];
+    for (const name of filenames) {
+      try {
+        const raw = await readFile(join(dir, name), 'utf-8');
+        const data = JSON.parse(raw);
+        if (!data.url) continue;
+        if (search && !data.url.toLowerCase().includes(search)) continue;
+        valid.push(category === 'error'
+          ? { url: data.url, error: deriveErrorMessage(data) }
+          : { url: data.url });
+      } catch {
+        console.warn(`[dataset/urls] skipped malformed file ${join(dir, name)}`);
+      }
+    }
+    const total = valid.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIdx = (page - 1) * limit;
+    const items = valid.slice(startIdx, startIdx + limit);
+    res.json({ category, total, page, totalPages, items });
+  } catch (err) {
+    console.error(`Error listing dataset URLs for job ${id}:`, err);
+    res.status(500).json({ error: 'Failed to list dataset URLs' });
+  }
+});
+
 app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   const { id } = req.params;
   try {
