@@ -1693,6 +1693,16 @@ class CrawlerManager:
                             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
                             logger.info(f"Stale detection: released global slot for '{crawl_id}' (was '{status}').")
 
+                        # Fix 2: Kill the subprocess if still alive. A stale job whose
+                        # subprocess is still running is a zombie — it'll keep consuming
+                        # resources and may eventually exit with OOM (code 3), triggering
+                        # a ghost relaunch of an already-failed job. Mirrors force_finish_crawl.
+                        if crawl_id in self.local_processes:
+                            proc = self.local_processes[crawl_id]
+                            if proc.returncode is None:
+                                self._kill_process_group(proc.pid)
+                                logger.info(f"Stale detection: killed process for '{crawl_id}' (PID {proc.pid}).")
+
                         job_data["status"] = final_status
                         job_data["shutdown_reason"] = "Stop cleanup (stale)" if is_stopping else "Stale job detected (missing heartbeat)"
                         if "last_heartbeat" in job_data:

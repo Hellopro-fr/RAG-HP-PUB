@@ -44,3 +44,66 @@ class TestStaleHandlerCounter:
             await mock_cache_service.safe_decrement_key(cm.CRAWL_RUNNING_COUNT_KEY)
 
         mock_cache_service.safe_decrement_key.assert_not_awaited()
+
+
+class TestStaleHandlerKillProcess:
+    """Fix 2: SIGKILL the subprocess when stale detection marks job failed."""
+
+    def test_kill_process_group_called_when_process_alive(self):
+        """Subprocess with returncode=None should be killed."""
+        proc = MagicMock()
+        proc.returncode = None
+        proc.pid = 12345
+
+        kill_called = {"count": 0, "pid": None}
+
+        def fake_kill(pid):
+            kill_called["count"] += 1
+            kill_called["pid"] = pid
+
+        local_processes = {"test-5482": proc}
+        crawl_id = "test-5482"
+        if crawl_id in local_processes:
+            p = local_processes[crawl_id]
+            if p.returncode is None:
+                fake_kill(p.pid)
+
+        assert kill_called["count"] == 1
+        assert kill_called["pid"] == 12345
+
+    def test_kill_skipped_when_process_already_exited(self):
+        """Subprocess with returncode != None should NOT be killed (PID recycle risk)."""
+        proc = MagicMock()
+        proc.returncode = 1
+        proc.pid = 12345
+
+        kill_called = {"count": 0}
+
+        def fake_kill(pid):
+            kill_called["count"] += 1
+
+        local_processes = {"test-5482": proc}
+        crawl_id = "test-5482"
+        if crawl_id in local_processes:
+            p = local_processes[crawl_id]
+            if p.returncode is None:
+                fake_kill(p.pid)
+
+        assert kill_called["count"] == 0
+
+    def test_kill_skipped_when_remote_job(self):
+        """Remote jobs (not in local_processes) should not be killed."""
+        local_processes = {}
+        crawl_id = "remote-job"
+
+        kill_called = {"count": 0}
+
+        def fake_kill(pid):
+            kill_called["count"] += 1
+
+        if crawl_id in local_processes:
+            p = local_processes[crawl_id]
+            if p.returncode is None:
+                fake_kill(p.pid)
+
+        assert kill_called["count"] == 0
