@@ -132,3 +132,4 @@ package-lock.json
 apps-microservices/nextjs-formulaire-hp/package-lock.json
 
 .mcp.json
+.superpowers/
