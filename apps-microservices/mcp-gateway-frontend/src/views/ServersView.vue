@@ -32,6 +32,14 @@
         </button>
         <button
           v-if="authStore.isAdmin"
+          class="px-4 py-2 text-sm font-medium text-green-600 border border-green-300 rounded-md hover:bg-green-50 dark:text-green-400 dark:border-green-600 dark:hover:bg-green-900/20"
+          @click="showGoogleImportModal = true"
+        >
+          <i class="pi pi-file-excel mr-1" />
+          Google Sheets
+        </button>
+        <button
+          v-if="authStore.isAdmin"
           class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
           @click="router.push('/servers/new')"
         >
@@ -91,6 +99,12 @@
       @imported="loadServers"
     />
 
+    <GoogleSheetsImportModal
+      v-if="showGoogleImportModal"
+      @close="showGoogleImportModal = false"
+      @imported="loadServers"
+    />
+
     <ConfirmDialog
       :open="!!deletingServerId"
       title="Supprimer le serveur"
@@ -114,6 +128,7 @@ import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ServerCard from '@/components/servers/ServerCard.vue'
 import ServerDetailsModal from '@/components/servers/ServerDetailsModal.vue'
 import ImportModal from '@/components/servers/ImportModal.vue'
+import GoogleSheetsImportModal from '@/components/google/GoogleSheetsImportModal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { Server } from '@/types/server'
 
@@ -125,6 +140,7 @@ const toast = useToast()
 const activeTab = ref('all')
 const tagFilter = ref('')
 const showImportModal = ref(false)
+const showGoogleImportModal = ref(false)
 const detailsServerId = ref<string>()
 const deletingServerId = ref<string>()
 const discoveringAll = ref(false)
