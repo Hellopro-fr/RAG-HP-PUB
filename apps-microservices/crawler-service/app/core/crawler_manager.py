@@ -328,6 +328,16 @@ class CrawlerManager:
         crawl_id = job_info["crawl_id"]
         restart_count = int(job_info.get("oom_restart_count", 0))
 
+        # Fix 3: The coroutine may have been scheduled with a stale job_info snapshot.
+        # If another actor (stale detection, force-finish, stop) has transitioned the
+        # job to a terminal state in the meantime, abort the relaunch. The counter
+        # was already released by whoever transitioned the job.
+        current = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+        if not current or current.get("status") != "restarting_oom":
+            current_status = current.get("status") if current else "gone"
+            logger.info(f"OOM relaunch for '{crawl_id}' aborted: status is '{current_status}', not 'restarting_oom'.")
+            return
+
         if restart_count >= settings.MAX_OOM_RESTARTS:
             logger.error(f"Maximum OOM restarts ({settings.MAX_OOM_RESTARTS}) reached for '{crawl_id}'. Failing job.")
 

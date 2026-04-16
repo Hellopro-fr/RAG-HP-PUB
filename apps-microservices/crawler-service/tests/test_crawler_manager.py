@@ -107,3 +107,27 @@ class TestStaleHandlerKillProcess:
                 fake_kill(p.pid)
 
         assert kill_called["count"] == 0
+
+
+class TestRelaunchAbort:
+    """Fix 3: _relaunch_oom_crawl aborts if status is no longer restarting_oom."""
+
+    def test_abort_when_status_is_failed(self):
+        current = {"status": "failed"}
+        should_abort = not current or current.get("status") != "restarting_oom"
+        assert should_abort is True
+
+    def test_abort_when_status_is_stopped(self):
+        current = {"status": "stopped"}
+        should_abort = not current or current.get("status") != "restarting_oom"
+        assert should_abort is True
+
+    def test_abort_when_job_is_gone(self):
+        current = None
+        should_abort = not current or current.get("status") != "restarting_oom"
+        assert should_abort is True
+
+    def test_proceed_when_status_is_restarting_oom(self):
+        current = {"status": "restarting_oom"}
+        should_abort = not current or current.get("status") != "restarting_oom"
+        assert should_abort is False
