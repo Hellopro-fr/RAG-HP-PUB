@@ -925,8 +925,10 @@ class CrawlerManager:
                 async with aiofiles.open(snapshot_path, 'r') as f:
                     content = await f.read()
                     snapshot_data = json.loads(content)
+                # Override status with current Redis value — snapshot was taken before status transition
+                snapshot_data["status"] = job_info["status"]
                 logger.info(
-                    f"Loaded status from snapshot for archived crawl '{crawl_id}'.")
+                    f"Loaded status from snapshot for crawl '{crawl_id}' (status: {job_info['status']}).")
                 return CrawlStatus(**snapshot_data)
             except Exception as e:
                 logger.error(
