@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Outlet } from 'react-router-dom';
 import {
   RefreshCw, Server, CheckCircle, XCircle, Zap, Archive,
@@ -86,12 +86,22 @@ const Overview = ({ token, replicas }) => {
     return { finished, failed, running, archived, total: filteredJobs.length };
   }, [filteredJobs]);
 
+  const detailsPanelRef = useRef(null);
+
   const handleSelectJob = (id) => {
     // Defensive: never navigate to /jobs/undefined or /jobs/null which would
     // trigger a 404 fetch loop.
     if (!id || id === 'undefined' || id === 'null') return;
     navigate(`/jobs/${id}`);
   };
+
+  // Auto-scroll to the details panel when a job is selected (UX: avoids
+  // requiring the user to scroll down on small viewports).
+  useEffect(() => {
+    if (routeJobId && detailsPanelRef.current) {
+      detailsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [routeJobId]);
 
   // Click on a timeline bucket → narrow the date filters to that bucket
   const handleTimelineBucketClick = ({ from, to }) => {
@@ -237,7 +247,7 @@ const Overview = ({ token, replicas }) => {
           )}
         </div>
 
-        <div className="flex-1 bg-gray-800 rounded-lg p-6">
+        <div ref={detailsPanelRef} className="flex-1 bg-gray-800 rounded-lg p-6">
           {loadingDetails ? (
             <div className="flex items-center justify-center py-20">
               <RefreshCw className="w-12 h-12 animate-spin text-blue-400" />
