@@ -293,8 +293,15 @@ async function loadSpreadsheets() {
   loadingSpreadsheets.value = true
   try {
     spreadsheets.value = await googleApi.listSpreadsheets(searchQuery.value || undefined)
-  } catch {
-    toast.error('Impossible de charger les feuilles de calcul')
+  } catch (err: unknown) {
+    let msg = 'Erreur inconnue'
+    if (err && typeof err === 'object' && 'body' in err) {
+      const body = (err as { body?: { error?: string } }).body
+      msg = body?.error || JSON.stringify(body)
+    } else if (err instanceof Error) {
+      msg = err.message
+    }
+    toast.error(msg)
   } finally {
     loadingSpreadsheets.value = false
   }

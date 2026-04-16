@@ -199,6 +199,7 @@ func (h *Handler) handleListSpreadsheets(w http.ResponseWriter, r *http.Request)
 	query := r.URL.Query().Get("q")
 	items, err := goGoogle.ListSpreadsheets(r.Context(), client, query)
 	if err != nil {
+		log.Printf("[google] failed to list spreadsheets: %v", err)
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "failed to list spreadsheets: " + err.Error()})
 		return
 	}
