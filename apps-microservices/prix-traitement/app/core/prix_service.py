@@ -461,7 +461,8 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             nom_produit = meta.get("nom_produit", "N/A")
             fournisseur = meta.get("fournisseur", "N/A")
             nom_categorie = meta.get("nom_categorie", meta.get("categorie", "N/A"))
-            text = meta.get("text", "")
+            description_produit = meta.get("description_produit", "")
+            valeur_reponse_q1 = meta.get("valeur_reponse_q1", "")
 
             # Construction de la ligne de prix
             prix_line = ""
@@ -479,14 +480,14 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             caracteristique = meta.get("caracteristique", "")
             date_prix = meta.get("date_prix", "")
 
-            chunk_text = f"""Titre : {nom_produit}
-            Source : Prix
+            chunk_text = f"""Titre du produit : {nom_produit}
+            Description du produit : {description_produit}
+            Réponse Question 1 : {valeur_reponse_q1}
+            Caractéristiques : {caracteristique}
             Fournisseur : {fournisseur}
-            Catégorie : {nom_categorie}
-            Texte : {text}
+            Nom de la catégorie : {nom_categorie}
             Prix : {prix_line}
-            Date_prix : {date_prix}
-            Caractéristiques : {caracteristique}"""
+            Date du prix : {date_prix}"""
 
             formatted_chunks.append(chunk_text)
 
