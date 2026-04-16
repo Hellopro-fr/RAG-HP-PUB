@@ -98,10 +98,29 @@
 
           <!-- Step 1: Column mapping -->
           <div v-show="currentStep === 1" class="space-y-4">
+            <!-- Name prefix -->
+            <div>
+              <label for="name-prefix" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Préfixe des noms de serveur
+              </label>
+              <input
+                id="name-prefix"
+                v-model="namePrefix"
+                type="text"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                placeholder="ex: prod-"
+              />
+              <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Ajouté devant chaque nom de serveur importé (optionnel)
+              </p>
+            </div>
+
             <ColumnMappingTable
               v-if="preview"
               :headers="preview.headers"
               v-model="columnMapping"
+              v-model:fixed-tags="fixedTags"
+              v-model:fixed-tool-prefix="fixedToolPrefix"
             />
 
             <div class="flex items-center gap-2">
@@ -248,7 +267,10 @@ const selectedSheet = ref('')
 const preview = ref<SheetPreviewType | null>(null)
 
 // Step 1
+const namePrefix = ref('')
 const columnMapping = ref<ColumnMapping>({ name: '', url: '' })
+const fixedTags = ref('')
+const fixedToolPrefix = ref('')
 const autoDiscover = ref(true)
 const importing = ref(false)
 
@@ -357,6 +379,9 @@ async function handleImport() {
       sheet_name: selectedSheet.value,
       column_mapping: columnMapping.value,
       auto_discover: autoDiscover.value,
+      name_prefix: namePrefix.value || undefined,
+      fixed_tags: fixedTags.value || undefined,
+      fixed_tool_prefix: fixedToolPrefix.value || undefined,
     })
     currentStep.value = 2
   } catch (err: unknown) {
@@ -372,7 +397,10 @@ function resetFlow() {
   sheetInfo.value = null
   selectedSheet.value = ''
   preview.value = null
+  namePrefix.value = ''
   columnMapping.value = { name: '', url: '' }
+  fixedTags.value = ''
+  fixedToolPrefix.value = ''
   importResult.value = null
 }
 </script>

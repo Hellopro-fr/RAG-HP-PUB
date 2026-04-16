@@ -51,6 +51,10 @@ type SheetImportRequest struct {
 	SheetName     string        `json:"sheet_name"`
 	ColumnMapping ColumnMapping `json:"column_mapping"`
 	AutoDiscover  bool          `json:"auto_discover"`
+	// Override fields — applied to all imported servers (take precedence over column mapping).
+	NamePrefix     string `json:"name_prefix,omitempty"`      // Prepended to every server name
+	FixedTags      string `json:"fixed_tags,omitempty"`       // Comma-separated tags applied to all servers (merged with sheet column)
+	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"` // Tool prefix applied to all servers (overrides sheet column)
 }
 
 // SheetImportResultEntry represents the import status of a single row.

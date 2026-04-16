@@ -333,7 +333,7 @@ func (h *Handler) handleSheetImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for rowIdx, row := range rows {
-		result := h.importSheetRow(r, rowIdx+2, row, colIndex, &req.ColumnMapping, userEmail, req.AutoDiscover) // +2: 1-based + header row
+		result := h.importSheetRow(r, rowIdx+2, row, colIndex, &req, userEmail) // +2: 1-based + header row
 		switch result.Status {
 		case "imported":
 			resp.Imported++
@@ -415,8 +415,9 @@ func (h *Handler) writeGoogleError(w http.ResponseWriter, err error) {
 }
 
 // importSheetRow creates a single MCP server from a spreadsheet row.
-func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colIndex map[string]int, mapping *ColumnMapping, userEmail string, autoDiscover bool) SheetImportResultEntry {
+func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colIndex map[string]int, req *SheetImportRequest, userEmail string) SheetImportResultEntry {
 	result := SheetImportResultEntry{Row: rowNum}
+	mapping := &req.ColumnMapping
 
 	getVal := func(header string) string {
 		if header == "" {
@@ -430,6 +431,11 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 
 	name := getVal(mapping.Name)
 	serverURL := getVal(mapping.URL)
+
+	// Apply name prefix
+	if req.NamePrefix != "" && name != "" {
+		name = req.NamePrefix + name
+	}
 
 	if name == "" || serverURL == "" {
 		result.Status = "error"
@@ -472,7 +478,9 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 			srv.ConnectTimeoutMs = uint(n)
 		}
 	}
-	if v := getVal(mapping.ToolPrefix); v != "" {
+	if req.FixedToolPrefix != "" {
+		srv.ToolPrefix = req.FixedToolPrefix
+	} else if v := getVal(mapping.ToolPrefix); v != "" {
 		srv.ToolPrefix = v
 	}
 	if v := getVal(mapping.Icon); v != "" {
@@ -502,11 +510,22 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 		srv.AuthHeaders = []byte(v)
 	}
 
-	// Tags
+	// Tags: merge sheet column + fixed tags (deduplicated)
+	tagSet := make(map[string]bool)
 	if v := getVal(mapping.Tags); v != "" {
 		for _, tag := range strings.Split(v, ",") {
 			tag = strings.TrimSpace(tag)
-			if tag != "" {
+			if tag != "" && !tagSet[tag] {
+				tagSet[tag] = true
+				srv.Tags = append(srv.Tags, db.ServerTag{ServerID: id, Tag: tag})
+			}
+		}
+	}
+	if req.FixedTags != "" {
+		for _, tag := range strings.Split(req.FixedTags, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" && !tagSet[tag] {
+				tagSet[tag] = true
 				srv.Tags = append(srv.Tags, db.ServerTag{ServerID: id, Tag: tag})
 			}
 		}
@@ -526,7 +545,7 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 	result.Status = "imported"
 
 	// Auto-discover for remote servers
-	if autoDiscover && srv.MCPTransport != "stdio" && serverURL != "" {
+	if req.AutoDiscover && srv.MCPTransport != "stdio" && serverURL != "" {
 		authHeaders := parseAuthHeaders(srv.AuthHeaders)
 		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, authHeaders); err != nil {
 			log.Printf("[google] auto-discover failed for %s (%s): %v", name, srv.URL, err)

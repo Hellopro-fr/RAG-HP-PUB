@@ -47,6 +47,9 @@ export interface SheetImportRequest {
   sheet_name: string
   column_mapping: ColumnMapping
   auto_discover: boolean
+  name_prefix?: string
+  fixed_tags?: string
+  fixed_tool_prefix?: string
 }
 
 export interface SheetImportResultEntry {
