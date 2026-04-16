@@ -112,24 +112,24 @@ async def check_url_in_dlq(url: str, es_client: ElasticsearchClient = Depends(ge
 async def check_urls_batch_in_dlq(request: CheckUrlsBatchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Vérifie si une liste d'URLs existe dans les DLQ Elasticsearch.
-    
+
     Args:
-        request: CheckUrlsBatchRequest avec une liste d'URLs
-        
+        request: CheckUrlsBatchRequest avec une liste d'URLs et un since_date optionnel
+
     Returns:
         - results: Dict avec le statut de chaque URL
         - summary: Statistiques globales (total, found, missing)
-    
+
     Exemple d'utilisation:
         POST /api/check-urls
-        Body: {"urls": ["https://example.com/page1", "https://example.com/page2"]}
+        Body: {"urls": ["https://example.com/page1"], "since_date": "2026-04-15T00:00:00"}
     """
     if not request.urls:
         return {
             "results": {},
             "summary": {"total": 0, "found": 0, "missing": 0}
         }
-    return await es_client.check_urls_batch_in_dlq(request.urls)
+    return await es_client.check_urls_batch_in_dlq(request.urls, since_date=request.since_date)
 
 @router.post("/dashboard-stats")
 async def get_dashboard_stats(filters: Optional[Dict[str, Any]] = Body(None), es_client: ElasticsearchClient = Depends(get_es_client)):

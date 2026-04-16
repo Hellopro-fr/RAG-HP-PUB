@@ -184,10 +184,16 @@ class ElasticsearchClient:
         return response['aggregations']['by_service']['buckets']
 
     @staticmethod
-    def _build_url_query(url: str) -> Dict:
-        """Builds the ES query for matching a URL in DLQ payloads."""
+    def _build_url_query(url: str, since_date: str = None) -> Dict:
+        """Builds the ES query for matching a URL in DLQ payloads.
+
+        Args:
+            url: L'URL à rechercher
+            since_date: Date ISO 8601 minimale (ex: 2026-04-15T00:00:00).
+                        Si fourni, seuls les messages DLQ postérieurs à cette date sont considérés.
+        """
         normalized_url = url.rstrip('/')
-        return {
+        url_match = {
             "bool": {
                 "should": [
                     {"term": {"original_payload.data.url.keyword": url}},
@@ -198,6 +204,18 @@ class ElasticsearchClient:
                     {"match_phrase": {"original_payload.url": url}}
                 ],
                 "minimum_should_match": 1
+            }
+        }
+
+        if not since_date:
+            return url_match
+
+        return {
+            "bool": {
+                "must": [
+                    url_match,
+                    {"range": {"@timestamp": {"gte": since_date}}}
+                ]
             }
         }
 
@@ -246,14 +264,16 @@ class ElasticsearchClient:
             print(f"Erreur lors de la vérification DLQ pour URL {url}: {e}")
             return {"exists": False, "count": 0, "error": str(e)}
 
-    async def check_urls_batch_in_dlq(self, urls: List[str]) -> Dict[str, Any]:
+    async def check_urls_batch_in_dlq(self, urls: List[str], since_date: str = None) -> Dict[str, Any]:
         """
         Vérifie si une liste d'URLs existe dans les DLQ Elasticsearch.
         Utilise msearch pour optimiser les performances.
-        
+
         Args:
             urls: Liste d'URLs à vérifier
-            
+            since_date: Date ISO 8601 minimale (ex: 2026-04-15T00:00:00).
+                        Si fourni, seuls les messages DLQ postérieurs à cette date sont considérés.
+
         Returns:
             Dict avec:
             - results: Dict[url, {exists, count, latest}]
@@ -275,7 +295,7 @@ class ElasticsearchClient:
             search_lines.append({"index": ELASTIC_INDEX_NAME})
 
             # Body de la requête
-            query = self._build_url_query(url)
+            query = self._build_url_query(url, since_date)
             search_lines.append({
                 "query": query,
                 "size": 1,
