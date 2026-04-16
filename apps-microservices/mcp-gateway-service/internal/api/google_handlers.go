@@ -500,11 +500,15 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 	if v := getVal(mapping.MCPEnv); v != "" {
 		srv.MCPEnv = json.RawMessage(v)
 	}
-	if v := getVal(mapping.DocSlug); v != "" {
+	if req.DisableDocumentation {
+		srv.DocSlug = ""
+	} else if v := getVal(mapping.DocSlug); v != "" {
 		srv.DocSlug = v
 	}
-	if v := getVal(mapping.DocDescription); v != "" {
-		srv.DocDescription = v
+	if !req.DisableDocumentation {
+		if v := getVal(mapping.DocDescription); v != "" {
+			srv.DocDescription = v
+		}
 	}
 
 	// Auth headers: expect JSON string like {"Authorization": "Bearer xxx"}

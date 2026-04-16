@@ -131,6 +131,18 @@
 
             <div class="flex items-center gap-2">
               <input
+                id="gsheet-documentation"
+                v-model="enableDocumentation"
+                type="checkbox"
+                class="rounded border-gray-300 text-brand-500 dark:border-gray-700"
+              />
+              <label for="gsheet-documentation" class="text-sm text-gray-700 dark:text-gray-300">
+                Activer la page de documentation pour chaque serveur
+              </label>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <input
                 id="gsheet-discover"
                 v-model="autoDiscover"
                 type="checkbox"
@@ -269,6 +281,7 @@ const columnMapping = ref<ColumnMapping>({ name: '', url: '' })
 const fixedTags = ref('')
 const fixedToolPrefix = ref('')
 const fixedIcon = ref('')
+const enableDocumentation = ref(true)
 const autoDiscover = ref(true)
 const importing = ref(false)
 
@@ -394,6 +407,7 @@ async function handleImport() {
       fixed_tags: fixedTags.value || undefined,
       fixed_tool_prefix: fixedToolPrefix.value || undefined,
       fixed_icon: fixedIcon.value || undefined,
+      disable_documentation: !enableDocumentation.value || undefined,
     })
     currentStep.value = 2
   } catch (err: unknown) {
@@ -414,6 +428,7 @@ function resetFlow() {
   fixedTags.value = ''
   fixedToolPrefix.value = ''
   fixedIcon.value = ''
+  enableDocumentation.value = true
   importResult.value = null
 }
 </script>

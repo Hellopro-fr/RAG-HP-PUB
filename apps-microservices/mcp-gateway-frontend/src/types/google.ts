@@ -51,6 +51,7 @@ export interface SheetImportRequest {
   fixed_tags?: string
   fixed_tool_prefix?: string
   fixed_icon?: string
+  disable_documentation?: boolean
 }
 
 export interface SheetImportResultEntry {
