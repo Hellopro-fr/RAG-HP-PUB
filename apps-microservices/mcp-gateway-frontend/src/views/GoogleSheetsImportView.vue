@@ -126,6 +126,9 @@
               v-model:fixed-tool-prefix="fixedToolPrefix"
             />
 
+            <!-- Icon picker -->
+            <IconPicker v-model="fixedIcon" />
+
             <div class="flex items-center gap-2">
               <input
                 id="gsheet-discover"
@@ -237,6 +240,7 @@ import { useToast } from '@/composables/useToast'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import SheetPreview from '@/components/google/SheetPreview.vue'
 import ColumnMappingTable from '@/components/google/ColumnMappingTable.vue'
+import IconPicker from '@/components/servers/IconPicker.vue'
 import type {
   SheetInfo,
   SheetPreview as SheetPreviewType,
@@ -264,6 +268,7 @@ const namePrefix = ref('')
 const columnMapping = ref<ColumnMapping>({ name: '', url: '' })
 const fixedTags = ref('')
 const fixedToolPrefix = ref('')
+const fixedIcon = ref('')
 const autoDiscover = ref(true)
 const importing = ref(false)
 
@@ -388,6 +393,7 @@ async function handleImport() {
       name_prefix: namePrefix.value || undefined,
       fixed_tags: fixedTags.value || undefined,
       fixed_tool_prefix: fixedToolPrefix.value || undefined,
+      fixed_icon: fixedIcon.value || undefined,
     })
     currentStep.value = 2
   } catch (err: unknown) {
@@ -407,6 +413,7 @@ function resetFlow() {
   columnMapping.value = { name: '', url: '' }
   fixedTags.value = ''
   fixedToolPrefix.value = ''
+  fixedIcon.value = ''
   importResult.value = null
 }
 </script>

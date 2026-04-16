@@ -483,7 +483,9 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 	} else if v := getVal(mapping.ToolPrefix); v != "" {
 		srv.ToolPrefix = v
 	}
-	if v := getVal(mapping.Icon); v != "" {
+	if req.FixedIcon != "" {
+		srv.Icon = req.FixedIcon
+	} else if v := getVal(mapping.Icon); v != "" {
 		srv.Icon = v
 	}
 	if v := getVal(mapping.MCPTransport); v != "" {

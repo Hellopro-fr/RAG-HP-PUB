@@ -55,6 +55,7 @@ type SheetImportRequest struct {
 	NamePrefix     string `json:"name_prefix,omitempty"`      // Prepended to every server name
 	FixedTags      string `json:"fixed_tags,omitempty"`       // Comma-separated tags applied to all servers (merged with sheet column)
 	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"` // Tool prefix applied to all servers (overrides sheet column)
+	FixedIcon       string `json:"fixed_icon,omitempty"`        // Icon applied to all servers (overrides sheet column)
 }
 
 // SheetImportResultEntry represents the import status of a single row.

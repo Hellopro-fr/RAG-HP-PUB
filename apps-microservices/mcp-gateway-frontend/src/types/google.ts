@@ -50,6 +50,7 @@ export interface SheetImportRequest {
   name_prefix?: string
   fixed_tags?: string
   fixed_tool_prefix?: string
+  fixed_icon?: string
 }
 
 export interface SheetImportResultEntry {
