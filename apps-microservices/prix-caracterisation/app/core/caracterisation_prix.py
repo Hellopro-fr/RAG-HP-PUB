@@ -22,6 +22,7 @@ import logging
 import asyncio
 import contextvars
 import unicodedata
+from collections import defaultdict
 from typing import Dict, List, Any, Optional, Tuple
 
 from app.core.api_client import HelloProAPIClient, DeepSeek
@@ -138,16 +139,51 @@ class CaracterisationPrixGenerator:
 
         return cleaned
 
+    def _deduplicate_by_id_cible(self, milvus_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Dédoublonne les items Milvus par id_cible.
+        Quand un même document est découpé en plusieurs chunks pour l'embedding,
+        on les fusionne en un seul item :
+          - id (id_prix_milvus) : concaténation des IDs Milvus séparés par ',' ordonnés par chunk_id
+          - text : concaténation du texte de tous les chunks ordonnés par chunk_id
+          - description_produit : identique sur tous les chunks → on garde celui du premier
+        """
+        groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for item in milvus_items:
+            id_cible = self._get_id_cible(item)
+            groups[id_cible].append(item)
+
+        deduplicated: List[Dict[str, Any]] = []
+        for id_cible, items in groups.items():
+            if len(items) == 1:
+                deduplicated.append(items[0])
+                continue
+
+            # Trier par chunk_id (1 à n)
+            items.sort(key=lambda x: int(x.get("chunk_id", 0) or 0))
+
+            # Base = premier chunk, on écrase les champs fusionnés
+            merged = items[0].copy()
+
+            # Concaténer les IDs Milvus ordonnés par chunk_id
+            merged["id"] = ",".join(str(it.get("id") or it.get("pk") or "") for it in items)
+
+            # Concaténer uniquement les textes (chunks du même document)
+            texts = [str(it.get("text", "") or "") for it in items]
+            merged["text"] = " ".join(t for t in texts if t)
+
+            deduplicated.append(merged)
+
+        return deduplicated
+
     def _build_enriched_descriptif(
         self,
-        description_categorie: str,
+        description: str,
         item: Dict[str, Any],
     ) -> str:
         """
-        Enrichit le `DESCRIPTIF_CATEGORIE` avec les infos prix Milvus de l'item courant.
-        Prompts 100/103 (QC-caracterisation) inchangés — on injecte simplement plus de contexte
-        via le placeholder existant pour permettre au LLM d'exploiter le prix comme indice
-        de caractérisation (ex: valeur_reponse_q1 contraint déjà la structure produit).
+        Enrichit la description produit avec les infos prix Milvus de l'item courant.
+        Le résultat est injecté dans le placeholder {DESCRIPTIF_CATEGORIE} des prompts 100/103.
         """
         price_lines: List[str] = []
 
@@ -177,10 +213,10 @@ class CaracterisationPrixGenerator:
             price_lines.append("Prix: " + " ".join(prix_parts))
 
         if not price_lines:
-            return description_categorie or ""
+            return description or ""
 
         prix_block = "\n".join(price_lines)
-        base = (description_categorie or "").strip()
+        base = (description or "").strip()
         if base:
             return f"{base} \n {prix_block}"
         return f"{prix_block}"
@@ -200,18 +236,21 @@ class CaracterisationPrixGenerator:
             self._log(f"Prompt repasse chargé (ID: {self.PROMPT_REPASSE_ID})")
 
     def _get_milvus_id(self, item: Dict[str, Any]) -> str:
-        """Retourne l'identifiant du point Milvus (id_prix_milvus_cppi)."""
-        return str(item.get("id") or item.get("pk") or "")
+        """Retourne l'identifiant du point Milvus (id_prix_milvus_cppi).
+        Tronqué à 255 chars si nécessaire (VARCHAR(255) côté SQL)."""
+        raw = str(item.get("id") or item.get("pk") or "")
+        return raw[:255]
 
     def _get_id_cible(self, item: Dict[str, Any]) -> str:
-        """Retourne l'id métier polymorphe selon la source."""
+        """Retourne l'id métier polymorphe selon la source.
+        Tronqué à 255 chars si nécessaire (VARCHAR(255) côté SQL)."""
         source = str(item.get("source", "")).lower()
         if source == "produit":
-            return str(item.get("id_produit", "") or "")
+            return str(item.get("id_produit", "") or "")[:255]
         if source == "message":
-            return str(item.get("id_lead", "") or "")
+            return str(item.get("id_lead", "") or "")[:255]
         # devis / siteweb
-        return str(item.get("source_chunk_id", "") or "")
+        return str(item.get("source_chunk_id", "") or "")[:255]
 
     # ======================================================================
     # Appel LLM (DeepSeek + repasse) pour sources non-produit
@@ -233,16 +272,16 @@ class CaracterisationPrixGenerator:
         titre = str(item.get("nom_produit", "") or "")
         description = str(item.get("description_produit", "") or item.get("text", "") or "")
 
-        # DESCRIPTIF_CATEGORIE enrichi avec toutes les infos prix Milvus de l'item
-        enriched_descriptif = self._build_enriched_descriptif(description_categorie, item)
+        # Enrichir la description produit avec les infos prix Milvus
+        enriched_description = self._build_enriched_descriptif(description, item)
 
         # Pass 1 : extraction
         prompt_config = self.prompt_caracterisation.copy()
         prompt_text = prompt_config["contenu_prompt"]
         prompt_text = prompt_text.replace("{JEU_CARACTERISTIQUE}", utils.to_json_string(caracteristiques_for_llm))
         prompt_text = prompt_text.replace("{CATEGORIE}", nom_rubrique)
-        prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", enriched_descriptif)
-        prompt_text = prompt_text.replace("{TITRE_DESCRIPTION}", f"{titre} {description}")
+        prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", description_categorie or "")
+        prompt_text = prompt_text.replace("{TITRE_DESCRIPTION}", f"{titre} {enriched_description}")
 
         temperature = float(prompt_config.get("temperature") or 0.1)
         deepseek = DeepSeek(temperature=temperature, max_retries=5)
@@ -530,12 +569,17 @@ class CaracterisationPrixGenerator:
                 id_categorie=str(id_categorie),
                 source=source,
             )
-            total_prix += len(milvus_items)
-
             if not milvus_items:
                 self._log(f"Aucun prix Milvus pour source={source}")
                 by_source[source] = 0
                 continue
+
+            # 1b. Dédoublonnage par id_cible (fusion des chunks d'un même document)
+            raw_count = len(milvus_items)
+            milvus_items = self._deduplicate_by_id_cible(milvus_items)
+            if len(milvus_items) < raw_count:
+                self._log(f"{raw_count} chunks Milvus → {len(milvus_items)} items uniques (dédoublonnage par id_cible)")
+            total_prix += len(milvus_items)
 
             # 2. Existants côté BDD
             existing_ids = await self._fetch_existing_caracterisations(

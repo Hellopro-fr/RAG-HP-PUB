@@ -71,6 +71,8 @@ MILVUS_PRIX_FIELDS = [
     "date_prix",
     # Texte embed (fallback description)
     "text",
+    # Chunk ordering (1..n quand un texte est découpé en plusieurs embeddings)
+    "chunk_id",
 ]
 
 
