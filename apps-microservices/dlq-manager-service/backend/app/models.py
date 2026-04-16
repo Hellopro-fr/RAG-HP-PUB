@@ -29,6 +29,7 @@ class ArchiveByFilterRequest(BaseModel):
 class CheckUrlsBatchRequest(BaseModel):
     """Modèle pour la vérification batch d'URLs dans les DLQ."""
     urls: List[str] = Field(max_length=500)
+    since_date: Optional[str] = Field(None, description="Date ISO 8601 minimale pour filtrer les messages DLQ (ex: 2026-04-15T00:00:00). Si absent, aucun filtre date.")
 
 class AutoArchiveRuleCreate(BaseModel):
     name: str
