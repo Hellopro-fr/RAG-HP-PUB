@@ -39,7 +39,17 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: '/tokens'
+      name: 'home',
+      redirect: () => {
+        const authStore = useAuthStore()
+        return authStore.isAdmin ? '/dashboard' : '/tokens'
+      }
+    },
+    {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('@/views/DashboardView.vue'),
+      meta: { requiresAuth: true, title: 'Tableau de bord', minRole: 'admin' }
     },
     {
       path: '/servers/new',
