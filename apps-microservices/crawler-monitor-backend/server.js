@@ -481,107 +481,87 @@ const matchesPattern = (url, pattern) => {
 
 app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 50;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
   const search = (req.query.search || '').toLowerCase();
+  const status = ['all', 'pending', 'handled'].includes(req.query.status) ? req.query.status : 'all';
 
   try {
     const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.json({ items: [], total: 0, page, limit });
+      return res.json({
+        items: [], total: 0, page, limit, totalPages: 0,
+        counts: { total: 0, pending: 0, handled: 0 },
+      });
     }
 
-    let matchingFiles = [];
-
-    if (search) {
-      // Native FS search — no shell exec, no injection risk
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const domainDir = join(baseDir, entry.name);
-          const domainFiles = await readdir(domainDir);
-
-          for (const file of domainFiles) {
-            if (file.endsWith('.json')) {
-              try {
-                const filePath = join(domainDir, file);
-                const content = await readFile(filePath, 'utf-8');
-                if (content.toLowerCase().includes(search)) {
-                  matchingFiles.push({
-                    name: file,
-                    domain: entry.name,
-                    fullPath: filePath,
-                    relativePath: join(entry.name, file)
-                  });
-                }
-              } catch (e) {
-                // Skip unreadable files
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // No search, list all files
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const domainDir = join(baseDir, entry.name);
-          const domainFiles = await readdir(domainDir);
-
-          for (const file of domainFiles) {
-            if (file.endsWith('.json')) {
-              matchingFiles.push({
-                name: file,
-                domain: entry.name,
-                fullPath: join(domainDir, file),
-                relativePath: join(entry.name, file)
-              });
-            }
-          }
+    // Single pass over every file. Produces both the unfiltered counts AND the filtered page.
+    const allFiles = [];
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const domainDir = join(baseDir, entry.name);
+      const domainFiles = await readdir(domainDir);
+      for (const file of domainFiles) {
+        if (!file.endsWith('.json')) continue;
+        const filePath = join(domainDir, file);
+        try {
+          const content = await readFile(filePath, 'utf-8');
+          const data = JSON.parse(content);
+          allFiles.push({
+            name: file,
+            domain: entry.name,
+            path: join(entry.name, file),
+            url: data.url,
+            method: data.method,
+            retryCount: data.retryCount,
+            errorMessages: data.errorMessages,
+            isHandled: Boolean(data.handledAt),
+            rawContent: content, // for search (matches legacy behavior)
+          });
+        } catch {
+          // Unreadable / malformed — still counted in total but shown as "Error reading file"
+          allFiles.push({
+            name: file,
+            domain: entry.name,
+            path: join(entry.name, file),
+            url: 'Error reading file',
+            method: 'UNKNOWN',
+            isHandled: false,
+            rawContent: '',
+          });
         }
       }
     }
 
-    const total = matchingFiles.length;
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedFiles = matchingFiles.slice(startIndex, endIndex);
+    // Unfiltered counts — drives the UI counts bar.
+    const counts = {
+      total: allFiles.length,
+      pending: allFiles.filter(f => !f.isHandled).length,
+      handled: allFiles.filter(f => f.isHandled).length,
+    };
 
-    // Read content ONLY for the current page
-    const items = await Promise.all(paginatedFiles.map(async (f) => {
-      try {
-        const content = await readFile(f.fullPath, 'utf-8');
-        const data = JSON.parse(content);
-        return {
-          name: f.name,
-          domain: f.domain,
-          path: f.relativePath,
-          url: data.url,
-          method: data.method,
-          retryCount: data.retryCount,
-          errorMessages: data.errorMessages
-        };
-      } catch (err) {
-        console.error(`Error reading queue file ${f.name}:`, err);
-        return {
-          name: f.name,
-          domain: f.domain,
-          path: f.relativePath,
-          url: 'Error reading file',
-          method: 'UNKNOWN'
-        };
-      }
+    // Apply search + status filters for the page set.
+    let matching = allFiles;
+    if (search) matching = matching.filter(f => f.rawContent.toLowerCase().includes(search));
+    if (status === 'pending') matching = matching.filter(f => !f.isHandled);
+    else if (status === 'handled') matching = matching.filter(f => f.isHandled);
+
+    const total = matching.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIdx = (page - 1) * limit;
+    const pageItems = matching.slice(startIdx, startIdx + limit).map(f => ({
+      name: f.name,
+      domain: f.domain,
+      path: f.path,
+      url: f.url,
+      method: f.method,
+      retryCount: f.retryCount,
+      errorMessages: f.errorMessages,
+      isHandled: f.isHandled,  // NEW — used by the frontend row status glyph
     }));
 
-    res.json({
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit)
-    });
-
+    res.json({ items: pageItems, total, page, limit, totalPages, counts });
   } catch (error) {
     console.error(`Error listing request queues for job ${id}:`, error);
     res.status(500).json({ error: 'Failed to list request queues' });
