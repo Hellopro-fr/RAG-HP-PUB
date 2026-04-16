@@ -886,6 +886,67 @@ async function findDatasetDir(jobId, datasetName = null) {
   return null;
 }
 
+/**
+ * Discover the three dataset subdirectories (main/error/nfr) for a job.
+ * Returns { mainDir, errorDir, nfrDir, domain } — any dir may be null if absent.
+ * Does NOT require Redis — the domain is recovered from the directory names.
+ */
+async function listDatasetDirs(jobId) {
+  const datasetsRoot = join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'datasets');
+  if (!existsSync(datasetsRoot)) {
+    return { mainDir: null, errorDir: null, nfrDir: null, domain: null };
+  }
+  const entries = await readdir(datasetsRoot, { withFileTypes: true });
+  let mainName = null, errorName = null, nfrName = null;
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('error-')) errorName = e.name;
+    else if (e.name.startsWith('nfr-')) nfrName = e.name;
+    else if (!mainName) mainName = e.name;
+  }
+  const domain = mainName || errorName?.slice('error-'.length) || nfrName?.slice('nfr-'.length) || null;
+  return {
+    mainDir:  mainName  ? join(datasetsRoot, mainName)  : null,
+    errorDir: errorName ? join(datasetsRoot, errorName) : null,
+    nfrDir:   nfrName   ? join(datasetsRoot, nfrName)   : null,
+    domain,
+  };
+}
+
+/** Count valid JSON files in a directory (malformed files excluded). */
+async function countValidJsonFiles(dir) {
+  if (!dir || !existsSync(dir)) return 0;
+  const files = await readdir(dir);
+  let count = 0;
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const content = await readFile(join(dir, f), 'utf-8');
+      JSON.parse(content);
+      count++;
+    } catch {
+      // malformed — skip silently, matches existing scanDataset() behavior
+    }
+  }
+  return count;
+}
+
+app.get('/api/jobs/:id/dataset/counts', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { mainDir, errorDir, nfrDir } = await listDatasetDirs(id);
+    const [success, error, nfr] = await Promise.all([
+      countValidJsonFiles(mainDir),
+      countValidJsonFiles(errorDir),
+      countValidJsonFiles(nfrDir),
+    ]);
+    res.json({ success, error, nfr });
+  } catch (err) {
+    console.error(`Error counting datasets for job ${id}:`, err);
+    res.status(500).json({ error: 'Failed to count datasets' });
+  }
+});
+
 app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   const { id } = req.params;
   try {
