@@ -14,6 +14,6 @@ RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /bin/mcp-classification-produit /bin/mcp-classification-produit
 
-EXPOSE 8591
+EXPOSE 8593
 
 ENTRYPOINT ["/bin/mcp-classification-produit"]
