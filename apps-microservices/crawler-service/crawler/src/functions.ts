@@ -488,10 +488,6 @@ export const startCrawler = async (
                 launcher: firefox,
                 launchOptions: {
                     ...camoufoxOpts,
-                    args: [
-                        ...(camoufoxOpts.args || []),
-                        '--ignore-certificate-errors',
-                    ],
                 },
             },
         } : {}),
