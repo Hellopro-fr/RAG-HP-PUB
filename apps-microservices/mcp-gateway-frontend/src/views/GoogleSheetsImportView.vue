@@ -43,67 +43,94 @@
 
       <!-- Step 0: Spreadsheet selection -->
       <div v-show="currentStep === 0">
-        <!-- Search bar -->
-        <div class="flex gap-2 mb-4">
-          <div class="relative flex-1">
-            <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+
+        <!-- URL fallback mode -->
+        <template v-if="!driveAvailable">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            URL de la feuille Google Sheets
+          </label>
+          <div class="flex gap-2 mb-4">
             <input
-              v-model="searchQuery"
+              v-model="spreadsheetUrl"
               type="text"
-              placeholder="Rechercher une feuille de calcul..."
-              class="w-full pl-9 pr-4 py-2.5 rounded-lg border border-gray-300 bg-transparent text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-              @input="debouncedSearch"
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              class="flex-1 rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
             />
+            <button
+              class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50 shrink-0"
+              :disabled="!spreadsheetUrl.trim() || loadingInfo"
+              @click="loadFromUrl"
+            >
+              <i v-if="loadingInfo" class="pi pi-spinner pi-spin mr-1" />
+              Charger
+            </button>
           </div>
-          <button
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-            :disabled="loadingSpreadsheets"
-            @click="loadSpreadsheets"
-          >
-            <i v-if="loadingSpreadsheets" class="pi pi-spinner pi-spin mr-1" />
-            <i v-else class="pi pi-refresh mr-1" />
-            Actualiser
-          </button>
-        </div>
+        </template>
 
-        <!-- Spreadsheet list -->
-        <div v-if="loadingSpreadsheets && spreadsheets.length === 0" class="text-center py-8">
-          <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
-        </div>
+        <!-- Drive list mode -->
+        <template v-else>
+          <!-- Search bar -->
+          <div class="flex gap-2 mb-4">
+            <div class="relative flex-1">
+              <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Rechercher une feuille de calcul..."
+                class="w-full pl-9 pr-4 py-2.5 rounded-lg border border-gray-300 bg-transparent text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                @input="debouncedSearch"
+              />
+            </div>
+            <button
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+              :disabled="loadingSpreadsheets"
+              @click="loadSpreadsheets"
+            >
+              <i v-if="loadingSpreadsheets" class="pi pi-spinner pi-spin mr-1" />
+              <i v-else class="pi pi-refresh mr-1" />
+              Actualiser
+            </button>
+          </div>
 
-        <div v-else-if="spreadsheets.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
-          <i class="pi pi-file-excel text-4xl mb-3 block" />
-          <p>Aucune feuille de calcul trouvée</p>
-        </div>
+          <!-- Spreadsheet list -->
+          <div v-if="loadingSpreadsheets && spreadsheets.length === 0" class="text-center py-8">
+            <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
+          </div>
 
-        <div v-else class="grid grid-cols-1 gap-3">
-          <div
-            v-for="doc in spreadsheets"
-            :key="doc.id"
-            :class="[
-              'rounded-xl border p-4 cursor-pointer transition-colors',
-              selectedSpreadsheet?.id === doc.id
-                ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400'
-                : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
-            ]"
-            @click="selectSpreadsheet(doc)"
-          >
-            <div class="flex items-center gap-3">
-              <div class="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
-                <i class="pi pi-file-excel text-green-600 dark:text-green-400" />
+          <div v-else-if="spreadsheets.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+            <i class="pi pi-file-excel text-4xl mb-3 block" />
+            <p>Aucune feuille de calcul trouvée</p>
+          </div>
+
+          <div v-else class="grid grid-cols-1 gap-3">
+            <div
+              v-for="doc in spreadsheets"
+              :key="doc.id"
+              :class="[
+                'rounded-xl border p-4 cursor-pointer transition-colors',
+                selectedSpreadsheet?.id === doc.id
+                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400'
+                  : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
+              ]"
+              @click="selectSpreadsheet(doc)"
+            >
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                  <i class="pi pi-file-excel text-green-600 dark:text-green-400" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {{ doc.name }}
+                  </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    Modifié le {{ formatDate(doc.modified_time) }}
+                  </p>
+                </div>
+                <i v-if="selectedSpreadsheet?.id === doc.id" class="pi pi-check-circle text-brand-500" />
               </div>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
-                  {{ doc.name }}
-                </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  Modifié le {{ formatDate(doc.modified_time) }}
-                </p>
-              </div>
-              <i v-if="selectedSpreadsheet?.id === doc.id" class="pi pi-check-circle text-brand-500" />
             </div>
           </div>
-        </div>
+        </template>
 
         <!-- Sheet tab selection (after selecting a spreadsheet) -->
         <div v-if="sheetInfo" class="mt-6 p-4 rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
@@ -252,6 +279,9 @@ const googleConnected = ref(false)
 const currentStep = ref(0)
 
 // Step 0: Spreadsheet selection
+const driveAvailable = ref(true)
+const spreadsheetUrl = ref('')
+const loadingInfo = ref(false)
 const searchQuery = ref('')
 const loadingSpreadsheets = ref(false)
 const spreadsheets = ref<SpreadsheetListItem[]>([])
@@ -293,17 +323,30 @@ async function loadSpreadsheets() {
   loadingSpreadsheets.value = true
   try {
     spreadsheets.value = await googleApi.listSpreadsheets(searchQuery.value || undefined)
-  } catch (err: unknown) {
-    let msg = 'Erreur inconnue'
-    if (err && typeof err === 'object' && 'body' in err) {
-      const body = (err as { body?: { error?: string } }).body
-      msg = body?.error || JSON.stringify(body)
-    } else if (err instanceof Error) {
-      msg = err.message
-    }
-    toast.error(msg)
+  } catch {
+    // Drive API blocked (e.g. domain policy) — fall back to URL input
+    driveAvailable.value = false
   } finally {
     loadingSpreadsheets.value = false
+  }
+}
+
+async function loadFromUrl() {
+  if (!spreadsheetUrl.value.trim()) return
+  loadingInfo.value = true
+  sheetInfo.value = null
+  selectedSheet.value = ''
+  preview.value = null
+
+  try {
+    sheetInfo.value = await googleApi.getSheetInfo(spreadsheetUrl.value)
+    if (sheetInfo.value.sheets.length === 1) {
+      await selectSheet(sheetInfo.value.sheets[0] ?? '')
+    }
+  } catch {
+    toast.error('Impossible de charger la feuille. Vérifiez l\'URL et vos droits d\'accès.')
+  } finally {
+    loadingInfo.value = false
   }
 }
 
