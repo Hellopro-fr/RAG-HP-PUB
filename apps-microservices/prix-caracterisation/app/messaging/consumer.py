@@ -37,9 +37,9 @@ class Consumer:
         self.exchange_name = "prix_pipeline_exchange"
         self.routing_key = "prix.caracterisation.start"
         self.queue_name = "prix_caracterisation_queue"
-        self.retry_exchange = "prix_retry_exchange"
+        self.retry_exchange = "prix_caracterisation_retry_exchange"
         self.retry_queue_name = f"{self.queue_name}_retry"
-        self.dead_letter_exchange = "prix_dead_letter_exchange"
+        self.dead_letter_exchange = "prix_caracterisation_dead_letter_exchange"
         self.dead_letter_queue_name = f"{self.queue_name}_dlq"
 
     async def connect(self):
