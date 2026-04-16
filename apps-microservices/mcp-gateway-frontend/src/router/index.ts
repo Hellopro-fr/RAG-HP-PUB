@@ -26,6 +26,18 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/views/PrivacyPolicyView.vue'),
+      meta: { requiresAuth: false, title: 'Politique de confidentialité' }
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: () => import('@/views/AppHomepageView.vue'),
+      meta: { requiresAuth: false, title: 'MCP Gateway' }
+    },
+    {
       path: '/docs',
       name: 'docs',
       component: () => import('@/views/DocsServersView.vue'),
