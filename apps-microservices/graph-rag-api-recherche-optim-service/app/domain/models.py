@@ -288,7 +288,7 @@ class ScoringOptions(BaseModel):
         0.8, description="Score pour les géolocalisations inconnues"
     )
     c_unknown_score: float = Field(
-        0, description="Score pour les caractéristiques inconnues"
+        -0.25, description="Score pour les caractéristiques inconnues — pénalité absence"
     )
     v_blocked: float = Field(
         -2.0, description="Score pour les caractéristiques bloquées"
@@ -340,7 +340,7 @@ class MatchingPayload(BaseModel):
             z_unmatched=0,
             e_unmatched=0.9,
             g_unknown_score=0.8,
-            c_unknown_score=0,
+            c_unknown_score=-0.25,
             v_blocked=-2.0,
             v_different=-0.3,
             t_unmatched=0.2,
