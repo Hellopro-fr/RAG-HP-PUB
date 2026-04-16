@@ -55,6 +55,30 @@ class QuestionnaireResponse(BaseModel):
     message: str = Field("", description="Message informatif ou d'erreur")
 
 
+class QuestionnaireV2Request(BaseModel):
+    """Requête pour le questionnaire prix V2 via matching équivalences + LLM"""
+    equivalences: List[Dict[str, Any]] = Field(..., description="Équivalences prix filtrées (textuelles) issues du questionnaire acheteur")
+    id_categorie: Union[str, int] = Field(..., description="ID de la catégorie cible")
+    nom_categorie: str = Field(..., description="Nom de la catégorie cible")
+    texte_prompt: str = Field(..., description="Texte à injecter comme {requete_rag} dans le prompt LLM")
+    model: Optional[str] = Field(None, description="Modèle LLM à utiliser (remplace le modèle par défaut si fourni)")
+
+    @field_validator('id_categorie')
+    @classmethod
+    def convert_id_to_str_v2(cls, v):
+        return str(v)
+
+
+class QuestionnaireV2Response(BaseModel):
+    """Réponse de l'endpoint /prix/questionnaire-v2"""
+    success: bool = Field(..., description="Indique si le traitement a réussi")
+    reponse: Optional[Dict[str, Any]] = Field(None, description="Réponse JSON structurée générée par le LLM")
+    matching: Optional[Dict[str, Any]] = Field(None, description="Résultat brut du matching prix (nb_results, results)")
+    api_response: Optional[Dict[str, Any]] = Field(None, description="Réponse brute de l'API LLM")
+    time_elapsed: Optional[float] = Field(None, description="Temps de traitement en secondes")
+    message: str = Field("", description="Message informatif ou d'erreur")
+
+
 class CaracteristiqueLotRequest(BaseModel):
     """Requête pour le traitement batch des caractéristiques prix"""
     categories: List[CaracteristiqueRequest] = Field(..., description="Liste des catégories à traiter")

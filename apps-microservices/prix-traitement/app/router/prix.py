@@ -3,8 +3,9 @@ from fastapi import APIRouter, HTTPException, Body
 
 from app.schemas.prix import CaracteristiqueRequest, CaracteristiqueResponse, ReponseResult
 from app.schemas.prix import QuestionnaireRequest, QuestionnaireResponse
+from app.schemas.prix import QuestionnaireV2Request, QuestionnaireV2Response
 from app.schemas.prix import CaracteristiqueLotRequest, CaracteristiqueLotResponse, CaracteristiqueLotItemResult
-from app.core.prix_service import run_identification, run_questionnaire, run_identification_lot
+from app.core.prix_service import run_identification, run_questionnaire, run_questionnaire_v2, run_identification_lot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -92,6 +93,53 @@ async def questionnaire_prix(request: QuestionnaireRequest = Body(...)):
         logger.info(f"Réponse /prix/questionnaire: success={response.success}, message={response.message}")
         return response
         
+    except ValueError as ve:
+        logger.error(f"Erreur de validation (400): {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Erreur interne du serveur (500): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
+
+
+@router.post("/prix/questionnaire-v2", tags=["Prix - Questionnaire V2"], response_model=QuestionnaireV2Response)
+async def questionnaire_prix_v2(request: QuestionnaireV2Request = Body(...)):
+    """
+    Endpoint V2 du questionnaire prix : matching équivalences × _cppi + LLM.
+
+    Remplace la recherche RAG par un matching direct via les caractéristiques textuelles
+    de l'acheteur (équivalences filtrées) contre les prix caractérisés en base (_cppi).
+    Les résultats matchés sont formatés et envoyés au LLM (prompt 114).
+    """
+    try:
+        logger.info(f"Requête /prix/questionnaire-v2: id_categorie={request.id_categorie}, {len(request.equivalences)} équivalences")
+
+        if not request.id_categorie.strip():
+            raise ValueError("L'id_categorie ne peut pas être vide.")
+        if not request.equivalences:
+            raise ValueError("Les equivalences ne peuvent pas être vides.")
+        if not request.texte_prompt.strip():
+            raise ValueError("Le texte_prompt ne peut pas être vide.")
+
+        result = await run_questionnaire_v2(
+            equivalences=request.equivalences,
+            id_categorie=request.id_categorie,
+            nom_categorie=request.nom_categorie,
+            texte_prompt=request.texte_prompt,
+            model=request.model
+        )
+
+        response = QuestionnaireV2Response(
+            success=result.get("success", False),
+            reponse=result.get("reponse"),
+            matching=result.get("matching"),
+            api_response=result.get("api_response"),
+            time_elapsed=result.get("time_elapsed"),
+            message=result.get("message", "")
+        )
+
+        logger.info(f"Réponse /prix/questionnaire-v2: success={response.success}, message={response.message}")
+        return response
+
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
