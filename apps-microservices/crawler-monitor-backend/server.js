@@ -59,13 +59,13 @@ if (missingVars.length > 0) {
     console.error('');
     console.error('NOTE: legacy ADMIN_PASSWORD (plain text) is no longer accepted — set ADMIN_PASSWORD_HASH instead.');
   }
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
 }
 
-if (!looksLikeScryptHash(ADMIN_PASSWORD_HASH)) {
+if (ADMIN_PASSWORD_HASH && !looksLikeScryptHash(ADMIN_PASSWORD_HASH)) {
   console.error('FATAL ERROR: ADMIN_PASSWORD_HASH does not look like a scrypt$ hash.');
   console.error('It must be generated with src/lib/password.js hashPassword().');
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
 }
 
 if (process.env.ADMIN_PASSWORD) {
@@ -1509,34 +1509,39 @@ async function setupRedisListener() {
   }
 }
 
-ensureRedisConnected()
-  .then(() => {
-    console.log('Connected to Redis (persistent client).');
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`Crawler Monitor Backend running on port ${PORT}`);
-      setupRedisListener();
-      // Audit log: prune old files at boot, then once a day
-      rotateOldLogs().then(r => {
-        if (r.deleted) console.log(`[audit] pruned ${r.deleted} old log files`);
-      }).catch(err => console.error('[audit] initial rotation failed:', err.message));
-      setInterval(() => {
-        rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
-      }, 24 * 60 * 60 * 1000);
+async function start() {
+  await ensureRedisConnected();
+  console.log('Connected to Redis (persistent client).');
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Crawler Monitor Backend running on port ${PORT}`);
+    setupRedisListener();
+    // Audit log: prune old files at boot, then once a day
+    rotateOldLogs().then(r => {
+      if (r.deleted) console.log(`[audit] pruned ${r.deleted} old log files`);
+    }).catch(err => console.error('[audit] initial rotation failed:', err.message));
+    setInterval(() => {
+      rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
+    }, 24 * 60 * 60 * 1000);
 
-      // Capacity history snapshot: every 60s into Redis sorted set (capped at 24h)
-      const takeCapacitySnapshot = async () => {
-        try {
-          const client = await ensureRedisConnected();
-          await snapshotCapacity(client, CRAWL_RUNNING_COUNT_KEY, CRAWL_MAX_GLOBAL_KEY);
-        } catch (err) {
-          console.error('[capacity] snapshot failed:', err.message);
-        }
-      };
-      takeCapacitySnapshot();
-      setInterval(takeCapacitySnapshot, SNAPSHOT_INTERVAL_MS);
-    });
-  })
-  .catch(err => {
-    console.error('Failed to connect to Redis:', err);
+    // Capacity history snapshot: every 60s into Redis sorted set (capped at 24h)
+    const takeCapacitySnapshot = async () => {
+      try {
+        const client = await ensureRedisConnected();
+        await snapshotCapacity(client, CRAWL_RUNNING_COUNT_KEY, CRAWL_MAX_GLOBAL_KEY);
+      } catch (err) {
+        console.error('[capacity] snapshot failed:', err.message);
+      }
+    };
+    takeCapacitySnapshot();
+    setInterval(takeCapacitySnapshot, SNAPSHOT_INTERVAL_MS);
+  });
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  start().catch(err => {
+    console.error('Failed to start server:', err);
     process.exit(1);
   });
+}
+
+export { app };
