@@ -61,7 +61,10 @@
                 placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
               />
               <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                L'ID se trouve dans l'URL : docs.google.com/spreadsheets/d/<strong>ID_ICI</strong>/edit
+                <i v-if="loadingInfo" class="pi pi-spinner pi-spin mr-1" />
+                <template v-else>
+                  L'ID se trouve dans l'URL : docs.google.com/spreadsheets/d/<strong>ID_ICI</strong>/edit
+                </template>
               </p>
             </div>
 
@@ -188,17 +191,7 @@
               {{ currentStep === 2 ? 'Fermer' : 'Annuler' }}
             </button>
 
-            <!-- Step 0 → 1: Load & Next -->
-            <button
-              v-if="currentStep === 0 && !sheetInfo"
-              type="button"
-              class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-              :disabled="!spreadsheetId.trim() || loadingInfo"
-              @click="loadSpreadsheetInfo"
-            >
-              <i v-if="loadingInfo" class="pi pi-spinner pi-spin mr-1" />
-              Charger
-            </button>
+            <!-- Step 0 → 1: Next -->
             <button
               v-if="currentStep === 0 && preview"
               type="button"
@@ -237,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { googleApi } from '@/api/google'
 import { useToast } from '@/composables/useToast'
@@ -282,6 +275,19 @@ const completedSteps = computed(() => {
   if (preview.value) completed.push(0)
   if (preview.value && columnMapping.value.name && columnMapping.value.url) completed.push(1)
   return completed
+})
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(spreadsheetId, (val) => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (val.trim()) {
+    debounceTimer = setTimeout(() => loadSpreadsheetInfo(), 600)
+  } else {
+    sheetInfo.value = null
+    selectedSheet.value = ''
+    preview.value = null
+  }
 })
 
 onMounted(async () => {
