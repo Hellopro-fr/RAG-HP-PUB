@@ -231,6 +231,13 @@ const menuGroups = computed<MenuGroup[]>(() => {
 
   // Gestion group — Serveurs only for read-only+, Config MCP always
   const gestionItems: MenuItem[] = []
+  if (authStore.isAdmin) {
+    gestionItems.push({
+      icon: 'pi pi-objects-column',
+      name: 'Tableau de bord',
+      path: '/dashboard',
+    })
+  }
   if (authStore.hasRole('read-only')) {
     gestionItems.push({
       icon: 'pi pi-server',
