@@ -291,7 +291,7 @@ class ScoringOptions(BaseModel):
         0, description="Score pour les caractéristiques inconnues"
     )
     v_blocked: float = Field(
-        -2.0, description="Score pour les caractéristiques bloquées"
+        -20.0, description="Score pour les caractéristiques bloquées — P6 fix: pénalité forte pour éliminer les produits avec valeurs_bloquantes"
     )
     v_different: float = Field(
         -0.3, description="Score pour les caractéristiques différentes"
@@ -341,7 +341,7 @@ class MatchingPayload(BaseModel):
             e_unmatched=0.9,
             g_unknown_score=0.8,
             c_unknown_score=0,
-            v_blocked=-2.0,
+            v_blocked=-20.0,
             v_different=-0.3,
             t_unmatched=0.2,
         ),
