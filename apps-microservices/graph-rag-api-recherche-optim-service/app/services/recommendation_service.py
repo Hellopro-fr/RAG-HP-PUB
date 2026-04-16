@@ -1910,18 +1910,6 @@ class RecommendationService:
             3. Comparer le descriptif technique aux critères du besoin
             4. Ne JAMAIS conclure à la compatibilité sur la base du titre seul — si le descriptif contredit le titre, c'est le descriptif qui prime
 
-            ## ⚠️ RÈGLE CATÉGORIE — Un produit hors catégorie/sous-type = score 1
-
-            Si le besoin exprime une catégorie ou un sous-type précis, tout produit d'une AUTRE catégorie ou d'un AUTRE sous-type est éliminé (score 1), même si ses caractéristiques techniques sont proches.
-
-            **Exemples (score 1 obligatoire) :**
-            - "distributeur sur-pied" → produit "distributeur comptoir" → score 1
-            - "tracteur standard" → produit "tracteur vigneron" → score 1
-            - "pont 2 colonnes" → produit "pont ciseaux" → score 1
-            - "compresseur à vis" → produit "compresseur à piston" → score 1
-
-            **Règle** : La correspondance catégorie/sous-type est vérifiée AVANT les caractéristiques techniques. Un produit hors catégorie n'est JAMAIS score 2 — c'est score 1.
-
             ## TRAITEMENT
             
             ### ÉTAPE 1 — Comprendre le besoin
@@ -1954,7 +1942,7 @@ class RecommendationService:
             Usage cohérent, rien ne contredit le besoin sur les critiques. Des caractéristiques ne sont pas renseignées, ce qui empêche de confirmer la compatibilité complète. Écarts uniquement sur secondaires → score 3 aussi.
             
             **Score 2 — Correspondance partielle**
-            Bon univers ET bon sous-type, mais écart(s) sur des critiques sans être éliminatoire : valeur numérique hors tolérance 20% mais dans 50%–200% de la cible, valeur textuelle critique proche mais pas exacte. L'acheteur devra vérifier.
+            Bon univers mais écart(s) sur des critiques sans être éliminatoire : valeur numérique hors tolérance 20% mais dans 50%–200% de la cible, valeur textuelle critique proche mais pas exacte, sous-type proche mais pas exactement celui demandé. L'acheteur devra vérifier.
             
             **Score 1 — Ne correspond pas**
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
@@ -1965,7 +1953,7 @@ class RecommendationService:
             - Valeur textuelle **présente** et incompatible sur un critique (motorisation, interface, alimentation, norme…) — si absente : score 3, pas score 1
             - État neuf/occasion différent de ce que l'acheteur a demandé
             
-            **En cas de doute entre score 1 et score 2 → score 2, SAUF si le sous-type est différent (→ toujours score 1).** Un seul critère éliminatoire suffit pour le score 1, à condition d'être factuel.
+            **En cas de doute entre score 1 et score 2 → toujours score 2.** Un seul critère éliminatoire suffit pour le score 1, à condition d'être factuel.
             
             ### ÉTAPE 4 — Décisions
             - **Score 1** → ÉCARTÉ → `produits_ecartes`
@@ -2019,8 +2007,7 @@ class RecommendationService:
             - [ ] Score 1 réservé aux incompatibilités certaines et factuelles
             - [ ] Valeur textuelle présente + incompatible sur critique = score 1 / absente = score 3
             - [ ] Valeur numérique hors 20% mais dans 50%–200% = score 2 / hors 50%–200% = score 1
-            - [ ] Catégorie/sous-type vérifié AVANT les caractéristiques — si différent = score 1
-            - [ ] Doute score 1 / score 2 → score 2 (SAUF sous-type différent → score 1)
+            - [ ] Doute score 1 / score 2 → score 2
             - [ ] Info absente = ni pénalité ni compatibilité ni incompatibilité inférée
             - [ ] Score 2 → autres_produits, jamais dans le top
             - [ ] Règle fournisseur à score égal uniquement
