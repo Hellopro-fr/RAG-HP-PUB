@@ -6,11 +6,14 @@ import {
 } from 'recharts';
 import {
   Play, Pause, SkipBack, SkipForward, RefreshCw,
-  AlertTriangle, AlertCircle, Activity, Cpu,
+  AlertTriangle, AlertCircle, Activity, Cpu, ArrowLeft,
 } from 'lucide-react';
 import { useJobReplayQuery } from '../hooks/queries';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import {
+  Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle,
+} from '../components/ui/sheet';
 import { cn } from '../lib/utils';
 
 const fmtTime = (ts) => {
@@ -70,12 +73,13 @@ const ReplayPage = ({ token }) => {
   const [speed, setSpeed] = useState(2);
   const indexRef = useRef(0);
 
+  // Fix 1b : reset currentTs au changement de job ou quand tsStart change
+  // (sinon ReferenceLine recharts reçoit un ts hors domaine et plante)
   useEffect(() => {
-    if (hasPoints && currentTs === 0) {
-      setCurrentTs(tsStart);
-      indexRef.current = 0;
-    }
-  }, [hasPoints, tsStart, currentTs]);
+    setCurrentTs(tsStart);
+    indexRef.current = 0;
+    setIsPlaying(false);
+  }, [id, tsStart]);
 
   useEffect(() => {
     if (!isPlaying || !hasPoints) return undefined;
@@ -179,11 +183,52 @@ const ReplayPage = ({ token }) => {
   const job = data?.job;
   const durationMin = hasPoints ? ((tsEnd - tsStart) / 60000).toFixed(1) : '?';
 
+  // Contenu réutilisable de la liste d'événements (sidebar desktop + sheet mobile)
+  const renderEventsList = () => (
+    events.length === 0 ? (
+      <div className="p-4 text-center text-xs text-muted-foreground">
+        Aucun événement notable.
+      </div>
+    ) : (
+      <ul className="space-y-1.5 p-2">
+        {events.map((ev, i) => {
+          const s = EVENT_STYLES[ev.severity] || EVENT_STYLES.info;
+          const SIcon = s.Icon;
+          const isNear = nearbyEvents.some(n => n.ts === ev.ts && n.kind === ev.kind);
+          return (
+            <li
+              key={`${ev.ts}-${ev.kind}-${i}`}
+              onClick={() => { setCurrentTs(ev.ts); indexRef.current = Math.max(0, points.findIndex(p => p.ts >= ev.ts)); setIsPlaying(false); }}
+              className={cn(
+                'cursor-pointer rounded-md border px-2.5 py-2 text-xs transition-all',
+                s.surface,
+                isNear ? 'shadow-sm ring-2 ring-foreground/30' : 'opacity-80 hover:opacity-100'
+              )}
+              title="Cliquer pour sauter ici"
+            >
+              <div className="flex items-center gap-2">
+                <SIcon className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-mono text-[10px] opacity-70">{fmtTime(ev.ts)}</span>
+                <span className="ml-auto text-[9px] uppercase opacity-60">{ev.kind.replace(/_/g, ' ')}</span>
+              </div>
+              <div className="mt-1 leading-tight">{ev.label}</div>
+            </li>
+          );
+        })}
+      </ul>
+    )
+  );
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
+          {/* Fix 1a : bouton retour visible (mobile friendly) */}
+          <Button variant="ghost" size="sm" onClick={close} className="h-8 gap-1 px-2">
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Retour</span>
+          </Button>
           <Activity className="h-5 w-5 shrink-0 text-primary" />
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-foreground">
@@ -195,6 +240,9 @@ const ReplayPage = ({ token }) => {
               {hasPoints && <span>Durée capturée: {durationMin} min</span>}
               {job?.crawl_mode === 'update' && <span className="text-primary">↻ update mode</span>}
               {job?.oom_restart_count > 0 && <span className="text-warning">{job.oom_restart_count} OOM</span>}
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              Esc pour fermer · Espace play/pause · ←→ frame par frame
             </div>
           </div>
         </div>
@@ -248,6 +296,20 @@ const ReplayPage = ({ token }) => {
             <span className="ml-1 text-muted-foreground">/ {fmtTime(tsEnd)}</span>
           </div>
         </div>
+        {/* Fix 1c : bouton mobile pour accéder aux événements via Sheet */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="sm" className="md:hidden">
+              Voir {events.length} événements
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[85vw] overflow-y-auto p-0 sm:max-w-md">
+            <SheetHeader className="border-b border-border p-3">
+              <SheetTitle className="text-sm">Événements ({events.length})</SheetTitle>
+            </SheetHeader>
+            {renderEventsList()}
+          </SheetContent>
+        </Sheet>
       </div>
 
       {/* Body */}
@@ -343,8 +405,8 @@ const ReplayPage = ({ token }) => {
           )}
         </div>
 
-        {/* Events sidebar */}
-        <div className="w-80 overflow-y-auto border-l border-border bg-muted/20">
+        {/* Events sidebar — hidden en mobile (fallback Sheet ci-dessus) */}
+        <div className="hidden w-80 overflow-y-auto border-l border-border bg-muted/20 md:block">
           <div className="border-b border-border p-3">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Événements ({events.length})
@@ -353,38 +415,7 @@ const ReplayPage = ({ token }) => {
               Mis en surbrillance près du scrubber
             </div>
           </div>
-          {events.length === 0 ? (
-            <div className="p-4 text-center text-xs text-muted-foreground">
-              Aucun événement notable.
-            </div>
-          ) : (
-            <ul className="space-y-1.5 p-2">
-              {events.map((ev, i) => {
-                const s = EVENT_STYLES[ev.severity] || EVENT_STYLES.info;
-                const SIcon = s.Icon;
-                const isNear = nearbyEvents.some(n => n.ts === ev.ts && n.kind === ev.kind);
-                return (
-                  <li
-                    key={`${ev.ts}-${ev.kind}-${i}`}
-                    onClick={() => { setCurrentTs(ev.ts); indexRef.current = Math.max(0, points.findIndex(p => p.ts >= ev.ts)); setIsPlaying(false); }}
-                    className={cn(
-                      'cursor-pointer rounded-md border px-2.5 py-2 text-xs transition-all',
-                      s.surface,
-                      isNear ? 'shadow-sm ring-2 ring-foreground/30' : 'opacity-80 hover:opacity-100'
-                    )}
-                    title="Cliquer pour sauter ici"
-                  >
-                    <div className="flex items-center gap-2">
-                      <SIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="font-mono text-[10px] opacity-70">{fmtTime(ev.ts)}</span>
-                      <span className="ml-auto text-[9px] uppercase opacity-60">{ev.kind.replace(/_/g, ' ')}</span>
-                    </div>
-                    <div className="mt-1 leading-tight">{ev.label}</div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          {renderEventsList()}
         </div>
       </div>
     </div>

@@ -47,10 +47,18 @@ const JobCard = ({ job, onClick, isSelected }) => {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       className={cn(
         'cursor-pointer rounded-md border border-border bg-card p-3 text-card-foreground transition-colors border-l-4',
-        'hover:bg-accent/40',
+        'hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         isSelected && 'bg-accent shadow-sm',
         railClass
       )}

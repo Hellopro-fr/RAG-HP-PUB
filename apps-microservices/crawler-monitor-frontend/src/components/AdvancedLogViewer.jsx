@@ -37,7 +37,9 @@ const LogRow = ({ index, style, lines, searchTerm }) => {
   if (!searchTerm) {
     content = line;
   } else {
-    const parts = line.split(new RegExp(`(${searchTerm})`, 'gi'));
+    // Échappe les métacaractères regex pour éviter un crash sur `(`, `*`, `[`, `\`, etc.
+    const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = line.split(new RegExp(`(${escaped})`, 'gi'));
     content = parts.map((part, i) =>
       part.toLowerCase() === searchTerm.toLowerCase()
         ? <span key={i} className="bg-warning font-bold text-warning-foreground">{part}</span>
@@ -53,7 +55,7 @@ const LogRow = ({ index, style, lines, searchTerm }) => {
         levelRowClass(level)
       )}
     >
-      <span className="w-12 shrink-0 select-none text-right text-muted-foreground/60">{index + 1}</span>
+      <span className="w-12 shrink-0 select-none text-right text-muted-foreground">{index + 1}</span>
       <span className="flex-1 truncate whitespace-pre">{content}</span>
       {url && (
         <a
@@ -82,7 +84,8 @@ const AdvancedLogViewer = ({ content, jobId }) => {
       else if (lowerLine.includes('warn')) level = 'warn';
 
       const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
-      const url = urlMatch ? urlMatch[1] : null;
+      // Trim la ponctuation finale parfois capturée avec l'URL.
+      const url = urlMatch ? urlMatch[1].replace(/[.,;)\]"'>]+$/, '') : null;
 
       const timestampMatch = line.match(/(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})/);
       const timestamp = timestampMatch ? timestampMatch[1] : null;

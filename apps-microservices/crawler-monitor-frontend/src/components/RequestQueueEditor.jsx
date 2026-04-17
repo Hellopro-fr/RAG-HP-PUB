@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Code, RefreshCw, Search, Trash2, Filter,
-  ChevronLeft, ChevronRight, AlignLeft, CheckCircle, AlertCircle, X,
+  ChevronLeft, ChevronRight, AlignLeft, CheckCircle, AlertCircle, X, ArrowLeft,
 } from 'lucide-react';
 import Editor from 'react-simple-code-editor';
 import Prism from 'prismjs';
@@ -19,7 +19,6 @@ const STATUS_OPTIONS = [
   { id: 'pending', label: '○ En attente' },
 ];
 
-// eslint-disable-next-line no-unused-vars
 const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -257,6 +256,12 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
               #{String(jobId).slice(0, 10)}
             </span>
           </h3>
+          {onClose && (
+            <Button variant="outline" size="sm" onClick={onClose}>
+              <ArrowLeft className="h-4 w-4" />
+              Retour au job
+            </Button>
+          )}
         </div>
 
         <div className="flex flex-1 overflow-hidden">

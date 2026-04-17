@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Server, RefreshCw, AlertCircle } from 'lucide-react';
+import { Server, RefreshCw, AlertCircle, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import UrlListBrowser from './UrlListBrowser';
 import DuplicatesTab from './DuplicatesTab';
@@ -23,7 +23,6 @@ const formatInt = (n) => (n ?? 0).toLocaleString('fr-FR');
  *
  * Counts are fetched on mount via /dataset/counts and displayed in tab labels.
  */
-// eslint-disable-next-line no-unused-vars
 const DatasetAnalyzer = ({ jobId, onClose, token }) => {
   const [activeTab, setActiveTab] = useState('success');
   const [counts, setCounts] = useState(null);
@@ -57,6 +56,12 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
             </span>
             {countsLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           </h3>
+          {onClose && (
+            <Button variant="outline" size="sm" onClick={onClose}>
+              <ArrowLeft className="h-4 w-4" />
+              Retour au job
+            </Button>
+          )}
         </div>
 
         {countsError && (

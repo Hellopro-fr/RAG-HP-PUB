@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Globe, RefreshCw, AlertCircle, Search,
@@ -10,9 +10,36 @@ import { Button } from '../components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
+import {
+  Tooltip, TooltipTrigger, TooltipContent,
+} from '../components/ui/tooltip';
 import { cn } from '../lib/utils';
 
 const WINDOW_OPTIONS = ['24h', '7d', '30d'];
+
+// Fix 3b : libellés explicites pour les entêtes cryptiques
+const HEAD_TOOLTIPS = {
+  oom:    'Out Of Memory — nombre de redémarrages suite à un dépassement mémoire',
+  ok:     'Succès (jobs finished/archived)',
+  ko:     'Échec (failed)',
+  run:    'En cours (running/stopping/restarting_oom)',
+  update: 'Pourcentage de jobs lancés en mode update (crawl incrémental)',
+  succ:   'Taux de succès sur les jobs terminés (finished+archived) / (finished+archived+failed)',
+};
+
+// Wrapper pour des <TableHead> annotés d'un tooltip explicatif
+const HeadWithTip = ({ tip, className, children }) => (
+  <TableHead className={className}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  </TableHead>
+);
 
 const DomainsPage = ({ token }) => {
   const navigate = useNavigate();
@@ -34,6 +61,18 @@ const DomainsPage = ({ token }) => {
     if (rate >= 0.7) return 'text-warning';
     return 'text-destructive';
   };
+
+  // Fix 3a : handler unifié (click + clavier) pour l'a11y des lignes cliquables
+  const goToDomain = useCallback((d) => {
+    navigate(`/domains/${encodeURIComponent(d.domain)}`);
+  }, [navigate]);
+
+  const onRowKeyDown = useCallback((e, d) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      goToDomain(d);
+    }
+  }, [goToDomain]);
 
   return (
     <div className="p-4">
@@ -109,12 +148,12 @@ const DomainsPage = ({ token }) => {
                 <TableRow>
                   <TableHead>Domain</TableHead>
                   <TableHead className="text-right">Jobs</TableHead>
-                  <TableHead className="text-right">✓</TableHead>
-                  <TableHead className="text-right">✗</TableHead>
-                  <TableHead className="text-right">▶</TableHead>
-                  <TableHead className="text-right">OOM</TableHead>
-                  <TableHead className="text-right">Success rate</TableHead>
-                  <TableHead className="text-right">Update %</TableHead>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.ok}     className="text-right">✓</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.ko}     className="text-right">✗</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.run}    className="text-right">▶</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.oom}    className="text-right">OOM</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.succ}   className="text-right">Success rate</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.update} className="text-right">Update %</HeadWithTip>
                   <TableHead>Last run</TableHead>
                 </TableRow>
               </TableHeader>
@@ -122,8 +161,11 @@ const DomainsPage = ({ token }) => {
                 {filtered.map(d => (
                   <TableRow
                     key={d.domain}
-                    onClick={() => navigate(`/domains/${encodeURIComponent(d.domain)}`)}
-                    className="cursor-pointer"
+                    onClick={() => goToDomain(d)}
+                    onKeyDown={(e) => onRowKeyDown(e, d)}
+                    role="button"
+                    tabIndex={0}
+                    className="cursor-pointer focus:outline-none focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <TableCell className="font-mono text-foreground">{d.domain}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{d.total_jobs}</TableCell>

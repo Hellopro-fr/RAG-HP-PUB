@@ -78,7 +78,7 @@ const ReplicaMonitor = ({ replicas, token }) => {
         <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <Server className="h-4 w-4 text-primary" />
           Crawler Replicas
-          <span className="font-mono text-xs normal-case text-muted-foreground/70 tracking-normal">
+          <span className="font-mono text-xs normal-case text-muted-foreground tracking-normal">
             ({activeReplicas.length} actifs)
           </span>
         </h2>
@@ -209,7 +209,7 @@ const ReplicaMonitor = ({ replicas, token }) => {
                         <div>
                           Container: {formatBytes(replica.ram)} / {formatBytes(totalRam)} ({(totalRam > 0 ? Math.min((replica.ram || 0) / totalRam * 100, 100) : 0).toFixed(0)}%)
                         </div>
-                        <div className="text-muted-foreground/70">
+                        <div className="text-muted-foreground">
                           Top {sorted.length} process RSS: {formatBytes(measured)}{' '}
                           <span title="La somme des RSS process est souvent supérieure au total container car la mémoire partagée (libs, shared pages) est comptée dans chaque process.">ⓘ</span>
                         </div>

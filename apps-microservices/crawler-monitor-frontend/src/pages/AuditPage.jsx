@@ -9,6 +9,9 @@ import { Button } from '../components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
+import {
+  Tooltip, TooltipTrigger, TooltipContent,
+} from '../components/ui/tooltip';
 import { cn } from '../lib/utils';
 
 /**
@@ -25,6 +28,30 @@ const ACTION_OPTIONS = [
   'dataset_deduplicate',
   'callback_retry', 'callback_delete', 'callback_clear_all',
 ];
+
+// Fix 4a : libellés des colonnes
+const HEAD_TOOLTIPS = {
+  when:     'Date et heure de l\u2019événement (timezone locale)',
+  user:     'Utilisateur authentifié qui a déclenché l\u2019action (anonymous si non loggué)',
+  action:   'Nom de l\u2019action : login, queue_drop, callback_retry, dataset_deduplicate\u2026',
+  status:   'Résultat de l\u2019action : ok (succès) ou error (échec)',
+  target:   'Cible concernée : id de queue, url, job, etc.',
+  metadata: 'Détails additionnels structurés (clé=valeur · clé=valeur)',
+  ip:       'Adresse IP source de la requête',
+};
+
+const HeadWithTip = ({ tip, children }) => (
+  <TableHead>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  </TableHead>
+);
 
 const statusClass = (status) =>
   status === 'ok'
@@ -57,9 +84,19 @@ const AuditPage = ({ token }) => {
 
   const [actionFilter, setActionFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
+  // Fix 4a : debounce 300ms du userFilter pour éviter un fetch à chaque frappe
+  const [debouncedUser, setDebouncedUser] = useState('');
   const [days, setDays] = useState(1);
   const [limit] = useState(100);
   const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedUser(userFilter);
+      setOffset(0);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [userFilter]);
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -72,7 +109,7 @@ const AuditPage = ({ token }) => {
         query: {
           from, to,
           ...(actionFilter ? { action: actionFilter } : {}),
-          ...(userFilter ? { user: userFilter } : {}),
+          ...(debouncedUser ? { user: debouncedUser } : {}),
           limit: String(limit),
           offset: String(offset),
         },
@@ -86,7 +123,7 @@ const AuditPage = ({ token }) => {
     } finally {
       setLoading(false);
     }
-  }, [token, actionFilter, userFilter, days, limit, offset]);
+  }, [token, actionFilter, debouncedUser, days, limit, offset]);
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
@@ -144,7 +181,7 @@ const AuditPage = ({ token }) => {
             type="text"
             placeholder="Filtrer par user (admin, anonymous, …)"
             value={userFilter}
-            onChange={e => { setUserFilter(e.target.value); setOffset(0); }}
+            onChange={e => setUserFilter(e.target.value)}
             className="h-8 min-w-[200px] flex-1"
           />
         </div>
@@ -169,13 +206,13 @@ const AuditPage = ({ token }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Metadata</TableHead>
-                  <TableHead>IP</TableHead>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.when}>When</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.user}>User</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.action}>Action</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.status}>Status</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.target}>Target</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.metadata}>Metadata</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.ip}>IP</HeadWithTip>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -102,10 +102,6 @@ const CallbacksPanel = ({ token, onClose }) => {
     }
   };
 
-  // onClose is kept for parent-refresh side-effect, but there's no modal to close.
-  // It fires when the user navigates away (no-op if unset).
-  useEffect(() => () => { if (onClose) onClose(); }, [onClose]);
-
   return (
     <div className="p-4">
       <ConfirmDestructive

@@ -54,7 +54,7 @@ export function Sidebar({
         {NAV_ITEMS.map((section) => (
           <div key={section.section} className="mb-4 last:mb-0">
             {showLabels && (
-              <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {section.section}
               </div>
             )}
