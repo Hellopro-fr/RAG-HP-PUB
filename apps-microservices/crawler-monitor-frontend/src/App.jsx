@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  Activity, RefreshCw, LogOut, FileText, Globe, Mail, SlidersHorizontal,
-} from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { setOnUnauthorized } from './lib/api';
 import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
 import LoginPage from './components/LoginPage';
 import Overview from './pages/Overview';
+import { AppShell } from './components/layout/AppShell';
 
 // Lazy-loaded pages: downloaded only when the user navigates to them.
 // Shrinks the initial bundle (Overview is the main entry; the rest is 50%+ of code
@@ -171,65 +170,12 @@ const App = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
-      <header className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-20">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity">
-            <Activity className="w-8 h-8 text-blue-400" />
-            <h1 className="text-xl font-bold text-white">Crawler Dashboard Pro</h1>
-          </Link>
-          <div className="flex gap-2 items-center">
-            <Link
-              to="/domains"
-              className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
-              title="Domains"
-            >
-              <Globe className="w-5 h-5" />
-            </Link>
-            <Link
-              to="/callbacks"
-              className={
-                failedCallbackCount > 0
-                  ? 'relative p-2 rounded-md bg-red-900/40 hover:bg-red-900/60 border border-red-500/40 transition-colors text-red-300'
-                  : 'relative p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white'
-              }
-              title={
-                failedCallbackCount > 0
-                  ? `${failedCallbackCount} callback${failedCallbackCount > 1 ? 's' : ''} en échec`
-                  : 'Callbacks (aucun en échec)'
-              }
-            >
-              <Mail className="w-5 h-5" />
-              {failedCallbackCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full bg-red-500 text-white">
-                  {failedCallbackCount > 99 ? '99+' : failedCallbackCount}
-                </span>
-              )}
-            </Link>
-            <Link
-              to="/capacity-planning"
-              className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
-              title="Capacity Planning"
-            >
-              <SlidersHorizontal className="w-5 h-5" />
-            </Link>
-            <Link
-              to="/audit"
-              className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
-              title="Audit log"
-            >
-              <FileText className="w-5 h-5" />
-            </Link>
-            <button onClick={handleManualRefresh} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
-              <RefreshCw className={`w-5 h-5 ${isJobsLoading ? 'animate-spin' : ''}`} />
-            </button>
-            <button onClick={handleLogout} className="p-2 rounded-md hover:bg-red-700 transition-colors text-red-400 hover:text-white" title="Déconnexion">
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell
+      badges={{ failedCallbacks: failedCallbackCount }}
+      onLogout={handleLogout}
+      onRefresh={handleManualRefresh}
+      isRefreshing={isJobsLoading}
+    >
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Overview token={token} replicas={replicas} />} />
@@ -246,7 +192,7 @@ const App = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
-    </div>
+    </AppShell>
   );
 }
 
