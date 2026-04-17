@@ -216,6 +216,14 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
           color: #e5e7eb; /* gray-200 — base text */
           background: transparent !important;
         }
+        /* react-simple-code-editor renders a relative-positioned div containing the
+           pre+textarea. By default it hugs parent width; with white-space: pre the
+           children extend past it but the wrapper's overflow never triggers. Setting
+           min-width: max-content on the Editor root lets long JSON lines extend the
+           layout so the queue-json-editor's overflow-auto reveals horizontal scroll. */
+        .queue-json-editor > div {
+          min-width: max-content;
+        }
       `}</style>
       <ConfirmDestructive
         open={showDropConfirm}
@@ -427,8 +435,10 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
           <div className="flex-1 flex flex-col bg-gray-900">
             {selectedFile ? (
               <>
-                <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-                  <div className="flex flex-col overflow-hidden mr-2">
+                <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center gap-2">
+                  {/* flex-1 min-w-0 is required so `truncate` on the children actually shrinks
+                      the inner div instead of pushing the action buttons past the modal edge. */}
+                  <div className="flex flex-col overflow-hidden flex-1 min-w-0">
                     <span className="text-xs font-mono text-gray-400 truncate">{selectedFile.path}</span>
                     <span className="text-sm font-bold text-white truncate" title={selectedFile.url}>{selectedFile.url}</span>
                   </div>
