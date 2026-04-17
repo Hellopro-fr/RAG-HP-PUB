@@ -2077,6 +2077,29 @@ services:
       - services-net
     logging: *logging_defaults
 
+  mcp-google-analytics-minisite-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-google-analytics-service/Dockerfile
+    container_name: mcp-google-analytics-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8594:8594"
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
+      - GOOGLE_PROJECT_ID=${GOOGLE_ANALYTICS_PROJECT_ID_MINISITE}
+      # Set to "p12" to use P12 key format instead of JSON
+      - GOOGLE_CREDENTIALS_TYPE=${GOOGLE_CREDENTIALS_TYPE_MINISITE:-json}
+      - GOOGLE_SERVICE_ACCOUNT_EMAIL=${GOOGLE_SERVICE_ACCOUNT_EMAIL_MINISITE:-}
+      - GOOGLE_P12_PASSWORD=${GOOGLE_P12_PASSWORD_MINISITE:-notasecret}
+    volumes:
+      - ${GOOGLE_ANALYTICS_CREDENTIALS_PATH_MINISITE:-./secrets/gcp-analytics-credentials.json}:/secrets/gcp-credentials.json:ro
+      - ${GOOGLE_ANALYTICS_P12_PATH_MINISITE:-./secrets/gcp-analytics-credentials.p12}:/secrets/gcp-credentials.p12:ro
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Google Search Console Service ─────────────────────────────────
   mcp-google-search-console-service:
     build:
