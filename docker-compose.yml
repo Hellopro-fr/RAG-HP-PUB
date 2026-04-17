@@ -2062,8 +2062,9 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8583:8583"
+      - "${MCP_GOOGLE_ANALYTICS_PORT:-8583}:${MCP_GOOGLE_ANALYTICS_PORT:-8583}"
     environment:
+      - MCP_PORT=${MCP_GOOGLE_ANALYTICS_PORT:-8583}
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
       - GOOGLE_PROJECT_ID=${GOOGLE_ANALYTICS_PROJECT_ID}
       # Set to "p12" to use P12 key format instead of JSON
@@ -2085,8 +2086,9 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8594:8583"
+      - "${MCP_GOOGLE_ANALYTICS_PORT_MINISITE:-8594}:${MCP_GOOGLE_ANALYTICS_PORT_MINISITE:-8594}"
     environment:
+      - MCP_PORT=${MCP_GOOGLE_ANALYTICS_PORT_MINISITE:-8594}
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
       - GOOGLE_PROJECT_ID=${GOOGLE_ANALYTICS_PROJECT_ID_MINISITE}
       # Set to "p12" to use P12 key format instead of JSON
