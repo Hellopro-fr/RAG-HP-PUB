@@ -8,13 +8,19 @@ import (
 )
 
 // handleClassifyProduct classifies a single product via the classification API.
+// id_produit is optional: if missing or empty, a synthetic "auto-<hex>" value
+// is generated at the MCP layer so the backend contract is preserved.
 func handleClassifyProduct(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
 	idProduit, _ := args["id_produit"].(string)
 	nomProduit, _ := args["nom_produit"].(string)
 	description, _ := args["description"].(string)
 
-	if idProduit == "" || nomProduit == "" || description == "" {
-		return errorResult("id_produit, nom_produit, and description are required"), nil
+	if nomProduit == "" || description == "" {
+		return errorResult("nom_produit and description are required"), nil
+	}
+
+	if idProduit == "" {
+		idProduit = generateAutoID()
 	}
 
 	payload := map[string]any{
