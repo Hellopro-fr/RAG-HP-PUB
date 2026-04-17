@@ -216,13 +216,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
           color: #e5e7eb; /* gray-200 — base text */
           background: transparent !important;
         }
-        /* react-simple-code-editor renders a relative-positioned div containing the
-           pre+textarea. By default it hugs parent width; with white-space: pre the
-           children extend past it but the wrapper's overflow never triggers. Setting
-           min-width: max-content on the Editor root lets long JSON lines extend the
-           layout so the queue-json-editor's overflow-auto reveals horizontal scroll. */
+        /* react-simple-code-editor sets overflow: hidden on its inline container,
+           which clips the pre even when white-space: pre would push content past
+           the wrapper. Override to overflow: visible so the pre extends to its
+           natural width, and force min-width: max-content so the container grows
+           with its longest line. The outer .queue-json-editor (overflow-auto)
+           then provides the horizontal scroll. */
         .queue-json-editor > div {
-          min-width: max-content;
+          min-width: max-content !important;
+          overflow: visible !important;
         }
       `}</style>
       <ConfirmDestructive
@@ -431,8 +433,9 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
             </div>
           </div>
 
-          {/* Editor area */}
-          <div className="flex-1 flex flex-col bg-gray-900">
+          {/* Editor area — min-w-0 on the panel itself so the whole column can shrink
+              below the intrinsic width of its longest child (a long URL in the header). */}
+          <div className="flex-1 min-w-0 flex flex-col bg-gray-900 overflow-hidden">
             {selectedFile ? (
               <>
                 <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center gap-2">
