@@ -64,6 +64,7 @@ func CombinedMiddleware(
 
 					cc = &CachedClient{
 						ID:           client.ID,
+						Name:         client.Name,
 						ServerIDs:    serverIDs,
 						AllowedTools: allowedTools,
 						ExpiresAt:    client.ExpiresAt,
@@ -95,6 +96,9 @@ func CombinedMiddleware(
 				ctx := context.WithValue(r.Context(), scopetoken.AllowedServersContextKey, cc.ServerIDs)
 				if cc.AllowedTools != nil {
 					ctx = context.WithValue(ctx, scopetoken.AllowedToolsContextKey, cc.AllowedTools)
+				}
+				if cc.Name != "" {
+					ctx = context.WithValue(ctx, scopetoken.ScopeNameContextKey, cc.Name)
 				}
 				if cc.LeexiFilterMode != "" && cc.LeexiFilterMode != "none" {
 					ctx = context.WithValue(ctx, scopetoken.LeexiFilterContextKey, &scopetoken.LeexiFilterContext{

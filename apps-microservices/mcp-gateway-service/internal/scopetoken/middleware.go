@@ -24,6 +24,12 @@ const AllowedToolsContextKey = "scope_allowed_tools"
 // forwarding a tools/call to a Leexi-tagged backend.
 const LeexiFilterContextKey = "scope_leexi_filter"
 
+// ScopeNameContextKey carries the human-readable name of the active scope
+// token or OAuth2 client. ScopedGateway reads it to override serverInfo.name
+// on the MCP initialize response so clients see the credential label instead
+// of the static gateway name.
+const ScopeNameContextKey = "scope_name"
+
 // LeexiFilterContext is the runtime view of the persisted scope.
 type LeexiFilterContext struct {
 	Mode             string
@@ -90,6 +96,7 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 
 				ct = &CachedToken{
 					ID:           dbToken.ID,
+					Name:         dbToken.Name,
 					ServerIDs:    serverIDs,
 					AllowedTools: allowedTools,
 					ExpiresAt:    dbToken.ExpiresAt,
@@ -122,6 +129,9 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 			ctx := context.WithValue(r.Context(), AllowedServersContextKey, ct.ServerIDs)
 			if ct.AllowedTools != nil {
 				ctx = context.WithValue(ctx, AllowedToolsContextKey, ct.AllowedTools)
+			}
+			if ct.Name != "" {
+				ctx = context.WithValue(ctx, ScopeNameContextKey, ct.Name)
 			}
 			if ct.LeexiFilterMode != "" && ct.LeexiFilterMode != "none" {
 				ctx = context.WithValue(ctx, LeexiFilterContextKey, &LeexiFilterContext{
