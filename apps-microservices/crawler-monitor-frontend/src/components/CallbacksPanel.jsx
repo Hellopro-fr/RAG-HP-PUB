@@ -1,16 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  XCircle, RefreshCw, RotateCcw, Trash2, AlertCircle, CheckCircle, Mail
+  RefreshCw, RotateCcw, Trash2, AlertCircle, CheckCircle, Mail,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
+import { Card } from './ui/card';
+import { Button } from './ui/button';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from './ui/table';
+import { cn } from '../lib/utils';
 
-const typeBadgeClasses = (type) => {
+const typeBadgeClass = (type) => {
   switch (type) {
-    case 'success': return 'bg-green-500/20 text-green-400';
-    case 'failure': return 'bg-red-500/20 text-red-400';
-    case 'stop':    return 'bg-yellow-500/20 text-yellow-400';
-    default:        return 'bg-gray-500/20 text-gray-300';
+    case 'success': return 'bg-success/15 text-success';
+    case 'failure': return 'bg-destructive/15 text-destructive';
+    case 'stop':    return 'bg-warning/15 text-warning';
+    default:        return 'bg-muted text-muted-foreground';
   }
 };
 
@@ -24,7 +30,7 @@ const CallbacksPanel = ({ token, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [busyIndex, setBusyIndex] = useState(null);          // 'retry-N' or 'delete-N'
+  const [busyIndex, setBusyIndex] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -56,10 +62,9 @@ const CallbacksPanel = ({ token, onClose }) => {
       }
       await fetchItems();
     } catch (err) {
-      // 502 from backend means retry attempted but webhook still failed — surface it nicely
       const msg = err.body && err.body.error ? err.body.error : err.message;
       setError(`Échec retry #${index} : ${msg}`);
-      await fetchItems(); // refresh to show updated manual_retry_attempts
+      await fetchItems();
     } finally {
       setBusyIndex(null);
     }
@@ -97,8 +102,12 @@ const CallbacksPanel = ({ token, onClose }) => {
     }
   };
 
+  // onClose is kept for parent-refresh side-effect, but there's no modal to close.
+  // It fires when the user navigates away (no-op if unset).
+  useEffect(() => () => { if (onClose) onClose(); }, [onClose]);
+
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+    <div className="p-4">
       <ConfirmDestructive
         open={showClearConfirm}
         title="Clear all callbacks"
@@ -116,126 +125,136 @@ const CallbacksPanel = ({ token, onClose }) => {
         busy={clearing}
       />
 
-      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-5xl h-[85vh] flex flex-col">
-        <div className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <Mail className="w-5 h-5 text-red-400" />
-            Callbacks en échec ({items.length})
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <h3 className="flex items-center gap-2 text-base font-semibold">
+            <Mail className="h-4 w-4 text-destructive" />
+            Callbacks en échec
+            <span className="font-mono text-xs font-normal text-muted-foreground">
+              ({items.length})
+            </span>
           </h3>
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={fetchItems}
               disabled={loading}
-              className="p-2 rounded hover:bg-gray-700 disabled:opacity-50"
               title="Rafraîchir"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            </Button>
             {items.length > 0 && (
-              <button
+              <Button
+                variant="destructive"
+                size="sm"
                 onClick={() => setShowClearConfirm(true)}
-                className="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded text-sm text-white flex items-center gap-2"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="h-4 w-4" />
                 Tout supprimer ({items.length})
-              </button>
+              </Button>
             )}
-            <button onClick={onClose} className="text-gray-400 hover:text-white" title="Fermer">
-              <XCircle className="w-6 h-6" />
-            </button>
           </div>
         </div>
 
         {error && (
-          <div className="px-4 py-2 bg-red-900/40 border-b border-red-700/50 text-red-300 text-sm flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" /> {error}
+          <div className="flex items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4" /> {error}
           </div>
         )}
         {success && (
-          <div className="px-4 py-2 bg-green-900/40 border-b border-green-700/50 text-green-300 text-sm flex items-center gap-2">
-            <CheckCircle className="w-4 h-4" /> {success}
+          <div className="flex items-center gap-2 border-b border-success/40 bg-success/10 px-4 py-2 text-sm text-success">
+            <CheckCircle className="h-4 w-4" /> {success}
           </div>
         )}
 
-        <div className="flex-1 overflow-auto">
+        <div className="max-h-[75vh] overflow-auto">
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center py-20">
-              <RefreshCw className="w-8 h-8 animate-spin text-blue-400" />
+              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : items.length === 0 ? (
-            <div className="text-center py-20 text-gray-400">
-              <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500/60" />
-              <p className="text-lg">Aucun callback en échec — tout est OK ✓</p>
+            <div className="py-20 text-center text-muted-foreground">
+              <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success/60" />
+              <p className="text-base">Aucun callback en échec — tout est OK ✓</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-900 sticky top-0">
-                <tr className="text-left text-gray-400 text-xs uppercase">
-                  <th className="px-3 py-2">When</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Crawl</th>
-                  <th className="px-3 py-2">URL</th>
-                  <th className="px-3 py-2">Error</th>
-                  <th className="px-3 py-2 text-right">Retries</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Crawl</TableHead>
+                  <TableHead>URL</TableHead>
+                  <TableHead>Error</TableHead>
+                  <TableHead className="text-right">Retries</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {items.map((entry, idx) => {
                   const isRetrying = busyIndex === `retry-${idx}`;
                   const isDeleting = busyIndex === `delete-${idx}`;
                   const ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString('fr-FR') : '—';
                   return (
-                    <tr key={idx} className="border-t border-gray-700 hover:bg-gray-700/30">
-                      <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{ts}</td>
-                      <td className="px-3 py-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${typeBadgeClasses(entry.webhook_type)}`}>
+                    <TableRow key={idx}>
+                      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{ts}</TableCell>
+                      <TableCell>
+                        <span className={cn('rounded px-1.5 py-0.5 text-[10px]', typeBadgeClass(entry.webhook_type))}>
                           {entry.webhook_type || 'unknown'}
                         </span>
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs text-gray-300">
-                        {truncate(entry.crawl_id, 16)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-300" title={entry.url}>
-                        <span className="font-mono text-xs">{truncate(entry.url, 50)}</span>
-                      </td>
-                      <td className="px-3 py-2 text-red-300" title={entry.error || entry.last_manual_retry_error || ''}>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{truncate(entry.crawl_id, 16)}</TableCell>
+                      <TableCell title={entry.url} className="font-mono text-xs">
+                        {truncate(entry.url, 50)}
+                      </TableCell>
+                      <TableCell
+                        className="text-xs text-destructive/90"
+                        title={entry.error || entry.last_manual_retry_error || ''}
+                      >
                         {truncate(entry.last_manual_retry_error || entry.error, 40)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-gray-400">
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-muted-foreground">
                         {entry.manual_retry_attempts || 0}
-                      </td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <button
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right">
+                        <Button
+                          size="sm"
+                          className="mr-1 h-7 px-2"
                           onClick={() => retryItem(idx)}
                           disabled={busyIndex !== null}
-                          className="px-2 py-1 mr-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 rounded text-xs text-white inline-flex items-center gap-1"
                           title="Rejouer le webhook"
                         >
-                          {isRetrying ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                          {isRetrying
+                            ? <RefreshCw className="h-3 w-3 animate-spin" />
+                            : <RotateCcw className="h-3 w-3" />}
                           Retry
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 hover:bg-destructive hover:text-destructive-foreground"
                           onClick={() => deleteItem(idx)}
                           disabled={busyIndex !== null}
-                          className="px-2 py-1 bg-gray-700 hover:bg-red-700 disabled:opacity-40 rounded text-xs text-white inline-flex items-center gap-1"
                           title="Supprimer cette entrée"
                         >
-                          {isDeleting ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                        </button>
-                      </td>
-                    </tr>
+                          {isDeleting
+                            ? <RefreshCw className="h-3 w-3 animate-spin" />
+                            : <Trash2 className="h-3 w-3" />}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </div>
 
-        <div className="px-4 py-2 border-t border-gray-700 text-[11px] text-gray-500">
+        <div className="border-t border-border p-3 text-[11px] text-muted-foreground">
           Les actions Retry / Delete / Clear sont tracées dans l&apos;audit log.
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

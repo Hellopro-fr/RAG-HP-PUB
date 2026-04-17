@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, XCircle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from './ui/dialog';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 
 /**
  * Type-to-confirm modal for destructive actions.
@@ -33,83 +39,72 @@ const ConfirmDestructive = ({
     if (open) {
       setTypedId('');
       setTypedWord('');
-      // Defer focus until after render
       setTimeout(() => idRef.current?.focus(), 50);
     }
   }, [open]);
 
-  if (!open) return null;
   const ready = typedId.trim() === shortId && typedWord.trim() === confirmWord;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg border border-red-500/30">
-        <div className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h3 className="text-lg font-bold text-red-400 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5" /> {title}
-          </h3>
-          <button
-            onClick={onCancel}
-            className="text-gray-400 hover:text-white disabled:opacity-50"
-            disabled={busy}
-            title="Annuler"
-          >
-            <XCircle className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div className="text-sm text-gray-300">{description}</div>
-          <div className="space-y-2">
-            <label className="text-xs text-gray-400 block">
-              Tape l&apos;identifiant <code className="text-orange-300">{shortId}</code> :
-            </label>
-            <input
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !busy) onCancel(); }}>
+      <DialogContent className="max-w-lg border-destructive/40">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="h-5 w-5" /> {title}
+          </DialogTitle>
+          <DialogDescription asChild>
+            <div className="pt-1 text-sm text-foreground">{description}</div>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm-id" className="text-xs text-muted-foreground">
+              Tape l&apos;identifiant{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-warning">{shortId}</code> :
+            </Label>
+            <Input
+              id="confirm-id"
               ref={idRef}
               value={typedId}
               onChange={e => setTypedId(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-red-500 focus:outline-none"
               placeholder={shortId}
               disabled={busy}
               autoComplete="off"
               spellCheck={false}
+              className="font-mono"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-xs text-gray-400 block">
-              Tape <code className="text-orange-300">{confirmWord}</code> en majuscules :
-            </label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm-word" className="text-xs text-muted-foreground">
+              Tape <code className="rounded bg-muted px-1 py-0.5 text-warning">{confirmWord}</code> en majuscules :
+            </Label>
+            <Input
+              id="confirm-word"
               value={typedWord}
               onChange={e => setTypedWord(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-red-500 focus:outline-none"
               placeholder={confirmWord}
               disabled={busy}
               autoComplete="off"
               spellCheck={false}
+              className="font-mono"
             />
           </div>
-          <div className="text-[11px] text-gray-500 italic">
+          <div className="text-[11px] italic text-muted-foreground">
             Cette action est tracée dans l&apos;audit log.
           </div>
         </div>
-        <div className="flex gap-2 justify-end p-4 border-t border-gray-700">
-          <button
-            onClick={onCancel}
-            disabled={busy}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm disabled:opacity-50"
-          >
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
             Annuler
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={!ready || busy}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-sm font-semibold text-white"
-          >
+          </Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={!ready || busy}>
             {busy ? 'En cours…' : title}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
