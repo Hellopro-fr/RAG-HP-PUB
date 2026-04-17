@@ -22,7 +22,7 @@ const CapacityPlanningPage = lazy(() => import('./pages/CapacityPlanningPage'));
 
 const PageFallback = () => (
   <div className="flex items-center justify-center py-20">
-    <RefreshCw className="w-8 h-8 animate-spin text-blue-400" />
+    <RefreshCw className="w-8 h-8 animate-spin text-primary" />
   </div>
 );
 

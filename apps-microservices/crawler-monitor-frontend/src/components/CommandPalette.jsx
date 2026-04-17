@@ -24,7 +24,7 @@ export function CommandPalette({ open, onOpenChange, onLogout, onRefresh }) {
   // Global keyboard: toggle on Cmd+K / Ctrl+K
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key?.toLowerCase() === 'k') {
         e.preventDefault();
         onOpenChange(!open);
       }
