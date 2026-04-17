@@ -70,9 +70,15 @@ def _nettoyer_resultats_prix(
     """
     Filtre les prix aberrants des résultats du matching v2 (méthode IQR + médiane).
 
-    - Pré-filtre : élimine les prix > ratio_mediane × médiane ou < médiane / ratio_mediane
-    - IQR : élimine les outliers au-delà de Q1/Q3 ± multiplicateur × IQR
-    - Les items sans prix parsable sont conservés (non rejetés)
+    borne_min / borne_max ne sont définis QUE si une coupe réelle a eu lieu de ce côté :
+    - borne_min est défini uniquement si des prix aberrants ont été rejetés en bas
+    - borne_max est défini uniquement si des prix aberrants ont été rejetés en haut
+    - None = aucune coupe de ce côté, la distribution est homogène
+
+    Étapes :
+    1. Pré-filtre médiane : élimine les prix hors [médiane/ratio ; médiane×ratio]
+    2. IQR sur les prix pré-filtrés : exclut les outliers au-delà de Q1/Q3 ± mult×IQR
+    3. Items sans prix parsable toujours conservés (non rejetés)
 
     Args:
         results: liste de dicts issus de matching_prix/matching/get
@@ -94,11 +100,11 @@ def _nettoyer_resultats_prix(
         else:
             items_sans_prix.append(item)
 
+    # Moins de 3 prix parsables : pas assez de données pour calculer des bornes
     if len(items_avec_prix) < 3:
-        prix_seuls = [p for p, _ in items_avec_prix]
         return {
-            "borne_min": min(prix_seuls) if prix_seuls else None,
-            "borne_max": max(prix_seuls) if prix_seuls else None,
+            "borne_min": None,
+            "borne_max": None,
             "results_nettoyes": [item for _, item in items_avec_prix] + items_sans_prix,
             "results_rejetes": [],
         }
@@ -106,41 +112,45 @@ def _nettoyer_resultats_prix(
     prix_tries = sorted(p for p, _ in items_avec_prix)
     mediane = _percentile_iqr(prix_tries, 50)
 
-    # Pré-filtre médiane
+    # Bornes du pré-filtre (filtre les valeurs manifestement erronées)
     borne_inf_mediane = mediane / ratio_mediane
     borne_sup_mediane = mediane * ratio_mediane
     prix_pre = [p for p in prix_tries if borne_inf_mediane <= p <= borne_sup_mediane]
 
-    if len(prix_pre) < 3:
-        borne_inf_finale = float(min(prix_pre)) if prix_pre else float(prix_tries[0])
-        borne_sup_finale = float(max(prix_pre)) if prix_pre else float(prix_tries[-1])
-    else:
+    # Bornes IQR (affinées sur les prix pré-filtrés)
+    borne_inf_iqr: Optional[float] = None
+    borne_sup_iqr: Optional[float] = None
+
+    if len(prix_pre) >= 3:
         q1 = _percentile_iqr(prix_pre, 25)
         q3 = _percentile_iqr(prix_pre, 75)
         iqr = q3 - q1
         borne_inf_iqr = max(q1 - multiplicateur * iqr, borne_inf_mediane)
         borne_sup_iqr = q3 + multiplicateur * iqr
 
-        filtres = [p for p in prix_pre if borne_inf_iqr <= p <= borne_sup_iqr]
+    # Borne effective : IQR si disponible, sinon pré-filtre seul
+    borne_inf_effective = borne_inf_iqr if borne_inf_iqr is not None else borne_inf_mediane
+    borne_sup_effective = borne_sup_iqr if borne_sup_iqr is not None else borne_sup_mediane
 
-        if not filtres:
-            borne_inf_finale = float(min(prix_pre))
-            borne_sup_finale = float(max(prix_pre))
-        else:
-            borne_inf_finale = float(min(filtres))
-            borne_sup_finale = float(max(filtres))
-
+    # Filtrage : on suit si une coupe a réellement eu lieu de chaque côté
     results_nettoyes = list(items_sans_prix)
     results_rejetes: List[Dict[str, Any]] = []
+    low_cut = False
+    high_cut = False
+
     for prix, item in items_avec_prix:
-        if borne_inf_finale <= prix <= borne_sup_finale:
-            results_nettoyes.append(item)
-        else:
+        if prix < borne_inf_effective:
             results_rejetes.append(item)
+            low_cut = True
+        elif prix > borne_sup_effective:
+            results_rejetes.append(item)
+            high_cut = True
+        else:
+            results_nettoyes.append(item)
 
     return {
-        "borne_min": borne_inf_finale,
-        "borne_max": borne_sup_finale,
+        "borne_min": round(borne_inf_effective, 2) if low_cut else None,
+        "borne_max": round(borne_sup_effective, 2) if high_cut else None,
         "results_nettoyes": results_nettoyes,
         "results_rejetes": results_rejetes,
     }
