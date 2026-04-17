@@ -26,6 +26,7 @@ export const queryKeys = {
   alerts:             () => ['alerts'],
   jobPerformance:     (id) => ['jobs', id, 'performance'],
   jobReplay:          (id) => ['jobs', id, 'replay'],
+  capacityPlanning:   (window) => ['capacity-planning', 'ram', window],
 };
 
 /* ---------- Jobs ---------- */
@@ -133,6 +134,18 @@ export function useJobPerformanceQuery(token, jobId, options = {}) {
     queryFn: () => api.get(`/jobs/${jobId}/performance`, token),
     enabled: !!token && isValidJobId(jobId),
     refetchInterval: 15 * 1000, // refresh every 15s while viewing a running job
+    ...options,
+  });
+}
+
+export function useCapacityPlanningQuery(token, window = '1h', options = {}) {
+  return useQuery({
+    queryKey: queryKeys.capacityPlanning(window),
+    queryFn: () => api.get('/capacity-planning/ram', token, { query: { window } }),
+    enabled: !!token,
+    // Aggregate view; not worth refetching frequently. User can click refresh.
+    staleTime: 60 * 1000,
+    refetchInterval: false,
     ...options,
   });
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Activity, RefreshCw, LogOut, FileText, Globe, Mail,
+  Activity, RefreshCw, LogOut, FileText, Globe, Mail, SlidersHorizontal,
 } from 'lucide-react';
 import { setOnUnauthorized } from './lib/api';
 import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
@@ -19,6 +19,7 @@ const AuditPage     = lazy(() => import('./pages/AuditPage'));
 const DomainsPage   = lazy(() => import('./pages/DomainsPage'));
 const DomainPage    = lazy(() => import('./pages/DomainPage'));
 const ReplayPage    = lazy(() => import('./pages/ReplayPage'));
+const CapacityPlanningPage = lazy(() => import('./pages/CapacityPlanningPage'));
 
 const PageFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -206,6 +207,13 @@ const App = () => {
               )}
             </Link>
             <Link
+              to="/capacity-planning"
+              className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
+              title="Capacity Planning"
+            >
+              <SlidersHorizontal className="w-5 h-5" />
+            </Link>
+            <Link
               to="/audit"
               className="p-2 rounded-md hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
               title="Audit log"
@@ -234,6 +242,7 @@ const App = () => {
           <Route path="/audit" element={<AuditPage token={token} />} />
           <Route path="/domains" element={<DomainsPage token={token} />} />
           <Route path="/domains/:domain" element={<DomainPage token={token} />} />
+          <Route path="/capacity-planning" element={<CapacityPlanningPage token={token} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
