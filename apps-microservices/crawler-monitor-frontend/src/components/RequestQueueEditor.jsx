@@ -3,6 +3,9 @@ import {
   Code, XCircle, RefreshCw, Search, Trash2, Filter,
   ChevronLeft, ChevronRight, AlignLeft, CheckCircle
 } from 'lucide-react';
+import Editor from 'react-simple-code-editor';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-json';
 import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
 
@@ -71,7 +74,13 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setSuccessMsg(null);
     try {
       const data = await api.get(`/jobs/${jobId}/request-queues/${file.domain}/${file.name}`, token);
-      setContent(JSON.stringify(data, null, 2));
+      // Defensive pretty-print: backend returns parsed object, but a stringified
+      // payload could arrive in the future and we should not crash on it.
+      try {
+        setContent(JSON.stringify(data, null, 2));
+      } catch {
+        setContent(typeof data === 'string' ? data : String(data));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -191,6 +200,23 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <style>{`
+        .queue-json-editor .token.property    { color: #22d3ee; } /* cyan-400 */
+        .queue-json-editor .token.string      { color: #4ade80; } /* green-400 */
+        .queue-json-editor .token.number      { color: #fb923c; } /* orange-400 */
+        .queue-json-editor .token.boolean,
+        .queue-json-editor .token.null        { color: #c084fc; } /* purple-400 */
+        .queue-json-editor .token.punctuation { color: #6b7280; } /* gray-500 */
+        .queue-json-editor .token.operator    { color: #9ca3af; } /* gray-400 */
+        .queue-json-editor textarea,
+        .queue-json-editor pre {
+          white-space: pre !important;
+          overflow-wrap: normal !important;
+          word-break: normal !important;
+          color: #e5e7eb; /* gray-200 — base text */
+          background: transparent !important;
+        }
+      `}</style>
       <ConfirmDestructive
         open={showDropConfirm}
         title="Drop entire queue"
@@ -429,12 +455,21 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                 {error && <div className="p-2 bg-red-900/50 text-red-200 text-sm border-b border-red-700">{error}</div>}
                 {successMsg && <div className="p-2 bg-green-900/50 text-green-200 text-sm border-b border-green-700">{successMsg}</div>}
 
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  className="flex-1 w-full bg-gray-900 text-gray-300 font-mono text-sm p-4 focus:outline-none resize-none"
-                  spellCheck="false"
-                />
+                <div className="queue-json-editor flex-1 bg-gray-900 overflow-auto">
+                  <Editor
+                    value={content}
+                    onValueChange={setContent}
+                    highlight={code => Prism.highlight(code, Prism.languages.json, 'json')}
+                    padding={16}
+                    textareaClassName="focus:outline-none"
+                    preClassName=""
+                    style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                      fontSize: 13,
+                      minHeight: '100%',
+                    }}
+                  />
+                </div>
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-500">
