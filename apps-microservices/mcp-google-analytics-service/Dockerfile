@@ -8,7 +8,8 @@ COPY apps-microservices/mcp-google-analytics-service/entrypoint.sh /app/entrypoi
 COPY apps-microservices/mcp-google-analytics-service/p12_to_json.py /app/p12_to_json.py
 RUN chmod +x /app/entrypoint.sh
 
-EXPOSE 8583
+ENV MCP_PORT=8583
+EXPOSE ${MCP_PORT}
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["mcp-proxy", "--port", "8583", "--host", "0.0.0.0", "--pass-environment", "--allow-origin", "*", "--stateless", "--", "analytics-mcp"]
+CMD ["sh", "-c", "mcp-proxy --port ${MCP_PORT} --host 0.0.0.0 --pass-environment --allow-origin '*' --stateless -- analytics-mcp"]
