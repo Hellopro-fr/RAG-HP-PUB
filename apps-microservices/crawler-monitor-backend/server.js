@@ -516,7 +516,11 @@ app.get('/api/jobs/:id/request-queues', async (req, res) => {
             method: data.method,
             retryCount: data.retryCount,
             errorMessages: data.errorMessages,
-            isHandled: Boolean(data.handledAt),
+            // Crawlee v3 marks a request as handled by setting orderNo to null (pending
+            // requests have a positive number used for FIFO ordering). handledAt IS set
+            // too, but it lives inside the nested `json` string field, not at the top
+            // level — so checking data.handledAt is always undefined here.
+            isHandled: data.orderNo === null,
             rawContent: content, // for search (matches legacy behavior)
           });
         } catch {
@@ -784,8 +788,11 @@ app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {
                   }
                 }
 
-                // Check if handled
-                if (data.handledAt) {
+                // Check if handled — Crawlee v3 sets orderNo to null when a request is
+                // marked as handled. handledAt is ALSO set but it lives inside the
+                // nested `json` string field, not at the top level, so data.handledAt
+                // here is always undefined.
+                if (data.orderNo === null) {
                   stats.handled++;
                 } else {
                   stats.pending++;

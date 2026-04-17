@@ -16,6 +16,10 @@ export const FIXTURE_ROOT = join(__dirname, '..', 'fixtures');
  * @param {Array<{url, error?, statusCode?, statusText?}>} [opts.errorUrls=[]]
  * @param {string[]} [opts.nfrUrls=[]]                              - URLs for the nfr-{domain} dataset
  * @param {Array<{url, method?, retryCount?, errorMessages?, handledAt?}>} [opts.queueFiles=[]]
+ *   - Tests pass the conceptual shape; the helper emits the actual Crawlee v3
+ *     on-disk shape: top-level fields (id, url, method, orderNo, retryCount,
+ *     uniqueKey) plus a nested `json` string with the full request body. When
+ *     `handledAt` is truthy, `orderNo` is set to null (Crawlee's handled marker).
  * @param {Array<{dir, name, body}>} [opts.rawFiles=[]]             - arbitrary files (for malformed-JSON tests)
  */
 export async function setupFixture(jobId, opts = {}) {
@@ -63,12 +67,36 @@ export async function setupFixture(jobId, opts = {}) {
     }
   }
 
-  // queue files
+  // queue files — emit Crawlee v3 on-disk shape so backend tests match production.
   if (queueFiles.length) {
     const dir = join(jobRoot, 'storage', 'request_queues', domain);
     await mkdir(dir, { recursive: true });
     for (let i = 0; i < queueFiles.length; i++) {
-      await writeFile(join(dir, `${i}.json`), JSON.stringify(queueFiles[i]));
+      const entry = queueFiles[i];
+      const url = entry.url;
+      const method = entry.method || 'GET';
+      const retryCount = entry.retryCount || 0;
+      const errorMessages = entry.errorMessages || [];
+      const uniqueKey = entry.uniqueKey || url;
+      const id = entry.id || `req_${jobId}_${i}`;
+      const isHandled = Boolean(entry.handledAt);
+      const innerJson = {
+        id, url, loadedUrl: url, uniqueKey, method,
+        noRetry: false, retryCount, errorMessages, headers: {},
+        userData: { __crawlee: { enqueueStrategy: 'same-domain', state: 4 } },
+      };
+      if (entry.handledAt) innerJson.handledAt = entry.handledAt;
+      const crawleeFile = {
+        id,
+        json: JSON.stringify(innerJson),
+        method,
+        // Crawlee's handled marker: null = handled, positive int = pending (FIFO order).
+        orderNo: isHandled ? null : Date.now() + i,
+        retryCount,
+        uniqueKey,
+        url,
+      };
+      await writeFile(join(dir, `${i}.json`), JSON.stringify(crawleeFile));
     }
   }
 
