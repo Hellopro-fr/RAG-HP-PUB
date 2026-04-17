@@ -4,6 +4,12 @@ import { Breadcrumbs } from './Breadcrumbs';
 import { ThemeToggle } from '../ThemeToggle';
 import { cn } from '../../lib/utils';
 
+// Détection plateforme : Ctrl+K sur Windows/Linux, ⌘K sur macOS. Évalué une
+// seule fois à l'import — aucune prop runtime nécessaire.
+const isMac =
+  typeof navigator !== 'undefined' &&
+  /Mac|iPhone|iPod|iPad/.test(navigator.platform || navigator.userAgent || '');
+
 /**
  * Topbar — sticky header above the routed content.
  *
@@ -44,7 +50,13 @@ export function Topbar({
             <Search className="h-3.5 w-3.5" />
             <span>Rechercher…</span>
             <kbd className="ml-2 inline-flex items-center gap-0.5 rounded border border-border bg-muted px-1 font-mono text-[10px] text-muted-foreground">
-              <span className="text-[11px] leading-none">⌘</span>K
+              {isMac ? (
+                <>
+                  <span className="text-[11px] leading-none">⌘</span>K
+                </>
+              ) : (
+                'Ctrl+K'
+              )}
             </kbd>
           </button>
         )}
