@@ -170,6 +170,7 @@ export async function readAuditEntries({
   to,
   action,
   user,
+  target,
   limit = 100,
   offset = 0,
 } = {}) {
@@ -217,6 +218,7 @@ export async function readAuditEntries({
       if (ts < fromDate.getTime() || ts > toDate.getTime()) continue;
       if (action && entry.action !== action) continue;
       if (user && entry.user !== user) continue;
+      if (target && entry.target !== target) continue;
       matches.push(entry);
     }
   }

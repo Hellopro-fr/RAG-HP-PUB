@@ -10,7 +10,8 @@
  */
 
 export const JOB_PERF_PREFIX = 'job:perf:';
-export const JOB_PERF_RETENTION_MS = 24 * 60 * 60 * 1000; // 24h
+// Extended to 7 days so the replay feature can scrub recently-completed jobs.
+export const JOB_PERF_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7d
 
 /**
  * Persist a heartbeat sample indexed by jobId (fire-and-forget from heartbeat handler).
