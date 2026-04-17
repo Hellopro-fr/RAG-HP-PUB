@@ -2085,7 +2085,7 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8594:8594"
+      - "8594:8583"
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
       - GOOGLE_PROJECT_ID=${GOOGLE_ANALYTICS_PROJECT_ID_MINISITE}
