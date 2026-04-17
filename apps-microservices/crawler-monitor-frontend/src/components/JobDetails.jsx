@@ -123,7 +123,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
 
           {job.errors && job.errors.length > 0 && (
             <>
-              <ErrorVisualization errors={job.errors} warnings={job.warnings || []} />
+              <ErrorVisualization errors={job.errors} />
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-destructive">
                   <AlertCircle className="h-4 w-4" />
