@@ -18,6 +18,134 @@ from app.core.credentials import settings
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Helpers : nettoyage des prix aberrants (IQR + borne médiane, sans numpy)
+# ---------------------------------------------------------------------------
+
+def _parser_prix(valeur_str: Any) -> Optional[float]:
+    """
+    Convertit une chaîne de prix en float.
+    Gère : symboles (≥ ≤ € $), espaces, séparateurs de milliers (. ou espace),
+    virgule décimale française.
+    """
+    if not isinstance(valeur_str, str):
+        return None
+    s = re.sub(r'[≥≤<>~\s€$]', '', valeur_str)
+
+    # "6.514.245" → séparateur de milliers → "6514245"
+    if s.count('.') > 1:
+        s = s.replace('.', '')
+    elif s.count('.') == 1:
+        avant, apres = s.split('.')
+        if len(apres) == 3 and avant.isdigit() and len(avant) <= 3:
+            s = s.replace('.', '')
+
+    s = s.replace(',', '.')
+
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _percentile_iqr(sorted_values: List[float], pct: float) -> float:
+    """Percentile par interpolation linéaire (équivalent np.percentile, sans numpy)."""
+    n = len(sorted_values)
+    if n == 1:
+        return float(sorted_values[0])
+    idx = (pct / 100) * (n - 1)
+    lower = int(idx)
+    upper = lower + 1
+    if upper >= n:
+        return float(sorted_values[-1])
+    frac = idx - lower
+    return sorted_values[lower] + frac * (sorted_values[upper] - sorted_values[lower])
+
+
+def _nettoyer_resultats_prix(
+    results: List[Dict[str, Any]],
+    multiplicateur: float = 1.5,
+    ratio_mediane: float = 10.0,
+) -> Dict[str, Any]:
+    """
+    Filtre les prix aberrants des résultats du matching v2 (méthode IQR + médiane).
+
+    - Pré-filtre : élimine les prix > ratio_mediane × médiane ou < médiane / ratio_mediane
+    - IQR : élimine les outliers au-delà de Q1/Q3 ± multiplicateur × IQR
+    - Les items sans prix parsable sont conservés (non rejetés)
+
+    Args:
+        results: liste de dicts issus de matching_prix/matching/get
+        multiplicateur: coefficient IQR (1.5 standard)
+        ratio_mediane: tolérance autour de la médiane (10× par défaut)
+
+    Returns:
+        dict avec 'borne_min', 'borne_max', 'results_nettoyes', 'results_rejetes'
+    """
+    items_avec_prix: List[tuple] = []
+    items_sans_prix: List[Dict[str, Any]] = []
+
+    for item in results:
+        bloc = item.get("prix", {})
+        raw = (bloc.get("valeur_prix") or bloc.get("prix")) if isinstance(bloc, dict) else None
+        p = _parser_prix(raw)
+        if p is not None and p > 0:
+            items_avec_prix.append((p, item))
+        else:
+            items_sans_prix.append(item)
+
+    if len(items_avec_prix) < 3:
+        prix_seuls = [p for p, _ in items_avec_prix]
+        return {
+            "borne_min": min(prix_seuls) if prix_seuls else None,
+            "borne_max": max(prix_seuls) if prix_seuls else None,
+            "results_nettoyes": [item for _, item in items_avec_prix] + items_sans_prix,
+            "results_rejetes": [],
+        }
+
+    prix_tries = sorted(p for p, _ in items_avec_prix)
+    mediane = _percentile_iqr(prix_tries, 50)
+
+    # Pré-filtre médiane
+    borne_inf_mediane = mediane / ratio_mediane
+    borne_sup_mediane = mediane * ratio_mediane
+    prix_pre = [p for p in prix_tries if borne_inf_mediane <= p <= borne_sup_mediane]
+
+    if len(prix_pre) < 3:
+        borne_inf_finale = float(min(prix_pre)) if prix_pre else float(prix_tries[0])
+        borne_sup_finale = float(max(prix_pre)) if prix_pre else float(prix_tries[-1])
+    else:
+        q1 = _percentile_iqr(prix_pre, 25)
+        q3 = _percentile_iqr(prix_pre, 75)
+        iqr = q3 - q1
+        borne_inf_iqr = max(q1 - multiplicateur * iqr, borne_inf_mediane)
+        borne_sup_iqr = q3 + multiplicateur * iqr
+
+        filtres = [p for p in prix_pre if borne_inf_iqr <= p <= borne_sup_iqr]
+
+        if not filtres:
+            borne_inf_finale = float(min(prix_pre))
+            borne_sup_finale = float(max(prix_pre))
+        else:
+            borne_inf_finale = float(min(filtres))
+            borne_sup_finale = float(max(filtres))
+
+    results_nettoyes = list(items_sans_prix)
+    results_rejetes: List[Dict[str, Any]] = []
+    for prix, item in items_avec_prix:
+        if borne_inf_finale <= prix <= borne_sup_finale:
+            results_nettoyes.append(item)
+        else:
+            results_rejetes.append(item)
+
+    return {
+        "borne_min": borne_inf_finale,
+        "borne_max": borne_sup_finale,
+        "results_nettoyes": results_nettoyes,
+        "results_rejetes": results_rejetes,
+    }
+
+
 def format_numeric_constraint(constraint: Any, unite: str = "") -> str:
     """
     Formate une contrainte numérique (min/max/exact) en string lisible.
@@ -750,6 +878,46 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             }
 
         logger.info(f"[{id_categorie}] V2 — {len(results)} prix matchés")
+
+        # =====================================================================
+        # ÉTAPE 1b : Filtrage des prix aberrants (IQR + borne médiane)
+        # =====================================================================
+        nettoyage = _nettoyer_resultats_prix(results)
+        results = nettoyage["results_nettoyes"]
+        nb_rejetes = len(nettoyage["results_rejetes"])
+
+        bornes_str = (
+            f" (bornes [{nettoyage['borne_min']:.2f} – {nettoyage['borne_max']:.2f}])"
+            if nettoyage["borne_min"] is not None else ""
+        )
+        write_log(tracking_file, "--- NETTOYAGE PRIX ---")
+        write_log(tracking_file, f"Gardés : {len(results)} | Rejetés : {nb_rejetes}{bornes_str}")
+        write_log(tracking_file, json.dumps(
+            {
+                "borne_min": nettoyage["borne_min"],
+                "borne_max": nettoyage["borne_max"],
+                "nb_gardes": len(results),
+                "nb_rejetes": nb_rejetes,
+                "prix_rejetes": [
+                    (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
+                    for item in nettoyage["results_rejetes"]
+                ],
+            },
+            ensure_ascii=False, indent=2
+        ))
+        write_log(tracking_file, "")
+
+        if not results:
+            elapsed = time.time() - start_time
+            write_log(tracking_file, "ERREUR : Tous les prix ont été rejetés après nettoyage")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": "Tous les prix matchés ont été éliminés comme aberrants"
+            }
 
         # =====================================================================
         # ÉTAPE 2 : Formater les résultats matchés (même format que v1 chunks)
