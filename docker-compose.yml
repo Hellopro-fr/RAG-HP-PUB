@@ -2081,7 +2081,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/mcp-google-analytics-service/Dockerfile
-    container_name: mcp-google-analytics-service
+    container_name: mcp-google-analytics-minisite-service
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
