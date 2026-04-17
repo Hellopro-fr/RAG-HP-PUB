@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Sheet, SheetContent, SheetTitle } from '../ui/sheet';
+import { CommandPalette } from '../CommandPalette';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
@@ -17,7 +18,6 @@ export function AppShell({
   onLogout,
   onRefresh,
   isRefreshing = false,
-  onOpenCommandPalette,
 }) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -27,6 +27,7 @@ export function AppShell({
     }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const toggleCollapsed = () => {
     setCollapsed((c) => {
@@ -74,7 +75,7 @@ export function AppShell({
         <div className="flex flex-1 min-w-0 flex-col">
           <Topbar
             onOpenMobileSidebar={() => setMobileOpen(true)}
-            onOpenCommandPalette={onOpenCommandPalette}
+            onOpenCommandPalette={() => setPaletteOpen(true)}
             onRefresh={onRefresh}
             isRefreshing={isRefreshing}
           />
@@ -83,6 +84,13 @@ export function AppShell({
           </main>
         </div>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onLogout={onLogout}
+        onRefresh={onRefresh}
+      />
     </div>
   );
 }
