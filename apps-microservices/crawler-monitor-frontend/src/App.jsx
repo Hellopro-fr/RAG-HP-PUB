@@ -14,6 +14,7 @@ import CallbacksPage from './pages/CallbacksPage';
 import AuditPage from './pages/AuditPage';
 import DomainsPage from './pages/DomainsPage';
 import DomainPage from './pages/DomainPage';
+import ReplayPage from './pages/ReplayPage';
 
 /**
  * App — auth gate + layout shell + router.
@@ -190,6 +191,7 @@ const App = () => {
         <Route path="/jobs/:id" element={<Overview token={token} replicas={replicas} />}>
           <Route path="queue" element={<QueuePage token={token} />} />
           <Route path="dataset" element={<DatasetPage token={token} />} />
+          <Route path="replay" element={<ReplayPage token={token} />} />
         </Route>
         <Route path="/callbacks" element={<CallbacksPage token={token} onClose={() => callbacksQuery.refetch()} />} />
         <Route path="/audit" element={<AuditPage token={token} />} />

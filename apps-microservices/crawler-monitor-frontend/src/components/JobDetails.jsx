@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import {
-  XCircle, Code, Server, Clock, CheckCircle, AlertCircle
+  XCircle, Code, Server, Clock, CheckCircle, AlertCircle, Play
 } from 'lucide-react';
 import StatCard from './StatCard';
 import ErrorVisualization from './ErrorVisualization';
@@ -73,6 +73,14 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
           >
             <Server className="w-4 h-4" />
             Analyser Dataset
+          </Link>
+          <Link
+            to={`/jobs/${job.id}/replay`}
+            className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors text-white"
+            title="Rejouer l'évolution CPU/RAM du crawl"
+          >
+            <Play className="w-4 h-4" />
+            Replay
           </Link>
           <button
             onClick={onToggleRaw}

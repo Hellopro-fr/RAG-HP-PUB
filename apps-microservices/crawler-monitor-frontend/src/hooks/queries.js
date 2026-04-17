@@ -25,6 +25,7 @@ export const queryKeys = {
   domainDetail:       (domain, window) => ['domains', domain, window],
   alerts:             () => ['alerts'],
   jobPerformance:     (id) => ['jobs', id, 'performance'],
+  jobReplay:          (id) => ['jobs', id, 'replay'],
 };
 
 /* ---------- Jobs ---------- */
@@ -128,6 +129,17 @@ export function useJobPerformanceQuery(token, jobId, options = {}) {
     queryFn: () => api.get(`/jobs/${jobId}/performance`, token),
     enabled: !!token && isValidJobId(jobId),
     refetchInterval: 15 * 1000, // refresh every 15s while viewing a running job
+    ...options,
+  });
+}
+
+export function useJobReplayQuery(token, jobId, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.jobReplay(jobId),
+    queryFn: () => api.get(`/jobs/${jobId}/replay`, token),
+    enabled: !!token && isValidJobId(jobId),
+    // Replay is static historical data; no auto-refresh.
+    staleTime: 30 * 1000,
     ...options,
   });
 }
