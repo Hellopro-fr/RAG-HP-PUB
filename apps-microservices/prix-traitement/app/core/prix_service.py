@@ -899,6 +899,10 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                     "borne_max": nettoyage["borne_max"],
                     "nb_gardes": len(results),
                     "nb_rejetes": nb_rejetes,
+                    "prix_gardes": [
+                        (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
+                        for item in results
+                    ],
                     "prix_rejetes": [
                         (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
                         for item in nettoyage["results_rejetes"]
