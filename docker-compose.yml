@@ -1767,6 +1767,7 @@ services:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking/prix-extraction-message:ro
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking/prix-extraction-devis:ro
       - /mnt/data/docker/images/prix-extraction/prix-caracterisation:/app/tracking/prix-caracterisation:ro
+      - /mnt/data/docker/images/prix-extraction/prix-traitement:/app/tracking/prix-traitement:ro
     networks:
       - services-net
     logging: *logging_defaults
@@ -2003,6 +2004,8 @@ services:
       SERVICE_NAME: prix-traitement
     env_file:
       - .env
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-traitement:/app/tracking
     networks:
       - services-net
     logging: *logging_defaults
