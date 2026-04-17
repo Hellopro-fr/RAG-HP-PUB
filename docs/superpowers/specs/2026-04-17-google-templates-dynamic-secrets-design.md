@@ -64,17 +64,17 @@ Control plane (gateway) is separated from runtime (subprocess host) so the Go ga
 │  - image: python + mcp-proxy +          │
 │    analytics-mcp + mcp-gsc              │
 │  - supervisor per uploaded JSON         │
-│  - allocates port 9001–9099 per inst    │
+│  - allocates port 15000–15099 per inst  │
 │  - writes JSON to tmpfs, shreds on del  │
 │  - admin API (register/unregister/      │
 │    reconcile/status)                    │
 └───────────────┬─────────────────────────┘
                 │ asyncio.subprocess
                 ▼
-  mcp-proxy :9001 → analytics-mcp (key A)
-  mcp-proxy :9002 → analytics-mcp (key B)
-  mcp-proxy :9003 → mcp-gsc       (key C)
-  mcp-proxy :9004 → mcp-gsc       (key D)
+  mcp-proxy :15000 → analytics-mcp (key A)
+  mcp-proxy :15001 → analytics-mcp (key B)
+  mcp-proxy :15002 → mcp-gsc       (key C)
+  mcp-proxy :15003 → mcp-gsc       (key D)
 ```
 
 ### Why split (vs. running `mcp-proxy` inside the gateway)
@@ -193,7 +193,7 @@ Gateway → runner callbacks (admin-token only, no JWT):
   "runner_status": "pending",
   "runner_port": null,
   "mcp_server_id": "7f2a...-uuid",
-  "url": "http://mcp-google-templates-runner:9001",
+  "url": "http://mcp-google-templates-runner:15000",
   "created_at": "2026-04-17T10:00:00Z"
 }
 ```
@@ -228,8 +228,8 @@ Runner:
 | `MCP_GATEWAY_ADMIN_TOKEN` | — | Same shared secret |
 | `RUNNER_ADMIN_TOKEN` | — | Incoming admin token on `/admin/*` (can be the same value as `MCP_GATEWAY_ADMIN_TOKEN`, but split for rotation) |
 | `RUNNER_PORT` | `8590` | Admin API port |
-| `RUNNER_INSTANCE_PORT_START` | `9001` | First port in the dynamic pool |
-| `RUNNER_INSTANCE_PORT_END` | `9099` | Last port in the dynamic pool |
+| `RUNNER_INSTANCE_PORT_START` | `15000` | First port in the dynamic pool |
+| `RUNNER_INSTANCE_PORT_END` | `15099` | Last port in the dynamic pool |
 
 ## Supervision Model
 
@@ -416,7 +416,7 @@ Component tests for `TemplatesView`, `TemplateInstanceCard`, `AddInstanceModal` 
 ## Risks / Open Items
 
 - **`mcp-proxy` cold start ~2s per instance.** Acceptable for single uploads. Painful if the runner restarts with 20+ instances. Mitigation: `asyncio` reconcile with bounded concurrency = 5.
-- **Port range sizing.** 9001–9099 = 99 instances per runner. If HelloPro outgrows this, widen the range (config already supports it) or migrate to unix sockets (breaking contract change between runner and gateway).
+- **Port range sizing.** 15000–15099 = 100 instances per runner. If HelloPro outgrows this, widen the range (config already supports it) or migrate to unix sockets (breaking contract change between runner and gateway).
 - **Upstream package breakage.** `analytics-mcp` and `mcp-gsc` are third-party. Pin versions in runner's `requirements.txt`. Upgrade only via explicit PR with a smoke-test in staging.
 - **`mcp-gsc` local patch.** The existing GSC service ships a patched `mcp_gsc/__init__.py` fixing two bugs. The new runner must carry the same patch until fixed upstream — copy the patch into the runner image.
 - **Runner is a single point of failure.** Restart ≈ 2–10 seconds of instance downtime (spawn pool cold start). Multi-runner scheduling is out of scope; a single replica is sufficient for current scale.
