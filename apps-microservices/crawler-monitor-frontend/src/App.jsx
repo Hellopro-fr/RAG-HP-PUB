@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -8,13 +8,23 @@ import { setOnUnauthorized } from './lib/api';
 import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
 import LoginPage from './components/LoginPage';
 import Overview from './pages/Overview';
-import QueuePage from './pages/QueuePage';
-import DatasetPage from './pages/DatasetPage';
-import CallbacksPage from './pages/CallbacksPage';
-import AuditPage from './pages/AuditPage';
-import DomainsPage from './pages/DomainsPage';
-import DomainPage from './pages/DomainPage';
-import ReplayPage from './pages/ReplayPage';
+
+// Lazy-loaded pages: downloaded only when the user navigates to them.
+// Shrinks the initial bundle (Overview is the main entry; the rest is 50%+ of code
+// that users rarely touch on first visit).
+const QueuePage     = lazy(() => import('./pages/QueuePage'));
+const DatasetPage   = lazy(() => import('./pages/DatasetPage'));
+const CallbacksPage = lazy(() => import('./pages/CallbacksPage'));
+const AuditPage     = lazy(() => import('./pages/AuditPage'));
+const DomainsPage   = lazy(() => import('./pages/DomainsPage'));
+const DomainPage    = lazy(() => import('./pages/DomainPage'));
+const ReplayPage    = lazy(() => import('./pages/ReplayPage'));
+
+const PageFallback = () => (
+  <div className="flex items-center justify-center py-20">
+    <RefreshCw className="w-8 h-8 animate-spin text-blue-400" />
+  </div>
+);
 
 /**
  * App — auth gate + layout shell + router.
@@ -186,19 +196,21 @@ const App = () => {
         </div>
       </header>
 
-      <Routes>
-        <Route path="/" element={<Overview token={token} replicas={replicas} />} />
-        <Route path="/jobs/:id" element={<Overview token={token} replicas={replicas} />}>
-          <Route path="queue" element={<QueuePage token={token} />} />
-          <Route path="dataset" element={<DatasetPage token={token} />} />
-          <Route path="replay" element={<ReplayPage token={token} />} />
-        </Route>
-        <Route path="/callbacks" element={<CallbacksPage token={token} onClose={() => callbacksQuery.refetch()} />} />
-        <Route path="/audit" element={<AuditPage token={token} />} />
-        <Route path="/domains" element={<DomainsPage token={token} />} />
-        <Route path="/domains/:domain" element={<DomainPage token={token} />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/" element={<Overview token={token} replicas={replicas} />} />
+          <Route path="/jobs/:id" element={<Overview token={token} replicas={replicas} />}>
+            <Route path="queue" element={<QueuePage token={token} />} />
+            <Route path="dataset" element={<DatasetPage token={token} />} />
+            <Route path="replay" element={<ReplayPage token={token} />} />
+          </Route>
+          <Route path="/callbacks" element={<CallbacksPage token={token} onClose={() => callbacksQuery.refetch()} />} />
+          <Route path="/audit" element={<AuditPage token={token} />} />
+          <Route path="/domains" element={<DomainsPage token={token} />} />
+          <Route path="/domains/:domain" element={<DomainPage token={token} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 }

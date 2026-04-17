@@ -19,6 +19,9 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  // Debounced copy of searchTerm: updated 300ms after the user stops typing.
+  // Prevents a backend call on every keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Status filter state (Task 9)
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'handled'
@@ -30,9 +33,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
+  // Debounce the search term (one effect + timeout)
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
+
   useEffect(() => {
     fetchFiles();
-  }, [jobId, page, searchTerm, statusFilter]); // Refetch on page, search, or status change
+  }, [jobId, page, debouncedSearch, statusFilter]); // Refetch on page, (debounced) search, or status change
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -43,7 +52,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
         { query: {
             page: String(page),
             limit: String(limit),
-            search: searchTerm,
+            search: debouncedSearch,
             status: statusFilter,
           } }
       );
