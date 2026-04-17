@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { useTimelineQuery } from '../hooks/queries';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
@@ -158,4 +158,4 @@ const Timeline = ({ token, onBucketClick }) => {
   );
 };
 
-export default Timeline;
+export default memo(Timeline);

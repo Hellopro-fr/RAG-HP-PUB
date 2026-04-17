@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { AlertTriangle } from 'lucide-react';
 import { useCapacityHistoryQuery } from '../hooks/queries';
@@ -91,4 +91,4 @@ const CapacityBar = ({ capacity, token }) => {
   );
 };
 
-export default CapacityBar;
+export default memo(CapacityBar);

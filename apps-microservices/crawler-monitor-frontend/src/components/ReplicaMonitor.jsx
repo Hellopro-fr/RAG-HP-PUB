@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Server, Cpu } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { useJobsQuery, useReplicasHistoryQuery } from '../hooks/queries';
@@ -241,4 +241,9 @@ const ReplicaMonitor = ({ replicas, token }) => {
   );
 };
 
-export default ReplicaMonitor;
+// React.memo: skip re-render when the `replicas` prop dict has the same
+// identity. App.jsx now batches heartbeats so we only get a new ref ~1/s.
+// Without memo, EVERY re-render of Overview (which happens on every state
+// change — filters, pagination, job selection) would force ReplicaMonitor
+// to rebuild all its Recharts sparklines. Huge CPU saving.
+export default memo(ReplicaMonitor);

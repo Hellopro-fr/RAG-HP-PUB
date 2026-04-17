@@ -73,6 +73,15 @@ const App = () => {
   const failedCallbackCount = callbacksQuery.data?.count || 0;
   const isJobsLoading = !!queryClient.isFetching({ queryKey: queryKeys.jobs() });
 
+  // Heartbeat batching: replicas emit every 2s each. With N replicas we were
+  // getting N re-renders per 2s (= full tree re-render of Overview + Timeline
+  // + ReplicaMonitor + Recharts internals). On long sessions this balloons
+  // Chrome's memory into the GB range (Recharts retains D3 state, React
+  // accumulates fibers). We now buffer heartbeats in a ref and flush once per
+  // second max — 1 re-render/s regardless of replica count.
+  const pendingReplicasRef = useRef({});
+  const replicasFlushTimerRef = useRef(null);
+
   // WebSocket connection
   useEffect(() => {
     if (!token) return;
@@ -87,16 +96,27 @@ const App = () => {
       setIsConnected(true);
     };
 
+    const flushReplicas = () => {
+      replicasFlushTimerRef.current = null;
+      const pending = pendingReplicasRef.current;
+      pendingReplicasRef.current = {};
+      if (Object.keys(pending).length === 0) return;
+      setReplicas(prev => ({ ...prev, ...pending }));
+    };
+
     wsRef.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'job_update') {
           handleJobUpdate(data.crawl_id);
         } else if (data.type === 'replica_heartbeat') {
-          setReplicas(prev => ({
-            ...prev,
-            [data.data.replicaId]: data.data
-          }));
+          const hb = data.data;
+          if (!hb || !hb.replicaId) return;
+          // Buffer: same replicaId collapses to the latest heartbeat only.
+          pendingReplicasRef.current[hb.replicaId] = hb;
+          if (!replicasFlushTimerRef.current) {
+            replicasFlushTimerRef.current = setTimeout(flushReplicas, 1000);
+          }
         }
       } catch (e) {
         console.error('WebSocket message error:', e);
@@ -110,6 +130,12 @@ const App = () => {
 
     return () => {
       if (wsRef.current) wsRef.current.close();
+      // Drop any pending flush to avoid setState after unmount
+      if (replicasFlushTimerRef.current) {
+        clearTimeout(replicasFlushTimerRef.current);
+        replicasFlushTimerRef.current = null;
+      }
+      pendingReplicasRef.current = {};
     };
   }, [token, handleJobUpdate]);
 

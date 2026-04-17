@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Outlet } from 'react-router-dom';
 import {
   RefreshCw, Server, CheckCircle, XCircle, Zap, Archive,
@@ -88,12 +88,13 @@ const Overview = ({ token, replicas }) => {
 
   const detailsPanelRef = useRef(null);
 
-  const handleSelectJob = (id) => {
-    // Defensive: never navigate to /jobs/undefined or /jobs/null which would
-    // trigger a 404 fetch loop.
+  // Stable callbacks — important for React.memo on Timeline / CapacityBar /
+  // JobCard list. A new function identity each render would defeat memo and
+  // force downstream Recharts re-renders.
+  const handleSelectJob = useCallback((id) => {
     if (!id || id === 'undefined' || id === 'null') return;
     navigate(`/jobs/${id}`);
-  };
+  }, [navigate]);
 
   // Auto-scroll to the details panel when a job is selected (UX: avoids
   // requiring the user to scroll down on small viewports).
@@ -103,15 +104,16 @@ const Overview = ({ token, replicas }) => {
     }
   }, [routeJobId]);
 
-  // Click on a timeline bucket → narrow the date filters to that bucket
-  const handleTimelineBucketClick = ({ from, to }) => {
+  // Stable callback for Timeline (memo'd child). Click on a bucket narrows
+  // the date filters to the bucket's span.
+  const handleTimelineBucketClick = useCallback(({ from, to }) => {
     const fromDate = new Date(from);
     const toDate = new Date(to - 1);
     const yyyymmdd = (d) => `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
     setStartDate(yyyymmdd(fromDate));
     setEndDate(yyyymmdd(toDate));
     setCurrentPage(1);
-  };
+  }, []);
 
   return (
     <main className="container mx-auto p-4 space-y-4">
