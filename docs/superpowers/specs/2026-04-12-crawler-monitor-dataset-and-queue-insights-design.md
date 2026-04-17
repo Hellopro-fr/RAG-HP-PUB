@@ -344,3 +344,4 @@ Fixtures: create a temporary `CRAWLER_STORAGE_PATH` containing a synthetic job w
 - **Re-queue a failed URL** from the Erreurs tab. Requires coordination with `crawler-service` (a write path that edits the request queue); not addressed here.
 - **Delete URLs from a dataset** via UI. Destructive, explicitly out of scope.
 - **Preserving tab/filter state** across modal reopens. Currently reset on unmount. Can be lifted to a higher state if operators ask for it.
+- **Persist `/app/logs/audit/` across container rebuilds** (deferred follow-up, surfaced during QA of this feature). The audit log directory has no Docker volume mount today, so every `docker-compose build crawler-monitor-backend` wipes the history. Two-line fix in `docker-compose.yml` — add a volume (e.g. `crawler_monitor_audit:/app/logs/audit`) and declare it under top-level `volumes:`. Unrelated to this feature's endpoints but discovered while verifying the Audit page on the rebuilt container.

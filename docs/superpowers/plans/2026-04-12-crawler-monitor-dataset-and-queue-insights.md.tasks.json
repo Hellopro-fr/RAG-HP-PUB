@@ -71,10 +71,10 @@
     {
       "id": 10,
       "subject": "Task 11: End-to-end manual QA + final sanity commit",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
       "description": "**Goal:** Walk through full spec acceptance checklist on a live deployment; fix any regressions.\n\n**Verify:** Manual QA per spec §9 checklist.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"manual QA per spec acceptance checklist\", \"acceptanceCriteria\": [\"Dataset tabs all work with correct counts\", \"Queue counts bar + toggle work\", \"JSON editor highlights\", \"no regressions\", \"no console errors\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-17T00:00:00Z"
+  "lastUpdated": "2026-04-17T03:00:00Z"
 }
