@@ -17,6 +17,10 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [successMsg, setSuccessMsg] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Status filter state (Task 9)
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'handled'
+  const [counts, setCounts] = useState(null); // { total, pending, handled } — unfiltered totals from backend
+
   // Pagination State
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
@@ -25,7 +29,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
   useEffect(() => {
     fetchFiles();
-  }, [jobId, page, searchTerm]); // Refetch on page or search change
+  }, [jobId, page, searchTerm, statusFilter]); // Refetch on page, search, or status change
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -33,7 +37,12 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
       const data = await api.get(
         `/jobs/${jobId}/request-queues`,
         token,
-        { query: { page: String(page), limit: String(limit), search: searchTerm } }
+        { query: {
+            page: String(page),
+            limit: String(limit),
+            search: searchTerm,
+            status: statusFilter,
+          } }
       );
 
       // Handle paginated response
@@ -41,6 +50,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
         setFiles(data.items);
         setTotalPages(data.totalPages);
         setTotalItems(data.total);
+        if (data.counts) setCounts(data.counts);
       } else {
         // Fallback for old API structure (array)
         setFiles(Array.isArray(data) ? data : []);
@@ -174,6 +184,11 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setPage(1); // Reset to first page on search
   };
 
+  const changeStatusFilter = (next) => {
+    setStatusFilter(next);
+    setPage(1); // Reset to first page on filter change
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <ConfirmDestructive
@@ -210,6 +225,43 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
           <div className="w-1/3 border-r border-gray-700 flex flex-col bg-gray-800">
             {/* Header & Tools */}
             <div className="p-3 bg-gray-900 border-b border-gray-700 space-y-3">
+              {/* Counts bar (Task 9) — stays constant across filter toggles */}
+              {counts && (
+                <div className="flex items-center gap-3 text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded px-3 py-2">
+                  <span className="text-gray-400">Total</span>
+                  <span className="text-white font-semibold">{counts.total.toLocaleString('fr-FR')}</span>
+                  <span className="text-gray-600">·</span>
+                  <span className="text-gray-400">✓ Traités</span>
+                  <span className="text-green-400 font-semibold">{counts.handled.toLocaleString('fr-FR')}</span>
+                  <span className="text-gray-600">·</span>
+                  <span className="text-gray-400">○ En attente</span>
+                  <span className="text-yellow-400 font-semibold">{counts.pending.toLocaleString('fr-FR')}</span>
+                </div>
+              )}
+
+              {/* Status segmented toggle (Task 9) */}
+              <div className="flex gap-1">
+                {[
+                  { id: 'all',     label: 'Tous' },
+                  { id: 'handled', label: '✓ Traités' },
+                  { id: 'pending', label: '○ En attente' },
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => changeStatusFilter(opt.id)}
+                    className={
+                      'text-xs px-3 py-1.5 rounded transition-colors ' +
+                      (statusFilter === opt.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600')
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex justify-between items-center">
                 <h4 className="text-sm font-semibold text-gray-400">Queue ({totalItems})</h4>
                 <div className="flex gap-2">
@@ -302,8 +354,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                   className={`w-full text-left px-3 py-2 rounded text-sm truncate group ${selectedFile?.path === file.path ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
                     }`}
                 >
-                  <div className="font-medium truncate" title={file.url || file.name}>
-                    {file.url || file.name}
+                  <div className="font-medium truncate flex items-center gap-2" title={file.url || file.name}>
+                    <span
+                      className={file.isHandled ? 'text-green-400 shrink-0' : 'text-gray-500 shrink-0'}
+                      title={file.isHandled ? 'Traité' : 'En attente'}
+                      aria-label={file.isHandled ? 'Traité' : 'En attente'}
+                    >
+                      {file.isHandled ? '✓' : '○'}
+                    </span>
+                    <span className="truncate">{file.url || file.name}</span>
                   </div>
                   <div className="flex justify-between items-center mt-1">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${file.method === 'GET' ? 'bg-green-900/50 text-green-300' : 'bg-yellow-900/50 text-yellow-300'
