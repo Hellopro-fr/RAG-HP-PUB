@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// NOTE: the crypto/rand error path in generateAutoID is not exercised here.
+// It is unreachable on Linux (kernel CSPRNG is always available post-boot);
+// mocking rand.Read would require DI or a build tag disproportionate to the risk.
 func TestGenerateAutoID_FormatAndLength(t *testing.T) {
 	got := generateAutoID()
 	re := regexp.MustCompile(`^auto-[0-9a-f]{16}$`)
