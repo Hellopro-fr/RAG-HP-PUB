@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, AlertCircle, ChevronDown, ChevronUp, X, Bell, BellOff } from 'lucide-react';
 import { useAlertsQuery } from '../hooks/queries';
 import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
@@ -31,6 +32,17 @@ const SEVERITY_STYLES = {
     chip:    'bg-info/20 text-info',
     Icon:    AlertCircle,
   },
+};
+
+// Surface dominante quand il y a au moins une alerte critique : fond plein
+// destructive, lisible d'un coup d'œil en pleine nuit.
+const CRITICAL_DOMINANT_SURFACE =
+  'bg-destructive text-destructive-foreground border-destructive';
+
+const SEVERITY_LABELS = {
+  critical: 'Critique',
+  warn:     'Avertissement',
+  info:     'Info',
 };
 
 const fmtSince = (ts) => {
@@ -71,6 +83,8 @@ const AlertsBanner = ({ token }) => {
   const worstSeverity = visible.some(a => a.severity === 'critical') ? 'critical' : 'warn';
   const styles = SEVERITY_STYLES[worstSeverity];
   const TopIcon = styles.Icon;
+  const isCriticalDominant = worstSeverity === 'critical';
+  const hasCallbackAlert = visible.some(a => (a.kind || '').includes('callback'));
 
   const dismissOne = (id) => {
     setDismissedIds(prev => {
@@ -81,7 +95,7 @@ const AlertsBanner = ({ token }) => {
   };
 
   return (
-    <div className={cn('rounded-md border', styles.surface)}>
+    <div className={cn('rounded-md border', isCriticalDominant ? CRITICAL_DOMINANT_SURFACE : styles.surface)}>
       <div className="flex w-full items-center gap-3 px-3 py-2">
         <button
           type="button"
@@ -90,11 +104,20 @@ const AlertsBanner = ({ token }) => {
         >
           <TopIcon className="h-4 w-4 shrink-0" />
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            <span className="text-sm font-semibold">{visible.length} alerte{visible.length > 1 ? 's' : ''}</span>
-            <span className="truncate text-xs opacity-80">— {visible[0].message}</span>
+            <span className="text-sm font-bold">{visible.length} alerte{visible.length > 1 ? 's' : ''}</span>
+            <span className="truncate text-sm">— {visible[0].message}</span>
           </div>
           {expanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
         </button>
+        {hasCallbackAlert && (
+          <Link
+            to="/callbacks"
+            onClick={(ev) => ev.stopPropagation()}
+            className="shrink-0 text-xs underline underline-offset-2 hover:opacity-80"
+          >
+            Voir callbacks
+          </Link>
+        )}
         {notif.supported && (
           <button
             type="button"
@@ -128,7 +151,7 @@ const AlertsBanner = ({ token }) => {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm">{a.message}</div>
                   <div className="mt-0.5 text-[11px] opacity-80">
-                    <span className={cn('mr-2 rounded px-1.5 py-0.5', s.chip)}>{a.severity}</span>
+                    <span className={cn('mr-2 rounded px-1.5 py-0.5', s.chip)}>{SEVERITY_LABELS[a.severity] || a.severity}</span>
                     <span className="font-mono">{a.kind}</span>
                     {since && <span className="ml-2">· {since}</span>}
                   </div>
