@@ -298,7 +298,7 @@ class ScoringOptions(BaseModel):
     )
     t_unmatched: float = Field(0.2, description="Score pour les typologies non matched")
     absolute_threshold: float = Field(
-        0.2, description="Seuil absolu de score minimum pour les produits — P5 fix: assouplir seuil pour parcours à 0 résultats"
+        0.3, description="Seuil absolu de score minimum pour les produits"
     )
     relative_tolerance: float = Field(
         0.15, description="Tolérance relative par rapport au meilleur score"
