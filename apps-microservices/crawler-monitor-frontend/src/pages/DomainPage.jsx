@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Globe, RefreshCw, AlertCircle, ChevronLeft, Clock,
@@ -10,6 +10,9 @@ import { Button } from '../components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
+import {
+  Tooltip, TooltipTrigger, TooltipContent,
+} from '../components/ui/tooltip';
 import { cn } from '../lib/utils';
 
 const WINDOW_OPTIONS = ['24h', '7d', '30d'];
@@ -33,6 +36,28 @@ const ACCENT_CLASSES = {
 };
 
 const fmtDate = (s) => s ? new Date(s).toLocaleString('fr-FR') : '—';
+
+// Fix 3b : libellés explicites pour les entêtes cryptiques de la table jobs
+const HEAD_TOOLTIPS = {
+  when:   'Date et heure de démarrage du job',
+  job:    'Identifiant du job (tronqué — clique la ligne pour ouvrir la page détail)',
+  status: 'Statut courant du job (finished/failed/running/…)',
+  mode:   'Mode de crawl : "update" (incrémental) ou standard',
+  oom:    'Out Of Memory — nombre de redémarrages suite à un dépassement mémoire',
+};
+
+const HeadWithTip = ({ tip, className, children }) => (
+  <TableHead className={className}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  </TableHead>
+);
 
 const ChainNode = ({ entry, isFirst }) => {
   if (!entry || !entry.id) return null;
@@ -92,6 +117,18 @@ const DomainPage = ({ token }) => {
     : successRate >= 0.9 ? 'text-success'
     : successRate >= 0.7 ? 'text-warning'
     : 'text-destructive';
+
+  // Fix 3a : handler unifié (click + clavier) pour l'a11y des lignes cliquables
+  const goToJob = useCallback((j) => {
+    navigate(`/jobs/${j.id}`);
+  }, [navigate]);
+
+  const onRowKeyDown = useCallback((e, j) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      goToJob(j);
+    }
+  }, [goToJob]);
 
   return (
     <div className="p-4 space-y-4">
@@ -191,11 +228,11 @@ const DomainPage = ({ token }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Job</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Mode</TableHead>
-                  <TableHead className="text-right">OOM</TableHead>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.when}>When</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.job}>Job</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.status}>Status</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.mode}>Mode</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.oom} className="text-right">OOM</HeadWithTip>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -205,8 +242,11 @@ const DomainPage = ({ token }) => {
                   return (
                     <TableRow
                       key={j.id}
-                      onClick={() => navigate(`/jobs/${j.id}`)}
-                      className="cursor-pointer"
+                      onClick={() => goToJob(j)}
+                      onKeyDown={(e) => onRowKeyDown(e, j)}
+                      role="button"
+                      tabIndex={0}
+                      className="cursor-pointer focus:outline-none focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
                         {fmtDate(j.start_time)}
