@@ -28,6 +28,7 @@ import {
   readAllReplicasHistory,
 } from './src/lib/replicaHistory.js';
 import { persistJobPerf, readJobPerf } from './src/lib/jobPerformance.js';
+import { computeCapacityPlanning } from './src/lib/capacityPlanning.js';
 import { computeTimeline } from './src/lib/timeline.js';
 import { parseDomainWindow, aggregateDomains, jobsForDomain } from './src/lib/domains.js';
 import { evaluateAlerts, DEFAULT_THRESHOLDS } from './src/lib/alerts.js';
@@ -1481,6 +1482,20 @@ app.get('/api/timeline', authenticateToken, async (req, res) => {
 });
 
 // Per-replica CPU/RAM history (single replica or batch for all known)
+// Capacity planning: aggregate RAM usage per replica to help operators
+// decide whether to downsize allocation / run more replicas / etc.
+app.get('/api/capacity-planning/ram', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '1h';
+    const client = await ensureRedisConnected();
+    const result = await computeCapacityPlanning(client, windowKey);
+    res.json(result);
+  } catch (error) {
+    console.error('Error computing capacity planning:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute capacity planning' });
+  }
+});
+
 app.get('/api/replicas/history', authenticateToken, async (req, res) => {
   try {
     const windowStr = req.query.window || '1h';
