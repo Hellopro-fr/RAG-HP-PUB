@@ -1,16 +1,13 @@
-// src/components/DuplicatesTab.jsx
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, AlertTriangle, Trash2, CheckCircle } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
+import { Card } from './ui/card';
+import { Button } from './ui/button';
+import { cn } from '../lib/utils';
 
 /**
  * Duplicates analysis tab inside the Dataset page.
- *
- * Behavior identical to the legacy body of DatasetAnalyzer before it became
- * tabbed: fetches /dataset/analyze on mount, shows total / unique / duplicate
- * counts, lists up to 5 duplicate URL examples, offers "Purger les doublons"
- * gated by ConfirmDestructive.
  */
 const DuplicatesTab = ({ jobId, token }) => {
   const [stats, setStats] = useState(null);
@@ -53,27 +50,28 @@ const DuplicatesTab = ({ jobId, token }) => {
   if (loading && !stats) {
     return (
       <div className="flex justify-center py-12">
-        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
   if (!stats) {
     return (
-      <div className="bg-red-900/20 p-4 text-red-400 rounded">
+      <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+        <AlertCircle className="h-4 w-4" />
         Erreur impossible de charger les stats. {error}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <ConfirmDestructive
         open={showPurgeConfirm}
         title="Purge duplicates"
         description={
           <>
             Va supprimer <strong>{stats.duplicateCount || 0}</strong> fichier{(stats.duplicateCount || 0) > 1 ? 's' : ''} doublon
-            pour le job <code className="text-orange-300">{jobId}</code>.
+            pour le job <code className="rounded bg-muted px-1 py-0.5 text-warning">{jobId}</code>.
             <br /><br />
             Le dataset garde la copie la plus récente de chaque URL.
             Cette action est <strong>irréversible</strong>.
@@ -85,62 +83,67 @@ const DuplicatesTab = ({ jobId, token }) => {
         busy={purging}
       />
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-gray-700 p-4 rounded-lg text-center">
-          <p className="text-gray-400 text-sm">Total Items</p>
-          <p className="text-2xl font-bold text-white">{stats.totalItems}</p>
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg text-center">
-          <p className="text-gray-400 text-sm">URLs Uniques</p>
-          <p className="text-2xl font-bold text-green-400">{stats.uniqueUrls}</p>
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg text-center border border-red-500/30">
-          <p className="text-gray-400 text-sm">Doublons</p>
-          <p className="text-2xl font-bold text-red-400">{stats.duplicateCount}</p>
-        </div>
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile label="Total Items" value={stats.totalItems} />
+        <StatTile label="URLs Uniques" value={stats.uniqueUrls} valueClass="text-success" />
+        <StatTile
+          label="Doublons"
+          value={stats.duplicateCount}
+          valueClass="text-destructive"
+          cardClass="border-destructive/40"
+        />
       </div>
 
       {stats.duplicateCount > 0 ? (
-        <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-lg">
-          <h4 className="font-bold text-red-400 mb-2 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" /> Doublons détectés
+        <Card className="border-destructive/40 bg-destructive/5 p-4">
+          <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-destructive">
+            <AlertTriangle className="h-4 w-4" /> Doublons détectés
           </h4>
-          <p className="text-sm text-gray-300 mb-4">
+          <p className="mb-4 text-sm text-foreground/80">
             Le dataset contient <strong>{stats.duplicateCount}</strong> entrées en double.
-            Cela arrive souvent après une reprise de crawl ("resume") suite à un arrêt d'urgence.
+            Cela arrive souvent après une reprise de crawl (&quot;resume&quot;) suite à un arrêt d&apos;urgence.
           </p>
-          <button
+          <Button
+            variant="destructive"
             onClick={() => setShowPurgeConfirm(true)}
             disabled={purging}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium flex items-center gap-2 transition-colors disabled:opacity-50"
           >
-            {purging ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            {purging ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             Purger les doublons
-          </button>
-        </div>
+          </Button>
+        </Card>
       ) : (
-        <div className="bg-green-900/20 border border-green-500/30 p-4 rounded-lg flex items-center gap-3">
-          <CheckCircle className="w-6 h-6 text-green-400" />
-          <span className="text-green-300 font-medium">Le dataset est propre. Aucun doublon détecté.</span>
+        <div className="flex items-center gap-3 rounded-md border border-success/40 bg-success/5 p-4">
+          <CheckCircle className="h-5 w-5 text-success" />
+          <span className="font-medium text-success">Le dataset est propre. Aucun doublon détecté.</span>
         </div>
       )}
 
       {stats.duplicatesExample && stats.duplicatesExample.length > 0 && (
-        <div className="bg-gray-900 p-4 rounded-lg font-mono text-xs text-gray-400">
-          <p className="mb-2 uppercase text-gray-500">Exemples de doublons :</p>
-          <ul className="list-disc pl-4 space-y-1">
+        <Card className="bg-background p-4">
+          <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+            Exemples de doublons :
+          </p>
+          <ul className="list-disc space-y-1 pl-4 font-mono text-xs text-muted-foreground">
             {stats.duplicatesExample.map((url, i) => <li key={i}>{url}</li>)}
           </ul>
-        </div>
+        </Card>
       )}
 
       {success && (
-        <div className="bg-green-900/30 text-green-400 p-3 rounded flex items-center gap-2">
-          <CheckCircle className="w-4 h-4" /> {success}
+        <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-3 text-sm text-success">
+          <CheckCircle className="h-4 w-4" /> {success}
         </div>
       )}
     </div>
   );
 };
+
+const StatTile = ({ label, value, valueClass = 'text-foreground', cardClass }) => (
+  <Card className={cn('p-4 text-center', cardClass)}>
+    <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+    <p className={cn('font-mono text-2xl font-bold', valueClass)}>{value}</p>
+  </Card>
+);
 
 export default DuplicatesTab;

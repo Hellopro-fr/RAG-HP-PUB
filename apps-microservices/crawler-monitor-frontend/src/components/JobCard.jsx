@@ -1,61 +1,98 @@
 import {
-  CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Archive, RotateCcw
+  CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Archive, RotateCcw,
 } from 'lucide-react';
+import { cn } from '../lib/utils';
+
+/**
+ * JobCard — dense row in the jobs list.
+ *
+ * Status → variant mapping (not dynamic class names, so Tailwind purge keeps them).
+ * An OOM-restart count overrides the left rail to warning regardless of status.
+ */
+const STATUS_MAP = {
+  running:        { label: 'En cours',   icon: RefreshCw,     spin: true,  accent: 'info' },
+  finished:       { label: 'Succès',     icon: CheckCircle,   accent: 'success' },
+  failed:         { label: 'Échec',      icon: XCircle,       accent: 'destructive' },
+  stopping:       { label: 'Arrêt…',     icon: AlertTriangle, accent: 'warning' },
+  archived:       { label: 'Archivé',    icon: Archive,       accent: 'muted' },
+  restarting_oom: { label: 'Restart OOM', icon: RotateCcw,    spin: true,  accent: 'warning' },
+};
+
+// Static class map — required so Tailwind keeps these classes in the bundle.
+const ACCENT_CLASSES = {
+  info:        { badge: 'bg-info/15 text-info',               rail: 'border-l-info' },
+  success:     { badge: 'bg-success/15 text-success',         rail: 'border-l-success' },
+  destructive: { badge: 'bg-destructive/15 text-destructive', rail: 'border-l-destructive' },
+  warning:     { badge: 'bg-warning/15 text-warning',         rail: 'border-l-warning' },
+  muted:       { badge: 'bg-muted text-muted-foreground',     rail: 'border-l-muted-foreground/40' },
+};
 
 const JobCard = ({ job, onClick, isSelected }) => {
-  const getStatusInfo = (job) => {
-    const status = job.status || 'pending';
-    switch (status.toLowerCase()) {
-      case 'running': return { color: 'blue', text: 'En cours', icon: RefreshCw, spin: true };
-      case 'finished': return { color: 'green', text: 'Succès', icon: CheckCircle };
-      case 'failed': return { color: 'red', text: 'Échec', icon: XCircle };
-      case 'stopping': return { color: 'yellow', text: 'Arrêt...', icon: AlertTriangle };
-      case 'archived': return { color: 'gray', text: 'Archivé', icon: Archive };
-      case 'restarting_oom': return { color: 'orange', text: 'Restart OOM', icon: RotateCcw, spin: true };
-      default: return { color: 'gray', text: status, icon: Clock };
-    }
+  const status = STATUS_MAP[(job.status || '').toLowerCase()] ?? {
+    label: job.status || 'pending',
+    icon: Clock,
+    accent: 'muted',
   };
-
-  const status = getStatusInfo(job);
   const StatusIcon = status.icon;
+  const accent = ACCENT_CLASSES[status.accent];
 
-  // Override left border to orange when job had OOM restarts (visual fragility cue)
   const oomCount = job.oom_restart_count || 0;
-  const borderClass = isSelected
-    ? 'border-blue-500 bg-gray-700 shadow-lg'
+  const railClass = isSelected
+    ? 'border-l-primary'
     : oomCount > 0
-      ? 'border-orange-500'
-      : `border-${status.color}-500`;
+      ? 'border-l-warning'
+      : accent.rail;
 
   const hasMeta = job.crawl_mode === 'update' || oomCount > 0 || job.previous_crawl_id;
 
   return (
     <div
       onClick={onClick}
-      className={`bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-700 border-l-4 transition-all ${borderClass}`}
+      className={cn(
+        'cursor-pointer rounded-md border border-border bg-card p-3 text-card-foreground transition-colors border-l-4',
+        'hover:bg-accent/40',
+        isSelected && 'bg-accent shadow-sm',
+        railClass
+      )}
     >
-      <div className="flex justify-between items-start">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-white font-semibold truncate">Job #{job.id}</p>
-          <p className="text-gray-400 text-sm truncate">{job.domain}</p>
+          <p className="truncate font-mono text-sm font-semibold text-foreground">
+            #{job.id}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{job.domain}</p>
         </div>
-        <div className="flex-shrink-0 flex items-center gap-2">
-          <span className={`px-2 py-0.5 rounded text-xs font-medium bg-${status.color}-500/20 text-${status.color}-400`}>
-            {status.text}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', accent.badge)}>
+            {status.label}
           </span>
-          <StatusIcon className={`w-5 h-5 text-${status.color}-400 ${status.spin ? 'animate-spin' : ''}`} />
+          <StatusIcon
+            className={cn(
+              'h-4 w-4',
+              status.accent === 'info' && 'text-info',
+              status.accent === 'success' && 'text-success',
+              status.accent === 'destructive' && 'text-destructive',
+              status.accent === 'warning' && 'text-warning',
+              status.accent === 'muted' && 'text-muted-foreground',
+              status.spin && 'animate-spin'
+            )}
+          />
         </div>
       </div>
+
       {hasMeta && (
-        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {job.crawl_mode === 'update' && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400" title="Crawl incrémental (update)">
+            <span
+              className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary"
+              title="Crawl incrémental (update)"
+            >
               ↻ update
             </span>
           )}
           {oomCount > 0 && (
             <span
-              className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-semibold"
+              className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning"
               title={`${oomCount} redémarrage${oomCount > 1 ? 's' : ''} après OOM`}
             >
               {oomCount}× OOM
@@ -63,7 +100,7 @@ const JobCard = ({ job, onClick, isSelected }) => {
           )}
           {job.previous_crawl_id && (
             <span
-              className="text-[10px] text-gray-500"
+              className="text-[10px] text-muted-foreground"
               title={`Retry de ${job.previous_crawl_id}`}
             >
               ↩
@@ -71,7 +108,10 @@ const JobCard = ({ job, onClick, isSelected }) => {
           )}
         </div>
       )}
-      <p className="mt-3 text-xs text-gray-500">{new Date(job.start_time).toLocaleString('fr-FR')}</p>
+
+      <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+        {new Date(job.start_time).toLocaleString('fr-FR')}
+      </p>
     </div>
   );
 };

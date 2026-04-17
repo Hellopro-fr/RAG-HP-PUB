@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Activity } from 'lucide-react';
 import { apiFetch, ApiError } from '../lib/api';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
+import { Label } from './ui/label';
 
 const LoginPage = ({ onLogin }) => {
   const [password, setPassword] = useState('');
@@ -15,7 +19,7 @@ const LoginPage = ({ onLogin }) => {
       const data = await apiFetch('/login', {
         method: 'POST',
         body: { password },
-        retry: { attempts: 1 }, // don't retry login failures
+        retry: { attempts: 1 },
       });
       onLogin(data.token);
     } catch (err) {
@@ -32,33 +36,36 @@ const LoginPage = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
-        <h1 className="text-2xl font-bold text-white mb-6 text-center flex items-center justify-center gap-2">
-          <Activity className="w-8 h-8 text-blue-500" />
-          Crawler Monitor
-        </h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-gray-400 text-sm font-bold mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-gray-700 text-white border border-gray-600 rounded p-3 focus:outline-none focus:border-blue-500"
-              placeholder="Enter admin password"
-            />
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="items-center text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Activity className="h-7 w-7 text-primary" />
+            <CardTitle className="text-xl">Crawler Monitor</CardTitle>
           </div>
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
-      </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="login-password">Password</Label>
+              <Input
+                id="login-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter admin password"
+                autoFocus
+              />
+            </div>
+            {error && (
+              <p className="text-center text-sm text-destructive">{error}</p>
+            )}
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? 'Logging in…' : 'Login'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 };
