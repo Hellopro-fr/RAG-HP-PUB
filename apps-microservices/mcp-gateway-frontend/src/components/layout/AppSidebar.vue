@@ -293,6 +293,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
           name: "Journal d'audit",
           path: '/audit-logs',
         },
+        {
+          icon: 'pi pi-cog',
+          name: 'Paramètres',
+          path: '/settings',
+        },
       ],
     })
   }

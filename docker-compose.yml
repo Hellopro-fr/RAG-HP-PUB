@@ -1767,6 +1767,7 @@ services:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking/prix-extraction-message:ro
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking/prix-extraction-devis:ro
       - /mnt/data/docker/images/prix-extraction/prix-caracterisation:/app/tracking/prix-caracterisation:ro
+      - /mnt/data/docker/images/prix-extraction/prix-traitement:/app/tracking/prix-traitement:ro
     networks:
       - services-net
     logging: *logging_defaults
@@ -2003,6 +2004,8 @@ services:
       SERVICE_NAME: prix-traitement
     env_file:
       - .env
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-traitement:/app/tracking
     networks:
       - services-net
     logging: *logging_defaults
@@ -2153,6 +2156,25 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP Classification Produit Service ──────────────────────────────────
+  mcp-classification-produit-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-classification-produit-service/Dockerfile
+    container_name: mcp-classification-produit-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8593:8593"
+    environment:
+      - MCP_PORT=8593
+      - MCP_SERVICE_NAME=mcp-classification-produit
+      - MCP_SERVICE_VERSION=0.1.0
+      - CLASSIFICATION_API_URL=http://api-classification-lb:80
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Neo4j Service ─────────────────────────────────────────────────
   mcp-neo4j-service:
     build:
@@ -2194,7 +2216,7 @@ services:
       - JWT_AUDIENCE=${JWT_AUDIENCE}
       - AUTH_URL=${AUTH_URL}
       - SCOPE_TOKEN_REQUIRED=${MCP_SCOPE_TOKEN_REQUIRED}
-      - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
+      - GATEWAY_PUBLIC_URL=${GATEWAY_PUBLIC_URL}
       - ALLOW_INTERNAL_URLS=${MCP_ALLOW_INTERNAL_URLS:-true}
       - ADMIN_EMAILS=${MCP_ADMIN_EMAILS}
       - FALLBACK_USER=${MCP_FALLBACK_USER}
@@ -2204,6 +2226,9 @@ services:
       - LEEXI_INTERNAL_URL=${LEEXI_INTERNAL_URL}
       - LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
       - ALLOWED_EMAILS=${MCP_ALLOWED_EMAILS}
+      # Google Sheets import (OAuth2)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     volumes:
       - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:

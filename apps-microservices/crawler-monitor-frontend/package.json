@@ -16,10 +16,12 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^0.553.0",
     "npx": "^10.2.2",
+    "prismjs": "^1.29.0",
     "react": "^19.2.0",
     "react-date-range": "^2.0.1",
     "react-dom": "^19.2.0",
     "react-router-dom": "^6.28.0",
+    "react-simple-code-editor": "^0.14.0",
     "react-window": "^2.2.3",
     "recharts": "^3.4.1"
   },

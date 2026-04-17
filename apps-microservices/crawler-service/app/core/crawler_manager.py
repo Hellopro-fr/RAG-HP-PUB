@@ -328,6 +328,16 @@ class CrawlerManager:
         crawl_id = job_info["crawl_id"]
         restart_count = int(job_info.get("oom_restart_count", 0))
 
+        # Fix 3: The coroutine may have been scheduled with a stale job_info snapshot.
+        # If another actor (stale detection, force-finish, stop) has transitioned the
+        # job to a terminal state in the meantime, abort the relaunch. The counter
+        # was already released by whoever transitioned the job.
+        current = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+        if not current or current.get("status") != "restarting_oom":
+            current_status = current.get("status") if current else "gone"
+            logger.info(f"OOM relaunch for '{crawl_id}' aborted: status is '{current_status}', not 'restarting_oom'.")
+            return
+
         if restart_count >= settings.MAX_OOM_RESTARTS:
             logger.error(f"Maximum OOM restarts ({settings.MAX_OOM_RESTARTS}) reached for '{crawl_id}'. Failing job.")
 
@@ -720,6 +730,18 @@ class CrawlerManager:
                  # entry so no other crawl can steal the reserved slot before relaunch.
                  # The slot will be released by _relaunch_oom_crawl if max restarts is
                  # reached or if the relaunch itself fails.
+
+                 # Fix 4: Before entering the OOM relaunch flow, re-read the current
+                 # status from Redis. If stale detection (or force-finish) already
+                 # transitioned the job to a terminal state, skip the OOM branch
+                 # entirely. Otherwise we'd overwrite the terminal status with
+                 # 'restarting_oom' and schedule a ghost relaunch.
+                 current = await cache_service.get_json(job_key)
+                 current_status = current.get("status") if current else None
+                 if current_status in ("failed", "stopped", "finished"):
+                    logger.info(f"Skipping OOM relaunch for '{crawl_id}': status is already '{current_status}' (likely stale detection or force-finish ran first).")
+                    return
+
                  logger.warning(f"Crawl '{crawl_id}' exited with OOM_RELAUNCH (code 3). Slot preserved. Auto-relaunching...")
 
                  job_info["status"] = "restarting_oom"
@@ -840,10 +862,18 @@ class CrawlerManager:
         if target_status not in ("finished", "failed"):
             target_status = "finished"
 
-        # Release the global concurrency slot if the job was holding one
-        if old_status in ("running", "restarting_oom", "stopping"):
+        # Fix 5: Make the decrement idempotent. Another actor (stale detection or
+        # a concurrent force-finish) may have already released the slot. Re-read
+        # the current status from Redis; only decrement if the job is still
+        # holding a slot. old_status is the status we read when this function
+        # was called — it can be stale if concurrent activity updated Redis since.
+        current = await cache_service.get_json(job_key)
+        current_status = current.get("status") if current else None
+        if current_status in ("running", "restarting_oom", "stopping"):
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
-            logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{old_status}').")
+            logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{current_status}').")
+        else:
+            logger.info(f"Force-finish: slot already released for '{crawl_id}' (current status: '{current_status}'). Skipping decrement.")
 
         # Update status
         job_info["status"] = target_status
@@ -925,8 +955,10 @@ class CrawlerManager:
                 async with aiofiles.open(snapshot_path, 'r') as f:
                     content = await f.read()
                     snapshot_data = json.loads(content)
+                # Override status with current Redis value — snapshot was taken before status transition
+                snapshot_data["status"] = job_info["status"]
                 logger.info(
-                    f"Loaded status from snapshot for archived crawl '{crawl_id}'.")
+                    f"Loaded status from snapshot for crawl '{crawl_id}' (status: {job_info['status']}).")
                 return CrawlStatus(**snapshot_data)
             except Exception as e:
                 logger.error(
@@ -1381,6 +1413,12 @@ class CrawlerManager:
             )
 
         try:
+            # Cleanup orphaned temp file from a previous failed attempt
+            tmp_archive_path = os.path.join(archives_dir, f"{crawl_id}.tmp.tar.gz")
+            if os.path.exists(tmp_archive_path):
+                os.remove(tmp_archive_path)
+                logger.info(f"Removed orphaned temp archive for '{crawl_id}'.")
+
             # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
             if os.path.exists(target_archive_path):
                 archive_size = os.path.getsize(target_archive_path)
@@ -1428,23 +1466,32 @@ class CrawlerManager:
 
             try:
                 def _create_archive():
-                    """Create tar.gz archive in shared volume."""
+                    """Create tar.gz archive in shared volume.
+                    Uses a .tmp extension during creation to prevent the upload daemon
+                    from picking up a partially written file. Atomic rename at the end."""
                     os.makedirs(archives_dir, exist_ok=True)
-                    base_name = os.path.join(archives_dir, crawl_id)
-                    final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
-                    archive_size = os.path.getsize(final_path)
-                    if archive_size == 0:
-                        raise RuntimeError(f"Archive at '{final_path}' is empty (0 bytes).")
+                    tmp_base_name = os.path.join(archives_dir, f"{crawl_id}.tmp")
+                    final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
 
-                    # Verify archive is readable
+                    # Write to .tmp.tar.gz (daemon only watches *.tar.gz, not *.tmp.tar.gz)
+                    tmp_path = shutil.make_archive(tmp_base_name, 'gztar', root_dir=job_storage_path)
+                    archive_size = os.path.getsize(tmp_path)
+                    if archive_size == 0:
+                        os.remove(tmp_path)
+                        raise RuntimeError(f"Archive at '{tmp_path}' is empty (0 bytes).")
+
+                    # Verify archive is readable before renaming
                     try:
-                        with tarfile.open(final_path, 'r:gz') as t:
+                        with tarfile.open(tmp_path, 'r:gz') as t:
                             t.getnames()  # Force read of the archive index
                     except Exception as e:
-                        os.remove(final_path)
+                        os.remove(tmp_path)
                         raise RuntimeError(f"Archive integrity check failed: {e}")
 
-                    return final_path, archive_size
+                    # Atomic rename to final path — daemon can now pick it up safely
+                    os.rename(tmp_path, final_target)
+
+                    return final_target, archive_size
 
                 def _cleanup_local_data():
                     """Remove crawl data files, keeping only logs and markers."""
@@ -1668,6 +1715,23 @@ class CrawlerManager:
                             time_info = f"{time_since_activity:.0f}s ago" if last_activity_time else "no time data"
                             ownership_info = f"local" if is_local_job else (f"remote (replica: {job_replica_id})" if job_replica_id else "legacy (no replica_id)")
                             logger.warning(f"Job '{crawl_id}' (status: {status}, {ownership_info}) is stale! Last activity: {time_info}. Marking as failed.")
+
+                        # Fix 1: Release the global slot if this job was holding one.
+                        # Without this, the counter drifts: job is marked failed but
+                        # the slot stays reserved until the next reconciliation bulk reset.
+                        if status in ("running", "restarting_oom", "stopping"):
+                            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                            logger.info(f"Stale detection: released global slot for '{crawl_id}' (was '{status}').")
+
+                        # Fix 2: Kill the subprocess if still alive. A stale job whose
+                        # subprocess is still running is a zombie — it'll keep consuming
+                        # resources and may eventually exit with OOM (code 3), triggering
+                        # a ghost relaunch of an already-failed job. Mirrors force_finish_crawl.
+                        if crawl_id in self.local_processes:
+                            proc = self.local_processes[crawl_id]
+                            if proc.returncode is None:
+                                self._kill_process_group(proc.pid)
+                                logger.info(f"Stale detection: killed process for '{crawl_id}' (PID {proc.pid}).")
 
                         job_data["status"] = final_status
                         job_data["shutdown_reason"] = "Stop cleanup (stale)" if is_stopping else "Stale job detected (missing heartbeat)"

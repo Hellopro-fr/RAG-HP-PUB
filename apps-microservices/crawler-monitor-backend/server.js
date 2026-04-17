@@ -59,13 +59,13 @@ if (missingVars.length > 0) {
     console.error('');
     console.error('NOTE: legacy ADMIN_PASSWORD (plain text) is no longer accepted — set ADMIN_PASSWORD_HASH instead.');
   }
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
 }
 
-if (!looksLikeScryptHash(ADMIN_PASSWORD_HASH)) {
+if (ADMIN_PASSWORD_HASH && !looksLikeScryptHash(ADMIN_PASSWORD_HASH)) {
   console.error('FATAL ERROR: ADMIN_PASSWORD_HASH does not look like a scrypt$ hash.');
   console.error('It must be generated with src/lib/password.js hashPassword().');
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
 }
 
 if (process.env.ADMIN_PASSWORD) {
@@ -618,107 +618,91 @@ const matchesPattern = (url, pattern) => {
 
 app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 50;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
   const search = (req.query.search || '').toLowerCase();
+  const status = ['all', 'pending', 'handled'].includes(req.query.status) ? req.query.status : 'all';
 
   try {
     const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.json({ items: [], total: 0, page, limit });
+      return res.json({
+        items: [], total: 0, page, limit, totalPages: 0,
+        counts: { total: 0, pending: 0, handled: 0 },
+      });
     }
 
-    let matchingFiles = [];
-
-    if (search) {
-      // Native FS search — no shell exec, no injection risk
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const domainDir = join(baseDir, entry.name);
-          const domainFiles = await readdir(domainDir);
-
-          for (const file of domainFiles) {
-            if (file.endsWith('.json')) {
-              try {
-                const filePath = join(domainDir, file);
-                const content = await readFile(filePath, 'utf-8');
-                if (content.toLowerCase().includes(search)) {
-                  matchingFiles.push({
-                    name: file,
-                    domain: entry.name,
-                    fullPath: filePath,
-                    relativePath: join(entry.name, file)
-                  });
-                }
-              } catch (e) {
-                // Skip unreadable files
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // No search, list all files
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const domainDir = join(baseDir, entry.name);
-          const domainFiles = await readdir(domainDir);
-
-          for (const file of domainFiles) {
-            if (file.endsWith('.json')) {
-              matchingFiles.push({
-                name: file,
-                domain: entry.name,
-                fullPath: join(domainDir, file),
-                relativePath: join(entry.name, file)
-              });
-            }
-          }
+    // Single pass over every file. Produces both the unfiltered counts AND the filtered page.
+    const allFiles = [];
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const domainDir = join(baseDir, entry.name);
+      const domainFiles = await readdir(domainDir);
+      for (const file of domainFiles) {
+        if (!file.endsWith('.json')) continue;
+        const filePath = join(domainDir, file);
+        try {
+          const content = await readFile(filePath, 'utf-8');
+          const data = JSON.parse(content);
+          allFiles.push({
+            name: file,
+            domain: entry.name,
+            path: join(entry.name, file),
+            url: data.url,
+            method: data.method,
+            retryCount: data.retryCount,
+            errorMessages: data.errorMessages,
+            // Crawlee v3 marks a request as handled by setting orderNo to null (pending
+            // requests have a positive number used for FIFO ordering). handledAt IS set
+            // too, but it lives inside the nested `json` string field, not at the top
+            // level — so checking data.handledAt is always undefined here.
+            isHandled: data.orderNo === null,
+            rawContent: content, // for search (matches legacy behavior)
+          });
+        } catch {
+          // Unreadable / malformed — still counted in total but shown as "Error reading file"
+          allFiles.push({
+            name: file,
+            domain: entry.name,
+            path: join(entry.name, file),
+            url: 'Error reading file',
+            method: 'UNKNOWN',
+            isHandled: false,
+            rawContent: '',
+          });
         }
       }
     }
 
-    const total = matchingFiles.length;
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedFiles = matchingFiles.slice(startIndex, endIndex);
+    // Unfiltered counts — drives the UI counts bar.
+    const counts = {
+      total: allFiles.length,
+      pending: allFiles.filter(f => !f.isHandled).length,
+      handled: allFiles.filter(f => f.isHandled).length,
+    };
 
-    // Read content ONLY for the current page
-    const items = await Promise.all(paginatedFiles.map(async (f) => {
-      try {
-        const content = await readFile(f.fullPath, 'utf-8');
-        const data = JSON.parse(content);
-        return {
-          name: f.name,
-          domain: f.domain,
-          path: f.relativePath,
-          url: data.url,
-          method: data.method,
-          retryCount: data.retryCount,
-          errorMessages: data.errorMessages
-        };
-      } catch (err) {
-        console.error(`Error reading queue file ${f.name}:`, err);
-        return {
-          name: f.name,
-          domain: f.domain,
-          path: f.relativePath,
-          url: 'Error reading file',
-          method: 'UNKNOWN'
-        };
-      }
+    // Apply search + status filters for the page set.
+    let matching = allFiles;
+    if (search) matching = matching.filter(f => f.rawContent.toLowerCase().includes(search));
+    if (status === 'pending') matching = matching.filter(f => !f.isHandled);
+    else if (status === 'handled') matching = matching.filter(f => f.isHandled);
+
+    const total = matching.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIdx = (page - 1) * limit;
+    const pageItems = matching.slice(startIdx, startIdx + limit).map(f => ({
+      name: f.name,
+      domain: f.domain,
+      path: f.path,
+      url: f.url,
+      method: f.method,
+      retryCount: f.retryCount,
+      errorMessages: f.errorMessages,
+      isHandled: f.isHandled,  // NEW — used by the frontend row status glyph
     }));
 
-    res.json({
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit)
-    });
-
+    res.json({ items: pageItems, total, page, limit, totalPages, counts });
   } catch (error) {
     console.error(`Error listing request queues for job ${id}:`, error);
     res.status(500).json({ error: 'Failed to list request queues' });
@@ -941,8 +925,11 @@ app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {
                   }
                 }
 
-                // Check if handled
-                if (data.handledAt) {
+                // Check if handled — Crawlee v3 sets orderNo to null when a request is
+                // marked as handled. handledAt is ALSO set but it lives inside the
+                // nested `json` string field, not at the top level, so data.handledAt
+                // here is always undefined.
+                if (data.orderNo === null) {
                   stats.handled++;
                 } else {
                   stats.pending++;
@@ -1022,6 +1009,128 @@ async function findDatasetDir(jobId, datasetName = null) {
 
   return null;
 }
+
+/**
+ * Discover the three dataset subdirectories (main/error/nfr) for a job.
+ * Returns { mainDir, errorDir, nfrDir, domain } — any dir may be null if absent.
+ * Does NOT require Redis — the domain is recovered from the directory names.
+ */
+async function listDatasetDirs(jobId) {
+  const datasetsRoot = join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'datasets');
+  if (!existsSync(datasetsRoot)) {
+    return { mainDir: null, errorDir: null, nfrDir: null, domain: null };
+  }
+  const entries = await readdir(datasetsRoot, { withFileTypes: true });
+  let mainName = null, errorName = null, nfrName = null;
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('error-')) errorName = e.name;
+    else if (e.name.startsWith('nfr-')) nfrName = e.name;
+    else if (!mainName) mainName = e.name;
+  }
+  const domain = mainName || errorName?.slice('error-'.length) || nfrName?.slice('nfr-'.length) || null;
+  return {
+    mainDir:  mainName  ? join(datasetsRoot, mainName)  : null,
+    errorDir: errorName ? join(datasetsRoot, errorName) : null,
+    nfrDir:   nfrName   ? join(datasetsRoot, nfrName)   : null,
+    domain,
+  };
+}
+
+/** Count valid JSON files in a directory (malformed files excluded). */
+async function countValidJsonFiles(dir) {
+  if (!dir || !existsSync(dir)) return 0;
+  const files = await readdir(dir);
+  let count = 0;
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const content = await readFile(join(dir, f), 'utf-8');
+      JSON.parse(content);
+      count++;
+    } catch {
+      // malformed — skip silently, matches existing scanDataset() behavior
+    }
+  }
+  return count;
+}
+
+app.get('/api/jobs/:id/dataset/counts', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { mainDir, errorDir, nfrDir } = await listDatasetDirs(id);
+    const [success, error, nfr] = await Promise.all([
+      countValidJsonFiles(mainDir),
+      countValidJsonFiles(errorDir),
+      countValidJsonFiles(nfrDir),
+    ]);
+    res.json({ success, error, nfr });
+  } catch (err) {
+    console.error(`Error counting datasets for job ${id}:`, err);
+    res.status(500).json({ error: 'Failed to count datasets' });
+  }
+});
+
+/** Derive a human-readable error string from an error-dataset entry. */
+function deriveErrorMessage(entry) {
+  if (Array.isArray(entry.errorMessages) && entry.errorMessages.length > 0) {
+    return String(entry.errorMessages[0]);
+  }
+  if (entry.statusCode !== undefined) {
+    const text = entry.statusText ? ` ${entry.statusText}` : '';
+    return `HTTP ${entry.statusCode}${text}`;
+  }
+  return 'Unknown error';
+}
+
+app.get('/api/jobs/:id/dataset/urls', async (req, res) => {
+  const { id } = req.params;
+  const category = String(req.query.category || '');
+  if (!['success', 'error', 'nfr'].includes(category)) {
+    return res.status(400).json({ error: 'Invalid category. Must be one of: success, error, nfr' });
+  }
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+  const search = String(req.query.search || '').toLowerCase();
+
+  try {
+    const dirs = await listDatasetDirs(id);
+    const dir = category === 'success' ? dirs.mainDir
+              : category === 'error'   ? dirs.errorDir
+              :                          dirs.nfrDir;
+
+    if (!dir || !existsSync(dir)) {
+      return res.json({ category, total: 0, page, totalPages: 0, items: [] });
+    }
+
+    const filenames = (await readdir(dir)).filter(n => n.endsWith('.json'));
+
+    // Single pass: read every file, skip malformed, apply optional search, then paginate.
+    // Gives an accurate `total` (malformed files excluded) regardless of search.
+    const valid = [];
+    for (const name of filenames) {
+      try {
+        const raw = await readFile(join(dir, name), 'utf-8');
+        const data = JSON.parse(raw);
+        if (!data.url) continue;
+        if (search && !data.url.toLowerCase().includes(search)) continue;
+        valid.push(category === 'error'
+          ? { url: data.url, error: deriveErrorMessage(data) }
+          : { url: data.url });
+      } catch {
+        console.warn(`[dataset/urls] skipped malformed file ${join(dir, name)}`);
+      }
+    }
+    const total = valid.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIdx = (page - 1) * limit;
+    const items = valid.slice(startIdx, startIdx + limit);
+    res.json({ category, total, page, totalPages, items });
+  } catch (err) {
+    console.error(`Error listing dataset URLs for job ${id}:`, err);
+    res.status(500).json({ error: 'Failed to list dataset URLs' });
+  }
+});
 
 app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   const { id } = req.params;
@@ -1646,34 +1755,39 @@ async function setupRedisListener() {
   }
 }
 
-ensureRedisConnected()
-  .then(() => {
-    console.log('Connected to Redis (persistent client).');
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`Crawler Monitor Backend running on port ${PORT}`);
-      setupRedisListener();
-      // Audit log: prune old files at boot, then once a day
-      rotateOldLogs().then(r => {
-        if (r.deleted) console.log(`[audit] pruned ${r.deleted} old log files`);
-      }).catch(err => console.error('[audit] initial rotation failed:', err.message));
-      setInterval(() => {
-        rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
-      }, 24 * 60 * 60 * 1000);
+async function start() {
+  await ensureRedisConnected();
+  console.log('Connected to Redis (persistent client).');
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Crawler Monitor Backend running on port ${PORT}`);
+    setupRedisListener();
+    // Audit log: prune old files at boot, then once a day
+    rotateOldLogs().then(r => {
+      if (r.deleted) console.log(`[audit] pruned ${r.deleted} old log files`);
+    }).catch(err => console.error('[audit] initial rotation failed:', err.message));
+    setInterval(() => {
+      rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
+    }, 24 * 60 * 60 * 1000);
 
-      // Capacity history snapshot: every 60s into Redis sorted set (capped at 24h)
-      const takeCapacitySnapshot = async () => {
-        try {
-          const client = await ensureRedisConnected();
-          await snapshotCapacity(client, CRAWL_RUNNING_COUNT_KEY, CRAWL_MAX_GLOBAL_KEY);
-        } catch (err) {
-          console.error('[capacity] snapshot failed:', err.message);
-        }
-      };
-      takeCapacitySnapshot();
-      setInterval(takeCapacitySnapshot, SNAPSHOT_INTERVAL_MS);
-    });
-  })
-  .catch(err => {
-    console.error('Failed to connect to Redis:', err);
+    // Capacity history snapshot: every 60s into Redis sorted set (capped at 24h)
+    const takeCapacitySnapshot = async () => {
+      try {
+        const client = await ensureRedisConnected();
+        await snapshotCapacity(client, CRAWL_RUNNING_COUNT_KEY, CRAWL_MAX_GLOBAL_KEY);
+      } catch (err) {
+        console.error('[capacity] snapshot failed:', err.message);
+      }
+    };
+    takeCapacitySnapshot();
+    setInterval(takeCapacitySnapshot, SNAPSHOT_INTERVAL_MS);
+  });
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  start().catch(err => {
+    console.error('Failed to start server:', err);
     process.exit(1);
   });
+}
+
+export { app };

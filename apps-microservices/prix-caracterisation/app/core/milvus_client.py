@@ -71,6 +71,13 @@ MILVUS_PRIX_FIELDS = [
     "date_prix",
     # Texte embed (fallback description)
     "text",
+    # Chunk ordering (1..n quand un texte est découpé en plusieurs embeddings)
+    "chunk_id",
+]
+
+# Champs Milvus envoyés au BO pour la table prix_cible_ia (MILVUS_PRIX_FIELDS sans id, chunk_id, text)
+PRIX_CIBLE_FIELDS = [
+    f for f in MILVUS_PRIX_FIELDS if f not in ("id", "chunk_id", "text")
 ]
 
 

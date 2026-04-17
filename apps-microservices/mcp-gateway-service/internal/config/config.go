@@ -36,6 +36,10 @@ type Config struct {
 	FallbackPass  string // FALLBACK_PASS
 	FallbackEmail string // FALLBACK_EMAIL
 
+	// Google OAuth2 (for Sheets import)
+	GoogleClientID     string // GOOGLE_CLIENT_ID — OAuth2 client ID from Google Cloud Console
+	GoogleClientSecret string // GOOGLE_CLIENT_SECRET — OAuth2 client secret
+
 	// Upload directory for server icons
 	UploadDir string // UPLOAD_DIR — directory for uploaded files (default /data/uploads)
 
@@ -110,6 +114,9 @@ func Load() *Config {
 		FallbackUser:        os.Getenv("FALLBACK_USER"),
 		FallbackPass:        os.Getenv("FALLBACK_PASS"),
 		FallbackEmail:       os.Getenv("FALLBACK_EMAIL"),
+
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 
 		UploadDir:        getEnv("UPLOAD_DIR", "/data/uploads"),
 

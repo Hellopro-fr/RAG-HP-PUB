@@ -26,6 +26,18 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/views/PrivacyPolicyView.vue'),
+      meta: { requiresAuth: false, title: 'Politique de confidentialité' }
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: () => import('@/views/AppHomepageView.vue'),
+      meta: { requiresAuth: false, title: 'MCP Gateway' }
+    },
+    {
       path: '/docs',
       name: 'docs',
       component: () => import('@/views/DocsServersView.vue'),
@@ -98,6 +110,12 @@ const router = createRouter({
       name: 'servers',
       component: () => import('@/views/ServersView.vue'),
       meta: { requiresAuth: true, title: 'Serveurs MCP', minRole: 'read-only' }
+    },
+    {
+      path: '/servers/import-google',
+      name: 'google-sheets-import',
+      component: () => import('@/views/GoogleSheetsImportView.vue'),
+      meta: { requiresAuth: true, title: 'Import Google Sheets', minRole: 'admin' }
     },
     {
       path: '/docs-admin',
@@ -176,6 +194,12 @@ const router = createRouter({
       name: 'audit-logs',
       component: () => import('@/views/AuditLogView.vue'),
       meta: { requiresAuth: true, title: "Journal d'audit", minRole: 'admin' }
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+      meta: { requiresAuth: true, title: 'Paramètres', minRole: 'admin' }
     }
   ]
 })

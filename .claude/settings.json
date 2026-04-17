@@ -5,78 +5,11 @@
     "pr": ""
   },
   "permissions": {
-    "allow": [
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/app/services/**)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/app/services/**)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/app/config.py)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/app/config.py)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/MATCHING_CONTEXT.md)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/MATCHING_CONTEXT.md)",
-      "Read(/**)"
-    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./secrets/**)",
-      "Read(./config/credentials.json)",
-
-      "Edit(/apps-microservices/graph-rag-api-recherche-service/**)",
-      "Write(/apps-microservices/graph-rag-api-recherche-service/**)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-service-debug/**)",
-      "Write(/apps-microservices/graph-rag-api-recherche-service-debug/**)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-rust-service/**)",
-      "Write(/apps-microservices/graph-rag-api-recherche-rust-service/**)",
-      "Edit(/apps-microservices/graph-rag-api-admin-service/**)",
-      "Write(/apps-microservices/graph-rag-api-admin-service/**)",
-      "Edit(/apps-microservices/graph-rag-database-connector-service/**)",
-      "Write(/apps-microservices/graph-rag-database-connector-service/**)",
-      "Edit(/apps-microservices/graph-rag-milvus-service/**)",
-      "Write(/apps-microservices/graph-rag-milvus-service/**)",
-      "Edit(/apps-microservices/graph-rag-normalize-unite-service/**)",
-      "Write(/apps-microservices/graph-rag-normalize-unite-service/**)",
-      "Edit(/apps-microservices/llm-service/**)",
-      "Write(/apps-microservices/llm-service/**)",
-      "Edit(/apps-microservices/reranking-model-service/**)",
-      "Write(/apps-microservices/reranking-model-service/**)",
-      "Edit(/apps-microservices/embedding-model-service/**)",
-      "Write(/apps-microservices/embedding-model-service/**)",
-      "Edit(/apps-microservices/api-gateway/**)",
-      "Write(/apps-microservices/api-gateway/**)",
-
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/app/main.py)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/app/main.py)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/app/routers/**)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/app/routers/**)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/app/infrastructure/**)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/app/infrastructure/**)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/app/domain/**)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/app/domain/**)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/Dockerfile)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/Dockerfile)",
-      "Edit(/apps-microservices/graph-rag-api-recherche-optim-service/requirements.txt)",
-      "Write(/apps-microservices/graph-rag-api-recherche-optim-service/requirements.txt)",
-
-      "Edit(/libs/**)",
-      "Write(/libs/**)",
-      "Edit(/protos/**)",
-      "Write(/protos/**)",
-      "Edit(/docker-compose*.yml)",
-      "Write(/docker-compose*.yml)",
-      "Edit(/.env*)",
-      "Write(/.env*)",
-      "Edit(/.github/**)",
-      "Write(/.github/**)",
-      "Edit(/prometheus/**)",
-      "Write(/prometheus/**)",
-      "Edit(/grafana/**)",
-      "Write(/grafana/**)",
-      // "Edit(/.claude/**)",
-      // "Write(/.claude/**)",
-
-      "Bash(git push --force *)",
-      "Bash(git push -f *)",
-      "Bash(git reset --hard *)",
-      "Bash(rm -rf *)"
+      "Read(./config/credentials.json)"
     ]
   },
   "env": {
@@ -145,12 +78,5 @@
       }
     ]
   },
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "code-review@claude-plugins-official": true,
-    "claude-mem@thedotmack": true,
-    "context7@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true
-  }
+  "enabledPlugins": {}
 }

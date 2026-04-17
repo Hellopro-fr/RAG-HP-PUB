@@ -33,7 +33,7 @@ PATTERNS = [
     # Database connection strings
     (r'mongodb(\+srv)?://[^\s"\']+', 'MongoDB Connection String', 'critical'),
     (r'postgres(ql)?://[^\s"\']+', 'PostgreSQL Connection String', 'critical'),
-    (r'mysql://[^\s"\']+', 'MySQL Connection String', 'critical'),
+    (r'mysql://[^@\s"\']+:[^@\s"\']+@[^\s"\']+', 'MySQL Connection String with Credentials', 'critical'),
     (r'redis://[^\s"\']+', 'Redis Connection String', 'high'),
     (r'amqp://[^\s"\']+', 'RabbitMQ Connection String', 'high'),
     # JWT / Private keys

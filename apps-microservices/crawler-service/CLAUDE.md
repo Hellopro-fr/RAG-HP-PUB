@@ -132,6 +132,29 @@ The crawler uses **Camoufox** (stealth Firefox with C++ anti-detection patches) 
 | 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
 | Other | Failure | Status: `failed`, failure webhook |
 
+## Capacity Counter Invariants
+
+The global capacity counter (Redis key `crawl_jobs:running_count`) is authoritative for capacity gating. Every state transition that changes whether a job is "holding a slot" must keep the counter in sync.
+
+**Slot-holding statuses:** `running`, `restarting_oom`, `stopping`
+**Terminal statuses:** `finished`, `failed`, `stopped`
+
+**Transition rules:**
+- Starting a job: increment counter (in `start_crawl`, unless `is_restart=True`)
+- Process exits normally (code 0/2): decrement counter (in `_monitor_process`)
+- Process exits OOM (code 3) AND job is still `restarting_oom`: keep counter reserved, schedule relaunch
+- Process exits OOM (code 3) AND job is already terminal: skip OOM path, counter already released by whoever transitioned
+- Stale detection transitions job to terminal: decrement counter AND SIGKILL subprocess if still alive
+- `force_finish_crawl`: decrement counter only if current status (re-read at decrement time) is still slot-holding
+- OOM max-restarts reached (in `_relaunch_oom_crawl`): decrement counter, mark failed
+
+**Guards:**
+- Stale handler decrements counter before writing terminal status (prevents drift)
+- Stale handler kills subprocess (prevents zombie OOM-relaunch)
+- `_monitor_process` re-reads status before entering OOM branch (prevents overwriting terminal status)
+- `_relaunch_oom_crawl` re-reads status at entry (prevents ghost relaunch of failed jobs)
+- `force_finish_crawl` re-reads status before decrement (prevents double-decrement)
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.

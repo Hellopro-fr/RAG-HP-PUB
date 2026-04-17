@@ -3,6 +3,9 @@ import {
   Code, XCircle, RefreshCw, Search, Trash2, Filter,
   ChevronLeft, ChevronRight, AlignLeft, CheckCircle
 } from 'lucide-react';
+import Editor from 'react-simple-code-editor';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-json';
 import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
 
@@ -17,6 +20,10 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [successMsg, setSuccessMsg] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Status filter state (Task 9)
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'handled'
+  const [counts, setCounts] = useState(null); // { total, pending, handled } — unfiltered totals from backend
+
   // Pagination State
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
@@ -25,7 +32,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
   useEffect(() => {
     fetchFiles();
-  }, [jobId, page, searchTerm]); // Refetch on page or search change
+  }, [jobId, page, searchTerm, statusFilter]); // Refetch on page, search, or status change
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -33,7 +40,12 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
       const data = await api.get(
         `/jobs/${jobId}/request-queues`,
         token,
-        { query: { page: String(page), limit: String(limit), search: searchTerm } }
+        { query: {
+            page: String(page),
+            limit: String(limit),
+            search: searchTerm,
+            status: statusFilter,
+          } }
       );
 
       // Handle paginated response
@@ -41,6 +53,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
         setFiles(data.items);
         setTotalPages(data.totalPages);
         setTotalItems(data.total);
+        if (data.counts) setCounts(data.counts);
       } else {
         // Fallback for old API structure (array)
         setFiles(Array.isArray(data) ? data : []);
@@ -61,7 +74,13 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setSuccessMsg(null);
     try {
       const data = await api.get(`/jobs/${jobId}/request-queues/${file.domain}/${file.name}`, token);
-      setContent(JSON.stringify(data, null, 2));
+      // Defensive pretty-print: backend returns parsed object, but a stringified
+      // payload could arrive in the future and we should not crash on it.
+      try {
+        setContent(JSON.stringify(data, null, 2));
+      } catch {
+        setContent(typeof data === 'string' ? data : String(data));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -174,8 +193,40 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setPage(1); // Reset to first page on search
   };
 
+  const changeStatusFilter = (next) => {
+    setStatusFilter(next);
+    setPage(1); // Reset to first page on filter change
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <style>{`
+        .queue-json-editor .token.property    { color: #22d3ee; } /* cyan-400 */
+        .queue-json-editor .token.string      { color: #4ade80; } /* green-400 */
+        .queue-json-editor .token.number      { color: #fb923c; } /* orange-400 */
+        .queue-json-editor .token.boolean,
+        .queue-json-editor .token.null        { color: #c084fc; } /* purple-400 */
+        .queue-json-editor .token.punctuation { color: #6b7280; } /* gray-500 */
+        .queue-json-editor .token.operator    { color: #9ca3af; } /* gray-400 */
+        .queue-json-editor textarea,
+        .queue-json-editor pre {
+          white-space: pre !important;
+          overflow-wrap: normal !important;
+          word-break: normal !important;
+          color: #e5e7eb; /* gray-200 — base text */
+          background: transparent !important;
+        }
+        /* react-simple-code-editor sets overflow: hidden on its inline container,
+           which clips the pre even when white-space: pre would push content past
+           the wrapper. Override to overflow: visible so the pre extends to its
+           natural width, and force min-width: max-content so the container grows
+           with its longest line. The outer .queue-json-editor (overflow-auto)
+           then provides the horizontal scroll. */
+        .queue-json-editor > div {
+          min-width: max-content !important;
+          overflow: visible !important;
+        }
+      `}</style>
       <ConfirmDestructive
         open={showDropConfirm}
         title="Drop entire queue"
@@ -210,6 +261,43 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
           <div className="w-1/3 border-r border-gray-700 flex flex-col bg-gray-800">
             {/* Header & Tools */}
             <div className="p-3 bg-gray-900 border-b border-gray-700 space-y-3">
+              {/* Counts bar (Task 9) — stays constant across filter toggles */}
+              {counts && (
+                <div className="flex items-center gap-3 text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded px-3 py-2">
+                  <span className="text-gray-400">Total</span>
+                  <span className="text-white font-semibold">{counts.total.toLocaleString('fr-FR')}</span>
+                  <span className="text-gray-600">·</span>
+                  <span className="text-gray-400">✓ Traités</span>
+                  <span className="text-green-400 font-semibold">{counts.handled.toLocaleString('fr-FR')}</span>
+                  <span className="text-gray-600">·</span>
+                  <span className="text-gray-400">○ En attente</span>
+                  <span className="text-yellow-400 font-semibold">{counts.pending.toLocaleString('fr-FR')}</span>
+                </div>
+              )}
+
+              {/* Status segmented toggle (Task 9) */}
+              <div className="flex gap-1">
+                {[
+                  { id: 'all',     label: 'Tous' },
+                  { id: 'handled', label: '✓ Traités' },
+                  { id: 'pending', label: '○ En attente' },
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => changeStatusFilter(opt.id)}
+                    className={
+                      'text-xs px-3 py-1.5 rounded transition-colors ' +
+                      (statusFilter === opt.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600')
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex justify-between items-center">
                 <h4 className="text-sm font-semibold text-gray-400">Queue ({totalItems})</h4>
                 <div className="flex gap-2">
@@ -302,8 +390,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                   className={`w-full text-left px-3 py-2 rounded text-sm truncate group ${selectedFile?.path === file.path ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
                     }`}
                 >
-                  <div className="font-medium truncate" title={file.url || file.name}>
-                    {file.url || file.name}
+                  <div className="font-medium truncate flex items-center gap-2" title={file.url || file.name}>
+                    <span
+                      className={file.isHandled ? 'text-green-400 shrink-0' : 'text-gray-500 shrink-0'}
+                      title={file.isHandled ? 'Traité' : 'En attente'}
+                      aria-label={file.isHandled ? 'Traité' : 'En attente'}
+                    >
+                      {file.isHandled ? '✓' : '○'}
+                    </span>
+                    <span className="truncate">{file.url || file.name}</span>
                   </div>
                   <div className="flex justify-between items-center mt-1">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${file.method === 'GET' ? 'bg-green-900/50 text-green-300' : 'bg-yellow-900/50 text-yellow-300'
@@ -338,12 +433,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
             </div>
           </div>
 
-          {/* Editor area */}
-          <div className="flex-1 flex flex-col bg-gray-900">
+          {/* Editor area — min-w-0 on the panel itself so the whole column can shrink
+              below the intrinsic width of its longest child (a long URL in the header). */}
+          <div className="flex-1 min-w-0 flex flex-col bg-gray-900 overflow-hidden">
             {selectedFile ? (
               <>
-                <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-                  <div className="flex flex-col overflow-hidden mr-2">
+                <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center gap-2">
+                  {/* flex-1 min-w-0 is required so `truncate` on the children actually shrinks
+                      the inner div instead of pushing the action buttons past the modal edge. */}
+                  <div className="flex flex-col overflow-hidden flex-1 min-w-0">
                     <span className="text-xs font-mono text-gray-400 truncate">{selectedFile.path}</span>
                     <span className="text-sm font-bold text-white truncate" title={selectedFile.url}>{selectedFile.url}</span>
                   </div>
@@ -370,12 +468,21 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                 {error && <div className="p-2 bg-red-900/50 text-red-200 text-sm border-b border-red-700">{error}</div>}
                 {successMsg && <div className="p-2 bg-green-900/50 text-green-200 text-sm border-b border-green-700">{successMsg}</div>}
 
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  className="flex-1 w-full bg-gray-900 text-gray-300 font-mono text-sm p-4 focus:outline-none resize-none"
-                  spellCheck="false"
-                />
+                <div className="queue-json-editor flex-1 bg-gray-900 overflow-auto">
+                  <Editor
+                    value={content}
+                    onValueChange={setContent}
+                    highlight={code => Prism.highlight(code, Prism.languages.json, 'json')}
+                    padding={16}
+                    textareaClassName="focus:outline-none"
+                    preClassName=""
+                    style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                      fontSize: 13,
+                      minHeight: '100%',
+                    }}
+                  />
+                </div>
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-500">
