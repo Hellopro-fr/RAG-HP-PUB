@@ -879,45 +879,52 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         logger.info(f"[{id_categorie}] V2 — {len(results)} prix matchés")
 
-        # =====================================================================
-        # ÉTAPE 1b : Filtrage des prix aberrants (IQR + borne médiane)
-        # =====================================================================
-        nettoyage = _nettoyer_resultats_prix(results)
-        results = nettoyage["results_nettoyes"]
-        nb_rejetes = len(nettoyage["results_rejetes"])
+        if model == "gemini":  # Pas de nettoyage pour Claude (effort déjà intégré)
+            # =====================================================================
+            # ÉTAPE 1b : Filtrage des prix aberrants (IQR + borne médiane)
+            # =====================================================================
+            nettoyage = _nettoyer_resultats_prix(results)
+            results = nettoyage["results_nettoyes"]
+            nb_rejetes = len(nettoyage["results_rejetes"])
 
-        bornes_str = (
-            f" (bornes [{nettoyage['borne_min']:.2f} – {nettoyage['borne_max']:.2f}])"
-            if nettoyage["borne_min"] is not None else ""
-        )
-        write_log(tracking_file, "--- NETTOYAGE PRIX ---")
-        write_log(tracking_file, f"Gardés : {len(results)} | Rejetés : {nb_rejetes}{bornes_str}")
-        write_log(tracking_file, json.dumps(
-            {
-                "borne_min": nettoyage["borne_min"],
-                "borne_max": nettoyage["borne_max"],
-                "nb_gardes": len(results),
-                "nb_rejetes": nb_rejetes,
-                "prix_rejetes": [
-                    (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
-                    for item in nettoyage["results_rejetes"]
-                ],
-            },
-            ensure_ascii=False, indent=2
-        ))
-        write_log(tracking_file, "")
+            bornes_str = (
+                f" (bornes [{nettoyage['borne_min']:.2f} – {nettoyage['borne_max']:.2f}])"
+                if nettoyage["borne_min"] is not None else ""
+            )
+            write_log(tracking_file, "--- NETTOYAGE PRIX ---")
+            write_log(tracking_file, f"Gardés : {len(results)} | Rejetés : {nb_rejetes}{bornes_str}")
+            write_log(tracking_file, json.dumps(
+                {
+                    "borne_min": nettoyage["borne_min"],
+                    "borne_max": nettoyage["borne_max"],
+                    "nb_gardes": len(results),
+                    "nb_rejetes": nb_rejetes,
+                    "prix_gardes": [
+                        (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
+                        for item in results
+                    ],
+                    "prix_rejetes": [
+                        (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
+                        for item in nettoyage["results_rejetes"]
+                    ],
+                },
+                ensure_ascii=False, indent=2
+            ))
+            write_log(tracking_file, "")
 
-        if not results:
-            elapsed = time.time() - start_time
-            write_log(tracking_file, "ERREUR : Tous les prix ont été rejetés après nettoyage")
-            return {
-                "success": False,
-                "reponse": None,
-                "matching": matching_response,
-                "api_response": {},
-                "time_elapsed": elapsed,
-                "message": "Tous les prix matchés ont été éliminés comme aberrants"
-            }
+            if not results:
+                elapsed = time.time() - start_time
+                write_log(tracking_file, "ERREUR : Tous les prix ont été rejetés après nettoyage")
+                return {
+                    "success": False,
+                    "reponse": None,
+                    "matching": matching_response,
+                    "api_response": {},
+                    "time_elapsed": elapsed,
+                    "message": "Tous les prix matchés ont été éliminés comme aberrants"
+                }
+        else:
+            write_log(tracking_file, "--- NO NETTOYAGE PRIX ---")
 
         # =====================================================================
         # ÉTAPE 2 : Formater les résultats matchés (même format que v1 chunks)

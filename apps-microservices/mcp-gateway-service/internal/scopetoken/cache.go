@@ -8,6 +8,7 @@ import (
 // CachedToken holds the resolved scope for a token hash.
 type CachedToken struct {
 	ID           string
+	Name         string                     // human-readable token name; surfaced as serverInfo.name
 	ServerIDs    map[string]bool            // set of allowed server IDs
 	AllowedTools map[string]map[string]bool // server_id → tool_name → true; nil map for a server = all tools
 	ExpiresAt    *time.Time
