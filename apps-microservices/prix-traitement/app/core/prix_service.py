@@ -539,7 +539,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
 
         elif use_claude:
             # ---- Claude (défaut) ----
-            actual_model = llm_model
+            actual_model = llm_model if llm_model != "claude" else settings.CLAUDE_MODEL_NAME
             type_ia = 4
 
             # Parser les suffixes raccourcis : -e-{effort} ou -b-{budget_tokens}
@@ -813,11 +813,12 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             actual_model = llm_model if llm_model != "gemini" else settings.GEMINI_MODEL_NAME
             type_ia = 3
             logger.info(f"[{id_categorie}] V2 — Appel Gemini (model={actual_model}, {len(final_prompt)} chars)...")
+            write_log(tracking_file, f"--- Appel Gemini (model={actual_model}, {len(final_prompt)} chars)...")            
             gemini = GeminiProvider(model=actual_model, thinking_level="low")
             llm_result = await gemini.chat(final_prompt)
 
         elif use_claude:
-            actual_model = llm_model
+            actual_model = llm_model if llm_model != "claude" else settings.CLAUDE_MODEL_NAME
             type_ia = 4
             effort = None
             budget_tokens = None
@@ -830,14 +831,21 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                 budget_tokens = int(match_budget.group(1))
                 actual_model = actual_model[:match_budget.start()]
             logger.info(f"[{id_categorie}] V2 — Appel Claude (model={actual_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...")
+            write_log(tracking_file, f"--- Appel Claude (model={actual_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...") 
             claude = ClaudeProvider(model=actual_model, effort=effort, budget_tokens=budget_tokens)
             llm_result = await claude.chat(final_prompt)
 
         else:
             actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
             type_ia = 1
-            logger.info(f"[{id_categorie}] V2 — Appel ChatGPT (model={actual_model}, {len(final_prompt)} chars)...")
-            gpt = ChatGPTProvider(model=actual_model)
+            effort = None
+            match_effort = re.search(r"-e-(low|medium|high)$", actual_model)
+            if match_effort:
+                effort = match_effort.group(1)
+                actual_model = actual_model[:match_effort.start()]
+            logger.info(f"[{id_categorie}] V2 — Appel ChatGPT (model={actual_model}, effort={effort}, {len(final_prompt)} chars)...")
+            write_log(tracking_file, f"--- Appel ChatGPT (model={actual_model}, effort={effort}, {len(final_prompt)} chars)...") 
+            gpt = ChatGPTProvider(model=actual_model, reasoning_effort=effort)
             llm_result = await gpt.chat(final_prompt)
 
         # Extraction usage commun
