@@ -85,7 +85,7 @@ const Timeline = ({ token, onBucketClick }) => {
         <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <Clock className="h-4 w-4 text-primary" />
           Timeline jobs
-          <span className="font-mono text-xs normal-case text-muted-foreground/70 tracking-normal">
+          <span className="font-mono text-xs normal-case text-muted-foreground tracking-normal">
             ({totalEvents} démarrés)
           </span>
           {query.isFetching && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}

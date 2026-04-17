@@ -55,7 +55,7 @@ const LogRow = ({ index, style, lines, searchTerm }) => {
         levelRowClass(level)
       )}
     >
-      <span className="w-12 shrink-0 select-none text-right text-muted-foreground/60">{index + 1}</span>
+      <span className="w-12 shrink-0 select-none text-right text-muted-foreground">{index + 1}</span>
       <span className="flex-1 truncate whitespace-pre">{content}</span>
       {url && (
         <a
