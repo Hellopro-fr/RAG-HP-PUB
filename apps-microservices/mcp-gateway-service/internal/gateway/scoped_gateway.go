@@ -54,7 +54,7 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Response {
 	switch req.Method {
 	case "initialize":
-		return sg.handleInitialize(req)
+		return sg.handleInitialize(ctx, req)
 	case "tools/list":
 		return sg.handleToolsList(req)
 	case "tools/call":
@@ -72,15 +72,19 @@ func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Resp
 	}
 }
 
-func (sg *ScopedGateway) handleInitialize(req *mcp.Request) *mcp.Response {
+func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request) *mcp.Response {
 	caps := sg.registry.MergedCapabilitiesFiltered(sg.allowedIDs)
 	if caps.Tools == nil {
 		caps.Tools = &mcp.ToolsCapability{}
 	}
+	name := sg.name
+	if v, ok := ctx.Value(scopetoken.ScopeNameContextKey).(string); ok && v != "" {
+		name = v
+	}
 	result := mcp.InitializeResult{
 		ProtocolVersion: mcp.ProtocolVersion,
 		Capabilities:    caps,
-		ServerInfo:      mcp.Implementation{Name: sg.name, Version: sg.version},
+		ServerInfo:      mcp.Implementation{Name: name, Version: sg.version},
 	}
 	return okResp(req.ID, result)
 }

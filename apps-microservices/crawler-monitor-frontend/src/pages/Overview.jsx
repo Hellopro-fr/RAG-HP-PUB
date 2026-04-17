@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Outlet } from 'react-router-dom';
 import {
   RefreshCw, Server, CheckCircle, XCircle, Zap, Archive,
-  Search, Filter, Calendar, ChevronLeft, ChevronRight, TrendingUp,
+  Search, Filter, Calendar, ChevronLeft, ChevronRight, TrendingUp, X,
 } from 'lucide-react';
 import { JOBS_PER_PAGE } from '../lib/constants';
 import { useJobsQuery, useCapacityQuery, useJobDetailsQuery } from '../hooks/queries';
@@ -13,6 +13,10 @@ import JobDetails from '../components/JobDetails';
 import CapacityBar from '../components/CapacityBar';
 import Timeline from '../components/Timeline';
 import AlertsBanner from '../components/AlertsBanner';
+import { Card } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { cn } from '../lib/utils';
 
 /**
  * Overview page (`/` and `/jobs/:id`).
@@ -115,15 +119,18 @@ const Overview = ({ token, replicas }) => {
     setCurrentPage(1);
   }, []);
 
+  const hasDateFilter = !!(startDate || endDate);
+
   return (
-    <main className="container mx-auto p-4 space-y-4">
+    <div className="p-4 space-y-4">
       <AlertsBanner token={token} />
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <StatCard title="Total" value={globalStats.total} icon={Server} color="gray" />
-        <StatCard title="Succès" value={globalStats.finished} icon={CheckCircle} color="green" />
-        <StatCard title="Échecs" value={globalStats.failed} icon={XCircle} color="red" />
-        <StatCard title="En cours" value={globalStats.running} icon={Zap} color="blue" />
-        <StatCard title="Archivés" value={globalStats.archived} icon={Archive} color="gray" />
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <StatCard title="Total"    value={globalStats.total}    icon={Server}      variant="default" />
+        <StatCard title="Succès"   value={globalStats.finished} icon={CheckCircle} variant="success" />
+        <StatCard title="Échecs"   value={globalStats.failed}   icon={XCircle}     variant="destructive" />
+        <StatCard title="En cours" value={globalStats.running}  icon={Zap}         variant="info" />
+        <StatCard title="Archivés" value={globalStats.archived} icon={Archive}     variant="default" />
       </div>
 
       <Timeline token={token} onBucketClick={handleTimelineBucketClick} />
@@ -132,74 +139,83 @@ const Overview = ({ token, replicas }) => {
 
       <ReplicaMonitor replicas={replicas} token={token} />
 
-      <div className="bg-gray-800 p-3 rounded-lg space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Filters + pagination */}
+      <Card className="p-3 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-grow min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-            <input
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
               type="text"
-              placeholder="Filtrer par ID ou domaine..."
+              placeholder="Filtrer par ID ou domaine…"
               value={searchTerm}
               onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="w-full bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="pl-8"
             />
           </div>
+
           <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+            <Filter className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <select
               value={statusFilter}
               onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-              className="bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 appearance-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="h-9 appearance-none rounded-md border border-input bg-background pl-8 pr-8 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="all">Tous les statuts</option>
               <option value="finished">Succès</option>
               <option value="failed">Échec</option>
               <option value="running">En cours</option>
-              <option value="stopping">Arrêt...</option>
+              <option value="stopping">Arrêt…</option>
               <option value="archived">Archivé</option>
               <option value="restarting_oom">Restart OOM</option>
             </select>
           </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-gray-500" />
-            <input
+
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Input
               type="date"
               value={startDate}
               onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-              className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+              className="w-[150px]"
             />
-            <span className="text-gray-500">à</span>
-            <input
+            <span className="text-muted-foreground text-sm">→</span>
+            <Input
               type="date"
               value={endDate}
               onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-              className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+              className="w-[150px]"
             />
-            {(startDate || endDate) && (
-              <button
+            {hasDateFilter && (
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
-                className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-md text-sm text-white transition-colors"
+                aria-label="Effacer les dates"
+                title="Effacer les dates"
               >
-                ✕
-              </button>
+                <X className="h-4 w-4" />
+              </Button>
             )}
           </div>
         </div>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between text-sm text-gray-400 pt-2 border-t border-gray-700">
-            <span>{filteredJobs.length} jobs trouvés</span>
+          <div className="flex items-center justify-between border-t border-border pt-2 text-sm text-muted-foreground">
+            <span className="font-mono">{filteredJobs.length} jobs</span>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                aria-label="Page précédente"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <div className="flex items-center gap-2">
-                <span className="hidden sm:inline">Page</span>
-                <input
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex items-center gap-1.5">
+                <span className="hidden sm:inline text-xs">Page</span>
+                <Input
                   type="number"
                   min="1"
                   max={totalPages}
@@ -210,32 +226,36 @@ const Overview = ({ token, replicas }) => {
                       setCurrentPage(val);
                     }
                   }}
-                  className="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="h-8 w-14 px-2 text-center font-mono"
                 />
-                <span className="text-gray-500">/ {totalPages}</span>
+                <span className="text-xs text-muted-foreground">/ {totalPages}</span>
               </div>
-              <button
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                aria-label="Page suivante"
               >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="flex gap-4 items-start">
-        <div className="w-1/3 space-y-3 max-h-[calc(100vh-20rem)] overflow-y-auto">
+      {/* Jobs list + details */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(280px,1fr)_2fr]">
+        <Card className="p-2 space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <RefreshCw className="w-8 h-8 animate-spin text-blue-400" />
+              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : paginatedJobs.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>Aucun job trouvé</p>
+            <div className="py-12 text-center text-muted-foreground">
+              <Server className="mx-auto mb-3 h-10 w-10 opacity-50" />
+              <p className="text-sm">Aucun job trouvé</p>
             </div>
           ) : (
             paginatedJobs.map(job => (
@@ -247,12 +267,12 @@ const Overview = ({ token, replicas }) => {
               />
             ))
           )}
-        </div>
+        </Card>
 
-        <div ref={detailsPanelRef} className="flex-1 bg-gray-800 rounded-lg p-6">
+        <Card ref={detailsPanelRef} className={cn('p-5', !selectedJob && !loadingDetails && 'flex items-center justify-center')}>
           {loadingDetails ? (
             <div className="flex items-center justify-center py-20">
-              <RefreshCw className="w-12 h-12 animate-spin text-blue-400" />
+              <RefreshCw className="h-10 w-10 animate-spin text-primary" />
             </div>
           ) : selectedJob ? (
             <JobDetails
@@ -263,17 +283,17 @@ const Overview = ({ token, replicas }) => {
               onSelectJob={handleSelectJob}
             />
           ) : (
-            <div className="text-center py-20 text-gray-400">
-              <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">Sélectionnez un job pour voir les détails</p>
-              <p className="text-sm mt-2">Cliquez sur un job dans la liste de gauche</p>
+            <div className="text-center text-muted-foreground py-16">
+              <TrendingUp className="mx-auto mb-3 h-12 w-12 opacity-50" />
+              <p className="text-base">Sélectionnez un job pour voir les détails</p>
+              <p className="text-xs mt-1.5">Cliquez sur un job dans la liste</p>
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       <Outlet />
-    </main>
+    </div>
   );
 };
 
