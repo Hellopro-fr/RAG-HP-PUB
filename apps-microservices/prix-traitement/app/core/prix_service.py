@@ -7,10 +7,11 @@ import json
 import logging
 import asyncio
 import re
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from app.core.api_client import GeminiProvider, ClaudeProvider, ChatGPTProvider, HelloProAPIClient
-from app.core.utils import extract_json_from_text, get_prompt_cached
+from app.core.utils import extract_json_from_text, get_prompt_cached, get_tracking_filepath, write_log
 from app.core.search import call_search_api_async
 from app.core.credentials import settings
 
@@ -683,6 +684,19 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     api_client = HelloProAPIClient()
     ID_PROCESS = "37"
 
+    # Tracking file (visualisé dans QC-tracking-service)
+    tracking_file = get_tracking_filepath(id_categorie, prefix="prix-traitement-v2")
+    write_log(tracking_file, "=" * 80)
+    write_log(tracking_file, f"RUN_QUESTIONNAIRE_V2 — {datetime.now().isoformat()}")
+    write_log(tracking_file, "=" * 80)
+    write_log(tracking_file, f"id_categorie: {id_categorie}")
+    write_log(tracking_file, f"nom_categorie: {nom_categorie}")
+    write_log(tracking_file, f"model: {model or settings.CHATGPT_MODEL_NAME}")
+    write_log(tracking_file, "")
+    write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
+    write_log(tracking_file, json.dumps(equivalences, ensure_ascii=False, indent=2))
+    write_log(tracking_file, "")
+
     try:
         # =====================================================================
         # ÉTAPE 1 : Matching prix via BO + récupération prompt EN PARALLÈLE
@@ -765,6 +779,10 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         logger.info(f"[{id_categorie}] V2 — {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars)")
 
+        write_log(tracking_file, f"--- ALL_CHUNKS_TEXT ({len(formatted_chunks)} chunks, {len(all_chunks_text)} chars) ---")
+        write_log(tracking_file, all_chunks_text)
+        write_log(tracking_file, "")
+
         prompt_text = prompt_config.get("contenu_prompt", "")
 
         # =====================================================================
@@ -773,9 +791,13 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         final_prompt = prompt_text
         final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
 
-        # {requete_rag} = texte_prompt si fourni     
+        # {requete_rag} = texte_prompt si fourni
         requete_rag_value = texte_prompt.strip()
         logger.info(f"[{id_categorie}] V2 — Requête prompt surchargée: {requete_rag_value}")
+
+        write_log(tracking_file, "--- REQUETE_RAG_VALUE ---")
+        write_log(tracking_file, requete_rag_value)
+        write_log(tracking_file, "")
 
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
@@ -852,6 +874,10 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         llm_text = llm_result.get("message", "")
         logger.info(f"[{id_categorie}] V2 — Réponse LLM reçue: {llm_text[:200]}... en {elapsed:.1f}s")
+
+        write_log(tracking_file, f"--- LLM_TEXT ({len(llm_text)} chars, {elapsed:.1f}s) ---")
+        write_log(tracking_file, llm_text)
+        write_log(tracking_file, "")
 
         parsed = extract_json_from_text(llm_text)
         if not parsed or not isinstance(parsed, dict):
