@@ -3,6 +3,10 @@ import { List } from 'react-window';
 import {
   XCircle, AlertTriangle, Info, Search, Download, ExternalLink,
 } from 'lucide-react';
+import { Card } from './ui/card';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
+import { cn } from '../lib/utils';
 
 /**
  * Advanced log viewer.
@@ -13,21 +17,22 @@ import {
 const ROW_HEIGHT = 24;
 const LIST_HEIGHT_PX = 480;
 
-const highlightLogClass = (level) => {
+const levelRowClass = (level) => {
   switch (level) {
-    case 'error': return 'text-red-400 bg-red-900/20';
-    case 'warn':  return 'text-yellow-400 bg-yellow-900/20';
-    default:      return 'text-gray-300';
+    case 'error': return 'text-destructive bg-destructive/10';
+    case 'warn':  return 'text-warning bg-warning/10';
+    default:      return 'text-foreground/80';
   }
 };
 
-// Row component used by react-window. Receives: { index, style, lines, searchTerm }
+const SELECT_CLS =
+  'h-9 appearance-none rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
 const LogRow = ({ index, style, lines, searchTerm }) => {
   const item = lines[index];
   if (!item) return null;
   const { line, level, url } = item;
 
-  // Inline search highlighter (memoization per row would cost more than help)
   let content;
   if (!searchTerm) {
     content = line;
@@ -35,7 +40,7 @@ const LogRow = ({ index, style, lines, searchTerm }) => {
     const parts = line.split(new RegExp(`(${searchTerm})`, 'gi'));
     content = parts.map((part, i) =>
       part.toLowerCase() === searchTerm.toLowerCase()
-        ? <span key={i} className="bg-yellow-500 text-black font-bold">{part}</span>
+        ? <span key={i} className="bg-warning font-bold text-warning-foreground">{part}</span>
         : part
     );
   }
@@ -43,19 +48,22 @@ const LogRow = ({ index, style, lines, searchTerm }) => {
   return (
     <div
       style={style}
-      className={`flex gap-4 items-start py-0.5 hover:bg-gray-800/50 ${highlightLogClass(level)} px-2 rounded font-mono text-xs`}
+      className={cn(
+        'flex items-start gap-4 rounded px-2 py-0.5 font-mono text-xs hover:bg-accent/50',
+        levelRowClass(level)
+      )}
     >
-      <span className="text-gray-600 select-none w-12 text-right shrink-0">{index + 1}</span>
-      <span className="flex-1 whitespace-pre truncate">{content}</span>
+      <span className="w-12 shrink-0 select-none text-right text-muted-foreground/60">{index + 1}</span>
+      <span className="flex-1 truncate whitespace-pre">{content}</span>
       {url && (
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 text-blue-400 hover:text-blue-300"
+          className="shrink-0 text-primary hover:text-primary/80"
           title={url}
         >
-          <ExternalLink className="w-3.5 h-3.5" />
+          <ExternalLink className="h-3.5 w-3.5" />
         </a>
       )}
     </div>
@@ -126,47 +134,47 @@ const AdvancedLogViewer = ({ content, jobId }) => {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3 flex items-center gap-3">
-          <XCircle className="w-8 h-8 text-red-400" />
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="flex items-center gap-3 border-destructive/30 bg-destructive/5 p-3">
+          <XCircle className="h-7 w-7 text-destructive" />
           <div>
-            <p className="text-2xl font-bold text-red-400">{levelStats.error}</p>
-            <p className="text-sm text-gray-400">Erreurs</p>
+            <p className="font-mono text-2xl font-bold text-destructive">{levelStats.error}</p>
+            <p className="text-xs text-muted-foreground">Erreurs</p>
           </div>
-        </div>
-        <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3">
-          <AlertTriangle className="w-8 h-8 text-yellow-400" />
+        </Card>
+        <Card className="flex items-center gap-3 border-warning/30 bg-warning/5 p-3">
+          <AlertTriangle className="h-7 w-7 text-warning" />
           <div>
-            <p className="text-2xl font-bold text-yellow-400">{levelStats.warn}</p>
-            <p className="text-sm text-gray-400">Avertissements</p>
+            <p className="font-mono text-2xl font-bold text-warning">{levelStats.warn}</p>
+            <p className="text-xs text-muted-foreground">Avertissements</p>
           </div>
-        </div>
-        <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-3">
-          <Info className="w-8 h-8 text-blue-400" />
+        </Card>
+        <Card className="flex items-center gap-3 border-info/30 bg-info/5 p-3">
+          <Info className="h-7 w-7 text-info" />
           <div>
-            <p className="text-2xl font-bold text-blue-400">{levelStats.info}</p>
-            <p className="text-sm text-gray-400">Info</p>
+            <p className="font-mono text-2xl font-bold text-info">{levelStats.info}</p>
+            <p className="text-xs text-muted-foreground">Info</p>
           </div>
-        </div>
+        </Card>
       </div>
 
-      <div className="bg-gray-800 p-4 rounded-lg space-y-3">
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input
+      <Card className="space-y-3 p-3">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
               type="text"
-              placeholder="Rechercher dans les logs..."
+              placeholder="Rechercher dans les logs…"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="pl-10"
             />
           </div>
 
           <select
             value={levelFilter}
             onChange={e => setLevelFilter(e.target.value)}
-            className="bg-gray-900 border border-gray-700 rounded-md px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className={SELECT_CLS}
           >
             <option value="all">Tous les niveaux</option>
             <option value="error">Erreurs</option>
@@ -175,27 +183,31 @@ const AdvancedLogViewer = ({ content, jobId }) => {
           </select>
 
           <div className="flex gap-2">
-            <button onClick={() => downloadLogs('txt')}  className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm transition-colors">
-              <Download className="w-4 h-4" /> TXT
-            </button>
-            <button onClick={() => downloadLogs('json')} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-md text-sm transition-colors">
-              <Download className="w-4 h-4" /> JSON
-            </button>
-            <button onClick={() => downloadLogs('csv')}  className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm transition-colors">
-              <Download className="w-4 h-4" /> CSV
-            </button>
+            <Button size="sm" onClick={() => downloadLogs('txt')}>
+              <Download className="h-4 w-4" /> TXT
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => downloadLogs('json')}>
+              <Download className="h-4 w-4" /> JSON
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => downloadLogs('csv')}>
+              <Download className="h-4 w-4" /> CSV
+            </Button>
           </div>
         </div>
 
-        <div className="text-sm text-gray-400">
-          {filteredLines.length} lignes
-          {filteredLines.length !== parsedLines.length && ` (sur ${parsedLines.length} au total)`}
+        <div className="text-xs text-muted-foreground">
+          <span className="font-mono">{filteredLines.length}</span> lignes
+          {filteredLines.length !== parsedLines.length && (
+            <> (sur <span className="font-mono">{parsedLines.length}</span> au total)</>
+          )}
         </div>
-      </div>
+      </Card>
 
-      <div className="bg-gray-900 rounded-lg overflow-hidden">
+      <Card className="overflow-hidden bg-background p-0">
         {filteredLines.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">Aucune ligne ne correspond.</div>
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            Aucune ligne ne correspond.
+          </div>
         ) : (
           <List
             rowComponent={LogRow}
@@ -206,7 +218,7 @@ const AdvancedLogViewer = ({ content, jobId }) => {
             overscanCount={10}
           />
         )}
-      </div>
+      </Card>
     </div>
   );
 };

@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { Card } from './ui/card';
 
-const TOP_N = 7; // keep top 7 + "Autres" aggregate
+const TOP_N = 7;
 
-const ErrorVisualization = ({ errors, warnings }) => {
+const ErrorVisualization = ({ errors }) => {
   const data = useMemo(() => {
     const types = {};
     errors.forEach(err => {
@@ -21,27 +22,39 @@ const ErrorVisualization = ({ errors, warnings }) => {
 
   if (data.length === 0) return null;
 
-  // Dynamic height: 32px per row, min 200px
   const chartHeight = Math.max(200, data.length * 32);
 
   return (
-    <div className="bg-gray-800 p-4 rounded-lg">
-      <h3 className="text-lg font-semibold text-white mb-4">Distribution des Erreurs</h3>
+    <Card className="p-4">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        Distribution des Erreurs
+      </h3>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart data={data} layout="vertical" margin={{ top: 5, right: 24, left: 8, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-          <XAxis type="number" stroke="#9ca3af" allowDecimals={false} />
-          <YAxis type="category" dataKey="name" stroke="#9ca3af" width={140} tick={{ fontSize: 12 }} />
-          <Tooltip
-            cursor={{ fill: '#1f2937' }}
-            contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 6 }}
-            labelStyle={{ color: '#f3f4f6' }}
-            itemStyle={{ color: '#ef4444' }}
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+          <XAxis type="number" stroke="hsl(var(--muted-foreground))" allowDecimals={false} />
+          <YAxis
+            type="category"
+            dataKey="name"
+            stroke="hsl(var(--muted-foreground))"
+            width={140}
+            tick={{ fontSize: 12 }}
           />
-          <Bar dataKey="value" fill="#ef4444" radius={[0, 4, 4, 0]} />
+          <Tooltip
+            cursor={{ fill: 'hsl(var(--muted) / 0.5)' }}
+            contentStyle={{
+              background: 'hsl(var(--popover))',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: 6,
+              color: 'hsl(var(--popover-foreground))',
+            }}
+            labelStyle={{ color: 'hsl(var(--foreground))' }}
+            itemStyle={{ color: 'hsl(var(--destructive))' }}
+          />
+          <Bar dataKey="value" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   );
 };
 
