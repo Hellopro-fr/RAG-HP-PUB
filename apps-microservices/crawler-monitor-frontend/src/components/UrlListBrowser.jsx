@@ -1,9 +1,10 @@
-// src/components/UrlListBrowser.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight, ExternalLink, AlertTriangle,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
 
 const LIMIT = 50;
 
@@ -25,7 +26,6 @@ const UrlListBrowser = ({ jobId, category, token }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Debounce search input (300ms) — reset to page 1 on change.
   const searchTimer = useRef(null);
   useEffect(() => {
     clearTimeout(searchTimer.current);
@@ -36,7 +36,6 @@ const UrlListBrowser = ({ jobId, category, token }) => {
     return () => clearTimeout(searchTimer.current);
   }, [search]);
 
-  // Reset pagination + search when the category changes (tab switch).
   useEffect(() => {
     setSearch(''); setDebounced(''); setPage(1);
   }, [category]);
@@ -68,55 +67,54 @@ const UrlListBrowser = ({ jobId, category, token }) => {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher une URL…"
-            className="w-full bg-gray-900 border border-gray-700 rounded pl-9 pr-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+            className="pl-9"
           />
         </div>
-        <span className="text-xs text-gray-400">{counterLabel}</span>
+        <span className="font-mono text-xs text-muted-foreground">{counterLabel}</span>
       </div>
 
       {error && (
-        <div className="bg-red-900/20 border border-red-500/50 text-red-300 p-3 rounded flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           <span className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" /> Impossible de charger les URLs. {error}
+            <AlertTriangle className="h-4 w-4" /> Impossible de charger les URLs. {error}
           </span>
-          <button
-            onClick={fetchPage}
-            className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-white"
-          >Réessayer</button>
+          <Button variant="destructive" size="sm" onClick={fetchPage}>
+            Réessayer
+          </Button>
         </div>
       )}
 
       {loading && items.length === 0 ? (
         <div className="flex justify-center py-12">
-          <RefreshCw className="w-6 h-6 animate-spin text-blue-500" />
+          <RefreshCw className="h-5 w-5 animate-spin text-primary" />
         </div>
       ) : !error && items.length === 0 ? (
-        <div className="text-gray-500 text-sm py-8 text-center">
+        <div className="py-8 text-center text-sm text-muted-foreground">
           Aucune URL dans cette catégorie.
         </div>
       ) : (
-        <ul className="divide-y divide-gray-700 bg-gray-900 border border-gray-700 rounded">
+        <ul className="divide-y divide-border rounded-md border border-border bg-background">
           {items.map((it, i) => (
-            <li key={`${it.url}-${i}`} className="p-3 hover:bg-gray-800/60 transition-colors">
+            <li key={`${it.url}-${i}`} className="p-3 transition-colors hover:bg-accent/40">
               <a
                 href={it.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 text-sm break-all flex items-start gap-2"
+                className="flex items-start gap-2 break-all text-sm text-primary hover:text-primary/80"
               >
-                <ExternalLink className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{it.url}</span>
               </a>
               {category === 'error' && it.error && (
-                <p className="text-red-400 text-xs mt-1 pl-5">{it.error}</p>
+                <p className="mt-1 pl-5 text-xs text-destructive">{it.error}</p>
               )}
             </li>
           ))}
@@ -125,19 +123,25 @@ const UrlListBrowser = ({ jobId, category, token }) => {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between gap-3">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page <= 1 || loading}
-            className="flex items-center gap-1 text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded disabled:opacity-40"
-          ><ChevronLeft className="w-3.5 h-3.5" /> Préc.</button>
-          <span className="text-xs text-gray-400">
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Préc.
+          </Button>
+          <span className="font-mono text-xs text-muted-foreground">
             Page {page} / {totalPages}
           </span>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages || loading}
-            className="flex items-center gap-1 text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded disabled:opacity-40"
-          >Suiv. <ChevronRight className="w-3.5 h-3.5" /></button>
+          >
+            Suiv. <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
         </div>
       )}
     </div>
