@@ -1,13 +1,17 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   SlidersHorizontal, RefreshCw, AlertCircle, TrendingDown, TrendingUp, Server,
 } from 'lucide-react';
-import { useCapacityPlanningQuery } from '../hooks/queries';
+import { useCapacityPlanningQuery, useJobsQuery } from '../hooks/queries';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
+import {
+  Tooltip, TooltipTrigger, TooltipContent,
+} from '../components/ui/tooltip';
 import { cn } from '../lib/utils';
 
 const GB = 1024 * 1024 * 1024;
@@ -42,6 +46,12 @@ const efficiencyBar = (pct) => {
   return 'bg-success';
 };
 
+const shortJobId = (id) => {
+  if (!id) return '';
+  const s = String(id);
+  return s.length > 8 ? s.slice(0, 8) : s;
+};
+
 /**
  * Capacity planning — answer "can we reduce RAM per replica?".
  */
@@ -49,10 +59,17 @@ const CapacityPlanningPage = ({ token }) => {
   const [windowKey, setWindowKey] = useState('1h');
   const [marginPct, setMarginPct] = useState(30);
   const query = useCapacityPlanningQuery(token, windowKey);
+  // Pour joindre peak_job_id → domaine (évite de re-fetch par job)
+  const jobsQuery = useJobsQuery(token);
   const data = query.data;
 
   const replicas = data?.replicas || [];
   const totals = data?.totals || null;
+
+  const jobsById = useMemo(() => {
+    const jobs = jobsQuery.data || [];
+    return new Map(jobs.map(j => [j.id, j]));
+  }, [jobsQuery.data]);
 
   const globalPeak = useMemo(() => {
     if (!replicas.length) return 0;
@@ -69,7 +86,7 @@ const CapacityPlanningPage = ({ token }) => {
     return Math.max(...replicas.map(r => r.allocated || 0)) / GB;
   }, [replicas]);
 
-  const totalAllocatedGB = totals ? totals.total_allocated / GB : 0;
+  const totalAllocatedGB = totals ? (totals.total_allocated ?? 0) / GB : 0;
   const simulatedReplicaCount = targetPerReplicaGB > 0
     ? Math.floor(totalAllocatedGB / targetPerReplicaGB)
     : 0;
@@ -137,6 +154,12 @@ const CapacityPlanningPage = ({ token }) => {
             <p className="text-sm">Aucun sample de replica dans la fenêtre {windowKey}.</p>
             <p className="mt-1 text-xs">Attends quelques heartbeats et réessaie.</p>
           </div>
+        ) : !totals ? (
+          // Fix 2a : guarde sur totals (backend peut renvoyer null si erreur agrégat)
+          <div className="py-16 text-center text-muted-foreground">
+            <AlertCircle className="mx-auto mb-3 h-10 w-10 opacity-40" />
+            <p className="text-sm">Totaux indisponibles — retente dans quelques secondes.</p>
+          </div>
         ) : (
           <>
             {/* KPI row */}
@@ -181,28 +204,66 @@ const CapacityPlanningPage = ({ token }) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {replicas.map(r => (
-                    <TableRow key={r.replicaId}>
-                      <TableCell className="max-w-[200px] truncate font-mono text-xs text-foreground" title={r.replicaId}>
-                        {r.replicaId.slice(0, 20)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground">{fmtBytes(r.allocated)}</TableCell>
-                      <TableCell className="text-right font-mono text-info">{fmtBytes(r.peak)}</TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground">{fmtBytes(r.avg)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 max-w-[120px] flex-1 overflow-hidden rounded-full bg-muted">
-                            <div className={cn('h-full', efficiencyBar(r.efficiency))} style={{ width: `${Math.min(r.efficiency * 100, 100)}%` }} />
+                  {replicas.map(r => {
+                    // Fix 2b : join peak_job_id → domaine pour le tooltip
+                    const peakJob = r.peak_job_id ? jobsById.get(r.peak_job_id) : null;
+                    const canLink = Boolean(r.peak_job_id);
+                    const peakLabel = fmtBytes(r.peak);
+                    const peakNode = canLink ? (
+                      <Link
+                        to={`/jobs/${r.peak_job_id}`}
+                        className="font-mono text-info underline-offset-2 hover:underline"
+                      >
+                        {peakLabel}
+                      </Link>
+                    ) : (
+                      <span className="font-mono text-info">{peakLabel}</span>
+                    );
+                    const canTooltip = canLink || !!r.peak_ts;
+                    return (
+                      <TableRow key={r.replicaId}>
+                        <TableCell className="max-w-[200px] truncate font-mono text-xs text-foreground" title={r.replicaId}>
+                          {r.replicaId.slice(0, 20)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">{fmtBytes(r.allocated)}</TableCell>
+                        <TableCell className="text-right">
+                          {canTooltip ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-block">{peakNode}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="space-y-0.5 text-xs">
+                                  {peakJob?.domain && (
+                                    <div className="font-semibold">{peakJob.domain}</div>
+                                  )}
+                                  {r.peak_ts ? <div>{fmtDate(r.peak_ts)}</div> : null}
+                                  {r.peak_job_id ? (
+                                    <div className="font-mono text-muted-foreground">
+                                      job #{shortJobId(r.peak_job_id)}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : peakNode}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">{fmtBytes(r.avg)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 max-w-[120px] flex-1 overflow-hidden rounded-full bg-muted">
+                              <div className={cn('h-full', efficiencyBar(r.efficiency))} style={{ width: `${Math.min(r.efficiency * 100, 100)}%` }} />
+                            </div>
+                            <span className={cn('font-mono text-xs font-semibold', efficiencyColor(r.efficiency))}>
+                              {fmtPct(r.efficiency)}
+                            </span>
                           </div>
-                          <span className={cn('font-mono text-xs font-semibold', efficiencyColor(r.efficiency))}>
-                            {fmtPct(r.efficiency)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">{r.sample_count}</TableCell>
-                      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{fmtDate(r.last_seen)}</TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground">{r.sample_count}</TableCell>
+                        <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{fmtDate(r.last_seen)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

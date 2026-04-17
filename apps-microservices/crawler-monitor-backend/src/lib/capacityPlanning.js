@@ -10,6 +10,8 @@
  *
  * Stats per replica: allocated (max totalRam seen), peak (max ram),
  * avg (mean ram), sample count, last seen timestamp.
+ * Le peak inclut aussi peak_ts + peak_job_id pour permettre le cross-ref
+ * côté UI (→ ouverture du crawl/domaine responsable du pic).
  */
 
 import { JOB_PERF_PREFIX } from './jobPerformance.js';
@@ -31,6 +33,10 @@ export function parsePlanningWindow(input) {
 /**
  * Fold points into per-replica stats.
  * points: [{ ts, cpu, ram, totalRam, replicaId?, jobId? }, ...]
+ *
+ * On capture peak_ts + peak_job_id en même temps que le peak RAM
+ * pour qu'une UI puisse retrouver *quel* crawl/domaine a causé le pic
+ * sans re-scanner Redis à la main.
  */
 export function aggregateByReplica(pointsByReplica) {
   const replicas = [];
@@ -38,13 +44,19 @@ export function aggregateByReplica(pointsByReplica) {
     if (!points || points.length === 0) continue;
     let allocated = 0;
     let peak = 0;
+    let peak_ts = 0;
+    let peak_job_id = null;
     let sum = 0;
     let lastTs = 0;
     for (const p of points) {
       const ram = p.ram || 0;
       const tot = p.totalRam || 0;
       if (tot > allocated) allocated = tot;
-      if (ram > peak) peak = ram;
+      if (ram > peak) {
+        peak = ram;
+        peak_ts = p.ts || 0;
+        peak_job_id = p.jobId || null;
+      }
       sum += ram;
       if (p.ts > lastTs) lastTs = p.ts;
     }
@@ -53,6 +65,8 @@ export function aggregateByReplica(pointsByReplica) {
       replicaId: id,
       allocated,
       peak,
+      peak_ts,
+      peak_job_id,
       avg,
       sample_count: points.length,
       last_seen: lastTs,
@@ -120,6 +134,8 @@ export async function computeCapacityPlanning(client, windowKey, loaders = {}) {
 /**
  * Default implementation of the long-window loader. Iterates all job:perf:*
  * keys, reads their points, and regroups by replicaId within the window.
+ * Note: on injecte le jobId déduit de la clé (`job:perf:<id>`) sur chaque
+ * point pour que `aggregateByReplica` puisse remonter `peak_job_id`.
  */
 async function defaultScanJobPerf(client, windowMs, nowMs) {
   const cutoff = nowMs - windowMs;
@@ -132,10 +148,12 @@ async function defaultScanJobPerf(client, windowMs, nowMs) {
     try {
       raw = await client.zRangeByScore(key, cutoff, '+inf');
     } catch { continue; }
+    const jobId = key.startsWith(JOB_PERF_PREFIX) ? key.slice(JOB_PERF_PREFIX.length) : null;
     for (const s of raw) {
       let p;
       try { p = JSON.parse(s); } catch { continue; }
       if (!p || !p.replicaId) continue;
+      if (!p.jobId && jobId) p.jobId = jobId;
       if (!pointsByReplica[p.replicaId]) pointsByReplica[p.replicaId] = [];
       pointsByReplica[p.replicaId].push(p);
     }
