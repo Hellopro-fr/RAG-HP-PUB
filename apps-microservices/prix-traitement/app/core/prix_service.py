@@ -879,7 +879,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         logger.info(f"[{id_categorie}] V2 — {len(results)} prix matchés")
 
-        if model != "claude":  # Pas de nettoyage pour Claude (effort déjà intégré)
+        if model == "gemini":  # Pas de nettoyage pour Claude (effort déjà intégré)
             # =====================================================================
             # ÉTAPE 1b : Filtrage des prix aberrants (IQR + borne médiane)
             # =====================================================================
