@@ -36,8 +36,11 @@ const PerfTooltip = ({ active, payload }) => {
  * Shows CPU% (left Y axis) and RAM (right Y axis) over time,
  * with markers on peaks.
  */
-const JobPerformance = ({ token, jobId }) => {
-  const query = useJobPerformanceQuery(token, jobId);
+const JobPerformance = ({ token, jobId, isRunning = true }) => {
+  // Stop polling once the job is terminal — perf data won't change anymore.
+  const query = useJobPerformanceQuery(token, jobId, {
+    refetchInterval: isRunning ? 15 * 1000 : false,
+  });
   const data = query.data;
 
   const chartData = useMemo(() => {

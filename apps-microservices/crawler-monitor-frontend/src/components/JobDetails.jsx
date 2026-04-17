@@ -93,8 +93,13 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
       </div>
 
       {/* Performance chart — ALWAYS visible regardless of log stats.
-          Data comes from heartbeats (independent of CrawlingStats in the log). */}
-      <JobPerformance token={token} jobId={job.id} />
+          Data comes from heartbeats (independent of CrawlingStats in the log).
+          Polling stops once the job is terminal to save bandwidth + CPU. */}
+      <JobPerformance
+        token={token}
+        jobId={job.id}
+        isRunning={['running', 'stopping', 'restarting_oom'].includes((job.status || '').toLowerCase())}
+      />
 
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
