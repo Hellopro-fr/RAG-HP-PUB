@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-18-archive-disk-space-preflight.md",
+  "tasks": [
+    {
+      "id": 4,
+      "subject": "Task 1: Add disk space + archive diagnostics helpers",
+      "status": "completed",
+      "description": "**Goal:** Add two pure, testable helpers to `CrawlerManager`: `_estimate_archive_required_bytes` and `_get_archives_disk_state`. Both fail-open on error.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/app/core/crawler_manager.py`\n- Modify: `apps-microservices/crawler-service/tests/test_crawler_manager.py`\n\n**Acceptance Criteria:**\n- [ ] `_estimate_archive_required_bytes(job_storage_path)` returns `int(size * 1.5)` or 0 on error\n- [ ] `_get_archives_disk_state(archives_dir)` returns `{free_bytes, total_bytes, used_pct, file_count, oldest_file_age_seconds}` dict\n- [ ] `file_count` excludes `.staging/` subdirectory\n- [ ] Both helpers fail-open\n- [ ] 7 new tests pass\n\n**Verify:** `cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py::TestArchiveDiskPreflight -v`\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py::TestArchiveDiskPreflight -v\", \"acceptanceCriteria\": [\"helpers added\", \"7 tests pass\", \"fail-open\", \".staging/ excluded\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 2: Integrate pre-flight check and diagnostics into archive_crawl",
+      "status": "completed",
+      "blockedBy": [4],
+      "description": "**Goal:** Insert pre-flight disk space check in `archive_crawl` between the GCS fallback and the snapshot/archive creation. Log baseline disk state. Reject with 503 `INSUFFICIENT_DISK_SPACE` when free < required. Log state again in the failure path.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/app/core/crawler_manager.py`\n- Modify: `apps-microservices/crawler-service/tests/test_crawler_manager.py`\n\n**Acceptance Criteria:**\n- [ ] Baseline disk state logged\n- [ ] Required bytes floored at 1 GB\n- [ ] 503 raised with `INSUFFICIENT_DISK_SPACE` error_code\n- [ ] Post-failure disk state logged\n- [ ] All existing tests still pass\n\n**Verify:** `cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py -v`\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py -v\", \"acceptanceCriteria\": [\"pre-flight check inserted\", \"503 on insufficient space\", \"baseline + failure logs\", \"1 GB floor\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 3: Document pre-flight behavior in CLAUDE.md",
+      "status": "completed",
+      "blockedBy": [5],
+      "description": "**Goal:** Add a sub-section documenting the pre-flight disk space check, 503 response, and fail-open policy.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/CLAUDE.md`\n\n**Acceptance Criteria:**\n- [ ] Pre-flight check + 503 shape documented\n- [ ] Fail-open policy stated\n- [ ] Spec reference included\n\n**Verify:** `grep -q 'INSUFFICIENT_DISK_SPACE' apps-microservices/crawler-service/CLAUDE.md`\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -q 'INSUFFICIENT_DISK_SPACE' apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"INSUFFICIENT_DISK_SPACE documented\", \"fail-open explained\", \"spec link\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-18T00:00:00Z"
+}
