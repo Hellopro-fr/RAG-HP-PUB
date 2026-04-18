@@ -1746,8 +1746,47 @@ class CrawlerManager:
 
     async def reconcile_jobs(self):
         """
+        Public wrapper: leader election + delegate to _reconcile_locked.
+
+        Only one replica runs reconciliation at a time, chosen via a Redis
+        SET NX lock. Without this, multiple replicas race on stale jobs and
+        each fires duplicate failure webhooks.
+        """
+        leader_lock_key = "reconcile_leader_lock"
+        my_replica_id = os.uname().nodename
+        # TTL is 2x the reconciliation interval — enough safety margin to survive
+        # a slow scan, and short enough to recover if the leader dies mid-scan.
+        lock_ttl = settings.RECONCILIATION_INTERVAL_SECONDS * 2
+        acquired = await cache_service.redis_client.set(
+            leader_lock_key, my_replica_id, nx=True, ex=lock_ttl
+        )
+        if not acquired:
+            logger.debug("Reconciliation skipped: another replica holds the leader lock.")
+            return
+
+        try:
+            await self._reconcile_locked()
+        finally:
+            # Ownership-safe release: only delete the lock if we still own it.
+            # This prevents a replica from releasing a lock that TTL-expired and
+            # was re-acquired by a different replica during a long-running scan.
+            try:
+                current_owner = await cache_service.redis_client.get(leader_lock_key)
+                if isinstance(current_owner, bytes):
+                    current_owner = current_owner.decode()
+                if current_owner == my_replica_id:
+                    await cache_service.redis_client.delete(leader_lock_key)
+            except Exception as release_err:
+                logger.warning(f"Could not release reconciliation leader lock: {release_err}")
+
+    async def _reconcile_locked(self):
+        """
         Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
         marks them as failed, and corrects the global running jobs counter.
+
+        This is the actual reconciliation logic. It is called by the public
+        `reconcile_jobs` wrapper only after the leader lock has been acquired —
+        so the scan runs on exactly one replica at a time.
         """
         logger.info("Starting job reconciliation...")
 

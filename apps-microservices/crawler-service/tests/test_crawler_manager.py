@@ -449,3 +449,77 @@ class TestReconciliationLeaderElection:
             "stale detection must not gate the local override on is_local_job; "
             "self.local_processes alone is authoritative for process ownership"
         )
+
+    def test_reconcile_jobs_acquires_leader_lock(self):
+        """reconcile_jobs must attempt to acquire a SET NX leader lock at the top."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.reconcile_jobs)
+        assert "reconcile_leader_lock" in source, (
+            "reconcile_jobs must use a 'reconcile_leader_lock' Redis key"
+        )
+        assert "nx=True" in source, (
+            "reconcile_jobs must acquire the leader lock with SET NX"
+        )
+        assert "ex=" in source, (
+            "reconcile_jobs must set a TTL on the leader lock"
+        )
+
+    def test_reconcile_jobs_returns_early_when_not_leader(self):
+        """reconcile_jobs must return early when it does not acquire the lock."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.reconcile_jobs)
+        # Must have a guard that returns if acquisition failed
+        assert "if not acquired" in source or "if acquired is False" in source, (
+            "reconcile_jobs must guard on lock acquisition and return early when not leader"
+        )
+
+    def test_reconcile_jobs_releases_lock_ownership_safely(self):
+        """reconcile_jobs must release the lock only if it still owns it,
+        guarded by a finally block so a crash still triggers release attempt."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.reconcile_jobs)
+        assert "finally:" in source, (
+            "reconcile_jobs must have a finally block for lock release"
+        )
+        # Ownership-safe release: read the current owner, compare, delete
+        assert "current_owner" in source, (
+            "reconcile_jobs must read the current lock owner before releasing"
+        )
+        assert "my_replica_id" in source, (
+            "reconcile_jobs must track this replica's own id for ownership comparison"
+        )
+
+    def test_reconcile_jobs_delegates_to_reconcile_locked(self):
+        """reconcile_jobs (public wrapper) must delegate actual work to _reconcile_locked."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        assert hasattr(cm.CrawlerManager, "_reconcile_locked"), (
+            "CrawlerManager must have a private _reconcile_locked method containing "
+            "the actual reconciliation logic"
+        )
+        source = inspect.getsource(cm.CrawlerManager.reconcile_jobs)
+        assert "self._reconcile_locked()" in source, (
+            "reconcile_jobs wrapper must call self._reconcile_locked() "
+            "to run the actual scanning logic"
+        )
+
+    def test_reconcile_locked_contains_scanning_logic(self):
+        """The renamed _reconcile_locked method must contain the original scanning logic."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._reconcile_locked)
+        # Smoke-check that the scanning logic is actually in _reconcile_locked
+        assert "scan_keys_by_prefix" in source, (
+            "_reconcile_locked must contain the original scan_keys_by_prefix call"
+        )
+        assert "stale_jobs_count" in source, (
+            "_reconcile_locked must contain the original stale-job counter"
+        )
