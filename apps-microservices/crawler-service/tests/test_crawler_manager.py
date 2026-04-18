@@ -366,3 +366,43 @@ class TestArchiveDiskPreflight:
             "file_count": None,
             "oldest_file_age_seconds": None,
         }
+
+    def test_archive_crawl_calls_get_disk_state_for_baseline(self):
+        """archive_crawl must call _get_archives_disk_state early (baseline log)."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.archive_crawl)
+        assert "_get_archives_disk_state" in source, (
+            "archive_crawl must collect disk state for baseline logging and pre-flight"
+        )
+        # Must appear at least twice: once for baseline, once in the failure path
+        assert source.count("_get_archives_disk_state") >= 2, (
+            "archive_crawl must call _get_archives_disk_state in both baseline and failure paths"
+        )
+
+    def test_archive_crawl_applies_1gb_floor_to_required_bytes(self):
+        """Required bytes must be floored at 1 GB (1_073_741_824)."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.archive_crawl)
+        assert "_estimate_archive_required_bytes" in source, (
+            "archive_crawl must call _estimate_archive_required_bytes"
+        )
+        assert "1_073_741_824" in source or "1073741824" in source, (
+            "archive_crawl must apply a 1 GB floor to required bytes"
+        )
+
+    def test_archive_crawl_raises_503_on_insufficient_space(self):
+        """archive_crawl must raise HTTPException with status 503 and INSUFFICIENT_DISK_SPACE error_code."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.archive_crawl)
+        assert "INSUFFICIENT_DISK_SPACE" in source, (
+            "archive_crawl must use the INSUFFICIENT_DISK_SPACE error_code"
+        )
+        assert "status_code=503" in source, (
+            "archive_crawl must raise 503 (not 500) when disk space is insufficient"
+        )

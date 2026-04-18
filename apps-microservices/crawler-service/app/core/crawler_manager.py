@@ -1519,6 +1519,31 @@ class CrawlerManager:
                 # Archive not in GCS (502/504) — proceed with normal archiving
                 logger.info(f"Archive for '{crawl_id}' not found in GCS. Proceeding with fresh archiving.")
 
+            # --- PRE-FLIGHT DISK SPACE CHECK ---
+            # Measure the source directory, check free space on /app/archives/, reject
+            # with 503 if insufficient. Fail-open if measurement itself fails.
+            baseline_state = self._get_archives_disk_state(archives_dir)
+            logger.info(f"Archive disk state for '{crawl_id}': {baseline_state}")
+
+            required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+            required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+
+            if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                logger.warning(
+                    f"Rejecting archive '{crawl_id}': insufficient disk space. "
+                    f"Required: {required_bytes} bytes, Available: {baseline_state['free_bytes']} bytes. "
+                    f"Disk state: {baseline_state}"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error_code": "INSUFFICIENT_DISK_SPACE",
+                        "required_bytes": required_bytes,
+                        "available_bytes": baseline_state["free_bytes"],
+                        "disk_state": baseline_state,
+                    },
+                )
+
             # Save current status snapshot before archiving (critical: dataset files will be deleted)
             try:
                 current_status = await self.get_status(job_info)
@@ -1610,6 +1635,12 @@ class CrawlerManager:
 
             except Exception as e:
                 logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+                # Log disk state at failure so we can correlate with the baseline log
+                try:
+                    post_failure_state = self._get_archives_disk_state(archives_dir)
+                    logger.error(f"Archive disk state at failure for '{crawl_id}': {post_failure_state}")
+                except Exception:
+                    pass
                 raise HTTPException(
                     status_code=500, detail=f"Archiving failed: {str(e)}")
         finally:
