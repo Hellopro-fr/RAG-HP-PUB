@@ -106,3 +106,139 @@ class TestGcloudOperations:
         with patch("gcs_archive_audit._run_gcloud") as mock_run:
             ga.gcloud_move("gs://bucket/a", "gs://bucket/b")
         mock_run.assert_called_once_with(["storage", "mv", "gs://bucket/a", "gs://bucket/b"])
+
+
+import io
+import json as _json
+import tarfile as _tarfile
+from typing import Dict
+
+
+def _build_tar(tmp_path: Path, files: Dict[str, bytes], name: str = "test.tar.gz") -> Path:
+    """Helper: build an in-memory tar.gz with the given files at the given paths.
+
+    `files` is a dict of { path_in_tar: bytes_content }.
+    """
+    path = tmp_path / name
+    with _tarfile.open(str(path), "w:gz") as tar:
+        for p, content in files.items():
+            info = _tarfile.TarInfo(name=p)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+    return path
+
+
+def _payload(domain: str = "example.com", stored: int = 3, success=None) -> bytes:
+    data = {"domain": domain, "stored_files_count": stored}
+    if success is not None:
+        data["success"] = success
+    return _json.dumps(data).encode()
+
+
+def _marker() -> bytes:
+    return _json.dumps({"final_status": "finished", "exit_code": 0}).encode()
+
+
+class TestClassifyByName:
+    def test_tmp_tar_gz_is_wrong_name(self):
+        assert ga.classify_by_name("crawls/4365.tmp.tar.gz") == ga.WRONG_NAME
+
+    def test_plain_tar_gz_is_none(self):
+        assert ga.classify_by_name("crawls/4365.tar.gz") is None
+
+    def test_full_gs_uri(self):
+        assert ga.classify_by_name("gs://b/crawls/4365.tmp.tar.gz") == ga.WRONG_NAME
+
+
+class TestArchiveInspection:
+    def _ok_tar(self, tmp_path: Path) -> Path:
+        """Build a tar with payload, marker, and 3 dataset files — matches stored_files_count=3."""
+        return _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(domain="example.com", stored=3),
+            "_completion_marker.json": _marker(),
+            "storage/datasets/example.com/url1.json": b'{"url": "a"}',
+            "storage/datasets/example.com/url2.json": b'{"url": "b"}',
+            "storage/datasets/example.com/url3.json": b'{"url": "c"}',
+        })
+
+    def test_ok_archive(self, tmp_path):
+        path = self._ok_tar(tmp_path)
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == 3
+        assert details["actual_count"] == 3
+
+    def test_corrupted_archive(self, tmp_path):
+        # Write random bytes that are not a valid gzip
+        path = tmp_path / "bad.tar.gz"
+        path.write_bytes(b"this is not a gzip file at all")
+        category, details = ga.inspect_archive(path)
+        assert category == ga.CORRUPTED
+        assert "error" in details
+
+    def test_missing_payload(self, tmp_path):
+        path = _build_tar(tmp_path, {
+            "_completion_marker.json": _marker(),
+            # no _callback_payload.json
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.MISSING_PAYLOAD
+        assert "_callback_payload.json" in details.get("missing", "")
+
+    def test_missing_marker(self, tmp_path):
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(stored=3),
+            # no _completion_marker.json
+            "storage/datasets/example.com/x.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.MISSING_MARKER
+        assert "_completion_marker.json" in details.get("missing", "")
+
+    def test_row_count_mismatch(self, tmp_path):
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(stored=5),  # claims 5
+            "_completion_marker.json": _marker(),
+            # but only 2 dataset files
+            "storage/datasets/example.com/a.json": b'{}',
+            "storage/datasets/example.com/b.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.ROW_COUNT_MISMATCH
+        assert details["expected_count"] == 5
+        assert details["actual_count"] == 2
+
+    def test_sanitized_domain_fallback(self, tmp_path):
+        """If storage/datasets/{domain}/ is missing but the sanitized variant exists, use it."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(domain="foo.com", stored=1),
+            "_completion_marker.json": _marker(),
+            # Only sanitized variant exists (foo-com not foo.com)
+            "storage/datasets/foo-com/only.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["actual_count"] == 1
+
+    def test_success_field_fallback(self, tmp_path):
+        """If stored_files_count is absent but success is present, use success."""
+        payload = _json.dumps({"domain": "example.com", "success": 2}).encode()
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": payload,
+            "_completion_marker.json": _marker(),
+            "storage/datasets/example.com/a.json": b'{}',
+            "storage/datasets/example.com/b.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == 2
+
+    def test_payload_missing_domain_field(self, tmp_path):
+        payload = _json.dumps({"stored_files_count": 3}).encode()  # no domain
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": payload,
+            "_completion_marker.json": _marker(),
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.MISSING_PAYLOAD
+        assert "domain" in details.get("missing", "")

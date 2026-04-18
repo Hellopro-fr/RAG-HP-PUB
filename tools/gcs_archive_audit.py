@@ -11,10 +11,12 @@ Run:
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 
 def _run_gcloud(args: List[str], check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
@@ -124,3 +126,130 @@ def extract_crawl_id(object_name: str) -> Optional[str]:
             if crawl_id:
                 return crawl_id
     return None
+
+
+# ---- Categories ----
+
+OK = "OK"
+WRONG_NAME = "WRONG_NAME"
+CORRUPTED = "CORRUPTED"
+MISSING_PAYLOAD = "MISSING_PAYLOAD"
+MISSING_MARKER = "MISSING_MARKER"
+ROW_COUNT_MISMATCH = "ROW_COUNT_MISMATCH"
+DUPLICATE = "DUPLICATE"
+INSPECTION_FAILED = "INSPECTION_FAILED"
+
+
+def classify_by_name(object_name: str) -> Optional[str]:
+    """Return WRONG_NAME if the object name ends in `.tmp.tar.gz`, else None.
+
+    Name-only screening — does not download or open the archive.
+    """
+    base = object_name.rsplit("/", 1)[-1]
+    if base.endswith(".tmp.tar.gz"):
+        return WRONG_NAME
+    return None
+
+
+def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
+    """Open a .tar.gz and classify it.
+
+    Returns (category, details). `details` always includes the callback-payload
+    and marker read state; when row count is checked, it also includes
+    `expected_count` and `actual_count`.
+    """
+    details: Dict = {}
+
+    # 1. Integrity — can we open the tar at all?
+    try:
+        tar = tarfile.open(str(local_tar_path), "r:gz")
+    except (tarfile.TarError, OSError, EOFError) as e:
+        details["error"] = f"{type(e).__name__}: {e}"
+        return CORRUPTED, details
+
+    try:
+        members = tar.getmembers()  # forces reading the full index; may raise on truncated tars
+    except (tarfile.TarError, OSError, EOFError) as e:
+        tar.close()
+        details["error"] = f"{type(e).__name__}: {e}"
+        return CORRUPTED, details
+
+    try:
+        # 2. Extract _callback_payload.json
+        payload = _read_json_member(tar, "_callback_payload.json")
+        if payload is None:
+            details["missing"] = "_callback_payload.json"
+            return MISSING_PAYLOAD, details
+        details["payload"] = payload
+
+        # 3. Extract _completion_marker.json
+        marker = _read_json_member(tar, "_completion_marker.json")
+        if marker is None:
+            details["missing"] = "_completion_marker.json"
+            return MISSING_MARKER, details
+        details["marker"] = marker
+
+        # 4. Row count check
+        domain = payload.get("domain")
+        if not domain:
+            # Payload exists but lacks domain — treat as malformed payload
+            details["missing"] = "domain field in _callback_payload.json"
+            return MISSING_PAYLOAD, details
+
+        expected = payload.get("stored_files_count")
+        if expected is None:
+            expected = payload.get("success")
+        if expected is None:
+            # Payload lacks any count field — treat as malformed
+            details["missing"] = "stored_files_count/success field in _callback_payload.json"
+            return MISSING_PAYLOAD, details
+
+        actual = _count_dataset_files(members, domain)
+        details["expected_count"] = int(expected)
+        details["actual_count"] = actual
+
+        if int(expected) != actual:
+            return ROW_COUNT_MISMATCH, details
+
+        return OK, details
+    finally:
+        tar.close()
+
+
+def _read_json_member(tar: tarfile.TarFile, name: str) -> Optional[Dict]:
+    """Read and parse a JSON file from the tar by exact member name. Returns None if absent."""
+    try:
+        member = tar.getmember(name)
+    except KeyError:
+        return None
+    try:
+        f = tar.extractfile(member)
+        if f is None:
+            return None
+        return json.loads(f.read().decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return None
+
+
+def _count_dataset_files(members: List[tarfile.TarInfo], domain: str) -> int:
+    """Count .json files under storage/datasets/{domain}/ (or sanitized variant).
+
+    Returns the number of JSON files directly under the dataset directory.
+    Matches the crawler's convention: one JSON file per successfully crawled URL.
+    """
+    sanitized = domain.replace(".", "-")
+    candidates = [f"storage/datasets/{domain}/", f"storage/datasets/{sanitized}/"]
+
+    for prefix in candidates:
+        count = 0
+        found_dir = False
+        for m in members:
+            if m.name.startswith(prefix):
+                found_dir = True
+                # Only count files (not nested directories), and only .json
+                name_after_prefix = m.name[len(prefix):]
+                if m.isfile() and "/" not in name_after_prefix and name_after_prefix.endswith(".json"):
+                    count += 1
+        if found_dir:
+            return count
+    return 0
