@@ -170,6 +170,25 @@ Complementary protections in the same fix:
 
 Spec: `docs/superpowers/specs/2026-04-18-reconciliation-leader-election-design.md`.
 
+## Failure Webhook Idempotency
+
+Failure webhooks include a `request_id` UUID generated once per crawl failure and persisted in `job_data["failure_webhook_request_id"]`. PHP dedupes by this UUID so duplicate deliveries (common during shutdown + reconciliation replay) process at most once.
+
+**Client-side (this service):**
+- `_get_or_create_failure_request_id(job_info)` returns an existing UUID if present, else generates and persists one.
+- The UUID is threaded through all 6 failure-webhook callsites: OOM max-restarts, OOM relaunch failure, monitor exit, force-finish, shutdown, reconciliation stale detection.
+- Shutdown path uses a bounded `_send_webhook_once` (5-second timeout, no retries) via `shutdown=True`. If delivery fails, the persisted UUID lets reconciliation replay with the same identifier.
+- Docker `stop_grace_period: 30s` gives the shutdown path enough headroom.
+
+**PHP-side contract (`script_process_detect_fiche_produit.php`):**
+- Read the `request_id` query parameter.
+- Look up in a dedup store (Redis/MySQL/APC), TTL ≥ 24h.
+- If found: return `HTTP 200` with no side effects.
+- If not found: store, then process normally.
+- If `request_id` is absent (legacy calls): process normally (backward compatible).
+
+Spec: `docs/superpowers/specs/2026-04-18-webhook-idempotency-design.md`.
+
 ## Exit Codes (Node.js → Python)
 
 | Code | Meaning | Python Behavior |
