@@ -1466,32 +1466,41 @@ class CrawlerManager:
 
             try:
                 def _create_archive():
-                    """Create tar.gz archive in shared volume.
-                    Uses a .tmp extension during creation to prevent the upload daemon
-                    from picking up a partially written file. Atomic rename at the end."""
+                    """Create tar.gz archive in a staging subdirectory, then atomically
+                    move to the final location. The upload daemon uses `find -maxdepth 1`,
+                    so it never sees the staging dir — preventing the race where the
+                    daemon uploads (and deletes) a partial tmp file."""
+                    staging_dir = os.path.join(archives_dir, ".staging")
+                    os.makedirs(staging_dir, exist_ok=True)
                     os.makedirs(archives_dir, exist_ok=True)
-                    tmp_base_name = os.path.join(archives_dir, f"{crawl_id}.tmp")
+
+                    staging_base = os.path.join(staging_dir, crawl_id)
                     final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
+                    staging_path = None
 
-                    # Write to .tmp.tar.gz (daemon only watches *.tar.gz, not *.tmp.tar.gz)
-                    tmp_path = shutil.make_archive(tmp_base_name, 'gztar', root_dir=job_storage_path)
-                    archive_size = os.path.getsize(tmp_path)
-                    if archive_size == 0:
-                        os.remove(tmp_path)
-                        raise RuntimeError(f"Archive at '{tmp_path}' is empty (0 bytes).")
-
-                    # Verify archive is readable before renaming
                     try:
-                        with tarfile.open(tmp_path, 'r:gz') as t:
+                        # Create archive in staging dir (hidden from daemon)
+                        staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
+                        archive_size = os.path.getsize(staging_path)
+                        if archive_size == 0:
+                            raise RuntimeError(f"Archive at '{staging_path}' is empty (0 bytes).")
+
+                        # Verify archive is readable
+                        with tarfile.open(staging_path, 'r:gz') as t:
                             t.getnames()  # Force read of the archive index
-                    except Exception as e:
-                        os.remove(tmp_path)
-                        raise RuntimeError(f"Archive integrity check failed: {e}")
 
-                    # Atomic rename to final path — daemon can now pick it up safely
-                    os.rename(tmp_path, final_target)
+                        # Atomic rename to final path — same filesystem, always atomic
+                        os.rename(staging_path, final_target)
+                        staging_path = None  # Successfully moved; skip cleanup
 
-                    return final_target, archive_size
+                        return final_target, archive_size
+                    finally:
+                        # Clean up staging file on any failure (disk full, corrupt, 0 bytes, etc.)
+                        if staging_path and os.path.exists(staging_path):
+                            try:
+                                os.remove(staging_path)
+                            except OSError:
+                                pass
 
                 def _cleanup_local_data():
                     """Remove crawl data files, keeping only logs and markers."""
