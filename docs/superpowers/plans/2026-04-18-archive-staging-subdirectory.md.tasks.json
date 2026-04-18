@@ -4,20 +4,20 @@
     {
       "id": 1,
       "subject": "Task 1: Write failing tests for staging subdirectory behavior",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Add unit tests that assert the staging-dir contract before the implementation changes.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/tests/test_crawler_manager.py`\n\n**Acceptance Criteria:**\n- [ ] New `TestCreateArchiveStaging` class with 3 tests\n- [ ] 2 structural tests (source inspection) fail before Task 2\n- [ ] 1 behavior test (end-to-end simulation) passes immediately, documents the contract\n\n**Verify:** `cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py::TestCreateArchiveStaging -v` \u2192 2 FAIL + 1 PASS\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/tests/test_crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py::TestCreateArchiveStaging -v\", \"acceptanceCriteria\": [\"TestCreateArchiveStaging class added\", \"2 structural tests fail initially\", \"1 behavior simulation test passes\"]}\n```"
     },
     {
       "id": 2,
       "subject": "Task 2: Replace _create_archive with staging subdirectory implementation",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Make the structural tests from Task 1 pass by implementing the new staging behavior in `archive_crawl`.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/app/core/crawler_manager.py` (replace `_create_archive` inner function, currently lines 1468-1494)\n\n**Acceptance Criteria:**\n- [ ] `_create_archive` writes to `{archives_dir}/.staging/{crawl_id}.tar.gz` first\n- [ ] After size + integrity checks pass, `os.rename` moves to `{archives_dir}/{crawl_id}.tar.gz`\n- [ ] A `finally` block removes staging file on any failure (gated by `if staging_path`)\n- [ ] All 3 tests from Task 1 pass\n- [ ] No regression in pre-existing tests\n\n**Verify:** `cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py -v` \u2192 all tests PASS\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py -v\", \"acceptanceCriteria\": [\"archives written to .staging/ subdir\", \"atomic rename to final path\", \"finally block cleans up partial files\", \"all tests pass\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: Document the .staging convention in CLAUDE.md",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** Document the `.staging/` convention so future changes to the upload daemon or archiving path don't break the fix.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/CLAUDE.md`\n\n**Acceptance Criteria:**\n- [ ] Archiving section mentions the `.staging/` subdirectory\n- [ ] Explicit warning against making the upload daemon scan subdirectories\n\n**Verify:** visual inspection of `CLAUDE.md` \u2192 archiving section references `.staging/`\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -q '.staging' apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\".staging mentioned in archiving section\", \"warning about daemon subdir scanning\"]}\n```"
     }
