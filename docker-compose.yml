@@ -1205,6 +1205,7 @@ services:
       dockerfile: ./apps-microservices/crawler-service/Dockerfile
     profiles: ["crawling"]
     init: true
+    stop_grace_period: 30s
     expose:
       - "8503"
     volumes:
