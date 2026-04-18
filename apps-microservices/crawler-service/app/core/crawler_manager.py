@@ -143,10 +143,15 @@ class CrawlerManager:
         lock_key = f"{CRAWL_LOCK_PREFIX}{crawl_id}"
         job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
 
-        # Build job data early (pid will be patched after spawn)
+        # Build job data early (pid will be patched after spawn).
+        # last_heartbeat is set to now() immediately so concurrent reconciliation
+        # on other replicas sees a fresh heartbeat — preventing the 60s blind
+        # window between start_crawl and the first monitor-loop tick.
+        now = datetime.utcnow()
         job_data = {
             "crawl_id": crawl_id, "status": "starting", "domain": domain,
-            "start_url": start_url, "start_time": datetime.utcnow(),
+            "start_url": start_url, "start_time": now,
+            "last_heartbeat": now,
             "storage_path": job_storage_path,
             "callback_url": callback_url,
             "failure_callback_url": failure_callback_url, "pid": None,

@@ -406,3 +406,20 @@ class TestArchiveDiskPreflight:
         assert "status_code=503" in source, (
             "archive_crawl must raise 503 (not 500) when disk space is insufficient"
         )
+
+
+class TestReconciliationLeaderElection:
+    """Tests for Issue #1 (leader election) and Issue #2 (fresh heartbeat,
+    ownership-agnostic local override) in crawler_manager."""
+
+    def test_start_crawl_writes_fresh_last_heartbeat(self):
+        """start_crawl's initial job_data must include last_heartbeat=now().
+        Asserted via source inspection because start_crawl is async and
+        requires heavy Redis/process mocking to exercise end-to-end."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.start_crawl)
+        assert '"last_heartbeat"' in source or "'last_heartbeat'" in source, (
+            "start_crawl must include last_heartbeat in the initial job_data dict"
+        )
