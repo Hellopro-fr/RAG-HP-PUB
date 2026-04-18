@@ -1377,6 +1377,76 @@ class CrawlerManager:
         self.local_processes.clear()
         logger.info("Graceful shutdown complete for this replica.")
 
+    def _estimate_archive_required_bytes(self, job_storage_path: str) -> int:
+        """Walk the source directory, sum file sizes, return size * 1.5 (gzip + safety margin).
+        Returns 0 on any error — the caller is expected to apply a floor (1 GB).
+        Fail-open: never raises."""
+        try:
+            if not os.path.isdir(job_storage_path):
+                logger.warning(f"Source dir not found for size estimation: '{job_storage_path}'")
+                return 0
+            total = 0
+            for root, _dirs, files in os.walk(job_storage_path):
+                for name in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root, name))
+                    except OSError:
+                        continue  # broken symlink or permission denied; skip
+            return int(total * 1.5)
+        except Exception as e:
+            logger.warning(f"Could not estimate required bytes for '{job_storage_path}': {e}")
+            return 0
+
+    def _get_archives_disk_state(self, archives_dir: str) -> dict:
+        """Collect diagnostics about the archives volume.
+        Returns a dict with free_bytes, total_bytes, used_pct, file_count,
+        oldest_file_age_seconds. Fail-open: on any error, returns a degraded dict
+        with None values and logs a warning (never raises)."""
+        degraded = {
+            "free_bytes": None,
+            "total_bytes": None,
+            "used_pct": None,
+            "file_count": None,
+            "oldest_file_age_seconds": None,
+        }
+        try:
+            usage = shutil.disk_usage(archives_dir)
+            total_bytes = usage.total
+            free_bytes = usage.free
+            used_pct = round(100.0 * (total_bytes - free_bytes) / total_bytes, 2) if total_bytes else None
+
+            file_count = 0
+            oldest_mtime = None
+            try:
+                for name in os.listdir(archives_dir):
+                    if not name.endswith(".tar.gz"):
+                        continue
+                    path = os.path.join(archives_dir, name)
+                    if not os.path.isfile(path):
+                        continue  # skip dirs like .staging/
+                    file_count += 1
+                    try:
+                        mtime = os.path.getmtime(path)
+                        if oldest_mtime is None or mtime < oldest_mtime:
+                            oldest_mtime = mtime
+                    except OSError:
+                        continue
+            except FileNotFoundError:
+                pass  # archives_dir doesn't exist yet; count stays 0
+
+            oldest_age = int(time.time() - oldest_mtime) if oldest_mtime is not None else None
+
+            return {
+                "free_bytes": free_bytes,
+                "total_bytes": total_bytes,
+                "used_pct": used_pct,
+                "file_count": file_count,
+                "oldest_file_age_seconds": oldest_age,
+            }
+        except Exception as e:
+            logger.warning(f"Could not get disk state for '{archives_dir}': {e}")
+            return degraded
+
     async def archive_crawl(self, job_info: dict) -> dict:
         """
         Archives a finished crawl job to a shared volume for host-side upload to GCS.

@@ -273,3 +273,96 @@ class TestCreateArchiveStaging:
         # Final archive exists in /archives/, staging is empty
         assert (archives_dir / f"{crawl_id}.tar.gz").exists()
         assert list(staging_dir.iterdir()) == [], "staging dir must be empty after success"
+
+
+import time
+from unittest.mock import MagicMock, patch
+
+
+class TestArchiveDiskPreflight:
+    """Helpers for the pre-flight disk space check before archiving."""
+
+    def _manager(self):
+        """Instantiate CrawlerManager without running __init__ (avoids Redis setup)."""
+        from app.core.crawler_manager import CrawlerManager
+        return CrawlerManager.__new__(CrawlerManager)
+
+    def test_estimate_returns_size_times_1_5(self, tmp_path):
+        """Source dir with 1000 bytes total → estimate returns 1500 bytes."""
+        (tmp_path / "a.txt").write_bytes(b"x" * 600)
+        (tmp_path / "b.txt").write_bytes(b"y" * 400)
+        mgr = self._manager()
+
+        result = mgr._estimate_archive_required_bytes(str(tmp_path))
+
+        assert result == 1500
+
+    def test_estimate_returns_zero_when_source_missing(self, tmp_path):
+        """Missing source dir → return 0 (caller applies floor)."""
+        mgr = self._manager()
+
+        result = mgr._estimate_archive_required_bytes(str(tmp_path / "does_not_exist"))
+
+        assert result == 0
+
+    def test_estimate_fail_open_on_exception(self):
+        """If os.walk raises, return 0 and do not propagate."""
+        mgr = self._manager()
+
+        with patch("app.core.crawler_manager.os.walk", side_effect=RuntimeError("fs error")):
+            with patch("app.core.crawler_manager.os.path.isdir", return_value=True):
+                result = mgr._estimate_archive_required_bytes("/fake")
+
+        assert result == 0
+
+    def test_disk_state_returns_expected_keys(self, tmp_path):
+        """Happy path: archives_dir has one .tar.gz → state dict populated."""
+        (tmp_path / "abc.tar.gz").write_bytes(b"z" * 100)
+        mgr = self._manager()
+
+        state = mgr._get_archives_disk_state(str(tmp_path))
+
+        assert set(state.keys()) == {
+            "free_bytes", "total_bytes", "used_pct", "file_count", "oldest_file_age_seconds"
+        }
+        assert state["file_count"] == 1
+        assert state["oldest_file_age_seconds"] is not None
+        assert state["free_bytes"] is not None
+        assert state["total_bytes"] is not None
+        assert state["used_pct"] is not None
+
+    def test_disk_state_excludes_staging_subdirectory(self, tmp_path):
+        """Files in .staging/ must NOT be counted — those are in-progress tmp files."""
+        staging = tmp_path / ".staging"
+        staging.mkdir()
+        (staging / "in_progress.tar.gz").write_bytes(b"x" * 100)
+        (tmp_path / "finished.tar.gz").write_bytes(b"y" * 100)
+        mgr = self._manager()
+
+        state = mgr._get_archives_disk_state(str(tmp_path))
+
+        assert state["file_count"] == 1  # only the top-level finished.tar.gz
+
+    def test_disk_state_oldest_age_is_none_when_empty(self, tmp_path):
+        """Empty archives_dir → oldest_file_age_seconds is None, not 0."""
+        mgr = self._manager()
+
+        state = mgr._get_archives_disk_state(str(tmp_path))
+
+        assert state["file_count"] == 0
+        assert state["oldest_file_age_seconds"] is None
+
+    def test_disk_state_fail_open_on_shutil_error(self):
+        """If shutil.disk_usage raises (e.g., bad path), return degraded dict (all None)."""
+        mgr = self._manager()
+
+        with patch("app.core.crawler_manager.shutil.disk_usage", side_effect=OSError("no such path")):
+            state = mgr._get_archives_disk_state("/nonexistent")
+
+        assert state == {
+            "free_bytes": None,
+            "total_bytes": None,
+            "used_pct": None,
+            "file_count": None,
+            "oldest_file_age_seconds": None,
+        }
