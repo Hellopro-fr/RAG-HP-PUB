@@ -11,10 +11,14 @@ Run:
 """
 from __future__ import annotations
 
+import argparse
 import json
+import signal
 import subprocess
 import sys
 import tarfile
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -253,3 +257,241 @@ def _count_dataset_files(members: List[tarfile.TarInfo], domain: str) -> int:
         if found_dir:
             return count
     return 0
+
+
+# ---- Orchestration ----
+
+REPORT_FLUSH_INTERVAL = 50  # write partial report every N archives
+
+
+def detect_duplicates(archives: List[Dict]) -> None:
+    """Mutates `archives` in place. Adds 'DUPLICATE' to the `secondary_tags` list
+    of any archive whose crawl_id appears in more than one object."""
+    counts: Dict[str, int] = {}
+    for a in archives:
+        cid = a.get("crawl_id")
+        if cid:
+            counts[cid] = counts.get(cid, 0) + 1
+
+    for a in archives:
+        cid = a.get("crawl_id")
+        if cid and counts.get(cid, 0) > 1:
+            a.setdefault("secondary_tags", [])
+            if "DUPLICATE" not in a["secondary_tags"]:
+                a["secondary_tags"].append("DUPLICATE")
+
+
+def remediate(obj_uri: str, category: str, action: str, quarantine_prefix: Optional[str], bucket: str) -> str:
+    """Perform delete or quarantine for a bad archive. Returns a human-readable
+    description of what was done. Does nothing when category == OK."""
+    if category == OK:
+        return ""
+    if action == "delete":
+        gcloud_delete(obj_uri)
+        return f"deleted {obj_uri}"
+    if action == "quarantine":
+        assert quarantine_prefix is not None
+        # Object name relative to bucket, e.g. "crawls/4365.tar.gz" → "<quarantine_prefix>/4365.tar.gz"
+        rel = obj_uri.replace(f"gs://{bucket}/", "", 1)
+        base = rel.rsplit("/", 1)[-1]
+        dst = f"gs://{bucket}/{quarantine_prefix.rstrip('/')}/{base}"
+        gcloud_move(obj_uri, dst)
+        return f"quarantined to {dst}"
+    return ""
+
+
+def write_report(path: Path, report: Dict) -> None:
+    """Write the audit report to a JSON file with pretty formatting.
+    Re-tallies the 'categories' counter from the archives list before writing."""
+    counts: Dict[str, int] = {}
+    for a in report.get("archives", []):
+        counts[a["category"]] = counts.get(a["category"], 0) + 1
+    report["categories"] = counts
+    report["total_objects"] = len(report.get("archives", []))
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2, default=str)
+
+
+def _confirm_or_exit(action: str, quarantine_prefix: Optional[str]) -> None:
+    msg = f"About to {action} bad archives" + (
+        f" (quarantine prefix: {quarantine_prefix})" if action == "quarantine" else ""
+    ) + ". Continue? [y/N] "
+    try:
+        reply = input(msg).strip().lower()
+    except EOFError:
+        reply = ""
+    if reply not in ("y", "yes"):
+        print("Aborted.", file=sys.stderr)
+        sys.exit(1)
+
+
+def _print_summary(report: Dict) -> None:
+    print("\n=== GCS Archive Audit ===")
+    print(f"Bucket: {report['bucket']}")
+    print(f"Prefix: {report['prefix']}")
+    print(f"Audited: {report['total_objects']} archives\n")
+    print("Categories:")
+    for cat in (OK, WRONG_NAME, CORRUPTED, MISSING_PAYLOAD, MISSING_MARKER,
+                ROW_COUNT_MISMATCH, DUPLICATE, INSPECTION_FAILED):
+        count = report["categories"].get(cat, 0)
+        if count:
+            pct = (100.0 * count / report["total_objects"]) if report["total_objects"] else 0
+            print(f"  {cat:<24} {count:>5}  ({pct:.1f}%)")
+
+
+def _load_resume_set(resume_path: Optional[str]) -> set:
+    """Load previously-audited object names from a prior report so we can skip them."""
+    if not resume_path:
+        return set()
+    p = Path(resume_path)
+    if not p.exists():
+        return set()
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            prior = json.load(f)
+        return {a["object_name"] for a in prior.get("archives", [])}
+    except (json.JSONDecodeError, KeyError, OSError):
+        return set()
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Audit GCS archives for corruption, incompleteness, and name issues."
+    )
+    parser.add_argument("--bucket", required=True, help="GCS bucket name (no gs:// prefix)")
+    parser.add_argument("--prefix", default="crawls/", help="Object name prefix to scan (default: crawls/)")
+    parser.add_argument("--output", default="gcs_archive_audit_report.json", help="Report output path")
+    parser.add_argument("--name-only", action="store_true",
+                        help="Fast mode: skip download/inspection, only check names")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Maximum number of archives to audit (for testing)")
+    parser.add_argument("--delete", action="store_true",
+                        help="Delete bad archives (mutually exclusive with --quarantine)")
+    parser.add_argument("--quarantine", default=None,
+                        help="Prefix inside bucket to move bad archives to (mutually exclusive with --delete)")
+    parser.add_argument("--yes", action="store_true",
+                        help="Skip the confirmation prompt for --delete/--quarantine")
+    parser.add_argument("--resume", default=None,
+                        help="Skip archives already present in the given prior report")
+    args = parser.parse_args(argv)
+
+    if args.delete and args.quarantine:
+        parser.error("--delete and --quarantine are mutually exclusive")
+    return args
+
+
+def _inspect_one(obj_uri: str, size_bytes: int, name_only: bool) -> Tuple[str, Dict]:
+    """Inspect a single archive. Returns (category, details)."""
+    # Name-based screening first — cheap and catches WRONG_NAME without download.
+    name_cat = classify_by_name(obj_uri)
+    if name_cat is not None:
+        return name_cat, {}
+    if name_only:
+        return OK, {}
+
+    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        try:
+            gcloud_download(obj_uri, tmp_path)
+        except subprocess.CalledProcessError as e:
+            return INSPECTION_FAILED, {"error": f"download failed: {e.stderr}"}
+        return inspect_archive(tmp_path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = parse_args(argv)
+    check_gcloud_auth()
+
+    action: Optional[str] = None
+    if args.delete:
+        action = "delete"
+    elif args.quarantine:
+        action = "quarantine"
+    if action and not args.yes:
+        _confirm_or_exit(action, args.quarantine)
+
+    # Build initial report skeleton
+    report: Dict = {
+        "bucket": args.bucket,
+        "prefix": args.prefix,
+        "audited_at": datetime.now(timezone.utc).isoformat(),
+        "total_objects": 0,
+        "categories": {},
+        "archives": [],
+    }
+    report_path = Path(args.output)
+
+    # SIGINT handler to write partial report before exiting
+    def _on_sigint(signum, frame):
+        print("\nInterrupted — writing partial report...", file=sys.stderr)
+        detect_duplicates(report["archives"])
+        write_report(report_path, report)
+        sys.exit(130)
+
+    signal.signal(signal.SIGINT, _on_sigint)
+
+    skip_set = _load_resume_set(args.resume)
+
+    # List
+    uri = f"gs://{args.bucket}/{args.prefix}"
+    listing = gcloud_ls(uri, long=True)
+    total = len(listing)
+    print(f"Found {total} objects under {uri}. Beginning audit...")
+
+    processed = 0
+    for size_bytes, obj_uri in listing:
+        if obj_uri in skip_set:
+            continue
+        if args.limit is not None and processed >= args.limit:
+            break
+        processed += 1
+
+        entry: Dict = {
+            "object_name": obj_uri.replace(f"gs://{args.bucket}/", "", 1),
+            "crawl_id": extract_crawl_id(obj_uri),
+            "size_bytes": size_bytes,
+            "category": OK,
+            "secondary_tags": [],
+            "actions_taken": [],
+        }
+
+        category, details = _inspect_one(obj_uri, size_bytes, args.name_only)
+        entry["category"] = category
+        if details.get("expected_count") is not None:
+            entry["expected_count"] = details["expected_count"]
+            entry["actual_count"] = details["actual_count"]
+        if details.get("error"):
+            entry["error"] = details["error"]
+
+        if action and category != OK:
+            try:
+                note = remediate(obj_uri, category, action, args.quarantine, args.bucket)
+                if note:
+                    entry["actions_taken"].append(note)
+            except subprocess.CalledProcessError as e:
+                entry["actions_taken"].append(f"remediation failed: {e.stderr}")
+
+        report["archives"].append(entry)
+
+        if processed % REPORT_FLUSH_INTERVAL == 0:
+            detect_duplicates(report["archives"])
+            write_report(report_path, report)
+            print(f"  ...audited {processed}/{total}")
+
+    # Final duplicate detection + write
+    detect_duplicates(report["archives"])
+    write_report(report_path, report)
+    _print_summary(report)
+    print(f"\nFull report written to: {report_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

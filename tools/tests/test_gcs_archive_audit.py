@@ -242,3 +242,65 @@ class TestArchiveInspection:
         category, details = ga.inspect_archive(path)
         assert category == ga.MISSING_PAYLOAD
         assert "domain" in details.get("missing", "")
+
+
+class TestDetectDuplicates:
+    def test_tags_duplicate_crawl_ids(self):
+        archives = [
+            {"object_name": "crawls/4365.tar.gz", "crawl_id": "4365", "category": ga.OK, "secondary_tags": []},
+            {"object_name": "crawls/4365.tmp.tar.gz", "crawl_id": "4365", "category": ga.WRONG_NAME, "secondary_tags": []},
+            {"object_name": "crawls/5000.tar.gz", "crawl_id": "5000", "category": ga.OK, "secondary_tags": []},
+        ]
+        ga.detect_duplicates(archives)
+        assert "DUPLICATE" in archives[0]["secondary_tags"]
+        assert "DUPLICATE" in archives[1]["secondary_tags"]
+        assert "DUPLICATE" not in archives[2]["secondary_tags"]
+
+    def test_no_duplicates_when_all_unique(self):
+        archives = [
+            {"crawl_id": "1", "category": ga.OK, "secondary_tags": []},
+            {"crawl_id": "2", "category": ga.OK, "secondary_tags": []},
+        ]
+        ga.detect_duplicates(archives)
+        assert all("DUPLICATE" not in a["secondary_tags"] for a in archives)
+
+
+class TestRemediate:
+    def test_delete(self):
+        with patch("gcs_archive_audit.gcloud_delete") as mock_del:
+            note = ga.remediate("gs://b/crawls/4365.tmp.tar.gz", ga.WRONG_NAME, "delete", None, "b")
+        mock_del.assert_called_once_with("gs://b/crawls/4365.tmp.tar.gz")
+        assert "deleted" in note
+
+    def test_quarantine(self):
+        with patch("gcs_archive_audit.gcloud_move") as mock_mv:
+            note = ga.remediate("gs://b/crawls/4365.tmp.tar.gz", ga.WRONG_NAME, "quarantine", "quarantine/", "b")
+        mock_mv.assert_called_once_with(
+            "gs://b/crawls/4365.tmp.tar.gz",
+            "gs://b/quarantine/4365.tmp.tar.gz",
+        )
+        assert "quarantined" in note
+
+    def test_ok_skips_action(self):
+        with patch("gcs_archive_audit.gcloud_delete") as mock_del:
+            note = ga.remediate("gs://b/crawls/x.tar.gz", ga.OK, "delete", None, "b")
+        mock_del.assert_not_called()
+        assert note == ""
+
+
+class TestArgs:
+    def test_delete_and_quarantine_are_mutually_exclusive(self):
+        with pytest.raises(SystemExit):
+            ga.parse_args(["--bucket", "b", "--delete", "--quarantine", "q/"])
+
+    def test_bucket_is_required(self):
+        with pytest.raises(SystemExit):
+            ga.parse_args([])
+
+    def test_defaults(self):
+        args = ga.parse_args(["--bucket", "b"])
+        assert args.bucket == "b"
+        assert args.prefix == "crawls/"
+        assert args.delete is False
+        assert args.quarantine is None
+        assert args.name_only is False
