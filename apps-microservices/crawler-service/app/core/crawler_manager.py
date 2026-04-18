@@ -365,17 +365,25 @@ class CrawlerManager:
             except Exception as e:
                 logger.warning(f"Could not write completion marker for OOM max-restart '{crawl_id}': {e}")
 
+            # Generate request_id before set_json so the UUID is persisted in the
+            # same Redis write. Reconciliation/retries read the same UUID later
+            # and PHP dedupes → no duplicate processing.
+            request_id = None
+            if job_info.get("failure_callback_url"):
+                request_id = self._get_or_create_failure_request_id(job_info)
+
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
 
-            if job_info.get("failure_callback_url"):
+            if request_id:
                 asyncio.create_task(self._send_failure_webhook(
                     str(job_info["failure_callback_url"]),
                     crawl_id,
                     job_info["domain"],
                     -1, # Special exit code for max restart fail
-                    job_info.get("crawl_mode", "standard")
+                    job_info.get("crawl_mode", "standard"),
+                    request_id=request_id,
                 ))
             return
 
@@ -419,16 +427,24 @@ class CrawlerManager:
             except Exception as marker_err:
                 logger.warning(f"Could not write completion marker for OOM relaunch failure '{crawl_id}': {marker_err}")
 
+            # Generate request_id before set_json so the UUID is persisted in the
+            # same Redis write. Reconciliation/retries read the same UUID later
+            # and PHP dedupes → no duplicate processing.
+            request_id = None
+            if job_info.get("failure_callback_url"):
+                request_id = self._get_or_create_failure_request_id(job_info)
+
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
-            if job_info.get("failure_callback_url"):
+            if request_id:
                 asyncio.create_task(self._send_failure_webhook(
                     str(job_info["failure_callback_url"]),
                     crawl_id,
                     job_info["domain"],
                     -1,
-                    job_info.get("crawl_mode", "standard")
+                    job_info.get("crawl_mode", "standard"),
+                    request_id=request_id,
                 ))
 
     def _get_or_create_failure_request_id(self, job_info: dict) -> str:
@@ -844,12 +860,15 @@ class CrawlerManager:
                 asyncio.create_task(self._send_success_webhook(job_info))
             elif not is_success and job_info.get("failure_callback_url"):
                 logger.info(f"Crawl '{crawl_id}' failed. Triggering failure webhook.")
+                request_id = self._get_or_create_failure_request_id(job_info)
+                await cache_service.set_json(job_key, job_info)
                 asyncio.create_task(self._send_failure_webhook(
                     str(job_info["failure_callback_url"]),
                     crawl_id,
                     job_info["domain"],
                     exit_code,
-                    job_info.get("crawl_mode", "standard")
+                    job_info.get("crawl_mode", "standard"),
+                    request_id=request_id,
                 ))
 
             # --- CLEANUP RESTORED PREVIOUS CRAWL DATA ---
@@ -955,12 +974,15 @@ class CrawlerManager:
 
         # Use appropriate webhook based on target status
         if target_status == "failed" and job_info.get("failure_callback_url"):
+            request_id = self._get_or_create_failure_request_id(job_info)
+            await cache_service.set_json(job_key, job_info)
             asyncio.create_task(self._send_failure_webhook(
                 str(job_info["failure_callback_url"]),
                 crawl_id,
                 job_info.get("domain", "unknown"),
                 -1,  # Force-finish exit code
-                job_info.get("crawl_mode", "standard")
+                job_info.get("crawl_mode", "standard"),
+                request_id=request_id,
             ))
         else:
             asyncio.create_task(self._send_stop_webhook(job_info, target_status))
@@ -1384,6 +1406,14 @@ class CrawlerManager:
                 if "last_heartbeat" in job_info:
                     del job_info["last_heartbeat"]
 
+                # Generate request_id before set_json so the UUID is persisted in the
+                # same Redis write. Reconciliation/retries read the same UUID later
+                # and PHP dedupes → no duplicate processing.
+                if job_info.get("failure_callback_url"):
+                    failure_request_id = self._get_or_create_failure_request_id(job_info)
+                else:
+                    failure_request_id = None
+
                 await cache_service.set_json(job_key, job_info)
                 await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
                 logger.info(f"Marked job '{crawl_id}' as 'failed' in Redis. Lock released.")
@@ -1395,16 +1425,20 @@ class CrawlerManager:
 
                 logger.info(f"Decremented global running counter for job '{crawl_id}'.")
 
-                # 4. Send failure webhook
-                if job_info.get("failure_callback_url"):
-                    logger.info(f"Sending failure webhook for job '{crawl_id}'.")
-                    # Use a special exit code like -1 for shutdown
+                # 4. Send failure webhook (bounded shutdown path: 5s timeout, single attempt)
+                if failure_request_id:
+                    logger.info(f"Sending failure webhook for job '{crawl_id}' (shutdown path).")
+                    # shutdown=True routes through _send_webhook_once (5s timeout, no retry).
+                    # If delivery fails here, reconciliation replays with the same request_id
+                    # and PHP dedupes by request_id — no duplicate processing.
                     await self._send_failure_webhook(
                         str(job_info["failure_callback_url"]),
                         crawl_id,
                         job_info["domain"],
                         -1,
-                        job_info.get("crawl_mode", "standard")
+                        job_info.get("crawl_mode", "standard"),
+                        request_id=failure_request_id,
+                        shutdown=True,
                     )
             else:
                  logger.warning(f"Could not find job '{crawl_id}' in Redis during shutdown or it was not in 'running' state.")
@@ -1962,19 +1996,29 @@ class CrawlerManager:
                             except Exception as marker_err:
                                 logger.warning(f"Could not write completion marker for stale job '{crawl_id}': {marker_err}")
 
-                        # Release distributed lock and update state document
+                        # Release distributed lock and update state document.
+                        # Generate request_id before set_json so the UUID is persisted
+                        # in the same Redis write. PHP dedupes against any prior attempt
+                        # (e.g., from the shutdown path on the dying replica).
+                        reconcile_request_id = None
+                        if not is_stopping and job_data.get("failure_callback_url"):
+                            reconcile_request_id = self._get_or_create_failure_request_id(job_data)
+
                         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
                         await cache_service.set_json(all_job_keys[i], job_data)
                         await self._publish_update(crawl_id, final_status)
 
-                        # Only send failure webhook for non-stopping jobs
-                        if not is_stopping and job_data.get("failure_callback_url"):
+                        # Only send failure webhook for non-stopping jobs.
+                        # Use the persisted request_id so PHP dedupes against any prior
+                        # attempt (e.g., from the shutdown path on the dying replica).
+                        if reconcile_request_id:
                             asyncio.create_task(self._send_failure_webhook(
                                 str(job_data["failure_callback_url"]),
                                 crawl_id,
                                 job_data.get("domain", "unknown"),
                                 -1,
-                                job_data.get("crawl_mode", "standard")
+                                job_data.get("crawl_mode", "standard"),
+                                request_id=reconcile_request_id,
                             ))
 
                         stale_jobs_count += 1

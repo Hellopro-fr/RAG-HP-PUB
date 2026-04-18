@@ -632,3 +632,39 @@ class TestWebhookIdempotency:
         assert "timeout=5.0" in source, (
             "_send_webhook_once must be called with a 5-second timeout during shutdown"
         )
+
+    def test_all_failure_webhook_callsites_use_request_id_helper(self):
+        """Every callsite that sends a failure webhook must call
+        _get_or_create_failure_request_id and pass request_id to the webhook."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        # All 6 callsites live in these methods:
+        methods_to_check = [
+            cm.CrawlerManager._relaunch_oom_crawl,   # 2 callsites
+            cm.CrawlerManager._monitor_process,      # 1 callsite
+            cm.CrawlerManager.force_finish_crawl,    # 1 callsite
+            cm.CrawlerManager._cleanup_running_job,  # 1 callsite (shutdown)
+            cm.CrawlerManager._reconcile_locked,     # 1 callsite (reconciliation)
+        ]
+
+        for method in methods_to_check:
+            source = inspect.getsource(method)
+            assert "_get_or_create_failure_request_id" in source, (
+                f"{method.__qualname__} must call _get_or_create_failure_request_id "
+                f"before sending a failure webhook"
+            )
+            assert "request_id=" in source, (
+                f"{method.__qualname__} must pass request_id= to _send_failure_webhook"
+            )
+
+    def test_shutdown_path_passes_shutdown_true(self):
+        """_cleanup_running_job (shutdown path) must pass shutdown=True to _send_failure_webhook."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._cleanup_running_job)
+        assert "shutdown=True" in source, (
+            "_cleanup_running_job (shutdown path) must pass shutdown=True to route "
+            "through the bounded single-attempt webhook send"
+        )
