@@ -8,6 +8,7 @@ import tempfile
 import shutil
 import threading
 import time
+import uuid
 import anyio
 import tarfile
 import hashlib
@@ -429,6 +430,43 @@ class CrawlerManager:
                     -1,
                     job_info.get("crawl_mode", "standard")
                 ))
+
+    def _get_or_create_failure_request_id(self, job_info: dict) -> str:
+        """Returns the failure webhook's request_id, generating + persisting one if absent.
+
+        The UUID is stored in job_info so every retry path (shutdown, reconciliation,
+        OOM max-restarts, monitor, force-finish) uses the same value. PHP dedupes by
+        request_id, guaranteeing single processing regardless of how many times we send.
+
+        NOTE: the caller is responsible for persisting job_info back to Redis via
+        cache_service.set_json — this helper only mutates the in-memory dict.
+        """
+        rid = job_info.get("failure_webhook_request_id")
+        if rid:
+            return rid
+        rid = str(uuid.uuid4())
+        job_info["failure_webhook_request_id"] = rid
+        return rid
+
+    async def _send_webhook_once(self, url: str, params: dict, crawl_id: str,
+                                  webhook_type: str, timeout: float = 5.0) -> bool:
+        """Single-attempt webhook send with a custom timeout.
+
+        Used by the shutdown path to bound worst-case time. Does NOT retry and does
+        NOT store in FAILED_CALLBACKS_KEY on failure — reconciliation will replay
+        using the same request_id from job_info, and PHP dedupes.
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=timeout)
+                if 200 <= response.status_code < 300:
+                    logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (shutdown). Status: {response.status_code}")
+                    return True
+                logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' got {response.status_code} during shutdown")
+                return False
+        except httpx.RequestError as e:
+            logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' failed during shutdown: {e}")
+            return False
 
     async def _send_webhook_with_retry(self, url: str, params: dict, crawl_id: str, webhook_type: str):
         """

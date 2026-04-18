@@ -523,3 +523,79 @@ class TestReconciliationLeaderElection:
         assert "stale_jobs_count" in source, (
             "_reconcile_locked must contain the original stale-job counter"
         )
+
+
+import uuid as _uuid_module
+from unittest.mock import AsyncMock, MagicMock, patch
+
+
+class TestWebhookIdempotency:
+    """Tests for failure webhook idempotency helpers.
+    The helpers are standalone and pure — tested directly, not via archive_crawl."""
+
+    def _manager(self):
+        """Instantiate CrawlerManager without running __init__ (avoids Redis setup)."""
+        from app.core.crawler_manager import CrawlerManager
+        return CrawlerManager.__new__(CrawlerManager)
+
+    def test_get_or_create_generates_new_uuid_when_absent(self):
+        """First call on a job_info with no request_id must generate and persist a new UUID."""
+        mgr = self._manager()
+        job_info: dict = {}
+
+        rid = mgr._get_or_create_failure_request_id(job_info)
+
+        assert isinstance(rid, str)
+        # Must be a valid UUID
+        _uuid_module.UUID(rid)  # raises ValueError if not a valid UUID
+        # Must persist in the dict
+        assert job_info["failure_webhook_request_id"] == rid
+
+    def test_get_or_create_reuses_existing_uuid(self):
+        """Second call must return the same UUID stored from the first call."""
+        mgr = self._manager()
+        existing = "550e8400-e29b-41d4-a716-446655440000"
+        job_info = {"failure_webhook_request_id": existing}
+
+        rid = mgr._get_or_create_failure_request_id(job_info)
+
+        assert rid == existing
+        # And the dict must not have been mutated to a different value
+        assert job_info["failure_webhook_request_id"] == existing
+
+    def test_send_webhook_once_returns_true_on_2xx(self):
+        """Single-attempt send returns True on HTTP 200."""
+        import asyncio
+        mgr = self._manager()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("app.core.crawler_manager.httpx.AsyncClient", return_value=mock_client):
+            result = asyncio.run(
+                mgr._send_webhook_once("http://x.test", {"a": 1}, "crawl-1", "failure", timeout=1.0)
+            )
+
+        assert result is True
+
+    def test_send_webhook_once_returns_false_on_timeout(self):
+        """Single-attempt send returns False when httpx raises (timeout or connection error) and does NOT retry."""
+        import asyncio
+        import httpx
+        mgr = self._manager()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get = AsyncMock(side_effect=httpx.TimeoutException("too slow"))
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("app.core.crawler_manager.httpx.AsyncClient", return_value=mock_client):
+            result = asyncio.run(
+                mgr._send_webhook_once("http://x.test", {"a": 1}, "crawl-1", "failure", timeout=1.0)
+            )
+
+        assert result is False
+        # Must have been called exactly once — no retries
+        assert mock_client.__aenter__.return_value.get.call_count == 1
