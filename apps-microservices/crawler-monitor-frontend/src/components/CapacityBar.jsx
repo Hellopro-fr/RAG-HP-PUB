@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { AlertTriangle } from 'lucide-react';
 import { useCapacityHistoryQuery } from '../hooks/queries';
+import { Card } from './ui/card';
+import { cn } from '../lib/utils';
 
 const SATURATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -11,7 +13,6 @@ const SATURATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
  */
 function currentSaturationStreak(points) {
   if (!points || points.length === 0) return 0;
-  // points are ordered chronologically
   const last = points[points.length - 1];
   if (!last.full) return 0;
   let start = last.ts;
@@ -25,7 +26,6 @@ function currentSaturationStreak(points) {
 const CapacityBar = ({ capacity, token }) => {
   const historyQuery = useCapacityHistoryQuery(token, '1h');
   const history = historyQuery.data?.points || [];
-  // Hide sparkline silently if endpoint is unavailable (404 or other error)
   const historyAvailable = !historyQuery.isError;
 
   const saturationMs = useMemo(() => currentSaturationStreak(history), [history]);
@@ -35,34 +35,43 @@ const CapacityBar = ({ capacity, token }) => {
 
   const pct = (capacity.running_jobs / capacity.max_global_jobs) * 100;
   const fillClass = capacity.is_full
-    ? 'bg-red-500'
-    : pct > 80 ? 'bg-yellow-500'
-      : 'bg-green-500';
-  const lineColor = capacity.is_full ? '#ef4444' : '#22c55e';
+    ? 'bg-destructive'
+    : pct > 80 ? 'bg-warning'
+      : 'bg-success';
+  // Recharts strokes need raw color values — read the CSS var via computed style.
+  const lineColor = capacity.is_full ? 'hsl(var(--destructive))' : 'hsl(var(--success))';
 
   return (
     <div className="space-y-2">
       {showSaturationBanner && (
-        <div className="bg-orange-900/40 border border-orange-500/40 text-orange-300 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4" />
-          Capacité saturée depuis {Math.floor(saturationMs / 60000)} min
+        <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs text-warning">
+          <AlertTriangle className="h-4 w-4" />
+          <span>Capacité saturée depuis {Math.floor(saturationMs / 60000)} min</span>
         </div>
       )}
-      <div className="bg-gray-800 rounded-lg p-4 shadow-lg">
-        <div className="flex items-center justify-between mb-2 gap-4">
-          <div className="flex items-baseline gap-3 flex-1">
-            <span className="text-sm font-semibold text-gray-400">Capacité globale</span>
-            <span className={`text-sm font-bold ${capacity.is_full ? 'text-red-400' : 'text-green-400'}`}>
+      <Card className="p-3">
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <div className="flex flex-1 items-baseline gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Capacité globale
+            </span>
+            <span className={cn('font-mono text-sm font-bold', capacity.is_full ? 'text-destructive' : 'text-success')}>
               {capacity.running_jobs} / {capacity.max_global_jobs} slots
             </span>
           </div>
           {historyAvailable && history.length > 1 && (
-            <div className="w-[150px] h-8 shrink-0">
+            <div className="h-8 w-[150px] shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history}>
                   <YAxis hide domain={[0, capacity.max_global_jobs]} />
                   <Tooltip
-                    contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 4, fontSize: 11 }}
+                    contentStyle={{
+                      background: 'hsl(var(--popover))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: 4,
+                      fontSize: 11,
+                      color: 'hsl(var(--popover-foreground))',
+                    }}
                     labelStyle={{ display: 'none' }}
                     formatter={(v) => [`${v} running`, '']}
                     separator=""
@@ -80,15 +89,15 @@ const CapacityBar = ({ capacity, token }) => {
             </div>
           )}
         </div>
-        <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+        <div className="h-2 overflow-hidden rounded-full bg-muted">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${fillClass}`}
+            className={cn('h-full rounded-full transition-all duration-500', fillClass)}
             style={{ width: `${Math.min(pct, 100)}%` }}
           />
         </div>
-      </div>
+      </Card>
     </div>
   );
 };
 
-export default CapacityBar;
+export default memo(CapacityBar);

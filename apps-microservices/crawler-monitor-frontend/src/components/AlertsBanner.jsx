@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, AlertCircle, ChevronDown, ChevronUp, X, Bell, BellOff } from 'lucide-react';
 import { useAlertsQuery } from '../hooks/queries';
 import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
+import { cn } from '../lib/utils';
 
 /**
  * AlertsBanner — top-of-Overview banner aggregating active alerts.
@@ -10,29 +12,37 @@ import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
  *  - Shows nothing when no alerts (no chrome at all)
  *  - When alerts exist: collapsed strip showing the top alert + "voir tous (N)"
  *  - Click expands to show the full list with severity chips
- *  - Severities: critical (red, immediate eye-catch), warn (orange)
+ *  - Severities: critical (destructive), warn (warning), info (info)
  *  - 30s background refetch via useAlertsQuery
  */
 
 const SEVERITY_STYLES = {
   critical: {
-    bg:    'bg-red-900/40 border-red-500/50',
-    text:  'text-red-200',
-    chip:  'bg-red-500/30 text-red-200',
-    Icon:  AlertCircle,
+    surface: 'border-destructive/40 bg-destructive/10 text-destructive',
+    chip:    'bg-destructive/20 text-destructive',
+    Icon:    AlertCircle,
   },
   warn: {
-    bg:    'bg-orange-900/40 border-orange-500/40',
-    text:  'text-orange-200',
-    chip:  'bg-orange-500/30 text-orange-200',
-    Icon:  AlertTriangle,
+    surface: 'border-warning/40 bg-warning/10 text-warning',
+    chip:    'bg-warning/20 text-warning',
+    Icon:    AlertTriangle,
   },
   info: {
-    bg:    'bg-blue-900/40 border-blue-500/40',
-    text:  'text-blue-200',
-    chip:  'bg-blue-500/30 text-blue-200',
-    Icon:  AlertCircle,
+    surface: 'border-info/40 bg-info/10 text-info',
+    chip:    'bg-info/20 text-info',
+    Icon:    AlertCircle,
   },
+};
+
+// Surface dominante quand il y a au moins une alerte critique : fond plein
+// destructive, lisible d'un coup d'œil en pleine nuit.
+const CRITICAL_DOMINANT_SURFACE =
+  'bg-destructive text-destructive-foreground border-destructive';
+
+const SEVERITY_LABELS = {
+  critical: 'Critique',
+  warn:     'Avertissement',
+  info:     'Info',
 };
 
 const fmtSince = (ts) => {
@@ -55,17 +65,14 @@ const AlertsBanner = ({ token }) => {
   const allAlerts = query.data?.alerts || [];
   const visible = allAlerts.filter(a => !dismissedIds.has(a.id));
 
-  // Browser notifications: notify on NEW critical alerts that we haven't notified yet.
   useEffect(() => {
     const currentCriticalIds = new Set(allAlerts.filter(a => a.severity === 'critical').map(a => a.id));
-    // Notify each newly-appeared critical alert
     for (const a of allAlerts) {
       if (a.severity !== 'critical') continue;
       if (notifiedIdsRef.current.has(a.id)) continue;
       notifiedIdsRef.current.add(a.id);
       notif.notify(`Crawler: ${a.kind}`, { body: a.message, tag: a.id });
     }
-    // Garbage-collect IDs that are no longer active so they re-notify if they come back
     for (const id of notifiedIdsRef.current) {
       if (!currentCriticalIds.has(id)) notifiedIdsRef.current.delete(id);
     }
@@ -73,10 +80,11 @@ const AlertsBanner = ({ token }) => {
 
   if (visible.length === 0) return null;
 
-  // Worst severity across visible alerts drives the bar color
   const worstSeverity = visible.some(a => a.severity === 'critical') ? 'critical' : 'warn';
   const styles = SEVERITY_STYLES[worstSeverity];
   const TopIcon = styles.Icon;
+  const isCriticalDominant = worstSeverity === 'critical';
+  const hasCallbackAlert = visible.some(a => (a.kind || '').includes('callback'));
 
   const dismissOne = (id) => {
     setDismissedIds(prev => {
@@ -87,25 +95,34 @@ const AlertsBanner = ({ token }) => {
   };
 
   return (
-    <div className={`rounded-lg border ${styles.bg} ${styles.text}`}>
-      <div className="w-full flex items-center gap-3 px-3 py-2">
+    <div className={cn('rounded-md border', isCriticalDominant ? CRITICAL_DOMINANT_SURFACE : styles.surface)}>
+      <div className="flex w-full items-center gap-3 px-3 py-2">
         <button
           type="button"
           onClick={() => setExpanded(e => !e)}
-          className="flex-1 min-w-0 flex items-center gap-3 text-left"
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
-          <TopIcon className="w-5 h-5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="font-semibold">{visible.length} alerte{visible.length > 1 ? 's' : ''}</span>
-            <span className="ml-2 text-sm opacity-80 truncate">— {visible[0].message}</span>
+          <TopIcon className="h-4 w-4 shrink-0" />
+          <div className="flex min-w-0 flex-1 items-baseline gap-2">
+            <span className="text-sm font-bold">{visible.length} alerte{visible.length > 1 ? 's' : ''}</span>
+            <span className="truncate text-sm">— {visible[0].message}</span>
           </div>
-          {expanded ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+          {expanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
         </button>
+        {hasCallbackAlert && (
+          <Link
+            to="/callbacks"
+            onClick={(ev) => ev.stopPropagation()}
+            className="shrink-0 text-xs underline underline-offset-2 hover:opacity-80"
+          >
+            Voir callbacks
+          </Link>
+        )}
         {notif.supported && (
           <button
             type="button"
             onClick={notif.toggle}
-            className="opacity-70 hover:opacity-100 shrink-0"
+            className="shrink-0 opacity-70 hover:opacity-100"
             title={
               notif.enabled
                 ? (notif.permission === 'granted'
@@ -117,24 +134,24 @@ const AlertsBanner = ({ token }) => {
             }
           >
             {notif.enabled && notif.permission === 'granted'
-              ? <Bell className="w-4 h-4" />
-              : <BellOff className="w-4 h-4" />}
+              ? <Bell className="h-4 w-4" />
+              : <BellOff className="h-4 w-4" />}
           </button>
         )}
       </div>
       {expanded && (
-        <ul className="px-3 pb-3 space-y-2">
+        <ul className="space-y-1.5 px-3 pb-3">
           {visible.map(a => {
             const s = SEVERITY_STYLES[a.severity] || SEVERITY_STYLES.info;
             const SIcon = s.Icon;
             const since = fmtSince(a.since);
             return (
-              <li key={a.id} className={`flex items-start gap-3 px-2 py-1.5 rounded ${s.bg} ${s.text}`}>
-                <SIcon className="w-4 h-4 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
+              <li key={a.id} className={cn('flex items-start gap-3 rounded border px-2 py-1.5', s.surface)}>
+                <SIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
                   <div className="text-sm">{a.message}</div>
-                  <div className="text-[11px] opacity-70 mt-0.5">
-                    <span className={`px-1.5 py-0.5 rounded mr-2 ${s.chip}`}>{a.severity}</span>
+                  <div className="mt-0.5 text-[11px] opacity-80">
+                    <span className={cn('mr-2 rounded px-1.5 py-0.5', s.chip)}>{SEVERITY_LABELS[a.severity] || a.severity}</span>
                     <span className="font-mono">{a.kind}</span>
                     {since && <span className="ml-2">· {since}</span>}
                   </div>
@@ -144,7 +161,7 @@ const AlertsBanner = ({ token }) => {
                   className="opacity-60 hover:opacity-100"
                   title="Masquer (réapparaîtra si l'alerte persiste)"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="h-4 w-4" />
                 </button>
               </li>
             );

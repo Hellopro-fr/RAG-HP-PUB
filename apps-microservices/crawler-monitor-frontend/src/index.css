@@ -1,3 +1,106 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Design tokens — enterprise ops / Grafana-inspired.
+ * All color values are HSL triplets (no `hsl(...)` wrapper) so tailwind can
+ * compose opacity (`bg-primary/20`).
+ *
+ * Light defaults are clean + professional. Dark is the operator-oriented
+ * mode with neutral slate background that doesn't wash out chart colors.
+ */
+
+@layer base {
+  :root {
+    /* base surface */
+    --background:     0 0% 100%;
+    --foreground:     222 47% 11%;
+
+    /* cards / popovers */
+    --card:           0 0% 100%;
+    --card-foreground:222 47% 11%;
+    --popover:        0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* primary action (blue) */
+    --primary:            221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+
+    /* muted / secondary / accent surfaces */
+    --secondary:            210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted:                210 40% 96%;
+    --muted-foreground:     215 16% 47%;
+    --accent:               210 40% 96%;
+    --accent-foreground:    222 47% 11%;
+
+    /* destructive (red) */
+    --destructive:            0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* semantic severity */
+    --success:               142 76% 36%;
+    --success-foreground:    210 40% 98%;
+    --warning:               38 92% 50%;
+    --warning-foreground:    222 47% 11%;
+    --info:                  199 89% 48%;
+    --info-foreground:       210 40% 98%;
+
+    /* borders / inputs / focus ring */
+    --border: 214 32% 91%;
+    --input:  214 32% 91%;
+    --ring:   221 83% 53%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* base surface: deep neutral slate (not pure black — easier on eyes) */
+    --background:     222 47% 8%;
+    --foreground:     210 40% 96%;
+
+    --card:           222 47% 10%;
+    --card-foreground:210 40% 96%;
+    --popover:        222 47% 10%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary:            217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary:            217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+    --muted:                217 33% 17%;
+    --muted-foreground:     215 20% 65%;
+    --accent:               217 33% 17%;
+    --accent-foreground:    210 40% 96%;
+
+    --destructive:            0 63% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success:               142 71% 45%;
+    --success-foreground:    144 70% 10%;
+    --warning:               35 92% 55%;
+    --warning-foreground:    26 83% 14%;
+    --info:                  199 89% 56%;
+    --info-foreground:       204 80% 16%;
+
+    --border: 217 33% 20%;
+    --input:  217 33% 17%;
+    --ring:   217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+  /* Dense operator feel — tighter default line-height on data */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+}

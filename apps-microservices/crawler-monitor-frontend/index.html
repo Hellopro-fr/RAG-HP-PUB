@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crawlee Monitor</title>
+    <script>
+      // Anti-FOUC: apply the .dark class before React renders, based on
+      // stored preference or OS. Keeps the background from flashing white
+      // when the user is on dark mode.
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var wantsDark =
+            stored === 'dark' ||
+            ((stored === 'system' || !stored) &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (wantsDark) document.documentElement.classList.add('dark');
+        } catch (_) { /* ignore */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

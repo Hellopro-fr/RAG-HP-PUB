@@ -314,18 +314,25 @@ class ChatGPTProvider:
         self,
         api_key: Optional[str] = None,
         model: str = "gpt-4.1-mini",
+        reasoning_effort: str = None,
     ):
         self.api_key = api_key or settings.OPENAI_API_KEY
         self.model = model
+        self.reasoning_effort = reasoning_effort
         self.client = self._get_client(self.api_key)
 
     async def chat(self, prompt: str) -> Dict[str, Any]:
         """Envoie un prompt à ChatGPT de manière asynchrone."""
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            kwargs: Dict[str, Any] = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            
+            if self.reasoning_effort:
+                kwargs["reasoning_effort"] = self.reasoning_effort
+
+            response = await self.client.chat.completions.create(**kwargs)
 
             message_text = response.choices[0].message.content or ""
 

@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  XCircle, RefreshCw, AlertCircle, FileText, Filter, Calendar,
+  RefreshCw, AlertCircle, FileText, Filter, Calendar,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { Card } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '../components/ui/table';
+import {
+  Tooltip, TooltipTrigger, TooltipContent,
+} from '../components/ui/tooltip';
+import { cn } from '../lib/utils';
 
 /**
  * /audit — view the FS-rotated audit log entries.
@@ -20,17 +29,41 @@ const ACTION_OPTIONS = [
   'callback_retry', 'callback_delete', 'callback_clear_all',
 ];
 
-const STATUS_BADGE = (status) =>
-  status === 'ok'
-    ? 'bg-green-500/20 text-green-400'
-    : 'bg-red-500/20 text-red-400';
+// Fix 4a : libellés des colonnes
+const HEAD_TOOLTIPS = {
+  when:     'Date et heure de l\u2019événement (timezone locale)',
+  user:     'Utilisateur authentifié qui a déclenché l\u2019action (anonymous si non loggué)',
+  action:   'Nom de l\u2019action : login, queue_drop, callback_retry, dataset_deduplicate\u2026',
+  status:   'Résultat de l\u2019action : ok (succès) ou error (échec)',
+  target:   'Cible concernée : id de queue, url, job, etc.',
+  metadata: 'Détails additionnels structurés (clé=valeur · clé=valeur)',
+  ip:       'Adresse IP source de la requête',
+};
 
-const ACTION_BADGE = (action) => {
-  if (!action) return 'bg-gray-500/20 text-gray-300';
-  if (action.startsWith('login_')) return 'bg-blue-500/20 text-blue-300';
-  if (action.startsWith('callback_')) return 'bg-purple-500/20 text-purple-300';
-  if (action.startsWith('queue_drop') || action.startsWith('dataset_dedup')) return 'bg-red-500/20 text-red-300';
-  return 'bg-yellow-500/20 text-yellow-300';
+const HeadWithTip = ({ tip, children }) => (
+  <TableHead>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  </TableHead>
+);
+
+const statusClass = (status) =>
+  status === 'ok'
+    ? 'bg-success/15 text-success'
+    : 'bg-destructive/15 text-destructive';
+
+const actionClass = (action) => {
+  if (!action) return 'bg-muted text-muted-foreground';
+  if (action.startsWith('login_')) return 'bg-info/15 text-info';
+  if (action.startsWith('callback_')) return 'bg-primary/15 text-primary';
+  if (action.startsWith('queue_drop') || action.startsWith('dataset_dedup')) return 'bg-destructive/15 text-destructive';
+  return 'bg-warning/15 text-warning';
 };
 
 const fmtMetadata = (m) => {
@@ -40,19 +73,30 @@ const fmtMetadata = (m) => {
 
 const truncate = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : (s || ''));
 
+const SELECT_CLS =
+  'h-8 appearance-none rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
 const AuditPage = ({ token }) => {
-  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Filters
   const [actionFilter, setActionFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
-  const [days, setDays] = useState(1); // window: last N days
-  const [limit, setLimit] = useState(100);
+  // Fix 4a : debounce 300ms du userFilter pour éviter un fetch à chaque frappe
+  const [debouncedUser, setDebouncedUser] = useState('');
+  const [days, setDays] = useState(1);
+  const [limit] = useState(100);
   const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedUser(userFilter);
+      setOffset(0);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [userFilter]);
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -65,7 +109,7 @@ const AuditPage = ({ token }) => {
         query: {
           from, to,
           ...(actionFilter ? { action: actionFilter } : {}),
-          ...(userFilter ? { user: userFilter } : {}),
+          ...(debouncedUser ? { user: debouncedUser } : {}),
           limit: String(limit),
           offset: String(offset),
         },
@@ -79,7 +123,7 @@ const AuditPage = ({ token }) => {
     } finally {
       setLoading(false);
     }
-  }, [token, actionFilter, userFilter, days, limit, offset]);
+  }, [token, actionFilter, debouncedUser, days, limit, offset]);
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
@@ -87,40 +131,34 @@ const AuditPage = ({ token }) => {
   const currentPage = Math.floor(offset / limit) + 1;
 
   return (
-    <main className="container mx-auto p-4 space-y-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl">
-        <div className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-400" /> Audit log
-            <span className="text-sm font-normal text-gray-400">({total} entrées sur la période)</span>
+    <div className="p-4">
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <FileText className="h-4 w-4 text-primary" />
+            Audit log
+            <span className="font-mono text-xs font-normal text-muted-foreground">
+              ({total} entrées)
+            </span>
           </h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={fetchEntries}
-              disabled={loading}
-              className="p-2 rounded hover:bg-gray-700 disabled:opacity-50"
-              title="Rafraîchir"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="text-gray-400 hover:text-white"
-              title="Fermer"
-            >
-              <XCircle className="w-6 h-6" />
-            </button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={fetchEntries}
+            disabled={loading}
+            title="Rafraîchir"
+          >
+            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+          </Button>
         </div>
 
-        {/* Filters */}
-        <div className="p-4 border-b border-gray-700 flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border p-3 text-sm">
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-500" />
+            <Calendar className="h-4 w-4 text-muted-foreground" />
             <select
               value={days}
               onChange={e => { setDays(Number(e.target.value)); setOffset(0); }}
-              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className={SELECT_CLS}
             >
               <option value={1}>24h</option>
               <option value={7}>7 jours</option>
@@ -128,109 +166,113 @@ const AuditPage = ({ token }) => {
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-500" />
+            <Filter className="h-4 w-4 text-muted-foreground" />
             <select
               value={actionFilter}
               onChange={e => { setActionFilter(e.target.value); setOffset(0); }}
-              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className={SELECT_CLS}
             >
               {ACTION_OPTIONS.map(a => (
                 <option key={a} value={a}>{a || 'Toutes actions'}</option>
               ))}
             </select>
           </div>
-          <input
+          <Input
             type="text"
             placeholder="Filtrer par user (admin, anonymous, …)"
             value={userFilter}
-            onChange={e => { setUserFilter(e.target.value); setOffset(0); }}
-            className="flex-1 min-w-[200px] bg-gray-900 border border-gray-700 rounded px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            onChange={e => setUserFilter(e.target.value)}
+            className="h-8 min-w-[200px] flex-1"
           />
         </div>
 
         {error && (
-          <div className="px-4 py-2 bg-red-900/40 border-b border-red-700/50 text-red-300 text-sm flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" /> {error}
+          <div className="flex items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4" /> {error}
           </div>
         )}
 
-        <div className="overflow-auto max-h-[70vh]">
+        <div className="max-h-[70vh] overflow-auto">
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center py-16">
-              <RefreshCw className="w-8 h-8 animate-spin text-blue-400" />
+              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : items.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
-              <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>Aucune entrée pour ces filtres.</p>
+            <div className="py-16 text-center text-muted-foreground">
+              <FileText className="mx-auto mb-3 h-10 w-10 opacity-40" />
+              <p className="text-sm">Aucune entrée pour ces filtres.</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-900 sticky top-0">
-                <tr className="text-left text-gray-400 text-xs uppercase">
-                  <th className="px-3 py-2">When</th>
-                  <th className="px-3 py-2">User</th>
-                  <th className="px-3 py-2">Action</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Target</th>
-                  <th className="px-3 py-2">Metadata</th>
-                  <th className="px-3 py-2">IP</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.when}>When</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.user}>User</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.action}>Action</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.status}>Status</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.target}>Target</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.metadata}>Metadata</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.ip}>IP</HeadWithTip>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {items.map((e, idx) => (
-                  <tr key={`${e.ts}-${idx}`} className="border-t border-gray-700 hover:bg-gray-700/30">
-                    <td className="px-3 py-2 text-gray-300 whitespace-nowrap">
+                  <TableRow key={`${e.ts}-${idx}`}>
+                    <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
                       {new Date(e.ts).toLocaleString('fr-FR')}
-                    </td>
-                    <td className="px-3 py-2 text-gray-300 font-mono text-xs">{truncate(e.user, 16)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${ACTION_BADGE(e.action)}`}>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{truncate(e.user, 16)}</TableCell>
+                    <TableCell>
+                      <span className={cn('rounded px-1.5 py-0.5 text-[10px]', actionClass(e.action))}>
                         {e.action}
                       </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_BADGE(e.status)}`}>
+                    </TableCell>
+                    <TableCell>
+                      <span className={cn('rounded px-1.5 py-0.5 text-[10px]', statusClass(e.status))}>
                         {e.status || '?'}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-300 font-mono text-xs" title={e.target || ''}>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs" title={e.target || ''}>
                       {truncate(e.target, 24)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-400 text-xs">
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
                       {fmtMetadata(e.metadata)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 text-xs font-mono">{e.ip || ''}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.ip || ''}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </div>
 
         {totalPages > 1 && (
-          <div className="p-3 border-t border-gray-700 flex justify-between items-center text-sm text-gray-400">
-            <span>Page {currentPage} / {totalPages}</span>
+          <div className="flex items-center justify-between border-t border-border p-3 text-sm text-muted-foreground">
+            <span className="font-mono">Page {currentPage} / {totalPages}</span>
             <div className="flex gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setOffset(o => Math.max(0, o - limit))}
                 disabled={offset === 0 || loading}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50"
               >
                 Précédent
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setOffset(o => o + limit)}
                 disabled={currentPage >= totalPages || loading}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50"
               >
                 Suivant
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
-    </main>
+      </Card>
+    </div>
   );
 };
 

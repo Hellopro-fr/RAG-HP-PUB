@@ -25,6 +25,8 @@ export const queryKeys = {
   domainDetail:       (domain, window) => ['domains', domain, window],
   alerts:             () => ['alerts'],
   jobPerformance:     (id) => ['jobs', id, 'performance'],
+  jobReplay:          (id) => ['jobs', id, 'replay'],
+  capacityPlanning:   (window) => ['capacity-planning', 'ram', window],
 };
 
 /* ---------- Jobs ---------- */
@@ -71,7 +73,9 @@ export function useCapacityHistoryQuery(token, window = '1h', options = {}) {
     queryKey: queryKeys.capacityHistory(window),
     queryFn: () => api.get('/capacity/history', token, { query: { window }, retry: { attempts: 1 } }),
     enabled: !!token,
-    refetchInterval: 60 * 1000, // background refresh every 60s for the sparkline
+    // Backend persists a snapshot every 60s. Polling at 60s matches that cadence
+    // without pointless requests.
+    refetchInterval: 60 * 1000,
     ...options,
   });
 }
@@ -115,7 +119,9 @@ export function useReplicasHistoryQuery(token, window = '1h', options = {}) {
     queryKey: queryKeys.replicasHistoryAll(window),
     queryFn: () => api.get('/replicas/history', token, { query: { window }, retry: { attempts: 1 } }),
     enabled: !!token,
-    refetchInterval: 30 * 1000, // background refresh every 30s for sparklines
+    // Replica history gets new points every 2s via heartbeats. 60s polling is
+    // enough for the sparkline — the ~2s live values already come from WS.
+    refetchInterval: 60 * 1000,
     ...options,
   });
 }
@@ -128,6 +134,29 @@ export function useJobPerformanceQuery(token, jobId, options = {}) {
     queryFn: () => api.get(`/jobs/${jobId}/performance`, token),
     enabled: !!token && isValidJobId(jobId),
     refetchInterval: 15 * 1000, // refresh every 15s while viewing a running job
+    ...options,
+  });
+}
+
+export function useCapacityPlanningQuery(token, window = '1h', options = {}) {
+  return useQuery({
+    queryKey: queryKeys.capacityPlanning(window),
+    queryFn: () => api.get('/capacity-planning/ram', token, { query: { window } }),
+    enabled: !!token,
+    // Aggregate view; not worth refetching frequently. User can click refresh.
+    staleTime: 60 * 1000,
+    refetchInterval: false,
+    ...options,
+  });
+}
+
+export function useJobReplayQuery(token, jobId, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.jobReplay(jobId),
+    queryFn: () => api.get(`/jobs/${jobId}/replay`, token),
+    enabled: !!token && isValidJobId(jobId),
+    // Replay is static historical data; no auto-refresh.
+    staleTime: 30 * 1000,
     ...options,
   });
 }
@@ -166,7 +195,10 @@ export function useTimelineQuery(token, window = '6h', { from, to, ...options } 
       ? api.get('/timeline', token, { query: { from, to } })
       : api.get('/timeline', token, { query: { window } }),
     enabled: !!token,
-    refetchInterval: isCustom ? false : 30 * 1000, // no auto-refresh on custom range
+    // Timeline is WS-invalidated on every job_update. We don't poll — the
+    // moving-window "tail" being slightly stale for a few minutes is fine
+    // given 30s staleTime default.
+    refetchInterval: false,
     ...options,
   });
 }
@@ -178,7 +210,10 @@ export function useAlertsQuery(token, options = {}) {
     queryKey: queryKeys.alerts(),
     queryFn: () => api.get('/alerts', token, { retry: { attempts: 1 } }),
     enabled: !!token,
-    refetchInterval: 30 * 1000, // re-evaluate every 30s
+    // Alerts are also invalidated by WS job_update (see useWsInvalidator).
+    // Keep a 60s fallback poll for threshold crossings that don't correspond
+    // to a job event (replica high CPU, capacity saturation).
+    refetchInterval: 60 * 1000,
     ...options,
   });
 }

@@ -28,6 +28,7 @@ import {
   readAllReplicasHistory,
 } from './src/lib/replicaHistory.js';
 import { persistJobPerf, readJobPerf } from './src/lib/jobPerformance.js';
+import { computeCapacityPlanning } from './src/lib/capacityPlanning.js';
 import { computeTimeline } from './src/lib/timeline.js';
 import { parseDomainWindow, aggregateDomains, jobsForDomain } from './src/lib/domains.js';
 import { evaluateAlerts, DEFAULT_THRESHOLDS } from './src/lib/alerts.js';
@@ -313,6 +314,143 @@ app.get('/api/jobs/:id/performance', async (req, res) => {
   } catch (error) {
     console.error('Error fetching job performance:', error);
     res.status(500).json({ error: error.message || 'Failed to fetch performance' });
+  }
+});
+
+// Replay endpoint: aggregates everything needed for the scrubber/player UI.
+// Returns perf points + job metadata + derived event markers + audit actions.
+// High-CPU threshold (fraction 0..1) for marking "hot" zones, default 0.85.
+const REPLAY_HIGH_CPU = parseFloat(process.env.REPLAY_HIGH_CPU || '0.85');
+app.get('/api/jobs/:id/replay', async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    const client = await ensureRedisConnected();
+
+    // 1. Fetch performance points + summary
+    const perf = await readJobPerf(client, jobId);
+
+    // 2. Fetch job metadata from Redis
+    let jobInfo = null;
+    try {
+      const raw = await client.get(`${CRAWL_JOB_PREFIX}${jobId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        jobInfo = {
+          id: parsed.crawl_id || jobId,
+          domain: parsed.domain,
+          status: parsed.status,
+          start_time: parsed.start_time,
+          crawl_mode: parsed.crawl_mode,
+          oom_restart_count: parsed.oom_restart_count || 0,
+          previous_crawl_id: parsed.previous_crawl_id,
+        };
+      }
+    } catch { /* swallow */ }
+
+    // 3. Build event markers from the points
+    const events = [];
+
+    if (perf.summary) {
+      if (perf.summary.peak_cpu_at) {
+        events.push({
+          ts: perf.summary.peak_cpu_at,
+          kind: 'peak_cpu',
+          label: `Peak CPU ${(perf.summary.peak_cpu * 100).toFixed(1)}%`,
+          severity: perf.summary.peak_cpu > REPLAY_HIGH_CPU ? 'warn' : 'info',
+        });
+      }
+      if (perf.summary.peak_ram_at) {
+        events.push({
+          ts: perf.summary.peak_ram_at,
+          kind: 'peak_ram',
+          label: `Peak RAM ${(perf.summary.peak_ram / 1024 / 1024).toFixed(0)} MB`,
+          severity: 'info',
+        });
+      }
+    }
+
+    // 4. High-CPU zones: contiguous segments where cpu > threshold
+    const hotZones = [];
+    if (perf.points && perf.points.length > 1) {
+      let zoneStart = null;
+      let zoneMaxCpu = 0;
+      for (const p of perf.points) {
+        if ((p.cpu || 0) > REPLAY_HIGH_CPU) {
+          if (zoneStart === null) zoneStart = p.ts;
+          if ((p.cpu || 0) > zoneMaxCpu) zoneMaxCpu = p.cpu;
+        } else if (zoneStart !== null) {
+          hotZones.push({ from: zoneStart, to: p.ts, max_cpu: zoneMaxCpu });
+          zoneStart = null;
+          zoneMaxCpu = 0;
+        }
+      }
+      // Close any open zone at the end of the series
+      if (zoneStart !== null) {
+        hotZones.push({
+          from: zoneStart,
+          to: perf.points[perf.points.length - 1].ts,
+          max_cpu: zoneMaxCpu,
+        });
+      }
+      for (const z of hotZones) {
+        events.push({
+          ts: z.from,
+          kind: 'hot_cpu_zone',
+          label: `CPU > ${(REPLAY_HIGH_CPU * 100).toFixed(0)}% pendant ${Math.max(1, Math.round((z.to - z.from) / 1000))}s (max ${(z.max_cpu * 100).toFixed(0)}%)`,
+          severity: 'warn',
+          duration_ms: z.to - z.from,
+        });
+      }
+    }
+
+    // 5. OOM events (approximate — we only know the final count)
+    if (jobInfo && jobInfo.oom_restart_count > 0 && perf.points && perf.points.length > 0) {
+      events.push({
+        ts: perf.points[0].ts, // anchor at job start (imprecise but safe)
+        kind: 'oom_summary',
+        label: `${jobInfo.oom_restart_count} OOM restart${jobInfo.oom_restart_count > 1 ? 's' : ''} pendant le crawl`,
+        severity: 'critical',
+      });
+    }
+
+    // 6. Audit actions targeting this job (drop, dedupe, clean, repair, queue_file_edit)
+    try {
+      const windowMs = 7 * 24 * 60 * 60 * 1000;
+      const from = perf.points && perf.points.length
+        ? new Date(perf.points[0].ts - 60_000).toISOString()
+        : new Date(Date.now() - windowMs).toISOString();
+      const to = new Date().toISOString();
+      const audit = await readAuditEntries({ from, to, target: jobId, limit: 200 });
+      for (const e of audit.items || []) {
+        events.push({
+          ts: Date.parse(e.ts),
+          kind: 'audit',
+          label: `${e.action} par ${e.user}${e.status === 'error' ? ' (échec)' : ''}`,
+          severity: e.status === 'error' ? 'warn' : 'info',
+          action: e.action,
+          user: e.user,
+        });
+      }
+    } catch (err) {
+      // Audit is best-effort; missing = no annotations
+      console.warn('[replay] audit lookup failed:', err.message);
+    }
+
+    // Sort events chronologically
+    events.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+    res.json({
+      job_id: jobId,
+      job: jobInfo,
+      points: perf.points,
+      summary: perf.summary,
+      events,
+      hot_zones: hotZones,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error building replay:', error);
+    res.status(500).json({ error: error.message || 'Failed to build replay' });
   }
 });
 
@@ -1344,6 +1482,20 @@ app.get('/api/timeline', authenticateToken, async (req, res) => {
 });
 
 // Per-replica CPU/RAM history (single replica or batch for all known)
+// Capacity planning: aggregate RAM usage per replica to help operators
+// decide whether to downsize allocation / run more replicas / etc.
+app.get('/api/capacity-planning/ram', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '1h';
+    const client = await ensureRedisConnected();
+    const result = await computeCapacityPlanning(client, windowKey);
+    res.json(result);
+  } catch (error) {
+    console.error('Error computing capacity planning:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute capacity planning' });
+  }
+});
+
 app.get('/api/replicas/history', authenticateToken, async (req, res) => {
   try {
     const windowStr = req.query.window || '1h';

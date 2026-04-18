@@ -6,6 +6,8 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import ToastProvider from './components/ToastProvider.jsx'
+import { ThemeProvider } from './components/providers/ThemeProvider.jsx'
+import { TooltipProvider } from './components/ui/tooltip'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,13 +26,17 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
+      <ThemeProvider defaultTheme="system">
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <TooltipProvider delayDuration={200}>
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </TooltipProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,
 )

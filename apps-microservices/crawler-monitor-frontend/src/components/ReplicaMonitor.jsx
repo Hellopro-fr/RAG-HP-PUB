@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Server, Cpu } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { useJobsQuery, useReplicasHistoryQuery } from '../hooks/queries';
+import { Card } from './ui/card';
+import { cn } from '../lib/utils';
 
 /**
  * ReplicaMonitor
@@ -22,7 +24,6 @@ const ReplicaMonitor = ({ replicas, token }) => {
   const allJobs = jobsQuery.data || [];
   const historyByReplica = historyQuery.data?.replicas || {};
 
-  // jobId -> job map for fast cross-reference (Mode badge needs job.crawl_mode)
   const jobsById = useMemo(() => {
     const m = new Map();
     for (const j of allJobs) if (j.id) m.set(j.id, j);
@@ -31,20 +32,15 @@ const ReplicaMonitor = ({ replicas, token }) => {
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 MB';
-    const mb = bytes / 1024 / 1024;
-    return `${mb.toFixed(0)} MB`;
+    return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
   };
+  const formatCpu = (load) => (load ? `${(load * 100).toFixed(1)}%` : '0%');
 
-  const formatCpu = (load) => {
-    if (!load) return '0%';
-    return `${(load * 100).toFixed(1)}%`;
-  };
-
-  const getStatusColor = (timestamp) => {
+  const getStatusClass = (timestamp) => {
     const age = Date.now() - timestamp;
-    if (age < 5000) return 'green';
-    if (age < 15000) return 'yellow';
-    return 'red';
+    if (age < 5000)  return 'bg-success animate-pulse';
+    if (age < 15000) return 'bg-warning';
+    return 'bg-destructive';
   };
 
   const CircularProgress = ({ cpu, ram, totalRam }) => {
@@ -61,172 +57,161 @@ const ReplicaMonitor = ({ replicas, token }) => {
     const ramOffset = circumference - (ramPercent / 100) * circumference;
 
     return (
-      <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius - 18} fill="none" stroke="#374151" strokeWidth={strokeWidth} />
-        <circle cx={size / 2} cy={size / 2} r={radius}      fill="none" stroke="#374151" strokeWidth={strokeWidth} />
-        <circle cx={size / 2} cy={size / 2} r={radius - 18} fill="none" stroke="url(#cpuGradient)" strokeWidth={strokeWidth}
+      <svg width={size} height={size} className="-rotate-90 transform">
+        <circle cx={size / 2} cy={size / 2} r={radius - 18} fill="none" stroke="hsl(var(--muted))" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius}      fill="none" stroke="hsl(var(--muted))" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius - 18} fill="none" stroke="hsl(var(--info))"    strokeWidth={strokeWidth}
           strokeDasharray={circumference} strokeDashoffset={cpuOffset} strokeLinecap="round" className="transition-all duration-500" />
-        <circle cx={size / 2} cy={size / 2} r={radius}      fill="none" stroke="url(#ramGradient)" strokeWidth={strokeWidth}
+        <circle cx={size / 2} cy={size / 2} r={radius}      fill="none" stroke="hsl(var(--primary))" strokeWidth={strokeWidth}
           strokeDasharray={circumference} strokeDashoffset={ramOffset} strokeLinecap="round" className="transition-all duration-500" />
-        <defs>
-          <linearGradient id="cpuGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" />
-            <stop offset="100%" stopColor="#06b6d4" />
-          </linearGradient>
-          <linearGradient id="ramGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#a855f7" />
-            <stop offset="100%" stopColor="#ec4899" />
-          </linearGradient>
-        </defs>
       </svg>
     );
   };
 
-  // Defensive: drop replicas without a replicaId (partial heartbeats) so we never
-  // crash when calling .substring/.slice on undefined later in the render.
   const activeReplicas = Object.values(replicas).filter(
     r => r && r.replicaId && Date.now() - (r.timestamp || 0) < 30000
   );
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Server className="w-6 h-6 text-blue-400" />
+    <Card className="p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Server className="h-4 w-4 text-primary" />
           Crawler Replicas
-          <span className="text-sm font-normal text-gray-400 ml-2">
-            ({activeReplicas.length} active)
+          <span className="font-mono text-xs normal-case text-muted-foreground tracking-normal">
+            ({activeReplicas.length} actifs)
           </span>
         </h2>
       </div>
 
       {activeReplicas.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Server className="w-16 h-16 mx-auto mb-4 opacity-30" />
-          <p>Aucun replica actif</p>
+        <div className="py-12 text-center text-muted-foreground">
+          <Server className="mx-auto mb-3 h-12 w-12 opacity-40" />
+          <p className="text-sm">Aucun replica actif</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {activeReplicas.map((replica) => {
-            const statusColor = getStatusColor(replica.timestamp);
+            const statusClass = getStatusClass(replica.timestamp);
             const linkedJob = replica.jobId ? jobsById.get(replica.jobId) : null;
             const crawlMode = linkedJob?.crawl_mode;
             const history = historyByReplica[replica.replicaId] || [];
-            // Map history to sparkline points {ts, cpuPct}
             const cpuSeries = history.map(p => ({ ts: p.ts, cpu: (p.cpu || 0) * 100 }));
 
             return (
               <div
                 key={replica.replicaId}
-                className="bg-gray-900 rounded-lg p-5 border border-gray-700 hover:border-gray-600 transition-all"
+                className="rounded-md border border-border bg-background p-4 transition-colors hover:border-muted-foreground/40"
               >
-                {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className={`w-3 h-3 rounded-full shrink-0 ${statusColor === 'green' ? 'bg-green-500 animate-pulse' :
-                      statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'
-                      }`} />
-                    <span className="text-white font-semibold text-sm truncate">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <div className={cn('h-2.5 w-2.5 shrink-0 rounded-full', statusClass)} />
+                    <span className="truncate font-mono text-xs font-semibold text-foreground">
                       {String(replica.replicaId || '').substring(0, 12)}
                     </span>
                   </div>
-                  <Cpu className="w-4 h-4 text-blue-400 shrink-0" />
+                  <Cpu className="h-4 w-4 shrink-0 text-primary" />
                 </div>
 
-                {/* Circular Progress */}
-                <div className="flex flex-col items-center mb-4">
+                <div className="mb-3 flex flex-col items-center">
                   <div className="relative">
                     <CircularProgress cpu={replica.cpu} ram={replica.ram} totalRam={replica.totalRam} />
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <div className="absolute inset-0 flex items-center justify-center">
                       <div className="text-center">
-                        <div className="text-xs text-gray-400">CPU</div>
-                        <div className="text-lg font-bold text-cyan-400">{formatCpu(replica.cpu)}</div>
-                        <div className="text-xs text-gray-400 mt-1">RAM</div>
-                        <div className="text-sm font-semibold text-pink-400">{formatBytes(replica.ram)}</div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">CPU</div>
+                        <div className="font-mono text-lg font-bold text-info">{formatCpu(replica.cpu)}</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">RAM</div>
+                        <div className="font-mono text-sm font-semibold text-primary">{formatBytes(replica.ram)}</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* CPU sparkline (1h history) */}
                 {cpuSeries.length > 1 && (
                   <div className="mb-3 h-10">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={cpuSeries}>
                         <YAxis hide domain={[0, 100]} />
                         <Tooltip
-                          contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 4, fontSize: 11 }}
+                          contentStyle={{
+                            background: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            color: 'hsl(var(--popover-foreground))',
+                          }}
                           labelStyle={{ display: 'none' }}
                           formatter={(v) => [`${v.toFixed(0)}% CPU`, '']}
                           separator=""
                         />
-                        <Line type="monotone" dataKey="cpu" stroke="#06b6d4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                        <Line type="monotone" dataKey="cpu" stroke="hsl(var(--info))" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 )}
 
-                {/* Job + Mode info */}
                 {(replica.domain || linkedJob) && (
-                  <div className="mb-3 p-2 bg-gray-800 rounded text-xs space-y-1">
+                  <div className="mb-3 space-y-1 rounded border border-border bg-muted/40 p-2 text-xs">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 shrink-0">Job:</span>
+                      <span className="shrink-0 text-muted-foreground">Job:</span>
                       {crawlMode === 'update' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">↻ update</span>
+                        <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">↻ update</span>
                       )}
                       {crawlMode === 'standard' && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">▶ standard</span>
+                        <span className="rounded bg-info/15 px-1.5 py-0.5 text-[10px] text-info">▶ standard</span>
                       )}
                     </div>
                     {replica.domain && (
-                      <div className="text-white font-mono truncate" title={replica.domain}>{replica.domain}</div>
+                      <div className="truncate font-mono text-foreground" title={replica.domain}>{replica.domain}</div>
                     )}
                     {replica.jobId && (
-                      <div className="text-gray-500 font-mono text-[10px] truncate" title={replica.jobId}>
+                      <div className="truncate font-mono text-[10px] text-muted-foreground" title={replica.jobId}>
                         #{String(replica.jobId).slice(0, 12)}
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Top Processes (sorted desc by RAM, top 5, with proportion bars) */}
                 {replica.topProcesses && replica.topProcesses.length > 0 && (() => {
                   const totalRam = replica.totalRam || (6 * 1024 * 1024 * 1024);
                   const sorted = [...replica.topProcesses].sort((a, b) => (b.ram || 0) - (a.ram || 0)).slice(0, 5);
                   const measured = sorted.reduce((acc, p) => acc + (p.ram || 0), 0);
-                  const measuredPct = totalRam > 0 ? Math.min((measured / totalRam) * 100, 100) : 0;
                   return (
-                    <div className="mt-3 pt-3 border-t border-gray-700">
-                      <div className="text-xs text-gray-400 mb-2">Top RAM Processes:</div>
+                    <div className="mt-3 border-t border-border pt-3">
+                      <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Top RAM Processes:
+                      </div>
                       <div className="space-y-1.5">
                         {sorted.map((proc, idx) => {
                           const procPct = totalRam > 0 ? Math.min(((proc.ram || 0) / totalRam) * 100, 100) : 0;
                           const isCritical = procPct > 75;
                           const isHigh = procPct > 50;
-                          const nameClass = isCritical ? 'text-red-400 font-semibold'
-                            : isHigh ? 'text-orange-400 font-semibold' : 'text-gray-300';
-                          const barClass = isCritical ? 'bg-red-500' : isHigh ? 'bg-orange-500' : 'bg-purple-500';
+                          const nameClass = isCritical
+                            ? 'text-destructive font-semibold'
+                            : isHigh ? 'text-warning font-semibold' : 'text-foreground';
+                          const barClass = isCritical ? 'bg-destructive' : isHigh ? 'bg-warning' : 'bg-primary';
                           return (
                             <div key={idx}>
                               <div className="flex justify-between text-xs">
-                                <span className={`truncate flex-1 font-mono ${nameClass}`}>
+                                <span className={cn('flex-1 truncate font-mono', nameClass)}>
                                   {isCritical ? '⚠ ' : ''}{proc.name}
                                 </span>
-                                <span className="text-purple-400 ml-2">{formatBytes(proc.ram)}</span>
+                                <span className="ml-2 font-mono text-primary">{formatBytes(proc.ram)}</span>
                               </div>
-                              <div className="h-0.5 mt-0.5 bg-gray-700 rounded-full overflow-hidden">
-                                <div className={`h-full ${barClass}`} style={{ width: `${procPct}%` }} />
+                              <div className="mt-0.5 h-0.5 overflow-hidden rounded-full bg-muted">
+                                <div className={cn('h-full', barClass)} style={{ width: `${procPct}%` }} />
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                      <div className="text-[10px] text-gray-500 mt-2 space-y-0.5">
+                      <div className="mt-2 space-y-0.5 text-[10px] text-muted-foreground">
                         <div>
                           Container: {formatBytes(replica.ram)} / {formatBytes(totalRam)} ({(totalRam > 0 ? Math.min((replica.ram || 0) / totalRam * 100, 100) : 0).toFixed(0)}%)
                         </div>
-                        <div className="text-gray-600">
-                          Top {sorted.length} process RSS: {formatBytes(measured)} <span title="La somme des RSS process est souvent supérieure au total container car la mémoire partagée (libs, shared pages) est comptée dans chaque process.">ⓘ</span>
+                        <div className="text-muted-foreground">
+                          Top {sorted.length} process RSS: {formatBytes(measured)}{' '}
+                          <span title="La somme des RSS process est souvent supérieure au total container car la mémoire partagée (libs, shared pages) est comptée dans chaque process.">ⓘ</span>
                         </div>
                       </div>
                     </div>
@@ -237,8 +222,8 @@ const ReplicaMonitor = ({ replicas, token }) => {
           })}
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 
-export default ReplicaMonitor;
+export default memo(ReplicaMonitor);

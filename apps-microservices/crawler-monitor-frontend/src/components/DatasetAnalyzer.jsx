@@ -1,9 +1,11 @@
-// src/components/DatasetAnalyzer.jsx
 import { useCallback, useEffect, useState } from 'react';
-import { Server, XCircle, RefreshCw } from 'lucide-react';
+import { Server, RefreshCw, AlertCircle, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import UrlListBrowser from './UrlListBrowser';
 import DuplicatesTab from './DuplicatesTab';
+import { Card } from './ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { Button } from './ui/button';
 
 const TABS = [
   { id: 'success',    label: 'Succès',   kind: 'urls' },
@@ -20,7 +22,6 @@ const formatInt = (n) => (n ?? 0).toLocaleString('fr-FR');
  *   - Doublons                   → <DuplicatesTab />
  *
  * Counts are fetched on mount via /dataset/counts and displayed in tab labels.
- * Tab switch unmounts the previous tab (simple + predictable for v1).
  */
 const DatasetAnalyzer = ({ jobId, onClose, token }) => {
   const [activeTab, setActiveTab] = useState('success');
@@ -44,59 +45,58 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
   useEffect(() => { fetchCounts(); }, [fetchCounts]);
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <Server className="w-5 h-5 text-purple-400" /> Analyse Dataset
-            {countsLoading && <RefreshCw className="w-4 h-4 animate-spin text-gray-400" />}
+    <div className="p-4">
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <h3 className="flex items-center gap-2 text-base font-semibold">
+            <Server className="h-4 w-4 text-primary" />
+            Analyse Dataset
+            <span className="font-mono text-xs font-normal text-muted-foreground">
+              #{String(jobId).slice(0, 10)}
+            </span>
+            {countsLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Fermer">
-            <XCircle className="w-6 h-6" />
-          </button>
+          {onClose && (
+            <Button variant="outline" size="sm" onClick={onClose}>
+              <ArrowLeft className="h-4 w-4" />
+              Retour au job
+            </Button>
+          )}
         </div>
 
-        {/* Tabs */}
-        <nav className="flex gap-1 px-4 pt-3 border-b border-gray-700 bg-gray-800" role="tablist">
-          {TABS.map(t => {
-            const isActive = activeTab === t.id;
-            const countLabel =
-              t.kind === 'urls' && counts ? ` (${formatInt(counts[t.id])})` : '';
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveTab(t.id)}
-                role="tab"
-                aria-selected={isActive}
-                className={
-                  'px-4 py-2 text-sm rounded-t-md transition-colors ' +
-                  (isActive
-                    ? 'bg-gray-900 text-white border border-b-0 border-gray-700'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700/50')
-                }
-              >
-                {t.label}{countLabel}
-              </button>
-            );
-          })}
-        </nav>
-
         {countsError && (
-          <div className="mx-4 mt-3 bg-red-900/20 border border-red-500/50 text-red-300 p-3 rounded text-sm flex items-center justify-between gap-3">
-            <span>Impossible de charger les comptes. {countsError}</span>
-            <button onClick={fetchCounts} className="underline text-red-200 hover:text-white text-xs">
+          <div className="flex items-center justify-between gap-3 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            <span className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Impossible de charger les comptes. {countsError}
+            </span>
+            <Button variant="ghost" size="sm" onClick={fetchCounts}>
               Réessayer
-            </button>
+            </Button>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'duplicates'
-            ? <DuplicatesTab jobId={jobId} token={token} />
-            : <UrlListBrowser jobId={jobId} category={activeTab} token={token} />}
-        </div>
-      </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="p-4">
+          <TabsList>
+            {TABS.map(t => {
+              const countLabel = t.kind === 'urls' && counts ? ` (${formatInt(counts[t.id])})` : '';
+              return (
+                <TabsTrigger key={t.id} value={t.id}>
+                  {t.label}{countLabel}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          {TABS.map(t => (
+            <TabsContent key={t.id} value={t.id} className="mt-4">
+              {t.kind === 'duplicates'
+                ? <DuplicatesTab jobId={jobId} token={token} />
+                : <UrlListBrowser jobId={jobId} category={t.id} token={token} />}
+            </TabsContent>
+          ))}
+        </Tabs>
+      </Card>
     </div>
   );
 };
