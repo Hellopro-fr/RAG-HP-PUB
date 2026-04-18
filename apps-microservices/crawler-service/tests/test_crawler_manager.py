@@ -423,3 +423,29 @@ class TestReconciliationLeaderElection:
         assert '"last_heartbeat"' in source or "'last_heartbeat'" in source, (
             "start_crawl must include last_heartbeat in the initial job_data dict"
         )
+
+    def test_stale_override_does_not_require_is_local_job(self):
+        """The stale-detection local override must NOT gate on is_local_job.
+        It must trust self.local_processes as the authoritative source of
+        ownership — otherwise a replica can kill its own freshly-started
+        crawl after another replica overwrote replica_id in Redis.
+
+        Note: after Task 3, the scanning logic lives in reconcile_jobs
+        (before Task 3) OR in _reconcile_locked (after Task 3). This test
+        checks both to remain correct at any point in the task sequence."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        # Check whichever method holds the scanning logic
+        method = getattr(cm.CrawlerManager, "_reconcile_locked", None) or cm.CrawlerManager.reconcile_jobs
+        source = inspect.getsource(method)
+        # Find the local-override block: it must check local_processes
+        # but NOT gate on is_local_job in the SAME condition.
+        assert "crawl_id in self.local_processes" in source, (
+            "stale detection must check self.local_processes in the local override"
+        )
+        # Ensure the phrase 'is_stale and is_local_job and' (the old gate) is absent.
+        assert "is_stale and is_local_job and" not in source, (
+            "stale detection must not gate the local override on is_local_job; "
+            "self.local_processes alone is authoritative for process ownership"
+        )

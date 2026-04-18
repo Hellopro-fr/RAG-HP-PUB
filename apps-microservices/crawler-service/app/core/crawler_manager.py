@@ -1810,13 +1810,20 @@ class CrawlerManager:
                     else:
                         is_stale = True
 
-                    # Local job override: if process is alive locally, skip stale detection
-                    if is_stale and is_local_job and status != "stopping":
-                        if crawl_id in self.local_processes:
-                            proc = self.local_processes[crawl_id]
-                            if proc.returncode is None:
-                                logger.info(f"Job '{crawl_id}' heartbeat is stale but local process is alive (PID {proc.pid}). Skipping stale detection.")
-                                is_stale = False
+                    # Local process override: if our replica owns the live subprocess,
+                    # skip stale detection — regardless of what Redis says about
+                    # replica_id. Another replica may have overwritten our state with
+                    # stale fields during a write race, but self.local_processes is
+                    # the authoritative source for "is this process alive on this replica".
+                    if is_stale and status != "stopping" and crawl_id in self.local_processes:
+                        proc = self.local_processes[crawl_id]
+                        if proc.returncode is None:
+                            logger.info(
+                                f"Job '{crawl_id}' heartbeat is stale in Redis but local process "
+                                f"is alive (PID {proc.pid}, replica_id in Redis: {job_replica_id}). "
+                                f"Skipping stale detection."
+                            )
+                            is_stale = False
 
                     if is_stale:
                         # Branch based on status: stopping jobs are cleaned up silently,
