@@ -155,6 +155,21 @@ The crawler uses **Camoufox** (stealth Firefox with C++ anti-detection patches) 
 - Dependency: `camoufox-js` — browser binary baked into Docker image at build time
 - **Dockerfile requirement:** The Camoufox binary is fetched in Stage 1 (builder) via `npx camoufox-js fetch` and must be explicitly copied to Stage 2: `COPY --from=builder /root/.cache/camoufox /root/.cache/camoufox`
 
+## Reconciliation Leader Election
+
+`reconcile_jobs` runs on every replica's monitoring loop. To prevent multiple replicas from detecting the same stale job simultaneously (and each firing a duplicate failure webhook), only one replica runs the full scan at a time.
+
+- **Lock key:** `reconcile_leader_lock` (Redis `SET NX`)
+- **Lock TTL:** `RECONCILIATION_INTERVAL_SECONDS * 2` — safety margin for slow scans; auto-recovers if leader dies
+- **Ownership-safe release:** the `finally` block only deletes the lock if the current Redis value equals this replica's `replica_id` — prevents a slow leader from clobbering a new leader's lock after TTL expiry
+- **Architecture:** public `reconcile_jobs` is a thin wrapper around the lock; the actual scanning logic lives in `_reconcile_locked`
+
+Complementary protections in the same fix:
+- `start_crawl` writes `last_heartbeat=now()` in the initial `job_data` to close the 60-second blind window between start and the first monitor-loop heartbeat tick.
+- The stale-detection local override trusts `self.local_processes` (not `replica_id` in Redis) as the authoritative source of process ownership. A replica never kills a PID it owns, regardless of what Redis reports.
+
+Spec: `docs/superpowers/specs/2026-04-18-reconciliation-leader-election-design.md`.
+
 ## Exit Codes (Node.js → Python)
 
 | Code | Meaning | Python Behavior |
