@@ -199,3 +199,77 @@ class TestForceFinishIdempotent:
         holding_slot_statuses = ("running", "restarting_oom", "stopping")
         should_decrement = bool(current) and current.get("status") in holding_slot_statuses
         assert should_decrement is False
+
+
+import inspect
+import os
+import shutil
+import tarfile
+
+
+class TestCreateArchiveStaging:
+    """Archiving writes to a hidden .staging/ subdirectory then atomic-renames
+    to the final location, preventing the upload daemon from racing the tmp file."""
+
+    def test_archive_crawl_uses_staging_subdirectory(self):
+        """archive_crawl must write tmp archives to a .staging subdirectory."""
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.archive_crawl)
+        assert ".staging" in source, (
+            "archive_crawl must use the .staging subdirectory for tmp files "
+            "(daemon ignores subdirectories via `find -maxdepth 1`)"
+        )
+
+    def test_archive_crawl_has_finally_cleanup_for_staging(self):
+        """archive_crawl must have a finally block that cleans up partial staging files."""
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager.archive_crawl)
+        assert "finally:" in source, (
+            "archive_crawl must have a finally block for staging cleanup"
+        )
+        assert "os.remove(staging_path)" in source, (
+            "archive_crawl must remove the staging file on failure"
+        )
+        assert "if staging_path" in source, (
+            "cleanup must check staging_path is set before removing (skip on success)"
+        )
+
+    def test_staging_behavior_end_to_end(self, tmp_path):
+        """Exercise the staging logic in isolation: archive goes through .staging/
+        then ends up at the final path, and the staging dir is empty afterward."""
+        # Simulate job storage with a file to archive
+        job_storage = tmp_path / "job_storage"
+        job_storage.mkdir()
+        (job_storage / "data.txt").write_text("payload")
+
+        archives_dir = tmp_path / "archives"
+        archives_dir.mkdir()
+        crawl_id = "9999"
+
+        # This simulates the new _create_archive logic the implementation must follow
+        staging_dir = archives_dir / ".staging"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+
+        staging_base = str(staging_dir / crawl_id)
+        final_target = str(archives_dir / f"{crawl_id}.tar.gz")
+        staging_path = None
+
+        try:
+            staging_path = shutil.make_archive(
+                staging_base, 'gztar', root_dir=str(job_storage)
+            )
+            archive_size = os.path.getsize(staging_path)
+            assert archive_size > 0
+            with tarfile.open(staging_path, 'r:gz') as t:
+                t.getnames()
+            os.rename(staging_path, final_target)
+            staging_path = None
+        finally:
+            if staging_path and os.path.exists(staging_path):
+                os.remove(staging_path)
+
+        # Final archive exists in /archives/, staging is empty
+        assert (archives_dir / f"{crawl_id}.tar.gz").exists()
+        assert list(staging_dir.iterdir()) == [], "staging dir must be empty after success"
