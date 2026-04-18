@@ -610,7 +610,10 @@ class CrawlerManager:
 
         await self._send_webhook_with_retry(str(callback_url), params, crawl_id, "success")
 
-    async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int, crawl_mode: str = "standard"):
+    async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int,
+                                    crawl_mode: str = "standard",
+                                    request_id: Optional[str] = None,
+                                    shutdown: bool = False):
         # We process failures for both standard and update modes now
         # Determine message_erreur_crawling from context
         error_message = ""
@@ -626,14 +629,22 @@ class CrawlerManager:
             error_message = f"Processus terminé par signal {abs(exit_code)}"  # Signal-killed
         elif exit_code not in (0, 2, 3, 4, -1, 137):
             error_message = f"Erreur inattendue (code de sortie: {exit_code})"
-        
+
         params = {
             "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
             "timestamp": datetime.utcnow().isoformat(),
             "message_erreur_crawling": error_message
         }
-        
-        await self._send_webhook_with_retry(url, params, crawl_id, "failure")
+        if request_id:
+            params["request_id"] = request_id
+
+        if shutdown:
+            # Bounded shutdown path: 5-second timeout, no retries.
+            # Delivery failure is acceptable — reconciliation replays with the same
+            # request_id, PHP dedupes, no duplicate processing.
+            await self._send_webhook_once(url, params, crawl_id, "failure", timeout=5.0)
+        else:
+            await self._send_webhook_with_retry(url, params, crawl_id, "failure")
 
     async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped"):
         """

@@ -599,3 +599,36 @@ class TestWebhookIdempotency:
         assert result is False
         # Must have been called exactly once — no retries
         assert mock_client.__aenter__.return_value.get.call_count == 1
+
+    def test_send_failure_webhook_signature_accepts_request_id_and_shutdown(self):
+        """The updated _send_failure_webhook must accept request_id and shutdown kwargs."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        sig = inspect.signature(cm.CrawlerManager._send_failure_webhook)
+        assert "request_id" in sig.parameters, (
+            "_send_failure_webhook must accept a request_id parameter"
+        )
+        assert "shutdown" in sig.parameters, (
+            "_send_failure_webhook must accept a shutdown boolean parameter"
+        )
+        # Backward-compatible defaults
+        assert sig.parameters["request_id"].default is None
+        assert sig.parameters["shutdown"].default is False
+
+    def test_send_failure_webhook_body_includes_request_id_when_provided(self):
+        """Source inspection: the method body must add request_id to params when set,
+        and must route through _send_webhook_once when shutdown=True."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._send_failure_webhook)
+        assert 'params["request_id"] = request_id' in source, (
+            "_send_failure_webhook must include request_id in the params dict when provided"
+        )
+        assert "_send_webhook_once" in source, (
+            "_send_failure_webhook must route to _send_webhook_once when shutdown=True"
+        )
+        assert "timeout=5.0" in source, (
+            "_send_webhook_once must be called with a 5-second timeout during shutdown"
+        )
