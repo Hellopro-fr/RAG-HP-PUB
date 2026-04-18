@@ -108,6 +108,33 @@ Archives are first written to `/app/archives/.staging/{crawl_id}.tar.gz` and onl
 
 **Do not change the daemon to scan subdirectories** without also updating the tmp file location in `_create_archive`. Otherwise the daemon will race the tmp file and cause `FileNotFoundError` during archiving.
 
+### Pre-flight disk space check
+
+Before creating a new archive, `archive_crawl` measures the source directory (`os.walk` + `size * 1.5` for gzip + safety margin, floored at 1 GB) and checks free space on `/app/archives/` via `shutil.disk_usage`. If free space is less than required, it responds with **503** carrying this body:
+
+```json
+{
+  "detail": {
+    "error_code": "INSUFFICIENT_DISK_SPACE",
+    "required_bytes": 524288000,
+    "available_bytes": 104857600,
+    "disk_state": {
+      "free_bytes": 104857600,
+      "total_bytes": 21474836480,
+      "used_pct": 99.51,
+      "file_count": 47,
+      "oldest_file_age_seconds": 7200
+    }
+  }
+}
+```
+
+**Fail-open policy:** if the measurement helpers themselves raise (permissions, filesystem error), the check is skipped and archive creation proceeds. Broken measurement must never block archiving; the staging-dir `finally` block still cleans up partial files on disk-full.
+
+Every archive attempt also logs a baseline disk state (`info`) and, on failure, a second disk state (`error`) so operational logs show the buffer pressure at both checkpoints.
+
+Spec: `docs/superpowers/specs/2026-04-18-archive-disk-space-preflight-design.md`.
+
 ## robots.txt Blanket Block Bypass
 
 At startup, after fetching robots.txt, the crawler checks if the site has a blanket block (`Disallow: *` or `Disallow: /`) using a multi-path probe (`isBlanketBlock` in `robotsTxtGuard.ts`). Three diverse URLs are tested against `isAllowed()` — if all are blocked, `robots` is set to `undefined`, disabling all robots.txt filtering for the crawl.
