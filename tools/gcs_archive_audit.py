@@ -220,23 +220,46 @@ def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
         tar.close()
 
 
+def _normalize_member_name(name: str) -> str:
+    """Strip leading './' or '.' from tar member names.
+
+    shutil.make_archive passes base_dir='.' to tarfile, which produces members
+    like './_callback_payload.json' (not 'foo.txt'). Normalization lets us
+    compare against unprefixed expected names regardless of how the tar was
+    produced.
+    """
+    if name.startswith("./"):
+        return name[2:]
+    if name == ".":
+        return ""
+    return name
+
+
 def _read_json_member(tar: tarfile.TarFile, name: str) -> Optional[Dict]:
-    """Read and parse a JSON file from the tar by exact member name. Returns None if absent."""
-    try:
-        member = tar.getmember(name)
-    except KeyError:
-        return None
-    try:
-        f = tar.extractfile(member)
-        if f is None:
-            return None
-        return json.loads(f.read().decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return None
+    """Read and parse a JSON file from the tar. Handles tars produced by
+    shutil.make_archive (which prefix members with './').
+
+    Iterates members and compares by normalized name rather than using
+    getmember() — getmember() is exact-name lookup and would miss './foo'
+    when asked for 'foo'.
+    """
+    for member in tar.getmembers():
+        if _normalize_member_name(member.name) == name:
+            try:
+                f = tar.extractfile(member)
+                if f is None:
+                    return None
+                return json.loads(f.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                return None
+    return None
 
 
 def _count_dataset_files(members: List[tarfile.TarInfo], domain: str) -> int:
     """Count .json files under storage/datasets/{domain}/ (or sanitized variant).
+
+    Normalizes member names before prefix comparison so './storage/datasets/...'
+    correctly matches 'storage/datasets/...'.
 
     Returns the number of JSON files directly under the dataset directory.
     Matches the crawler's convention: one JSON file per successfully crawled URL.
@@ -248,10 +271,11 @@ def _count_dataset_files(members: List[tarfile.TarInfo], domain: str) -> int:
         count = 0
         found_dir = False
         for m in members:
-            if m.name.startswith(prefix):
+            normalized = _normalize_member_name(m.name)
+            if normalized.startswith(prefix):
                 found_dir = True
                 # Only count files (not nested directories), and only .json
-                name_after_prefix = m.name[len(prefix):]
+                name_after_prefix = normalized[len(prefix):]
                 if m.isfile() and "/" not in name_after_prefix and name_after_prefix.endswith(".json"):
                     count += 1
         if found_dir:

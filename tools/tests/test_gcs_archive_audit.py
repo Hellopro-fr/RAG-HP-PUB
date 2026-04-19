@@ -108,24 +108,31 @@ class TestGcloudOperations:
         mock_run.assert_called_once_with(["storage", "mv", "gs://bucket/a", "gs://bucket/b"])
 
 
-import io
 import json as _json
+import shutil as _shutil
 import tarfile as _tarfile
 from typing import Dict
 
 
-def _build_tar(tmp_path: Path, files: Dict[str, bytes], name: str = "test.tar.gz") -> Path:
-    """Helper: build an in-memory tar.gz with the given files at the given paths.
+def _build_tar(tmp_path: Path, files: Dict[str, bytes], name: str = "test") -> Path:
+    """Helper: build a realistic tar.gz using shutil.make_archive.
 
-    `files` is a dict of { path_in_tar: bytes_content }.
+    This matches the crawler's actual archiving code path (crawler_manager.py's
+    `_create_archive` calls `shutil.make_archive(..., root_dir=job_storage_path)`).
+    Resulting members will have './' prefix — exactly as real archives do.
+
+    `files` is a dict of { path_in_tar: bytes_content }. The `name` parameter
+    is the base name (without extension); the returned path ends in `.tar.gz`.
     """
-    path = tmp_path / name
-    with _tarfile.open(str(path), "w:gz") as tar:
-        for p, content in files.items():
-            info = _tarfile.TarInfo(name=p)
-            info.size = len(content)
-            tar.addfile(info, io.BytesIO(content))
-    return path
+    staging = tmp_path / f"staging_{name}"
+    staging.mkdir(exist_ok=True)
+    for path, content in files.items():
+        full_path = staging / path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_bytes(content)
+    archive_base = str(tmp_path / name)
+    archive_path = _shutil.make_archive(archive_base, 'gztar', root_dir=str(staging))
+    return Path(archive_path)
 
 
 def _payload(domain: str = "example.com", stored: int = 3, success=None) -> bytes:
@@ -304,3 +311,40 @@ class TestArgs:
         assert args.delete is False
         assert args.quarantine is None
         assert args.name_only is False
+
+
+class TestPathNormalization:
+    """Regression tests for tar-member '.' prefix handling.
+    Real archives produced by shutil.make_archive contain './'-prefixed members."""
+
+    def test_fixture_actually_produces_dot_slash_prefix(self, tmp_path):
+        """Sanity-check the _build_tar helper matches the real crawler layout."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(domain="example.com", stored=1),
+        })
+        with _tarfile.open(str(path), 'r:gz') as t:
+            names = [m.name for m in t.getmembers()]
+        assert any(n.startswith("./") for n in names), (
+            f"Fixture should produce './' prefixed members, got: {names}"
+        )
+
+    def test_payload_found_despite_leading_dot_slash(self, tmp_path):
+        """The audit must classify a well-formed archive as OK even though
+        its members have the './' prefix from shutil.make_archive."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(domain="example.com", stored=1),
+            "_completion_marker.json": _marker(),
+            "storage/datasets/example.com/a.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["actual_count"] == 1
+
+    def test_normalize_strips_dot_slash_prefix(self):
+        assert ga._normalize_member_name("./_callback_payload.json") == "_callback_payload.json"
+
+    def test_normalize_maps_bare_dot_to_empty(self):
+        assert ga._normalize_member_name(".") == ""
+
+    def test_normalize_leaves_unprefixed_names_unchanged(self):
+        assert ga._normalize_member_name("foo/bar.json") == "foo/bar.json"
