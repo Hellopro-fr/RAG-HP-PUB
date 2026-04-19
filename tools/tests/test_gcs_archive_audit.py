@@ -348,3 +348,51 @@ class TestPathNormalization:
 
     def test_normalize_leaves_unprefixed_names_unchanged(self):
         assert ga._normalize_member_name("foo/bar.json") == "foo/bar.json"
+
+
+class TestRestoreFromQuarantine:
+    def test_moves_every_quarantined_object_to_target_prefix(self):
+        quarantined = [
+            "gs://b/crawls-quarantine/4365.tar.gz",
+            "gs://b/crawls-quarantine/4683.tar.gz",
+        ]
+        with patch("gcs_archive_audit.gcloud_ls", return_value=quarantined) as mock_ls, \
+             patch("gcs_archive_audit.gcloud_move") as mock_mv:
+            count = ga.restore_from_quarantine("b", "crawls-quarantine/", "crawls/")
+
+        assert count == 2
+        mock_ls.assert_called_once_with("gs://b/crawls-quarantine/")
+        # Each object moved to gs://b/crawls/{basename}
+        assert mock_mv.call_args_list == [
+            (("gs://b/crawls-quarantine/4365.tar.gz", "gs://b/crawls/4365.tar.gz"),),
+            (("gs://b/crawls-quarantine/4683.tar.gz", "gs://b/crawls/4683.tar.gz"),),
+        ]
+
+    def test_returns_zero_when_quarantine_is_empty(self, capsys):
+        with patch("gcs_archive_audit.gcloud_ls", return_value=[]):
+            count = ga.restore_from_quarantine("b", "crawls-quarantine/", "crawls/")
+
+        assert count == 0
+        out = capsys.readouterr().out
+        assert "No objects under" in out
+
+    def test_continues_after_individual_move_failure(self, capsys):
+        quarantined = [
+            "gs://b/crawls-quarantine/ok.tar.gz",
+            "gs://b/crawls-quarantine/fail.tar.gz",
+            "gs://b/crawls-quarantine/another.tar.gz",
+        ]
+        err = subprocess.CalledProcessError(1, "gcloud", stderr="permission denied")
+
+        def _move(src, dst):
+            if "fail" in src:
+                raise err
+
+        with patch("gcs_archive_audit.gcloud_ls", return_value=quarantined), \
+             patch("gcs_archive_audit.gcloud_move", side_effect=_move):
+            count = ga.restore_from_quarantine("b", "crawls-quarantine/", "crawls/")
+
+        # 2 succeed, 1 fails
+        assert count == 2
+        err_out = capsys.readouterr().err
+        assert "Failed to restore fail.tar.gz" in err_out

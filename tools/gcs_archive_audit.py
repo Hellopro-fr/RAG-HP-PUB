@@ -324,6 +324,37 @@ def remediate(obj_uri: str, category: str, action: str, quarantine_prefix: Optio
     return ""
 
 
+def restore_from_quarantine(bucket: str, quarantine_prefix: str, target_prefix: str = "crawls/") -> int:
+    """Move all objects from gs://{bucket}/{quarantine_prefix}/ back to
+    gs://{bucket}/{target_prefix}/, preserving basenames.
+
+    Used to recover from a faulty prior audit that quarantined false positives.
+    Returns the count of successfully-moved objects. Individual failures are
+    logged but do not abort the whole operation.
+    """
+    quarantine_uri = f"gs://{bucket}/{quarantine_prefix.rstrip('/')}/"
+    listing = gcloud_ls(quarantine_uri)
+    if not listing:
+        print(f"No objects under {quarantine_uri}")
+        return 0
+
+    count = 0
+    for obj_uri in listing:
+        if not isinstance(obj_uri, str):
+            # gcloud_ls called without long=True returns List[str]; defensive guard
+            continue
+        basename = obj_uri.rsplit("/", 1)[-1]
+        dst = f"gs://{bucket}/{target_prefix.rstrip('/')}/{basename}"
+        try:
+            gcloud_move(obj_uri, dst)
+            print(f"Restored: {basename}")
+            count += 1
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr if hasattr(e, 'stderr') else str(e)
+            print(f"Failed to restore {basename}: {stderr}", file=sys.stderr)
+    return count
+
+
 def write_report(path: Path, report: Dict) -> None:
     """Write the audit report to a JSON file with pretty formatting.
     Re-tallies the 'categories' counter from the archives list before writing."""
@@ -398,6 +429,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="Skip the confirmation prompt for --delete/--quarantine")
     parser.add_argument("--resume", default=None,
                         help="Skip archives already present in the given prior report")
+    parser.add_argument("--restore-from-quarantine", default=None, metavar="PREFIX",
+                        help="Move all objects from gs://<bucket>/<PREFIX>/ back to "
+                             "gs://<bucket>/<--prefix>/, then exit. Used to recover from "
+                             "a faulty prior audit run.")
     args = parser.parse_args(argv)
 
     if args.delete and args.quarantine:
@@ -432,6 +467,20 @@ def _inspect_one(obj_uri: str, size_bytes: int, name_only: bool) -> Tuple[str, D
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     check_gcloud_auth()
+
+    # Early exit: restore-from-quarantine is a separate top-level operation.
+    # It does not run the normal audit flow.
+    if args.restore_from_quarantine:
+        if not args.yes:
+            _confirm_or_exit(
+                f"restore from quarantine '{args.restore_from_quarantine}'",
+                quarantine_prefix=None,
+            )
+        count = restore_from_quarantine(
+            args.bucket, args.restore_from_quarantine, args.prefix
+        )
+        print(f"\nRestored {count} objects.")
+        return 0
 
     action: Optional[str] = None
     if args.delete:
