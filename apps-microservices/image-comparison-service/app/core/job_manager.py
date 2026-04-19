@@ -1,4 +1,5 @@
 import logging
+import time
 import json
 import asyncio
 from typing import Optional, List, Union
@@ -20,7 +21,7 @@ class JobManager:
         self.redis: Optional[redis.Redis] = None
         self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_JOBS)
         # Track local active jobs manually since semaphore._value is internal/implementation specific
-        self.local_active_jobs = 0 
+        self.local_active_jobs = 0
 
     async def connect_redis(self):
         self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -40,7 +41,7 @@ class JobManager:
         if self.redis:
             val = await self.redis.get(GLOBAL_RUNNING_COUNT_KEY)
             global_count = int(val) if val else 0
-            
+
         return CapacityResponse(
             global_running_jobs=global_count,
             local_running_jobs=self.local_active_jobs,
@@ -63,20 +64,20 @@ class JobManager:
     async def list_jobs(self, limit: int = 100) -> List[JobStatus]:
         """Scans Redis for all job statuses."""
         if not self.redis: return []
-        
+
         job_keys = []
         # Use SCAN to find keys to avoid blocking Redis on large datasets
         async for key in self.redis.scan_iter("job:*:status", count=limit):
             job_keys.append(key)
             if len(job_keys) >= limit:
                 break
-        
+
         if not job_keys:
             return []
 
         # Batch get values
         jobs_data = await self.redis.mget(job_keys)
-        
+
         results = []
         for data in jobs_data:
             if data:
@@ -90,43 +91,49 @@ class JobManager:
         """
         The core processing logic with global counter tracking.
         """
+        start = time.monotonic()
+        logger.info(
+            f"Job {job_id}: starting | inputs={len(inputs)} | "
+            f"local_active={self.local_active_jobs}/{settings.MAX_CONCURRENT_JOBS}"
+        )
+
         # Increment Global Counter
         if self.redis:
             await self.redis.incr(GLOBAL_RUNNING_COUNT_KEY)
-        
+
         self.local_active_jobs += 1
-        
+
         try:
             async with self.semaphore:
                 try:
                     # Update status to processing
                     await self.redis.set(
-                        f"job:{job_id}:status", 
+                        f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="processing", progress=10.0).json(),
                         ex=settings.JOB_RESULT_TTL
                     )
 
                     logger.info(f"Job {job_id}: Loading {len(inputs)} images...")
-                    
+
                     # Use load_images which handles both URLs and Base64 content
                     images_map, failed_ids = await ImageProcessor.load_images(inputs)
-                    
+
                     if not images_map:
                         raise Exception("No valid images could be loaded/downloaded.")
 
                     await self.redis.set(
-                        f"job:{job_id}:status", 
+                        f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="processing", progress=40.0).json(),
                         ex=settings.JOB_RESULT_TTL
                     )
 
                     logger.info(f"Job {job_id}: Processing comparisons...")
-                    
+
                     # We now pass 'inputs' to compare_batch to allow URL mapping
                     raw_results = await anyio.to_thread.run_sync(
-                        ImageProcessor.compare_batch, 
+                        ImageProcessor.compare_batch,
                         images_map,
-                        inputs 
+                        inputs
                     )
 
                     similar_pairs = []
@@ -144,23 +151,24 @@ class JobManager:
                         similar_pairs=similar_pairs,
                         failed_images=failed_ids
                     )
-                    
+
                     ttl = settings.JOB_RESULT_TTL
                     await self.redis.set(f"job:{job_id}:result", result.json(), ex=ttl)
                     await self.redis.set(
-                        f"job:{job_id}:status", 
+                        f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="finished", progress=100.0).json(),
                         ex=ttl
                     )
-                    logger.info(f"Job {job_id} finished successfully.")
-                    
+                    duration = time.monotonic() - start
+                    logger.info(f"Job {job_id}: finished in {duration:.1f}s")
+
                     return result
 
                 except Exception as e:
                     logger.error(f"Job {job_id} failed: {e}", exc_info=True)
                     error_status = JobStatus(
-                        job_id=job_id, 
-                        status="failed", 
+                        job_id=job_id,
+                        status="failed",
                         error=str(e),
                         progress=0.0
                     )
@@ -175,7 +183,7 @@ class JobManager:
         """Fire and forget execution."""
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
         await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
-        
+
         # Launch in background
         asyncio.create_task(self.process_job_logic(job_id, images, threshold))
 
@@ -183,7 +191,7 @@ class JobManager:
         """Wait for execution and return result."""
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
         await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
-        
+
         # Await completion
         return await self.process_job_logic(job_id, images, threshold)
 
