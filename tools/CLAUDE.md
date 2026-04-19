@@ -27,6 +27,11 @@ python tools/gcs_archive_audit.py --bucket <name> --output report.json
 python tools/gcs_archive_audit.py --bucket <name> --name-only            # fast mode: names only
 python tools/gcs_archive_audit.py --bucket <name> --quarantine quarantine/ --yes   # move bad archives
 python tools/gcs_archive_audit.py --bucket <name> --delete --yes                    # delete bad archives
+
+# Recover from a faulty prior audit (move quarantined archives back to crawls/):
+python tools/gcs_archive_audit.py --bucket <name> --restore-from-quarantine crawls-quarantine/ --yes
+# Then re-audit so the fixed classifier re-quarantines only the real bad ones:
+python tools/gcs_archive_audit.py --bucket <name> --quarantine crawls-quarantine/ --yes --output corrected_report.json
 ```
 
 ## File Inventory
