@@ -35,6 +35,22 @@ class JobManager:
         """Check if this specific instance has reached max concurrency."""
         return self.local_active_jobs >= settings.MAX_CONCURRENT_JOBS
 
+    def try_acquire_local_slot(self) -> bool:
+        """
+        Atomic check-and-reserve. No await => no yield point => no race
+        between the check and the reservation.
+
+        Returns True if a slot was reserved (caller must release).
+        """
+        if self.local_active_jobs >= settings.MAX_CONCURRENT_JOBS:
+            return False
+        self.local_active_jobs += 1
+        return True
+
+    def release_local_slot(self) -> None:
+        """Release a previously-acquired slot. Idempotent against double-release."""
+        self.local_active_jobs = max(0, self.local_active_jobs - 1)
+
     async def get_capacity(self) -> CapacityResponse:
         """Get current capacity metrics."""
         global_count = 0
@@ -89,7 +105,10 @@ class JobManager:
 
     async def process_job_logic(self, job_id: str, inputs: list, threshold: float) -> ComparisonResult:
         """
-        The core processing logic with global counter tracking.
+        The core processing logic. Caller owns the local slot lifecycle:
+          - Sync path: router calls try_acquire_local_slot() / release_local_slot()
+          - Async path: submit_job_async() increments and the wrapper releases
+        This function only manages the global Redis counter and the actual work.
         """
         start = time.monotonic()
         logger.info(
@@ -100,8 +119,6 @@ class JobManager:
         # Increment Global Counter
         if self.redis:
             await self.redis.incr(GLOBAL_RUNNING_COUNT_KEY)
-
-        self.local_active_jobs += 1
 
         try:
             async with self.semaphore:
@@ -115,7 +132,6 @@ class JobManager:
 
                     logger.info(f"Job {job_id}: Loading {len(inputs)} images...")
 
-                    # Use load_images which handles both URLs and Base64 content
                     images_map, failed_ids = await ImageProcessor.load_images(inputs)
 
                     if not images_map:
@@ -129,7 +145,6 @@ class JobManager:
 
                     logger.info(f"Job {job_id}: Processing comparisons...")
 
-                    # We now pass 'inputs' to compare_batch to allow URL mapping
                     raw_results = await anyio.to_thread.run_sync(
                         ImageProcessor.compare_batch,
                         images_map,
@@ -175,24 +190,37 @@ class JobManager:
                     await self.redis.set(f"job:{job_id}:status", error_status.json(), ex=settings.JOB_RESULT_TTL)
                     raise e
         finally:
-            self.local_active_jobs -= 1
             if self.redis:
                 await self.redis.decr(GLOBAL_RUNNING_COUNT_KEY)
 
     async def submit_job_async(self, job_id: str, images: list, threshold: float):
-        """Fire and forget execution."""
+        """
+        Fire-and-forget execution. Acquires a local slot before queuing the task,
+        which is released in the wrapper's finally.
+        """
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
         await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
 
-        # Launch in background
-        asyncio.create_task(self.process_job_logic(job_id, images, threshold))
+        # Async submissions are never rejected — they queue past MAX via the semaphore
+        # inside process_job_logic. Reserve the slot here so capacity reporting is accurate.
+        self.local_active_jobs += 1
+
+        async def _run_and_release():
+            try:
+                await self.process_job_logic(job_id, images, threshold)
+            finally:
+                self.release_local_slot()
+
+        asyncio.create_task(_run_and_release())
 
     async def submit_job_sync(self, job_id: str, images: list, threshold: float) -> ComparisonResult:
-        """Wait for execution and return result."""
+        """
+        Wait for execution and return result.
+        Caller (router) owns the local slot lifecycle.
+        """
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
         await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
 
-        # Await completion
         return await self.process_job_logic(job_id, images, threshold)
 
 job_manager = JobManager()
