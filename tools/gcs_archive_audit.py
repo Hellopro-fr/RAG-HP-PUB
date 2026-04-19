@@ -193,22 +193,30 @@ def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
             return MISSING_MARKER, details
         details["marker"] = marker
 
-        # 4. Row count check
-        domain = payload.get("domain")
-        if not domain:
-            # Payload exists but lacks domain — treat as malformed payload
-            details["missing"] = "domain field in _callback_payload.json"
-            return MISSING_PAYLOAD, details
+        # 4. Resolve domain via multi-source lookup (payload, snapshot, tar inference).
+        domain = _resolve_domain_name(tar, members, payload)
 
+        # 5. Get expected count. Node.js writes 'success' (the successful URL count);
+        #    'stored_files_count' is added by Python in-memory at webhook-send time
+        #    and NOT persisted to disk, so this is a future-proofing fallback only.
         expected = payload.get("stored_files_count")
         if expected is None:
             expected = payload.get("success")
+
+        # 6. Row count check — best-effort. Skip (with warning) if we lack either input.
+        if domain is None:
+            details["warning"] = "domain could not be resolved; row count check skipped"
+            if expected is not None:
+                details["expected_count"] = int(expected)
+            return OK, details
+
         if expected is None:
-            # Payload lacks any count field — treat as malformed
-            details["missing"] = "stored_files_count/success field in _callback_payload.json"
-            return MISSING_PAYLOAD, details
+            details["warning"] = "payload has no count field (stored_files_count/success); row count check skipped"
+            details["domain"] = domain
+            return OK, details
 
         actual = _count_dataset_files(members, domain)
+        details["domain"] = domain
         details["expected_count"] = int(expected)
         details["actual_count"] = actual
 
@@ -281,6 +289,52 @@ def _count_dataset_files(members: List[tarfile.TarInfo], domain: str) -> int:
         if found_dir:
             return count
     return 0
+
+
+def _resolve_domain_name(
+    tar: tarfile.TarFile,
+    members: List[tarfile.TarInfo],
+    payload: Dict,
+) -> Optional[str]:
+    """Resolve the crawl's domain name from multiple possible sources.
+
+    Priority:
+    1. payload['domain'] — not currently written by Node.js but future-proof
+    2. _status_snapshot.json['domain'] — written by Python's archive_crawl
+       (CrawlStatus model has domain as a required field)
+    3. Inferred from tar structure: first 'storage/datasets/{X}/' where X does
+       NOT start with a known special prefix (nfr-, error-, update-)
+
+    Returns the domain name as a string, or None if all sources fail.
+    """
+    # 1. Try payload
+    domain = payload.get("domain")
+    if domain:
+        return domain
+
+    # 2. Try status snapshot (Python writes this before archiving)
+    snapshot = _read_json_member(tar, "_status_snapshot.json")
+    if snapshot:
+        domain = snapshot.get("domain")
+        if domain:
+            return domain
+
+    # 3. Infer from tar structure
+    special_prefixes = ("nfr-", "error-", "update-")
+    seen_candidates: set = set()
+    for m in members:
+        normalized = _normalize_member_name(m.name)
+        if normalized.startswith("storage/datasets/"):
+            parts = normalized.split("/", 3)  # ['storage', 'datasets', 'X', ...]
+            if len(parts) >= 3 and parts[2]:
+                candidate = parts[2]
+                if candidate in seen_candidates:
+                    continue
+                seen_candidates.add(candidate)
+                if not any(candidate.startswith(p) for p in special_prefixes):
+                    return candidate
+
+    return None
 
 
 # ---- Orchestration ----

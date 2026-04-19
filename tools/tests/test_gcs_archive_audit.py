@@ -135,15 +135,41 @@ def _build_tar(tmp_path: Path, files: Dict[str, bytes], name: str = "test") -> P
     return Path(archive_path)
 
 
-def _payload(domain: str = "example.com", stored: int = 3, success=None) -> bytes:
-    data = {"domain": domain, "stored_files_count": stored}
-    if success is not None:
-        data["success"] = success
-    return _json.dumps(data).encode()
+def _payload(success: int = 3, id_domaine: str = "4365") -> bytes:
+    """Build a _callback_payload.json matching what Node.js actually writes.
+
+    Key details:
+    - Contains 'id_domaine' (the crawl_id), NOT 'domain' (hostname).
+    - Contains 'success' (URL count), NOT 'stored_files_count'.
+    - 'stored_files_count' is added by Python in-memory at webhook-send time
+      and is NEVER persisted to disk.
+    """
+    return _json.dumps({
+        "id_domaine": id_domaine,
+        "success": success,
+        "failed": 0,
+        "isFinished": 1,
+        "method": "auto",
+        "isError": "",
+        "storagePath": f"/app/storage/{id_domaine}",
+        "message_erreur_crawling": None,
+    }).encode()
 
 
 def _marker() -> bytes:
     return _json.dumps({"final_status": "finished", "exit_code": 0}).encode()
+
+
+def _snapshot(domain: str = "example.com") -> bytes:
+    """Build a _status_snapshot.json that Python's archive_crawl writes.
+    The CrawlStatus model (app/schemas/crawler.py) has `domain` as a required field."""
+    return _json.dumps({
+        "crawl_id": "4365",
+        "status": "finished",
+        "domain": domain,
+        "start_url": f"https://{domain}/",
+        "urls_crawled": 0,
+    }).encode()
 
 
 class TestClassifyByName:
@@ -161,7 +187,7 @@ class TestArchiveInspection:
     def _ok_tar(self, tmp_path: Path) -> Path:
         """Build a tar with payload, marker, and 3 dataset files — matches stored_files_count=3."""
         return _build_tar(tmp_path, {
-            "_callback_payload.json": _payload(domain="example.com", stored=3),
+            "_callback_payload.json": _payload(success=3),
             "_completion_marker.json": _marker(),
             "storage/datasets/example.com/url1.json": b'{"url": "a"}',
             "storage/datasets/example.com/url2.json": b'{"url": "b"}',
@@ -194,7 +220,7 @@ class TestArchiveInspection:
 
     def test_missing_marker(self, tmp_path):
         path = _build_tar(tmp_path, {
-            "_callback_payload.json": _payload(stored=3),
+            "_callback_payload.json": _payload(success=3),
             # no _completion_marker.json
             "storage/datasets/example.com/x.json": b'{}',
         })
@@ -204,7 +230,7 @@ class TestArchiveInspection:
 
     def test_row_count_mismatch(self, tmp_path):
         path = _build_tar(tmp_path, {
-            "_callback_payload.json": _payload(stored=5),  # claims 5
+            "_callback_payload.json": _payload(success=5),  # claims 5
             "_completion_marker.json": _marker(),
             # but only 2 dataset files
             "storage/datasets/example.com/a.json": b'{}',
@@ -215,23 +241,28 @@ class TestArchiveInspection:
         assert details["expected_count"] == 5
         assert details["actual_count"] == 2
 
-    def test_sanitized_domain_fallback(self, tmp_path):
-        """If storage/datasets/{domain}/ is missing but the sanitized variant exists, use it."""
+    def test_uses_status_snapshot_domain_when_payload_lacks_it(self, tmp_path):
+        """When payload has no 'domain' but _status_snapshot.json does, the snapshot
+        provides the domain for row counting. This exercises the second resolver
+        priority (after payload, before tar inference)."""
         path = _build_tar(tmp_path, {
-            "_callback_payload.json": _payload(domain="foo.com", stored=1),
+            "_callback_payload.json": _payload(success=1),
             "_completion_marker.json": _marker(),
-            # Only sanitized variant exists (foo-com not foo.com)
+            "_status_snapshot.json": _snapshot(domain="foo.com"),
+            # Tar has sanitized dir name; snapshot resolves the real domain 'foo.com',
+            # which _count_dataset_files matches via its sanitized fallback.
             "storage/datasets/foo-com/only.json": b'{}',
         })
         category, details = ga.inspect_archive(path)
         assert category == ga.OK
+        assert details["domain"] == "foo.com"
         assert details["actual_count"] == 1
 
-    def test_success_field_fallback(self, tmp_path):
-        """If stored_files_count is absent but success is present, use success."""
-        payload = _json.dumps({"domain": "example.com", "success": 2}).encode()
+    def test_uses_success_field_from_realistic_payload(self, tmp_path):
+        """The Node.js payload has 'success' (not 'stored_files_count'). The audit
+        must pick up the count from 'success' and classify as OK when the count matches."""
         path = _build_tar(tmp_path, {
-            "_callback_payload.json": payload,
+            "_callback_payload.json": _payload(success=2),
             "_completion_marker.json": _marker(),
             "storage/datasets/example.com/a.json": b'{}',
             "storage/datasets/example.com/b.json": b'{}',
@@ -240,15 +271,19 @@ class TestArchiveInspection:
         assert category == ga.OK
         assert details["expected_count"] == 2
 
-    def test_payload_missing_domain_field(self, tmp_path):
-        payload = _json.dumps({"stored_files_count": 3}).encode()  # no domain
+    def test_ok_when_payload_lacks_domain_field(self, tmp_path):
+        """The Node.js payload doesn't have a 'domain' field — that's normal, not a failure.
+        When the tar contains dataset files, the resolver infers the domain from tar structure
+        and the audit classifies as OK."""
         path = _build_tar(tmp_path, {
-            "_callback_payload.json": payload,
+            "_callback_payload.json": _payload(success=1),  # no 'domain' field — realistic
             "_completion_marker.json": _marker(),
+            "storage/datasets/example.com/a.json": b'{}',
         })
         category, details = ga.inspect_archive(path)
-        assert category == ga.MISSING_PAYLOAD
-        assert "domain" in details.get("missing", "")
+        assert category == ga.OK
+        assert details["domain"] == "example.com"
+        assert details["actual_count"] == 1
 
 
 class TestDetectDuplicates:
@@ -320,7 +355,7 @@ class TestPathNormalization:
     def test_fixture_actually_produces_dot_slash_prefix(self, tmp_path):
         """Sanity-check the _build_tar helper matches the real crawler layout."""
         path = _build_tar(tmp_path, {
-            "_callback_payload.json": _payload(domain="example.com", stored=1),
+            "_callback_payload.json": _payload(success=1),
         })
         with _tarfile.open(str(path), 'r:gz') as t:
             names = [m.name for m in t.getmembers()]
@@ -332,7 +367,7 @@ class TestPathNormalization:
         """The audit must classify a well-formed archive as OK even though
         its members have the './' prefix from shutil.make_archive."""
         path = _build_tar(tmp_path, {
-            "_callback_payload.json": _payload(domain="example.com", stored=1),
+            "_callback_payload.json": _payload(success=1),
             "_completion_marker.json": _marker(),
             "storage/datasets/example.com/a.json": b'{}',
         })
@@ -396,3 +431,94 @@ class TestRestoreFromQuarantine:
         assert count == 2
         err_out = capsys.readouterr().err
         assert "Failed to restore fail.tar.gz" in err_out
+
+
+class TestDomainResolution:
+    """Tests for the multi-source _resolve_domain_name helper.
+    Priority: payload.domain > _status_snapshot.json.domain > tar inference."""
+
+    def _open_tar(self, path: Path):
+        return _tarfile.open(str(path), 'r:gz')
+
+    def test_uses_payload_domain_if_present(self, tmp_path):
+        """Priority 1: if payload has 'domain', use it even if the tar layout
+        suggests a different domain."""
+        payload_bytes = _json.dumps({"id_domaine": "4365", "domain": "x.com", "success": 1}).encode()
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": payload_bytes,
+            "_completion_marker.json": _marker(),
+            # Tar has y.com but payload says x.com — payload wins
+            "storage/datasets/y.com/a.json": b'{}',
+        })
+        with self._open_tar(path) as tar:
+            members = tar.getmembers()
+            payload = ga._read_json_member(tar, "_callback_payload.json")
+            result = ga._resolve_domain_name(tar, members, payload)
+        assert result == "x.com"
+
+    def test_falls_back_to_status_snapshot_domain(self, tmp_path):
+        """Priority 2: when payload lacks 'domain', read it from _status_snapshot.json."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=1),
+            "_completion_marker.json": _marker(),
+            "_status_snapshot.json": _snapshot(domain="x.com"),
+            # No dataset dir to infer from — resolver must use the snapshot
+        })
+        with self._open_tar(path) as tar:
+            members = tar.getmembers()
+            payload = ga._read_json_member(tar, "_callback_payload.json")
+            result = ga._resolve_domain_name(tar, members, payload)
+        assert result == "x.com"
+
+    def test_infers_from_tar_when_no_metadata_source(self, tmp_path):
+        """Priority 3: neither payload nor snapshot has domain — infer from tar."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=1),
+            "_completion_marker.json": _marker(),
+            # No snapshot; tar has a dataset dir
+            "storage/datasets/example.com/a.json": b'{}',
+        })
+        with self._open_tar(path) as tar:
+            members = tar.getmembers()
+            payload = ga._read_json_member(tar, "_callback_payload.json")
+            result = ga._resolve_domain_name(tar, members, payload)
+        assert result == "example.com"
+
+    def test_skips_special_prefix_dirs_during_inference(self, tmp_path):
+        """When tar has nfr-/error-/update- dirs AND a main domain dir,
+        the resolver must skip the special-prefix ones and pick the main domain."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=1),
+            "_completion_marker.json": _marker(),
+            "storage/datasets/error-foo.com/e.json": b'{}',
+            "storage/datasets/nfr-bar.com/n.json": b'{}',
+            "storage/datasets/update-baz.com/u.json": b'{}',
+            "storage/datasets/example.com/a.json": b'{}',
+        })
+        with self._open_tar(path) as tar:
+            members = tar.getmembers()
+            payload = ga._read_json_member(tar, "_callback_payload.json")
+            result = ga._resolve_domain_name(tar, members, payload)
+        assert result == "example.com"
+
+    def test_returns_none_when_no_source_available(self, tmp_path):
+        """Edge case: no payload.domain, no snapshot, only special-prefix dataset dirs.
+        Resolver returns None; inspect_archive classifies as OK with a warning."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=0),
+            "_completion_marker.json": _marker(),
+            # Only special-prefix dataset dirs — resolver can't infer a main domain
+            "storage/datasets/error-foo.com/e.json": b'{}',
+            "storage/datasets/nfr-bar.com/n.json": b'{}',
+        })
+        with self._open_tar(path) as tar:
+            members = tar.getmembers()
+            payload = ga._read_json_member(tar, "_callback_payload.json")
+            result = ga._resolve_domain_name(tar, members, payload)
+        assert result is None
+
+        # And inspect_archive must classify this as OK with a warning (not MISSING_PAYLOAD)
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert "warning" in details
+        assert "domain could not be resolved" in details["warning"]
