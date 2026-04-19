@@ -20,7 +20,7 @@ import tarfile
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 
 def _run_gcloud(args: List[str], check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
@@ -321,11 +321,11 @@ def _resolve_domain_name(
 
     # 3. Infer from tar structure
     special_prefixes = ("nfr-", "error-", "update-")
-    seen_candidates: set = set()
+    seen_candidates: Set[str] = set()
     for m in members:
         normalized = _normalize_member_name(m.name)
         if normalized.startswith("storage/datasets/"):
-            parts = normalized.split("/", 3)  # ['storage', 'datasets', 'X', ...]
+            parts = normalized.split("/", 3)  # e.g. 'storage/datasets/example.com' -> 3 parts
             if len(parts) >= 3 and parts[2]:
                 candidate = parts[2]
                 if candidate in seen_candidates:
