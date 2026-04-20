@@ -579,9 +579,5 @@ async def scrape_html_with_redirects(
 
     except Exception as e:
         logger.error(f"Erreur suivi redirections Playwright pour {url}: {e}")
-        if browser:
-            try:
-                await browser.close()
-            except Exception:
-                pass
+        # Inner finally block (above) has already closed context + browser.
         return {'success': False, 'error': str(e)}

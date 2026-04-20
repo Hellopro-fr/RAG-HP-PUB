@@ -86,7 +86,7 @@ class TestBrowserSemaphoreEnv:
         import importlib
         from app.services import scraper
         importlib.reload(scraper)
-        assert scraper._BROWSER_SEMAPHORE._value == 3
+        assert scraper._BROWSER_SEMAPHORE_SIZE == 3
 
     def test_semaphore_size_default(self, monkeypatch):
         """Default is 10 when env var absent."""
@@ -94,7 +94,7 @@ class TestBrowserSemaphoreEnv:
         import importlib
         from app.services import scraper
         importlib.reload(scraper)
-        assert scraper._BROWSER_SEMAPHORE._value == 10
+        assert scraper._BROWSER_SEMAPHORE_SIZE == 10
 
 
 class TestRouteHandlerCleanup:
