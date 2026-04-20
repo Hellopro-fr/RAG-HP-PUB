@@ -897,10 +897,16 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             results = nettoyage["results_nettoyes"]
             nb_rejetes = len(nettoyage["results_rejetes"])
 
-            bornes_str = (
-                f" (bornes [{nettoyage['borne_min']:.2f} – {nettoyage['borne_max']:.2f}])"
-                if nettoyage["borne_min"] is not None else ""
-            )
+            borne_min = nettoyage["borne_min"]
+            borne_max = nettoyage["borne_max"]
+            if borne_min is not None and borne_max is not None:
+                bornes_str = f" (bornes [{borne_min:.2f} – {borne_max:.2f}])"
+            elif borne_min is not None:
+                bornes_str = f" (borne min {borne_min:.2f})"
+            elif borne_max is not None:
+                bornes_str = f" (borne max {borne_max:.2f})"
+            else:
+                bornes_str = ""
             write_log(tracking_file, "--- NETTOYAGE PRIX ---")
             write_log(tracking_file, f"Gardés : {len(results)} | Rejetés : {nb_rejetes}{bornes_str}")
             write_log(tracking_file, json.dumps(
@@ -935,6 +941,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                 }
         else:
             write_log(tracking_file, "--- NO NETTOYAGE PRIX ---")
+            
 
         # =====================================================================
         # ÉTAPE 2 : Formater les résultats matchés (même format que v1 chunks)
