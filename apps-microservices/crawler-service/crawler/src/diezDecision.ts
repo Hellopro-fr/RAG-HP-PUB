@@ -248,3 +248,21 @@ export const applyCliFlagGuard = (): void => {
         );
     }
 };
+
+/**
+ * Compute the diezDecisionMode to surface in _callback_payload.json.
+ * Called at crawl end, after isError is finalized.
+ *
+ * Returns:
+ *   "escalated"       — isError === "limitDiez" (Tier 3 fired, today's email path)
+ *   "tier1-skipdiez"  — Tier 1 committed skipDiez during the crawl
+ *   "tier1-bypassdiez" — Tier 1 committed bypassDiez during the crawl
+ *   "unused"          — crawl completed without needing a tier-1 decision
+ */
+export const getDiezDecisionMode = (isError: string | undefined): string => {
+    if (isError === "limitDiez") return "escalated";
+    if (!context.diezDecisionCommitted) return "unused";
+    if (context.config.skipDiez) return "tier1-skipdiez";
+    if (context.config.bypassDiez) return "tier1-bypassdiez";
+    return "unused";
+};

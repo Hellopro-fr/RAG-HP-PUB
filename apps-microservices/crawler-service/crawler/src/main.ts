@@ -35,7 +35,7 @@ import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
-import { readPersistedDecision, applyCliFlagGuard } from "./diezDecision.js";
+import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 
 const execAsync = promisify(exec);
@@ -924,7 +924,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         storagePath: storagePath,
         message_erreur_crawling: messageErreurCrawling || null,
         robots_txt_bypassed: context.robotsTxtBypassed,
-        camoufox_used: context.camoufoxEnabled
+        camoufox_used: context.camoufoxEnabled,
+        diezDecisionMode: getDiezDecisionMode(isError),
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
