@@ -1973,26 +1973,33 @@ class RecommendationService:
             
             ## FORMAT DE SORTIE
             Objet JSON valide uniquement, sans texte avant ou après.
-            
+            **Chaque produit DOIT inclure `score` (1 à 4) et `raison` (1 phrase justifiant le score).**
+
             {{
             "top_produits": [
                 {{
                 "rang": 1,
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
+                "score": 4,
+                "raison": "Usage aligné, caractéristiques critiques compatibles"
                 }}
             ],
             "autres_produits": [
                 {{
                 "rang": 3,
                 "id_produit": "XXXXX",
-                "nom": "Nom du produit",     
+                "nom": "Nom du produit",
+                "score": 2,
+                "raison": "Bon univers mais écart sur [critère]"
                 }}
             ],
             "produits_ecartes": [
                 {{
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
+                "score": 1,
+                "raison": "Sous-type incompatible : [type produit] vs [type demandé]"
                 }}
             ]
             }}
