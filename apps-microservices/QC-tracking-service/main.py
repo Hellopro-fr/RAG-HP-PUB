@@ -4,12 +4,12 @@ QC Tracking Service - Interface de visualisation des fichiers tracking
 import os
 import io
 import zipfile
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -262,6 +262,130 @@ async def download_files_by_date(
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class OldFileItem(BaseModel):
+    path: str
+    name: str
+    modified: str  # ISO date
+    size: int
+
+
+class ServiceBucket(BaseModel):
+    service: str
+    count: int
+    total_size: int
+    files: List[OldFileItem]
+
+
+class OldFilesResponse(BaseModel):
+    threshold_date: str  # ISO date
+    total_count: int
+    total_size: int
+    by_service: List[ServiceBucket]
+
+
+class DeleteFilesRequest(BaseModel):
+    paths: List[str]
+
+
+class DeleteFilesResponse(BaseModel):
+    deleted: List[str]
+    errors: List[Dict[str, str]]
+
+
+def _infer_service_from_relpath(rel_path: str) -> str:
+    """
+    Déduit le nom du service depuis le chemin relatif.
+    Les volumes sont montés sous /app/tracking/<service>/..., donc le 1er segment = service.
+    """
+    parts = rel_path.replace("\\", "/").split("/")
+    return parts[0] if parts and parts[0] else "inconnu"
+
+
+@app.get("/api/old-files", response_model=OldFilesResponse)
+async def list_old_files(months: int = Query(3, ge=1, le=24, description="Âge minimum en mois")):
+    """
+    Liste les fichiers tracking plus vieux que N mois, groupés par service.
+    Le service est déduit du 1er segment du chemin (ex: /app/tracking/prix-traitement/... → prix-traitement).
+    """
+    threshold = datetime.now() - timedelta(days=months * 30)
+
+    buckets: Dict[str, List[OldFileItem]] = {}
+
+    for root, _dirs, files in os.walk(TRACKING_BASE_PATH):
+        for filename in files:
+            full_path = os.path.join(root, filename)
+            try:
+                stat = os.stat(full_path)
+                mtime = datetime.fromtimestamp(stat.st_mtime)
+                if mtime > threshold:
+                    continue
+                rel_path = os.path.relpath(full_path, TRACKING_BASE_PATH)
+                service = _infer_service_from_relpath(rel_path)
+                buckets.setdefault(service, []).append(OldFileItem(
+                    path=rel_path.replace("\\", "/"),
+                    name=filename,
+                    modified=mtime.isoformat(timespec="seconds"),
+                    size=stat.st_size,
+                ))
+            except Exception as e:
+                logger.warning(f"Erreur stat {full_path}: {e}")
+
+    by_service: List[ServiceBucket] = []
+    total_count = 0
+    total_size = 0
+    for service in sorted(buckets.keys()):
+        items = buckets[service]
+        items.sort(key=lambda x: x.modified)
+        size_sum = sum(x.size for x in items)
+        by_service.append(ServiceBucket(
+            service=service,
+            count=len(items),
+            total_size=size_sum,
+            files=items,
+        ))
+        total_count += len(items)
+        total_size += size_sum
+
+    return OldFilesResponse(
+        threshold_date=threshold.date().isoformat(),
+        total_count=total_count,
+        total_size=total_size,
+        by_service=by_service,
+    )
+
+
+@app.post("/api/delete-files", response_model=DeleteFilesResponse)
+async def delete_files(req: DeleteFilesRequest):
+    """Supprime une liste de fichiers tracking (paths relatifs à TRACKING_BASE_PATH)."""
+    deleted: List[str] = []
+    errors: List[Dict[str, str]] = []
+
+    for raw_path in req.paths:
+        safe_path = os.path.normpath(raw_path).lstrip(os.sep).lstrip(".")
+        full_path = os.path.join(TRACKING_BASE_PATH, safe_path)
+
+        # Security check
+        if not os.path.abspath(full_path).startswith(os.path.abspath(TRACKING_BASE_PATH)):
+            errors.append({"path": raw_path, "error": "Access denied"})
+            continue
+
+        if not os.path.exists(full_path):
+            errors.append({"path": raw_path, "error": "File not found"})
+            continue
+
+        if not os.path.isfile(full_path):
+            errors.append({"path": raw_path, "error": "Not a file"})
+            continue
+
+        try:
+            os.remove(full_path)
+            deleted.append(safe_path.replace("\\", "/"))
+        except Exception as e:
+            errors.append({"path": raw_path, "error": str(e)})
+
+    return DeleteFilesResponse(deleted=deleted, errors=errors)
 
 
 if __name__ == "__main__":
