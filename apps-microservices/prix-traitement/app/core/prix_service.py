@@ -794,7 +794,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         }
 
 
-async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
+async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
     via l'endpoint BO matching_prix.php (correspondance équivalences × _cppi).
@@ -986,6 +986,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+        final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
         llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
         use_gemini = llm_model.startswith("gemini")
