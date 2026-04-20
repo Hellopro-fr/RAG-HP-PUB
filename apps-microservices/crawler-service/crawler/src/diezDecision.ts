@@ -200,3 +200,51 @@ export const commitBypassDiez = (storagePath: string): void => {
         `[diez] Tier 1 decision: bypassDiez (anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`
     );
 };
+
+/**
+ * At crawl startup, check for a previously persisted decision and apply it.
+ * Called from main.ts after process.chdir(storagePath).
+ * Returns true if a decision was loaded and applied.
+ */
+export const readPersistedDecision = (storagePath: string): boolean => {
+    const filePath = path.join(storagePath, DECISION_FILE);
+    if (!fs.existsSync(filePath)) return false;
+
+    try {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        const payload = JSON.parse(raw) as { decision?: string; tier?: number };
+
+        if (payload.decision === "skipDiez") {
+            context.config.skipDiez = true;
+            context.diezDecisionCommitted = true;
+            console.log(`[diez] Loaded persisted decision: skipDiez (tier ${payload.tier ?? "?"})`);
+            return true;
+        }
+        if (payload.decision === "bypassDiez") {
+            context.config.bypassDiez = true;
+            context.diezDecisionCommitted = true;
+            console.log(`[diez] Loaded persisted decision: bypassDiez (tier ${payload.tier ?? "?"})`);
+            return true;
+        }
+
+        console.warn(`[diez] Persisted decision file has unknown 'decision' value: ${payload.decision}`);
+        return false;
+    } catch (e) {
+        console.warn(`[diez] Failed to parse ${filePath}: ${(e as Error).message}`);
+        return false;
+    }
+};
+
+/**
+ * Called from main.ts startup. If CLI flags already set skipDiez or bypassDiez,
+ * mark the decision as committed so recordClassification becomes a no-op.
+ * Spec §4.0 activation guard.
+ */
+export const applyCliFlagGuard = (): void => {
+    if (context.config.skipDiez || context.config.bypassDiez) {
+        context.diezDecisionCommitted = true;
+        console.log(
+            `[diez] CLI flag present (skipDiez=${context.config.skipDiez} bypassDiez=${context.config.bypassDiez}). Tier 1 disabled.`
+        );
+    }
+};

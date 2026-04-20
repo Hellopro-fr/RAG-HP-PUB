@@ -35,6 +35,7 @@ import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
+import { readPersistedDecision, applyCliFlagGuard } from "./diezDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 
 const execAsync = promisify(exec);
@@ -143,6 +144,13 @@ if (storagePath) {
     } catch (err) {
         console.error("Failed to change CWD:", err);
     }
+}
+
+// Tier-1 diez auto-decision bootstrap: load persisted decision (OOM_RELAUNCH) or
+// mark as committed if CLI already set skipDiez/bypassDiez (human choice wins, spec §10.1).
+if (storagePath) {
+    const loaded = readPersistedDecision(storagePath);
+    if (!loaded) applyCliFlagGuard();
 }
 
 const nameLogs = `${domain}-logs-${now}.log`;

@@ -245,3 +245,69 @@ test("persistence file does not include samplesForTier2", () => {
 
     fs.rmSync(storage, { recursive: true, force: true });
 });
+
+import { readPersistedDecision } from "./diezDecision.js";
+
+test("readPersistedDecision: no file returns false, no state change", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+
+    const loaded = readPersistedDecision(storage);
+
+    assert.equal(loaded, false);
+    assert.equal(context.config.skipDiez, false);
+    assert.equal(context.diezDecisionCommitted, false);
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("readPersistedDecision: valid skipDiez file applies to context", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    fs.writeFileSync(
+        path.join(storage, "_diez_decision.json"),
+        JSON.stringify({ decision: "skipDiez", tier: 1, committedAt: "2026-04-17T00:00:00Z", counts: { anchor: 7, spa: 0, ambiguous: 0, total: 7 } })
+    );
+    context.config.skipDiez = false;
+
+    const loaded = readPersistedDecision(storage);
+
+    assert.equal(loaded, true);
+    assert.equal(context.config.skipDiez, true);
+    assert.equal(context.diezDecisionCommitted, true);
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("readPersistedDecision: valid bypassDiez file applies to context", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    fs.writeFileSync(
+        path.join(storage, "_diez_decision.json"),
+        JSON.stringify({ decision: "bypassDiez", tier: 1, committedAt: "2026-04-17T00:00:00Z", counts: { anchor: 0, spa: 5, ambiguous: 0, total: 5 } })
+    );
+    context.config.bypassDiez = false;
+
+    const loaded = readPersistedDecision(storage);
+
+    assert.equal(loaded, true);
+    assert.equal(context.config.bypassDiez, true);
+    assert.equal(context.diezDecisionCommitted, true);
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("readPersistedDecision: malformed file returns false, no crash", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    fs.writeFileSync(path.join(storage, "_diez_decision.json"), "not-json");
+
+    const loaded = readPersistedDecision(storage);
+
+    assert.equal(loaded, false);
+    assert.equal(context.diezDecisionCommitted, false);
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
