@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Code, RefreshCw, Search, Trash2, Filter,
   ChevronLeft, ChevronRight, AlignLeft, CheckCircle, AlertCircle, X, ArrowLeft,
@@ -48,6 +48,14 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     fetchFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, page, debouncedSearch, statusFilter]);
+
+  // Reset scroll de la liste à chaque changement de filtre/page/search :
+  // sinon on reste scrollé sur d'anciens résultats et on croit que la requête
+  // n'a rien retourné.
+  const listRef = useRef(null);
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [debouncedSearch, statusFilter, page]);
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -382,7 +390,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
               />
             </div>
 
-            <div className="flex-1 space-y-1 overflow-y-auto p-2">
+            <div ref={listRef} className="flex-1 space-y-1 overflow-y-auto p-2">
               {loading && !selectedFile && (
                 <div className="p-4 text-center">
                   <RefreshCw className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />

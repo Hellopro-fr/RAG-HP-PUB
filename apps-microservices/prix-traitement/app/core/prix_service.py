@@ -122,8 +122,8 @@ def _nettoyer_resultats_prix(
     borne_sup_iqr: Optional[float] = None
 
     if len(prix_pre) >= 3:
-        q1 = _percentile_iqr(prix_pre, 25)
-        q3 = _percentile_iqr(prix_pre, 75)
+        q1 = _percentile_iqr(prix_pre, 10)
+        q3 = _percentile_iqr(prix_pre, 95)
         iqr = q3 - q1
         borne_inf_iqr = max(q1 - multiplicateur * iqr, borne_inf_mediane)
         borne_sup_iqr = q3 + multiplicateur * iqr
@@ -794,7 +794,79 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         }
 
 
-async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
+def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Vérifie que les prix des exemples_produits sont dans [borne_basse, borne_haute].
+    Si un prix est hors bornes, étend la fourchette :
+      - borne_haute = max(borne_haute, plus_haut_prix) arrondi à la dizaine supérieure
+      - borne_basse = min(borne_basse, plus_bas_prix)  arrondi à la dizaine inférieure
+    Puis recalcule prix_moyen = prix_median = (borne_basse + borne_haute) / 2.
+    Retourne un dict de détails pour tracking (adjusted=True/False), ou None si non applicable.
+    """
+    import math as _math
+
+    fourchette = parsed.get("fourchette")
+    exemples = parsed.get("exemples_produits") or []
+    if not isinstance(fourchette, dict) or not isinstance(exemples, list) or not exemples:
+        return None
+
+    try:
+        borne_basse = float(fourchette.get("borne_basse"))
+        borne_haute = float(fourchette.get("borne_haute"))
+    except (TypeError, ValueError):
+        return None
+
+    prix_exemples: List[float] = []
+    for ex in exemples:
+        try:
+            prix_exemples.append(float(ex.get("prix")))
+        except (TypeError, ValueError):
+            continue
+
+    if not prix_exemples:
+        return None
+
+    max_ex = max(prix_exemples)
+    min_ex = min(prix_exemples)
+
+    new_haute = borne_haute
+    new_basse = borne_basse
+    adjusted = False
+
+    if max_ex > borne_haute:
+        new_haute = _math.ceil(max_ex / 10) * 10
+        adjusted = True
+    if min_ex < borne_basse:
+        new_basse = _math.floor(min_ex / 10) * 10
+        adjusted = True
+
+    if not adjusted:
+        return {"adjusted": False}
+
+    new_moyen = (new_basse + new_haute) / 2
+
+    details = {
+        "adjusted": True,
+        "borne_basse_avant": borne_basse,
+        "borne_haute_avant": borne_haute,
+        "borne_basse_apres": new_basse,
+        "borne_haute_apres": new_haute,
+        "min_exemple": min_ex,
+        "max_exemple": max_ex,
+        "prix_moyen_apres": new_moyen,
+    }
+
+    # Mise à jour in-place de parsed["fourchette"]
+    fourchette["borne_basse"] = new_basse
+    fourchette["borne_haute"] = new_haute
+    fourchette["prix_moyen"] = new_moyen
+    fourchette["prix_median"] = new_moyen
+    fourchette["ajustement"] = details
+
+    return details
+
+
+async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
     via l'endpoint BO matching_prix.php (correspondance équivalences × _cppi).
@@ -832,6 +904,8 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     write_log(tracking_file, f"model: {model or settings.CHATGPT_MODEL_NAME}")
     write_log(tracking_file, "")
     write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
+    write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
+    write_log(tracking_file, f"nom_reponse_q1: {nom_reponse_q1}")
     write_log(tracking_file, json.dumps(equivalences, ensure_ascii=False, indent=2))
     write_log(tracking_file, "")
 
@@ -844,7 +918,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         matching_response, prompt_config = await asyncio.gather(
             api_client.post(
                 "matching_prix", "matching", "get",
-                {"id_categorie": id_categorie, "equivalences": equivalences}
+                {"id_categorie": id_categorie, "equivalences": equivalences, "id_reponse_q1": id_reponse_q1}
             ),
             get_prompt_cached(prompt_id)
         )
@@ -897,10 +971,16 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             results = nettoyage["results_nettoyes"]
             nb_rejetes = len(nettoyage["results_rejetes"])
 
-            bornes_str = (
-                f" (bornes [{nettoyage['borne_min']:.2f} – {nettoyage['borne_max']:.2f}])"
-                if nettoyage["borne_min"] is not None else ""
-            )
+            borne_min = nettoyage["borne_min"]
+            borne_max = nettoyage["borne_max"]
+            if borne_min is not None and borne_max is not None:
+                bornes_str = f" (bornes [{borne_min:.2f} – {borne_max:.2f}])"
+            elif borne_min is not None:
+                bornes_str = f" (borne min {borne_min:.2f})"
+            elif borne_max is not None:
+                bornes_str = f" (borne max {borne_max:.2f})"
+            else:
+                bornes_str = ""
             write_log(tracking_file, "--- NETTOYAGE PRIX ---")
             write_log(tracking_file, f"Gardés : {len(results)} | Rejetés : {nb_rejetes}{bornes_str}")
             write_log(tracking_file, json.dumps(
@@ -935,6 +1015,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                 }
         else:
             write_log(tracking_file, "--- NO NETTOYAGE PRIX ---")
+            
 
         # =====================================================================
         # ÉTAPE 2 : Formater les résultats matchés (même format que v1 chunks)
@@ -986,6 +1067,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+        final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
         llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
         use_gemini = llm_model.startswith("gemini")
@@ -1092,6 +1174,20 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                 fourchette["prix_median"] = fourchette["prix_moyen"]
             elif "prix_median" in fourchette and "prix_moyen" not in fourchette:
                 fourchette["prix_moyen"] = fourchette["prix_median"]
+
+        # Ajustement des bornes si un exemple_produit est hors fourchette
+        adjust_details = _adjust_fourchette_from_exemples(parsed)
+        if adjust_details is not None:
+            write_log(tracking_file, "--- AJUSTEMENT BORNES FOURCHETTE ---")
+            write_log(tracking_file, json.dumps(adjust_details, ensure_ascii=False, indent=2))
+            write_log(tracking_file, "")
+            if adjust_details.get("adjusted"):
+                logger.info(
+                    f"[{id_categorie}] V2 — Fourchette ajustée : "
+                    f"[{adjust_details['borne_basse_avant']}, {adjust_details['borne_haute_avant']}] → "
+                    f"[{adjust_details['borne_basse_apres']}, {adjust_details['borne_haute_apres']}] "
+                    f"(min_ex={adjust_details['min_exemple']}, max_ex={adjust_details['max_exemple']})"
+                )
 
         return {
             "success": True,

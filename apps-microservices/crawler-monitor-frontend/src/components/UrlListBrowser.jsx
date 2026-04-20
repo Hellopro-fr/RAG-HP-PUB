@@ -59,6 +59,16 @@ const UrlListBrowser = ({ jobId, category, token }) => {
 
   useEffect(() => { fetchPage(); }, [fetchPage]);
 
+  // Reset scroll de la liste à chaque search/page/category change : sinon
+  // l'utilisateur reste scrollé au milieu d'anciens résultats, ne voit pas
+  // le nouveau "top" de liste, et croit que la recherche n'a rien retourné.
+  const listRef = useRef(null);
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+    // Scroll aussi la liste into view (utile si on vient d'une longue page)
+    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [debounced, page, category]);
+
   const counterLabel = useMemo(() => {
     if (loading) return 'Chargement…';
     if (total === 0) return '0 URL';
@@ -101,7 +111,10 @@ const UrlListBrowser = ({ jobId, category, token }) => {
           Aucune URL dans cette catégorie.
         </div>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border bg-background">
+        <ul
+          ref={listRef}
+          className="divide-y divide-border rounded-md border border-border bg-background max-h-[60vh] overflow-y-auto"
+        >
           {items.map((it, i) => (
             <li key={`${it.url}-${i}`} className="p-3 transition-colors hover:bg-accent/40">
               <a

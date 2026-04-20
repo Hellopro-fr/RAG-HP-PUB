@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetTitle } from '../ui/sheet';
 import { CommandPalette } from '../CommandPalette';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { ScrollToTop } from './ScrollToTop';
 
 const COLLAPSED_KEY = 'sidebar:collapsed';
 
@@ -47,6 +48,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <ScrollToTop />
       <div className="flex min-h-screen">
         {/* Desktop sidebar */}
         <aside className="hidden lg:block sticky top-0 h-screen shrink-0">

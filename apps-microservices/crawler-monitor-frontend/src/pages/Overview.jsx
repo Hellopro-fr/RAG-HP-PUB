@@ -91,6 +91,7 @@ const Overview = ({ token, replicas }) => {
   }, [filteredJobs]);
 
   const detailsPanelRef = useRef(null);
+  const jobsListRef = useRef(null);
 
   // Stable callbacks — important for React.memo on Timeline / CapacityBar /
   // JobCard list. A new function identity each render would defeat memo and
@@ -100,16 +101,19 @@ const Overview = ({ token, replicas }) => {
     navigate(`/jobs/${id}`);
   }, [navigate]);
 
-  // Auto-scroll to the details panel when a job is selected (UX: avoids
-  // requiring the user to scroll down on small viewports).
+  // Auto-scroll to the details panel when a job is selected.
+  // `block: 'start'` aligne le haut du panneau avec le top du viewport — sur
+  // mobile où la liste et le détail sont empilés, `nearest` pouvait laisser
+  // l'utilisateur regarder une zone vide. On force un scroll utile.
   useEffect(() => {
     if (routeJobId && detailsPanelRef.current) {
-      detailsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      detailsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [routeJobId]);
 
-  // Stable callback for Timeline (memo'd child). Click on a bucket narrows
-  // the date filters to the bucket's span.
+  // Click sur un bucket Timeline : filtre par date ET scroll vers la liste
+  // jobs filtrée — sinon l'utilisateur voit que la Timeline et doit scroller
+  // pour voir le résultat du filtrage.
   const handleTimelineBucketClick = useCallback(({ from, to }) => {
     const fromDate = new Date(from);
     const toDate = new Date(to - 1);
@@ -117,6 +121,10 @@ const Overview = ({ token, replicas }) => {
     setStartDate(yyyymmdd(fromDate));
     setEndDate(yyyymmdd(toDate));
     setCurrentPage(1);
+    // Defer le scroll au prochain tick pour que la liste filtrée soit rendue
+    setTimeout(() => {
+      jobsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   }, []);
 
   const hasDateFilter = !!(startDate || endDate);
@@ -246,7 +254,9 @@ const Overview = ({ token, replicas }) => {
       </Card>
 
       {/* Jobs list + details */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(280px,1fr)_2fr]">
+      {/* scroll-mt-16 = marge de 64px pour que scrollIntoView ne cache pas
+          le haut du bloc sous la Topbar sticky (h-14 = 56px). */}
+      <div ref={jobsListRef} className="grid gap-4 scroll-mt-16 lg:grid-cols-[minmax(280px,1fr)_2fr]">
         <Card className="p-2 space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -269,7 +279,7 @@ const Overview = ({ token, replicas }) => {
           )}
         </Card>
 
-        <Card ref={detailsPanelRef} className={cn('p-5', !selectedJob && !loadingDetails && 'flex items-center justify-center')}>
+        <Card ref={detailsPanelRef} className={cn('p-5 scroll-mt-16', !selectedJob && !loadingDetails && 'flex items-center justify-center')}>
           {loadingDetails ? (
             <div className="flex items-center justify-center py-20">
               <RefreshCw className="h-10 w-10 animate-spin text-primary" />
