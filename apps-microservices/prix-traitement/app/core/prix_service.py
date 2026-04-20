@@ -832,6 +832,8 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     write_log(tracking_file, f"model: {model or settings.CHATGPT_MODEL_NAME}")
     write_log(tracking_file, "")
     write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
+    write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
+    write_log(tracking_file, f"nom_reponse_q1: {nom_reponse_q1}")
     write_log(tracking_file, json.dumps(equivalences, ensure_ascii=False, indent=2))
     write_log(tracking_file, "")
 
