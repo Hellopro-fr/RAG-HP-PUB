@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Server, RefreshCw, AlertCircle, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import UrlListBrowser from './UrlListBrowser';
@@ -44,6 +44,17 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
 
   useEffect(() => { fetchCounts(); }, [fetchCounts]);
 
+  // Ref sur la zone TabsContent pour scroller direct sur le contenu
+  // quand l'utilisateur change d'onglet (sinon il peut rester scrollé
+  // sur des résultats de l'onglet précédent).
+  const tabsContentRef = useRef(null);
+  const handleTabChange = useCallback((next) => {
+    setActiveTab(next);
+    setTimeout(() => {
+      tabsContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }, []);
+
   return (
     <div className="p-4">
       <Card className="overflow-hidden">
@@ -76,7 +87,7 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
           </div>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="p-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="p-4">
           <TabsList>
             {TABS.map(t => {
               const countLabel = t.kind === 'urls' && counts ? ` (${formatInt(counts[t.id])})` : '';
@@ -88,13 +99,15 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
             })}
           </TabsList>
 
-          {TABS.map(t => (
-            <TabsContent key={t.id} value={t.id} className="mt-4">
-              {t.kind === 'duplicates'
-                ? <DuplicatesTab jobId={jobId} token={token} />
-                : <UrlListBrowser jobId={jobId} category={t.id} token={token} />}
-            </TabsContent>
-          ))}
+          <div ref={tabsContentRef} className="scroll-mt-16">
+            {TABS.map(t => (
+              <TabsContent key={t.id} value={t.id} className="mt-4">
+                {t.kind === 'duplicates'
+                  ? <DuplicatesTab jobId={jobId} token={token} />
+                  : <UrlListBrowser jobId={jobId} category={t.id} token={token} />}
+              </TabsContent>
+            ))}
+          </div>
         </Tabs>
       </Card>
     </div>
