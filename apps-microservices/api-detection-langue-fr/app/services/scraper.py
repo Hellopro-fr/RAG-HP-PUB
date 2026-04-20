@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import random
 import uuid
 from typing import Optional
@@ -68,8 +69,10 @@ def build_proxy_url(base_proxy: str, session_id: Optional[str] = None, country: 
         return base_proxy
 
 # Sémaphore global limitant le nombre de navigateurs Playwright simultanés.
-# Protège contre l'épuisement mémoire en cas de requêtes /detect ou /detect-batch concurrentes.
-_BROWSER_SEMAPHORE = asyncio.Semaphore(10)
+# Taille configurable via BROWSER_SEMAPHORE_SIZE env var (défaut: 10).
+# Chaque Camoufox/Chromium consomme ~300-500 MB — ne pas dépasser la capacité du container.
+_BROWSER_SEMAPHORE_SIZE = int(os.getenv("BROWSER_SEMAPHORE_SIZE", "10"))
+_BROWSER_SEMAPHORE = asyncio.Semaphore(_BROWSER_SEMAPHORE_SIZE)
 
 
 # Pool de User-Agents réalistes — rotation aléatoire à chaque requête
@@ -289,13 +292,12 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
         logger.error(f"Proxy invalide pour {url}: {proxy}")
         return None
 
-    browser = None
-    is_camoufox = False
-    try:
-        async with _BROWSER_SEMAPHORE:
-            async with async_playwright() as p:
-                browser, is_camoufox = await _launch_browser(p, playwright_proxy)
-
+    async with _BROWSER_SEMAPHORE:
+        async with async_playwright() as p:
+            browser, is_camoufox = await _launch_browser(p, playwright_proxy)
+            context = None
+            page = None
+            try:
                 # Camoufox handles UA/fingerprinting at engine level — only set for Chromium
                 context_options = {
                     'locale': 'fr-FR',
@@ -331,9 +333,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     # classifier l'erreur et basculer vers les variantes URL (Phase 2)
                     if any(err in err_str for err in _PERMANENT_NAV_ERRORS):
                         logger.error(f"Erreur navigation permanente pour {url}: {err_str.splitlines()[0]}")
-                        await context.close()
-                        await browser.close()
-                        raise
+                        raise  # finally block will close context + browser
 
                     # Erreurs transitoires (proxy, timeout) — on tente l'extraction partielle
                     logger.warning(f"Timeout/Erreur navigation pour {url} (extraction partielle tentée): {nav_e}")
@@ -423,9 +423,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 # Capturer l'URL finale (après redirections éventuelles)
                 final_url = page.url
 
-                await context.close()
-                await browser.close()
-
+                # Do NOT close here — finally block handles it.
                 if content and len(content) > 100:
                     if final_url != url:
                         logger.info(f"Scraping réussi pour {url} → {final_url} ({len(content)} caractères)")
@@ -435,15 +433,24 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 else:
                     logger.warning(f"Contenu trop court pour {url}")
                     return None
-
-    except Exception as e:
-        logger.error(f"Erreur scraping Playwright pour {url}: {e}")
-        if browser:
-            try:
-                await browser.close()
-            except Exception:
-                pass
-        return None
+            finally:
+                # Drain in-flight route callbacks before tearing down the page.
+                # Suppresses TargetClosedError flood from _route_handler firing
+                # on closed pages under concurrent load.
+                if page is not None:
+                    try:
+                        await page.unroute_all(behavior='ignoreErrors')
+                    except Exception as unroute_err:
+                        logger.debug(f"unroute_all failed for {url}: {unroute_err}")
+                if context is not None:
+                    try:
+                        await context.close()
+                    except Exception as ctx_err:
+                        logger.debug(f"context.close failed for {url}: {ctx_err}")
+                try:
+                    await browser.close()
+                except Exception as br_err:
+                    logger.debug(f"browser.close failed for {url}: {br_err}")
 
 
 async def scrape_html_with_redirects(
@@ -487,71 +494,88 @@ async def scrape_html_with_redirects(
         async with _BROWSER_SEMAPHORE:
             async with async_playwright() as p:
                 browser, is_camoufox = await _launch_browser(p, playwright_proxy)
-
-                context_options = {
-                    'locale': 'fr-FR',
-                    'ignore_https_errors': True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
-                    'extra_http_headers': {
-                        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                    },
-                }
-                if not is_camoufox:
-                    context_options['user_agent'] = random.choice(_USER_AGENTS)
-
-                context = await browser.new_context(**context_options)
-
-                await _inject_cookie_consent(context, url)
-
-                page = await context.new_page()
-                await _setup_resource_blocking(page)
-
-                # Capturer les redirections via événement response
-                def on_response(response):
-                    status = response.status
-                    if 300 <= status < 400:
-                        redirects.append({
-                            'url': response.url,
-                            'status_code': status
-                        })
-
-                page.on('response', on_response)
-
-                # Navigation deux phases (cohérent avec scrape_html)
-                nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
+                context = None
+                page = None
                 try:
-                    response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
-                except Exception as nav_e:
-                    err_str = str(nav_e)
-                    if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
-                        await context.close()
+                    context_options = {
+                        'locale': 'fr-FR',
+                        'ignore_https_errors': True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
+                        'extra_http_headers': {
+                            'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                        },
+                    }
+                    if not is_camoufox:
+                        context_options['user_agent'] = random.choice(_USER_AGENTS)
+
+                    context = await browser.new_context(**context_options)
+
+                    await _inject_cookie_consent(context, url)
+
+                    page = await context.new_page()
+                    await _setup_resource_blocking(page)
+
+                    # Capturer les redirections via événement response
+                    def on_response(response):
+                        status = response.status
+                        if 300 <= status < 400:
+                            redirects.append({
+                                'url': response.url,
+                                'status_code': status
+                            })
+
+                    page.on('response', on_response)
+
+                    # Navigation deux phases (cohérent avec scrape_html)
+                    nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
+                    try:
+                        response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
+                    except Exception as nav_e:
+                        err_str = str(nav_e)
+                        if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
+                            # finally block will close context + browser
+                            return {'success': False, 'error': f'Site inaccessible: {err_str}'}
+
+                        logger.warning(f"Timeout/Erreur navigation pour {url}: {nav_e}")
+                        response = None
+
+                    # Phase 2 : bonus networkidle (5s)
+                    try:
+                        await page.wait_for_load_state('networkidle', timeout=5000)
+                    except Exception:
+                        pass
+
+                    final_url = page.url
+                    status_code = response.status if response else 0
+                    content_type = ''
+                    if response:
+                        content_type = response.headers.get('content-type', '')
+
+                    # Do NOT close here — finally block handles it.
+                    return {
+                        'success': True,
+                        'final_url': final_url,
+                        'status_code': status_code,
+                        'content_type': content_type,
+                        'redirects': redirects,
+                    }
+                finally:
+                    # Drain in-flight route callbacks before tearing down the page.
+                    # Suppresses TargetClosedError flood from _route_handler firing
+                    # on closed pages under concurrent load.
+                    if page is not None:
+                        try:
+                            await page.unroute_all(behavior='ignoreErrors')
+                        except Exception as unroute_err:
+                            logger.debug(f"unroute_all failed for {url}: {unroute_err}")
+                    if context is not None:
+                        try:
+                            await context.close()
+                        except Exception as ctx_err:
+                            logger.debug(f"context.close failed for {url}: {ctx_err}")
+                    try:
                         await browser.close()
-                        return {'success': False, 'error': f'Site inaccessible: {err_str}'}
-
-                    logger.warning(f"Timeout/Erreur navigation pour {url}: {nav_e}")
-                    response = None
-
-                # Phase 2 : bonus networkidle (5s)
-                try:
-                    await page.wait_for_load_state('networkidle', timeout=5000)
-                except Exception:
-                    pass
-
-                final_url = page.url
-                status_code = response.status if response else 0
-                content_type = ''
-                if response:
-                    content_type = response.headers.get('content-type', '')
-
-                await context.close()
-                await browser.close()
-
-                return {
-                    'success': True,
-                    'final_url': final_url,
-                    'status_code': status_code,
-                    'content_type': content_type,
-                    'redirects': redirects,
-                }
+                    except Exception as br_err:
+                        logger.debug(f"browser.close failed for {url}: {br_err}")
 
     except Exception as e:
         logger.error(f"Erreur suivi redirections Playwright pour {url}: {e}")
