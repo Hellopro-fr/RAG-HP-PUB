@@ -1739,11 +1739,10 @@ class RecommendationService:
                             carac_entry["unite"] = unite
                         filtered_caracs.append(carac_entry)
 
+            # iter-2 (P3): description placed BEFORE titre so the LLM anchors
+            # on the discriminant technical content instead of a generic label.
             formatted_product = {
                 "id_produit": str(id_produit),
-                "titre": info.get(
-                    "titre_produit", info.get("nom_produit", info.get("titre", ""))
-                ),
                 "description": re.sub(
                     r"\s+",
                     " ",
@@ -1751,6 +1750,9 @@ class RecommendationService:
                         "\xa0", " "
                     ),
                 ).strip(),
+                "titre": info.get(
+                    "titre_produit", info.get("nom_produit", info.get("titre", ""))
+                ),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "type": etat_societe_label,
