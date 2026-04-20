@@ -122,8 +122,8 @@ def _nettoyer_resultats_prix(
     borne_sup_iqr: Optional[float] = None
 
     if len(prix_pre) >= 3:
-        q1 = _percentile_iqr(prix_pre, 25)
-        q3 = _percentile_iqr(prix_pre, 75)
+        q1 = _percentile_iqr(prix_pre, 10)
+        q3 = _percentile_iqr(prix_pre, 95)
         iqr = q3 - q1
         borne_inf_iqr = max(q1 - multiplicateur * iqr, borne_inf_mediane)
         borne_sup_iqr = q3 + multiplicateur * iqr
