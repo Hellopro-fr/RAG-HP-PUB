@@ -76,3 +76,97 @@ test("classifyFragment: length boundary — 20-char short-alphanum is anchor", (
 test("classifyFragment: rule precedence — fragment with / and short length is spa (rule 3 beats anything)", () => {
     assert.equal(classifyFragment("a/b"), "spa");
 });
+
+import { context } from "./context.js";
+import { recordClassification, maybeCommitDecision } from "./diezDecision.js";
+
+const resetContextState = () => {
+    context.diezClassification = { anchor: 0, spa: 0, ambiguous: 0, total: 0, samplesForTier2: [] };
+    context.diezDecisionCommitted = false;
+};
+
+test("recordClassification: increments correct counter", () => {
+    resetContextState();
+    recordClassification("https://example.com/page#top");
+    assert.equal(context.diezClassification.anchor, 1);
+    assert.equal(context.diezClassification.total, 1);
+});
+
+test("recordClassification: ambiguous URL is appended to samplesForTier2", () => {
+    resetContextState();
+    const url = "https://example.com/page#xkc9f8h2kj34lmn7pqr5stuvwxyz";
+    recordClassification(url);
+    assert.equal(context.diezClassification.ambiguous, 1);
+    assert.deepEqual(context.diezClassification.samplesForTier2, [url]);
+});
+
+test("recordClassification: samplesForTier2 capped at 50", () => {
+    resetContextState();
+    for (let i = 0; i < 60; i++) {
+        recordClassification(`https://example.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    }
+    assert.equal(context.diezClassification.samplesForTier2.length, 50);
+    assert.equal(context.diezClassification.ambiguous, 60);
+});
+
+test("recordClassification: URL without # is ignored", () => {
+    resetContextState();
+    recordClassification("https://example.com/page");
+    assert.equal(context.diezClassification.total, 0);
+});
+
+test("recordClassification: no-op after decision committed", () => {
+    resetContextState();
+    context.diezDecisionCommitted = true;
+    recordClassification("https://example.com/page#top");
+    assert.equal(context.diezClassification.total, 0);
+});
+
+test("maybeCommitDecision: below MIN_SAMPLES returns null", () => {
+    resetContextState();
+    for (let i = 0; i < 4; i++) recordClassification(`https://e.com/p#top${i}`);
+    assert.equal(maybeCommitDecision(), null);
+});
+
+test("maybeCommitDecision: 5 anchor samples returns skipDiez", () => {
+    resetContextState();
+    for (const frag of ["top", "bottom", "section-1", "faq", "comments"]) {
+        recordClassification(`https://e.com/p#${frag}`);
+    }
+    assert.equal(maybeCommitDecision(), "skipDiez");
+});
+
+test("maybeCommitDecision: 5 spa samples returns bypassDiez", () => {
+    resetContextState();
+    for (const frag of ["/products/1", "/products/2", "/cart", "/about", "/contact"]) {
+        recordClassification(`https://e.com/p#${frag}`);
+    }
+    assert.equal(maybeCommitDecision(), "bypassDiez");
+});
+
+test("maybeCommitDecision: 80/20 split below 90% threshold returns null", () => {
+    resetContextState();
+    for (const frag of ["top", "bottom", "section-1", "faq"]) {
+        recordClassification(`https://e.com/p#${frag}`);
+    }
+    recordClassification("https://e.com/p#/route");
+    assert.equal(maybeCommitDecision(), null);
+});
+
+test("maybeCommitDecision: ambiguous ≥ 40% at total ≥ 20 returns promoteTier2", () => {
+    resetContextState();
+    for (let i = 0; i < 10; i++) {
+        recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    }
+    for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#top${i}`);
+    for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#/r${i}`);
+    assert.equal(maybeCommitDecision(), "promoteTier2");
+});
+
+test("maybeCommitDecision: 100 samples mixed below confidence returns escalate", () => {
+    resetContextState();
+    for (let i = 0; i < 40; i++) recordClassification(`https://e.com/p#top${i}`);
+    for (let i = 0; i < 40; i++) recordClassification(`https://e.com/p#/r${i}`);
+    for (let i = 0; i < 20; i++) recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    assert.equal(maybeCommitDecision(), "escalate");
+});

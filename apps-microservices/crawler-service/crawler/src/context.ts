@@ -57,6 +57,18 @@ export const context = {
     // Used by postNavigationHooks to avoid O(n²) full-dataset scans.
     countQuestionMark: 0,
     countDiez: 0,
+    // Tier-1 auto-decision for limitDiez (see diezDecision.ts + spec 2026-04-17).
+    // Counters are in-memory only (not persisted across restarts — §10.2 of spec).
+    diezClassification: {
+        anchor: 0,
+        spa: 0,
+        ambiguous: 0,
+        total: 0,
+        samplesForTier2: [] as string[],  // URLs classified as ambiguous; capped at 50
+    },
+    // Set to true once a tier-1 commit has happened OR a persisted decision was loaded at startup.
+    // When true, recordClassification is a no-op — we already decided.
+    diezDecisionCommitted: false,
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null,

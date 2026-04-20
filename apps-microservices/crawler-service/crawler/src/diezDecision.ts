@@ -42,3 +42,65 @@ export const classifyFragment = (fragment: string): Classification => {
     if (frag.length <= 20 && /^[a-zA-Z0-9_-]+$/.test(frag)) return "anchor";
     return "ambiguous";
 };
+
+import { context } from "./context.js";
+
+const MIN_SAMPLES = 5;
+const MAX_SAMPLES = 100;
+const CONFIDENCE_THRESHOLD = 0.9;
+const AMBIGUOUS_PROMOTE_RATIO = 0.4;
+const AMBIGUOUS_PROMOTE_MIN_TOTAL = 20;
+const TIER2_SAMPLE_CAP = 50;
+
+export type DecisionOutcome = "skipDiez" | "bypassDiez" | "promoteTier2" | "escalate" | null;
+
+/**
+ * Classify a URL (must contain '#') and record into the context counters.
+ * No-op if the URL has no '#' or if a decision was already committed.
+ */
+export const recordClassification = (url: string): void => {
+    if (context.diezDecisionCommitted) return;
+    const hashIdx = url.indexOf("#");
+    if (hashIdx === -1) return;
+    const fragment = url.slice(hashIdx + 1);
+
+    const classification = classifyFragment(fragment);
+    context.diezClassification[classification]++;
+    context.diezClassification.total++;
+
+    if (classification === "ambiguous" && context.diezClassification.samplesForTier2.length < TIER2_SAMPLE_CAP) {
+        context.diezClassification.samplesForTier2.push(url);
+    }
+};
+
+/**
+ * Inspect current counters and decide whether to commit a decision.
+ *
+ * Returns:
+ *   "skipDiez"     — anchor confidence ≥ 90% (caller should flip skipDiez flag + rewrite queue)
+ *   "bypassDiez"   — spa confidence ≥ 90% (caller should flip bypassDiez flag)
+ *   "promoteTier2" — ambiguous ratio ≥ 40% at total ≥ 20 (phase 2 hook; phase 1 caller ignores)
+ *   "escalate"     — reached MAX_SAMPLES with no confident decision (caller lets today's limitDiez fire)
+ *   null           — keep collecting
+ */
+export const maybeCommitDecision = (): DecisionOutcome => {
+    if (context.diezDecisionCommitted) return null;
+
+    const c = context.diezClassification;
+    if (c.total < MIN_SAMPLES) return null;
+
+    const anchorRatio = c.anchor / c.total;
+    const spaRatio = c.spa / c.total;
+    const ambiguousRatio = c.ambiguous / c.total;
+
+    if (anchorRatio >= CONFIDENCE_THRESHOLD) return "skipDiez";
+    if (spaRatio >= CONFIDENCE_THRESHOLD) return "bypassDiez";
+
+    if (ambiguousRatio >= AMBIGUOUS_PROMOTE_RATIO && c.total >= AMBIGUOUS_PROMOTE_MIN_TOTAL) {
+        return "promoteTier2";
+    }
+
+    if (c.total >= MAX_SAMPLES) return "escalate";
+
+    return null;
+};
