@@ -1,0 +1,96 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-20-detection-langue-fr-concurrency-defense.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Fix route handler leak + env-configurable browser semaphore",
+      "status": "pending",
+      "description": "**Goal:** Eliminate TargetClosedError flood by draining in-flight route callbacks before closing pages, guarantee browser cleanup via try/finally, expose BROWSER_SEMAPHORE_SIZE env var.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/services/scraper.py\", \"apps-microservices/api-detection-langue-fr/tests/test_scraper.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -m pytest tests/test_scraper.py -v\", \"acceptanceCriteria\": [\"BROWSER_SEMAPHORE_SIZE env var respected\", \"unroute_all called before context.close\", \"try/finally guarantees browser close on exception\", \"All new scraper tests pass\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Update api-detection-langue-fr CLAUDE.md (Camoufox + env vars)",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Correct stale Chromium-only statement, document new env vars.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/CLAUDE.md\"], \"verifyCommand\": \"grep -E 'Camoufox|BROWSER_SEMAPHORE_SIZE' apps-microservices/api-detection-langue-fr/CLAUDE.md\", \"acceptanceCriteria\": [\"Camoufox documented as primary browser\", \"Env var table added\", \"Caller contract referenced\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Add Prometheus metrics module + /metrics endpoint + scraper instrumentation",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Create metrics module, expose /metrics, instrument browser launch timing.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/metrics.py\", \"apps-microservices/api-detection-langue-fr/tests/test_metrics.py\", \"apps-microservices/api-detection-langue-fr/main.py\", \"apps-microservices/api-detection-langue-fr/app/services/scraper.py\", \"apps-microservices/api-detection-langue-fr/requirements.txt\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -m pytest tests/test_metrics.py -v\", \"acceptanceCriteria\": [\"prometheus-client added\", \"Six metrics defined\", \"/metrics endpoint serves Prometheus format\", \"Browser launch timing labeled\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Docker resource limits + healthcheck + Uvicorn --limit-concurrency",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Container-level safety nets.\n\n```json:metadata\n{\"files\": [\"docker-compose.yml\", \"apps-microservices/api-detection-langue-fr/Dockerfile\"], \"verifyCommand\": \"docker compose config | grep -A 20 api-detection-langue-fr-service\", \"acceptanceCriteria\": [\"mem_limit 4500m\", \"cpus 4\", \"Healthcheck on /api/v1/health\", \"Uvicorn --limit-concurrency 50\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: AdmissionController class with atomic counter tests",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** Atomic in-flight counter primitive.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/admission.py\", \"apps-microservices/api-detection-langue-fr/tests/test_admission.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -m pytest tests/test_admission.py -v\", \"acceptanceCriteria\": [\"acquire True/False based on counter\", \"release does not go negative\", \"Atomic under 100 concurrent acquires\", \"inflight property observable\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Admission middleware with path-scoped controllers + integration tests",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** FastAPI middleware emitting 503+Retry-After on saturation.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/middleware/__init__.py\", \"apps-microservices/api-detection-langue-fr/app/middleware/admission.py\", \"apps-microservices/api-detection-langue-fr/tests/test_admission_middleware.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -m pytest tests/test_admission_middleware.py -v\", \"acceptanceCriteria\": [\"Path-based controller selection\", \"503+Retry-After on saturation\", \"Debug pool isolated from prod\", \"Infra paths bypass\", \"Kill switch works\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Wire admission middleware into main.py with env-driven config",
+      "status": "pending",
+      "blockedBy": [6],
+      "description": "**Goal:** Instantiate controllers and attach middleware.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/main.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -c 'from fastapi.testclient import TestClient; from main import app; assert TestClient(app).get(\\\"/api/v1/health\\\").status_code == 200; print(\\\"OK\\\")'\", \"acceptanceCriteria\": [\"Controllers from env vars\", \"Middleware attached\", \"/health responds 200\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: InflightDedup class for URL coalescing",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** URL coalescing primitive sharing one future across concurrent callers.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/inflight_dedup.py\", \"apps-microservices/api-detection-langue-fr/tests/test_inflight_dedup.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -m pytest tests/test_inflight_dedup.py -v\", \"acceptanceCriteria\": [\"Factory runs once for concurrent same-key callers\", \"Different keys independent\", \"Entry cleaned after success and exception\", \"hits counter accurate\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Wire InflightDedup into routes._detect_single_url",
+      "status": "pending",
+      "blockedBy": [8],
+      "description": "**Goal:** Wrap fetch_html in dedup.coalesce keyed by normalized URL.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/api/routes.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -m pytest tests/ -v --ignore=tests/test_api.py\", \"acceptanceCriteria\": [\"fetch_html wrapped in coalesce\", \"force_refresh bypasses dedup\", \"DEDUP_HITS synced\", \"No regressions\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: Create common_utils.detection_client Python helper with tests",
+      "status": "pending",
+      "blockedBy": [9],
+      "description": "**Goal:** Shared HTTP client enforcing caller contract.\n\n```json:metadata\n{\"files\": [\"libs/common-utils/src/common_utils/detection_client.py\", \"libs/common-utils/tests/test_detection_client.py\"], \"verifyCommand\": \"cd libs/common-utils && python -m pytest tests/test_detection_client.py -v\", \"acceptanceCriteria\": [\"Env var contract enforced\", \"Semaphore caps concurrency\", \"503 retry with Retry-After precedence\", \"Non-503 errors raise immediately\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: Gateway per-service timeout map (detection=180s, others unchanged)",
+      "status": "pending",
+      "blockedBy": [10],
+      "description": "**Goal:** Scoped gateway fix — detection 180s, others keep timeout=None.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-gateway/app/core/settings.py\", \"apps-microservices/api-gateway/main.py\", \"apps-microservices/api-gateway/tests/test_proxy_timeout.py\"], \"verifyCommand\": \"cd apps-microservices/api-gateway && python -m pytest tests/test_proxy_timeout.py -v\", \"acceptanceCriteria\": [\"DOWNSTREAM_TIMEOUTS_S detection=180s\", \"Unmapped services timeout=None\", \"504 on timeout, 503 logged\", \"Gateway imports cleanly\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: Crawler DetectionLangueClient.ts — p-limit + 503 retry",
+      "status": "pending",
+      "blockedBy": [11],
+      "description": "**Goal:** Apply contract in TypeScript: p-limit + 503 retry with Retry-After.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/package.json\", \"apps-microservices/crawler-service/crawler/src/class/DetectionLangueClient.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm install && npm run build\", \"acceptanceCriteria\": [\"p-limit dependency\", \"pLimit wraps calls\", \"503 retry with Retry-After\", \"Axios timeout 180s\", \"TypeScript compiles\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: Update api-gateway + crawler-service CLAUDE.md for caller contract",
+      "status": "pending",
+      "blockedBy": [12],
+      "description": "**Goal:** Document caller-contract integration in both downstream services' CLAUDE.md.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-gateway/CLAUDE.md\", \"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -E 'DOWNSTREAM_TIMEOUTS_S|DETECTION_MAX_CONCURRENCY' apps-microservices/api-gateway/CLAUDE.md apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"Gateway documents timeout map\", \"Crawler documents env var contract\", \"Both reference spec\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-20T00:00:00Z"
+}
