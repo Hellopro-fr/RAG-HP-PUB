@@ -794,7 +794,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         }
 
 
-async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
+async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
     via l'endpoint BO matching_prix.php (correspondance équivalences × _cppi).
@@ -844,7 +844,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         matching_response, prompt_config = await asyncio.gather(
             api_client.post(
                 "matching_prix", "matching", "get",
-                {"id_categorie": id_categorie, "equivalences": equivalences}
+                {"id_categorie": id_categorie, "equivalences": equivalences, "id_reponse_q1": id_reponse_q1}
             ),
             get_prompt_cached(prompt_id)
         )
