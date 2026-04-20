@@ -19,7 +19,8 @@
     "scripts": {
         "start": "node dist/main.js",
         "dev": "tsx src/main.ts",
-        "build": "tsc"
+        "build": "tsc",
+        "test": "node --import tsx --test src/**/*.test.ts"
     },
     "author": "It's not you it's me",
     "license": "ISC"
