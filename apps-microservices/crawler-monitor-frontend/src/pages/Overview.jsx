@@ -254,7 +254,9 @@ const Overview = ({ token, replicas }) => {
       </Card>
 
       {/* Jobs list + details */}
-      <div ref={jobsListRef} className="grid gap-4 lg:grid-cols-[minmax(280px,1fr)_2fr]">
+      {/* scroll-mt-16 = marge de 64px pour que scrollIntoView ne cache pas
+          le haut du bloc sous la Topbar sticky (h-14 = 56px). */}
+      <div ref={jobsListRef} className="grid gap-4 scroll-mt-16 lg:grid-cols-[minmax(280px,1fr)_2fr]">
         <Card className="p-2 space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -277,7 +279,7 @@ const Overview = ({ token, replicas }) => {
           )}
         </Card>
 
-        <Card ref={detailsPanelRef} className={cn('p-5', !selectedJob && !loadingDetails && 'flex items-center justify-center')}>
+        <Card ref={detailsPanelRef} className={cn('p-5 scroll-mt-16', !selectedJob && !loadingDetails && 'flex items-center justify-center')}>
           {loadingDetails ? (
             <div className="flex items-center justify-center py-20">
               <RefreshCw className="h-10 w-10 animate-spin text-primary" />
