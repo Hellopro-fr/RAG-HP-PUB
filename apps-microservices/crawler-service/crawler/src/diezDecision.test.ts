@@ -170,3 +170,78 @@ test("maybeCommitDecision: 100 samples mixed below confidence returns escalate",
     for (let i = 0; i < 20; i++) recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
     assert.equal(maybeCommitDecision(), "escalate");
 });
+
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+
+const makeTmpStorage = (): string => {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "diez-test-"));
+};
+
+test("commitSkipDiez: flips flag, sets committed, writes persistence file", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    context.config.skipDiez = false;
+    for (let i = 0; i < 7; i++) recordClassification(`https://e.com/p#top${i}`);
+
+    commitSkipDiez(storage);
+
+    assert.equal(context.config.skipDiez, true);
+    assert.equal(context.diezDecisionCommitted, true);
+
+    const filePath = path.join(storage, "_diez_decision.json");
+    assert.ok(fs.existsSync(filePath), "persistence file not written");
+    const payload = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    assert.equal(payload.decision, "skipDiez");
+    assert.equal(payload.tier, 1);
+    assert.ok(typeof payload.committedAt === "string");
+    assert.equal(payload.counts.total, 7);
+    assert.equal(payload.counts.anchor, 7);
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("commitBypassDiez: flips flag, sets committed, writes persistence file", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    context.config.bypassDiez = false;
+    for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#/r${i}`);
+
+    commitBypassDiez(storage);
+
+    assert.equal(context.config.bypassDiez, true);
+    assert.equal(context.diezDecisionCommitted, true);
+
+    const payload = JSON.parse(fs.readFileSync(path.join(storage, "_diez_decision.json"), "utf-8"));
+    assert.equal(payload.decision, "bypassDiez");
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("commit flag stops further recording", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#top${i}`);
+    commitSkipDiez(storage);
+
+    recordClassification("https://e.com/p#another");
+    assert.equal(context.diezClassification.total, 5, "counters should not change after commit");
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("persistence file does not include samplesForTier2", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    // Add some ambiguous samples
+    for (let i = 0; i < 3; i++) recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    for (let i = 0; i < 4; i++) recordClassification(`https://e.com/p#top${i}`);
+    commitSkipDiez(storage);
+
+    const payload = JSON.parse(fs.readFileSync(path.join(storage, "_diez_decision.json"), "utf-8"));
+    assert.ok(!("samplesForTier2" in payload.counts), "samplesForTier2 should be dropped from counts");
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});

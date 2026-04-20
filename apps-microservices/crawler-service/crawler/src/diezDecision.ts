@@ -104,3 +104,99 @@ export const maybeCommitDecision = (): DecisionOutcome => {
 
     return null;
 };
+
+import fs from "node:fs";
+import path from "node:path";
+import { createRequire } from "node:module";
+
+const _require = createRequire(import.meta.url);
+
+const DECISION_FILE = "_diez_decision.json";
+
+/**
+ * Write the decision marker atomically (tmp → rename) with fsync before rename.
+ * Ensures durability on power-loss / OOM-triggered restart.
+ */
+const writeDecisionFile = (
+    storagePath: string,
+    decision: "skipDiez" | "bypassDiez",
+    tier: 1 | 2
+): void => {
+    const c = context.diezClassification;
+    const payload = {
+        decision,
+        tier,
+        committedAt: new Date().toISOString(),
+        counts: {
+            anchor: c.anchor,
+            spa: c.spa,
+            ambiguous: c.ambiguous,
+            total: c.total,
+        },
+    };
+
+    const finalPath = path.join(storagePath, DECISION_FILE);
+    const tmpPath = `${finalPath}.tmp`;
+
+    fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+    // Open with "r+" (read-write) so fsyncSync has a writable fd on all platforms.
+    const fd = fs.openSync(tmpPath, "r+");
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    fs.renameSync(tmpPath, finalPath);
+};
+
+/**
+ * Commit "anchor" decision: strip '#' from already-queued URLs and prevent
+ * future limitDiez accounting by setting skipDiez = true.
+ *
+ * Idempotent: no-op when diezDecisionCommitted is already true.
+ */
+export const commitSkipDiez = (storagePath: string): void => {
+    if (context.diezDecisionCommitted) return;
+
+    const c = context.diezClassification;
+    context.config.skipDiez = true;
+    context.diezDecisionCommitted = true;
+
+    writeDecisionFile(storagePath, "skipDiez", 1);
+
+    console.log(
+        `[diez] Tier 1 decision: skipDiez (anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`
+    );
+
+    // Rewrite already-queued URLs to strip '#'. Lazy require avoids ESM circular dep at load time.
+    try {
+        const { parseJsonFiles, getAllRequestQueues } = _require("./functions.js");
+        const queueName = context.config.crawleeStorageName;
+        const queues: string[] = getAllRequestQueues(queueName);
+        if (Array.isArray(queues) && queues.length > 0) {
+            parseJsonFiles(queues, context.config.skipQuestionMark, true, {
+                toKeep: context.config.toKeep,
+                toRemove: context.config.toRemove,
+            });
+            console.log(`[diez] Rewrote ${queues.length} queued request file(s) to strip '#'.`);
+        }
+    } catch (e) {
+        console.warn(`[diez] Queue rewrite skipped: ${(e as Error).message}`);
+    }
+};
+
+/**
+ * Commit "spa" decision: keep '#' URLs as-is but stop the limitDiez counter
+ * from triggering a stop by setting bypassDiez = true.
+ *
+ * Idempotent: no-op when diezDecisionCommitted is already true.
+ */
+export const commitBypassDiez = (storagePath: string): void => {
+    if (context.diezDecisionCommitted) return;
+
+    const c = context.diezClassification;
+    context.config.bypassDiez = true;
+    context.diezDecisionCommitted = true;
+
+    writeDecisionFile(storagePath, "bypassDiez", 1);
+
+    console.log(
+        `[diez] Tier 1 decision: bypassDiez (anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`
+    );
+};
