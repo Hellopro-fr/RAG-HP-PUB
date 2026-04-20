@@ -864,10 +864,11 @@ class RecommendationService:
             score: top_score,
             details: top_details
         }) AS top_p
-        
-        UNWIND all_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
+
+        // Apply deduplication: return only top_p products (one per fournisseur, max 4)
+        UNWIND top_p AS top_product
+        WITH top_product.product_data AS p_node, top_product.details AS details, top_product.score AS global_score
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score
         """
 
         # Determine projection
