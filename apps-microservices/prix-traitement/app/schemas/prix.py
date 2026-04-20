@@ -62,6 +62,7 @@ class QuestionnaireV2Request(BaseModel):
     nom_categorie: str = Field(..., description="Nom de la catégorie cible")
     texte_prompt: str = Field(..., description="Texte à injecter comme {requete_rag} dans le prompt LLM")
     model: Optional[str] = Field(None, description="Modèle LLM à utiliser (remplace le modèle par défaut si fourni)")
+    id_reponse_q1: Optional[str] = Field(None, description="ID de la réponse Q1")
 
     @field_validator('id_categorie')
     @classmethod

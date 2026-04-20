@@ -32,7 +32,7 @@ def get_tracking_filepath(
     """
     year = datetime.now().strftime("%Y")
     month = datetime.now().strftime("%m")
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     directory = f"{base_dir}/{year}/{month}/"
     ensure_directory(directory)
     filename = f"{timestamp}-tracking-{prefix}-{id_categorie}.txt"
