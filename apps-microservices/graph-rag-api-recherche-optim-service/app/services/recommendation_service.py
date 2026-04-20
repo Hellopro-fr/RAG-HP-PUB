@@ -1739,11 +1739,10 @@ class RecommendationService:
                             carac_entry["unite"] = unite
                         filtered_caracs.append(carac_entry)
 
+            # iter-2 (P3): description placed BEFORE titre so the LLM anchors
+            # on the discriminant technical content instead of a generic label.
             formatted_product = {
                 "id_produit": str(id_produit),
-                "titre": info.get(
-                    "titre_produit", info.get("nom_produit", info.get("titre", ""))
-                ),
                 "description": re.sub(
                     r"\s+",
                     " ",
@@ -1751,6 +1750,9 @@ class RecommendationService:
                         "\xa0", " "
                     ),
                 ).strip(),
+                "titre": info.get(
+                    "titre_produit", info.get("nom_produit", info.get("titre", ""))
+                ),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "type": etat_societe_label,
@@ -1973,26 +1975,33 @@ class RecommendationService:
             
             ## FORMAT DE SORTIE
             Objet JSON valide uniquement, sans texte avant ou après.
-            
+            **Chaque produit DOIT inclure `score` (1 à 4) et `raison` (1 phrase justifiant le score).**
+
             {{
             "top_produits": [
                 {{
                 "rang": 1,
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
+                "score": 4,
+                "raison": "Usage aligné, caractéristiques critiques compatibles"
                 }}
             ],
             "autres_produits": [
                 {{
                 "rang": 3,
                 "id_produit": "XXXXX",
-                "nom": "Nom du produit",     
+                "nom": "Nom du produit",
+                "score": 2,
+                "raison": "Bon univers mais écart sur [critère]"
                 }}
             ],
             "produits_ecartes": [
                 {{
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
+                "score": 1,
+                "raison": "Sous-type incompatible : [type produit] vs [type demandé]"
                 }}
             ]
             }}
