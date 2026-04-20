@@ -69,6 +69,20 @@ export const context = {
     // Set to true once a tier-1 commit has happened OR a persisted decision was loaded at startup.
     // When true, recordClassification is a no-op — we already decided.
     diezDecisionCommitted: false,
+    // Tier-1 observer for limitQuestionMark (see questionMarkDecision.ts + spec 2026-04-17).
+    // Records the domain-specific params that survived Tier-0 stripping. No decisions yet.
+    questionMarkObservations: {
+        // param name → running count of occurrences across URLs pushed to dataset (post-Tier-0)
+        paramFrequency: new Map<string, number>(),
+        // param name → list of full URLs carrying that param, capped at 50 samples per param
+        samplesByParam: new Map<string, string[]>(),
+        // total count of URLs pushed to dataset that STILL contain '?' after Tier-0 processing
+        // (differs from context.countQuestionMark which also counts URLs whose '?' survived)
+        domainSpecificCount: 0,
+    },
+    // Becomes false when the human's skipQuestionMark or bypassQuestionMark is set at crawl start.
+    // When false, recordQuestionMarkObservation is a no-op (human choice wins).
+    questionMarkObservationEnabled: true,
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null,
