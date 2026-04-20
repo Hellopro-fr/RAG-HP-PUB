@@ -1,47 +1,56 @@
+import logging
 from fastapi import APIRouter, HTTPException, status
 from typing import Union
 import uuid
 from app.schemas.comparator import CompareRequest, JobResponse, JobStatus, ComparisonResult, JobListResponse, CapacityResponse
 from app.core.job_manager import job_manager
+from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/start", response_model=Union[JobResponse, ComparisonResult], status_code=status.HTTP_202_ACCEPTED)
 async def start_comparison(request: CompareRequest):
     """
     Starts a new image comparison job.
-    
-    - If `sync` is True: 
+
+    - If `sync` is True:
         - Returns 503 Service Unavailable if local capacity is full (triggering Nginx retry).
         - Otherwise, waits for completion and returns result.
     - If `sync` is False:
         - Always accepts (queues) the job. Returns Job ID.
     """
-    # Generate ID if missing
     job_id = request.job_id or str(uuid.uuid4())
 
     existing_status = await job_manager.get_job_status(job_id)
     if existing_status:
         raise HTTPException(
-            status_code=409, 
+            status_code=409,
             detail=f"Job {job_id} already exists with status: {existing_status.status}"
         )
 
     if request.sync:
-        # Check Local Capacity for Sync requests
-        if job_manager.is_local_full():
+        # Atomic acquire — closes the await-window race that previously let
+        # concurrent requests slip past the capacity check and block on the semaphore.
+        if not job_manager.try_acquire_local_slot():
+            logger.warning(
+                f"Returning 503: local_active={job_manager.local_active_jobs}/"
+                f"{settings.MAX_CONCURRENT_JOBS}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Instance at max capacity. Please retry (triggers Nginx failover)."
             )
-            
+
         try:
-            result = await job_manager.submit_job_sync(job_id, request.images, request.threshold)
-            return result
+            return await job_manager.submit_job_sync(job_id, request.images, request.threshold)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Job failed: {str(e)}")
+        finally:
+            job_manager.release_local_slot()
     else:
-        # Async requests can be queued even if full
         await job_manager.submit_job_async(job_id, request.images, request.threshold)
         return JobResponse(
             message="Comparison job accepted and started.",

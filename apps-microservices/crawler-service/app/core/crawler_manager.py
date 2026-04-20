@@ -8,6 +8,7 @@ import tempfile
 import shutil
 import threading
 import time
+import uuid
 import anyio
 import tarfile
 import hashlib
@@ -143,10 +144,15 @@ class CrawlerManager:
         lock_key = f"{CRAWL_LOCK_PREFIX}{crawl_id}"
         job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
 
-        # Build job data early (pid will be patched after spawn)
+        # Build job data early (pid will be patched after spawn).
+        # last_heartbeat is set to now() immediately so concurrent reconciliation
+        # on other replicas sees a fresh heartbeat — preventing the 60s blind
+        # window between start_crawl and the first monitor-loop tick.
+        now = datetime.utcnow()
         job_data = {
             "crawl_id": crawl_id, "status": "starting", "domain": domain,
-            "start_url": start_url, "start_time": datetime.utcnow(),
+            "start_url": start_url, "start_time": now,
+            "last_heartbeat": now,
             "storage_path": job_storage_path,
             "callback_url": callback_url,
             "failure_callback_url": failure_callback_url, "pid": None,
@@ -359,17 +365,25 @@ class CrawlerManager:
             except Exception as e:
                 logger.warning(f"Could not write completion marker for OOM max-restart '{crawl_id}': {e}")
 
+            # Generate request_id before set_json so the UUID is persisted in the
+            # same Redis write. Reconciliation/retries read the same UUID later
+            # and PHP dedupes → no duplicate processing.
+            request_id = None
+            if job_info.get("failure_callback_url"):
+                request_id = self._get_or_create_failure_request_id(job_info)
+
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
 
-            if job_info.get("failure_callback_url"):
+            if request_id:
                 asyncio.create_task(self._send_failure_webhook(
                     str(job_info["failure_callback_url"]),
                     crawl_id,
                     job_info["domain"],
                     -1, # Special exit code for max restart fail
-                    job_info.get("crawl_mode", "standard")
+                    job_info.get("crawl_mode", "standard"),
+                    request_id=request_id,
                 ))
             return
 
@@ -413,17 +427,62 @@ class CrawlerManager:
             except Exception as marker_err:
                 logger.warning(f"Could not write completion marker for OOM relaunch failure '{crawl_id}': {marker_err}")
 
+            # Generate request_id before set_json so the UUID is persisted in the
+            # same Redis write. Reconciliation/retries read the same UUID later
+            # and PHP dedupes → no duplicate processing.
+            request_id = None
+            if job_info.get("failure_callback_url"):
+                request_id = self._get_or_create_failure_request_id(job_info)
+
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
-            if job_info.get("failure_callback_url"):
+            if request_id:
                 asyncio.create_task(self._send_failure_webhook(
                     str(job_info["failure_callback_url"]),
                     crawl_id,
                     job_info["domain"],
                     -1,
-                    job_info.get("crawl_mode", "standard")
+                    job_info.get("crawl_mode", "standard"),
+                    request_id=request_id,
                 ))
+
+    def _get_or_create_failure_request_id(self, job_info: dict) -> str:
+        """Returns the failure webhook's request_id, generating + persisting one if absent.
+
+        The UUID is stored in job_info so every retry path (shutdown, reconciliation,
+        OOM max-restarts, monitor, force-finish) uses the same value. PHP dedupes by
+        request_id, guaranteeing single processing regardless of how many times we send.
+
+        NOTE: the caller is responsible for persisting job_info back to Redis via
+        cache_service.set_json — this helper only mutates the in-memory dict.
+        """
+        rid = job_info.get("failure_webhook_request_id")
+        if rid:
+            return rid
+        rid = str(uuid.uuid4())
+        job_info["failure_webhook_request_id"] = rid
+        return rid
+
+    async def _send_webhook_once(self, url: str, params: dict, crawl_id: str,
+                                  webhook_type: str, timeout: float = 5.0) -> bool:
+        """Single-attempt webhook send with a custom timeout.
+
+        Used by the shutdown path to bound worst-case time. Does NOT retry and does
+        NOT store in FAILED_CALLBACKS_KEY on failure — reconciliation will replay
+        using the same request_id from job_info, and PHP dedupes.
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=timeout)
+                if 200 <= response.status_code < 300:
+                    logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (shutdown). Status: {response.status_code}")
+                    return True
+                logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' got {response.status_code} during shutdown")
+                return False
+        except httpx.RequestError as e:
+            logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' failed during shutdown: {e}")
+            return False
 
     async def _send_webhook_with_retry(self, url: str, params: dict, crawl_id: str, webhook_type: str):
         """
@@ -567,7 +626,10 @@ class CrawlerManager:
 
         await self._send_webhook_with_retry(str(callback_url), params, crawl_id, "success")
 
-    async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int, crawl_mode: str = "standard"):
+    async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int,
+                                    crawl_mode: str = "standard",
+                                    request_id: Optional[str] = None,
+                                    shutdown: bool = False):
         # We process failures for both standard and update modes now
         # Determine message_erreur_crawling from context
         error_message = ""
@@ -583,14 +645,22 @@ class CrawlerManager:
             error_message = f"Processus terminé par signal {abs(exit_code)}"  # Signal-killed
         elif exit_code not in (0, 2, 3, 4, -1, 137):
             error_message = f"Erreur inattendue (code de sortie: {exit_code})"
-        
+
         params = {
             "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
             "timestamp": datetime.utcnow().isoformat(),
             "message_erreur_crawling": error_message
         }
-        
-        await self._send_webhook_with_retry(url, params, crawl_id, "failure")
+        if request_id:
+            params["request_id"] = request_id
+
+        if shutdown:
+            # Bounded shutdown path: 5-second timeout, no retries.
+            # Delivery failure is acceptable — reconciliation replays with the same
+            # request_id, PHP dedupes, no duplicate processing.
+            await self._send_webhook_once(url, params, crawl_id, "failure", timeout=5.0)
+        else:
+            await self._send_webhook_with_retry(url, params, crawl_id, "failure")
 
     async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped"):
         """
@@ -790,12 +860,15 @@ class CrawlerManager:
                 asyncio.create_task(self._send_success_webhook(job_info))
             elif not is_success and job_info.get("failure_callback_url"):
                 logger.info(f"Crawl '{crawl_id}' failed. Triggering failure webhook.")
+                request_id = self._get_or_create_failure_request_id(job_info)
+                await cache_service.set_json(job_key, job_info)
                 asyncio.create_task(self._send_failure_webhook(
                     str(job_info["failure_callback_url"]),
                     crawl_id,
                     job_info["domain"],
                     exit_code,
-                    job_info.get("crawl_mode", "standard")
+                    job_info.get("crawl_mode", "standard"),
+                    request_id=request_id,
                 ))
 
             # --- CLEANUP RESTORED PREVIOUS CRAWL DATA ---
@@ -901,12 +974,15 @@ class CrawlerManager:
 
         # Use appropriate webhook based on target status
         if target_status == "failed" and job_info.get("failure_callback_url"):
+            request_id = self._get_or_create_failure_request_id(job_info)
+            await cache_service.set_json(job_key, job_info)
             asyncio.create_task(self._send_failure_webhook(
                 str(job_info["failure_callback_url"]),
                 crawl_id,
                 job_info.get("domain", "unknown"),
                 -1,  # Force-finish exit code
-                job_info.get("crawl_mode", "standard")
+                job_info.get("crawl_mode", "standard"),
+                request_id=request_id,
             ))
         else:
             asyncio.create_task(self._send_stop_webhook(job_info, target_status))
@@ -1330,6 +1406,14 @@ class CrawlerManager:
                 if "last_heartbeat" in job_info:
                     del job_info["last_heartbeat"]
 
+                # Generate request_id before set_json so the UUID is persisted in the
+                # same Redis write. Reconciliation/retries read the same UUID later
+                # and PHP dedupes → no duplicate processing.
+                if job_info.get("failure_callback_url"):
+                    failure_request_id = self._get_or_create_failure_request_id(job_info)
+                else:
+                    failure_request_id = None
+
                 await cache_service.set_json(job_key, job_info)
                 await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
                 logger.info(f"Marked job '{crawl_id}' as 'failed' in Redis. Lock released.")
@@ -1341,16 +1425,20 @@ class CrawlerManager:
 
                 logger.info(f"Decremented global running counter for job '{crawl_id}'.")
 
-                # 4. Send failure webhook
-                if job_info.get("failure_callback_url"):
-                    logger.info(f"Sending failure webhook for job '{crawl_id}'.")
-                    # Use a special exit code like -1 for shutdown
+                # 4. Send failure webhook (bounded shutdown path: 5s timeout, single attempt)
+                if failure_request_id:
+                    logger.info(f"Sending failure webhook for job '{crawl_id}' (shutdown path).")
+                    # shutdown=True routes through _send_webhook_once (5s timeout, no retry).
+                    # If delivery fails here, reconciliation replays with the same request_id
+                    # and PHP dedupes by request_id — no duplicate processing.
                     await self._send_failure_webhook(
                         str(job_info["failure_callback_url"]),
                         crawl_id,
                         job_info["domain"],
                         -1,
-                        job_info.get("crawl_mode", "standard")
+                        job_info.get("crawl_mode", "standard"),
+                        request_id=failure_request_id,
+                        shutdown=True,
                     )
             else:
                  logger.warning(f"Could not find job '{crawl_id}' in Redis during shutdown or it was not in 'running' state.")
@@ -1376,6 +1464,76 @@ class CrawlerManager:
 
         self.local_processes.clear()
         logger.info("Graceful shutdown complete for this replica.")
+
+    def _estimate_archive_required_bytes(self, job_storage_path: str) -> int:
+        """Walk the source directory, sum file sizes, return size * 1.5 (gzip + safety margin).
+        Returns 0 on any error — the caller is expected to apply a floor (1 GB).
+        Fail-open: never raises."""
+        try:
+            if not os.path.isdir(job_storage_path):
+                logger.warning(f"Source dir not found for size estimation: '{job_storage_path}'")
+                return 0
+            total = 0
+            for root, _dirs, files in os.walk(job_storage_path):
+                for name in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root, name))
+                    except OSError:
+                        continue  # broken symlink or permission denied; skip
+            return int(total * 1.5)
+        except Exception as e:
+            logger.warning(f"Could not estimate required bytes for '{job_storage_path}': {e}")
+            return 0
+
+    def _get_archives_disk_state(self, archives_dir: str) -> dict:
+        """Collect diagnostics about the archives volume.
+        Returns a dict with free_bytes, total_bytes, used_pct, file_count,
+        oldest_file_age_seconds. Fail-open: on any error, returns a degraded dict
+        with None values and logs a warning (never raises)."""
+        degraded = {
+            "free_bytes": None,
+            "total_bytes": None,
+            "used_pct": None,
+            "file_count": None,
+            "oldest_file_age_seconds": None,
+        }
+        try:
+            usage = shutil.disk_usage(archives_dir)
+            total_bytes = usage.total
+            free_bytes = usage.free
+            used_pct = round(100.0 * (total_bytes - free_bytes) / total_bytes, 2) if total_bytes else None
+
+            file_count = 0
+            oldest_mtime = None
+            try:
+                for name in os.listdir(archives_dir):
+                    if not name.endswith(".tar.gz"):
+                        continue
+                    path = os.path.join(archives_dir, name)
+                    if not os.path.isfile(path):
+                        continue  # skip dirs like .staging/
+                    file_count += 1
+                    try:
+                        mtime = os.path.getmtime(path)
+                        if oldest_mtime is None or mtime < oldest_mtime:
+                            oldest_mtime = mtime
+                    except OSError:
+                        continue
+            except FileNotFoundError:
+                pass  # archives_dir doesn't exist yet; count stays 0
+
+            oldest_age = int(time.time() - oldest_mtime) if oldest_mtime is not None else None
+
+            return {
+                "free_bytes": free_bytes,
+                "total_bytes": total_bytes,
+                "used_pct": used_pct,
+                "file_count": file_count,
+                "oldest_file_age_seconds": oldest_age,
+            }
+        except Exception as e:
+            logger.warning(f"Could not get disk state for '{archives_dir}': {e}")
+            return degraded
 
     async def archive_crawl(self, job_info: dict) -> dict:
         """
@@ -1449,6 +1607,31 @@ class CrawlerManager:
                 # Archive not in GCS (502/504) — proceed with normal archiving
                 logger.info(f"Archive for '{crawl_id}' not found in GCS. Proceeding with fresh archiving.")
 
+            # --- PRE-FLIGHT DISK SPACE CHECK ---
+            # Measure the source directory, check free space on /app/archives/, reject
+            # with 503 if insufficient. Fail-open if measurement itself fails.
+            baseline_state = self._get_archives_disk_state(archives_dir)
+            logger.info(f"Archive disk state for '{crawl_id}': {baseline_state}")
+
+            required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+            required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+
+            if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                logger.warning(
+                    f"Rejecting archive '{crawl_id}': insufficient disk space. "
+                    f"Required: {required_bytes} bytes, Available: {baseline_state['free_bytes']} bytes. "
+                    f"Disk state: {baseline_state}"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error_code": "INSUFFICIENT_DISK_SPACE",
+                        "required_bytes": required_bytes,
+                        "available_bytes": baseline_state["free_bytes"],
+                        "disk_state": baseline_state,
+                    },
+                )
+
             # Save current status snapshot before archiving (critical: dataset files will be deleted)
             try:
                 current_status = await self.get_status(job_info)
@@ -1466,32 +1649,41 @@ class CrawlerManager:
 
             try:
                 def _create_archive():
-                    """Create tar.gz archive in shared volume.
-                    Uses a .tmp extension during creation to prevent the upload daemon
-                    from picking up a partially written file. Atomic rename at the end."""
+                    """Create tar.gz archive in a staging subdirectory, then atomically
+                    move to the final location. The upload daemon uses `find -maxdepth 1`,
+                    so it never sees the staging dir — preventing the race where the
+                    daemon uploads (and deletes) a partial tmp file."""
+                    staging_dir = os.path.join(archives_dir, ".staging")
+                    os.makedirs(staging_dir, exist_ok=True)
                     os.makedirs(archives_dir, exist_ok=True)
-                    tmp_base_name = os.path.join(archives_dir, f"{crawl_id}.tmp")
+
+                    staging_base = os.path.join(staging_dir, crawl_id)
                     final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
+                    staging_path = None
 
-                    # Write to .tmp.tar.gz (daemon only watches *.tar.gz, not *.tmp.tar.gz)
-                    tmp_path = shutil.make_archive(tmp_base_name, 'gztar', root_dir=job_storage_path)
-                    archive_size = os.path.getsize(tmp_path)
-                    if archive_size == 0:
-                        os.remove(tmp_path)
-                        raise RuntimeError(f"Archive at '{tmp_path}' is empty (0 bytes).")
-
-                    # Verify archive is readable before renaming
                     try:
-                        with tarfile.open(tmp_path, 'r:gz') as t:
+                        # Create archive in staging dir (hidden from daemon)
+                        staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
+                        archive_size = os.path.getsize(staging_path)
+                        if archive_size == 0:
+                            raise RuntimeError(f"Archive at '{staging_path}' is empty (0 bytes).")
+
+                        # Verify archive is readable
+                        with tarfile.open(staging_path, 'r:gz') as t:
                             t.getnames()  # Force read of the archive index
-                    except Exception as e:
-                        os.remove(tmp_path)
-                        raise RuntimeError(f"Archive integrity check failed: {e}")
 
-                    # Atomic rename to final path — daemon can now pick it up safely
-                    os.rename(tmp_path, final_target)
+                        # Atomic rename to final path — same filesystem, always atomic
+                        os.rename(staging_path, final_target)
+                        staging_path = None  # Successfully moved; skip cleanup
 
-                    return final_target, archive_size
+                        return final_target, archive_size
+                    finally:
+                        # Clean up staging file on any failure (disk full, corrupt, 0 bytes, etc.)
+                        if staging_path and os.path.exists(staging_path):
+                            try:
+                                os.remove(staging_path)
+                            except OSError:
+                                pass
 
                 def _cleanup_local_data():
                     """Remove crawl data files, keeping only logs and markers."""
@@ -1531,6 +1723,12 @@ class CrawlerManager:
 
             except Exception as e:
                 logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+                # Log disk state at failure so we can correlate with the baseline log
+                try:
+                    post_failure_state = self._get_archives_disk_state(archives_dir)
+                    logger.error(f"Archive disk state at failure for '{crawl_id}': {post_failure_state}")
+                except Exception:
+                    pass
                 raise HTTPException(
                     status_code=500, detail=f"Archiving failed: {str(e)}")
         finally:
@@ -1631,8 +1829,47 @@ class CrawlerManager:
 
     async def reconcile_jobs(self):
         """
+        Public wrapper: leader election + delegate to _reconcile_locked.
+
+        Only one replica runs reconciliation at a time, chosen via a Redis
+        SET NX lock. Without this, multiple replicas race on stale jobs and
+        each fires duplicate failure webhooks.
+        """
+        leader_lock_key = "reconcile_leader_lock"
+        my_replica_id = os.uname().nodename
+        # TTL is 2x the reconciliation interval — enough safety margin to survive
+        # a slow scan, and short enough to recover if the leader dies mid-scan.
+        lock_ttl = settings.RECONCILIATION_INTERVAL_SECONDS * 2
+        acquired = await cache_service.redis_client.set(
+            leader_lock_key, my_replica_id, nx=True, ex=lock_ttl
+        )
+        if not acquired:
+            logger.debug("Reconciliation skipped: another replica holds the leader lock.")
+            return
+
+        try:
+            await self._reconcile_locked()
+        finally:
+            # Ownership-safe release: only delete the lock if we still own it.
+            # This prevents a replica from releasing a lock that TTL-expired and
+            # was re-acquired by a different replica during a long-running scan.
+            try:
+                current_owner = await cache_service.redis_client.get(leader_lock_key)
+                if isinstance(current_owner, bytes):
+                    current_owner = current_owner.decode()
+                if current_owner == my_replica_id:
+                    await cache_service.redis_client.delete(leader_lock_key)
+            except Exception as release_err:
+                logger.warning(f"Could not release reconciliation leader lock: {release_err}")
+
+    async def _reconcile_locked(self):
+        """
         Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
         marks them as failed, and corrects the global running jobs counter.
+
+        This is the actual reconciliation logic. It is called by the public
+        `reconcile_jobs` wrapper only after the leader lock has been acquired —
+        so the scan runs on exactly one replica at a time.
         """
         logger.info("Starting job reconciliation...")
 
@@ -1695,13 +1932,20 @@ class CrawlerManager:
                     else:
                         is_stale = True
 
-                    # Local job override: if process is alive locally, skip stale detection
-                    if is_stale and is_local_job and status != "stopping":
-                        if crawl_id in self.local_processes:
-                            proc = self.local_processes[crawl_id]
-                            if proc.returncode is None:
-                                logger.info(f"Job '{crawl_id}' heartbeat is stale but local process is alive (PID {proc.pid}). Skipping stale detection.")
-                                is_stale = False
+                    # Local process override: if our replica owns the live subprocess,
+                    # skip stale detection — regardless of what Redis says about
+                    # replica_id. Another replica may have overwritten our state with
+                    # stale fields during a write race, but self.local_processes is
+                    # the authoritative source for "is this process alive on this replica".
+                    if is_stale and status != "stopping" and crawl_id in self.local_processes:
+                        proc = self.local_processes[crawl_id]
+                        if proc.returncode is None:
+                            logger.info(
+                                f"Job '{crawl_id}' heartbeat is stale in Redis but local process "
+                                f"is alive (PID {proc.pid}, replica_id in Redis: {job_replica_id}). "
+                                f"Skipping stale detection."
+                            )
+                            is_stale = False
 
                     if is_stale:
                         # Branch based on status: stopping jobs are cleaned up silently,
@@ -1752,19 +1996,29 @@ class CrawlerManager:
                             except Exception as marker_err:
                                 logger.warning(f"Could not write completion marker for stale job '{crawl_id}': {marker_err}")
 
-                        # Release distributed lock and update state document
+                        # Release distributed lock and update state document.
+                        # Generate request_id before set_json so the UUID is persisted
+                        # in the same Redis write. PHP dedupes against any prior attempt
+                        # (e.g., from the shutdown path on the dying replica).
+                        reconcile_request_id = None
+                        if not is_stopping and job_data.get("failure_callback_url"):
+                            reconcile_request_id = self._get_or_create_failure_request_id(job_data)
+
                         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
                         await cache_service.set_json(all_job_keys[i], job_data)
                         await self._publish_update(crawl_id, final_status)
 
-                        # Only send failure webhook for non-stopping jobs
-                        if not is_stopping and job_data.get("failure_callback_url"):
+                        # Only send failure webhook for non-stopping jobs.
+                        # Use the persisted request_id so PHP dedupes against any prior
+                        # attempt (e.g., from the shutdown path on the dying replica).
+                        if reconcile_request_id:
                             asyncio.create_task(self._send_failure_webhook(
                                 str(job_data["failure_callback_url"]),
                                 crawl_id,
                                 job_data.get("domain", "unknown"),
                                 -1,
-                                job_data.get("crawl_mode", "standard")
+                                job_data.get("crawl_mode", "standard"),
+                                request_id=reconcile_request_id,
                             ))
 
                         stale_jobs_count += 1

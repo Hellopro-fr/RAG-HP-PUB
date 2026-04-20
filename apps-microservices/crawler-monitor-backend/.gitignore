@@ -1,0 +1,4 @@
+# Test-run artefacts — synthetic job directories created by tests/helpers/fixture.js.
+# Normally removed by teardownFixture(), but Windows EBUSY races during parallel
+# teardown can leave stragglers. Ignore wholesale so they never enter history.
+tests/fixtures/
