@@ -79,7 +79,7 @@ export const applyCliFlagGuard = (): void => {
  * Phase 1 values: "escalated" | "unused" | "observed".
  * Phase 2 will add "tier2-resolved" when content comparison commits params.
  */
-export const getQuestionMarkDecisionMode = (isError?: string): string => {
+export const getQuestionMarkDecisionMode = (isError?: string): "escalated" | "unused" | "observed" => {
     if (isError === "limitQuestionMark") return "escalated";
     if (!context.questionMarkObservationEnabled) return "unused";
     if (context.questionMarkObservations.domainSpecificCount === 0) return "unused";

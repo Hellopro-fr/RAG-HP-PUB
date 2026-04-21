@@ -117,6 +117,14 @@ test("applyCliFlagGuard: bypassQuestionMark set → observation disabled", () =>
     assert.equal(context.questionMarkObservationEnabled, false);
 });
 
+test("applyCliFlagGuard: both flags set → observation disabled", () => {
+    resetContextState();
+    context.config.skipQuestionMark = true;
+    context.config.bypassQuestionMark = true;
+    applyCliFlagGuard();
+    assert.equal(context.questionMarkObservationEnabled, false);
+});
+
 test("getQuestionMarkDecisionMode: isError=limitQuestionMark → escalated", () => {
     resetContextState();
     assert.equal(getQuestionMarkDecisionMode("limitQuestionMark"), "escalated");
@@ -136,6 +144,7 @@ test("getQuestionMarkDecisionMode: no ? URLs observed → unused", () => {
 test("getQuestionMarkDecisionMode: observation ran with samples → observed", () => {
     resetContextState();
     recordQuestionMarkObservation("https://example.com/page?ref=promo");
+    assert.equal(context.questionMarkObservations.domainSpecificCount, 1);
     assert.equal(getQuestionMarkDecisionMode(undefined), "observed");
 });
 
