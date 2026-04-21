@@ -94,6 +94,16 @@ func TestHandleRotateCredentials_NilDeps_Returns503(t *testing.T) {
 	}
 }
 
+func TestHandleDeleteInstance_NilDeps_Returns503(t *testing.T) {
+	h := &Handler{}
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/template-instances/abc", nil)
+	rec := httptest.NewRecorder()
+	h.handleDeleteInstance(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("got %d", rec.Code)
+	}
+}
+
 func TestToTemplateResponse_PreservesFields(t *testing.T) {
 	tmpl := db.Template{
 		Slug:         "google-sheets",

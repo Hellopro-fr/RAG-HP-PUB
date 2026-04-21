@@ -467,6 +467,34 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rotating"})
 }
 
+func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
+	if h.instanceRepo == nil || h.runner == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
+		return
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/template-instances/"), "/")
+	if id == "" || strings.Contains(id, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := h.instanceRepo.GetByID(id); err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+		return
+	}
+	// 1) Kill runner subprocess first (idempotent on runner side — a 404 from runner is OK;
+	//    the instance may have already been cleaned up or never spawned successfully).
+	if err := h.runner.Kill(r.Context(), id); err != nil {
+		log.Printf("[templates][WARN] runner kill failed for %s: %v (continuing with DB delete)", id, err)
+	}
+	// 2) Transactional delete of template_instances + mcp_servers.
+	if err := h.instanceRepo.DeleteWithMCPServer(id); err != nil {
+		log.Printf("[templates] DB delete failed for %s: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "delete failed"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // extractInstanceID pulls the {id} out of /api/v1/template-instances/{id}<suffix>.
 // Example: extractInstanceID("/api/v1/template-instances/abc-123/restart", "/restart") == "abc-123".
 // Returns "" when the path has no ID component (e.g. "/api/v1/template-instances" or
