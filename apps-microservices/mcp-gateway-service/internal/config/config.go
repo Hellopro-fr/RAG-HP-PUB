@@ -50,6 +50,10 @@ type Config struct {
 	// /api/v1/leexi/* proxy and the Leexi-scoped token filters.
 	LeexiInternalURL string // LEEXI_INTERNAL_URL
 	LeexiAdminToken  string // LEEXI_ADMIN_TOKEN
+
+	// Google templates runner (mcp-google-templates-runner sidecar).
+	GoogleTemplatesRunnerURL        string // GOOGLE_TEMPLATES_RUNNER_URL
+	GoogleTemplatesRunnerAdminToken string // GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN
 }
 
 func Load() *Config {
@@ -122,6 +126,9 @@ func Load() *Config {
 
 		LeexiInternalURL: os.Getenv("LEEXI_INTERNAL_URL"),
 		LeexiAdminToken:  os.Getenv("LEEXI_ADMIN_TOKEN"),
+
+		GoogleTemplatesRunnerURL:        os.Getenv("GOOGLE_TEMPLATES_RUNNER_URL"),
+		GoogleTemplatesRunnerAdminToken: os.Getenv("GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN"),
 	}
 }
 
