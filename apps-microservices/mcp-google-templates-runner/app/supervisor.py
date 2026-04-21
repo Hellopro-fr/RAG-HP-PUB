@@ -70,7 +70,11 @@ class Supervisor:
                 # Spawn-on-existing = restart-with-possibly-new-spec
                 await self._kill_locked(spec.instance_id, release_port=False)
             port = self._pool.allocate()
-            cred_path = self._creds.write(spec.instance_id, spec.credentials_json)
+            try:
+                cred_path = self._creds.write(spec.instance_id, spec.credentials_json)
+            except Exception:
+                self._pool.release(port)
+                raise
             inst = RunningInstance(
                 instance_id=spec.instance_id,
                 template_slug=spec.template_slug,
@@ -92,6 +96,20 @@ class Supervisor:
         # Give the supervisor a moment to launch
         await asyncio.sleep(0.1)
         return inst
+
+    async def _release_failed(self, instance_id: str) -> None:
+        """Pop the instance, release its port, and shred credentials.
+
+        Called by _supervise when the supervise loop terminates with status=failed
+        (binary missing, flapping). Without this, the port would stay allocated and
+        the credentials file would stay on disk until explicit kill().
+        """
+        async with self._lock:
+            inst = self._instances.pop(instance_id, None)
+            if not inst:
+                return
+            self._pool.release(inst.port)
+            self._creds.shred(inst.instance_id)
 
     async def kill(self, instance_id: str) -> None:
         async with self._lock:
@@ -159,6 +177,7 @@ class Supervisor:
                 inst.last_error = f"spawn failed: {e}"
                 inst.status = "failed"
                 logger.error("instance %s: %s", inst.instance_id, inst.last_error)
+                await self._release_failed(inst.instance_id)
                 return
 
             inst.process = proc
@@ -182,11 +201,16 @@ class Supervisor:
             inst.last_error = f"exit {exit_code}; stderr tail:\n{tail}"
             logger.warning("instance %s exited: %s", inst.instance_id, inst.last_error)
 
-            # Flapping detection
+            # Flapping detection. Note: uptime here is the last spawn's lifetime;
+            # exit_count is cumulative across respawns. Effective rule: "latest run
+            # was short AND we've crashed at least THRESHOLD times total (modulo
+            # healthy-resets)". Not a true rolling time window — good enough for
+            # catching wedged configurations without over-engineering.
             uptime = time.monotonic() - inst.started_at
             if uptime < self.FLAPPING_WINDOW_SEC and inst.exit_count >= self.FLAPPING_THRESHOLD:
                 inst.status = "failed"
                 inst.desired_state = "stopped"
+                await self._release_failed(inst.instance_id)
                 return
 
             # Healthy long-run resets backoff and exit counter
