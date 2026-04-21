@@ -20,9 +20,26 @@
       link-label="Voir la documentation"
     />
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
+    <!-- Loading skeleton -->
+    <div v-if="loading" class="animate-pulse" aria-hidden="true">
+      <div class="mb-8">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-lg bg-gray-200 dark:bg-gray-800" />
+          <div class="flex-1">
+            <div class="h-7 w-1/3 rounded bg-gray-200 dark:bg-gray-800 mb-2" />
+            <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+      </div>
+      <div class="space-y-4">
+        <div v-for="i in 4" :key="i" class="flex gap-3">
+          <div class="flex-shrink-0 w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-800" />
+          <div class="flex-1 pt-0.5">
+            <div class="h-4 w-1/4 rounded bg-gray-200 dark:bg-gray-800 mb-2" />
+            <div class="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Not found -->

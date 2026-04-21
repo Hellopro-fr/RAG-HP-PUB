@@ -24,9 +24,26 @@
       link-label="Voir la documentation"
     />
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
+    <!-- Loading skeleton -->
+    <div v-if="loading" class="animate-pulse" aria-hidden="true">
+      <section v-for="section in 2" :key="section" class="mb-10">
+        <div class="h-6 w-48 rounded bg-gray-200 dark:bg-gray-800 mb-2" />
+        <div class="h-3 w-80 max-w-full rounded bg-gray-100 dark:bg-gray-800 mb-5" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div
+            v-for="i in 3"
+            :key="i"
+            class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 p-5"
+          >
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-800" />
+              <div class="h-5 w-24 rounded bg-gray-200 dark:bg-gray-800" />
+            </div>
+            <div class="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800 mb-2" />
+            <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+      </section>
     </div>
 
     <template v-else>
