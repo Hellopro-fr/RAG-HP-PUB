@@ -340,7 +340,8 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
                 for equiv in equivalences:
                     if isinstance(equiv, dict):
                         id_c = equiv.get("id_caracteristique")
-                        if id_c:
+                        poids = equiv.get("poids")
+                        if id_c and poids == "critique":
                             list_carac_equiv.append(str(id_c))
                     else:
                         logger.warning(f"[{id_categorie}] Équivalence non valide pour la réponse '{reponse}' (id={id_reponse}): {equivalences}")
