@@ -66,6 +66,9 @@ func (r *InstanceRepo) Create(inst *db.TemplateInstance, credentialsPlain []byte
 // GetByIDWithCredentials returns the instance along with the decrypted SA JSON.
 // Callers that do not need the secret should use GetByID instead.
 func (r *InstanceRepo) GetByIDWithCredentials(id string) (*db.TemplateInstance, []byte, error) {
+	if r.encryptor == nil {
+		return nil, nil, fmt.Errorf("encryptor required for template instances")
+	}
 	var inst db.TemplateInstance
 	if err := r.db.First(&inst, "id = ?", id).Error; err != nil {
 		return nil, nil, err
@@ -110,19 +113,36 @@ func (r *InstanceRepo) UpdateStatus(id, status, lastError string, port *int) err
 	if port != nil {
 		updates["runner_port"] = *port
 	}
-	return r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Updates(updates).Error
+	result := r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // UpdateCredentials re-encrypts and stores a new SA JSON + its hash.
 func (r *InstanceRepo) UpdateCredentials(id string, credentialsPlain []byte, hashHex string) error {
+	if r.encryptor == nil {
+		return fmt.Errorf("encryptor required for template instances")
+	}
 	ct, err := r.encryptor.Encrypt(credentialsPlain)
 	if err != nil {
 		return fmt.Errorf("encrypt: %w", err)
 	}
-	return r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Updates(map[string]any{
+	result := r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Updates(map[string]any{
 		"encrypted_credentials": ct,
 		"credentials_hash":      hashHex,
-	}).Error
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // DeleteWithMCPServer removes both the template_instances row and its linked

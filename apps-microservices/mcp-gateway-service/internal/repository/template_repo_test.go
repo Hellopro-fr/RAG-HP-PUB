@@ -117,6 +117,8 @@ func TestTemplateRepo_GetBySlug_NotFound(t *testing.T) {
 	}
 }
 
+// newTestEncryptor returns an Encryptor with a deterministic test-only key.
+// Not used in production.
 func newTestEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
 	// 32-byte hex key
@@ -156,5 +158,84 @@ func TestInstanceRepo_CreateRoundTrip(t *testing.T) {
 	}
 	if string(plaintext) != string(credJSON) {
 		t.Errorf("plaintext round-trip failed")
+	}
+	if len(got.EncryptedCredentials) == 0 {
+		t.Error("EncryptedCredentials is empty — encryption didn't run")
+	}
+	if string(got.EncryptedCredentials) == string(credJSON) {
+		t.Error("EncryptedCredentials equals plaintext — encryption silently bypassed")
+	}
+}
+
+func TestInstanceRepo_DeleteWithMCPServer(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	enc := newTestEncryptor(t)
+	repo := NewInstanceRepo(gdb, enc)
+
+	instID := uuid.New().String()
+	serverID := uuid.New().String()
+
+	// Seed an mcp_servers row that the instance will reference
+	if err := gdb.Exec(
+		"INSERT INTO mcp_servers (id, name, url) VALUES (?, ?, ?)",
+		serverID, "test-srv", "http://test",
+	).Error; err != nil {
+		t.Fatalf("seed mcp_server: %v", err)
+	}
+
+	// Seed the instance via repo.Create
+	inst := &db.TemplateInstance{
+		ID:              instID,
+		TemplateSlug:    "ga",
+		Name:            "to-delete",
+		CredentialsHash: "h",
+		MCPServerID:     serverID,
+		RunnerStatus:    "running",
+	}
+	if err := repo.Create(inst, []byte(`{"type":"service_account"}`)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Delete
+	if err := repo.DeleteWithMCPServer(instID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Both rows should be gone
+	if _, err := repo.GetByID(instID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("instance should be gone, got err %v", err)
+	}
+	var cnt int64
+	gdb.Raw("SELECT COUNT(*) FROM mcp_servers WHERE id = ?", serverID).Scan(&cnt)
+	if cnt != 0 {
+		t.Errorf("mcp_server should be gone, count = %d", cnt)
+	}
+}
+
+func TestInstanceRepo_DeleteWithMCPServer_MissingServer(t *testing.T) {
+	// The instance's MCPServerID points to a non-existent mcp_servers row.
+	// Delete should still succeed — tx.Delete on a missing row is a no-op in GORM.
+	gdb := newTemplateTestDB(t)
+	enc := newTestEncryptor(t)
+	repo := NewInstanceRepo(gdb, enc)
+
+	instID := uuid.New().String()
+	inst := &db.TemplateInstance{
+		ID:              instID,
+		TemplateSlug:    "ga",
+		Name:            "orphan",
+		CredentialsHash: "h",
+		MCPServerID:     uuid.New().String(), // never inserted
+		RunnerStatus:    "running",
+	}
+	if err := repo.Create(inst, []byte(`{}`)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := repo.DeleteWithMCPServer(instID); err != nil {
+		t.Fatalf("delete orphan: %v", err)
+	}
+	if _, err := repo.GetByID(instID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("instance should be gone, got err %v", err)
 	}
 }
