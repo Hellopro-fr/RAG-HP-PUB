@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { context } from "./context.js";
-import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
+import { recordQuestionMarkObservation, applyCliFlagGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 
 const resetContextState = () => {
     context.questionMarkObservations = {
@@ -85,4 +85,62 @@ test("recordQuestionMarkObservation: param with empty value still recorded", () 
 
     assert.equal(context.questionMarkObservations.paramFrequency.get("ref"), 1);
     assert.equal(context.questionMarkObservations.paramFrequency.get("tab"), 1);
+});
+
+test("applyCliFlagGuard: no flag set → observation stays enabled", () => {
+    resetContextState();
+    context.config.skipQuestionMark = false;
+    context.config.bypassQuestionMark = false;
+
+    applyCliFlagGuard();
+
+    assert.equal(context.questionMarkObservationEnabled, true);
+});
+
+test("applyCliFlagGuard: skipQuestionMark set → observation disabled", () => {
+    resetContextState();
+    context.config.skipQuestionMark = true;
+    context.config.bypassQuestionMark = false;
+
+    applyCliFlagGuard();
+
+    assert.equal(context.questionMarkObservationEnabled, false);
+});
+
+test("applyCliFlagGuard: bypassQuestionMark set → observation disabled", () => {
+    resetContextState();
+    context.config.skipQuestionMark = false;
+    context.config.bypassQuestionMark = true;
+
+    applyCliFlagGuard();
+
+    assert.equal(context.questionMarkObservationEnabled, false);
+});
+
+test("getQuestionMarkDecisionMode: isError=limitQuestionMark → escalated", () => {
+    resetContextState();
+    assert.equal(getQuestionMarkDecisionMode("limitQuestionMark"), "escalated");
+});
+
+test("getQuestionMarkDecisionMode: observation disabled → unused", () => {
+    resetContextState();
+    context.questionMarkObservationEnabled = false;
+    assert.equal(getQuestionMarkDecisionMode(undefined), "unused");
+});
+
+test("getQuestionMarkDecisionMode: no ? URLs observed → unused", () => {
+    resetContextState();
+    assert.equal(getQuestionMarkDecisionMode(undefined), "unused");
+});
+
+test("getQuestionMarkDecisionMode: observation ran with samples → observed", () => {
+    resetContextState();
+    recordQuestionMarkObservation("https://example.com/page?ref=promo");
+    assert.equal(getQuestionMarkDecisionMode(undefined), "observed");
+});
+
+test("getQuestionMarkDecisionMode: escalated takes priority over observed", () => {
+    resetContextState();
+    recordQuestionMarkObservation("https://example.com/page?ref=promo");
+    assert.equal(getQuestionMarkDecisionMode("limitQuestionMark"), "escalated");
 });

@@ -59,3 +59,29 @@ export const recordQuestionMarkObservation = (url: string): void => {
         // else: silently drop additional samples beyond the cap
     }
 };
+
+/**
+ * Called at crawler startup. If the human already set skipQuestionMark or bypassQuestionMark
+ * via the data_crawling_dspi → CLI args chain, disable the observer for this run.
+ * Respects explicit human choices (spec §9.3).
+ */
+export const applyCliFlagGuard = (): void => {
+    if (context.config.skipQuestionMark || context.config.bypassQuestionMark) {
+        context.questionMarkObservationEnabled = false;
+        console.log(
+            `[questionmark] CLI flag present (skipQuestionMark=${context.config.skipQuestionMark} bypassQuestionMark=${context.config.bypassQuestionMark}). Observer disabled.`
+        );
+    }
+};
+
+/**
+ * Compute the questionMarkDecisionMode value for the _callback_payload.json.
+ * Phase 1 values: "escalated" | "unused" | "observed".
+ * Phase 2 will add "tier2-resolved" when content comparison commits params.
+ */
+export const getQuestionMarkDecisionMode = (isError?: string): string => {
+    if (isError === "limitQuestionMark") return "escalated";
+    if (!context.questionMarkObservationEnabled) return "unused";
+    if (context.questionMarkObservations.domainSpecificCount === 0) return "unused";
+    return "observed";
+};
