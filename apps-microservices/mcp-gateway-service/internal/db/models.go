@@ -344,3 +344,43 @@ type UserGoogleToken struct {
 }
 
 func (UserGoogleToken) TableName() string { return "user_google_tokens" }
+
+// Template is the GORM model for the templates catalog (seed data).
+// Rows are managed via migration, never via user input.
+type Template struct {
+	Slug             string          `gorm:"type:varchar(32);primaryKey" json:"slug"`
+	Name             string          `gorm:"type:varchar(128);not null" json:"name"`
+	Description      string          `gorm:"type:text" json:"description"`
+	Icon             string          `gorm:"type:varchar(512);not null;default:''" json:"icon"`
+	StdioCommand     string          `gorm:"type:varchar(256);not null" json:"stdio_command"`
+	StdioArgs        json.RawMessage `gorm:"type:json" json:"stdio_args"`
+	DefaultEnv       json.RawMessage `gorm:"type:json" json:"default_env"`
+	RequiredExtraEnv json.RawMessage `gorm:"type:json" json:"required_extra_env"`
+	ToolPrefix       string          `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
+	Tags             json.RawMessage `gorm:"type:json" json:"tags"`
+	IsActive         bool            `gorm:"not null;default:true;index:idx_template_active" json:"is_active"`
+	CreatedAt        time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt        time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (Template) TableName() string { return "templates" }
+
+// TemplateInstance is one admin-uploaded service-account JSON. Each row backs
+// exactly one running mcp-proxy subprocess in the runner.
+type TemplateInstance struct {
+	ID                   string     `gorm:"type:char(36);primaryKey" json:"id"`
+	TemplateSlug         string     `gorm:"type:varchar(32);not null;index:idx_instance_template" json:"template_slug"`
+	Name                 string     `gorm:"type:varchar(255);not null" json:"name"`
+	EncryptedCredentials []byte     `gorm:"type:blob;not null" json:"-"`
+	CredentialsHash      string     `gorm:"type:char(64);not null" json:"-"`
+	ExtraEnv             json.RawMessage `gorm:"type:json" json:"extra_env,omitempty"`
+	RunnerPort           *int       `gorm:"type:int" json:"runner_port,omitempty"`
+	RunnerStatus         string     `gorm:"type:varchar(16);not null;default:'pending';index:idx_instance_status" json:"runner_status"`
+	RunnerLastError      string     `gorm:"type:text" json:"runner_last_error,omitempty"`
+	MCPServerID          string     `gorm:"type:char(36);not null;uniqueIndex:uq_instance_mcp_server" json:"mcp_server_id"`
+	CreatedBy            string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	CreatedAt            time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt            time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (TemplateInstance) TableName() string { return "template_instances" }
