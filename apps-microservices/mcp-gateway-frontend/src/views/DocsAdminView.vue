@@ -8,71 +8,74 @@
     </div>
 
     <template v-else>
-      <!-- Tabs + Actions bar -->
+      <!-- Action bar -->
+      <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
+        <button
+          v-if="authStore.isAdmin"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+          :disabled="generatingSlugs"
+          @click="handleGenerateSlugs"
+        >
+          <i v-if="generatingSlugs" class="pi pi-spinner pi-spin mr-1" />
+          Generer slugs
+        </button>
+        <button
+          v-if="authStore.isAdmin"
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+          @click="handleBatchExport"
+        >
+          Exporter tout
+        </button>
+        <label
+          v-if="authStore.isAdmin"
+          class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10 cursor-pointer"
+          :class="dragOverBatch ? 'border-brand-400 bg-brand-50 dark:bg-brand-500/10' : ''"
+          @dragover.prevent="dragOverBatch = true"
+          @dragleave="dragOverBatch = false"
+          @drop.prevent="handleBatchDrop"
+        >
+          Importer tout
+          <input ref="batchInput" type="file" accept=".json" class="hidden" @change="handleBatchImport" />
+        </label>
+      </div>
+
+      <!-- Filters -->
+      <FilterPanel
+        :active-count="activeFilterCount"
+        @reset="resetFilters"
+      >
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Nom ou slug</span>
+          <input v-model="filters.search" type="text" placeholder="Rechercher..." class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 placeholder:text-gray-400" />
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Statut</span>
+          <select v-model="filters.status" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option value="published">Publie</option>
+            <option value="draft">Brouillon</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Guide de configuration</span>
+          <select v-model="filters.configGuide" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option value="with">Avec</option>
+            <option value="without">Sans</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Nombre d'outils</span>
+          <select v-model="filters.toolsBucket" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option value="0">Aucun</option>
+            <option value="1-5">1 a 5</option>
+            <option value="6+">6 et plus</option>
+          </select>
+        </label>
+      </FilterPanel>
+
       <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 shadow-theme-xs overflow-hidden">
-        <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
-          <!-- Tabs -->
-          <div class="flex items-center">
-            <button
-              v-for="tab in tabs"
-              :key="tab.value"
-              class="px-5 py-4 text-sm font-medium transition-colors relative"
-              :class="statusFilter === tab.value
-                ? 'text-brand-600 dark:text-brand-400'
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-              @click="statusFilter = tab.value"
-            >
-              {{ tab.label }}
-              <span
-                class="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-medium rounded-full"
-                :class="statusFilter === tab.value
-                  ? 'bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400'
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'"
-              >
-                {{ tab.count }}
-              </span>
-              <span v-if="statusFilter === tab.value" class="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500" />
-            </button>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex items-center gap-3 px-4">
-            <input
-              v-model="search"
-              type="text"
-              placeholder="Rechercher..."
-              class="h-9 w-48 rounded-md border border-gray-300 bg-transparent px-3 py-1.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-            />
-            <button
-              v-if="authStore.isAdmin"
-              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-              :disabled="generatingSlugs"
-              @click="handleGenerateSlugs"
-            >
-              <i v-if="generatingSlugs" class="pi pi-spinner pi-spin mr-1" />
-              Generer slugs
-            </button>
-            <button
-              v-if="authStore.isAdmin"
-              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-              @click="handleBatchExport"
-            >
-              Exporter tout
-            </button>
-            <label
-              v-if="authStore.isAdmin"
-              class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10 cursor-pointer"
-              :class="dragOverBatch ? 'border-brand-400 bg-brand-50 dark:bg-brand-500/10' : ''"
-              @dragover.prevent="dragOverBatch = true"
-              @dragleave="dragOverBatch = false"
-              @drop.prevent="handleBatchDrop"
-            >
-              Importer tout
-              <input ref="batchInput" type="file" accept=".json" class="hidden" @change="handleBatchImport" />
-            </label>
-          </div>
-        </div>
-
         <p v-if="batchError" class="text-xs text-error-500 dark:text-error-400 px-4 pt-3">{{ batchError }}</p>
         <p v-if="batchSuccess" class="text-xs text-success-600 dark:text-success-400 px-4 pt-3">{{ batchSuccess }}</p>
         <table class="w-full text-sm">
@@ -184,7 +187,7 @@
         <!-- Empty -->
         <div v-if="filteredServers.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
           <i class="pi pi-book text-4xl mb-3 block" />
-          <p>Aucun serveur trouvé</p>
+          <p>{{ activeFilterCount > 0 ? 'Aucun serveur ne correspond aux filtres' : 'Aucun serveur trouvé' }}</p>
         </div>
       </div>
     </template>
@@ -192,13 +195,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useServersStore } from '@/stores/servers'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { api } from '@/api/client'
 import { serversApi } from '@/api/servers'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
+import FilterPanel from '@/components/shared/FilterPanel.vue'
 import type { Server } from '@/types/server'
 
 const serversStore = useServersStore()
@@ -206,49 +210,68 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 const loading = ref(true)
-const search = ref('')
-const statusFilter = ref('all')
 const generatingSlugs = ref(false)
 const dragOverBatch = ref(false)
 const batchError = ref('')
 const batchSuccess = ref('')
+
+const filters = reactive({
+  search: '',
+  status: '' as '' | 'published' | 'draft',
+  configGuide: '' as '' | 'with' | 'without',
+  toolsBucket: '' as '' | '0' | '1-5' | '6+',
+})
 
 onMounted(async () => {
   await serversStore.fetchServers()
   loading.value = false
 })
 
-const tabs = computed(() => {
-  const all = serversStore.servers
-  const published = all.filter(s => s.is_active && !!s.doc_slug)
-  const draft = all.filter(s => !s.is_active || !s.doc_slug)
-  return [
-    { label: 'Tous', value: 'all', count: all.length },
-    { label: 'Publie', value: 'published', count: published.length },
-    { label: 'Brouillon', value: 'draft', count: draft.length },
-  ]
-})
-
 function isPublished(server: Server): boolean {
   return server.is_active && !!server.doc_slug
 }
 
+function hasConfigGuide(server: Server): boolean {
+  return !!(server.doc_config_guide && server.doc_config_guide.steps && server.doc_config_guide.steps.length > 0)
+}
+
+function matchesToolsBucket(count: number, bucket: string): boolean {
+  if (bucket === '0') return count === 0
+  if (bucket === '1-5') return count >= 1 && count <= 5
+  if (bucket === '6+') return count >= 6
+  return true
+}
+
 const filteredServers = computed(() => {
-  let list = serversStore.servers
-  if (search.value) {
-    const q = search.value.toLowerCase()
-    list = list.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      (s.doc_slug && s.doc_slug.toLowerCase().includes(q))
-    )
-  }
-  if (statusFilter.value === 'published') {
-    list = list.filter(s => isPublished(s))
-  } else if (statusFilter.value === 'draft') {
-    list = list.filter(s => !isPublished(s))
-  }
-  return list
+  const q = filters.search.trim().toLowerCase()
+  return serversStore.servers.filter(s => {
+    if (q && !s.name.toLowerCase().includes(q) && !(s.doc_slug || '').toLowerCase().includes(q)) {
+      return false
+    }
+    if (filters.status === 'published' && !isPublished(s)) return false
+    if (filters.status === 'draft' && isPublished(s)) return false
+    if (filters.configGuide === 'with' && !hasConfigGuide(s)) return false
+    if (filters.configGuide === 'without' && hasConfigGuide(s)) return false
+    if (filters.toolsBucket && !matchesToolsBucket(s.tools_count, filters.toolsBucket)) return false
+    return true
+  })
 })
+
+const activeFilterCount = computed(() => {
+  let n = 0
+  if (filters.search.trim()) n++
+  if (filters.status) n++
+  if (filters.configGuide) n++
+  if (filters.toolsBucket) n++
+  return n
+})
+
+function resetFilters() {
+  filters.search = ''
+  filters.status = ''
+  filters.configGuide = ''
+  filters.toolsBucket = ''
+}
 
 async function handleToggle(id: string, enable: boolean) {
   try {
