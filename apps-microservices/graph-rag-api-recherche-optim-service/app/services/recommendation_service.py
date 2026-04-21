@@ -2265,15 +2265,6 @@ class RecommendationService:
             query_time = time.perf_counter() - query_start
             logging.warning("[RERANK-TIMING] cypher_query: %.3fs (%d results)", query_time, len(results) if results else 0)
 
-            # P5 fix: if no results, retry with absolute_threshold=0.0 to handle categories
-            # with sparse characteristic coverage (e.g. distributeur_snacks — many unknowns)
-            if not results:
-                logging.warning("[P5-FALLBACK] 0 results, retrying with absolute_threshold=0.0")
-                fallback_params = dict(params)
-                fallback_params["absolute_threshold"] = 0.0
-                results = await clients.execute_cypher(cypher_query, fallback_params)
-                logging.warning("[P5-FALLBACK] fallback returned %d results", len(results) if results else 0)
-
             # --- DEBUG: Diversity Algorithm Output ---
             if results:
                 pre_diversity_debug = results[0].get("pre_diversity_debug", [])
