@@ -98,7 +98,7 @@ func (h *Handler) handleListInstances(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]TemplateInstanceResponse, 0, len(instances))
 	for _, inst := range instances {
-		out = append(out, toInstanceResponse(inst, ""))
+		out = append(out, toInstanceResponse(inst, "", ""))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"instances": out})
 }
@@ -121,6 +121,13 @@ func (h *Handler) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
 		return
 	}
+	// Look up the mcp_servers row so we can surface the live URL in the response.
+	var serverURL string
+	if h.repo != nil {
+		if mcpSrv, err := h.repo.GetByID(inst.MCPServerID); err == nil && mcpSrv != nil {
+			serverURL = mcpSrv.URL
+		}
+	}
 	// Best-effort: fetch live stderr tail from runner.
 	tail := ""
 	if h.runner != nil {
@@ -133,10 +140,10 @@ func (h *Handler) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, toInstanceResponse(*inst, tail))
+	writeJSON(w, http.StatusOK, toInstanceResponse(*inst, tail, serverURL))
 }
 
-func toInstanceResponse(inst db.TemplateInstance, stderrTail string) TemplateInstanceResponse {
+func toInstanceResponse(inst db.TemplateInstance, stderrTail, url string) TemplateInstanceResponse {
 	return TemplateInstanceResponse{
 		ID:              inst.ID,
 		TemplateSlug:    inst.TemplateSlug,
@@ -146,6 +153,7 @@ func toInstanceResponse(inst db.TemplateInstance, stderrTail string) TemplateIns
 		RunnerStatus:    inst.RunnerStatus,
 		RunnerLastError: inst.RunnerLastError,
 		MCPServerID:     inst.MCPServerID,
+		URL:             url,
 		CreatedBy:       inst.CreatedBy,
 		CreatedAt:       inst.CreatedAt,
 		UpdatedAt:       inst.UpdatedAt,
@@ -161,7 +169,8 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Multipart: fields "template_slug", "name", "extra_env" (JSON string), file "credentials"
-	if err := r.ParseMultipartForm(int64(validation.MaxSAJSONSize) + 16*1024); err != nil {
+	// 16KB SA JSON + 48KB for non-file fields (name, template_slug, extra_env).
+	if err := r.ParseMultipartForm(int64(validation.MaxSAJSONSize) + 48*1024); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "multipart parse: " + err.Error()})
 		return
 	}
@@ -259,9 +268,9 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	if err := h.instanceRepo.Create(&inst, credBytes); err != nil {
 		// Roll back the mcp_servers insert — without this the user sees an orphan server.
 		if delErr := h.repo.Delete(mcpServerID); delErr != nil {
-			log.Printf("[templates] rollback mcp_server delete failed: %v", delErr)
+			log.Printf("[templates][ERROR] orphan mcp_server row id=%s — manual cleanup needed. delete err: %v (original err: %v)", mcpServerID, delErr, err)
 		}
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create instance: " + err.Error()})
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create instance failed"})
 		return
 	}
 
@@ -276,25 +285,39 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		CredentialsHash: hashHex,
 	})
 	if err != nil {
-		_ = h.instanceRepo.UpdateStatus(instanceID, "failed", err.Error(), nil)
-		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner spawn failed: " + err.Error()})
+		log.Printf("[templates] runner spawn failed for instance %s: %v", instanceID, err)
+		if uErr := h.instanceRepo.UpdateStatus(instanceID, "failed", err.Error(), nil); uErr != nil {
+			log.Printf("[templates] could not persist failed status for %s: %v", instanceID, uErr)
+		}
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
 		return
 	}
 
 	// 4) Update mcp_servers URL + instance port
+	// NOTE: assumes the gateway and runner share a Docker network — GoogleTemplatesRunnerURL
+	// is the in-cluster URL (e.g. http://mcp-google-templates-runner:8590). If the runner is
+	// ever exposed through a proxy or different public host, this extraction will need to
+	// point at that public address instead. Consider a separate GOOGLE_TEMPLATES_RUNNER_PUBLIC_HOST env var.
 	runnerHost := strings.TrimPrefix(strings.TrimPrefix(h.config.GoogleTemplatesRunnerURL, "http://"), "https://")
 	runnerHost = strings.SplitN(runnerHost, ":", 2)[0]
 	instanceURL := fmt.Sprintf("http://%s:%d", runnerHost, resp.Port)
 	if err := h.repo.UpdateURL(mcpServerID, instanceURL); err != nil {
-		log.Printf("[templates] warn: could not update mcp_server URL: %v", err)
+		log.Printf("[templates][WARN] could not update mcp_server URL (id=%s): %v", mcpServerID, err)
 	}
 	port := resp.Port
-	_ = h.instanceRepo.UpdateStatus(instanceID, "running", "", &port)
+	if err := h.instanceRepo.UpdateStatus(instanceID, "running", "", &port); err != nil {
+		log.Printf("[templates][WARN] could not persist running status (id=%s): %v", instanceID, err)
+	}
 
-	// 5) Return 201
-	inst.RunnerPort = &port
-	inst.RunnerStatus = "running"
-	writeJSON(w, http.StatusCreated, toInstanceResponse(inst, ""))
+	// 5) Return 201 — re-fetch to populate CreatedAt/UpdatedAt.
+	freshInst, err := h.instanceRepo.GetByID(instanceID)
+	if err != nil {
+		// Persisted but can't re-read — return the in-memory version.
+		inst.RunnerPort = &port
+		inst.RunnerStatus = "running"
+		freshInst = &inst
+	}
+	writeJSON(w, http.StatusCreated, toInstanceResponse(*freshInst, "", instanceURL))
 }
 
 // renderEnv merges default_env (from template) + extra_env (admin input),

@@ -28,6 +28,7 @@ type TemplateInstanceResponse struct {
 	RunnerStatus    string          `json:"runner_status"`
 	RunnerLastError string          `json:"runner_last_error,omitempty"`
 	MCPServerID     string          `json:"mcp_server_id"`
+	URL             string          `json:"url,omitempty"`
 	CreatedBy       string          `json:"created_by"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
