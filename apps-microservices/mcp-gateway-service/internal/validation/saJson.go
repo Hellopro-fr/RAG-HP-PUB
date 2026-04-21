@@ -33,7 +33,7 @@ func ValidateServiceAccountJSON(raw []byte) (*ServiceAccountInfo, error) {
 	if info.ClientEmail == "" {
 		return nil, fmt.Errorf("client_email is required")
 	}
-	if !strings.Contains(info.ClientEmail, ".iam.gserviceaccount.com") &&
+	if !strings.HasSuffix(info.ClientEmail, ".iam.gserviceaccount.com") &&
 		!strings.HasSuffix(info.ClientEmail, "@appspot.gserviceaccount.com") {
 		return nil, fmt.Errorf("client_email does not look like a service account email")
 	}

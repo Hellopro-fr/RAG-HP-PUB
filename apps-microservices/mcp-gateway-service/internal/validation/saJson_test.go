@@ -36,6 +36,8 @@ func TestValidateServiceAccountJSON_Errors(t *testing.T) {
 		{"no email", strings.Replace(validSA, `"client_email": "bot@my-project.iam.gserviceaccount.com",`, ``, 1), "client_email"},
 		{"no project", strings.Replace(validSA, `"project_id": "my-project",`, ``, 1), "project_id"},
 		{"no private_key", strings.Replace(validSA, `"private_key": "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"`, `"private_key": ""`, 1), "private_key"},
+		{"bad email domain", strings.Replace(validSA, "bot@my-project.iam.gserviceaccount.com", "bot@example.com", 1), "client_email"},
+		{"subdomain bypass attempt", strings.Replace(validSA, "bot@my-project.iam.gserviceaccount.com", "bot@foo.iam.gserviceaccount.com.evil.com", 1), "client_email"},
 		{"wrong PK format", strings.Replace(validSA, `-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n`, `not-a-pem`, 1), "private_key"},
 		{"too big", `{"type":"service_account"` + strings.Repeat(" ", 17*1024) + `}`, "too large"},
 	}
