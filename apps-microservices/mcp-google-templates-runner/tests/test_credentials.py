@@ -33,7 +33,7 @@ def test_path_is_predictable(tmp_store):
 
 @pytest.mark.parametrize(
     "bad_id",
-    ["../etc/passwd", "a/b", "a\\b", ".hidden", "..", "."],
+    ["../etc/passwd", "a/b", "a\\b", ".hidden", "..", ".", "ab\x00cd", "a%2fb", ""],
 )
 def test_rejects_traversal_instance_id(tmp_store, bad_id):
     with pytest.raises(ValueError):

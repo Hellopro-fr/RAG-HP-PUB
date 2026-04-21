@@ -13,7 +13,14 @@ class CredentialsStore:
 
     @staticmethod
     def _validate_id(instance_id: str) -> None:
-        if "/" in instance_id or "\\" in instance_id or instance_id.startswith("."):
+        if (
+            not instance_id
+            or "/" in instance_id
+            or "\\" in instance_id
+            or "\x00" in instance_id
+            or "%" in instance_id
+            or instance_id.startswith(".")
+        ):
             raise ValueError(f"invalid instance_id: {instance_id!r}")
 
     def path_for(self, instance_id: str) -> str:
