@@ -8,7 +8,7 @@ import logging
 import asyncio
 import re
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 from app.core.api_client import GeminiProvider, ClaudeProvider, ChatGPTProvider, HelloProAPIClient
 from app.core.utils import extract_json_from_text, get_prompt_cached, get_tracking_filepath, write_log
@@ -794,6 +794,122 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         }
 
 
+def _dedupe_matching_results(
+    results: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Dédoublonne les résultats du matching (Option A : garde le 1er représentant).
+    Doublon si TOUS les critères sont vrais :
+      - fournisseur == (normalisé : lowercase + strip + collapse + sans accents)
+      - valeur_prix == (arrondi à 2 décimales après conversion float)
+      - taxe == (normalisée ; HT vs TTC vs "" → non doublons entre eux)
+      - nom_produit similaire à ≥ 90 % (SequenceMatcher, uniquement ce champ)
+    Items sans prix ou sans fournisseur → pas dédoublonnés (laissés tels quels).
+    Retourne : (results_uniques, doublons_info) — doublons_info pour tracking.
+    """
+    import unicodedata as _unicodedata
+    from difflib import SequenceMatcher
+
+    def _norm_txt(s: Any) -> str:
+        if not s:
+            return ""
+        s = str(s).strip().lower()
+        nfkd = _unicodedata.normalize("NFKD", s)
+        s = "".join(c for c in nfkd if not _unicodedata.combining(c))
+        return re.sub(r"\s+", " ", s)
+
+    def _norm_prix(p: Any) -> Optional[float]:
+        try:
+            return round(float(p), 2)
+        except (TypeError, ValueError):
+            return None
+
+    # Pré-calcul des champs normalisés par index
+    # Clé bucket = (fournisseur, prix, taxe) en match EXACT ==
+    fields: List[tuple] = []  # (f_norm, p_norm, tx_norm, t_norm, t_orig)
+    buckets: Dict[tuple, List[int]] = {}
+    for i, item in enumerate(results):
+        prix_info = item.get("prix", {}) or {}
+        f_norm = _norm_txt(prix_info.get("fournisseur", ""))
+        p_norm = _norm_prix(prix_info.get("valeur_prix"))
+        tx_norm = _norm_txt(prix_info.get("taxe", ""))
+        t_orig = prix_info.get("nom_produit", "") or ""
+        t_norm = _norm_txt(t_orig)
+        fields.append((f_norm, p_norm, tx_norm, t_norm, t_orig))
+        if f_norm and p_norm is not None:
+            buckets.setdefault((f_norm, p_norm, tx_norm), []).append(i)
+
+    kept_flags = [True] * len(results)
+    duplicates_info: List[Dict[str, Any]] = []
+
+    # Dans chaque bucket (fournisseur/prix/taxe identiques), compare les titres à ≥90 %
+    for (f_norm, p_norm, tx_norm), indices in buckets.items():
+        if len(indices) < 2:
+            continue
+
+        clusters: List[List[int]] = []
+        for i in indices:
+            t_i = fields[i][3]
+            placed = False
+            for cluster in clusters:
+                t_ref = fields[cluster[0]][3]
+                if SequenceMatcher(None, t_i, t_ref).ratio() >= 0.9:
+                    cluster.append(i)
+                    placed = True
+                    break
+            if not placed:
+                clusters.append([i])
+
+        for cluster in clusters:
+            if len(cluster) < 2:
+                continue
+            # Option A : garde le premier
+            kept_idx = cluster[0]
+            removed = cluster[1:]
+            for r in removed:
+                kept_flags[r] = False
+            duplicates_info.append({
+                "fournisseur": f_norm,
+                "prix": p_norm,
+                "taxe": tx_norm,
+                "garde": fields[kept_idx][4],
+                "retires": [fields[r][4] for r in removed],
+            })
+
+    deduped = [results[i] for i in range(len(results)) if kept_flags[i]]
+    return deduped, duplicates_info
+
+
+def _format_fr_number(n: float) -> str:
+    """Formate un nombre en français avec espace insécable comme séparateur de milliers."""
+    return f"{int(round(n)):,}".replace(",", "\u00a0")
+
+
+def _replace_price_in_phrase(phrase: str, old_val: float, new_val: float) -> str:
+    """
+    Remplace une occurrence de prix (old_val) par new_val dans la phrase.
+    Tolère les séparateurs de milliers : espace, espace insécable, point, virgule, apostrophe.
+    Ex: 1800 → matche "1800", "1 800", "1\u00a0800", "1.800", "1'800".
+    """
+    old_int = int(round(old_val))
+    new_str = _format_fr_number(new_val)
+    s = str(old_int)
+
+    if len(s) <= 3:
+        pattern = r"(?<!\d)" + re.escape(s) + r"(?!\d)"
+    else:
+        # Découpe en groupes de 3 depuis la droite : 1800 → ["1", "800"]
+        groups = []
+        for i in range(len(s), 0, -3):
+            start = max(0, i - 3)
+            groups.append(s[start:i])
+        groups.reverse()
+        sep = r"[\s\u00a0.,'\u202f]?"
+        pattern = r"(?<!\d)" + sep.join(re.escape(g) for g in groups) + r"(?!\d)"
+
+    return re.sub(pattern, new_str, phrase)
+
+
 def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Vérifie que les prix des exemples_produits sont dans [borne_basse, borne_haute].
@@ -845,6 +961,13 @@ def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[st
 
     new_moyen = (new_basse + new_haute) / 2
 
+    # Capture des valeurs avant écrasement (pour mise à jour de phrase_prix)
+    old_moyen = None
+    try:
+        old_moyen = float(fourchette.get("prix_moyen"))
+    except (TypeError, ValueError):
+        old_moyen = None
+
     details = {
         "adjusted": True,
         "borne_basse_avant": borne_basse,
@@ -853,6 +976,7 @@ def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[st
         "borne_haute_apres": new_haute,
         "min_exemple": min_ex,
         "max_exemple": max_ex,
+        "prix_moyen_avant": old_moyen,
         "prix_moyen_apres": new_moyen,
     }
 
@@ -862,6 +986,27 @@ def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[st
     fourchette["prix_moyen"] = new_moyen
     fourchette["prix_median"] = new_moyen
     fourchette["ajustement"] = details
+
+    # Mise à jour de phrase_prix : remplace les anciens prix par les nouveaux
+    phrase = parsed.get("phrase_prix")
+    if isinstance(phrase, str) and phrase:
+        new_phrase = phrase
+        replacements = []
+        if new_basse != borne_basse:
+            replacements.append((borne_basse, new_basse))
+        if new_haute != borne_haute:
+            replacements.append((borne_haute, new_haute))
+        if old_moyen is not None and old_moyen != new_moyen \
+                and old_moyen != borne_basse and old_moyen != borne_haute:
+            replacements.append((old_moyen, new_moyen))
+
+        for old_val, new_val in replacements:
+            new_phrase = _replace_price_in_phrase(new_phrase, old_val, new_val)
+
+        if new_phrase != phrase:
+            details["phrase_prix_avant"] = phrase
+            details["phrase_prix_apres"] = new_phrase
+            parsed["phrase_prix"] = new_phrase
 
     return details
 
@@ -1020,6 +1165,23 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         # =====================================================================
         # ÉTAPE 2 : Formater les résultats matchés (même format que v1 chunks)
         # =====================================================================
+
+        # Dédoublonnage : fournisseur + prix + taxe identiques + nom_produit ≥ 90 %
+        raw_count = len(results)
+        results, duplicates_info = _dedupe_matching_results(results)
+        if raw_count > len(results):
+            logger.info(
+                f"[{id_categorie}] V2 — Dédoublonnage : {raw_count} → {len(results)} "
+                f"(retirés : {raw_count - len(results)})"
+            )
+            write_log(tracking_file, "--- DEDOUBLONNAGE MATCHING ---")
+            write_log(tracking_file, f"Avant: {raw_count} | Après: {len(results)} | Retirés: {raw_count - len(results)}")
+            write_log(tracking_file, json.dumps(duplicates_info, ensure_ascii=False, indent=2))
+            write_log(tracking_file, "")
+        else:
+            write_log(tracking_file, "--- DEDOUBLONNAGE MATCHING : 0 doublon ---")
+            write_log(tracking_file, "")
+
         formatted_chunks = []
 
         for item in results:
