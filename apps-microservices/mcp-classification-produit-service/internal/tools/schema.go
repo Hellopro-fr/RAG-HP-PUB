@@ -11,7 +11,7 @@ const classifyInputSchema = `{
 	"properties": {
 		"id_produit": {
 			"type": "string",
-			"description": "Identifiant unique du produit"
+			"description": "Identifiant unique du produit (optionnel — auto-généré si absent)"
 		},
 		"nom_produit": {
 			"type": "string",
@@ -31,7 +31,7 @@ const classifyInputSchema = `{
 			"default": false
 		}
 	},
-	"required": ["id_produit", "nom_produit", "description"]
+	"required": ["nom_produit", "description"]
 }`
 
 // -- classify_products_batch --------------------------------------------------
@@ -51,7 +51,7 @@ const classifyBatchInputSchema = `{
 				"properties": {
 					"id_produit": {
 						"type": "string",
-						"description": "Identifiant unique du produit"
+						"description": "Identifiant unique du produit (optionnel — auto-généré si absent)"
 					},
 					"nom_produit": {
 						"type": "string",
@@ -66,7 +66,7 @@ const classifyBatchInputSchema = `{
 						"description": "ID de la catégorie attendue (optionnel)"
 					}
 				},
-				"required": ["id_produit", "nom_produit", "description"]
+				"required": ["nom_produit", "description"]
 			}
 		}
 	},

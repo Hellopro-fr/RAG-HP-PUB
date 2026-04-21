@@ -6,7 +6,7 @@ Detects whether a website is in French or has a French version. Uses URL analysi
 
 - **Language:** Python 3.10
 - **Framework:** FastAPI + Uvicorn
-- **Scraping:** Playwright (Chromium) via Apify proxy (mandatory)
+- **Scraping:** Camoufox (stealth Firefox, default) via Playwright; Chromium fallback via `CAMOUFOX_ENABLED=false` or on Camoufox launch failure. Apify proxy mandatory for both.
 - **NLP:** fastText (primary), langdetect + langid (cross-check)
 - **HTML parsing:** BeautifulSoup4 + lxml
 - **Cache:** Redis (optional, graceful degradation)
@@ -17,7 +17,7 @@ Detects whether a website is in French or has a French version. Uses URL analysi
 - **Port:** 8999
 - **Run:** `uvicorn main:app --host 0.0.0.0 --port 8999 --proxy-headers --timeout-keep-alive 300`
 - **Tests:** `pytest tests/`
-- **Docker build:** installs Playwright + Chromium browser at build time
+- **Docker build:** installs Playwright + Chromium (fallback) and fetches the Camoufox binary at build time. Camoufox's ~200MB browser is stored in the image.
 - **Required env vars:** `APIFY_PROXY` (proxy password)
 - **Optional env vars:** `REDIS_URL` (cache)
 
@@ -73,6 +73,30 @@ api-detection-langue-fr/
 - Cache uses different TTLs based on result quality (definitive vs transient failures).
 - `force_refresh` parameter bypasses cache read but still writes (overwrites stale data).
 - Alternative URLs include method, reliability tier, validation status, and region priority.
+
+## Concurrency & Admission Control
+
+Under concurrent load the service applies three layers of protection:
+
+1. **Admission middleware** rejects with `503 + Retry-After` when in-flight count reaches `ADMISSION_MAX_SLOTS` (default 12). `/detect-debug` has an isolated budget via `ADMISSION_DEBUG_SLOTS` (default 2).
+2. **Inflight URL dedup** coalesces concurrent fetches of the same URL to a single browser launch. Bypassed when `force_refresh=True`.
+3. **Browser semaphore** caps concurrent Camoufox/Chromium instances at `BROWSER_SEMAPHORE_SIZE` (default 10).
+
+Prometheus metrics exposed at `/metrics` for all three layers.
+
+### Env vars
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BROWSER_SEMAPHORE_SIZE` | `10` | Max concurrent Camoufox/Chromium instances |
+| `CAMOUFOX_ENABLED` | `true` | Use Camoufox; `false` falls back to Chromium |
+| `ADMISSION_ENABLED` | `true` | Kill switch for admission middleware |
+| `ADMISSION_MAX_SLOTS` | `12` | Production endpoint in-flight limit |
+| `ADMISSION_DEBUG_SLOTS` | `2` | `/detect-debug` in-flight limit |
+| `ADMISSION_RETRY_AFTER_SECONDS` | `30` | `Retry-After` header value in 503 responses |
+| `INFLIGHT_DEDUP_ENABLED` | `true` | Kill switch for URL dedup |
+
+Callers MUST use the shared contract: `libs/common-utils/src/common_utils/detection_client.py` (Python) or mirror its env vars (`DETECTION_MAX_CONCURRENCY`, `DETECTION_REQUEST_TIMEOUT_S`, `DETECTION_MAX_RETRIES`, `DETECTION_BACKOFF_BASE_S`) in other languages.
 
 ## Dependencies on Other Services
 

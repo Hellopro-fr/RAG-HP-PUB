@@ -166,6 +166,109 @@
             color: var(--success);
         }
 
+        /* Cleanup button + modal */
+        .btn-cleanup {
+            margin-top: 10px;
+            width: 100%;
+            padding: 9px 14px;
+            background: #f87171;
+            color: #0f0f23;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-cleanup:hover { background: #ef4444; }
+
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: min(900px, 92vw);
+            max-height: 86vh;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+        }
+        .modal-header h3 { font-size: 1.05rem; color: var(--accent); }
+        .modal-close {
+            background: transparent; border: none;
+            color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;
+        }
+        .modal-toolbar {
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+        }
+        .modal-toolbar label { font-size: 0.85rem; color: var(--text-secondary); }
+        .modal-toolbar input[type=number] {
+            width: 70px; padding: 6px 8px;
+            background: var(--bg-primary); border: 1px solid var(--border);
+            color: var(--text-primary); border-radius: 4px; font-size: 0.85rem;
+        }
+        .modal-toolbar .summary { margin-left: auto; font-size: 0.8rem; color: var(--text-secondary); }
+        .modal-body {
+            padding: 10px 20px; overflow-y: auto; flex: 1;
+        }
+        .service-group {
+            margin-bottom: 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+        }
+        .service-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; background: var(--bg-tertiary);
+            font-size: 0.9rem; font-weight: 600; cursor: pointer;
+        }
+        .service-header .badge {
+            background: var(--accent); color: var(--bg-primary);
+            padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;
+        }
+        .service-body { display: none; padding: 6px 10px; }
+        .service-group.open .service-body { display: block; }
+        .service-group.open .chev { transform: rotate(90deg); }
+        .chev { transition: transform 0.2s; }
+        .file-row {
+            display: grid;
+            grid-template-columns: 28px 1fr 170px 90px;
+            gap: 10px; align-items: center;
+            padding: 6px 8px;
+            font-size: 0.82rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .file-row:last-child { border-bottom: none; }
+        .file-row .name { color: var(--text-primary); word-break: break-all; }
+        .file-row .modified, .file-row .size { color: var(--text-secondary); }
+        .modal-footer {
+            padding: 12px 20px; border-top: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+        }
+        .btn-danger {
+            padding: 8px 14px; background: #ef4444; color: white;
+            border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
+        }
+        .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-ghost {
+            padding: 8px 14px; background: transparent; color: var(--text-secondary);
+            border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+        }
+        .cleanup-status { font-size: 0.8rem; min-height: 1.1em; }
+        .cleanup-status.error { color: #f87171; }
+        .cleanup-status.success { color: var(--success); }
+
         /* Breadcrumb */
         .breadcrumb {
             padding: 12px 20px;
@@ -469,6 +572,7 @@
                     <button class="btn-download-date" id="downloadDateBtn" disabled>Télécharger</button>
                 </div>
                 <div class="download-date-status" id="downloadDateStatus"></div>
+                <button class="btn-cleanup" id="openCleanupBtn">🧹 Nettoyer trackings anciens</button>
             </div>
             
             <div class="search-results" id="searchResults" style="display: none;"></div>
@@ -498,6 +602,35 @@
                 <div class="file-content" id="fileContent" style="display: none;"></div>
             </div>
         </main>
+    </div>
+
+    <!-- Cleanup Modal -->
+    <div class="modal-overlay" id="cleanupModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🧹 Nettoyer les trackings anciens</h3>
+                <button class="modal-close" id="closeCleanupBtn">✕</button>
+            </div>
+            <div class="modal-toolbar">
+                <label for="cleanupMonths">Plus vieux que</label>
+                <input type="number" id="cleanupMonths" min="1" max="24" value="3">
+                <label>mois</label>
+                <button class="btn btn-secondary" id="refreshCleanupBtn">Actualiser</button>
+                <button class="btn btn-secondary" id="selectAllBtn">Tout sélectionner</button>
+                <button class="btn btn-secondary" id="unselectAllBtn">Tout désélectionner</button>
+                <span class="summary" id="cleanupSummary">—</span>
+            </div>
+            <div class="modal-body" id="cleanupBody">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+            <div class="modal-footer">
+                <div class="cleanup-status" id="cleanupStatus"></div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-ghost" id="cancelCleanupBtn">Annuler</button>
+                    <button class="btn-danger" id="deleteSelectedBtn" disabled>Supprimer la sélection (<span id="selectedCount">0</span>)</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -775,6 +908,167 @@
 
         // Initial load
         navigateTo('');
+
+        // ================================================================
+        // CLEANUP MODAL
+        // ================================================================
+        const cleanupState = {
+            data: null,
+            selected: new Set(),
+        };
+
+        function formatBytes(n) {
+            if (!n) return '0 B';
+            const u = ['B', 'KB', 'MB', 'GB'];
+            let i = 0;
+            while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+            return n.toFixed(1) + ' ' + u[i];
+        }
+
+        function openCleanupModal() {
+            document.getElementById('cleanupModal').classList.add('open');
+            cleanupState.selected.clear();
+            updateSelectedCount();
+            loadOldFiles();
+        }
+
+        function closeCleanupModal() {
+            document.getElementById('cleanupModal').classList.remove('open');
+        }
+
+        async function loadOldFiles() {
+            const months = parseInt(document.getElementById('cleanupMonths').value, 10) || 3;
+            const body = document.getElementById('cleanupBody');
+            const summary = document.getElementById('cleanupSummary');
+            const status = document.getElementById('cleanupStatus');
+            status.textContent = '';
+            status.className = 'cleanup-status';
+            body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/old-files?months=${months}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Erreur API');
+                cleanupState.data = data;
+                cleanupState.selected.clear();
+                renderCleanup(data);
+                summary.textContent = `${data.total_count} fichier(s) · ${formatBytes(data.total_size)} · seuil ≤ ${data.threshold_date}`;
+            } catch (e) {
+                body.innerHTML = `<div class="empty-state"><p>Erreur: ${escapeHtml(e.message)}</p></div>`;
+            }
+            updateSelectedCount();
+        }
+
+        function renderCleanup(data) {
+            const body = document.getElementById('cleanupBody');
+            if (!data.by_service.length) {
+                body.innerHTML = '<div class="empty-state"><p>Aucun fichier ancien trouvé.</p></div>';
+                return;
+            }
+            const html = data.by_service.map(g => `
+                <div class="service-group" data-service="${escapeHtml(g.service)}">
+                    <div class="service-header" onclick="toggleGroup(this.parentElement)">
+                        <span class="chev">▶</span>
+                        <span>${escapeHtml(g.service)}</span>
+                        <span class="badge">${g.count}</span>
+                        <span style="margin-left:auto; color: var(--text-secondary); font-size: 0.8rem;">${formatBytes(g.total_size)}</span>
+                        <input type="checkbox" class="group-chk" onclick="event.stopPropagation()" onchange="toggleGroupSelect('${escapeHtml(g.service)}', this.checked)">
+                    </div>
+                    <div class="service-body">
+                        ${g.files.map(f => `
+                            <div class="file-row">
+                                <input type="checkbox" class="file-chk" data-path="${escapeHtml(f.path)}" onchange="toggleFileSelect('${escapeHtml(f.path)}', this.checked)">
+                                <div class="name" title="${escapeHtml(f.path)}">${escapeHtml(f.name)}</div>
+                                <div class="modified">${escapeHtml(f.modified)}</div>
+                                <div class="size">${formatBytes(f.size)}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+            body.innerHTML = html;
+        }
+
+        function toggleGroup(el) {
+            el.classList.toggle('open');
+        }
+
+        function toggleFileSelect(path, checked) {
+            if (checked) cleanupState.selected.add(path);
+            else cleanupState.selected.delete(path);
+            updateSelectedCount();
+        }
+
+        function toggleGroupSelect(service, checked) {
+            const group = document.querySelector(`.service-group[data-service="${CSS.escape(service)}"]`);
+            if (!group) return;
+            group.querySelectorAll('.file-chk').forEach(chk => {
+                chk.checked = checked;
+                const p = chk.getAttribute('data-path');
+                if (checked) cleanupState.selected.add(p);
+                else cleanupState.selected.delete(p);
+            });
+            updateSelectedCount();
+        }
+
+        function selectAll(select) {
+            document.querySelectorAll('#cleanupBody .file-chk').forEach(chk => {
+                chk.checked = select;
+                const p = chk.getAttribute('data-path');
+                if (select) cleanupState.selected.add(p);
+                else cleanupState.selected.delete(p);
+            });
+            document.querySelectorAll('#cleanupBody .group-chk').forEach(chk => { chk.checked = select; });
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const n = cleanupState.selected.size;
+            document.getElementById('selectedCount').textContent = n;
+            document.getElementById('deleteSelectedBtn').disabled = n === 0;
+        }
+
+        async function deleteSelected() {
+            const paths = Array.from(cleanupState.selected);
+            if (!paths.length) return;
+            if (!confirm(`Supprimer ${paths.length} fichier(s) ? Cette action est irréversible.`)) return;
+
+            const btn = document.getElementById('deleteSelectedBtn');
+            const status = document.getElementById('cleanupStatus');
+            btn.disabled = true;
+            status.textContent = 'Suppression en cours...';
+            status.className = 'cleanup-status';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/delete-files`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Erreur API');
+
+                const nbOk = (data.deleted || []).length;
+                const nbKo = (data.errors || []).length;
+                status.textContent = `${nbOk} supprimé(s), ${nbKo} erreur(s)`;
+                status.className = 'cleanup-status ' + (nbKo ? 'error' : 'success');
+                cleanupState.selected.clear();
+                loadOldFiles();
+            } catch (e) {
+                status.textContent = 'Erreur: ' + e.message;
+                status.className = 'cleanup-status error';
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('openCleanupBtn').addEventListener('click', openCleanupModal);
+        document.getElementById('closeCleanupBtn').addEventListener('click', closeCleanupModal);
+        document.getElementById('cancelCleanupBtn').addEventListener('click', closeCleanupModal);
+        document.getElementById('refreshCleanupBtn').addEventListener('click', loadOldFiles);
+        document.getElementById('selectAllBtn').addEventListener('click', () => selectAll(true));
+        document.getElementById('unselectAllBtn').addEventListener('click', () => selectAll(false));
+        document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelected);
+        document.getElementById('cleanupMonths').addEventListener('change', loadOldFiles);
     </script>
 </body>
 </html>

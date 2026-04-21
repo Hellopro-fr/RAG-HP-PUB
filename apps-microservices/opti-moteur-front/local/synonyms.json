@@ -1,0 +1,34 @@
+{
+    "_comment": "Synonymes métier B2B HelloPro — à charger dans Typesense via l'API /synonyms",
+    "synonyms": [
+        {
+            "id": "armoire-meuble-cabinet",
+            "synonyms": ["armoire", "meuble", "cabinet", "placard"]
+        },
+        {
+            "id": "medical-sante",
+            "synonyms": ["médical", "médicale", "santé", "hospitalier", "clinique"]
+        },
+        {
+            "id": "pharmacie-medicaments",
+            "synonyms": ["pharmacie", "médicaments", "pharmaceutique"]
+        },
+        {
+            "id": "refrigere-froid",
+            "synonyms": ["réfrigéré", "réfrigérée", "frigorifique", "froid"]
+        },
+        {
+            "id": "chariot-elevateur",
+            "synonyms": ["chariot élévateur", "fenwick", "transpalette électrique", "gerbeur"]
+        },
+        {
+            "id": "pompe-hydraulique",
+            "synonyms": ["pompe hydraulique", "pompe à piston", "groupe hydraulique"]
+        },
+        {
+            "id": "securite-protection",
+            "synonyms": ["sécurité", "sûreté", "protection"]
+        }
+    ],
+    "usage": "Pour charger dans Typesense: POST /collections/produits_hellopro/synonyms/{id} avec le body de chaque synonyme"
+}

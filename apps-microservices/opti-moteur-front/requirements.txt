@@ -1,0 +1,10 @@
+fastapi[all]
+uvicorn
+python-dotenv
+pydantic
+pydantic-settings
+pymilvus>=2.3.0,<3.0.0
+typesense==0.21.0
+requests
+httpx
+tqdm

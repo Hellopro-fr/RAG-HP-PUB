@@ -14,9 +14,25 @@
       link-label="Suivre le guide d'installation"
     />
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
+    <!-- Loading skeleton -->
+    <div
+      v-if="loading"
+      class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse"
+      aria-hidden="true"
+    >
+      <div
+        v-for="i in 4"
+        :key="i"
+        class="p-5 rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+      >
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-8 h-8 rounded bg-gray-200 dark:bg-gray-800" />
+          <div class="h-5 w-1/3 rounded bg-gray-200 dark:bg-gray-800" />
+        </div>
+        <div class="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800 mb-2" />
+        <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800 mb-4" />
+        <div class="h-3 w-20 rounded bg-gray-100 dark:bg-gray-800" />
+      </div>
     </div>
 
     <template v-else>
