@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -26,8 +27,9 @@ func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
-	if h.config.GoogleTemplatesRunnerAdminToken == "" ||
-		r.Header.Get("X-Admin-Token") != h.config.GoogleTemplatesRunnerAdminToken {
+	expected := h.config.GoogleTemplatesRunnerAdminToken
+	got := r.Header.Get("X-Admin-Token")
+	if expected == "" || subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
