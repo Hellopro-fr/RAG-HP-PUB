@@ -1129,8 +1129,8 @@ class RecommendationService:
             if request.scoring.c_unknown_score is not None
             else 0
         )
-        # P1 iter-1: strengthen penalty for missing characteristics -0.5 → -0.8
-        c_unknown_score = min(c_unknown_score, -0.8)
+        # P1 fix: penalize missing characteristics (cap at -0.5 — aligned with V2)
+        c_unknown_score = min(c_unknown_score, -0.5)
         t_unmatched = (
             request.scoring.t_unmatched
             if request.scoring.t_unmatched is not None
@@ -1806,14 +1806,6 @@ class RecommendationService:
                 # Determine icon based on poids_caracteristique
                 icon = "🔴" if poids_c == "critique" else "🟡"
 
-                # Build id→name mapping for all values of this characteristic
-                # (used for both cibles and bloquantes — P2 fix)
-                cat_valeurs = cat_def.get("valeurs", [])
-                valeur_id_to_name = {
-                    str(v.get("id_valeur", "")): v.get("valeur", "")
-                    for v in cat_valeurs
-                }
-
                 # Format valeurs_cibles
                 valeur_parts = []
                 if isinstance(carac.valeurs_cibles, dict):
@@ -1831,6 +1823,12 @@ class RecommendationService:
                             f"{carac.valeurs_cibles['exact']} {unite}".strip()
                         )
                 elif isinstance(carac.valeurs_cibles, list):
+                    # Text values: look up human-readable names from category definition
+                    cat_valeurs = cat_def.get("valeurs", [])
+                    valeur_id_to_name = {
+                        str(v.get("id_valeur", "")): v.get("valeur", "")
+                        for v in cat_valeurs
+                    }
                     text_values = []
                     for v in carac.valeurs_cibles:
                         readable = valeur_id_to_name.get(str(v), str(v))
@@ -1838,30 +1836,7 @@ class RecommendationService:
                     valeur_parts.append(", ".join(text_values))
 
                 valeur_str = ", ".join(valeur_parts) if valeur_parts else "Non spécifié"
-
-                # P2 fix: expose valeurs_bloquantes so LLM can give score 1 to
-                # products carrying an explicitly incompatible value instead of score 3.
-                bloquant_parts = []
-                if isinstance(carac.valeurs_bloquantes, dict):
-                    if carac.valeurs_bloquantes.get("min") is not None:
-                        bloquant_parts.append(
-                            f"≥ {carac.valeurs_bloquantes['min']} {unite}".strip()
-                        )
-                    if carac.valeurs_bloquantes.get("max") is not None:
-                        bloquant_parts.append(
-                            f"≤ {carac.valeurs_bloquantes['max']} {unite}".strip()
-                        )
-                elif isinstance(carac.valeurs_bloquantes, list) and carac.valeurs_bloquantes:
-                    bloquant_parts = [
-                        valeur_id_to_name.get(str(v), str(v))
-                        for v in carac.valeurs_bloquantes
-                    ]
-
-                bloquant_str = ", ".join(bloquant_parts) if bloquant_parts else ""
-                if bloquant_str:
-                    line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str} | ❌ INCOMPATIBLE: {bloquant_str}"
-                else:
-                    line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str}"
+                line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str}"
                 caracteristiques_critiques_lines.append(line)
 
         caracteristiques_critiques = "\n".join(caracteristiques_critiques_lines)
