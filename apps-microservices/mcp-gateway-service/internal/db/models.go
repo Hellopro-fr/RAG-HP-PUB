@@ -369,15 +369,20 @@ func (Template) TableName() string { return "templates" }
 // exactly one running mcp-proxy subprocess in the runner.
 type TemplateInstance struct {
 	ID                   string     `gorm:"type:char(36);primaryKey" json:"id"`
-	TemplateSlug         string     `gorm:"type:varchar(32);not null;index:idx_instance_template" json:"template_slug"`
+	TemplateSlug         string     `gorm:"type:varchar(32);not null;index:idx_instance_template;constraint:OnDelete:RESTRICT" json:"template_slug"`
 	Name                 string     `gorm:"type:varchar(255);not null" json:"name"`
 	EncryptedCredentials []byte     `gorm:"type:blob;not null" json:"-"`
-	CredentialsHash      string     `gorm:"type:char(64);not null" json:"-"`
-	ExtraEnv             json.RawMessage `gorm:"type:json" json:"extra_env,omitempty"`
-	RunnerPort           *int       `gorm:"type:int" json:"runner_port,omitempty"`
-	RunnerStatus         string     `gorm:"type:varchar(16);not null;default:'pending';index:idx_instance_status" json:"runner_status"`
-	RunnerLastError      string     `gorm:"type:text" json:"runner_last_error,omitempty"`
-	MCPServerID          string     `gorm:"type:char(36);not null;uniqueIndex:uq_instance_mcp_server" json:"mcp_server_id"`
+	// CredentialsHash is SHA-256(plaintext) used by the runner to detect
+	// credential changes during reconcile. Not unique — multiple instances may
+	// share the same SA JSON under different names.
+	CredentialsHash string          `gorm:"type:char(64);not null" json:"-"`
+	ExtraEnv        json.RawMessage `gorm:"type:json" json:"extra_env,omitempty"`
+	RunnerPort      *int            `gorm:"type:int" json:"runner_port,omitempty"`
+	RunnerStatus    string          `gorm:"type:varchar(16);not null;default:'pending';index:idx_instance_status" json:"runner_status"`
+	RunnerLastError string          `gorm:"type:text" json:"runner_last_error,omitempty"`
+	// MCPServerID links to mcp_servers.id. No DB FK / cascade by design — delete
+	// order is enforced in the repository so the runner-kill step cannot be skipped.
+	MCPServerID string `gorm:"type:char(36);not null;uniqueIndex:uq_instance_mcp_server" json:"mcp_server_id"`
 	CreatedBy            string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
 	CreatedAt            time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt            time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
