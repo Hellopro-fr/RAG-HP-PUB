@@ -108,6 +108,14 @@ func (r *ServerRepo) UpdateURL(id, url string) error {
 	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Update("url", url).Error
 }
 
+// GetURL fetches just the URL column — avoids the tools/resources/prompts/tags
+// preload that GetByID triggers when all the caller needs is the address.
+func (r *ServerRepo) GetURL(id string) (string, error) {
+	var url string
+	err := r.db.Model(&db.MCPServer{}).Where("id = ?", id).Select("url").Scan(&url).Error
+	return url, err
+}
+
 // Delete removes a server and all its associations (CASCADE).
 func (r *ServerRepo) Delete(id string) error {
 	return r.db.Delete(&db.MCPServer{}, "id = ?", id).Error

@@ -212,6 +212,58 @@ func TestInstanceRepo_DeleteWithMCPServer(t *testing.T) {
 	}
 }
 
+func TestInstanceRepo_CountsByTemplate(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	enc := newTestEncryptor(t)
+	repo := NewInstanceRepo(gdb, enc)
+
+	// Empty table → empty map, no error.
+	m, err := repo.CountsByTemplate()
+	if err != nil {
+		t.Fatalf("empty counts: %v", err)
+	}
+	if len(m) != 0 {
+		t.Errorf("empty table should produce empty map, got %v", m)
+	}
+
+	// Seed 2 instances for "ga", 1 for "gsc".
+	seed := []struct {
+		slug string
+		name string
+	}{
+		{"ga", "ga-1"},
+		{"ga", "ga-2"},
+		{"gsc", "gsc-1"},
+	}
+	for _, s := range seed {
+		inst := &db.TemplateInstance{
+			ID:              uuid.New().String(),
+			TemplateSlug:    s.slug,
+			Name:            s.name,
+			CredentialsHash: "h",
+			MCPServerID:     uuid.New().String(),
+			RunnerStatus:    "running",
+		}
+		if err := repo.Create(inst, []byte(`{}`)); err != nil {
+			t.Fatalf("seed %s: %v", s.name, err)
+		}
+	}
+
+	m, err = repo.CountsByTemplate()
+	if err != nil {
+		t.Fatalf("counts: %v", err)
+	}
+	if m["ga"] != 2 {
+		t.Errorf("ga count = %d, want 2", m["ga"])
+	}
+	if m["gsc"] != 1 {
+		t.Errorf("gsc count = %d, want 1", m["gsc"])
+	}
+	if _, ok := m["nonexistent"]; ok {
+		t.Errorf("unexpected slug in counts: %v", m)
+	}
+}
+
 func TestInstanceRepo_DeleteWithMCPServer_MissingServer(t *testing.T) {
 	// The instance's MCPServerID points to a non-existent mcp_servers row.
 	// Delete should still succeed — tx.Delete on a missing row is a no-op in GORM.

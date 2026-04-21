@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +16,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/validation"
+	"gorm.io/gorm"
 )
 
 // handleListTemplates returns the catalog of available templates with live
@@ -54,7 +56,12 @@ func (h *Handler) handleGetTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	t, err := h.templateRepo.GetBySlug(slug)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "template not found"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "template not found"})
+			return
+		}
+		log.Printf("[templates] get template %s failed: %v", slug, err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "template lookup failed"})
 		return
 	}
 	counts, _ := h.instanceRepo.CountsByTemplate()
@@ -118,14 +125,20 @@ func (h *Handler) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	inst, err := h.instanceRepo.GetByID(id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+			return
+		}
+		log.Printf("[templates] get instance %s failed: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
-	// Look up the mcp_servers row so we can surface the live URL in the response.
+	// Surface the live URL without the Tools/Resources/Prompts/Tags preload that
+	// GetByID triggers — we only need the address here.
 	var serverURL string
 	if h.repo != nil {
-		if mcpSrv, err := h.repo.GetByID(inst.MCPServerID); err == nil && mcpSrv != nil {
-			serverURL = mcpSrv.URL
+		if u, uerr := h.repo.GetURL(inst.MCPServerID); uerr == nil {
+			serverURL = u
 		}
 	}
 	// Best-effort: fetch live stderr tail from runner.
@@ -370,7 +383,12 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if _, err := h.instanceRepo.GetByID(id); err != nil {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+			return
+		}
+		log.Printf("[templates] restart: lookup %s failed: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
 	if err := h.runner.Restart(r.Context(), id); err != nil {
@@ -422,11 +440,17 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 
 	inst, err := h.instanceRepo.GetByID(id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+			return
+		}
+		log.Printf("[templates] rotate: lookup %s failed: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
 	tpl, err := h.templateRepo.GetBySlug(inst.TemplateSlug)
 	if err != nil {
+		log.Printf("[templates] rotate: template lookup for slug %q failed: %v", inst.TemplateSlug, err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "template lookup failed"})
 		return
 	}
@@ -478,7 +502,12 @@ func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.instanceRepo.GetByID(id); err != nil {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+			return
+		}
+		log.Printf("[templates] delete: lookup %s failed: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
 	// 1) Kill runner subprocess first (idempotent on runner side — a 404 from runner is OK;
@@ -487,7 +516,14 @@ func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[templates][WARN] runner kill failed for %s: %v (continuing with DB delete)", id, err)
 	}
 	// 2) Transactional delete of template_instances + mcp_servers.
+	//    ErrRecordNotFound here means a concurrent DELETE completed between the
+	//    GetByID check above and the transaction — return 404 rather than a
+	//    misleading 500.
 	if err := h.instanceRepo.DeleteWithMCPServer(id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+			return
+		}
 		log.Printf("[templates] DB delete failed for %s: %v", id, err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "delete failed"})
 		return
