@@ -207,6 +207,12 @@ services:
       - services-net
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.settimeout(3); s.connect(('localhost', 50051)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     logging: *logging_defaults
 
   embedding-model-service:
@@ -856,8 +862,10 @@ services:
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
-      - llm-service
-      - deepseek-metrics-collector-service
+      llm-service:
+        condition: service_healthy
+      deepseek-metrics-collector-service:
+        condition: service_started
     networks:
       - services-net
     logging: *logging_defaults
