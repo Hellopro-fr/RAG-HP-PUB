@@ -28,10 +28,13 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
+  // Returns the created instance; does not mutate local `instances`. Callers
+  // should call fetchInstances(slug) to refresh — the store has no concept of
+  // "which slug is currently displayed" so a blind prepend can contaminate a
+  // filtered list (see mcp-gateway-frontend/src/stores/servers.ts for the same
+  // pattern in createServer).
   async function createInstance(params: CreateInstanceParams): Promise<TemplateInstance> {
-    const instance = await templatesApi.createInstance(params)
-    instances.value = [instance, ...instances.value]
-    return instance
+    return await templatesApi.createInstance(params)
   }
 
   async function deleteInstance(id: string): Promise<void> {
