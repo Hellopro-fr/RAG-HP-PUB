@@ -21,6 +21,7 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 
 export const router = createPlaywrightRouter();
 
@@ -614,7 +615,12 @@ router.addDefaultHandler(
                 }
 
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
-                if (url.includes('?')) context.countQuestionMark++;
+                if (url.includes('?')) {
+                    context.countQuestionMark++;
+                    // Tier-1 observer (spec 2026-04-17). Records domain-specific params that survived Tier-0.
+                    // No-op when observation disabled (human CLI flag set).
+                    recordQuestionMarkObservation(url);
+                }
                 if (url.includes('#')) {
                     context.countDiez++;
                     // Tier-1 auto-decision engine (spec 2026-04-17).
