@@ -1741,16 +1741,15 @@ class RecommendationService:
 
             # iter-2 (P3): description placed BEFORE titre so the LLM anchors
             # on the discriminant technical content instead of a generic label.
-            desc_clean = re.sub(
-                r"\s+",
-                " ",
-                re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
-                    "\xa0", " "
-                ),
-            ).strip()
             formatted_product = {
                 "id_produit": str(id_produit),
-                "description": desc_clean if desc_clean else "[AUCUN DESCRIPTIF DISPONIBLE]",
+                "description": re.sub(
+                    r"\s+",
+                    " ",
+                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                        "\xa0", " "
+                    ),
+                ).strip(),
                 "titre": info.get(
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
