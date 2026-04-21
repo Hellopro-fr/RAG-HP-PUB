@@ -8,42 +8,40 @@
     </div>
 
     <template v-else>
-      <!-- Action bar -->
-      <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
-        <button
-          v-if="authStore.isAdmin"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          :disabled="generatingSlugs"
-          @click="handleGenerateSlugs"
-        >
-          <i v-if="generatingSlugs" class="pi pi-spinner pi-spin mr-1" />
-          Generer slugs
-        </button>
-        <button
-          v-if="authStore.isAdmin"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          @click="handleBatchExport"
-        >
-          Exporter tout
-        </button>
-        <label
-          v-if="authStore.isAdmin"
-          class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10 cursor-pointer"
-          :class="dragOverBatch ? 'border-brand-400 bg-brand-50 dark:bg-brand-500/10' : ''"
-          @dragover.prevent="dragOverBatch = true"
-          @dragleave="dragOverBatch = false"
-          @drop.prevent="handleBatchDrop"
-        >
-          Importer tout
-          <input ref="batchInput" type="file" accept=".json" class="hidden" @change="handleBatchImport" />
-        </label>
-      </div>
-
-      <!-- Filters -->
+      <!-- Filters + actions -->
       <FilterPanel
         :active-count="activeFilterCount"
         @reset="resetFilters"
       >
+        <template #actions>
+          <button
+            v-if="authStore.isAdmin"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+            :disabled="generatingSlugs"
+            @click="handleGenerateSlugs"
+          >
+            <i v-if="generatingSlugs" class="pi pi-spinner pi-spin mr-1" />
+            Generer slugs
+          </button>
+          <button
+            v-if="authStore.isAdmin"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+            @click="handleBatchExport"
+          >
+            Exporter tout
+          </button>
+          <label
+            v-if="authStore.isAdmin"
+            class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10 cursor-pointer"
+            :class="dragOverBatch ? 'border-brand-400 bg-brand-50 dark:bg-brand-500/10' : ''"
+            @dragover.prevent="dragOverBatch = true"
+            @dragleave="dragOverBatch = false"
+            @drop.prevent="handleBatchDrop"
+          >
+            Importer tout
+            <input ref="batchInput" type="file" accept=".json" class="hidden" @change="handleBatchImport" />
+          </label>
+        </template>
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-gray-600 dark:text-gray-400">Nom ou slug</span>
           <input v-model="filters.search" type="text" placeholder="Rechercher..." class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 placeholder:text-gray-400" />

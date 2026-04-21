@@ -8,21 +8,19 @@
     </div>
 
     <template v-else>
-      <!-- Action bar -->
-      <div class="mb-4 flex items-center justify-end">
-        <button
-          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
-          @click="router.push('/oauth2/new')"
-        >
-          Créer un client
-        </button>
-      </div>
-
-      <!-- Filters -->
+      <!-- Filters + actions -->
       <FilterPanel
         :active-count="activeFilterCount"
         @reset="resetFilters"
       >
+        <template #actions>
+          <button
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
+            @click="router.push('/oauth2/new')"
+          >
+            Créer un client
+          </button>
+        </template>
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-gray-600 dark:text-gray-400">Nom</span>
           <input v-model="filters.search" type="text" placeholder="Rechercher..." class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 placeholder:text-gray-400" />

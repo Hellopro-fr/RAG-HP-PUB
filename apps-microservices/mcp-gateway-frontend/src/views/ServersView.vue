@@ -8,46 +8,44 @@
     </div>
 
     <template v-else>
-      <!-- Action bar -->
-      <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
-        <button
-          v-if="authStore.isAdmin"
-          class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10"
-          @click="showImportModal = true"
-        >
-          Importer .mcp.json
-        </button>
-        <router-link
-          v-if="authStore.isAdmin"
-          to="/servers/import-google"
-          class="px-4 py-2 text-sm font-medium text-green-600 border border-green-300 rounded-md hover:bg-green-50 dark:text-green-400 dark:border-green-600 dark:hover:bg-green-900/20"
-        >
-          <i class="pi pi-file-excel mr-1" />
-          Google Sheets
-        </router-link>
-        <button
-          v-if="authStore.isAdmin"
-          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
-          @click="router.push('/servers/new')"
-        >
-          Ajouter un serveur
-        </button>
-        <button
-          v-if="authStore.isAdmin"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          :disabled="discoveringAll"
-          @click="handleDiscoverAll"
-        >
-          <i v-if="discoveringAll" class="pi pi-spinner pi-spin mr-1" />
-          Découvrir tout
-        </button>
-      </div>
-
-      <!-- Filters -->
+      <!-- Filters + actions -->
       <FilterPanel
         :active-count="activeFilterCount"
         @reset="resetFilters"
       >
+        <template #actions>
+          <button
+            v-if="authStore.isAdmin"
+            class="px-4 py-2 text-sm font-medium text-brand-500 border border-brand-300 rounded-md hover:bg-brand-50 dark:hover:bg-brand-500/10"
+            @click="showImportModal = true"
+          >
+            Importer .mcp.json
+          </button>
+          <router-link
+            v-if="authStore.isAdmin"
+            to="/servers/import-google"
+            class="px-4 py-2 text-sm font-medium text-green-600 border border-green-300 rounded-md hover:bg-green-50 dark:text-green-400 dark:border-green-600 dark:hover:bg-green-900/20"
+          >
+            <i class="pi pi-file-excel mr-1" />
+            Google Sheets
+          </router-link>
+          <button
+            v-if="authStore.isAdmin"
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
+            @click="router.push('/servers/new')"
+          >
+            Ajouter un serveur
+          </button>
+          <button
+            v-if="authStore.isAdmin"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+            :disabled="discoveringAll"
+            @click="handleDiscoverAll"
+          >
+            <i v-if="discoveringAll" class="pi pi-spinner pi-spin mr-1" />
+            Découvrir tout
+          </button>
+        </template>
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-gray-600 dark:text-gray-400">Nom</span>
           <input

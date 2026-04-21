@@ -1,11 +1,11 @@
 <template>
   <div class="mb-4 rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/50">
-    <button
-      type="button"
-      class="flex w-full items-center justify-between px-4 py-3 text-left"
-      @click="open = !open"
-    >
-      <span class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-brand-600 dark:hover:text-brand-400"
+        @click="open = !open"
+      >
         <i class="pi pi-filter text-xs text-gray-400 dark:text-gray-500" />
         {{ title }}
         <span
@@ -14,12 +14,15 @@
         >
           {{ activeCount }}
         </span>
-      </span>
-      <i
-        class="pi text-xs text-gray-400 dark:text-gray-500 transition-transform"
-        :class="open ? 'pi-chevron-up' : 'pi-chevron-down'"
-      />
-    </button>
+        <i
+          class="pi text-xs text-gray-400 dark:text-gray-500 transition-transform"
+          :class="open ? 'pi-chevron-up' : 'pi-chevron-down'"
+        />
+      </button>
+      <div class="flex flex-wrap items-center gap-3">
+        <slot name="actions" />
+      </div>
+    </div>
     <div v-show="open" class="border-t border-gray-200 dark:border-gray-700 p-4">
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <slot />

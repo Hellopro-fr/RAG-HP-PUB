@@ -12,36 +12,6 @@
       v-model="activeTab"
       :tabs="tabs"
     >
-      <template #actions>
-        <button
-          v-if="activeTab === 'configs'"
-          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
-          @click="$router.push('/install-guides-admin/configs/new')"
-        >
-          Ajouter une configuration
-        </button>
-        <button
-          v-if="activeTab === 'executors'"
-          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
-          @click="$router.push('/install-guides-admin/executors/new')"
-        >
-          Ajouter un executeur
-        </button>
-        <button
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          @click="handleBatchImport"
-        >
-          Importer JSON
-        </button>
-        <button
-          class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          @click="handleExportAll"
-        >
-          <i class="pi pi-download text-xs" />
-          Exporter tout
-        </button>
-      </template>
-
       <!-- Success message -->
       <div
         v-if="successMsg"
@@ -50,11 +20,41 @@
         {{ successMsg }}
       </div>
 
-      <!-- Filters -->
+      <!-- Filters + actions -->
       <FilterPanel
         :active-count="activeFilterCount"
         @reset="resetFilters"
       >
+        <template #actions>
+          <button
+            v-if="activeTab === 'configs'"
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
+            @click="$router.push('/install-guides-admin/configs/new')"
+          >
+            Ajouter une configuration
+          </button>
+          <button
+            v-if="activeTab === 'executors'"
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
+            @click="$router.push('/install-guides-admin/executors/new')"
+          >
+            Ajouter un executeur
+          </button>
+          <button
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+            @click="handleBatchImport"
+          >
+            Importer JSON
+          </button>
+          <button
+            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+            @click="handleExportAll"
+          >
+            <i class="pi pi-download text-xs" />
+            Exporter tout
+          </button>
+        </template>
+
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-gray-600 dark:text-gray-400">Libelle</span>
           <input
