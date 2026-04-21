@@ -49,7 +49,8 @@ async def sync_with_gateway(sup: Supervisor, retries: int = 5) -> None:
             return
         except Exception as e:
             logger.warning("startup sync attempt %d failed: %s", attempt + 1, e)
-            await asyncio.sleep(min(2 ** attempt, 30) + random.uniform(0, 1))
+            if attempt < retries - 1:
+                await asyncio.sleep(min(2 ** attempt, 30) + random.uniform(0, 1))
 
     logger.error(
         "startup sync: giving up after %d attempts — running with empty state",

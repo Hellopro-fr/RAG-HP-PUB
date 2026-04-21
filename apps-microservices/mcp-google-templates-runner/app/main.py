@@ -35,8 +35,12 @@ async def lifespan(app: FastAPI):
     )
     # Startup sync — fire-and-forget so lifespan is not blocked if the gateway
     # is down (retries take up to ~150s; admin API must still come up).
-    asyncio.create_task(sync_with_gateway(supervisor))
+    # Held on app.state so shutdown can cancel it cleanly — otherwise Python
+    # prints "Task was destroyed but it is pending!" if shutdown lands mid-retry.
+    app.state.sync_task = asyncio.create_task(sync_with_gateway(supervisor))
     yield
+    app.state.sync_task.cancel()
+    await asyncio.gather(app.state.sync_task, return_exceptions=True)
     if supervisor:
         await supervisor.shutdown()
     logger.info("runner shut down")
