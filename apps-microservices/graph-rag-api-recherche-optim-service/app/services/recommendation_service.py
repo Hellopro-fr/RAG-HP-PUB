@@ -2180,7 +2180,38 @@ class RecommendationService:
                     )
                 )
 
-        return reranked_top, reranked_liste, ecarts
+        # P7 fix: deduplicate by titre_produit across top + liste to eliminate same-title
+        # pairs from different suppliers (not caught by per-fournisseur MMR limits)
+        seen_titles: set = set()
+        deduped_top = []
+        deduped_liste = []
+        for p in reranked_top:
+            pid = str(p.id_produit)
+            titre = (
+                products_info.get(pid, products_info.get(int(pid) if pid.isdigit() else pid, {}))
+                .get("produit", {})
+                .get("titre_produit", "")
+                .lower()
+                .strip()
+            )
+            if not titre or titre not in seen_titles:
+                if titre:
+                    seen_titles.add(titre)
+                deduped_top.append(p)
+        for p in reranked_liste:
+            pid = str(p.id_produit)
+            titre = (
+                products_info.get(pid, products_info.get(int(pid) if pid.isdigit() else pid, {}))
+                .get("produit", {})
+                .get("titre_produit", "")
+                .lower()
+                .strip()
+            )
+            if not titre or titre not in seen_titles:
+                if titre:
+                    seen_titles.add(titre)
+                deduped_liste.append(p)
+        return deduped_top, deduped_liste, ecarts
 
     async def get_products_by_caracteristique_filters_rerank(
         self,
