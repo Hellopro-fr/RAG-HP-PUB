@@ -13,6 +13,8 @@ class PortPool:
         self._start = start
         self._end = end
         self._used: set[int] = set()
+        # threading.Lock (not asyncio.Lock): allocate/release may be called from
+        # both the event-loop thread and executor threads (supervisor callbacks).
         self._lock = threading.Lock()
 
     def allocate(self) -> int:
