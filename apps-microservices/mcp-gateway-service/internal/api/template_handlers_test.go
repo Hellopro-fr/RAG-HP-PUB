@@ -119,3 +119,24 @@ func TestToTemplateResponse_PreservesFields(t *testing.T) {
 		t.Fatalf("unexpected args: %s", resp.StdioArgs)
 	}
 }
+
+func TestExtractInstanceID(t *testing.T) {
+	cases := []struct {
+		path   string
+		suffix string
+		want   string
+	}{
+		{"/api/v1/template-instances/abc-123/restart", "/restart", "abc-123"},
+		{"/api/v1/template-instances/abc-123/", "", "abc-123"},
+		{"/api/v1/template-instances/abc-123", "", "abc-123"},
+		{"/api/v1/template-instances//restart", "/restart", ""},
+		{"/api/v1/template-instances/", "", ""},
+		{"/api/v1/template-instances", "", ""},
+		{"/api/v1/template-instances/abc-123/rotate-credentials", "/rotate-credentials", "abc-123"},
+	}
+	for _, tc := range cases {
+		if got := extractInstanceID(tc.path, tc.suffix); got != tc.want {
+			t.Errorf("extractInstanceID(%q, %q) = %q, want %q", tc.path, tc.suffix, got, tc.want)
+		}
+	}
+}

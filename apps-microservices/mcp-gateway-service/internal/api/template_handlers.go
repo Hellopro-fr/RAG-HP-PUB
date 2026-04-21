@@ -365,6 +365,10 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	id := extractInstanceID(r.URL.Path, "/restart")
+	if id == "" || strings.Contains(id, "/") {
+		http.NotFound(w, r)
+		return
+	}
 	if _, err := h.instanceRepo.GetByID(id); err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
 		return
@@ -386,6 +390,10 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		return
 	}
 	id := extractInstanceID(r.URL.Path, "/rotate-credentials")
+	if id == "" || strings.Contains(id, "/") {
+		http.NotFound(w, r)
+		return
+	}
 	if err := r.ParseMultipartForm(int64(validation.MaxSAJSONSize) + 48*1024); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "multipart parse: " + err.Error()})
 		return
@@ -450,6 +458,9 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		CredentialsHash: hashHex,
 	}); err != nil {
 		log.Printf("[templates] runner respawn after rotate failed (id=%s): %v", id, err)
+		if uErr := h.instanceRepo.UpdateStatus(id, "failed", "rotate: "+err.Error(), nil); uErr != nil {
+			log.Printf("[templates][WARN] could not persist failed status after rotate (id=%s): %v", id, uErr)
+		}
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
 		return
 	}
@@ -458,8 +469,12 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 
 // extractInstanceID pulls the {id} out of /api/v1/template-instances/{id}<suffix>.
 // Example: extractInstanceID("/api/v1/template-instances/abc-123/restart", "/restart") == "abc-123".
+// Returns "" when the path has no ID component (e.g. "/api/v1/template-instances" or
+// "/api/v1/template-instances/"), so callers can 404 empty IDs explicitly.
 func extractInstanceID(path, suffix string) string {
-	rest := strings.TrimPrefix(path, "/api/v1/template-instances/")
+	const prefix = "/api/v1/template-instances"
+	rest := strings.TrimPrefix(path, prefix)
+	rest = strings.TrimPrefix(rest, "/")
 	rest = strings.TrimSuffix(rest, suffix)
 	return strings.TrimSuffix(rest, "/")
 }
