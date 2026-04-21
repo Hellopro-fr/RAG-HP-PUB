@@ -1,164 +1,165 @@
-# Opti Moteur Front — POC Typesense / OpenSearch vs Milvus
+# opti-moteur-front
 
-POC de remplacement du moteur de recherche produit front (actuellement Milvus)
-par **Typesense** et **OpenSearch** pour atteindre **< 2s de latence** avec une
-pertinence P@5 ≥ 80% sur les requêtes commerciales courtes (1–3 mots).
+Microservice FastAPI : **moteur de recherche produit front** pour HelloPro, en remplacement de Milvus (qui met 5–7 s actuellement).
 
-## 🎯 Contexte
+- **Backend**: Typesense 27.1 (hybrid BM25 + kNN natif)
+- **Embeddings**: CamemBERT-large 1024 dims (identiques à Milvus prod)
+- **Pertinence**: détection catégorie + prefix-match + re-rank Python pondéré
+- **Cible**: P@5 ≥ 80%, latence < 200 ms (vs 5–7 s Milvus prod)
 
-Les commerciaux se plaignent que la recherche produit Milvus renvoie des
-résultats peu pertinents sur des requêtes courtes type « armoire médicale »
-(les produits attendus remontent en 20e position au lieu du top 5), avec une
-latence de **5–7 s**. Objectif : **< 2 s, top-5 pertinent**.
+## 📊 Résultats benchmark
 
-## 📊 Résultats clés
+26 requêtes commerciales × 34 301 produits extraits de Milvus prod :
 
-Benchmark sur **26 requêtes commerciales** × dataset **34 301 produits**
-(extraits de Milvus prod, embeddings CamemBERT-large 1024 dims identiques).
-
-| Méthode | P@5 | P@10 | Latence moy |
+| Moteur | P@5 | P@10 | Latence moy |
 |---|---|---|---|
-| Milvus prod (baseline) | ~? | ~? | **5000–7000 ms** 🔴 |
-| 🥇 **Typesense Hybrid + filter_by** | **80%** | **79%** | **147 ms** ⚡ |
-| Typesense Sémantique pur (≈Milvus) | 69% | 62% | 31 ms |
-| Typesense BM25 pur | 62% | 58% | 32 ms |
-| OpenSearch BM25 | 66% | 62% | 59 ms |
-| OpenSearch kNN pur | 69% | 62% | 73 ms |
+| Milvus prod (baseline) | — | — | ~5–7 s 🔴 |
+| 🏆 **Typesense + filter_by** | **80%** | **79%** | 147 ms |
 | OpenSearch Hybrid | 67% | 63% | 67 ms |
-| OpenSearch Hybrid v2 (filter) | 67% | 64% | 69 ms |
 
-→ voir [`reports/bench_report_final.html`](reports/bench_report_final.html)
-pour le détail visuel par requête.
+→ détail dans `reports/bench_report_final.html`
 
-## 🧩 Innovations du moteur Typesense (`search_v2.py`)
-
-1. **Détection automatique de catégorie** via facet search sur `categorie`
-2. **Prefix-match tolérant sg/pl** : query « signalisation securite » matche
-   catégorie « Signalisations sécurité travail »
-3. **Hard filter par catégorie** quand confiance ≥ 80% et prefix-match OK
-4. **Re-rank Python pondéré** sur top 50 candidats :
-   `final = 0.55·vecteur + 0.10·BM25 + 0.25·match_nom + 0.10·match_categorie`
-5. **Pénalité** sur les hits « BM25-only » (vec < 0.20 AND name_match < 50%)
-
-## 📁 Structure
+## 🏗 Architecture
 
 ```
-opti-moteur-front/
-├── README.md                          ← vous êtes ici
-├── .gitignore
-│
-├── local/                             Scripts pour poste de dev (Windows/macOS/Linux)
-│   ├── docker-compose.yml             Typesense 27.1 single node
-│   ├── requirements.txt
-│   ├── search_v2.py                   ⭐ Moteur principal (detection cat + re-rank)
-│   ├── search_local.py                Benchmark simple
-│   ├── benchmark_panel.py             Panel 26 queries → bench_results.json
-│   ├── benchmark_opensearch.py        Bench OpenSearch (BM25 / kNN / Hybrid)
-│   ├── benchmark_opensearch_v2.py     Bench OS avec filter_by categorie
-│   ├── compute_metrics.py             Calcul P@5 / P@10 vs ground truth
-│   ├── generate_report_final.py       Rapport HTML 5-way + color-coded
-│   ├── ingest_typesense.py            Ingestion d'un JSONL dans Typesense
-│   ├── ingest_camembert.py            Ingestion POC initial (42 produits)
-│   ├── inspect_categories.py          Debug distribution catégories
-│   ├── merge_queries.py               Merge embeddings de queries
-│   ├── synonyms.json                  Exemple synonymes métier B2B
-│   └── data/
-│       ├── query_embeddings.json      26 requêtes pré-embeddées CamemBERT
-│       └── ground_truth.json          Catégories attendues par requête
-│
-├── vm/                                Scripts pour VM Linux (accès Milvus direct)
-│   ├── README_VM.md
-│   ├── docker-compose.yml             Typesense avec volume persist
-│   ├── docker-compose-full.yml        Typesense cap RAM 32 GB (prod-scale)
-│   ├── requirements.txt               pymilvus + typesense + tqdm
-│   ├── export_from_milvus.py          Export JSONL depuis Milvus (2 phases)
-│   ├── stream_milvus_to_typesense.py  Ingestion streaming directe (pas de JSONL)
-│   ├── ingest_by_categories.py        Ingestion par liste de catégories
-│   ├── ingest_typesense.py            Variante simple
-│   ├── search.py                      Benchmark sur VM avec baseline Milvus
-│   ├── debug_milvus.py                Debug connexion / filtres Milvus
-│   └── find_categories.sql            SQL recursif (alternative aux scripts PHP)
-│
-├── ecrtel/                            Scripts PHP pour l'hébergeur prod
-│   ├── build_categories_list.php      Par keywords → niveau_1 → leaves
-│   └── build_categories_from_roots.php Par rubriques racines → BFS descendants
-│
-└── reports/                           Rapports HTML (pour présentation)
-    ├── bench_report.html              Première version
-    ├── bench_report_3way.html         OpenSearch vs Typesense
-    └── bench_report_final.html        ⭐ Version finale avec P@5/P@10 color-coded
+app/
+├── core/
+│   ├── credentials.py        # Settings pydantic (ZILLIZ_*, TYPESENSE_*)
+│   ├── milvus_connector.py   # Singleton Milvus (query async via to_thread)
+│   └── typesense_client.py   # Singleton Typesense + helpers collection
+├── utils/
+│   └── text.py               # tokenize, normalize, is_prefix_match
+├── services/
+│   ├── category_detector.py  # Facet search + prefix-match filter
+│   ├── reranker.py           # Formule rerank pondérée
+│   ├── search_service.py     # Pipeline complet (detect + hybrid + rerank)
+│   └── ingestion_service.py  # Streaming Milvus → Typesense par catégorie
+├── schemas/                  # Pydantic (SearchRequest/Response, Ingest)
+└── router/                   # FastAPI routes (search, ingest, admin)
 ```
 
-## 🚀 Quickstart local
+## 🚀 Installation locale
 
 ```bash
-cd local
+cd apps-microservices/opti-moteur-front
+./init.sh                     # crée .venv + install deps
+cp .env.example .env          # éditer avec les vrais credentials ZILLIZ_*
+./run.sh                      # uvicorn --reload sur :8570
+```
 
-# 1. Lancer Typesense
+## 🐳 Docker
+
+```bash
 docker compose up -d
-curl http://localhost:8108/health    # attendu {"ok":true}
-
-# 2. Dépendances Python
-pip install -r requirements.txt
-
-# 3. Ingérer un JSONL (extrait depuis Milvus via vm/export_from_milvus.py)
-INPUT=data/merged_30k.jsonl TS_COLLECTION=produits_30k \
-  python3 ingest_typesense.py
-
-# 4. Benchmark complet
-TS_COLLECTION=produits_30k python3 benchmark_panel.py
-python3 compute_metrics.py
-python3 generate_report_final.py
-# → ouvrir bench_report_final.html
+curl http://localhost:8570/health
 ```
 
-## 🏭 Déploiement VM
+## 📡 API Endpoints
 
-Voir [`vm/README_VM.md`](vm/README_VM.md).
+### `GET /` — root
+```json
+{"message": "Bienvenue sur l'API OPTI-MOTEUR-FRONT v1.0.0"}
+```
 
-Pipeline typique :
-1. **ecrtel/build_categories_from_roots.php** → `categories_from_roots.txt`
-   (liste des rubriques leaves sous Fabrication & Santé par exemple)
-2. Transfert du `.txt` sur la VM
-3. **vm/ingest_by_categories.py** → streaming Milvus → Typesense, par catégorie
+### `GET /health`
+Verifie Typesense + Milvus.
+```json
+{"status": "ok", "typesense": "ok", "milvus": "ok"}
+```
+
+### `POST /search`
+Hybrid search avec détection catégorie + re-rank.
+```json
+{
+  "query": "armoire medicale",
+  "query_vector": [0.123, 0.456, ...],   // 1024 floats CamemBERT
+  "top_k": 10,
+  "apply_filter_by_category": true
+}
+```
+Réponse :
+```json
+{
+  "query": "armoire medicale",
+  "detected_category": "Armoire médicale",
+  "detection_confidence": 1.0,
+  "filter_by_category": ["Armoire médicale"],
+  "latency_ms": {"detect": 9, "typesense": 163, "rerank": 3, "total": 175},
+  "total_candidates": 50,
+  "results": [
+    {
+      "id_produit": "13142342",
+      "nom_produit": "Armoire médicale ...",
+      "categorie": "Armoire médicale",
+      "score": 0.639,
+      "scores_detail": {"vector": 0.34, "bm25": 0.0, "name_match": 1.0, "cat_match": 1.0, "penalty": ""}
+    },
+    ...
+  ]
+}
+```
+
+### `POST /ingest/category`
+Ingère 1 catégorie depuis Milvus (blocking).
+```json
+{
+  "categorie": "Armoire médicale",
+  "extra_filter": "etat in [\"Client\",\"Prospect\"]",
+  "batch_size": 1000
+}
+```
+
+### `POST /ingest/categories/batch`
+Ingère plusieurs catégories en série (avec garde-fou disque).
+
+### `GET /admin/collections`
+Liste des collections Typesense.
+
+### `POST /admin/collections/{name}`
+Crée une collection avec le schema standard (1024 dims, 23 fields).
+
+### `DELETE /admin/collections/{name}?confirm=true`
+Supprime une collection.
+
+## 🔗 Dépendances
+
+- Milvus prod (`ZILLIZ_*` envs) pour la source d'embeddings + metadata
+- Typesense (standalone Docker ou Typesense Cloud)
+- `api-embedding-service` pour embedder les queries au runtime (non inclus ici — à appeler avant `/search`)
+
+## 📖 Pipeline d'ingestion complet
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Build liste categories (scripts PHP sur ecrtel)          │
+│    php build_categories_from_roots.php → categories.txt     │
+└─────────────────────────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 2. POST /ingest/categories/batch avec liste                 │
+│    → streaming Milvus → Typesense                           │
+│    → monitoring disque/docs par categorie                   │
+└─────────────────────────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 3. Queries temps reel :                                     │
+│    • api-embedding-service embedd la query (1024 dims)      │
+│    • POST /search avec query + vector                       │
+│    • reponse en < 200ms                                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 🧪 Tests
 
 ```bash
-# Sur la VM, après sourcing du .env RAG-HP-PUB
-MILVUS_HOST=$ZILLIZ_URI MILVUS_PORT=$ZILLIZ_PORT \
-MILVUS_USER=$ZILLIZ_USER MILVUS_PASSWORD=$ZILLIZ_PASSWORD \
-CATEGORIES_FILE=categories_from_roots.txt \
-TS_COLLECTION=produits_prod \
-EXTRA_FILTER='etat in ["Client","Prospect"] or (etat == "Pause" and affichage == "Complet")' \
-python3 ingest_by_categories.py | tee ingestion.log
+pytest tests/
 ```
 
-Le script affiche après chaque catégorie : `chunks_ingérés`, `docs_total_typesense`, `disque_libre_restant`.
+## 🛠 TODO / Roadmap
 
-## 📐 Sizing prod (2,24 M chunks Milvus)
-
-| Ressource | Besoin | Notes |
-|---|---|---|
-| RAM Typesense | 25–30 GB | `mem_limit: 32g` dans docker-compose-full.yml |
-| Disque Typesense data | 30–40 GB | |
-| Ingestion | ~1–2 h streaming | 500–2000 docs/s selon CPU/réseau |
-| 1ère query (cold HNSW) | 30 s – 2 min | |
-| Queries suivantes | 50–200 ms | |
-
-## 🗺️ Roadmap
-
-- [x] POC local 42 produits (42 dims fictifs) — CamemBERT 1024
-- [x] Benchmark 34k produits réels
-- [x] Comparaison OpenSearch vs Typesense
-- [x] Métriques P@5 / P@10 sur ground truth
-- [x] Prefix-match catégorie + re-rank Python
-- [ ] Scale-test VM 2,24 M chunks
-- [ ] Collecte queries réelles commerciaux
-- [ ] Dual-write Milvus + Typesense à `api-embedding-service`
-- [ ] Canary 10% traffic en prod
-- [ ] Déploiement GA
-
-## 🔗 Références
-
-- [Typesense hybrid search](https://typesense.org/docs/27.1/api/vector-search.html#hybrid-search)
-- [OpenSearch kNN](https://opensearch.org/docs/latest/search-plugins/knn/index/)
-- Structure catégories HelloPro : `rubrique_front` avec racine virtuelle `1000000`, sections = direct children, niveau_1 = grandchildren
+- [ ] Tests unitaires sur `text.py`, `reranker.py`, `category_detector.py`
+- [ ] Endpoint `/ingest/categories/batch/async` avec tâche de fond + status polling
+- [ ] Intégration `common_utils.metrics.prometheus` (comme `api-rest-milvus`)
+- [ ] Intégration `common_utils.concurrency.MilvusConcurrencyGuard`
+- [ ] Synonymes métier B2B via Typesense `/synonyms` endpoint
+- [ ] Canary A/B (feature flag) en front
