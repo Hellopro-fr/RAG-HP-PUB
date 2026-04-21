@@ -16,10 +16,13 @@ type Client struct {
 }
 
 func New(baseURL, adminToken string) *Client {
+	// http.Client has no overall Timeout — per-call deadlines are enforced via
+	// context.WithTimeout in each method (Spawn=30s, Kill/Restart/List=15s,
+	// Reconcile=60s). A shared http.Client.Timeout would clip the longer calls.
 	return &Client{
 		baseURL:    baseURL,
 		adminToken: adminToken,
-		http:       &http.Client{Timeout: 15 * time.Second},
+		http:       &http.Client{},
 	}
 }
 
