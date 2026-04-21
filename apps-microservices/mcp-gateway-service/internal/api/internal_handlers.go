@@ -17,6 +17,11 @@ type runnerSyncResponse struct {
 // Returns the full list of desired instances, with decrypted credentials so
 // the runner can spawn/respawn them.
 func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
 	if h.config == nil || h.instanceRepo == nil || h.templateRepo == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
