@@ -1544,6 +1544,15 @@ class RecommendationService:
             results = await clients.execute_cypher(cypher_query, params)
             query_time = time.perf_counter() - query_start
 
+            # P5 fix: Cypher always returns ≥1 row via UNWIND [null], so `not results` is never True.
+            # Use product_data presence check instead to detect zero-result case.
+            if not any(r.get("product_data") for r in results):
+                logging.warning("[P5-FALLBACK] No products above threshold, retrying with absolute_threshold=-1.0")
+                fallback_params = dict(params)
+                fallback_params["absolute_threshold"] = -1.0
+                results = await clients.execute_cypher(cypher_query, fallback_params)
+                logging.warning("[P5-FALLBACK] fallback returned %d real products", sum(1 for r in results if r.get("product_data")))
+
             # --- DEBUG: Diversity Algorithm Output ---
             if results:
                 pre_diversity_debug = results[0].get("pre_diversity_debug", [])
