@@ -128,3 +128,116 @@ func TestHandleClassifyProduct_MissingDescription_ReturnsError(t *testing.T) {
 		t.Fatalf("expected error result, got success: %+v", res)
 	}
 }
+
+func TestHandleClassifyProductsBatch_AutoGeneratesMissingIDs(t *testing.T) {
+	srv, captured := newStubBackend(t, "/classification/classify/batch", `{"resultats":[]}`)
+	clients := &Clients{HTTP: srv.Client(), BaseURL: srv.URL}
+
+	args := map[string]any{
+		"produits": []any{
+			map[string]any{
+				"nom_produit": "A",
+				"description": "desc-A",
+			},
+			map[string]any{
+				"id_produit":  "SKU-B",
+				"nom_produit": "B",
+				"description": "desc-B",
+			},
+			map[string]any{
+				"id_produit":  "",
+				"nom_produit": "C",
+				"description": "desc-C",
+			},
+		},
+	}
+
+	res, err := handleClassifyProductsBatch(context.Background(), clients, args)
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected success result, got error: %+v", res)
+	}
+
+	var sent struct {
+		Produits []map[string]any `json:"produits"`
+	}
+	if err := json.Unmarshal(*captured, &sent); err != nil {
+		t.Fatalf("unmarshal captured body: %v", err)
+	}
+	if len(sent.Produits) != 3 {
+		t.Fatalf("expected 3 produits in payload, got %d", len(sent.Produits))
+	}
+
+	re := regexp.MustCompile(`^auto-[0-9a-f]{16}$`)
+
+	// Item 0: missing id_produit → auto-generated.
+	id0, _ := sent.Produits[0]["id_produit"].(string)
+	if !re.MatchString(id0) {
+		t.Fatalf("item 0: expected auto id, got %q", id0)
+	}
+	// Item 1: client-provided id_produit preserved.
+	if id1, _ := sent.Produits[1]["id_produit"].(string); id1 != "SKU-B" {
+		t.Fatalf("item 1: expected SKU-B, got %q", id1)
+	}
+	// Item 2: empty string → auto-generated.
+	id2, _ := sent.Produits[2]["id_produit"].(string)
+	if !re.MatchString(id2) {
+		t.Fatalf("item 2: expected auto id, got %q", id2)
+	}
+	// And the two auto IDs must differ.
+	if id0 == id2 {
+		t.Fatalf("expected distinct auto ids, both were %q", id0)
+	}
+}
+
+func TestHandleClassifyProductsBatch_EmptyProduits_ReturnsError(t *testing.T) {
+	clients := &Clients{HTTP: http.DefaultClient, BaseURL: "http://unused.invalid"}
+	args := map[string]any{"produits": []any{}}
+	res, err := handleClassifyProductsBatch(context.Background(), clients, args)
+	if err != nil {
+		t.Fatalf("handler returned unexpected error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected error result, got success: %+v", res)
+	}
+}
+
+func TestHandleClassifyProductsBatch_MissingProduits_ReturnsError(t *testing.T) {
+	clients := &Clients{HTTP: http.DefaultClient, BaseURL: "http://unused.invalid"}
+	res, err := handleClassifyProductsBatch(context.Background(), clients, map[string]any{})
+	if err != nil {
+		t.Fatalf("handler returned unexpected error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected error result, got success: %+v", res)
+	}
+}
+
+func TestHandleClassifyProductsBatch_LeavesNonMapItemsUntouched(t *testing.T) {
+	srv, captured := newStubBackend(t, "/classification/classify/batch", `{"resultats":[]}`)
+	clients := &Clients{HTTP: srv.Client(), BaseURL: srv.URL}
+
+	// Non-map items (e.g. a raw string) must pass through unchanged so the
+	// backend can return its own structured per-item error.
+	args := map[string]any{
+		"produits": []any{"not-a-map"},
+	}
+	if _, err := handleClassifyProductsBatch(context.Background(), clients, args); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+
+	var sent struct {
+		Produits []any `json:"produits"`
+	}
+	if err := json.Unmarshal(*captured, &sent); err != nil {
+		t.Fatalf("unmarshal captured body: %v", err)
+	}
+	if len(sent.Produits) != 1 {
+		t.Fatalf("expected 1 produit forwarded, got %d", len(sent.Produits))
+	}
+	if s, _ := sent.Produits[0].(string); s != "not-a-map" {
+		t.Fatalf("expected non-map item to pass through as %q, got %v", "not-a-map", sent.Produits[0])
+	}
+}
