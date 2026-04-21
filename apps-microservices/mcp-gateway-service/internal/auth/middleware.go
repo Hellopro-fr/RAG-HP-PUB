@@ -76,6 +76,7 @@ var publicPrefixes = []string{
 	"/.well-known",        // OAuth2 server metadata
 	"/api/v1/public/",     // Public docs endpoints
 	"/uploads/",           // Uploaded static files (icons)
+	"/api/v1/internal/",   // Internal machine-to-machine (X-Admin-Token on handler)
 }
 
 // Middleware returns an HTTP middleware that enforces authentication.

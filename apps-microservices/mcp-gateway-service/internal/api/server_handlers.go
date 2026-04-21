@@ -100,8 +100,26 @@ type TokenCache interface {
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry, allowInternalURLs bool) *Handler {
-	return &Handler{repo: repo, gw: gw, registry: registry, allowInternalURLs: allowInternalURLs}
+func NewHandler(
+	repo *repository.ServerRepo,
+	gw *gateway.Gateway,
+	registry *gateway.Registry,
+	allowInternalURLs bool,
+	templateRepo *repository.TemplateRepo,
+	instanceRepo *repository.InstanceRepo,
+	runner *runnerclient.Client,
+	cfg *config.Config,
+) *Handler {
+	return &Handler{
+		repo:              repo,
+		gw:                gw,
+		registry:          registry,
+		allowInternalURLs: allowInternalURLs,
+		templateRepo:      templateRepo,
+		instanceRepo:      instanceRepo,
+		runner:            runner,
+		config:            cfg,
+	}
 }
 
 // SetTokenRepo sets the token repository for token CRUD operations.
