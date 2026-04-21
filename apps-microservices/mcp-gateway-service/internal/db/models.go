@@ -369,7 +369,11 @@ func (Template) TableName() string { return "templates" }
 // exactly one running mcp-proxy subprocess in the runner.
 type TemplateInstance struct {
 	ID                   string     `gorm:"type:char(36);primaryKey" json:"id"`
-	TemplateSlug         string     `gorm:"type:varchar(32);not null;index:idx_instance_template;constraint:OnDelete:RESTRICT" json:"template_slug"`
+	TemplateSlug         string     `gorm:"type:varchar(32);not null;index:idx_instance_template" json:"template_slug"`
+	// Template is the associated catalog row. The FK (on TemplateSlug →
+	// templates.slug) is declared here so AutoMigrate emits it; the field itself
+	// is not preloaded by default and not exposed in JSON.
+	Template *Template `gorm:"foreignKey:TemplateSlug;references:Slug;constraint:OnDelete:RESTRICT" json:"-"`
 	Name                 string     `gorm:"type:varchar(255);not null" json:"name"`
 	EncryptedCredentials []byte     `gorm:"type:blob;not null" json:"-"`
 	// CredentialsHash is SHA-256(plaintext) used by the runner to detect
