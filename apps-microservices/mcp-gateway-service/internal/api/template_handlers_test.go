@@ -40,6 +40,30 @@ func TestHandleGetTemplate_NilDeps_Returns503(t *testing.T) {
 	}
 }
 
+func TestHandleListInstances_NilRepo_Returns503(t *testing.T) {
+	h := &Handler{} // instanceRepo nil
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/template-instances", nil)
+	rec := httptest.NewRecorder()
+
+	h.handleListInstances(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+}
+
+func TestHandleGetInstance_NilRepo_Returns503(t *testing.T) {
+	h := &Handler{} // instanceRepo nil
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/template-instances/abc", nil)
+	rec := httptest.NewRecorder()
+
+	h.handleGetInstance(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+}
+
 func TestToTemplateResponse_PreservesFields(t *testing.T) {
 	tmpl := db.Template{
 		Slug:         "google-sheets",
