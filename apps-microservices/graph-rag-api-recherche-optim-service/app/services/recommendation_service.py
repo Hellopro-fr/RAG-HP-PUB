@@ -1129,8 +1129,8 @@ class RecommendationService:
             if request.scoring.c_unknown_score is not None
             else 0
         )
-        # P1 fix: penalize missing characteristics (cap at -0.5 — aligned with V2)
-        c_unknown_score = min(c_unknown_score, -0.5)
+        # P1 iter-1: strengthen penalty for missing characteristics -0.5 → -0.8
+        c_unknown_score = min(c_unknown_score, -0.8)
         t_unmatched = (
             request.scoring.t_unmatched
             if request.scoring.t_unmatched is not None
