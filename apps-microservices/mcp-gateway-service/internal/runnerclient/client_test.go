@@ -1,6 +1,7 @@
 package runnerclient
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func TestSpawn_OK(t *testing.T) {
 	defer srv.Close()
 
 	c := New(srv.URL, "t")
-	out, err := c.Spawn(SpawnRequest{InstanceID: "x", TemplateSlug: "ga", StdioCommand: "analytics-mcp"})
+	out, err := c.Spawn(context.Background(), SpawnRequest{InstanceID: "x", TemplateSlug: "ga", StdioCommand: "analytics-mcp"})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -38,7 +39,7 @@ func TestSpawn_BadToken(t *testing.T) {
 	defer srv.Close()
 
 	c := New(srv.URL, "wrong")
-	_, err := c.Spawn(SpawnRequest{InstanceID: "x"})
+	_, err := c.Spawn(context.Background(), SpawnRequest{InstanceID: "x"})
 	if err == nil {
 		t.Fatal("want error")
 	}

@@ -1,6 +1,9 @@
 package runnerclient
 
 // SpawnRequest is sent to POST /admin/instances.
+// WARNING: CredentialsJSON contains the plaintext SA JSON private key.
+// Callers must NOT log the full SpawnRequest (use structured logging with
+// explicit field selection, or redact CredentialsJSON before logging).
 type SpawnRequest struct {
 	InstanceID      string            `json:"instance_id"`
 	TemplateSlug    string            `json:"template_slug"`

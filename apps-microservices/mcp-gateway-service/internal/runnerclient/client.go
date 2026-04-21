@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -56,7 +58,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 
 	if resp.StatusCode >= 400 {
 		var errBody map[string]any
-		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&errBody)
 		return fmt.Errorf("runner %s %s: status %d: %v", method, path, resp.StatusCode, errBody)
 	}
 	if out != nil {
@@ -65,9 +67,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	return nil
 }
 
-func (c *Client) Spawn(req SpawnRequest) (*SpawnResponse, error) {
+func (c *Client) Spawn(ctx context.Context, req SpawnRequest) (*SpawnResponse, error) {
 	var out SpawnResponse
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := c.do(ctx, http.MethodPost, "/admin/instances", req, &out); err != nil {
 		return nil, err
@@ -75,23 +77,23 @@ func (c *Client) Spawn(req SpawnRequest) (*SpawnResponse, error) {
 	return &out, nil
 }
 
-func (c *Client) Kill(instanceID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+func (c *Client) Kill(ctx context.Context, instanceID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	return c.do(ctx, http.MethodDelete, "/admin/instances/"+instanceID, nil, nil)
+	return c.do(ctx, http.MethodDelete, "/admin/instances/"+url.PathEscape(instanceID), nil, nil)
 }
 
-func (c *Client) Restart(instanceID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+func (c *Client) Restart(ctx context.Context, instanceID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	return c.do(ctx, http.MethodPost, "/admin/instances/"+instanceID+"/restart", nil, nil)
+	return c.do(ctx, http.MethodPost, "/admin/instances/"+url.PathEscape(instanceID)+"/restart", nil, nil)
 }
 
-func (c *Client) List() ([]InstanceStatus, error) {
+func (c *Client) List(ctx context.Context) ([]InstanceStatus, error) {
 	var out struct {
 		Instances []InstanceStatus `json:"instances"`
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := c.do(ctx, http.MethodGet, "/admin/instances", nil, &out); err != nil {
 		return nil, err
@@ -99,8 +101,8 @@ func (c *Client) List() ([]InstanceStatus, error) {
 	return out.Instances, nil
 }
 
-func (c *Client) Reconcile(desired []SpawnRequest) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+func (c *Client) Reconcile(ctx context.Context, desired []SpawnRequest) error {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	return c.do(ctx, http.MethodPost, "/admin/reconcile", ReconcileRequest{DesiredInstances: desired}, nil)
 }
