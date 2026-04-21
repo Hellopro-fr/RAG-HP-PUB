@@ -103,6 +103,26 @@ func (r *InstanceRepo) ListByTemplate(slug string) ([]db.TemplateInstance, error
 	return out, err
 }
 
+// CountsByTemplate returns {template_slug → number of instances}.
+func (r *InstanceRepo) CountsByTemplate() (map[string]int, error) {
+	var rows []struct {
+		TemplateSlug string
+		Cnt          int
+	}
+	err := r.db.Model(&db.TemplateInstance{}).
+		Select("template_slug, COUNT(*) as cnt").
+		Group("template_slug").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]int, len(rows))
+	for _, row := range rows {
+		m[row.TemplateSlug] = row.Cnt
+	}
+	return m, nil
+}
+
 // UpdateStatus updates the runner_status / runner_last_error / runner_port fields.
 // Pass port = nil to keep the existing port value.
 func (r *InstanceRepo) UpdateStatus(id, status, lastError string, port *int) error {

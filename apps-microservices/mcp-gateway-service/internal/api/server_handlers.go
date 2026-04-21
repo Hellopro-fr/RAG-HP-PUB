@@ -12,12 +12,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/config"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
@@ -84,6 +86,12 @@ type Handler struct {
 	// Google Sheets import
 	googleTokenRepo *repository.GoogleTokenRepo
 	googleOAuth     *goGoogle.OAuthClient
+	// Template instances (Google templates dynamic secrets feature).
+	// These stay zero-valued (nil) until Task 13 wires them in main.go.
+	templateRepo *repository.TemplateRepo
+	instanceRepo *repository.InstanceRepo
+	runner       *runnerclient.Client
+	config       *config.Config
 }
 
 // TokenCache is an interface for scope token cache operations.
