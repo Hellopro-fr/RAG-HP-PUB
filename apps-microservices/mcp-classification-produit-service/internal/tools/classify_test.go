@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -77,8 +76,9 @@ func TestHandleClassifyProduct_EmptyIDProduit_GeneratesAutoID(t *testing.T) {
 		t.Fatalf("unmarshal captured body: %v", err)
 	}
 	id, _ := sent["id_produit"].(string)
-	if !strings.HasPrefix(id, "auto-") {
-		t.Fatalf("expected auto-generated id, got %q", id)
+	re := regexp.MustCompile(`^auto-[0-9a-f]{16}$`)
+	if !re.MatchString(id) {
+		t.Fatalf("expected forwarded id_produit to match %q, got %q", re.String(), id)
 	}
 }
 
