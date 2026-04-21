@@ -358,3 +358,108 @@ func validateExtraEnv(schemaRaw json.RawMessage, extra map[string]string) error 
 	}
 	return nil
 }
+
+func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) {
+	if h.instanceRepo == nil || h.runner == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
+		return
+	}
+	id := extractInstanceID(r.URL.Path, "/restart")
+	if _, err := h.instanceRepo.GetByID(id); err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+		return
+	}
+	if err := h.runner.Restart(r.Context(), id); err != nil {
+		log.Printf("[templates] runner restart failed for instance %s: %v", id, err)
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
+		return
+	}
+	if err := h.instanceRepo.UpdateStatus(id, "pending", "", nil); err != nil {
+		log.Printf("[templates][WARN] could not persist restarting status (id=%s): %v", id, err)
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restarting"})
+}
+
+func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request) {
+	if h.templateRepo == nil || h.instanceRepo == nil || h.runner == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
+		return
+	}
+	id := extractInstanceID(r.URL.Path, "/rotate-credentials")
+	if err := r.ParseMultipartForm(int64(validation.MaxSAJSONSize) + 48*1024); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "multipart parse: " + err.Error()})
+		return
+	}
+	file, hdr, err := r.FormFile("credentials")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing credentials file"})
+		return
+	}
+	defer file.Close()
+	if hdr.Size > int64(validation.MaxSAJSONSize) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "credentials file too large"})
+		return
+	}
+	credBytes, err := io.ReadAll(io.LimitReader(file, int64(validation.MaxSAJSONSize)+1))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "read credentials: " + err.Error()})
+		return
+	}
+	if _, err := validation.ValidateServiceAccountJSON(credBytes); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid credentials: " + err.Error()})
+		return
+	}
+	hash := sha256.Sum256(credBytes)
+	hashHex := hex.EncodeToString(hash[:])
+
+	inst, err := h.instanceRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
+		return
+	}
+	tpl, err := h.templateRepo.GetBySlug(inst.TemplateSlug)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "template lookup failed"})
+		return
+	}
+
+	// Update DB first (encrypted blob + hash) — the runner respawn below re-reads from us on reconcile.
+	if err := h.instanceRepo.UpdateCredentials(id, credBytes, hashHex); err != nil {
+		log.Printf("[templates] rotate credentials DB update failed (id=%s): %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
+		return
+	}
+
+	// Respawn with the new credentials
+	var stdioArgs []string
+	if len(tpl.StdioArgs) > 0 {
+		_ = json.Unmarshal(tpl.StdioArgs, &stdioArgs)
+	}
+	var extraEnv map[string]string
+	if len(inst.ExtraEnv) > 0 {
+		_ = json.Unmarshal(inst.ExtraEnv, &extraEnv)
+	}
+	env := renderEnv(tpl.DefaultEnv, extraEnv, id)
+	if _, err := h.runner.Spawn(r.Context(), runnerclient.SpawnRequest{
+		InstanceID:      id,
+		TemplateSlug:    inst.TemplateSlug,
+		StdioCommand:    tpl.StdioCommand,
+		StdioArgs:       stdioArgs,
+		Env:             env,
+		CredentialsJSON: string(credBytes),
+		CredentialsHash: hashHex,
+	}); err != nil {
+		log.Printf("[templates] runner respawn after rotate failed (id=%s): %v", id, err)
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rotating"})
+}
+
+// extractInstanceID pulls the {id} out of /api/v1/template-instances/{id}<suffix>.
+// Example: extractInstanceID("/api/v1/template-instances/abc-123/restart", "/restart") == "abc-123".
+func extractInstanceID(path, suffix string) string {
+	rest := strings.TrimPrefix(path, "/api/v1/template-instances/")
+	rest = strings.TrimSuffix(rest, suffix)
+	return strings.TrimSuffix(rest, "/")
+}

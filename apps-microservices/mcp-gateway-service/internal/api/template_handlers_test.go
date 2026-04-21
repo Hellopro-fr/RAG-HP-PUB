@@ -74,6 +74,26 @@ func TestHandleCreateInstance_NilRepo_Returns503(t *testing.T) {
 	}
 }
 
+func TestHandleRestartInstance_NilDeps_Returns503(t *testing.T) {
+	h := &Handler{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/template-instances/abc/restart", nil)
+	rec := httptest.NewRecorder()
+	h.handleRestartInstance(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("got %d", rec.Code)
+	}
+}
+
+func TestHandleRotateCredentials_NilDeps_Returns503(t *testing.T) {
+	h := &Handler{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/template-instances/abc/rotate-credentials", nil)
+	rec := httptest.NewRecorder()
+	h.handleRotateCredentials(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("got %d", rec.Code)
+	}
+}
+
 func TestToTemplateResponse_PreservesFields(t *testing.T) {
 	tmpl := db.Template{
 		Slug:         "google-sheets",
