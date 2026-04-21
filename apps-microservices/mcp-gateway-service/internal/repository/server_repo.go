@@ -102,6 +102,12 @@ func (r *ServerRepo) Update(id string, updates map[string]interface{}) error {
 	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Updates(updates).Error
 }
 
+// UpdateURL sets the URL column (used when the templates feature learns the
+// dynamic port from the runner after initial insert).
+func (r *ServerRepo) UpdateURL(id, url string) error {
+	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Update("url", url).Error
+}
+
 // Delete removes a server and all its associations (CASCADE).
 func (r *ServerRepo) Delete(id string) error {
 	return r.db.Delete(&db.MCPServer{}, "id = ?", id).Error

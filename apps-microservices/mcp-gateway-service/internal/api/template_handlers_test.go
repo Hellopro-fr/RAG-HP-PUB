@@ -64,6 +64,16 @@ func TestHandleGetInstance_NilRepo_Returns503(t *testing.T) {
 	}
 }
 
+func TestHandleCreateInstance_NilRepo_Returns503(t *testing.T) {
+	h := &Handler{} // all deps nil
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/template-instances", nil)
+	rec := httptest.NewRecorder()
+	h.handleCreateInstance(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("got %d, want 503", rec.Code)
+	}
+}
+
 func TestToTemplateResponse_PreservesFields(t *testing.T) {
 	tmpl := db.Template{
 		Slug:         "google-sheets",
