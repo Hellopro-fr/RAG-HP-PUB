@@ -36,6 +36,7 @@ import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
+import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 
 const execAsync = promisify(exec);
@@ -152,6 +153,10 @@ if (storagePath) {
     const loaded = readPersistedDecision(storagePath);
     if (!loaded) applyCliFlagGuard();
 }
+
+// Tier-1 observer guard: disable observation if CLI already set skipQuestionMark / bypassQuestionMark.
+// Human choice wins — spec §9.3.
+applyQuestionMarkGuard();
 
 const nameLogs = `${domain}-logs-${now}.log`;
 attachFSLogger(nameLogs);
@@ -926,6 +931,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         robots_txt_bypassed: context.robotsTxtBypassed,
         camoufox_used: context.camoufoxEnabled,
         diezDecisionMode: getDiezDecisionMode(isError),
+        questionMarkDecisionMode: getQuestionMarkDecisionMode(isError),
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
