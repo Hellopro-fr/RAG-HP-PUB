@@ -1,19 +1,28 @@
 package repository
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/google/uuid"
+	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"gorm.io/gorm"
 )
 
-// newTemplateTestDB opens an in-memory SQLite and creates a minimal `templates` table
-// that matches the fields exercised by TemplateRepo. We avoid AutoMigrate on
-// db.Template because its MySQL-specific `datetime(3)` column type is not
-// recognised by SQLite drivers for time.Time scan conversion.
+// newTemplateTestDB opens an in-memory SQLite and creates minimal tables
+// covering the rows exercised by TemplateRepo and InstanceRepo. We avoid
+// AutoMigrate on db.Template / db.TemplateInstance / db.MCPServer because their
+// MySQL-specific `datetime(3)` column type is not recognised by SQLite drivers
+// for time.Time scan conversion.
+//
+// Only columns actually read/written by the repositories under test are
+// declared — this keeps the DDL narrow and easy to evolve. Callers that need
+// additional tables can extend this helper in place.
 func newTemplateTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -35,9 +44,39 @@ func newTemplateTestDB(t *testing.T) *gorm.DB {
 			is_active           INTEGER NOT NULL DEFAULT 1,
 			created_at          datetime,
 			updated_at          datetime
+		);
+		CREATE TABLE mcp_servers (
+			id                   TEXT PRIMARY KEY,
+			name                 TEXT NOT NULL DEFAULT '',
+			url                  TEXT NOT NULL DEFAULT '',
+			transport_preference TEXT NOT NULL DEFAULT 'auto',
+			connect_timeout_ms   INTEGER NOT NULL DEFAULT 10000,
+			mcp_transport        TEXT NOT NULL DEFAULT 'http',
+			tool_prefix          TEXT NOT NULL DEFAULT '',
+			icon                 TEXT NOT NULL DEFAULT '',
+			is_active            INTEGER NOT NULL DEFAULT 1,
+			health_status        TEXT NOT NULL DEFAULT 'unknown',
+			created_by           TEXT NOT NULL DEFAULT '',
+			created_at           datetime,
+			updated_at           datetime
+		);
+		CREATE TABLE template_instances (
+			id                    TEXT PRIMARY KEY,
+			template_slug         TEXT NOT NULL,
+			name                  TEXT NOT NULL,
+			encrypted_credentials BLOB NOT NULL,
+			credentials_hash      TEXT NOT NULL,
+			extra_env             TEXT,
+			runner_port           INTEGER,
+			runner_status         TEXT NOT NULL DEFAULT 'pending',
+			runner_last_error     TEXT,
+			mcp_server_id         TEXT NOT NULL,
+			created_by            TEXT NOT NULL DEFAULT '',
+			created_at            datetime,
+			updated_at            datetime
 		);`
 	if err := gdb.Exec(ddl).Error; err != nil {
-		t.Fatalf("create table: %v", err)
+		t.Fatalf("create tables: %v", err)
 	}
 	return gdb
 }
@@ -75,5 +114,47 @@ func TestTemplateRepo_GetBySlug_NotFound(t *testing.T) {
 	_, err := repo.GetBySlug("nope")
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("want gorm.ErrRecordNotFound, got %v", err)
+	}
+}
+
+func newTestEncryptor(t *testing.T) *crypto.Encryptor {
+	t.Helper()
+	// 32-byte hex key
+	enc, err := crypto.NewEncryptor("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("encryptor: %v", err)
+	}
+	return enc
+}
+
+func TestInstanceRepo_CreateRoundTrip(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	enc := newTestEncryptor(t)
+	repo := NewInstanceRepo(gdb, enc)
+
+	credJSON := []byte(`{"type":"service_account","client_email":"a@b.iam.gserviceaccount.com"}`)
+	hash := sha256.Sum256(credJSON)
+
+	inst := &db.TemplateInstance{
+		ID:              uuid.New().String(),
+		TemplateSlug:    "ga",
+		Name:            "HelloPro prod",
+		CredentialsHash: hex.EncodeToString(hash[:]),
+		MCPServerID:     uuid.New().String(),
+		RunnerStatus:    "pending",
+	}
+	if err := repo.Create(inst, credJSON); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, plaintext, err := repo.GetByIDWithCredentials(inst.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Name != "HelloPro prod" {
+		t.Errorf("Name = %q", got.Name)
+	}
+	if string(plaintext) != string(credJSON) {
+		t.Errorf("plaintext round-trip failed")
 	}
 }
