@@ -1,14 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SpawnRequest(BaseModel):
-    instance_id: str
-    template_slug: str
-    stdio_command: str
-    stdio_args: list[str] = []
-    env: dict[str, str] = {}
-    credentials_json: str
-    credentials_hash: str
+    instance_id: str = Field(..., min_length=1, max_length=128)
+    template_slug: str = Field(..., min_length=1, max_length=64)
+    stdio_command: str = Field(..., min_length=1, max_length=256)
+    stdio_args: list[str] = Field(default_factory=list, max_length=64)
+    env: dict[str, str] = Field(default_factory=dict, max_length=64)
+    credentials_json: str = Field(..., max_length=65536)
+    credentials_hash: str = Field(..., min_length=1, max_length=128)
 
 
 class SpawnResponse(BaseModel):

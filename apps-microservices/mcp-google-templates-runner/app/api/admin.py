@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +15,8 @@ from app.models import (
     SpawnResponse,
 )
 from app.supervisor import Supervisor, SpawnSpec
+
+logger = logging.getLogger("runner.admin")
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin_token)])
 
@@ -50,14 +53,19 @@ async def spawn_instance(req: SpawnRequest, sup: Supervisor = Depends(get_superv
     spec = SpawnSpec(**req.model_dump())
     try:
         inst = await sup.spawn(spec)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"spawn failed: {e}")
+    except Exception:
+        logger.exception("spawn failed for instance %s", req.instance_id)
+        raise HTTPException(status_code=500, detail="spawn failed — see server logs")
     return SpawnResponse(port=inst.port, pid=inst.pid)
 
 
 @router.delete("/instances/{instance_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def kill_instance(instance_id: str, sup: Supervisor = Depends(get_supervisor)):
-    await sup.kill(instance_id)
+    try:
+        await sup.kill(instance_id)
+    except Exception:
+        logger.exception("kill failed for instance %s", instance_id)
+        raise HTTPException(status_code=500, detail="kill failed — see server logs")
     return None
 
 
@@ -80,12 +88,18 @@ async def reconcile(req: ReconcileRequest, sup: Supervisor = Depends(get_supervi
         if iid not in desired:
             await sup.kill(iid)
 
-    # Spawn missing + restart hash mismatches (bounded concurrency = 5)
+    # Spawn missing + restart hash mismatches (bounded concurrency = 5).
+    # return_exceptions=True so one failing spawn doesn't cancel siblings
+    # mid-flight — a cancel during Supervisor.spawn's await can leak a port
+    # and a credentials file.
     sem = asyncio.Semaphore(5)
 
     async def _spawn_one(r: SpawnRequest):
         async with sem:
-            await sup.spawn(SpawnSpec(**r.model_dump()))
+            try:
+                await sup.spawn(SpawnSpec(**r.model_dump()))
+            except Exception:
+                logger.exception("reconcile: spawn failed for %s", r.instance_id)
 
     to_spawn = []
     for iid, r in desired.items():
@@ -94,5 +108,5 @@ async def reconcile(req: ReconcileRequest, sup: Supervisor = Depends(get_supervi
         elif local[iid].credentials_hash != r.credentials_hash:
             to_spawn.append(r)
 
-    await asyncio.gather(*[_spawn_one(r) for r in to_spawn])
+    await asyncio.gather(*[_spawn_one(r) for r in to_spawn], return_exceptions=True)
     return {"spawned": len(to_spawn)}
