@@ -1750,6 +1750,8 @@ class RecommendationService:
 
             # iter-2 (P3): description placed BEFORE titre so the LLM anchors
             # on the discriminant technical content instead of a generic label.
+            # P6 fix: include url_produit so the LLM can detect occasion products
+            # (e.g. medimat.fr/.../occasion-industrie-medimat/...) and apply score 1.
             formatted_product = {
                 "id_produit": str(id_produit),
                 "description": re.sub(
@@ -1762,6 +1764,7 @@ class RecommendationService:
                 "titre": info.get(
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
+                "url": info.get("url_produit", ""),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "type": etat_societe_label,
