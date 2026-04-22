@@ -464,6 +464,20 @@ def _load_resume_set(resume_path: Optional[str]) -> set:
         return set()
 
 
+def _load_include_ids(spec: Optional[str]) -> Optional[Set[str]]:
+    """Parse --include-ids input. Returns None when no filter, else Set[str].
+
+    Accepts either a path to a file (one crawl_id per line) or a
+    comma-separated string. Empty tokens and whitespace are stripped.
+    """
+    if not spec:
+        return None
+    p = Path(spec)
+    if p.exists():
+        return {line.strip() for line in p.read_text().splitlines() if line.strip()}
+    return {s.strip() for s in spec.split(",") if s.strip()}
+
+
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Audit GCS archives for corruption, incompleteness, and name issues."
@@ -483,6 +497,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="Skip the confirmation prompt for --delete/--quarantine")
     parser.add_argument("--resume", default=None,
                         help="Skip archives already present in the given prior report")
+    parser.add_argument("--include-ids", default=None, metavar="SPEC",
+                        help="Comma-separated list of crawl_ids, or path to a file "
+                             "with one ID per line. Only audit archives whose "
+                             "extracted crawl_id is in this set.")
     parser.add_argument("--restore-from-quarantine", default=None, metavar="PREFIX",
                         help="Move all objects from gs://<bucket>/<PREFIX>/ back to "
                              "gs://<bucket>/<--prefix>/, then exit. Used to recover from "
@@ -565,6 +583,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     signal.signal(signal.SIGINT, _on_sigint)
 
     skip_set = _load_resume_set(args.resume)
+    include_ids = _load_include_ids(args.include_ids)
 
     # List
     uri = f"gs://{args.bucket}/{args.prefix}"
@@ -574,8 +593,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     processed = 0
     for size_bytes, obj_uri in listing:
-        if obj_uri in skip_set:
+        # skip_set holds bucket-stripped object_names (same shape as stored in the report).
+        # Normalize obj_uri to match before checking.
+        normalized_name = obj_uri.replace(f"gs://{args.bucket}/", "", 1)
+        if normalized_name in skip_set:
             continue
+        if include_ids is not None:
+            cid = extract_crawl_id(obj_uri)
+            if cid not in include_ids:
+                continue
         if args.limit is not None and processed >= args.limit:
             break
         processed += 1

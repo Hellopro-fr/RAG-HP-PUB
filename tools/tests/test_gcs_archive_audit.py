@@ -522,3 +522,77 @@ class TestDomainResolution:
         assert category == ga.OK
         assert "warning" in details
         assert "domain could not be resolved" in details["warning"]
+
+
+class TestIncludeIds:
+    """Tests for the --include-ids flag: targeted audit over a subset of crawl_ids."""
+
+    def test_load_include_ids_from_csv_string(self):
+        result = ga._load_include_ids("1806,2517, 4606 , 5250")
+        assert result == {"1806", "2517", "4606", "5250"}
+
+    def test_load_include_ids_from_file(self, tmp_path):
+        p = tmp_path / "ids.txt"
+        p.write_text("1806\n2517\n\n 4606 \n")
+        result = ga._load_include_ids(str(p))
+        assert result == {"1806", "2517", "4606"}
+
+    def test_load_include_ids_returns_none_when_no_spec(self):
+        assert ga._load_include_ids(None) is None
+        assert ga._load_include_ids("") is None
+
+    def test_audit_skips_non_matching_ids(self, tmp_path, monkeypatch):
+        listing = [
+            (100, "gs://b/crawls/1806.tar.gz"),
+            (200, "gs://b/crawls/9999.tar.gz"),
+        ]
+
+        def fake_ls(uri, long=False):
+            return listing if long else [u for _, u in listing]
+
+        inspected = []
+
+        def fake_inspect_one(obj_uri, size, name_only, **kwargs):
+            inspected.append(obj_uri)
+            return ga.OK, {}
+
+        monkeypatch.setattr(ga, "gcloud_ls", fake_ls)
+        monkeypatch.setattr(ga, "_inspect_one", fake_inspect_one)
+        monkeypatch.setattr(ga, "check_gcloud_auth", lambda: None)
+
+        out_path = tmp_path / "out.json"
+        ga.main(["--bucket", "b", "--include-ids", "1806", "--output", str(out_path)])
+
+        assert inspected == ["gs://b/crawls/1806.tar.gz"]
+
+    def test_include_ids_combined_with_resume(self, tmp_path, monkeypatch):
+        listing = [
+            (100, "gs://b/crawls/1806.tar.gz"),
+            (200, "gs://b/crawls/2517.tar.gz"),
+        ]
+        prior = {"archives": [{"object_name": "crawls/1806.tar.gz"}]}
+        prior_path = tmp_path / "prior.json"
+        prior_path.write_text(_json.dumps(prior))
+
+        def fake_ls(uri, long=False):
+            return listing if long else [u for _, u in listing]
+
+        inspected = []
+
+        def fake_inspect_one(obj_uri, size, name_only, **kwargs):
+            inspected.append(obj_uri)
+            return ga.OK, {}
+
+        monkeypatch.setattr(ga, "gcloud_ls", fake_ls)
+        monkeypatch.setattr(ga, "_inspect_one", fake_inspect_one)
+        monkeypatch.setattr(ga, "check_gcloud_auth", lambda: None)
+
+        out_path = tmp_path / "out.json"
+        ga.main([
+            "--bucket", "b",
+            "--include-ids", "1806,2517",
+            "--resume", str(prior_path),
+            "--output", str(out_path),
+        ])
+        # 1806 skipped by resume; 2517 allowed by include + not in resume
+        assert inspected == ["gs://b/crawls/2517.tar.gz"]
