@@ -102,6 +102,20 @@ func (r *ServerRepo) Update(id string, updates map[string]interface{}) error {
 	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Updates(updates).Error
 }
 
+// UpdateURL sets the URL column (used when the templates feature learns the
+// dynamic port from the runner after initial insert).
+func (r *ServerRepo) UpdateURL(id, url string) error {
+	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Update("url", url).Error
+}
+
+// GetURL fetches just the URL column — avoids the tools/resources/prompts/tags
+// preload that GetByID triggers when all the caller needs is the address.
+func (r *ServerRepo) GetURL(id string) (string, error) {
+	var url string
+	err := r.db.Model(&db.MCPServer{}).Where("id = ?", id).Select("url").Scan(&url).Error
+	return url, err
+}
+
 // Delete removes a server and all its associations (CASCADE).
 func (r *ServerRepo) Delete(id string) error {
 	return r.db.Delete(&db.MCPServer{}, "id = ?", id).Error
@@ -268,11 +282,17 @@ func (r *ServerRepo) EncryptAuthHeaders(srv *db.MCPServer) error {
 	return nil
 }
 
-// ListWithDocs returns all active servers that have a doc_slug set.
+// ListWithDocs returns all active servers that have a doc_slug set AND are
+// not backed by a template instance. Template-backed servers are excluded
+// from the public docs index even if they somehow have a doc_slug (e.g.
+// legacy rows created before docs were off-by-default for templates) —
+// their documentation lives in the template catalog, not the per-instance
+// docs pages.
 func (r *ServerRepo) ListWithDocs() ([]db.MCPServer, error) {
 	var servers []db.MCPServer
 	err := r.db.
 		Where("is_active = ? AND doc_slug != '' AND doc_slug IS NOT NULL", true).
+		Where("id NOT IN (SELECT mcp_server_id FROM template_instances)").
 		Preload("Tools").
 		Find(&servers).Error
 	return servers, err

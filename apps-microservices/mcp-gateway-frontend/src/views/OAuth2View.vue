@@ -7,19 +7,65 @@
       <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
     </div>
 
-    <PageHeaderTabs
-      v-else
-      v-model="activeTab"
-      :tabs="tabs"
-    >
-      <template #actions>
-        <button
-          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
-          @click="router.push('/oauth2/new')"
-        >
-          Créer un client
-        </button>
-      </template>
+    <template v-else>
+      <!-- Filters + actions -->
+      <FilterPanel
+        :active-count="activeFilterCount"
+        @reset="resetFilters"
+      >
+        <template #actions>
+          <button
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
+            @click="router.push('/oauth2/new')"
+          >
+            Créer un client
+          </button>
+        </template>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Nom</span>
+          <input v-model="filters.search" type="text" placeholder="Rechercher..." class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 placeholder:text-gray-400" />
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Statut</span>
+          <select v-model="filters.status" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option value="active">Actif</option>
+            <option value="revoked">Révoqué</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Enregistrement</span>
+          <select v-model="filters.dynamic" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option value="dynamic">Dynamique</option>
+            <option value="manual">Manuel</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Serveur</span>
+          <select v-model="filters.serverId" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option v-for="s in serversStore.servers" :key="s.id" :value="s.id">{{ s.name }}</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Expiration</span>
+          <select v-model="filters.expiresBucket" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Toutes</option>
+            <option value="never">Jamais</option>
+            <option value="expired">Expiré</option>
+            <option value="soon">Expire sous 30j</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Créé après</span>
+          <input v-model="filters.createdFrom" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Créé avant</span>
+          <input v-model="filters.createdTo" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+        </label>
+      </FilterPanel>
 
       <!-- Client cards -->
       <div
@@ -42,12 +88,12 @@
         class="text-center py-12 text-gray-500 dark:text-gray-400"
       >
         <i class="pi pi-shield text-4xl mb-3 block" />
-        <p class="font-medium">Aucun client OAuth2</p>
-        <p class="text-sm mt-1">
+        <p class="font-medium">{{ activeFilterCount > 0 ? 'Aucun client ne correspond aux filtres' : 'Aucun client OAuth2' }}</p>
+        <p v-if="activeFilterCount === 0" class="text-sm mt-1">
           Créez un client pour permettre l'authentification OAuth2 avec vos serveurs MCP.
         </p>
       </div>
-    </PageHeaderTabs>
+    </template>
 
     <!-- Revoke confirm -->
     <ConfirmDialog
@@ -72,15 +118,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { oauth2Api } from '@/api/oauth2'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
-import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ClientCard from '@/components/oauth2/ClientCard.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import FilterPanel from '@/components/shared/FilterPanel.vue'
 import type { OAuth2Client } from '@/types/oauth2'
 
 const router = useRouter()
@@ -89,33 +135,74 @@ const toast = useToast()
 
 const clients = ref<OAuth2Client[]>([])
 const loading = ref(false)
-const activeTab = ref('all')
 const revokingClientId = ref<string>()
 const deletingClientId = ref<string>()
 
-const activeCount = computed(() => clients.value.filter(c => c.is_active).length)
-const revokedCount = computed(() => clients.value.filter(c => !c.is_active).length)
-const dynamicCount = computed(() => clients.value.filter(c => c.dynamically_registered).length)
+const filters = reactive({
+  search: '',
+  status: '' as '' | 'active' | 'revoked',
+  dynamic: '' as '' | 'dynamic' | 'manual',
+  serverId: '',
+  expiresBucket: '' as '' | 'never' | 'expired' | 'soon',
+  createdFrom: '',
+  createdTo: '',
+})
 
-const tabs = computed(() => [
-  { label: 'Tous', value: 'all', count: clients.value.length },
-  { label: 'Actif', value: 'active', count: activeCount.value },
-  { label: 'Révoqué', value: 'revoked', count: revokedCount.value },
-  { label: 'Dynamic', value: 'dynamic', count: dynamicCount.value },
-])
+function inCreatedRange(iso: string): boolean {
+  if (!filters.createdFrom && !filters.createdTo) return true
+  const d = iso.slice(0, 10)
+  if (filters.createdFrom && d < filters.createdFrom) return false
+  if (filters.createdTo && d > filters.createdTo) return false
+  return true
+}
+
+function matchesExpires(expiresAt: string | undefined): boolean {
+  if (!filters.expiresBucket) return true
+  if (filters.expiresBucket === 'never') return !expiresAt
+  if (!expiresAt) return false
+  const now = Date.now()
+  const exp = new Date(expiresAt).getTime()
+  if (filters.expiresBucket === 'expired') return exp < now
+  if (filters.expiresBucket === 'soon') return exp >= now && exp - now <= 30 * 24 * 60 * 60 * 1000
+  return true
+}
 
 const filteredClients = computed(() => {
-  if (activeTab.value === 'active') {
-    return clients.value.filter(c => c.is_active)
-  }
-  if (activeTab.value === 'revoked') {
-    return clients.value.filter(c => !c.is_active)
-  }
-  if (activeTab.value === 'dynamic') {
-    return clients.value.filter(c => c.dynamically_registered)
-  }
-  return clients.value
+  const q = filters.search.trim().toLowerCase()
+  return clients.value.filter(c => {
+    if (q && !c.name.toLowerCase().includes(q)) return false
+    if (filters.status === 'active' && !c.is_active) return false
+    if (filters.status === 'revoked' && c.is_active) return false
+    if (filters.dynamic === 'dynamic' && !c.dynamically_registered) return false
+    if (filters.dynamic === 'manual' && c.dynamically_registered) return false
+    if (filters.serverId && !c.server_ids.includes(filters.serverId)) return false
+    if (!matchesExpires(c.expires_at)) return false
+    if (!inCreatedRange(c.created_at)) return false
+    return true
+  })
 })
+
+const activeFilterCount = computed(() => {
+  let n = 0
+  if (filters.search.trim()) n++
+  if (filters.status) n++
+  if (filters.dynamic) n++
+  if (filters.serverId) n++
+  if (filters.expiresBucket) n++
+  if (filters.createdFrom) n++
+  if (filters.createdTo) n++
+  return n
+})
+
+function resetFilters() {
+  filters.search = ''
+  filters.status = ''
+  filters.dynamic = ''
+  filters.serverId = ''
+  filters.expiresBucket = ''
+  filters.createdFrom = ''
+  filters.createdTo = ''
+}
 
 onMounted(() => {
   loadClients()

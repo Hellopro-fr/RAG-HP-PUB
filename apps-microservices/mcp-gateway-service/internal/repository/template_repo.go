@@ -6,6 +6,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // TemplateRepo provides read-only access to the seed-data templates catalog.
@@ -33,6 +34,42 @@ func (r *TemplateRepo) GetBySlug(slug string) (*db.Template, error) {
 		return nil, err
 	}
 	return &t, nil
+}
+
+// ListAll returns every template row, active + inactive, ordered by slug.
+// Used by the export handler; routine catalog listing should keep using
+// ListActive so inactive seeds stay hidden from the UI.
+func (r *TemplateRepo) ListAll() ([]db.Template, error) {
+	var out []db.Template
+	err := r.db.Order("slug ASC").Find(&out).Error
+	return out, err
+}
+
+// Upsert creates each template by slug or overwrites the existing row.
+// Runs in a single transaction — either all rows apply or none do. The
+// caller must pre-validate required fields (slug, name, stdio_command).
+func (r *TemplateRepo) Upsert(tpls []db.Template) error {
+	if len(tpls) == 0 {
+		return nil
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		return tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "slug"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"name",
+				"description",
+				"icon",
+				"stdio_command",
+				"stdio_args",
+				"default_env",
+				"required_extra_env",
+				"tool_prefix",
+				"tags",
+				"is_active",
+				"updated_at",
+			}),
+		}).Create(&tpls).Error
+	})
 }
 
 // InstanceRepo manages TemplateInstance rows. All writes encrypt the
@@ -89,6 +126,17 @@ func (r *InstanceRepo) GetByID(id string) (*db.TemplateInstance, error) {
 	return &inst, nil
 }
 
+// FindByMCPServerID looks up the template instance that backs a given
+// mcp_servers row. Returns gorm.ErrRecordNotFound when the server isn't
+// template-backed — callers distinguish that from other DB errors.
+func (r *InstanceRepo) FindByMCPServerID(serverID string) (*db.TemplateInstance, error) {
+	var inst db.TemplateInstance
+	if err := r.db.First(&inst, "mcp_server_id = ?", serverID).Error; err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
 // ListAll returns all template instances, newest first.
 func (r *InstanceRepo) ListAll() ([]db.TemplateInstance, error) {
 	var out []db.TemplateInstance
@@ -101,6 +149,26 @@ func (r *InstanceRepo) ListByTemplate(slug string) ([]db.TemplateInstance, error
 	var out []db.TemplateInstance
 	err := r.db.Where("template_slug = ?", slug).Order("created_at DESC").Find(&out).Error
 	return out, err
+}
+
+// CountsByTemplate returns {template_slug → number of instances}.
+func (r *InstanceRepo) CountsByTemplate() (map[string]int, error) {
+	var rows []struct {
+		TemplateSlug string
+		Cnt          int
+	}
+	err := r.db.Model(&db.TemplateInstance{}).
+		Select("template_slug, COUNT(*) as cnt").
+		Group("template_slug").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]int, len(rows))
+	for _, row := range rows {
+		m[row.TemplateSlug] = row.Cnt
+	}
+	return m, nil
 }
 
 // UpdateStatus updates the runner_status / runner_last_error / runner_port fields.

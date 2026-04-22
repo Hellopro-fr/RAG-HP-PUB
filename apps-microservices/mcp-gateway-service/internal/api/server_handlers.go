@@ -12,12 +12,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/config"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
@@ -84,6 +86,12 @@ type Handler struct {
 	// Google Sheets import
 	googleTokenRepo *repository.GoogleTokenRepo
 	googleOAuth     *goGoogle.OAuthClient
+	// Template instances (Google templates dynamic secrets feature).
+	// These stay zero-valued (nil) until Task 13 wires them in main.go.
+	templateRepo *repository.TemplateRepo
+	instanceRepo *repository.InstanceRepo
+	runner       *runnerclient.Client
+	config       *config.Config
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -92,8 +100,26 @@ type TokenCache interface {
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry, allowInternalURLs bool) *Handler {
-	return &Handler{repo: repo, gw: gw, registry: registry, allowInternalURLs: allowInternalURLs}
+func NewHandler(
+	repo *repository.ServerRepo,
+	gw *gateway.Gateway,
+	registry *gateway.Registry,
+	allowInternalURLs bool,
+	templateRepo *repository.TemplateRepo,
+	instanceRepo *repository.InstanceRepo,
+	runner *runnerclient.Client,
+	cfg *config.Config,
+) *Handler {
+	return &Handler{
+		repo:              repo,
+		gw:                gw,
+		registry:          registry,
+		allowInternalURLs: allowInternalURLs,
+		templateRepo:      templateRepo,
+		instanceRepo:      instanceRepo,
+		runner:            runner,
+		config:            cfg,
+	}
 }
 
 // SetTokenRepo sets the token repository for token CRUD operations.
@@ -448,6 +474,30 @@ func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.registry.Unregister(id)
+
+	// If this server is backed by a template instance, route through the
+	// template-aware delete path: kill the runner subprocess + shred credentials
+	// first, then delete both rows in one transaction. Otherwise the runner
+	// would keep the subprocess alive forever and the SA JSON would persist on
+	// tmpfs, while the template_instances row would point at a now-deleted
+	// mcp_server_id.
+	if h.instanceRepo != nil {
+		if inst, ferr := h.instanceRepo.FindByMCPServerID(id); ferr == nil && inst != nil {
+			if h.runner != nil {
+				if kerr := h.runner.Kill(r.Context(), inst.ID); kerr != nil {
+					log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
+				}
+			}
+			if derr := h.instanceRepo.DeleteWithMCPServer(inst.ID); derr != nil {
+				log.Printf("[api] template-aware delete failed for %s: %v", inst.ID, derr)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
 	if err := h.repo.Delete(id); err != nil {
 		log.Printf("[api] delete server error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})

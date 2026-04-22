@@ -223,6 +223,103 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		})
 	}
 
+	// ── Templates + template instances ───────────────────────────────────────
+	// GET /api/v1/templates (catalog) and /api/v1/templates/{slug} are open
+	// to all authenticated users. Writes on /api/v1/template-instances are
+	// gated to admin via isAdminOnly (see below). The handlers themselves
+	// return 503 when the templates feature is not wired (Task 13 deps unset).
+	apiMux.HandleFunc("/api/v1/templates", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleListTemplates(w, r)
+	})
+	// /templates/export and /templates/import are registered with exact paths
+	// BEFORE the /templates/ slug catch-all below. net/http's ServeMux prefers
+	// the longer literal match over a prefix pattern, so these never fall into
+	// handleGetTemplate. Extra defence-in-depth: handleGetTemplate explicitly
+	// rejects the slugs "export" and "import" to avoid accidental collisions
+	// if the mux behaviour ever regresses.
+	apiMux.HandleFunc("/api/v1/templates/export", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleExportTemplates(w, r)
+	})
+	apiMux.HandleFunc("/api/v1/templates/import", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleImportTemplates(w, r)
+	})
+	apiMux.HandleFunc("/api/v1/templates/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleGetTemplate(w, r)
+	})
+
+	apiMux.HandleFunc("/api/v1/template-instances", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.handleListInstances(w, r)
+		case http.MethodPost:
+			h.handleCreateInstance(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	apiMux.HandleFunc("/api/v1/template-instances/", func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/restart"):
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleRestartInstance(w, r)
+		case strings.HasSuffix(r.URL.Path, "/rotate-credentials"):
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleRotateCredentials(w, r)
+		default:
+			switch r.Method {
+			case http.MethodGet:
+				h.handleGetInstance(w, r)
+			case http.MethodDelete:
+				h.handleDeleteInstance(w, r)
+			default:
+				w.Header().Set("Allow", "GET, DELETE")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			}
+		}
+	})
+
+	// Runner ↔ gateway sync endpoint. The runner authenticates with
+	// X-Admin-Token; the handler itself enforces that. We add the path to
+	// the auth middleware's public-prefix list so JWT is bypassed, and
+	// isAdminOnly leaves it alone so the role check doesn't block it.
+	apiMux.HandleFunc("/api/v1/internal/runner/sync", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleRunnerSync(w, r)
+	})
+
 	// ── Server icons routes ──────────────────────────────────────────────────
 	apiMux.HandleFunc("/api/v1/server-icons", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -368,6 +465,17 @@ func isAdminOnly(path, method string) bool {
 	// Server writes require admin
 	if strings.HasPrefix(path, "/api/v1/servers") &&
 		(method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete) {
+		return true
+	}
+	// Template-instance writes (create, delete, restart, rotate-credentials) require admin.
+	// GET routes on /api/v1/templates and /api/v1/template-instances stay open to all authenticated users.
+	if strings.HasPrefix(path, "/api/v1/template-instances") &&
+		(method == http.MethodPost || method == http.MethodDelete) {
+		return true
+	}
+	// Catalog import/export ship the whole seed definition, including inactive
+	// rows and internal config — admin-only even for the GET export.
+	if path == "/api/v1/templates/export" || path == "/api/v1/templates/import" {
 		return true
 	}
 	return false

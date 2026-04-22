@@ -27,6 +27,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
@@ -143,7 +144,19 @@ func main() {
 		tokenRepo = repository.NewTokenRepo(database, encryptor)
 		oauth2Repo = repository.NewOAuth2Repo(database, encryptor)
 
-		apiHandler := api.NewHandler(repo, gw, registry, cfg.AllowInternalURLs)
+		// Google templates (dynamic-secrets feature).
+		templateRepo := repository.NewTemplateRepo(database)
+		instanceRepo := repository.NewInstanceRepo(database, encryptor)
+
+		var runnerClient *runnerclient.Client
+		if cfg.GoogleTemplatesRunnerURL != "" && cfg.GoogleTemplatesRunnerAdminToken != "" {
+			runnerClient = runnerclient.New(cfg.GoogleTemplatesRunnerURL, cfg.GoogleTemplatesRunnerAdminToken)
+			log.Printf("[main] google-templates runner: %s", cfg.GoogleTemplatesRunnerURL)
+		} else {
+			log.Println("[main] google-templates runner: DISABLED (env vars not set)")
+		}
+
+		apiHandler := api.NewHandler(repo, gw, registry, cfg.AllowInternalURLs, templateRepo, instanceRepo, runnerClient, cfg)
 		apiHandler.SetTokenRepo(tokenRepo, tokenCache)
 		apiHandler.SetOAuth2Repo(oauth2Repo, oauth2Cache)
 		apiHandler.SetUserRepo(userRepo)

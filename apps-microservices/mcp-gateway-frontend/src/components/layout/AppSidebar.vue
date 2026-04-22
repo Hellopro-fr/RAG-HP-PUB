@@ -256,6 +256,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
       name: "Guides d'installation",
       path: '/install-guides-admin',
     })
+    gestionItems.push({
+      icon: 'pi pi-clone',
+      name: 'Templates',
+      path: '/admin/templates',
+    })
   }
   gestionItems.push({
     icon: 'pi pi-key',

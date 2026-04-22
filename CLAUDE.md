@@ -15,6 +15,7 @@ RAG (Retrieval-Augmented Generation) platform for HelloPro — 90+ microservices
 | Prix Services | `prix-*` (6 services) | Python / FastAPI | Remote |
 | ML/LLM Services | `llm-service`, `embedding-*`, `reranking-*` | Python / FastAPI / Triton | Remote (GPU) |
 | Frontends | `api-chatbot-html-service`, `nextjs-formulaire-hp`, etc. | Next.js / React / Vite | Local OK |
+| MCP Template Runner | `mcp-google-templates-runner` | Python / FastAPI / asyncio | Local OK |
 | Crawlers | `crawler-service`, `crawler-monitor-*` | Node.js / Crawlee / Express | Local OK |
 | Image Services | `image-*` (3 services) | Python / FastAPI | Remote |
 | Infrastructure | `tools/`, `model-optimizer/`, `protos/` | Python / Protobuf | Local (tools) |
@@ -64,12 +65,15 @@ docs/                 # Project documentation
 | `refactoring.md` | When/how to refactor safely: scope rules, shared component protocol, known duplication targets |
 | `stack-detection.md` | Single source of truth for detecting a service's stack from file indicators. All stack-dependent rules reference this. Unknown stack protocol included. |
 | `critical-thinking.md` | Anti-sycophancy, blind spot detection, evidence-based pushback, uncertainty transparency, anti-rationalization |
+| `lessons-learned.md` | Self-improving error-avoidance: when/how Claude saves a lesson, dedup rule, per-file-type category routing. Consumed by the inject-lessons hook. |
 
 ### Agents (`.claude/agents/`)
 
 | Agent | Purpose | Tools |
 |-------|---------|-------|
 | `code-reviewer` | SOLID/DRY/KISS, security, performance, error handling, impact awareness. Exhaustive single-pass (multi-pass internally). | Read, Glob, Grep |
+| `security-reviewer` | Deep SOURCE-CODE security audit — OWASP Top 10, auth/authz, injection, LLM/RAG-specific risks (prompt injection, data exfil, model supply chain), crypto, Docker/IaC, CI workflows. Read-only. | Read, Glob, Grep |
+| `cybersecurity-auditor` | EXTERNAL web audit against a URL (DAST-style, non-intrusive). Runs inside a **Kali Docker container** (`tools/cyber-audit/`) with `--cap-drop=ALL`. HTTP headers, TLS, cookies, CORS, DNS (SPF/DMARC/DKIM/CAA/DNSSEC), well-known paths, TCP connect scan. Invoked via `/cyber-audit <url>` after authorization. | Bash, Read, Grep, WebFetch |
 | `debugger` | Root cause analysis → structured fix plan with trade-offs and blast radius → apply after confirmation. | Read, Bash, Glob, Grep |
 | `doc-writer` | Add file-level, function-level, and inline documentation. English docstrings only. Code-immutable. | Read, Write, Edit, Glob, Grep |
 | `test-writer` | Stack-agnostic test generation: auto-detects Python (pytest), Rust (cargo test), Node.js (Jest/Vitest), or asks for unknown stacks. | Read, Write, Edit, Glob, Grep |
@@ -93,6 +97,7 @@ docs/                 # Project documentation
 | `/test-coverage` | Test coverage report across all services (well-tested / minimal / none) |
 | `/dependency-mapper` | Map cross-service dependencies: imports, gRPC, RabbitMQ, HTTP calls |
 | `/architecture-review` | Architecture-level review: coupling, cohesion, scalability, observability |
+| `/cyber-audit <url>` | External web security audit of a URL. Runs the Kali container in `tools/cyber-audit/` (DAST, non-intrusive): TLS, headers, cookies, CORS, DNS, well-known paths, top-20 TCP ports. Requires authorization confirmation. |
 
 ### Skills (`.claude/skills/`)
 
@@ -112,6 +117,7 @@ docs/                 # Project documentation
 | `PreToolUse` (Bash) | force-push-blocker (inline) | Block `git push --force` and `git push -f` |
 | `PreToolUse` (Bash) | `conventional-commits.py` | Validate commit messages follow Conventional Commits format |
 | `PreToolUse` (Edit/Write) | `tdd-gate.sh` | Block production code edits if no corresponding test file exists |
+| `PreToolUse` (Edit/Write/MultiEdit/NotebookEdit) | `inject-lessons.py` | Inject category-matched prior lessons before each code edit. Silent no-op when no lessons file exists. |
 | `PostToolUse` (Edit) | format-python (inline) | Auto-format Python files after edits (black/ruff, graceful fallback) |
 | `Stop` | auto-review (prompt) | Check if CLAUDE.md needs updating + self-review modified code |
 | `Stop` | `scope-guard.sh` | Warn if files modified outside declared spec scope |
