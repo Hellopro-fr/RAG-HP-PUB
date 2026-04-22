@@ -1,0 +1,20 @@
+# Override local/prod pour opti-moteur-front.
+#
+# Necessaire en prod sur la VM GCP pour que opti-moteur-front puisse resoudre
+# le nom DNS du container api-embedding-service (qui tourne dans le reseau
+# Docker "rag-hp-pub_services-net" du repo principal).
+#
+# - `default` : reseau cree par ce compose (opti-moteur-front_default), ou
+#   tourne typesense-opti-moteur.
+# - `services-net` : reseau externe partage avec les autres microservices du
+#   repo RAG-HP-PUB (api-embedding-service, api-gateway-service, etc.).
+services:
+  opti-moteur-front:
+    networks:
+      - default
+      - services-net
+
+networks:
+  services-net:
+    external: true
+    name: rag-hp-pub_services-net
