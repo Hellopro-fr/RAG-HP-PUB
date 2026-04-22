@@ -155,12 +155,25 @@ def classify_by_name(object_name: str) -> Optional[str]:
     return None
 
 
-def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
+def inspect_archive(
+    local_tar_path: Path,
+    row_count_tolerance: float = 0.05,
+) -> Tuple[str, Dict]:
     """Open a .tar.gz and classify it.
 
     Returns (category, details). `details` always includes the callback-payload
     and marker read state; when row count is checked, it also includes
-    `expected_count` and `actual_count`.
+    `expected_count` and `actual_count`, and may include `secondary_tags` with
+    one of:
+    - `EXCESS_FILES`: actual > expected (Node's 'success' under-reports; archive
+      is valid and contains more files than the counter claimed).
+    - `FAILED_CRAWL_WITH_RESIDUE`: expected == 0 but files exist (crawl errored
+      at the webhook-reporting step; archive still carries real data per
+      Python's status_snapshot).
+    - `COUNT_DRIFT`: deficit within `row_count_tolerance` (crawler-side
+      accounting noise — retries counted twice, flush races, etc.).
+
+    Only deficits above `row_count_tolerance` become `ROW_COUNT_MISMATCH`.
     """
     details: Dict = {}
 
@@ -216,11 +229,30 @@ def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
             return OK, details
 
         actual = _count_dataset_files(members, domain)
+        expected_int = int(expected)
         details["domain"] = domain
-        details["expected_count"] = int(expected)
+        details["expected_count"] = expected_int
         details["actual_count"] = actual
 
-        if int(expected) != actual:
+        # Edge case first: expected=0 with files on disk is a failed crawl
+        # whose webhook step zeroed the counter (see `4398` investigation:
+        # exit_code=2, success=0, but urls_crawled=108).
+        if expected_int == 0:
+            if actual > 0:
+                details.setdefault("secondary_tags", []).append("FAILED_CRAWL_WITH_RESIDUE")
+            return OK, details
+        # Node's 'success' under-reports in some crawls (see `3487`: success=35
+        # vs 1426 files). The archive is not corrupt; tag and pass.
+        if actual > expected_int:
+            details.setdefault("secondary_tags", []).append("EXCESS_FILES")
+            return OK, details
+        # Small drift (within tolerance) — crawler-side accounting noise
+        # (see `2754`: success=267 vs 265 files; `5441`: success=21 vs 20).
+        if actual < expected_int:
+            deficit = expected_int - actual
+            if deficit <= expected_int * row_count_tolerance:
+                details.setdefault("secondary_tags", []).append("COUNT_DRIFT")
+                return OK, details
             return ROW_COUNT_MISMATCH, details
 
         return OK, details
@@ -501,6 +533,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="Comma-separated list of crawl_ids, or path to a file "
                              "with one ID per line. Only audit archives whose "
                              "extracted crawl_id is in this set.")
+    parser.add_argument("--row-count-tolerance", type=float, default=0.05,
+                        metavar="FRACTION",
+                        help="Deficit fraction tolerated before flagging "
+                             "ROW_COUNT_MISMATCH (default 0.05 = 5%%). "
+                             "Archives within tolerance classify OK with "
+                             "secondary tag COUNT_DRIFT.")
     parser.add_argument("--restore-from-quarantine", default=None, metavar="PREFIX",
                         help="Move all objects from gs://<bucket>/<PREFIX>/ back to "
                              "gs://<bucket>/<--prefix>/, then exit. Used to recover from "
@@ -512,7 +550,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return args
 
 
-def _inspect_one(obj_uri: str, size_bytes: int, name_only: bool) -> Tuple[str, Dict]:
+def _inspect_one(
+    obj_uri: str,
+    size_bytes: int,
+    name_only: bool,
+    row_count_tolerance: float = 0.05,
+) -> Tuple[str, Dict]:
     """Inspect a single archive. Returns (category, details)."""
     # Name-based screening first — cheap and catches WRONG_NAME without download.
     name_cat = classify_by_name(obj_uri)
@@ -528,7 +571,7 @@ def _inspect_one(obj_uri: str, size_bytes: int, name_only: bool) -> Tuple[str, D
             gcloud_download(obj_uri, tmp_path)
         except subprocess.CalledProcessError as e:
             return INSPECTION_FAILED, {"error": f"download failed: {e.stderr}"}
-        return inspect_archive(tmp_path)
+        return inspect_archive(tmp_path, row_count_tolerance=row_count_tolerance)
     finally:
         try:
             tmp_path.unlink()
@@ -615,8 +658,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             "actions_taken": [],
         }
 
-        category, details = _inspect_one(obj_uri, size_bytes, args.name_only)
+        category, details = _inspect_one(
+            obj_uri,
+            size_bytes,
+            args.name_only,
+            row_count_tolerance=args.row_count_tolerance,
+        )
         entry["category"] = category
+        for tag in details.get("secondary_tags", []):
+            if tag not in entry["secondary_tags"]:
+                entry["secondary_tags"].append(tag)
         if details.get("expected_count") is not None:
             entry["expected_count"] = details["expected_count"]
             entry["actual_count"] = details["actual_count"]

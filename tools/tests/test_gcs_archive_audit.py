@@ -596,3 +596,62 @@ class TestIncludeIds:
         ])
         # 1806 skipped by resume; 2517 allowed by include + not in resume
         assert inspected == ["gs://b/crawls/2517.tar.gz"]
+
+
+class TestClassifierBugFixes:
+    """Tests for the three classifier false-positive fixes (Phase 2.1):
+    EXCESS_FILES, FAILED_CRAWL_WITH_RESIDUE, and COUNT_DRIFT."""
+
+    def _tar_with_files(self, tmp_path, payload_success, file_count, domain="example.com", name=None):
+        name = name or f"s{payload_success}f{file_count}"
+        files = {
+            "_callback_payload.json": _payload(success=payload_success),
+            "_completion_marker.json": _marker(),
+        }
+        files.update({
+            f"storage/datasets/{domain}/url{i}.json": b'{"url": "a"}'
+            for i in range(file_count)
+        })
+        return _build_tar(tmp_path, files, name=name)
+
+    def test_ok_with_excess_files_tag(self, tmp_path):
+        # Real-world: crawl 3487 had success=35 but 1426 files.
+        path = self._tar_with_files(tmp_path, payload_success=10, file_count=20)
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert "EXCESS_FILES" in details.get("secondary_tags", [])
+        assert details["expected_count"] == 10
+        assert details["actual_count"] == 20
+
+    def test_ok_with_failed_crawl_residue_tag(self, tmp_path):
+        # Real-world: crawl 4398 had success=0 but urls_crawled=108.
+        path = self._tar_with_files(tmp_path, payload_success=0, file_count=5)
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert "FAILED_CRAWL_WITH_RESIDUE" in details.get("secondary_tags", [])
+        assert details["expected_count"] == 0
+        assert details["actual_count"] == 5
+
+    def test_ok_with_count_drift_within_tolerance(self, tmp_path):
+        # 20 expected, 19 actual = 5% deficit, exactly at default tolerance.
+        path = self._tar_with_files(tmp_path, payload_success=20, file_count=19)
+        category, details = ga.inspect_archive(path, row_count_tolerance=0.05)
+        assert category == ga.OK
+        assert "COUNT_DRIFT" in details.get("secondary_tags", [])
+        assert details["expected_count"] == 20
+        assert details["actual_count"] == 19
+
+    def test_row_count_mismatch_above_tolerance(self, tmp_path):
+        # 20 expected, 15 actual = 25% deficit, well above 5% tolerance.
+        path = self._tar_with_files(tmp_path, payload_success=20, file_count=15)
+        category, details = ga.inspect_archive(path, row_count_tolerance=0.05)
+        assert category == ga.ROW_COUNT_MISMATCH
+        assert "COUNT_DRIFT" not in details.get("secondary_tags", [])
+
+    def test_row_count_tolerance_cli_override(self):
+        args = ga.parse_args(["--bucket", "b", "--row-count-tolerance", "0.10"])
+        assert args.row_count_tolerance == pytest.approx(0.10)
+
+    def test_row_count_tolerance_cli_default(self):
+        args = ga.parse_args(["--bucket", "b"])
+        assert args.row_count_tolerance == pytest.approx(0.05)
