@@ -156,7 +156,13 @@
       @confirm="confirmDelete"
     />
 
-    <!-- Task 26: AddInstanceModal (showAdd) -->
+    <AddInstanceModal
+      v-if="template"
+      v-model:open="showAdd"
+      :template="template"
+      @created="onCreated"
+    />
+
     <!-- Task 27: RotateCredentialsModal (rotateTarget) -->
     <!-- Task 27: InstanceLogsModal (logsTarget) -->
   </div>
@@ -170,6 +176,7 @@ import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import TemplateInstanceCard from '@/components/templates/TemplateInstanceCard.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import AddInstanceModal from '@/components/templates/AddInstanceModal.vue'
 import type { Template, TemplateInstance } from '@/types/templates'
 
 const props = defineProps<{
@@ -234,8 +241,13 @@ watch(
 )
 
 function onAdd(): void {
-  // Task 26: open AddInstanceModal
   showAdd.value = true
+}
+
+async function onCreated(): Promise<void> {
+  showAdd.value = false
+  toast.success('Instance créée')
+  await refetchInstances()
 }
 
 async function onRestart(inst: TemplateInstance): Promise<void> {
