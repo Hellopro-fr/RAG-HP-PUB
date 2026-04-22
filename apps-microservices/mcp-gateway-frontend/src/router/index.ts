@@ -137,6 +137,13 @@ const router = createRouter({
       props: true
     },
     {
+      path: '/admin/templates/:slug/import-from-sheet',
+      name: 'template-instance-sheet-import',
+      component: () => import('@/views/TemplateInstanceSheetImportView.vue'),
+      meta: { requiresAuth: true, title: 'Import depuis Sheets', minRole: 'admin' },
+      props: true
+    },
+    {
       path: '/admin/templates/:slug',
       name: 'template-detail',
       component: () => import('@/views/TemplateDetailView.vue'),

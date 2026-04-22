@@ -68,3 +68,21 @@ export interface SheetImportResponse {
   errors: number
   results: SheetImportResultEntry[]
 }
+
+// Request body for POST /api/v1/google/sheets/import-instances — batch-creates
+// template instances from a Google Sheet. Mirrors the server-import shape but
+// scoped to a single template selected via template_slug.
+export interface InstanceSheetImportRequest {
+  spreadsheet_id: string
+  sheet_name: string
+  template_slug: string
+  name_column: string
+  credentials_column: string
+  // Template required_extra_env key -> sheet column header.
+  extra_env_columns?: Record<string, string>
+  auto_discover?: boolean
+  fixed_tags?: string
+  fixed_tool_prefix?: string
+  fixed_icon?: string
+  name_prefix?: string
+}

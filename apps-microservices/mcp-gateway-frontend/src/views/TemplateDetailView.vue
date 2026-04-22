@@ -65,13 +65,22 @@
             </p>
           </div>
         </div>
-        <button
-          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md flex items-center gap-2 shrink-0"
-          @click="router.push({ name: 'template-instance-new', params: { slug } })"
-        >
-          <i class="pi pi-plus text-xs" />
-          Add instance
-        </button>
+        <div class="flex items-center gap-2 shrink-0">
+          <router-link
+            :to="{ name: 'template-instance-sheet-import', params: { slug } }"
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 shrink-0"
+          >
+            <i class="pi pi-file-import text-xs" />
+            Import depuis Sheets
+          </router-link>
+          <button
+            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md flex items-center gap-2 shrink-0"
+            @click="router.push({ name: 'template-instance-new', params: { slug } })"
+          >
+            <i class="pi pi-plus text-xs" />
+            Add instance
+          </button>
+        </div>
       </div>
 
       <!-- Description -->
