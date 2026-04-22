@@ -275,6 +275,15 @@ function goBack() {
   router.push('/servers')
 }
 
+// Pulled from the URL when the import was launched from the templates
+// catalog (TemplatesView sets ?template_slug=<slug> on http_batch cards).
+// Passed through verbatim to the backend so every imported mcp_servers row
+// carries its template origin for the docs / docs-admin filters.
+const templateSlug = computed<string>(() => {
+  const raw = route.query.template_slug
+  return typeof raw === 'string' ? raw : ''
+})
+
 const stepLabels = ['Sélection', 'Mapping', 'Résultats']
 const checkingConnection = ref(true)
 const googleConnected = ref(false)
@@ -420,6 +429,7 @@ async function handleImport() {
       fixed_tool_prefix: fixedToolPrefix.value || undefined,
       fixed_icon: fixedIcon.value || undefined,
       disable_documentation: !enableDocumentation.value || undefined,
+      template_slug: templateSlug.value || undefined,
     })
     currentStep.value = 2
   } catch (err: unknown) {

@@ -60,6 +60,9 @@ export interface Server {
   doc_slug?: string
   doc_description?: string
   doc_config_guide?: { authType: string; steps: { type?: string; title: string; description: string; link?: string; image?: string }[] }
+  // Non-empty when the server originated from a template flow (stdio
+  // instance or http_batch sheet import). Mirrors the Go backend DTO.
+  template_slug?: string
   created_by?: string
   created_at: string
   updated_at: string

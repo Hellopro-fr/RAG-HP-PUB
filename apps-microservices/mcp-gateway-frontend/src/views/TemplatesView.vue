@@ -167,10 +167,15 @@ onMounted(() => {
 //   - stdio       → the usual per-template detail view (instance list / create)
 //   - http_batch  → the existing generic Google Sheets server-import flow,
 //                   with ?from=templates so the import view's back-link
-//                   returns here rather than to /servers.
+//                   returns here rather than to /servers, and
+//                   ?template_slug=<slug> so the import request stamps every
+//                   created mcp_servers row with the originating template.
 function templateTarget(template: Template): RouteLocationRaw {
   if (template.kind === 'http_batch') {
-    return { name: 'google-sheets-import', query: { from: 'templates' } }
+    return {
+      name: 'google-sheets-import',
+      query: { from: 'templates', template_slug: template.slug },
+    }
   }
   return { name: 'template-detail', params: { slug: template.slug } }
 }
