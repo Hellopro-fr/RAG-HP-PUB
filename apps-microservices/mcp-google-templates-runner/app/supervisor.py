@@ -180,6 +180,12 @@ class Supervisor:
                 proc = await asyncio.create_subprocess_exec(
                     *argv,
                     env=proc_env,
+                    # cwd is the per-instance credentials directory (from
+                    # CredentialsStore.write) so stdio children that hardcode
+                    # filename lookups (e.g. mcp-gsc looks for
+                    # service_account_credentials.json in os.getcwd()) find
+                    # the file without us plumbing template-specific config.
+                    cwd=inst.credentials_path,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.PIPE,
                     stdin=asyncio.subprocess.DEVNULL,
