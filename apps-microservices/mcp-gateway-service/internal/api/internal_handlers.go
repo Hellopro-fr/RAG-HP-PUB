@@ -50,14 +50,24 @@ func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[templates][WARN] runner/sync: template %s missing for instance %s", inst.TemplateSlug, inst.ID)
 			continue
 		}
-		var stdioArgs []string
+		// Always send an empty slice (not nil) — Pydantic's list[str] on the
+		// runner side rejects null with 422.
+		stdioArgs := []string{}
 		if len(tpl.StdioArgs) > 0 {
 			_ = json.Unmarshal(tpl.StdioArgs, &stdioArgs)
+			if stdioArgs == nil {
+				stdioArgs = []string{}
+			}
 		}
 		var extraEnv map[string]string
 		if len(inst.ExtraEnv) > 0 {
 			_ = json.Unmarshal(inst.ExtraEnv, &extraEnv)
 		}
+		// Preferred port hint — pass the last-known port so the runner can try
+		// to reallocate the same one after restart. Without this, the pool
+		// hands out ports in a different order each boot (asyncio.gather is
+		// non-deterministic), and mcp_servers.url ends up pointing at the
+		// wrong port until the gateway rediscovers.
 		out.DesiredInstances = append(out.DesiredInstances, runnerclient.SpawnRequest{
 			InstanceID:      inst.ID,
 			TemplateSlug:    inst.TemplateSlug,
@@ -66,6 +76,7 @@ func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
 			Env:             renderEnv(tpl.DefaultEnv, extraEnv, inst.ID),
 			CredentialsJSON: string(plain),
 			CredentialsHash: inst.CredentialsHash,
+			RunnerPort:      inst.RunnerPort,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

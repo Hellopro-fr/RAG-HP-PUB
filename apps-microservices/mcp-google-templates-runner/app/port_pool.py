@@ -41,17 +41,34 @@ class PortPool:
         # both the event-loop thread and executor threads (supervisor callbacks).
         self._lock = threading.Lock()
 
-    def allocate(self, probe: bool = True) -> int:
+    def allocate(self, probe: bool = True, preferred: int | None = None) -> int:
         """Return the lowest port in the range that is:
           1. not already handed out by this pool, AND
           2. not currently accepting connections on 127.0.0.1 (unless
              probe=False).
+
+        If ``preferred`` is supplied AND inside the range AND passes both
+        checks, it wins over the sequential scan. This is how startup sync
+        restores stable per-instance ports across runner restarts (the
+        gateway sends the last-known port; the runner tries to reuse it so
+        the mcp_servers.url stored in the DB stays valid).
 
         Skipping externally-busy ports guards against stale pool state after
         an unclean runner restart, and against a foreign process that happens
         to bind a port inside our range.
         """
         with self._lock:
+            # Preferred-port fast path.
+            if preferred is not None and self._start <= preferred <= self._end:
+                if preferred not in self._used:
+                    if not probe or not _port_is_busy(preferred):
+                        self._used.add(preferred)
+                        return preferred
+                    logger.warning(
+                        "port_pool: preferred %d is busy, falling back to sequential",
+                        preferred,
+                    )
+            # Sequential scan (original behaviour).
             for p in range(self._start, self._end + 1):
                 if p in self._used:
                     continue
