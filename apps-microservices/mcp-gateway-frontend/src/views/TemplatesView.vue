@@ -106,5 +106,3 @@ onMounted(() => {
   templatesStore.fetchTemplates()
 })
 </script>
-</content>
-</invoke>
