@@ -101,33 +101,23 @@ def _generate_url_variants(url: str) -> List[str]:
     Variantes générées (dédupliquées) :
       - L'URL brute
       - Avec/sans slash final
-      - Avec/sans préfixe "www."
-      - Combinaisons des deux (4 variantes au total dans le cas standard)
 
     Nécessaire car Milvus stocke les URLs selon le format exact envoyé à
     l'ingestion, mais les consommateurs (scripts BO, healing) peuvent envoyer
-    une forme normalisée (trailing slash retiré, etc.). Sans cette tolérance,
-    des URLs pourtant présentes dans Milvus sont déclarées "missing".
+    une forme normalisée (trailing slash retiré). Sans cette tolérance, des
+    URLs pourtant présentes dans Milvus sont déclarées "missing".
+
+    NOTE : la tolérance www/non-www a été retirée volontairement car elle
+    doublait le volume de variantes sans bénéfice réel (le crawler stocke
+    les URLs de façon cohérente sur www) et saturait le concurrency_guard
+    Milvus (MILVUS_GLOBAL_MAX_CONCURRENT=30). Si un mismatch www apparaît,
+    il se verra dans le reporting et on pourra réévaluer.
     """
     variants = {url}
-
-    # Variantes slash final
     if url.endswith('/'):
         variants.add(url.rstrip('/'))
     else:
         variants.add(url + '/')
-
-    # Variantes www.
-    www_variants = set()
-    for v in variants:
-        if '://www.' in v:
-            www_variants.add(v.replace('://www.', '://', 1))
-        elif '://' in v:
-            parts = v.split('://', 1)
-            if len(parts) == 2:
-                www_variants.add(f"{parts[0]}://www.{parts[1]}")
-    variants.update(www_variants)
-
     return list(variants)
 
 
