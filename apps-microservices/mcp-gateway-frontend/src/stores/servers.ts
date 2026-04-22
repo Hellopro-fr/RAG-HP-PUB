@@ -8,7 +8,7 @@ export const useServersStore = defineStore('servers', () => {
   const tags = ref<string[]>([])
   const isLoading = ref(false)
 
-  async function fetchServers(filters?: { is_active?: string; tag?: string }): Promise<void> {
+  async function fetchServers(filters?: { is_active?: string; tag?: string; exclude_templates?: string }): Promise<void> {
     isLoading.value = true
     try {
       const response = await serversApi.list(filters)
