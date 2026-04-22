@@ -174,7 +174,9 @@ def score_constraint(
     target_numeric = constraint.get("target_numeric")
 
     if not matched_nodes:
-        return c_unknown_score, []
+        # P1: Penalize absent characteristics (-0.3) instead of treating as neutral (0)
+        absent_penalty = -0.3 if c_unknown_score >= 0 else c_unknown_score
+        return absent_penalty, []
 
     # Compute per-node scores
     scored_nodes = []
