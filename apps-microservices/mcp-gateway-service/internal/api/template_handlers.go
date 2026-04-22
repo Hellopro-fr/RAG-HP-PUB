@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -8,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
@@ -265,34 +268,12 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	env := renderEnv(tpl.DefaultEnv, extraEnv, instanceID)
 
-	// 1) Insert mcp_servers row (URL is a placeholder — runner returns the real port)
-	mcpSrv := db.MCPServer{
-		ID:                  mcpServerID,
-		Name:                tpl.Name + " — " + name,
-		URL:                 "http://pending",
-		MCPTransport:        "http",
-		TransportPreference: "auto",
-		ConnectTimeoutMs:    10000,
-		IsActive:            true,
-		HealthStatus:        "unknown",
-		ToolPrefix:          firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix),
-		Icon:                firstNonEmpty(icon, tpl.Icon),
-		DocSlug:             generateDocSlug(tpl.Name+"-"+name, mcpServerID),
-		CreatedBy:           auth.UserEmailFromContext(r.Context()),
-	}
-	if err := h.repo.Create(&mcpSrv); err != nil {
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create mcp_server: " + err.Error()})
-		return
-	}
-
-	// Persist tags (best-effort — failure is logged but does not abort creation).
-	if len(tags) > 0 {
-		if err := h.repo.SaveTags(mcpServerID, tags); err != nil {
-			log.Printf("[templates] save tags failed for %s: %v", mcpServerID, err)
-		}
-	}
-
-	// 2) Insert template_instances row (encrypts credentials)
+	// 1) Insert template_instances row first (status=pending). mcp_servers is
+	// deferred until we know the runner spawned + the instance is healthy —
+	// otherwise a failed spawn leaves a ghost "pending" server in the servers
+	// list that tokens/OAuth2 clients can bind to.
+	// mcp_server_id is pre-assigned but the mcp_servers row doesn't exist yet;
+	// the detail view tolerates missing servers (GetURL returns empty).
 	extraEnvJSON, _ := json.Marshal(extraEnv)
 	inst := db.TemplateInstance{
 		ID:              instanceID,
@@ -305,15 +286,11 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:       auth.UserEmailFromContext(r.Context()),
 	}
 	if err := h.instanceRepo.Create(&inst, credBytes); err != nil {
-		// Roll back the mcp_servers insert — without this the user sees an orphan server.
-		if delErr := h.repo.Delete(mcpServerID); delErr != nil {
-			log.Printf("[templates][ERROR] orphan mcp_server row id=%s — manual cleanup needed. delete err: %v (original err: %v)", mcpServerID, delErr, err)
-		}
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create instance failed"})
 		return
 	}
 
-	// 3) Call runner to spawn
+	// 2) Spawn via the runner.
 	resp, err := h.runner.Spawn(r.Context(), runnerclient.SpawnRequest{
 		InstanceID:      instanceID,
 		TemplateSlug:    slug,
@@ -325,32 +302,77 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Printf("[templates] runner spawn failed for instance %s: %v", instanceID, err)
-		if uErr := h.instanceRepo.UpdateStatus(instanceID, "failed", err.Error(), nil); uErr != nil {
-			log.Printf("[templates] could not persist failed status for %s: %v", instanceID, uErr)
+		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
+			log.Printf("[templates][WARN] could not roll back instance row %s: %v", instanceID, delErr)
 		}
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
 		return
 	}
 
-	// 4) Update mcp_servers URL + instance port
-	// NOTE: assumes the gateway and runner share a Docker network — GoogleTemplatesRunnerURL
-	// is the in-cluster URL (e.g. http://mcp-google-templates-runner:8595). If the runner is
-	// ever exposed through a proxy or different public host, this extraction will need to
-	// point at that public address instead. Consider a separate GOOGLE_TEMPLATES_RUNNER_PUBLIC_HOST env var.
+	// Compute the in-cluster URL. The gateway and runner share a Docker network.
 	runnerHost := strings.TrimPrefix(strings.TrimPrefix(h.config.GoogleTemplatesRunnerURL, "http://"), "https://")
 	runnerHost = strings.SplitN(runnerHost, ":", 2)[0]
 	instanceURL := fmt.Sprintf("http://%s:%d", runnerHost, resp.Port)
-	if err := h.repo.UpdateURL(mcpServerID, instanceURL); err != nil {
-		log.Printf("[templates][WARN] could not update mcp_server URL (id=%s): %v", mcpServerID, err)
+	hostPort := fmt.Sprintf("%s:%d", runnerHost, resp.Port)
+
+	// 3) Wait until mcp-proxy is accepting TCP connections on its port. The
+	// Spawn call returns as soon as the supervisor launches the child, but
+	// mcp-proxy needs a beat to bind. Without this, auto-discover and the
+	// first client request both race the startup.
+	if err := waitForTCPReady(r.Context(), hostPort, 15*time.Second); err != nil {
+		log.Printf("[templates] instance %s never became TCP-ready at %s: %v", instanceID, hostPort, err)
+		if kerr := h.runner.Kill(r.Context(), instanceID); kerr != nil {
+			log.Printf("[templates][WARN] kill after unhealthy startup failed for %s: %v", instanceID, kerr)
+		}
+		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
+			log.Printf("[templates][WARN] could not roll back unhealthy instance row %s: %v", instanceID, delErr)
+		}
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "instance failed to become healthy"})
+		return
 	}
+
+	// 4) Insert mcp_servers row now that we know the instance is live.
 	port := resp.Port
+	mcpSrv := db.MCPServer{
+		ID:                  mcpServerID,
+		Name:                tpl.Name + " — " + name,
+		URL:                 instanceURL,
+		MCPTransport:        "http",
+		TransportPreference: "auto",
+		ConnectTimeoutMs:    10000,
+		IsActive:            true,
+		HealthStatus:        "healthy",
+		ToolPrefix:          firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix),
+		Icon:                firstNonEmpty(icon, tpl.Icon),
+		DocSlug:             generateDocSlug(tpl.Name+"-"+name, mcpServerID),
+		CreatedBy:           auth.UserEmailFromContext(r.Context()),
+	}
+	if err := h.repo.Create(&mcpSrv); err != nil {
+		log.Printf("[templates] create mcp_server failed for %s: %v", mcpServerID, err)
+		if kerr := h.runner.Kill(r.Context(), instanceID); kerr != nil {
+			log.Printf("[templates][WARN] kill after mcp_server insert failure for %s: %v", instanceID, kerr)
+		}
+		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
+			log.Printf("[templates][WARN] could not roll back instance row %s: %v", instanceID, delErr)
+		}
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create mcp_server failed"})
+		return
+	}
+
+	// Tags (best-effort).
+	if len(tags) > 0 {
+		if err := h.repo.SaveTags(mcpServerID, tags); err != nil {
+			log.Printf("[templates] save tags failed for %s: %v", mcpServerID, err)
+		}
+	}
+
+	// 5) Mark instance running with its bound port.
 	if err := h.instanceRepo.UpdateStatus(instanceID, "running", "", &port); err != nil {
 		log.Printf("[templates][WARN] could not persist running status (id=%s): %v", instanceID, err)
 	}
 
-	// 4b) Optional: auto-discover tools against the freshly-spawned instance.
-	// Template instances never carry auth headers — the runner proxies with the
-	// decrypted credentials internally.
+	// 6) Optional: auto-discover tools against the live instance. No auth
+	// headers — the runner proxies with the decrypted SA JSON internally.
 	if autoDiscover && h.gw != nil && h.registry != nil {
 		log.Printf("[templates] auto-discover for %s at %s", mcpServerID, instanceURL)
 		if err := h.gw.DiscoverAndRegister(r.Context(), mcpServerID, instanceURL, nil); err != nil {
@@ -366,15 +388,41 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 5) Return 201 — re-fetch to populate CreatedAt/UpdatedAt.
+	// 7) Return 201 — re-fetch to populate CreatedAt/UpdatedAt.
 	freshInst, err := h.instanceRepo.GetByID(instanceID)
 	if err != nil {
-		// Persisted but can't re-read — return the in-memory version.
 		inst.RunnerPort = &port
 		inst.RunnerStatus = "running"
 		freshInst = &inst
 	}
 	writeJSON(w, http.StatusCreated, toInstanceResponse(*freshInst, "", instanceURL))
+}
+
+// waitForTCPReady dials hostPort with an exponential-ish backoff until a
+// connect succeeds or the deadline expires. Used to verify that mcp-proxy
+// has bound its port before we commit the mcp_servers row.
+func waitForTCPReady(ctx context.Context, hostPort string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	backoff := 200 * time.Millisecond
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("tcp ready deadline exceeded for %s", hostPort)
+		}
+		dialer := net.Dialer{Timeout: 2 * time.Second}
+		conn, err := dialer.DialContext(ctx, "tcp", hostPort)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		if backoff < 2*time.Second {
+			backoff *= 2
+		}
+	}
 }
 
 // firstNonEmpty returns a when non-empty, otherwise b. Used to let per-instance
