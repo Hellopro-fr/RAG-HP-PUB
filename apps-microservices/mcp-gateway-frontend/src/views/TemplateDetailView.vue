@@ -2,6 +2,14 @@
   <div>
     <PageBreadcrumb :page-title="template?.name || slug" />
 
+    <router-link
+      :to="{ name: 'templates' }"
+      class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-brand-500 dark:text-gray-400 dark:hover:text-brand-400 mb-4"
+    >
+      <i class="pi pi-arrow-left text-[10px]" />
+      Retour aux templates
+    </router-link>
+
     <!-- Loading state (template metadata not yet fetched) -->
     <div
       v-if="!template && loading"
