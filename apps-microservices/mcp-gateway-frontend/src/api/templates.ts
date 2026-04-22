@@ -35,6 +35,18 @@ export const templatesApi = {
       formData.append('extra_env', JSON.stringify(params.extra_env))
     }
     formData.append('credentials', params.credentials)
+    if (params.tags && params.tags.length > 0) {
+      formData.append('tags', JSON.stringify(params.tags))
+    }
+    if (params.icon) {
+      formData.append('icon', params.icon)
+    }
+    if (params.tool_prefix) {
+      formData.append('tool_prefix', params.tool_prefix)
+    }
+    if (params.auto_discover !== undefined) {
+      formData.append('auto_discover', params.auto_discover ? 'true' : 'false')
+    }
     return api.postMultipart<TemplateInstance>(`${BASE}/template-instances`, formData)
   },
 

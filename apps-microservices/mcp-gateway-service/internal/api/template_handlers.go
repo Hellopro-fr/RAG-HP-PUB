@@ -213,6 +213,24 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Optional extras: tags, icon, tool_prefix, auto_discover
+	var tags []string
+	if raw := r.FormValue("tags"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &tags); err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "tags: invalid JSON"})
+			return
+		}
+	}
+	icon := r.FormValue("icon")
+	toolPrefixOverride := r.FormValue("tool_prefix")
+	autoDiscover := r.FormValue("auto_discover") == "true"
+
+	// Validate tool prefix (alphanumeric only) when provided.
+	if toolPrefixOverride != "" && !alphanumericRe.MatchString(toolPrefixOverride) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "tool_prefix must contain only alphanumeric characters (a-z, A-Z, 0-9)"})
+		return
+	}
+
 	// Read credentials file
 	file, hdr, err := r.FormFile("credentials")
 	if err != nil {
@@ -257,13 +275,21 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		ConnectTimeoutMs:    10000,
 		IsActive:            true,
 		HealthStatus:        "unknown",
-		ToolPrefix:          tpl.ToolPrefix,
+		ToolPrefix:          firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix),
+		Icon:                firstNonEmpty(icon, tpl.Icon),
 		DocSlug:             generateDocSlug(tpl.Name+"-"+name, mcpServerID),
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 	if err := h.repo.Create(&mcpSrv); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create mcp_server: " + err.Error()})
 		return
+	}
+
+	// Persist tags (best-effort — failure is logged but does not abort creation).
+	if len(tags) > 0 {
+		if err := h.repo.SaveTags(mcpServerID, tags); err != nil {
+			log.Printf("[templates] save tags failed for %s: %v", mcpServerID, err)
+		}
 	}
 
 	// 2) Insert template_instances row (encrypts credentials)
@@ -322,6 +348,24 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[templates][WARN] could not persist running status (id=%s): %v", instanceID, err)
 	}
 
+	// 4b) Optional: auto-discover tools against the freshly-spawned instance.
+	// Template instances never carry auth headers — the runner proxies with the
+	// decrypted credentials internally.
+	if autoDiscover && h.gw != nil && h.registry != nil {
+		log.Printf("[templates] auto-discover for %s at %s", mcpServerID, instanceURL)
+		if err := h.gw.DiscoverAndRegister(r.Context(), mcpServerID, instanceURL, nil); err != nil {
+			log.Printf("[templates] auto-discover failed for %s: %v", mcpServerID, err)
+			_ = h.repo.UpdateHealth(mcpServerID, "unhealthy", err.Error())
+		} else {
+			if mcpSrv.ToolPrefix != "" {
+				h.registry.SetToolPrefix(mcpServerID, mcpSrv.ToolPrefix)
+			}
+			if backend := h.registry.FindByID(mcpServerID); backend != nil {
+				h.saveBackendCapabilities(mcpServerID, backend)
+			}
+		}
+	}
+
 	// 5) Return 201 — re-fetch to populate CreatedAt/UpdatedAt.
 	freshInst, err := h.instanceRepo.GetByID(instanceID)
 	if err != nil {
@@ -331,6 +375,15 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		freshInst = &inst
 	}
 	writeJSON(w, http.StatusCreated, toInstanceResponse(*freshInst, "", instanceURL))
+}
+
+// firstNonEmpty returns a when non-empty, otherwise b. Used to let per-instance
+// overrides (icon, tool_prefix) fall back to the template-level default.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // renderEnv merges default_env (from template) + extra_env (admin input),

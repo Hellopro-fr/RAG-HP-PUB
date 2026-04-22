@@ -53,4 +53,8 @@ export interface CreateInstanceParams {
   name: string
   extra_env?: Record<string, string>
   credentials: File
+  tags?: string[]
+  icon?: string
+  tool_prefix?: string
+  auto_discover?: boolean
 }

@@ -130,6 +130,13 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Templates', minRole: 'admin' }
     },
     {
+      path: '/admin/templates/:slug/new',
+      name: 'template-instance-new',
+      component: () => import('@/views/TemplateInstanceFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle instance', minRole: 'admin' },
+      props: true
+    },
+    {
       path: '/admin/templates/:slug',
       name: 'template-detail',
       component: () => import('@/views/TemplateDetailView.vue'),

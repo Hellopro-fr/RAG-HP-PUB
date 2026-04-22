@@ -67,7 +67,7 @@
         </div>
         <button
           class="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md flex items-center gap-2 shrink-0"
-          @click="onAdd"
+          @click="router.push({ name: 'template-instance-new', params: { slug } })"
         >
           <i class="pi pi-plus text-xs" />
           Add instance
@@ -164,13 +164,6 @@
       @confirm="confirmDelete"
     />
 
-    <AddInstanceModal
-      v-if="template"
-      v-model:open="showAdd"
-      :template="template"
-      @created="onCreated"
-    />
-
     <RotateCredentialsModal
       :instance="rotateTarget"
       :open="rotateTarget !== null"
@@ -188,13 +181,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTemplatesStore } from '@/stores/templates'
 import { templatesApi } from '@/api/templates'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import TemplateInstanceCard from '@/components/templates/TemplateInstanceCard.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
-import AddInstanceModal from '@/components/templates/AddInstanceModal.vue'
 import RotateCredentialsModal from '@/components/templates/RotateCredentialsModal.vue'
 import InstanceLogsModal from '@/components/templates/InstanceLogsModal.vue'
 import type { Template, TemplateInstance } from '@/types/templates'
@@ -203,12 +196,12 @@ const props = defineProps<{
   slug: string
 }>()
 
+const router = useRouter()
 const store = useTemplatesStore()
 const toast = useToast()
 
 const template = ref<Template | null>(null)
 const loading = ref(false)
-const showAdd = ref(false)
 const rotateTarget = ref<TemplateInstance | null>(null)
 const logsTarget = ref<TemplateInstance | null>(null)
 const deletingInstance = ref<TemplateInstance | null>(null)
@@ -259,16 +252,6 @@ watch(
     }
   }
 )
-
-function onAdd(): void {
-  showAdd.value = true
-}
-
-async function onCreated(): Promise<void> {
-  showAdd.value = false
-  toast.success('Instance créée')
-  await refetchInstances()
-}
 
 async function onRestart(inst: TemplateInstance): Promise<void> {
   try {
