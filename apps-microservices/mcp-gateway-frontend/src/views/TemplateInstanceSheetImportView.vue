@@ -62,49 +62,41 @@
         <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xs border border-gray-200 dark:border-gray-800 p-6">
           <!-- Step 0: Sélection -->
           <div v-show="currentStep === 0" class="space-y-4">
-            <!-- Spreadsheet picker -->
+            <!-- Spreadsheet ID / URL input (Drive list API is blocked by some
+                 Workspace domain policies — paste-ID uses the Sheets API only). -->
             <div>
-              <label for="spreadsheet-search" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Spreadsheet <span class="text-red-500">*</span>
+              <label for="spreadsheet-id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                ID ou URL du Spreadsheet <span class="text-red-500">*</span>
               </label>
-              <input
-                id="spreadsheet-search"
-                v-model="spreadsheetSearch"
-                type="text"
-                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                placeholder="Rechercher par nom..."
-                @focus="loadSpreadsheetList"
-              />
-              <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                <i v-if="loadingList" class="pi pi-spinner pi-spin mr-1" />
-                <template v-else-if="selectedSpreadsheet">
-                  Sélectionné : <strong>{{ selectedSpreadsheet.name }}</strong>
-                </template>
-                <template v-else>
-                  Tapez pour rechercher parmi vos Google Spreadsheets.
-                </template>
-              </p>
-              <ul
-                v-if="filteredSpreadsheets.length > 0 && !selectedSpreadsheet"
-                class="mt-2 max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md divide-y divide-gray-100 dark:divide-gray-800"
-              >
-                <li
-                  v-for="ss in filteredSpreadsheets"
-                  :key="ss.id"
-                  class="px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-sm text-gray-700 dark:text-gray-200"
-                  @click="pickSpreadsheet(ss)"
+              <div class="flex gap-2">
+                <input
+                  id="spreadsheet-id"
+                  v-model="spreadsheetIdInput"
+                  type="text"
+                  :disabled="loadingSheetInfo"
+                  class="h-11 flex-1 rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 disabled:opacity-60"
+                  placeholder="Collez l'ID ou l'URL complète du spreadsheet"
+                  @keyup.enter="loadSheetInfoFromInput"
+                />
+                <button
+                  type="button"
+                  :disabled="!spreadsheetIdInput.trim() || loadingSheetInfo"
+                  class="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-md flex items-center gap-2 shrink-0"
+                  @click="loadSheetInfoFromInput"
                 >
-                  <span class="font-medium">{{ ss.name }}</span>
-                </li>
-              </ul>
-              <button
-                v-if="selectedSpreadsheet"
-                type="button"
-                class="mt-2 text-xs text-brand-500 hover:text-brand-600"
-                @click="clearSpreadsheet"
-              >
-                Changer de spreadsheet
-              </button>
+                  <i v-if="loadingSheetInfo" class="pi pi-spinner pi-spin text-xs" />
+                  <i v-else class="pi pi-check text-xs" />
+                  Charger
+                </button>
+              </div>
+              <p v-if="sheetInfo" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                <i class="pi pi-file text-[11px] mr-1" />
+                <strong>{{ sheetInfo.title }}</strong>
+                <span class="text-gray-400 dark:text-gray-500 ml-2">— {{ sheetInfo.sheets.length }} feuille(s)</span>
+              </p>
+              <p v-else class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Exemple : <code class="font-mono">1A2b...xYz</code> ou <code class="font-mono">https://docs.google.com/spreadsheets/d/.../edit</code>
+              </p>
             </div>
 
             <!-- Sheet dropdown -->
@@ -128,29 +120,6 @@
                   {{ s }}
                 </button>
               </div>
-            </div>
-
-            <!-- Template selector -->
-            <div>
-              <label for="template-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Template <span class="text-red-500">*</span>
-              </label>
-              <select
-                id="template-select"
-                v-model="selectedTemplateSlug"
-                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-              >
-                <option
-                  v-for="t in store.templates"
-                  :key="t.slug"
-                  :value="t.slug"
-                >
-                  {{ t.name }}
-                </option>
-              </select>
-              <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Chaque ligne créera une instance de ce template.
-              </p>
             </div>
 
             <!-- Preview (read-only) -->
@@ -382,26 +351,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { googleApi } from '@/api/google'
 import { templatesApi } from '@/api/templates'
-import { useTemplatesStore } from '@/stores/templates'
 import { useToast } from '@/composables/useToast'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import SheetPreview from '@/components/google/SheetPreview.vue'
 import type {
   SheetInfo,
   SheetPreview as SheetPreviewType,
-  SheetImportResponse,
-  SpreadsheetListItem
+  SheetImportResponse
 } from '@/types/google'
 import type { Template } from '@/types/templates'
 
 const props = defineProps<{ slug: string }>()
 
 const router = useRouter()
-const store = useTemplatesStore()
 const toast = useToast()
 
 const stepLabels = ['Sélection', 'Mapping', 'Résultats']
@@ -417,15 +383,14 @@ const template = ref<Template | null>(null)
 // Step state
 const currentStep = ref(0)
 
-// Step 0: selection
-const spreadsheetSearch = ref('')
-const loadingList = ref(false)
-const spreadsheets = ref<SpreadsheetListItem[]>([])
-const selectedSpreadsheet = ref<SpreadsheetListItem | null>(null)
+// Step 0: selection — paste-ID flow only. The Drive list API is blocked by
+// some Workspace domain policies (domainPolicy 403); pasting the ID uses the
+// Sheets API directly which is unaffected.
+const spreadsheetIdInput = ref('')
+const loadingSheetInfo = ref(false)
 const sheetInfo = ref<SheetInfo | null>(null)
 const selectedSheet = ref('')
 const preview = ref<SheetPreviewType | null>(null)
-const selectedTemplateSlug = ref('')
 
 // Step 1: mapping
 const nameColumn = ref('')
@@ -441,21 +406,8 @@ const autoDiscover = ref(true)
 const importing = ref(false)
 const importResult = ref<SheetImportResponse | null>(null)
 
-const filteredSpreadsheets = computed(() => {
-  const q = spreadsheetSearch.value.trim().toLowerCase()
-  if (!q) return spreadsheets.value.slice(0, 20)
-  return spreadsheets.value
-    .filter(s => s.name.toLowerCase().includes(q))
-    .slice(0, 20)
-})
-
 const isStep0Valid = computed(() => {
-  return Boolean(
-    selectedSpreadsheet.value &&
-    selectedSheet.value &&
-    selectedTemplateSlug.value &&
-    preview.value
-  )
+  return Boolean(sheetInfo.value && selectedSheet.value && preview.value)
 })
 
 const isStep1Valid = computed(() => {
@@ -478,10 +430,7 @@ const completedSteps = computed(() => {
 })
 
 onMounted(async () => {
-  // Pre-seed template from URL slug.
-  selectedTemplateSlug.value = props.slug
-
-  // Kick off parallel: Google connection check + templates list + current template.
+  // Google connection check.
   try {
     const status = await googleApi.getStatus()
     googleConnected.value = status.connected
@@ -491,14 +440,7 @@ onMounted(async () => {
     checkingConnection.value = false
   }
 
-  if (store.templates.length === 0) {
-    try {
-      await store.fetchTemplates()
-    } catch {
-      // Silent — picker will be empty; UI explains.
-    }
-  }
-
+  // Template — slug comes from the route so there's no selector.
   loadingTemplate.value = true
   try {
     template.value = await templatesApi.get(props.slug)
@@ -509,55 +451,32 @@ onMounted(async () => {
   }
 })
 
-// Re-fetch the template details when the user picks a different slug.
-watch(selectedTemplateSlug, async (next, prev) => {
-  if (!next || next === prev) return
-  loadingTemplate.value = true
-  // Reset mapping — the schema differs per template.
-  for (const k of Object.keys(extraEnvColumns)) delete extraEnvColumns[k]
-  try {
-    template.value = await templatesApi.get(next)
-  } catch {
-    template.value = null
-  } finally {
-    loadingTemplate.value = false
-  }
-})
-
-async function loadSpreadsheetList() {
-  if (spreadsheets.value.length > 0) return
-  loadingList.value = true
-  try {
-    spreadsheets.value = await googleApi.listSpreadsheets()
-  } catch {
-    toast.error('Impossible de charger la liste des spreadsheets')
-  } finally {
-    loadingList.value = false
-  }
+// normaliseSpreadsheetInput wraps a raw ID in a full Sheets URL so the backend
+// URL parser always has something to extract from. Pass-through for URLs.
+function normaliseSpreadsheetInput(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
+  return `https://docs.google.com/spreadsheets/d/${trimmed}/edit`
 }
 
-async function pickSpreadsheet(ss: SpreadsheetListItem): Promise<void> {
-  selectedSpreadsheet.value = ss
-  spreadsheetSearch.value = ss.name
+async function loadSheetInfoFromInput(): Promise<void> {
+  const url = normaliseSpreadsheetInput(spreadsheetIdInput.value)
+  if (!url) return
+  loadingSheetInfo.value = true
   sheetInfo.value = null
   selectedSheet.value = ''
   preview.value = null
   try {
-    sheetInfo.value = await googleApi.getSheetInfo(ss.web_view_link || `https://docs.google.com/spreadsheets/d/${ss.id}/edit`)
+    sheetInfo.value = await googleApi.getSheetInfo(url)
     if (sheetInfo.value.sheets.length === 1) {
       await selectSheet(sheetInfo.value.sheets[0] ?? '')
     }
-  } catch {
-    toast.error('Impossible de charger les feuilles')
+  } catch (e: unknown) {
+    toast.error(e instanceof Error ? e.message : 'Impossible de charger le spreadsheet')
+  } finally {
+    loadingSheetInfo.value = false
   }
-}
-
-function clearSpreadsheet() {
-  selectedSpreadsheet.value = null
-  sheetInfo.value = null
-  selectedSheet.value = ''
-  preview.value = null
-  spreadsheetSearch.value = ''
 }
 
 async function selectSheet(name: string) {
@@ -609,7 +528,7 @@ function goToStep(step: number) {
 }
 
 async function handleImport() {
-  if (!selectedSpreadsheet.value || !selectedSheet.value || !selectedTemplateSlug.value) return
+  if (!sheetInfo.value || !selectedSheet.value) return
   importing.value = true
   try {
     // Only send non-empty mappings — backend only requires `required: true` keys.
@@ -618,9 +537,9 @@ async function handleImport() {
       if (v && v.trim()) envCleaned[k] = v
     }
     importResult.value = await googleApi.importInstancesFromSheet({
-      spreadsheet_id: selectedSpreadsheet.value.id,
+      spreadsheet_id: sheetInfo.value.spreadsheet_id,
       sheet_name: selectedSheet.value,
-      template_slug: selectedTemplateSlug.value,
+      template_slug: props.slug,
       name_column: nameColumn.value,
       credentials_column: credentialsColumn.value,
       extra_env_columns: Object.keys(envCleaned).length ? envCleaned : undefined,
