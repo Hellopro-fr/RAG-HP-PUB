@@ -298,6 +298,27 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Opt-in filter used by the docs-admin view: hide servers that are backed
+	// by a template instance. Template catalogs manage their own docs flow, so
+	// exposing template-backed servers in the docs admin would be confusing.
+	if r.URL.Query().Get("exclude_templates") == "true" && h.instanceRepo != nil {
+		if instances, ierr := h.instanceRepo.ListAll(); ierr == nil {
+			templateBacked := make(map[string]struct{}, len(instances))
+			for _, inst := range instances {
+				templateBacked[inst.MCPServerID] = struct{}{}
+			}
+			filtered := servers[:0]
+			for _, s := range servers {
+				if _, ok := templateBacked[s.ID]; !ok {
+					filtered = append(filtered, s)
+				}
+			}
+			servers = filtered
+		} else {
+			log.Printf("[api] exclude_templates list instances failed (returning unfiltered): %v", ierr)
+		}
+	}
+
 	resp := ListServersResponse{
 		Servers: make([]ServerResponse, 0, len(servers)),
 		Total:   len(servers),

@@ -221,7 +221,7 @@ const filters = reactive({
 })
 
 onMounted(async () => {
-  await serversStore.fetchServers()
+  await serversStore.fetchServers({ exclude_templates: 'true' })
   loading.value = false
 })
 
@@ -278,7 +278,7 @@ async function handleToggle(id: string, enable: boolean) {
     } else {
       await serversApi.disable(id)
     }
-    await serversStore.fetchServers()
+    await serversStore.fetchServers({ exclude_templates: 'true' })
     toast.success(enable ? 'Documentation activee' : 'Documentation desactivee')
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Erreur')
@@ -291,7 +291,7 @@ async function handleGenerateSlugs() {
     const res = await api.post<{ updated: number }>('/api/v1/servers/generate-slugs')
     if (res.updated > 0) {
       toast.success(`${res.updated} slug(s) genere(s)`)
-      await serversStore.fetchServers()
+      await serversStore.fetchServers({ exclude_templates: 'true' })
     } else {
       toast.success('Tous les serveurs ont deja un slug')
     }
@@ -411,7 +411,7 @@ async function processBatchFile(file: File) {
     }
   }
 
-  await serversStore.fetchServers()
+  await serversStore.fetchServers({ exclude_templates: 'true' })
   batchSuccess.value = `${updated} documentation(s) importee(s)` + (skipped > 0 ? `, ${skipped} ignoree(s): ${skippedNames.join(', ')}` : '')
 }
 </script>
