@@ -82,17 +82,32 @@ def _disk_free_gb(path: str = "/") -> float:
 
 
 def _flush_to_typesense(collection: str, batch: List[str]) -> Tuple[int, int]:
+    """
+    Raw HTTP POST avec encodage UTF-8 explicite.
+    Contourne un bug du client typesense-python 0.21.0 qui utilise latin-1
+    et fait planter les produits contenant ', EUR, bullet, TM, oe, etc.
+    """
     if not batch:
         return 0, 0
-    body = "\n".join(batch)
+    import requests
+    body = "\n".join(batch).encode("utf-8")
+    url = f"{typesense_client.base_url()}/collections/{collection}/documents/import?action=upsert"
     try:
-        res = typesense_client.client.collections[collection].documents.import_(
-            body, {"action": "upsert"}
+        r = requests.post(
+            url,
+            headers={
+                "X-TYPESENSE-API-KEY": settings.TYPESENSE_API_KEY,
+                "Content-Type": "text/plain; charset=utf-8",
+            },
+            data=body,
+            timeout=300,
         )
+        r.raise_for_status()
+        text = r.text
     except Exception as e:
         logger.warning("Typesense flush error: %s", e)
         return 0, len(batch)
-    return res.count('"success":true'), res.count('"success":false')
+    return text.count('"success":true'), text.count('"success":false')
 
 
 async def ingest_by_category(
