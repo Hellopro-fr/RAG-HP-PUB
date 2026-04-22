@@ -16,6 +16,6 @@ class SearchTextRequest(BaseModel):
     """
     query: str = Field(..., description="Requete textuelle", examples=["armoire medicale"])
     collection: Optional[str] = Field(None, description="Collection Typesense (override settings)")
-    top_k: Optional[int] = Field(10, ge=1, le=500, description="Nombre de resultats a retourner")
-    candidates: Optional[int] = Field(50, ge=10, le=500, description="Candidats pour re-rank")
+    top_k: Optional[int] = Field(10, ge=1, le=2000, description="Nombre de resultats a retourner")
+    candidates: Optional[int] = Field(50, ge=10, le=2000, description="Candidats pour re-rank")
     apply_filter_by_category: bool = Field(True, description="Applique filter_by si categorie detectee")
