@@ -92,9 +92,20 @@ class ImageProcessor:
                 output_format = 'PNG'
                 extension = '.png'
             
-            # --- 1. Normalization & Conversion for specific cases ---
-            if output_format == 'PNG' and image.mode in ('P', 'CMYK'):
-                 image = image.convert('RGBA')
+            # --- 1. Flatten sur fond blanc (parité PHP creer_image) ---
+            # PHP cases 3 (PNG) et 18 (WEBP) : imagecreatetruecolor + imagefill(255,255,255)
+            # avant resize → les zones transparentes deviennent blanches à la sortie.
+            # Appliqué AVANT thumbnail() pour que main_image ET thumb_image héritent du flatten.
+            if output_format == 'PNG':
+                if image.mode != 'RGBA':
+                    image = image.convert('RGBA')
+                canvas = Image.new('RGB', image.size, (255, 255, 255))
+                canvas.paste(image, mask=image.split()[-1])
+                image = canvas
+
+            # Préservation de la transparence GIF (parité PHP case 1 :
+            # imagetruecolortopalette + imagepalettecopy + imagecolortransparent)
+            gif_transparency = image.info.get('transparency') if output_format == 'GIF' else None
 
             # --- 2. Main Image Processing (Max 800x800) ---
             image_max_size = (800, 800)
@@ -111,8 +122,10 @@ class ImageProcessor:
             # Save Main Image
             save_kwargs = {"optimize": True}
             if output_format == 'GIF':
-                 save_kwargs["save_all"] = True # Preserve frames if possible, though thumbnail might flatten
-            
+                save_kwargs["save_all"] = True  # Preserve frames if possible, though thumbnail might flatten
+                if gif_transparency is not None:
+                    save_kwargs["transparency"] = gif_transparency
+
             main_image.save(main_file_path, output_format, **save_kwargs)
             logger.info(f"✅ PIL: Main image saved for {product_id}: {main_file_path}")
 
@@ -170,7 +183,11 @@ class ImageProcessor:
 
             # --- Main Image (800x800) using shrink-on-load ---
             main_vips = pyvips.Image.thumbnail_buffer(content, 800, height=800)
-            
+
+            # Flatten sur fond blanc (parité PHP cases 3 PNG et 18 WEBP)
+            if output_format_suffix == '.png' and main_vips.hasalpha():
+                main_vips = main_vips.flatten(background=[255, 255, 255])
+
             if output_format_suffix == '.jpg':
                 main_vips.jpegsave(main_file_path, optimize_coding=True)
             elif output_format_suffix == '.png':
@@ -183,7 +200,11 @@ class ImageProcessor:
             
             # --- Thumbnail (110x110) using shrink-on-load ---
             thumb_vips = pyvips.Image.thumbnail_buffer(content, 110, height=110)
-            
+
+            # Flatten sur fond blanc (parité PHP cases 3 PNG et 18 WEBP)
+            if output_format_suffix == '.png' and thumb_vips.hasalpha():
+                thumb_vips = thumb_vips.flatten(background=[255, 255, 255])
+
             if output_format_suffix == '.jpg':
                 thumb_vips.jpegsave(thumb_file_path, optimize_coding=True)
             elif output_format_suffix == '.png':
