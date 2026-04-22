@@ -97,6 +97,8 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		TokenHash:      hash,
 		TokenPrefix:    prefix,
 		MCPCommand:     req.MCPCommand,
+		ServerName:     req.ServerName,
+		AllowHTTP:      req.AllowHTTP,
 		EncryptedToken: []byte(rawToken),
 		IsActive:       true,
 	}
@@ -113,6 +115,18 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 
 	// Get created_by from session (use email for ownership checks)
 	token.CreatedBy = auth.UserEmailFromContext(r.Context())
+
+	// Resolve and validate the optional Leexi ownership filter.
+	mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
+		r.Context(), h.leexiAdmin, req.LeexiFilter, token.CreatedBy,
+	)
+	if lerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
+		return
+	}
+	token.LeexiFilterMode = mode
+	token.LeexiAllowedUserUUIDs = userUUIDs
+	token.LeexiAllowedTeamUUIDs = teamUUIDs
 
 	// Build server associations
 	for _, sid := range req.ServerIDs {
@@ -167,9 +181,12 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		ServerIDs:   req.ServerIDs,
 		ServerTools: buildServerToolsResponse(token.Tools),
 		MCPCommand:  token.MCPCommand,
+		ServerName:  token.ServerName,
+		AllowHTTP:   token.AllowHTTP,
 		IsActive:    token.IsActive,
 		CreatedAt:   token.CreatedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:   expiresStr,
+		LeexiFilter: scopeTokenLeexiFilterToDTO(&token),
 	})
 }
 
@@ -209,6 +226,31 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 	}
 	if req.Description != nil {
 		updates["description"] = *req.Description
+	}
+	if req.MCPCommand != nil {
+		updates["mcp_command"] = *req.MCPCommand
+	}
+	if req.ServerName != nil {
+		updates["server_name"] = *req.ServerName
+	}
+	if req.AllowHTTP != nil {
+		updates["allow_http"] = *req.AllowHTTP
+	}
+
+	// Allow rotating the Leexi ownership filter on an existing token. The
+	// creator email is read from the existing row so a non-owner cannot lift
+	// or relax the scope.
+	if req.LeexiFilter != nil {
+		mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
+			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy,
+		)
+		if lerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
+			return
+		}
+		updates["leexi_filter_mode"] = mode
+		updates["leexi_allowed_user_uuids"] = userUUIDs
+		updates["leexi_allowed_team_uuids"] = teamUUIDs
 	}
 
 	if len(updates) > 0 {
@@ -391,10 +433,13 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		ServerIDs:   serverIDs,
 		ServerTools: buildServerToolsResponse(t.Tools),
 		MCPCommand:  t.MCPCommand,
+		ServerName:  t.ServerName,
+		AllowHTTP:   t.AllowHTTP,
 		IsActive:    t.IsActive,
 		CreatedBy:   t.CreatedBy,
 		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:   t.UpdatedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:   expiresStr,
+		LeexiFilter: scopeTokenLeexiFilterToDTO(&t),
 	}
 }

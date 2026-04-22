@@ -1,22 +1,65 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
+	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
+	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
 var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+var nonSlugRe = regexp.MustCompile(`[^a-z0-9-]+`)
+var multiDashRe = regexp.MustCompile(`-{2,}`)
+
+// generateDocSlug creates a URL-safe slug from a name and appends a short hash for uniqueness.
+func generateDocSlug(name, id string) string {
+	// Lowercase and replace non-alphanumeric with dashes
+	slug := strings.ToLower(name)
+	// Replace common accented chars
+	replacer := strings.NewReplacer(
+		"é", "e", "è", "e", "ê", "e", "ë", "e",
+		"à", "a", "â", "a", "ä", "a",
+		"ù", "u", "û", "u", "ü", "u",
+		"ô", "o", "ö", "o",
+		"î", "i", "ï", "i",
+		"ç", "c",
+		" ", "-",
+	)
+	slug = replacer.Replace(slug)
+	// Remove remaining non-slug characters
+	slug = nonSlugRe.ReplaceAllString(slug, "")
+	slug = multiDashRe.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	// Remove any remaining unicode
+	clean := make([]rune, 0, len(slug))
+	for _, r := range slug {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' {
+			clean = append(clean, r)
+		}
+	}
+	slug = string(clean)
+	if slug == "" {
+		slug = "server"
+	}
+	// Append short hash from ID for uniqueness
+	hash := sha256.Sum256([]byte(id))
+	slug = slug + "-" + hex.EncodeToString(hash[:])[:6]
+	return slug
+}
 
 // Handler holds dependencies for the REST API.
 type Handler struct {
@@ -30,6 +73,17 @@ type Handler struct {
 	allowInternalURLs bool
 	userRepo          *repository.UserRepo
 	auditRepo         *repository.AuditRepo
+	// leexiAdmin is the in-cluster client used to resolve users/teams for the
+	// per-token Leexi filter UI and the runtime header injection. nil when the
+	// integration is disabled (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
+	leexiAdmin *leexiadmin.Client
+	// uploadDir is the base directory for uploaded files (icons, etc.)
+	uploadDir string
+	// installGuideRepo is the repository for install guide CRUD (executors + configs).
+	installGuideRepo *repository.InstallGuideRepo
+	// Google Sheets import
+	googleTokenRepo *repository.GoogleTokenRepo
+	googleOAuth     *goGoogle.OAuthClient
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -62,6 +116,22 @@ func (h *Handler) SetUserRepo(repo *repository.UserRepo) {
 // SetAuditRepo sets the audit repository for audit log access.
 func (h *Handler) SetAuditRepo(repo *repository.AuditRepo) {
 	h.auditRepo = repo
+}
+
+// SetLeexiAdmin wires the Leexi admin client used by the Leexi-scoped token
+// filter UI and the proxy at /api/v1/leexi/*. Pass nil to disable.
+func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
+	h.leexiAdmin = client
+}
+
+// SetUploadDir sets the base directory for uploaded files.
+func (h *Handler) SetUploadDir(dir string) {
+	h.uploadDir = dir
+}
+
+// SetInstallGuideRepo sets the install guide repository.
+func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
+	h.installGuideRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -119,6 +189,8 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
 		ToolPrefix:          req.ToolPrefix,
+		Icon:                req.Icon,
+		DocSlug:             generateDocSlug(req.Name, id),
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
 	}
 	if req.ConnectTimeoutMs != nil {
@@ -302,6 +374,26 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updates["tool_prefix"] = *req.ToolPrefix
+	}
+	if req.Icon != nil {
+		updates["icon"] = *req.Icon
+	}
+	if req.DocSlug != nil {
+		// Check for duplicate doc_slug (skip if empty — clearing is always allowed)
+		if *req.DocSlug != "" {
+			existing, err := h.repo.GetByDocSlug(*req.DocSlug)
+			if err == nil && existing != nil && existing.ID != id {
+				writeJSON(w, http.StatusConflict, ErrorResponse{Error: "doc_slug '" + *req.DocSlug + "' is already used by server '" + existing.Name + "'"})
+				return
+			}
+		}
+		updates["doc_slug"] = *req.DocSlug
+	}
+	if req.DocDescription != nil {
+		updates["doc_description"] = decodeEntitiesString(*req.DocDescription)
+	}
+	if req.DocConfigGuide != nil {
+		updates["doc_config_guide"] = decodeEntitiesJSON(*req.DocConfigGuide)
 	}
 
 	if len(updates) > 0 {
@@ -639,6 +731,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
 		ToolPrefix:          srv.ToolPrefix,
+		Icon:                srv.Icon,
 		ToolsCount:          len(srv.Tools),
 		ToolNames:           toolNames,
 		ResourcesCount:      len(srv.Resources),
@@ -648,6 +741,9 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		MCPArgs:             mcpArgs,
 		MCPEnv:              mcpEnv,
 		HasAuthHeaders:      len(srv.AuthHeaders) > 0,
+		DocSlug:             srv.DocSlug,
+		DocDescription:      srv.DocDescription,
+		DocConfigGuide:      srv.DocConfigGuide,
 		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,

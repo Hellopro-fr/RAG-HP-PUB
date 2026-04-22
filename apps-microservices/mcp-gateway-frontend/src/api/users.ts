@@ -18,6 +18,10 @@ export const usersApi = {
     return api.put<void>(`${BASE}/users/${id}`, { role })
   },
 
+  toggleAllowed(id: number, isAllowed: boolean): Promise<User> {
+    return api.post<User>(`${BASE}/users/${id}/toggle-allowed`, { is_allowed: isAllowed })
+  },
+
   delete(id: number): Promise<void> {
     return api.del<void>(`${BASE}/users/${id}`)
   }

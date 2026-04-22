@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/hellopro/mcp-gateway/internal/db"
@@ -51,8 +52,8 @@ type Config struct {
 	Enabled       bool
 	SecureCookie  bool   // Secure flag on session cookie (true when behind TLS)
 	FallbackUser  string // optional fallback username (env FALLBACK_USER)
-	FallbackPass  string // optional fallback password (env FALLBACK_PASS)
-	FallbackEmail string // optional fallback email (env FALLBACK_EMAIL)
+	FallbackPass  string   // optional fallback password (env FALLBACK_PASS)
+	FallbackEmail string   // optional fallback email (env FALLBACK_EMAIL)
 }
 
 // publicPaths that don't require authentication.
@@ -72,7 +73,9 @@ var publicPrefixes = []string{
 	"/token",                      // OAuth2 token endpoint
 	"/api/v1/oauth2/authorize",    // OAuth2 authorize API (Vue frontend)
 	// "/register" intentionally NOT public — requires admin session to prevent abuse
-	"/.well-known",  // OAuth2 server metadata
+	"/.well-known",        // OAuth2 server metadata
+	"/api/v1/public/",     // Public docs endpoints
+	"/uploads/",           // Uploaded static files (icons)
 }
 
 // Middleware returns an HTTP middleware that enforces authentication.
@@ -124,7 +127,7 @@ func Middleware(cfg Config, userRepo UserRepo) func(http.Handler) http.Handler {
 					w.WriteHeader(http.StatusUnauthorized)
 					w.Write([]byte(`{"error":"not authenticated"}`))
 				} else {
-					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					http.Redirect(w, r, "/login?redirect="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 				}
 				return
 			}
@@ -139,7 +142,7 @@ func Middleware(cfg Config, userRepo UserRepo) func(http.Handler) http.Handler {
 					w.WriteHeader(http.StatusUnauthorized)
 					w.Write([]byte(`{"error":"not authenticated"}`))
 				} else {
-					http.Redirect(w, r, "/login", http.StatusSeeOther)
+					http.Redirect(w, r, "/login?redirect="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 				}
 				return
 			}

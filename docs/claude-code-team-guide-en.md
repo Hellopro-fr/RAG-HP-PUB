@@ -51,11 +51,11 @@ Claude Code reads these files at session start and follows them as instructions.
 
 ### Our Configuration at a Glance
 
-**4 agents:** `code-reviewer`, `debugger`, `doc-writer`, `test-writer`
-**11 commands:** `/commit-msg`, `/explain`, `/plan`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`, `/investigate`, `/audit-feature`, `/review-task`
-**7 rules:** `code-modification.md`, `commit-messages.md`, `security.md`, `language.md`, `impact-awareness.md`, `docker-security.md`, `config-freshness.md`
-**3 skills:** `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`
-**1 hook:** `Stop` hook (auto-review + CLAUDE.md refresh after each response)
+**2 agents:** `doc-writer`, `test-writer`
+**13 commands:** `/commit-msg`, `/explain`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`, `/investigate`, `/audit-feature`, `/dependency-mapper`, `/secrets-scanner`, `/test-coverage`, `/architecture-review`
+**14 rules:** `code-modification.md`, `commit-messages.md`, `security.md`, `language.md`, `impact-awareness.md`, `docker-security.md`, `config-freshness.md`, `formatting.md`, `refactoring.md`, `stack-detection.md`, `critical-thinking.md`, `auto-simplify.md`, `auto-documentation.md`, `frontend-design-guidelines.md`
+**4 skills:** `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`, `/php-script-scaffold`
+**6 hooks:** `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate`, `auto-review-gate`, `scope-guard`
 
 ---
 
@@ -151,7 +151,7 @@ After launching `claude` from the project root, type:
 What configuration files are you aware of?
 ```
 
-Claude Code should list the root `CLAUDE.md`, all 7 rules in `.claude/rules/`, all 4 agents, all 11 commands, and all 3 skills. If anything is missing, check that the file exists and has valid Markdown frontmatter (for agents).
+Claude Code should list the root `CLAUDE.md`, all 14 rules in `.claude/rules/`, all 2 agents, all 13 commands, and all 4 skills. If anything is missing, check that the file exists and has valid Markdown frontmatter (for agents).
 
 ---
 
@@ -202,29 +202,9 @@ feat(graph-rag): ajout du fallback BM25 pour la recherche vectorielle
 
 **Rules:** Does NOT critique, suggest improvements, or output code.
 
-### 3.3 `/plan` — Interactive Planning
+> **Note:** The `/plan` command has been removed. Planning is now handled by the `superpowers-extended-cc:writing-plans` skill, which provides a more structured, multi-step planning process with formal review gates. Use it via: `writing-plans` in your Claude Code session.
 
-**When to use:** Before starting any task that involves multiple files or services. Always plan before coding complex features.
-
-**Example prompt:**
-```
-/plan Add a circuit breaker to the gRPC calls between api-gateway and embedding-model-service
-```
-
-**Example prompt with file details:**
-```
-/plan with file details Add WebSocket support to api-chatbot-html-service for real-time streaming
-```
-
-**What it does:**
-1. Restates the goal in one sentence.
-2. Lists the steps to take.
-3. If "with file details" is included, provides a table of files to CREATE, UPDATE, or DELETE.
-4. Ends with: *"Does this align with what you are looking for? Please confirm to proceed."*
-
-**Rules:** Does NOT generate any code until you explicitly confirm.
-
-### 3.4 `/understand` — Content Comprehension
+### 3.3 `/understand` — Content Comprehension
 
 **When to use:** When you upload or paste content (architecture docs, API specs, error logs) and want Claude Code to absorb it before you ask questions.
 
@@ -235,7 +215,7 @@ feat(graph-rag): ajout du fallback BM25 pour la recherche vectorielle
 
 **What it does:** Reads and analyzes the content thoroughly, then provides a detailed summary of purpose, key components, and constraints. Ends with: *"What would you like to discuss or work on next?"*
 
-### 3.5 `/new-feature-claude-md` — Update CLAUDE.md After a Feature Addition
+### 3.4 `/new-feature-claude-md` — Update CLAUDE.md After a Feature Addition
 
 **When to use:** After adding a significant feature to an existing service (new module, new external dependency, structural change, new commands).
 
@@ -252,7 +232,7 @@ Claude Code will ask:
 
 Then it scans the service directory, proposes surgical edits to the service's `CLAUDE.md`, and shows a diff preview before applying.
 
-### 3.6 `/new-service-claude-md` — Generate CLAUDE.md for a New Service
+### 3.5 `/new-service-claude-md` — Generate CLAUDE.md for a New Service
 
 **When to use:** When a brand-new microservice has been added to `apps-microservices/`.
 
@@ -263,7 +243,7 @@ Then it scans the service directory, proposes surgical edits to the service's `C
 
 Claude Code will ask for the service name, path, and whether it runs locally or is remote-only. It then scans the directory and generates a `CLAUDE.md` following the standard template (under 60 lines). It also updates the root `CLAUDE.md` service map.
 
-### 3.7 `/update-claude-md` — Propose Surgical CLAUDE.md Updates
+### 3.6 `/update-claude-md` — Propose Surgical CLAUDE.md Updates
 
 **When to use:** In three situations:
 - **(a)** Claude made a mistake you want to prevent in the future.
@@ -277,7 +257,7 @@ Claude Code will ask for the service name, path, and whether it runs locally or 
 
 Claude Code asks you to pick (a), (b), or (c), then proposes minimal edits — never a full rewrite — and shows a diff before applying. Files are kept under 80 lines; if they exceed that limit, Claude Code suggests extracting rules to `.claude/rules/`.
 
-### 3.8 `/pre-push` — Pre-Push Verification Checklist
+### 3.7 `/pre-push` — Pre-Push Verification Checklist
 
 **When to use:** Before pushing code to the remote repository. This command runs a complete checklist on all modified services.
 
@@ -288,7 +268,7 @@ Claude Code asks you to pick (a), (b), or (c), then proposes minimal edits — n
    - **Rust:** `cargo check`, `cargo test` (if tests exist)
    - **TypeScript/Node.js:** Lint and test scripts (if defined in package.json)
    - **Shared libraries (`libs/`):** Syntax check + downstream impact warning
-3. Runs `@code-reviewer` on all changed files
+3. Prompts use of `superpowers-extended-cc:requesting-code-review` on all changed files
 4. Displays a summary table with each service's status
 
 **Example prompt:**
@@ -308,7 +288,7 @@ All checks passed. Safe to push.
 
 > **Rule:** If tests are missing for a service, the command suggests using `@test-writer` to generate them.
 
-### 3.9 `/investigate` — Evidence-Based Statement Verification
+### 3.8 `/investigate` — Evidence-Based Statement Verification
 
 **When to use:** When you need to verify a claim about the codebase (e.g., "Do all services have health checks?" or "Is Redis only used by crawlers?").
 
@@ -324,7 +304,7 @@ All checks passed. Safe to push.
 
 **Rules:** Read-only. Does NOT modify any files.
 
-### 3.10 `/audit-feature` — End-to-End Feature Audit
+### 3.9 `/audit-feature` — End-to-End Feature Audit
 
 **When to use:** When you want to trace a feature across the entire microservice pipeline and audit every service involved.
 
@@ -339,22 +319,9 @@ All checks passed. Safe to push.
 3. Reports cross-service findings (inconsistent schemas, missing error propagation).
 4. Ends with: *"Would you like me to fix any of these findings?"*
 
-### 3.11 `/review-task` — Tech Lead Task Review
+> **Note:** The `/review-task` command has been removed. Task review is now handled by two `superpowers-extended-cc` skills: `verification-before-completion` (to verify work before claiming done) and `requesting-code-review` (for formal code review before merging). Use them via your Claude Code session.
 
-**When to use:** When reviewing a developer's completed work or auditing the current state of a service.
-
-**Example prompt:**
-```
-/review-task apps-microservices/QC-tracking-service
-```
-
-**What it does:**
-1. Reads the full service state (code, config, Dockerfile, tests, CLAUDE.md).
-2. If branch changes exist, also analyzes the diff to highlight what was introduced.
-3. Reviews against all 7 dimensions: code quality, security, Docker, impact, test coverage, CLAUDE.md accuracy, acceptance criteria.
-4. Produces a verdict: **APPROVED**, **CHANGES REQUESTED**, or **BLOCKED**.
-
-### 3.12 Skills (Scaffolding)
+### 3.10 Skills (Scaffolding)
 
 Skills generate entire service structures following project conventions. They live in `.claude/skills/`.
 
@@ -370,57 +337,9 @@ Skills generate entire service structures following project conventions. They li
 
 Agents are specialized sub-agents that Claude Code can delegate tasks to. They run in a focused mode with limited tools and a specific role. You trigger them by referencing their name or by describing a task that matches their scope.
 
-### 4.1 `code-reviewer` — Code Quality & Security Review
+> **Note:** The `@code-reviewer` and `@debugger` agents have been removed. Code review is now handled by the `superpowers-extended-cc:requesting-code-review` skill, and debugging by `superpowers-extended-cc:systematic-debugging`. Both provide more structured, verification-gated workflows than the former agents.
 
-**Model:** Sonnet
-**Tools:** Read, Glob, Grep (read-only — cannot modify files)
-
-**When to use:**
-- Before opening a PR
-- After completing a feature
-- When auditing unfamiliar code
-
-**Example prompt:**
-```
-Review the code in apps-microservices/QC-tracking-service/src/
-```
-
-**What it does:**
-1. Analyzes code against 7 dimensions: SOLID, DRY, KISS, security, performance, error handling, and **impact awareness** (trade-offs, shared component blast radius).
-2. Performs **multiple internal passes** (structure → security → performance → impact) before producing output — all findings in one response.
-3. Groups findings by severity: Red (Critical) > Yellow (Warning) > Blue (Suggestion).
-4. References specific lines and functions.
-5. Ends with an **Impact Summary** paragraph and: *"Would you like me to implement any of these suggested improvements?"*
-
-**Rules:** Does NOT generate fixed code or modify files. You must confirm which improvements to apply. The reviewer is designed to be **exhaustive in a single pass** — running it again on unchanged code should not produce new findings.
-
-### 4.2 `debugger` — Error Diagnosis & Root Cause Analysis
-
-**Model:** Sonnet
-**Tools:** Read, Bash, Glob, Grep
-
-**When to use:**
-- When you have a stack trace or error log
-- When a service behaves unexpectedly
-- When a test fails and the reason is not obvious
-
-**Example prompt:**
-```
-Debug this error from graph-rag-api-recherche-rust-service:
-thread 'main' panicked at 'index out of bounds: the len is 0 but the index is 0'
-```
-
-**What it does:**
-1. Reads the actual source file (never assumes from memory).
-2. Explains WHY the error occurs, not just what it is.
-3. If multiple causes are possible, ranks them by likelihood.
-4. Produces a **structured fix plan** with a table of changes, trade-off analysis, and blast radius check.
-5. Asks: *"Does this fix plan look correct? Confirm to apply."*
-6. On confirmation, applies all changes and verifies the fix (py_compile, tests if available).
-
-**Rules:** Does NOT apply fixes until you confirm. Follows `impact-awareness.md` for trade-off and downstream impact analysis.
-
-### 4.3 `doc-writer` — Documentation Specialist
+### 4.1 `doc-writer` — Documentation Specialist
 
 **Model:** Sonnet
 **Tools:** Read, Write, Edit, Glob, Grep
@@ -442,7 +361,7 @@ Document all functions in apps-microservices/crawler-service/src/crawler.ts
 
 **Rules:** NEVER modifies executable code. Only adds or updates comments/documentation.
 
-### 4.4 `test-writer` — Test Suite Generator
+### 4.2 `test-writer` — Test Suite Generator
 
 **Model:** Sonnet
 **Tools:** Read, Write, Edit, Glob, Grep
@@ -480,12 +399,10 @@ Write tests for apps-microservices/QC-tracking-service/
 
 ### When NOT to Use an Agent
 
-- Do not trigger `code-reviewer` for a quick one-line fix — just ask Claude directly.
-- Do not trigger `debugger` if you already know the fix — just describe the change.
 - Do not trigger `doc-writer` for a single function — ask Claude Code directly to add a docstring.
 - Do not trigger `test-writer` for a single trivial unit test — write it directly with Claude.
 
-Agents have their own context window. Use them for substantial tasks where their specialization adds value.
+Agents have their own context window. Use them for substantial tasks where their specialization adds value. For code review and debugging, prefer the `superpowers-extended-cc` skills (`requesting-code-review`, `systematic-debugging`) which provide structured, verification-gated workflows.
 
 ---
 
@@ -590,8 +507,36 @@ Governs when and how to refactor safely:
 
 1. **When**: After reviewer flags duplication/SOLID violation, when logic exists in 3+ services, or user explicitly requests.
 2. **When NOT**: During bug fixes, during feature additions, without tests, or unprompted.
-3. **Shared components**: Always `/plan` first, list all downstream consumers, commit library changes separately.
+3. **Shared components**: Always use `writing-plans` first, list all downstream consumers, commit library changes separately.
 4. **Known targets**: logging centralization (75 services), config duplication (45 services), structure standardization (15 services).
+
+### 5.10 `auto-simplify.md`
+
+**Location:** `.claude/rules/auto-simplify.md`
+
+**Purpose:** Automatically triggers a code simplification pass after every implementation.
+
+After you write or modify code, Claude will review the changes for unnecessary complexity, redundant code, naming clarity, over-abstraction, and obvious comments. This happens automatically — you don't need to ask.
+
+**Key constraint:** Never changes behavior — only improves how code is written. Prefers clarity over brevity.
+
+### 5.11 `auto-documentation.md`
+
+**Location:** `.claude/rules/auto-documentation.md`
+
+**Purpose:** Automatically fetches up-to-date library documentation when working with external libraries.
+
+When implementing code that uses FastAPI, Pydantic, Crawlee, Milvus, RabbitMQ, or other external libraries, Claude will use the context7 plugin to fetch current documentation before writing code. Also triggers during brainstorming when discussing technical choices.
+
+**Skip:** Internal project code (use codebase search), Python stdlib, libraries already verified in the session.
+
+### 5.12 `frontend-design-guidelines.md`
+
+**Location:** `.claude/rules/frontend-design-guidelines.md`
+
+**Purpose:** Design principles applied when building UI components or web applications.
+
+Guides Claude toward distinctive, intentional design rather than generic AI aesthetics. Covers typography, color, motion, layout, and detail. Key principle: "Bold maximalism and refined minimalism both work — the key is intentionality, not intensity."
 
 ### How Rules Are Loaded
 
@@ -639,21 +584,21 @@ From the next session onward, Claude Code will follow this rule automatically.
 
 ### 6.2 Before Coding
 
-For any non-trivial task, start with `/plan`:
+For any non-trivial task, start with the `superpowers-extended-cc:writing-plans` skill:
 
 ```
-/plan with file details Add retry logic to RabbitMQ consumers in QC-tracking-service
+Use writing-plans to plan adding retry logic to RabbitMQ consumers in QC-tracking-service
 ```
 
 Review the plan, confirm, then proceed. This prevents Claude Code from going in the wrong direction on a multi-file task.
 
-**When to use Plan mode:**
+**When to use a formal plan (writing-plans skill):**
 - Multi-file changes
 - Cross-service modifications
 - New features or architectural changes
 - Anything involving shared libraries in `libs/`
 
-**When Normal mode is fine:**
+**When working directly with Claude is fine:**
 - Single-file edits
 - Bug fixes with a known root cause
 - Adding a test for an existing function
@@ -665,7 +610,7 @@ Review the plan, confirm, then proceed. This prevents Claude Code from going in 
 - If a modified service has no tests, use `@test-writer` to generate a test suite.
 - Before pushing, run `/pre-push` for the full verification checklist.
 - If Claude Code's context is filling up (you notice slower responses or repeated mistakes), use `/compact` at **50-65% context usage** to summarize and free space.
-- For code reviews before committing, trigger the `code-reviewer` agent.
+- For code reviews before committing, use the `superpowers-extended-cc:requesting-code-review` skill.
 
 ### 6.4 Handling Remote-Only Services
 
@@ -701,7 +646,7 @@ Claude Code will rewrite `~/.claude/primer.md` with:
 
 ```
 1. Complete your changes.
-2. Trigger code-reviewer: "Review the changes in apps-microservices/my-service/src/"
+2. Use the superpowers-extended-cc:requesting-code-review skill to trigger a structured review.
 3. Read the findings (Critical > Warning > Suggestion).
 4. Tell Claude Code which findings to fix: "Fix findings 1 and 3."
 5. Run /commit-msg to generate the final commit message.
@@ -716,7 +661,7 @@ Claude Code will rewrite `~/.claude/primer.md` with:
 RAG-HP-PUB has 90+ services. Many tasks touch multiple services simultaneously: a new proto definition affects every service that imports it, a shared lib change ripples across dozens of consumers.
 
 **Approach:**
-1. Start with `/plan with file details` to map all affected files.
+1. Start with `writing-plans` skill to map all affected files.
 2. Work on one service at a time. Commit after each service.
 3. Use the service-level `CLAUDE.md` to understand each service's conventions before editing.
 
@@ -743,7 +688,7 @@ This keeps your main conversation focused on the task while the sub-agents gathe
 Changes to shared libraries are high-impact. Always follow this protocol:
 
 1. **Identify consumers:** Search for imports of the library across all services.
-2. **Plan the change:** Use `/plan` with the full list of affected services.
+2. **Plan the change:** Use the `writing-plans` skill with the full list of affected services.
 3. **Make the library change first.** Verify with type checking.
 4. **Update consumers one by one.** Test each.
 5. **Commit atomically:** One commit for the library change, one per affected service.
@@ -758,7 +703,7 @@ Search for all services that import from libs/embedding_utils/
 Scenario: Adding an API key validation layer that spans three services.
 
 ```
-/plan with file details
+Use writing-plans skill to plan:
 Add API key validation:
 1. New middleware in api-gateway (port 8500) that checks X-API-Key header
 2. New validation endpoint in auth-service
@@ -800,7 +745,7 @@ All Python/FastAPI services in `apps-microservices/` that depend on:
 | Lint TypeScript | `cd apps-microservices/<ts-service> && npm run lint` | |
 | Read and analyze code | Use Claude Code's Read, Glob, Grep tools | No execution needed |
 | Generate documentation | Use `doc-writer` agent | Read-only analysis |
-| Code review | Use `code-reviewer` agent | Read-only analysis |
+| Code review | Use `superpowers-extended-cc:requesting-code-review` skill | Read-only analysis |
 
 ### 8.4 What CANNOT Be Done Locally
 
@@ -887,7 +832,7 @@ docs/<topic>                  # Documentation
 **Pull requests:**
 - Title: Conventional Commit format, under 72 characters
 - Body: Summary of changes, test plan, link to related issues
-- Review: Run `code-reviewer` agent before opening the PR
+- Review: Use `superpowers-extended-cc:requesting-code-review` before opening the PR
 
 ### 9.4 Project CLAUDE.md vs Personal `~/.claude/CLAUDE.md`
 
@@ -967,13 +912,13 @@ This keeps CLAUDE.md files scannable and fast to load.
 
 - **Mistake 5:** Putting project-specific rules in `~/.claude/CLAUDE.md` instead of `.claude/rules/`. Personal config is not shared with the team — the rule will only work for you.
 
-- **Mistake 6:** Skipping `/plan` on multi-service tasks. Without a plan, Claude Code may edit files in the wrong order, miss dependencies, or go in the wrong direction entirely.
+- **Mistake 6:** Skipping the `writing-plans` skill on multi-service tasks. Without a formal plan, Claude Code may edit files in the wrong order, miss dependencies, or go in the wrong direction entirely.
 
 - **Mistake 7:** Waiting until 90% context usage to `/compact`. By then, Claude Code has already lost accuracy. Compact at **50-65%** for best results.
 
 - **Mistake 8:** Committing a CLAUDE.md that exceeds 80 lines. It becomes slow to scan and hard to maintain. Extract detailed rules into `.claude/rules/`.
 
-- **Mistake 9:** Using the `code-reviewer` agent for a one-line typo fix. Agents have overhead — use them for substantial reviews, not trivial edits.
+- **Mistake 9:** Using the `superpowers-extended-cc:requesting-code-review` skill for a one-line typo fix. Structured review skills have overhead — use them for substantial reviews before merging, not trivial edits.
 
 - **Mistake 10:** Running `docker-compose up` locally for GPU-dependent services like `vllm-server` or `triton-server`. These require hardware that does not exist on developer machines.
 
@@ -1007,15 +952,16 @@ The sub-agent explores, summarizes, and returns results without consuming your m
 
 ### 12.3 Hooks
 
-Claude Code hooks are configured in `.claude/settings.json`. They execute automatically in response to events.
+Hooks are automated scripts that run on specific events. They execute externally (zero token cost) and enforce quality gates.
 
-**Currently configured:**
-
-| Event | Hook Type | Purpose |
-|-------|-----------|---------|
-| `Stop` | `prompt` | After each response: (1) checks if any CLAUDE.md needs updating based on file changes, (2) self-reviews modified code for quality/security/impact awareness violations |
-
-This means after every response where code was modified, Claude Code automatically checks its own work. If issues are found, it reports them and offers to fix.
+| Hook | Trigger | Type | What It Does |
+|------|---------|------|-------------|
+| `secret-scanner.py` | Before `git commit`/`git add` | Blocking | Scans staged files for hardcoded secrets (API keys, passwords, connection strings). Blocks on critical/high findings. |
+| `dangerous-command-blocker.py` | Before any Bash command | Blocking | Blocks catastrophic commands (rm -rf /, dd) and commands targeting critical paths (.claude/, .git/, libs/). |
+| `conventional-commits.py` | Before `git commit` | Blocking | Validates commit message follows Conventional Commits format (feat/fix/refactor/docs/chore/test). |
+| `tdd-gate.sh` | Before Edit/Write | Blocking | Blocks production code edits if no corresponding test file exists. Encourages TDD. |
+| `auto-review-gate.sh` | Session stop | Non-blocking | Lists modified files and prompts for CLAUDE.md refresh and self-review. Delegates scope checking to scope-guard. |
+| `scope-guard.sh` | Session stop (via auto-review-gate) | Non-blocking | Warns if modified files fall outside the declared spec scope. |
 
 **How to add a new hook:** Edit `.claude/settings.json` and add entries under the `hooks` key. See [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) for the full hook API (PreToolUse, PostToolUse, Stop, etc.).
 
@@ -1025,12 +971,12 @@ The project has the `superpowers` plugin installed project-wide. It provides 14 
 
 **When to use superpowers vs. project commands:**
 
-| Task | Project command (lightweight) | Superpowers skill (heavyweight) |
+| Task | Direct approach (lightweight) | Superpowers skill (structured) |
 |------|-------------------------------|----------------------------------|
-| Plan a task | `/plan` | `writing-plans` (multi-step spec with formal review) |
-| Debug an error | `@debugger` | `systematic-debugging` (exhaustive hypothesis testing) |
-| Review code | `@code-reviewer` | `requesting-code-review` (formal review with verification gates) |
-| Write tests | `@test-writer` | `test-driven-development` (strict red-green-refactor TDD) |
+| Plan a task | Describe your task to Claude | `writing-plans` (multi-step spec with formal review) |
+| Debug an error | Describe the error to Claude | `systematic-debugging` (exhaustive hypothesis testing) |
+| Review code | Ask Claude to review a file | `requesting-code-review` (formal review with verification gates) |
+| Write tests | Use `@test-writer` agent | `test-driven-development` (strict red-green-refactor TDD) |
 | Execute a plan | Direct implementation | `executing-plans` (subagent delegation with checkpoints) |
 
 **Rule of thumb:** Use project commands for focused, day-to-day tasks. Use superpowers skills for complex, multi-step work that benefits from structured gates and verification.
@@ -1086,7 +1032,7 @@ When modifying `.proto` files in `protos/grpc_stubs/`:
 3. Update all services that import the modified stubs.
 4. Type check each affected service.
 
-Always use `/plan with file details` before touching proto files — the ripple effect can be significant.
+Always use the `writing-plans` skill before touching proto files — the ripple effect can be significant.
 
 ---
 
@@ -1122,14 +1068,14 @@ Follow these steps in order on your first day:
    /explain apps-microservices/api-gateway/main.py
    ```
 
-8. **Try a planning workflow** with a low-risk task:
+8. **Try a planning workflow** with a low-risk task using the superpowers skill:
    ```
-   /plan Add a docstring to all functions in apps-microservices/QC-tracking-service/src/main.py
+   Use writing-plans to plan adding docstrings to all functions in apps-microservices/QC-tracking-service/src/main.py
    ```
 
-9. **Run the code-reviewer agent** on a file you will be working on:
+9. **Run a code review** on a file you will be working on using the superpowers skill:
    ```
-   Review apps-microservices/<your-assigned-service>/src/
+   Use requesting-code-review on apps-microservices/<your-assigned-service>/src/
    ```
 
 10. **Try `@test-writer`** on a service without tests:
@@ -1157,7 +1103,6 @@ Follow these steps in order on your first day:
 |---------|---------|-------------|
 | `/commit-msg` | Generate bilingual commit message (EN/FR) | After any file changes |
 | `/explain` | Explain a single file or code block | Understanding unfamiliar code |
-| `/plan` | Interactive planning with step list | Before multi-file or multi-service tasks |
 | `/understand` | Absorb and summarize multiple files/topics | When analyzing docs, specs, logs |
 | `/new-feature-claude-md` | Update service CLAUDE.md after feature addition | After adding a significant feature |
 | `/new-service-claude-md` | Generate CLAUDE.md for a new service | When a new microservice is created |
@@ -1165,16 +1110,19 @@ Follow these steps in order on your first day:
 | `/pre-push` | Pre-push verification checklist | Before every push |
 | `/investigate` | Verify a statement about the codebase | Checking claims, auditing compliance |
 | `/audit-feature` | End-to-end feature audit across pipeline | Feature quality assessment |
-| `/review-task` | Tech Lead review (state + diff, verdict) | Reviewing dev work, service audits |
+| `/dependency-mapper` | Map cross-service dependencies | Understanding service coupling |
+| `/secrets-scanner` | Full codebase secrets audit | Security review before push |
+| `/test-coverage` | Test coverage report across services | Identifying under-tested services |
+| `/architecture-review` | Architecture-level review | Structural assessment of a service or system |
 
 ### Agents
 
 | Agent | Model | Role | Tools |
 |-------|-------|------|-------|
-| `code-reviewer` | Sonnet | Code quality, security, SOLID/DRY/KISS, impact awareness (exhaustive single-pass) | Read, Glob, Grep |
-| `debugger` | Sonnet | Root cause analysis → structured fix plan with trade-offs → apply | Read, Bash, Glob, Grep |
 | `doc-writer` | Sonnet | Add documentation (English only) without modifying code | Read, Write, Edit, Glob, Grep |
 | `test-writer` | Sonnet | Stack-agnostic test generation (Python/Rust/Node.js/unknown) | Read, Write, Edit, Glob, Grep |
+
+> **Note:** Code review → `superpowers-extended-cc:requesting-code-review`. Debugging → `superpowers-extended-cc:systematic-debugging`.
 
 ### Rules
 
@@ -1190,6 +1138,10 @@ Follow these steps in order on your first day:
 | `.claude/rules/formatting.md` | Code style per stack — references stack-detection.md, with unknown stack fallback |
 | `.claude/rules/refactoring.md` | When/how to refactor safely, scope rules, known duplication targets |
 | `.claude/rules/stack-detection.md` | Single source of truth for stack detection. All stack-dependent rules reference this file. |
+| `.claude/rules/critical-thinking.md` | Anti-sycophancy, blind spot detection, evidence over opinion, uncertainty transparency |
+| `.claude/rules/auto-simplify.md` | Auto simplification pass after every implementation — clarity over complexity, never changes behavior |
+| `.claude/rules/auto-documentation.md` | Auto-fetch external library docs (FastAPI, Pydantic, Milvus, etc.) via context7 before writing code |
+| `.claude/rules/frontend-design-guidelines.md` | Design principles for UI: typography, color, motion, layout — intentionality over intensity |
 
 ### Key Thresholds
 
@@ -1248,4 +1200,4 @@ Follow these steps in order on your first day:
 
 ---
 
-> **Maintained by the RAG-HP-PUB team.** Update this guide when new commands, agents, or rules are added. Last updated: March 2026.
+> **Maintained by the RAG-HP-PUB team.** Update this guide when new commands, agents, or rules are added. Last updated: April 2026.

@@ -10,17 +10,23 @@ import (
 
 // UserRepo provides CRUD operations on gateway users via GORM.
 type UserRepo struct {
-	db          *gorm.DB
-	adminEmails map[string]bool // emails that get admin role on first login
+	db            *gorm.DB
+	adminEmails   map[string]bool // emails that get admin role on first login
+	allowedEmails map[string]bool // emails that are allowed by default (from ALLOWED_EMAILS env)
 }
 
 // NewUserRepo creates a new UserRepo. adminEmails are promoted to admin on first login.
-func NewUserRepo(database *gorm.DB, adminEmails []string) *UserRepo {
-	m := make(map[string]bool, len(adminEmails))
+// allowedEmails are marked as is_allowed=true on first login.
+func NewUserRepo(database *gorm.DB, adminEmails, allowedEmails []string) *UserRepo {
+	am := make(map[string]bool, len(adminEmails))
 	for _, e := range adminEmails {
-		m[e] = true
+		am[e] = true
 	}
-	return &UserRepo{db: database, adminEmails: m}
+	al := make(map[string]bool, len(allowedEmails))
+	for _, e := range allowedEmails {
+		al[e] = true
+	}
+	return &UserRepo{db: database, adminEmails: am, allowedEmails: al}
 }
 
 // UpsertOnLogin creates or updates a GatewayUser on successful login.
@@ -36,14 +42,17 @@ func (r *UserRepo) UpsertOnLogin(email, displayName string) (*db.GatewayUser, er
 			return nil, err
 		}
 		// Create new user — admin if in ADMIN_EMAILS, otherwise config-only.
+		// is_allowed defaults to true for ADMIN_EMAILS and ALLOWED_EMAILS, false otherwise.
 		role := "config-only"
 		if r.adminEmails[email] {
 			role = "admin"
 		}
+		isAllowed := r.adminEmails[email] || r.allowedEmails[email]
 		user = db.GatewayUser{
 			Email:       email,
 			DisplayName: displayName,
 			Role:        role,
+			IsAllowed:   isAllowed,
 			LoginCount:  1,
 			LastLoginAt: &now,
 		}
@@ -54,10 +63,15 @@ func (r *UserRepo) UpsertOnLogin(email, displayName string) (*db.GatewayUser, er
 	}
 
 	// Update existing user.
+	// If the user is in ALLOWED_EMAILS or ADMIN_EMAILS but was previously blocked,
+	// automatically re-authorize them (env list takes precedence over manual block).
 	updates := map[string]interface{}{
 		"display_name":  displayName,
 		"login_count":   gorm.Expr("login_count + 1"),
 		"last_login_at": now,
+	}
+	if (r.allowedEmails[email] || r.adminEmails[email]) && !user.IsAllowed {
+		updates["is_allowed"] = true
 	}
 	if updateErr := r.db.Model(&user).Updates(updates).Error; updateErr != nil {
 		return nil, updateErr
@@ -110,6 +124,11 @@ func (r *UserRepo) GetByID(id uint64) (*db.GatewayUser, error) {
 // UpdateRole sets the role field of a user.
 func (r *UserRepo) UpdateRole(id uint64, role string) error {
 	return r.db.Model(&db.GatewayUser{}).Where("id = ?", id).Update("role", role).Error
+}
+
+// UpdateAllowed sets the is_allowed field of a user.
+func (r *UserRepo) UpdateAllowed(id uint64, isAllowed bool) error {
+	return r.db.Model(&db.GatewayUser{}).Where("id = ?", id).Update("is_allowed", isAllowed).Error
 }
 
 // Delete removes a GatewayUser by ID.

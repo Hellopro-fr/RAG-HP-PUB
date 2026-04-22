@@ -88,6 +88,8 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		ttl = *req.AccessTokenTTL
 	}
 
+	creatorEmail := auth.UserEmailFromContext(r.Context())
+
 	client := db.OAuth2Client{
 		ID:              clientID,
 		Name:            req.Name,
@@ -97,8 +99,20 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		EncryptedSecret: []byte(clientSecret),
 		AccessTokenTTL:  ttl,
 		IsActive:        true,
-		CreatedBy:       auth.UserEmailFromContext(r.Context()),
+		CreatedBy:       creatorEmail,
 	}
+
+	// Resolve and validate the optional Leexi ownership filter.
+	mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
+		r.Context(), h.leexiAdmin, req.LeexiFilter, creatorEmail,
+	)
+	if lerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
+		return
+	}
+	client.LeexiFilterMode = mode
+	client.LeexiAllowedUserUUIDs = userUUIDs
+	client.LeexiAllowedTeamUUIDs = teamUUIDs
 
 	if len(req.RedirectURIs) > 0 {
 		redirectJSON, _ := json.Marshal(req.RedirectURIs)
@@ -186,6 +200,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		RedirectURIs:          createRedirectURIs,
 		GrantTypes:            createGrantTypes,
 		DynamicallyRegistered: client.DynamicallyRegistered,
+		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&client),
 	})
 }
 
@@ -236,6 +251,19 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 		grantJSON, _ := json.Marshal(req.GrantTypes)
 		s := string(grantJSON)
 		updates["grant_types"] = &s
+	}
+
+	if req.LeexiFilter != nil {
+		mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
+			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy,
+		)
+		if lerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
+			return
+		}
+		updates["leexi_filter_mode"] = mode
+		updates["leexi_allowed_user_uuids"] = userUUIDs
+		updates["leexi_allowed_team_uuids"] = teamUUIDs
 	}
 
 	if len(updates) > 0 {
@@ -403,5 +431,6 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		RedirectURIs:          redirectURIs,
 		GrantTypes:            grantTypes,
 		DynamicallyRegistered: c.DynamicallyRegistered,
+		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&c),
 	}
 }

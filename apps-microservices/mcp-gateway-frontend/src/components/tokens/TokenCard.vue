@@ -51,6 +51,13 @@
             <span class="text-xs px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-400 font-mono">
               {{ token.mcp_command || 'npx' }}
             </span>
+            <span
+              v-if="leexiBadge"
+              class="text-xs px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400"
+              :title="`Filtre Leexi : ${leexiBadge}`"
+            >
+              <i class="pi pi-filter text-[10px] mr-1" />Leexi: {{ leexiBadge }}
+            </span>
           </div>
           <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <div class="flex items-center gap-1.5">
@@ -86,10 +93,22 @@
       <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-medium text-gray-600 dark:text-gray-400">.mcp.json</span>
-          <button class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1" @click="copyMcpJson">
-            <i class="pi pi-copy text-[10px]" />
-            Copier
-          </button>
+          <div class="flex items-center gap-3">
+            <a
+              href="/install-guide"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
+              title="Ouvrir le guide d'installation dans un nouvel onglet"
+            >
+              <i class="pi pi-external-link text-[10px]" />
+              Documentation
+            </a>
+            <button class="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1" @click="copyMcpJson">
+              <i class="pi pi-copy text-[10px]" />
+              Copier
+            </button>
+          </div>
         </div>
         <pre class="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 font-mono overflow-x-auto max-h-[160px] overflow-y-auto whitespace-pre text-gray-800 dark:text-gray-300">{{ mcpJsonDisplay }}</pre>
       </div>
@@ -100,10 +119,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ScopeToken } from '@/types/token'
+import type { InstallExecutor } from '@/types/install-guide'
 import { useClipboard } from '@/composables/useClipboard'
 import { useServersStore } from '@/stores/servers'
 
-const props = defineProps<{ token: ScopeToken }>()
+const props = withDefaults(
+  defineProps<{ token: ScopeToken; executors?: InstallExecutor[] }>(),
+  { executors: () => [] }
+)
 
 const emit = defineEmits<{
   edit: [token: ScopeToken]
@@ -130,40 +153,70 @@ const serverNames = computed(() => {
     })
 })
 
-function buildMcpJson(tokenValue: string) {
+// Compact one-line summary of the Leexi ownership filter for the badge.
+const leexiBadge = computed<string | null>(() => {
+  const f = props.token.leexi_filter
+  if (!f || f.mode === 'none') return null
+  switch (f.mode) {
+    case 'users':
+      return `${(f.user_uuids || []).length} user(s)`
+    case 'teams':
+      return `${(f.team_uuids || []).length} team(s)`
+    case 'creator':
+      return 'creator only'
+    default:
+      return null
+  }
+})
+
+// Build the .mcp.json string. Prefer the template stored on the selected
+// Package Executor (top-level mcp_config field → falls back to the
+// page-builder `mcp-config` element for legacy data). When no template is
+// available, fall back to a synthetic builder for built-in commands.
+function buildMcpJsonString(tokenValue: string): string {
   const command = props.token.mcp_command || 'npx'
-  const serverName = 'hellopro-gateway'
-  const gatewayUrl = window.location.origin
+  const serverName = props.token.server_name || 'hellopro-gateway'
+  const origin = window.location.origin
+  const host = origin.replace(/^https?:\/\//, '')
 
-  const headerArg = `Authorization:Bearer ${tokenValue}`
+  // 1. Try the executor's persisted template
+  const exec = props.executors.find(e => e.slug === command)
+  const mcpEl = Array.isArray(exec?.content)
+    ? exec!.content.find((el: any) => el?.type === 'mcp-config')
+    : null
+  const template = (exec?.mcp_config as string) || (mcpEl?.props?.code as string) || ''
 
-  if (command === 'custom') {
-    return {
+  if (template) {
+    const allowHttp = !!props.token.allow_http
+    const withAllowHttp = allowHttp
+      ? template.replace(/"<allow-http>"/g, '"--allow-http"')
+      : template.replace(/^[ \t]*"<allow-http>"[ \t]*,?[ \t]*\r?\n/gm, '')
+    return withAllowHttp
+      .replace(/https?:\/\/<gateway-url>/g, origin)
+      .replace(/<gateway-url>/g, host)
+      .replace(/<server-name>/g, serverName)
+      .replace(/<token>/g, tokenValue)
+      .replace(/<votre-token>/g, tokenValue)
+  }
+
+  // 2. Synthetic fallback for custom commands / missing executor
+  const headerArg = 'X-MCP-Scope-Token: ${MCP_SCOPE_TOKEN}'
+  const env = { MCP_SCOPE_TOKEN: tokenValue }
+  const defaultArgs = [origin + '/mcp', '--header', headerArg]
+
+  return JSON.stringify(
+    {
       mcpServers: {
         [serverName]: {
-          command: command,
-          args: [gatewayUrl + '/mcp', '--header', headerArg]
-        }
-      }
-    }
-  }
-
-  const argsMap: Record<string, string[]> = {
-    npx: ['-y', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    bunx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    deno: ['run', '--allow-net', 'npm:mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    uvx: ['mcp-remote', gatewayUrl + '/mcp', '--header', headerArg],
-    docker: ['run', '-i', '--rm', 'mcp-remote', gatewayUrl + '/mcp', '--header', headerArg]
-  }
-
-  return {
-    mcpServers: {
-      [serverName]: {
-        command: command,
-        args: argsMap[command] || [gatewayUrl + '/mcp', '--header', headerArg]
-      }
-    }
-  }
+          command,
+          args: defaultArgs,
+          env,
+        },
+      },
+    },
+    null,
+    2
+  )
 }
 
 const maskedToken = computed(() => {
@@ -173,15 +226,12 @@ const maskedToken = computed(() => {
 })
 
 // Display version uses masked token
-const mcpJsonDisplay = computed(() => {
-  return JSON.stringify(buildMcpJson(maskedToken.value), null, 2)
-})
+const mcpJsonDisplay = computed(() => buildMcpJsonString(maskedToken.value))
 
 // Copy version uses full token if available, otherwise masked
 function copyMcpJson() {
   const tokenValue = props.token.token || maskedToken.value
-  const fullJson = JSON.stringify(buildMcpJson(tokenValue), null, 2)
-  clipboard.copy(fullJson, 'Configuration .mcp.json')
+  clipboard.copy(buildMcpJsonString(tokenValue), 'Configuration .mcp.json')
 }
 
 function formatDate(dateStr: string): string {

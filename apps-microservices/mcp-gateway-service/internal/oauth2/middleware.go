@@ -2,6 +2,7 @@ package oauth2
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -63,12 +64,23 @@ func CombinedMiddleware(
 
 					cc = &CachedClient{
 						ID:           client.ID,
+						Name:         client.Name,
 						ServerIDs:    serverIDs,
 						AllowedTools: allowedTools,
 						ExpiresAt:    client.ExpiresAt,
 						IsActive:     client.IsActive,
 						TTL:          client.AccessTokenTTL,
 					}
+
+					// Decode persisted Leexi filter for runtime header injection.
+					cc.LeexiFilterMode = client.LeexiFilterMode
+					if len(client.LeexiAllowedUserUUIDs) > 0 {
+						_ = json.Unmarshal(client.LeexiAllowedUserUUIDs, &cc.LeexiAllowedUserUUIDs)
+					}
+					if len(client.LeexiAllowedTeamUUIDs) > 0 {
+						_ = json.Unmarshal(client.LeexiAllowedTeamUUIDs, &cc.LeexiAllowedTeamUUIDs)
+					}
+
 					oauth2Cache.Set(clientID, cc)
 				}
 
@@ -84,6 +96,16 @@ func CombinedMiddleware(
 				ctx := context.WithValue(r.Context(), scopetoken.AllowedServersContextKey, cc.ServerIDs)
 				if cc.AllowedTools != nil {
 					ctx = context.WithValue(ctx, scopetoken.AllowedToolsContextKey, cc.AllowedTools)
+				}
+				if cc.Name != "" {
+					ctx = context.WithValue(ctx, scopetoken.ScopeNameContextKey, cc.Name)
+				}
+				if cc.LeexiFilterMode != "" && cc.LeexiFilterMode != "none" {
+					ctx = context.WithValue(ctx, scopetoken.LeexiFilterContextKey, &scopetoken.LeexiFilterContext{
+						Mode:             cc.LeexiFilterMode,
+						AllowedUserUUIDs: cc.LeexiAllowedUserUUIDs,
+						AllowedTeamUUIDs: cc.LeexiAllowedTeamUUIDs,
+					})
 				}
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

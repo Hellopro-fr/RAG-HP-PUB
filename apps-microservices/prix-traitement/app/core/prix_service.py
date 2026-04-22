@@ -7,14 +7,153 @@ import json
 import logging
 import asyncio
 import re
-from typing import Dict, Any, Optional, List
+from datetime import datetime
+from typing import Dict, Any, Optional, List, Tuple
 
 from app.core.api_client import GeminiProvider, ClaudeProvider, ChatGPTProvider, HelloProAPIClient
-from app.core.utils import extract_json_from_text, get_prompt_cached
+from app.core.utils import extract_json_from_text, get_prompt_cached, get_tracking_filepath, write_log
 from app.core.search import call_search_api_async
 from app.core.credentials import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers : nettoyage des prix aberrants (IQR + borne médiane, sans numpy)
+# ---------------------------------------------------------------------------
+
+def _parser_prix(valeur_str: Any) -> Optional[float]:
+    """
+    Convertit une chaîne de prix en float.
+    Gère : symboles (≥ ≤ € $), espaces, séparateurs de milliers (. ou espace),
+    virgule décimale française.
+    """
+    if not isinstance(valeur_str, str):
+        return None
+    s = re.sub(r'[≥≤<>~\s€$]', '', valeur_str)
+
+    # "6.514.245" → séparateur de milliers → "6514245"
+    if s.count('.') > 1:
+        s = s.replace('.', '')
+    elif s.count('.') == 1:
+        avant, apres = s.split('.')
+        if len(apres) == 3 and avant.isdigit() and len(avant) <= 3:
+            s = s.replace('.', '')
+
+    s = s.replace(',', '.')
+
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _percentile_iqr(sorted_values: List[float], pct: float) -> float:
+    """Percentile par interpolation linéaire (équivalent np.percentile, sans numpy)."""
+    n = len(sorted_values)
+    if n == 1:
+        return float(sorted_values[0])
+    idx = (pct / 100) * (n - 1)
+    lower = int(idx)
+    upper = lower + 1
+    if upper >= n:
+        return float(sorted_values[-1])
+    frac = idx - lower
+    return sorted_values[lower] + frac * (sorted_values[upper] - sorted_values[lower])
+
+
+def _nettoyer_resultats_prix(
+    results: List[Dict[str, Any]],
+    multiplicateur: float = 1.5,
+    ratio_mediane: float = 10.0,
+) -> Dict[str, Any]:
+    """
+    Filtre les prix aberrants des résultats du matching v2 (méthode IQR + médiane).
+
+    borne_min / borne_max ne sont définis QUE si une coupe réelle a eu lieu de ce côté :
+    - borne_min est défini uniquement si des prix aberrants ont été rejetés en bas
+    - borne_max est défini uniquement si des prix aberrants ont été rejetés en haut
+    - None = aucune coupe de ce côté, la distribution est homogène
+
+    Étapes :
+    1. Pré-filtre médiane : élimine les prix hors [médiane/ratio ; médiane×ratio]
+    2. IQR sur les prix pré-filtrés : exclut les outliers au-delà de Q1/Q3 ± mult×IQR
+    3. Items sans prix parsable toujours conservés (non rejetés)
+
+    Args:
+        results: liste de dicts issus de matching_prix/matching/get
+        multiplicateur: coefficient IQR (1.5 standard)
+        ratio_mediane: tolérance autour de la médiane (10× par défaut)
+
+    Returns:
+        dict avec 'borne_min', 'borne_max', 'results_nettoyes', 'results_rejetes'
+    """
+    items_avec_prix: List[tuple] = []
+    items_sans_prix: List[Dict[str, Any]] = []
+
+    for item in results:
+        bloc = item.get("prix", {})
+        raw = (bloc.get("valeur_prix") or bloc.get("prix")) if isinstance(bloc, dict) else None
+        p = _parser_prix(raw)
+        if p is not None and p > 0:
+            items_avec_prix.append((p, item))
+        else:
+            items_sans_prix.append(item)
+
+    # Moins de 3 prix parsables : pas assez de données pour calculer des bornes
+    if len(items_avec_prix) < 3:
+        return {
+            "borne_min": None,
+            "borne_max": None,
+            "results_nettoyes": [item for _, item in items_avec_prix] + items_sans_prix,
+            "results_rejetes": [],
+        }
+
+    prix_tries = sorted(p for p, _ in items_avec_prix)
+    mediane = _percentile_iqr(prix_tries, 50)
+
+    # Bornes du pré-filtre (filtre les valeurs manifestement erronées)
+    borne_inf_mediane = mediane / ratio_mediane
+    borne_sup_mediane = mediane * ratio_mediane
+    prix_pre = [p for p in prix_tries if borne_inf_mediane <= p <= borne_sup_mediane]
+
+    # Bornes IQR (affinées sur les prix pré-filtrés)
+    borne_inf_iqr: Optional[float] = None
+    borne_sup_iqr: Optional[float] = None
+
+    if len(prix_pre) >= 3:
+        q1 = _percentile_iqr(prix_pre, 10)
+        q3 = _percentile_iqr(prix_pre, 95)
+        iqr = q3 - q1
+        borne_inf_iqr = max(q1 - multiplicateur * iqr, borne_inf_mediane)
+        borne_sup_iqr = q3 + multiplicateur * iqr
+
+    # Borne effective : IQR si disponible, sinon pré-filtre seul
+    borne_inf_effective = borne_inf_iqr if borne_inf_iqr is not None else borne_inf_mediane
+    borne_sup_effective = borne_sup_iqr if borne_sup_iqr is not None else borne_sup_mediane
+
+    # Filtrage : on suit si une coupe a réellement eu lieu de chaque côté
+    results_nettoyes = list(items_sans_prix)
+    results_rejetes: List[Dict[str, Any]] = []
+    low_cut = False
+    high_cut = False
+
+    for prix, item in items_avec_prix:
+        if prix < borne_inf_effective:
+            results_rejetes.append(item)
+            low_cut = True
+        elif prix > borne_sup_effective:
+            results_rejetes.append(item)
+            high_cut = True
+        else:
+            results_nettoyes.append(item)
+
+    return {
+        "borne_min": round(borne_inf_effective, 2) if low_cut else None,
+        "borne_max": round(borne_sup_effective, 2) if high_cut else None,
+        "results_nettoyes": results_nettoyes,
+        "results_rejetes": results_rejetes,
+    }
 
 
 def format_numeric_constraint(constraint: Any, unite: str = "") -> str:
@@ -201,7 +340,8 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
                 for equiv in equivalences:
                     if isinstance(equiv, dict):
                         id_c = equiv.get("id_caracteristique")
-                        if id_c:
+                        poids = equiv.get("poids")
+                        if id_c and poids == "critique":
                             list_carac_equiv.append(str(id_c))
                     else:
                         logger.warning(f"[{id_categorie}] Équivalence non valide pour la réponse '{reponse}' (id={id_reponse}): {equivalences}")
@@ -461,7 +601,10 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             nom_produit = meta.get("nom_produit", "N/A")
             fournisseur = meta.get("fournisseur", "N/A")
             nom_categorie = meta.get("nom_categorie", meta.get("categorie", "N/A"))
-            text = meta.get("text", "")
+            description_produit = meta.get("description_produit", "")
+            valeur_reponse_q1 = meta.get("valeur_reponse_q1", "")
+            type_transaction = meta.get("type_transaction", "")
+            structure_prix = meta.get("structure_prix", "")
 
             # Construction de la ligne de prix
             prix_line = ""
@@ -479,14 +622,16 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             caracteristique = meta.get("caracteristique", "")
             date_prix = meta.get("date_prix", "")
 
-            chunk_text = f"""Titre : {nom_produit}
-            Source : Prix
+            chunk_text = f"""Titre du produit : {nom_produit}
+            Description du produit : {description_produit}
+            Réponse Question 1 : {valeur_reponse_q1}
+            Caractéristiques : {caracteristique}
             Fournisseur : {fournisseur}
-            Catégorie : {nom_categorie}
-            Texte : {text}
+            Nom de la catégorie : {nom_categorie}
+            Type de transaction : {type_transaction}
             Prix : {prix_line}
-            Date_prix : {date_prix}
-            Caractéristiques : {caracteristique}"""
+            Date du prix : {date_prix}
+            Structure du prix : {structure_prix}"""
 
             formatted_chunks.append(chunk_text)
 
@@ -533,7 +678,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
 
         elif use_claude:
             # ---- Claude (défaut) ----
-            actual_model = llm_model
+            actual_model = llm_model if llm_model != "claude" else settings.CLAUDE_MODEL_NAME
             type_ia = 4
 
             # Parser les suffixes raccourcis : -e-{effort} ou -b-{budget_tokens}
@@ -644,6 +789,585 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         return {
             "success": False,
             "reponse": None,
+            "api_response": {},
+            "time_elapsed": elapsed,
+            "message": f"Erreur inattendue: {str(e)}"
+        }
+
+
+def _dedupe_matching_results(
+    results: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Dédoublonne les résultats du matching (Option A : garde le 1er représentant).
+    Doublon si TOUS les critères sont vrais :
+      - fournisseur == (normalisé : lowercase + strip + collapse + sans accents)
+      - valeur_prix == (arrondi à 2 décimales après conversion float)
+      - taxe == (normalisée ; HT vs TTC vs "" → non doublons entre eux)
+      - nom_produit similaire à ≥ 90 % (SequenceMatcher, uniquement ce champ)
+    Items sans prix ou sans fournisseur → pas dédoublonnés (laissés tels quels).
+    Retourne : (results_uniques, doublons_info) — doublons_info pour tracking.
+    """
+    import unicodedata as _unicodedata
+    from difflib import SequenceMatcher
+
+    def _norm_txt(s: Any) -> str:
+        if not s:
+            return ""
+        s = str(s).strip().lower()
+        nfkd = _unicodedata.normalize("NFKD", s)
+        s = "".join(c for c in nfkd if not _unicodedata.combining(c))
+        return re.sub(r"\s+", " ", s)
+
+    def _norm_prix(p: Any) -> Optional[float]:
+        try:
+            return round(float(p), 2)
+        except (TypeError, ValueError):
+            return None
+
+    # Pré-calcul des champs normalisés par index
+    # Clé bucket = (fournisseur, prix, taxe) en match EXACT ==
+    fields: List[tuple] = []  # (f_norm, p_norm, tx_norm, t_norm, t_orig)
+    buckets: Dict[tuple, List[int]] = {}
+    for i, item in enumerate(results):
+        prix_info = item.get("prix", {}) or {}
+        f_norm = _norm_txt(prix_info.get("fournisseur", ""))
+        p_norm = _norm_prix(prix_info.get("valeur_prix"))
+        tx_norm = _norm_txt(prix_info.get("taxe", ""))
+        t_orig = prix_info.get("nom_produit", "") or ""
+        t_norm = _norm_txt(t_orig)
+        fields.append((f_norm, p_norm, tx_norm, t_norm, t_orig))
+        if f_norm and p_norm is not None:
+            buckets.setdefault((f_norm, p_norm, tx_norm), []).append(i)
+
+    kept_flags = [True] * len(results)
+    duplicates_info: List[Dict[str, Any]] = []
+
+    # Dans chaque bucket (fournisseur/prix/taxe identiques), compare les titres à ≥90 %
+    for (f_norm, p_norm, tx_norm), indices in buckets.items():
+        if len(indices) < 2:
+            continue
+
+        clusters: List[List[int]] = []
+        for i in indices:
+            t_i = fields[i][3]
+            placed = False
+            for cluster in clusters:
+                t_ref = fields[cluster[0]][3]
+                if SequenceMatcher(None, t_i, t_ref).ratio() >= 0.9:
+                    cluster.append(i)
+                    placed = True
+                    break
+            if not placed:
+                clusters.append([i])
+
+        for cluster in clusters:
+            if len(cluster) < 2:
+                continue
+            # Option A : garde le premier
+            kept_idx = cluster[0]
+            removed = cluster[1:]
+            for r in removed:
+                kept_flags[r] = False
+            duplicates_info.append({
+                "fournisseur": f_norm,
+                "prix": p_norm,
+                "taxe": tx_norm,
+                "garde": fields[kept_idx][4],
+                "retires": [fields[r][4] for r in removed],
+            })
+
+    deduped = [results[i] for i in range(len(results)) if kept_flags[i]]
+    return deduped, duplicates_info
+
+
+def _format_fr_number(n: float) -> str:
+    """Formate un nombre en français avec espace insécable comme séparateur de milliers."""
+    return f"{int(round(n)):,}".replace(",", "\u00a0")
+
+
+def _replace_price_in_phrase(phrase: str, old_val: float, new_val: float) -> str:
+    """
+    Remplace une occurrence de prix (old_val) par new_val dans la phrase.
+    Tolère les séparateurs de milliers : espace, espace insécable, point, virgule, apostrophe.
+    Ex: 1800 → matche "1800", "1 800", "1\u00a0800", "1.800", "1'800".
+    """
+    old_int = int(round(old_val))
+    new_str = _format_fr_number(new_val)
+    s = str(old_int)
+
+    if len(s) <= 3:
+        pattern = r"(?<!\d)" + re.escape(s) + r"(?!\d)"
+    else:
+        # Découpe en groupes de 3 depuis la droite : 1800 → ["1", "800"]
+        groups = []
+        for i in range(len(s), 0, -3):
+            start = max(0, i - 3)
+            groups.append(s[start:i])
+        groups.reverse()
+        sep = r"[\s\u00a0.,'\u202f]?"
+        pattern = r"(?<!\d)" + sep.join(re.escape(g) for g in groups) + r"(?!\d)"
+
+    return re.sub(pattern, new_str, phrase)
+
+
+def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Vérifie que les prix des exemples_produits sont dans [borne_basse, borne_haute].
+    Si un prix est hors bornes, étend la fourchette :
+      - borne_haute = max(borne_haute, plus_haut_prix) arrondi à la dizaine supérieure
+      - borne_basse = min(borne_basse, plus_bas_prix)  arrondi à la dizaine inférieure
+    Puis recalcule prix_moyen = prix_median = (borne_basse + borne_haute) / 2.
+    Retourne un dict de détails pour tracking (adjusted=True/False), ou None si non applicable.
+    """
+    import math as _math
+
+    fourchette = parsed.get("fourchette")
+    exemples = parsed.get("exemples_produits") or []
+    if not isinstance(fourchette, dict) or not isinstance(exemples, list) or not exemples:
+        return None
+
+    try:
+        borne_basse = float(fourchette.get("borne_basse"))
+        borne_haute = float(fourchette.get("borne_haute"))
+    except (TypeError, ValueError):
+        return None
+
+    prix_exemples: List[float] = []
+    for ex in exemples:
+        try:
+            prix_exemples.append(float(ex.get("prix")))
+        except (TypeError, ValueError):
+            continue
+
+    if not prix_exemples:
+        return None
+
+    max_ex = max(prix_exemples)
+    min_ex = min(prix_exemples)
+
+    new_haute = borne_haute
+    new_basse = borne_basse
+    adjusted = False
+
+    if max_ex > borne_haute:
+        new_haute = _math.ceil(max_ex / 10) * 10
+        adjusted = True
+    if min_ex < borne_basse:
+        new_basse = _math.floor(min_ex / 10) * 10
+        adjusted = True
+
+    if not adjusted:
+        return {"adjusted": False}
+
+    new_moyen = (new_basse + new_haute) / 2
+
+    # Capture des valeurs avant écrasement (pour mise à jour de phrase_prix)
+    old_moyen = None
+    try:
+        old_moyen = float(fourchette.get("prix_moyen"))
+    except (TypeError, ValueError):
+        old_moyen = None
+
+    details = {
+        "adjusted": True,
+        "borne_basse_avant": borne_basse,
+        "borne_haute_avant": borne_haute,
+        "borne_basse_apres": new_basse,
+        "borne_haute_apres": new_haute,
+        "min_exemple": min_ex,
+        "max_exemple": max_ex,
+        "prix_moyen_avant": old_moyen,
+        "prix_moyen_apres": new_moyen,
+    }
+
+    # Mise à jour in-place de parsed["fourchette"]
+    fourchette["borne_basse"] = new_basse
+    fourchette["borne_haute"] = new_haute
+    fourchette["prix_moyen"] = new_moyen
+    fourchette["prix_median"] = new_moyen
+    fourchette["ajustement"] = details
+
+    # Mise à jour de phrase_prix : remplace les anciens prix par les nouveaux
+    phrase = parsed.get("phrase_prix")
+    if isinstance(phrase, str) and phrase:
+        new_phrase = phrase
+        replacements = []
+        if new_basse != borne_basse:
+            replacements.append((borne_basse, new_basse))
+        if new_haute != borne_haute:
+            replacements.append((borne_haute, new_haute))
+        if old_moyen is not None and old_moyen != new_moyen \
+                and old_moyen != borne_basse and old_moyen != borne_haute:
+            replacements.append((old_moyen, new_moyen))
+
+        for old_val, new_val in replacements:
+            new_phrase = _replace_price_in_phrase(new_phrase, old_val, new_val)
+
+        if new_phrase != phrase:
+            details["phrase_prix_avant"] = phrase
+            details["phrase_prix_apres"] = new_phrase
+            parsed["phrase_prix"] = new_phrase
+
+    return details
+
+
+async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Version 2 du questionnaire prix : remplace la recherche RAG par le matching
+    via l'endpoint BO matching_prix.php (correspondance équivalences × _cppi).
+
+    Étapes :
+    1. Appel BO matching_prix/matching/get avec les équivalences filtrées
+    2. Formate les résultats matchés en texte structuré (même format que v1)
+    3. Récupère le prompt 114
+    4. Injecte les résultats formatés + requête dans le prompt, appelle LLM
+    5. Retourne la réponse LLM structurée
+
+    Args:
+        equivalences: Équivalences prix filtrées (textuelles uniquement)
+        id_categorie: ID de la catégorie
+        nom_categorie: Nom de la catégorie
+        texte_prompt: Texte optionnel à injecter comme {requete_rag} dans le prompt
+        model: Modèle LLM à utiliser
+
+    Returns:
+        Dict avec 'success', 'reponse', 'matching', 'api_response', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    prompt_id = settings.PROMPT_ID_QUESTIONNAIRE
+
+    api_client = HelloProAPIClient()
+    ID_PROCESS = "37"
+
+    # Tracking file (visualisé dans QC-tracking-service)
+    tracking_file = get_tracking_filepath(id_categorie, prefix="prix-traitement-v2")
+    write_log(tracking_file, "=" * 80)
+    write_log(tracking_file, f"RUN_QUESTIONNAIRE_V2 — {datetime.now().isoformat()}")
+    write_log(tracking_file, "=" * 80)
+    write_log(tracking_file, f"id_categorie: {id_categorie}")
+    write_log(tracking_file, f"nom_categorie: {nom_categorie}")
+    write_log(tracking_file, f"model: {model or settings.CHATGPT_MODEL_NAME}")
+    write_log(tracking_file, "")
+    write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
+    write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
+    write_log(tracking_file, f"nom_reponse_q1: {nom_reponse_q1}")
+    write_log(tracking_file, json.dumps(equivalences, ensure_ascii=False, indent=2))
+    write_log(tracking_file, "")
+
+    try:
+        # =====================================================================
+        # ÉTAPE 1 : Matching prix via BO + récupération prompt EN PARALLÈLE
+        # =====================================================================
+        logger.info(f"[{id_categorie}] V2 — Matching prix + prompt en parallèle ({len(equivalences)} équivalences)")
+
+        matching_response, prompt_config = await asyncio.gather(
+            api_client.post(
+                "matching_prix", "matching", "get",
+                {"id_categorie": id_categorie, "equivalences": equivalences, "id_reponse_q1": id_reponse_q1}
+            ),
+            get_prompt_cached(prompt_id)
+        )
+
+        if not matching_response or matching_response.get("erreur"):
+            elapsed = time.time() - start_time
+            err_msg = (matching_response or {}).get("message", "Erreur appel matching_prix")
+            logger.warning(f"[{id_categorie}] V2 — Matching échoué: {err_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": err_msg
+            }
+
+        results = matching_response.get("results", [])
+        if not results:
+            elapsed = time.time() - start_time
+            logger.warning(f"[{id_categorie}] V2 — Aucun prix matché")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": f"Aucun prix correspondant trouvé pour la catégorie {id_categorie}"
+            }
+
+        if not prompt_config:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] V2 — Impossible de récupérer le prompt id={prompt_id}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer le prompt id={prompt_id}"
+            }
+
+        logger.info(f"[{id_categorie}] V2 — {len(results)} prix matchés")
+
+        if model == "gemini":  # Pas de nettoyage pour Claude (effort déjà intégré)
+            # =====================================================================
+            # ÉTAPE 1b : Filtrage des prix aberrants (IQR + borne médiane)
+            # =====================================================================
+            nettoyage = _nettoyer_resultats_prix(results)
+            results = nettoyage["results_nettoyes"]
+            nb_rejetes = len(nettoyage["results_rejetes"])
+
+            borne_min = nettoyage["borne_min"]
+            borne_max = nettoyage["borne_max"]
+            if borne_min is not None and borne_max is not None:
+                bornes_str = f" (bornes [{borne_min:.2f} – {borne_max:.2f}])"
+            elif borne_min is not None:
+                bornes_str = f" (borne min {borne_min:.2f})"
+            elif borne_max is not None:
+                bornes_str = f" (borne max {borne_max:.2f})"
+            else:
+                bornes_str = ""
+            write_log(tracking_file, "--- NETTOYAGE PRIX ---")
+            write_log(tracking_file, f"Gardés : {len(results)} | Rejetés : {nb_rejetes}{bornes_str}")
+            write_log(tracking_file, json.dumps(
+                {
+                    "borne_min": nettoyage["borne_min"],
+                    "borne_max": nettoyage["borne_max"],
+                    "nb_gardes": len(results),
+                    "nb_rejetes": nb_rejetes,
+                    "prix_gardes": [
+                        (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
+                        for item in results
+                    ],
+                    "prix_rejetes": [
+                        (item.get("prix") or {}).get("valeur_prix") or (item.get("prix") or {}).get("prix")
+                        for item in nettoyage["results_rejetes"]
+                    ],
+                },
+                ensure_ascii=False, indent=2
+            ))
+            write_log(tracking_file, "")
+
+            if not results:
+                elapsed = time.time() - start_time
+                write_log(tracking_file, "ERREUR : Tous les prix ont été rejetés après nettoyage")
+                return {
+                    "success": False,
+                    "reponse": None,
+                    "matching": matching_response,
+                    "api_response": {},
+                    "time_elapsed": elapsed,
+                    "message": "Tous les prix matchés ont été éliminés comme aberrants"
+                }
+        else:
+            write_log(tracking_file, "--- NO NETTOYAGE PRIX ---")
+            
+
+        # =====================================================================
+        # ÉTAPE 2 : Formater les résultats matchés (même format que v1 chunks)
+        # =====================================================================
+
+        # Dédoublonnage : fournisseur + prix + taxe identiques + nom_produit ≥ 90 %
+        raw_count = len(results)
+        results, duplicates_info = _dedupe_matching_results(results)
+        if raw_count > len(results):
+            logger.info(
+                f"[{id_categorie}] V2 — Dédoublonnage : {raw_count} → {len(results)} "
+                f"(retirés : {raw_count - len(results)})"
+            )
+            write_log(tracking_file, "--- DEDOUBLONNAGE MATCHING ---")
+            write_log(tracking_file, f"Avant: {raw_count} | Après: {len(results)} | Retirés: {raw_count - len(results)}")
+            write_log(tracking_file, json.dumps(duplicates_info, ensure_ascii=False, indent=2))
+            write_log(tracking_file, "")
+        else:
+            write_log(tracking_file, "--- DEDOUBLONNAGE MATCHING : 0 doublon ---")
+            write_log(tracking_file, "")
+
+        formatted_chunks = []
+
+        for item in results:
+            prix = item.get("prix", {})
+
+            prix_line = prix.get("prix", "")
+            caracteristiques = item.get("caracteristiques", prix.get("caracteristique", ""))
+
+            chunk_text = f"""Titre du produit : {prix.get("nom_produit", "N/A")}
+            Description du produit : {prix.get("description_produit", "")}
+            Réponse Question 1 : {prix.get("valeur_reponse_q1", "")}
+            Caractéristiques : {caracteristiques}
+            Fournisseur : {prix.get("fournisseur", "N/A")}
+            Nom de la catégorie : {prix.get("nom_categorie", "N/A")}
+            Type de transaction : {prix.get("type_transaction", "")}
+            Prix : {prix_line}
+            Date du prix : {prix.get("date_prix", "")}
+            Structure du prix : {prix.get("structure_prix", "")}"""
+
+            formatted_chunks.append(chunk_text)
+
+        all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
+
+        logger.info(f"[{id_categorie}] V2 — {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars)")
+
+        write_log(tracking_file, f"--- ALL_CHUNKS_TEXT ({len(formatted_chunks)} chunks, {len(all_chunks_text)} chars) ---")
+        write_log(tracking_file, all_chunks_text)
+        write_log(tracking_file, "")
+
+        prompt_text = prompt_config.get("contenu_prompt", "")
+
+        # =====================================================================
+        # ÉTAPE 3 : Construire le prompt final et appeler LLM
+        # =====================================================================
+        final_prompt = prompt_text
+        final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
+
+        # {requete_rag} = texte_prompt si fourni
+        requete_rag_value = texte_prompt.strip()
+        logger.info(f"[{id_categorie}] V2 — Requête prompt surchargée: {requete_rag_value}")
+
+        write_log(tracking_file, "--- REQUETE_RAG_VALUE ---")
+        write_log(tracking_file, requete_rag_value)
+        write_log(tracking_file, "")
+
+        final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
+        final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+        final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
+
+        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
+        use_gemini = llm_model.startswith("gemini")
+        use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
+        use_claude = llm_model.startswith("claude")
+
+        logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
+
+        if use_gemini:
+            actual_model = llm_model if llm_model != "gemini" else settings.GEMINI_MODEL_NAME
+            type_ia = 3
+            logger.info(f"[{id_categorie}] V2 — Appel Gemini (model={actual_model}, {len(final_prompt)} chars)...")
+            write_log(tracking_file, f"--- Appel Gemini (model={actual_model}, {len(final_prompt)} chars)...")            
+            gemini = GeminiProvider(model=actual_model, thinking_level="low")
+            llm_result = await gemini.chat(final_prompt)
+
+        elif use_claude:
+            actual_model = llm_model if llm_model != "claude" else settings.CLAUDE_MODEL_NAME
+            type_ia = 4
+            effort = None
+            budget_tokens = None
+            match_effort = re.search(r"-e-(low|medium|high)$", actual_model)
+            match_budget = re.search(r"-b-(\d+)$", actual_model)
+            if match_effort:
+                effort = match_effort.group(1)
+                actual_model = actual_model[:match_effort.start()]
+            elif match_budget:
+                budget_tokens = int(match_budget.group(1))
+                actual_model = actual_model[:match_budget.start()]
+            logger.info(f"[{id_categorie}] V2 — Appel Claude (model={actual_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...")
+            write_log(tracking_file, f"--- Appel Claude (model={actual_model}, effort={effort}, budget_tokens={budget_tokens}, {len(final_prompt)} chars)...") 
+            claude = ClaudeProvider(model=actual_model, effort=effort, budget_tokens=budget_tokens)
+            llm_result = await claude.chat(final_prompt)
+
+        else:
+            actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
+            type_ia = 1
+            effort = None
+            match_effort = re.search(r"-e-(low|medium|high)$", actual_model)
+            if match_effort:
+                effort = match_effort.group(1)
+                actual_model = actual_model[:match_effort.start()]
+            logger.info(f"[{id_categorie}] V2 — Appel ChatGPT (model={actual_model}, effort={effort}, {len(final_prompt)} chars)...")
+            write_log(tracking_file, f"--- Appel ChatGPT (model={actual_model}, effort={effort}, {len(final_prompt)} chars)...") 
+            gpt = ChatGPTProvider(model=actual_model, reasoning_effort=effort)
+            llm_result = await gpt.chat(final_prompt)
+
+        # Extraction usage commun
+        usage = llm_result.get("api_response", {}).get("usage", {})
+        input_tokens = usage.get("input_tokens") or 0
+        output_tokens = usage.get("output_tokens") or 0
+
+        # Log LLM usage (fire-and-forget)
+        asyncio.create_task(api_client.log_llm_usage(
+            type_ia=type_ia,
+            model=actual_model,
+            input_token=input_tokens,
+            output_token=output_tokens,
+            id_process=ID_PROCESS,
+            origine="prix-traitement-questionnaire-v2",
+            etat=1 if "error" not in llm_result else 2,
+            retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else "",
+            temperature=0.0
+        ))
+
+        elapsed = time.time() - start_time
+
+        if "error" in llm_result:
+            error_msg = f"Erreur LLM: {llm_result.get('error', '')}"
+            logger.error(f"[{id_categorie}] V2 — {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+
+        llm_text = llm_result.get("message", "")
+        logger.info(f"[{id_categorie}] V2 — Réponse LLM reçue: {llm_text[:200]}... en {elapsed:.1f}s")
+
+        write_log(tracking_file, f"--- LLM_TEXT ({len(llm_text)} chars, {elapsed:.1f}s) ---")
+        write_log(tracking_file, llm_text)
+        write_log(tracking_file, "")
+
+        parsed = extract_json_from_text(llm_text)
+        if not parsed or not isinstance(parsed, dict):
+            error_msg = f"Réponse JSON vide ou malformée: '{llm_text[:100]}'"
+            logger.error(f"[{id_categorie}] V2 — {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "matching": matching_response,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+
+        # Compatibilité prix_median <-> prix_moyen dans fourchette
+        fourchette = parsed.get("fourchette")
+        if isinstance(fourchette, dict):
+            if "prix_moyen" in fourchette and "prix_median" not in fourchette:
+                fourchette["prix_median"] = fourchette["prix_moyen"]
+            elif "prix_median" in fourchette and "prix_moyen" not in fourchette:
+                fourchette["prix_moyen"] = fourchette["prix_median"]
+
+        # Ajustement des bornes si un exemple_produit est hors fourchette
+        adjust_details = _adjust_fourchette_from_exemples(parsed)
+        if adjust_details is not None:
+            write_log(tracking_file, "--- AJUSTEMENT BORNES FOURCHETTE ---")
+            write_log(tracking_file, json.dumps(adjust_details, ensure_ascii=False, indent=2))
+            write_log(tracking_file, "")
+            if adjust_details.get("adjusted"):
+                logger.info(
+                    f"[{id_categorie}] V2 — Fourchette ajustée : "
+                    f"[{adjust_details['borne_basse_avant']}, {adjust_details['borne_haute_avant']}] → "
+                    f"[{adjust_details['borne_basse_apres']}, {adjust_details['borne_haute_apres']}] "
+                    f"(min_ex={adjust_details['min_exemple']}, max_ex={adjust_details['max_exemple']})"
+                )
+
+        return {
+            "success": True,
+            "reponse": parsed,
+            "matching": matching_response,
+            "api_response": llm_result.get("api_response", {}),
+            "time_elapsed": elapsed,
+            "message": f"{len(results)} prix matchés traités en {elapsed:.1f}s"
+        }
+
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[{id_categorie}] Erreur inattendue dans run_questionnaire_v2: {e}", exc_info=True)
+        return {
+            "success": False,
+            "reponse": None,
+            "matching": None,
             "api_response": {},
             "time_elapsed": elapsed,
             "message": f"Erreur inattendue: {str(e)}"

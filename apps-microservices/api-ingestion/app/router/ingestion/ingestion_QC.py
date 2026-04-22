@@ -27,6 +27,7 @@ from app.schemas.ingestion.ingestion_qc import (
     QCIngestionBatchResponse,
     QCServiceStep,
     QC_ROUTING_KEYS,
+    QC_EXCHANGES,
 )
 from app.messaging.publisher import publish_message
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
@@ -37,13 +38,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Nom de l'exchange pour le pipeline QC
+# Nom de l'exchange par défaut pour le pipeline QC (steps 1-7)
 QC_EXCHANGE_NAME = "qc_pipeline_exchange"
 
 
 def get_routing_key(service: QCServiceStep) -> str:
     """Retourne la routing key pour le service spécifié."""
     return QC_ROUTING_KEYS.get(service, "qc.step1.start")
+
+
+def get_exchange_name(service: QCServiceStep) -> str:
+    """Retourne l'exchange pour le service. Les services hors pipeline QC 1-7
+    (ex: caracterisation_prix) utilisent un exchange dédié."""
+    return QC_EXCHANGES.get(service, QC_EXCHANGE_NAME)
 
 
 @router.post(
@@ -79,7 +86,8 @@ async def publish_to_qc_service(
             )
 
     routing_key = get_routing_key(payload.service)
-    
+    exchange_name = get_exchange_name(payload.service)
+
     # Préparer le message
     message_data = {
         "id_categorie": payload.id_categorie,
@@ -88,7 +96,7 @@ async def publish_to_qc_service(
 
     success = publish_message(
         channel=channel,
-        exchange_name=QC_EXCHANGE_NAME,
+        exchange_name=exchange_name,
         routing_key=routing_key,
         data=message_data,
     )
@@ -99,13 +107,13 @@ async def publish_to_qc_service(
             message="Échec de la publication du message sur RabbitMQ.",
         )
 
-    logger.info(f"📤 Message publié pour catégorie {payload.id_categorie} vers {payload.service.value}")
+    logger.info(f"📤 Message publié pour catégorie {payload.id_categorie} vers {payload.service.value} ({exchange_name})")
 
     return QCIngestionResponseSuccess(
         code=status.HTTP_202_ACCEPTED,
         message="Le message a été mis en file d'attente pour publication.",
         details={
-            "exchange": QC_EXCHANGE_NAME,
+            "exchange": exchange_name,
             "routing_key": routing_key,
             "service": payload.service.value,
             "id_categorie": payload.id_categorie,
@@ -159,7 +167,8 @@ async def publish_batch_to_qc_service(
                 )
 
         routing_key = get_routing_key(payload.service)
-        
+        exchange_name = get_exchange_name(payload.service)
+
         semaphore = asyncio.Semaphore(4)  # Limite les connexions concurrentes
         loop = asyncio.get_running_loop()
         batch_size = 20  # Traite 20 messages par connexion
@@ -204,7 +213,7 @@ async def publish_batch_to_qc_service(
                     try:
                         success = publish_message(
                             channel=local_channel,
-                            exchange_name=QC_EXCHANGE_NAME,
+                            exchange_name=exchange_name,
                             routing_key=routing_key,
                             data=message_data,
                         )
@@ -308,6 +317,7 @@ async def list_qc_services():
         services.append({
             "name": service.value,
             "step": list(QCServiceStep).index(service) + 1,
+            "exchange": get_exchange_name(service),
             "routing_key": QC_ROUTING_KEYS[service],
             "description": {
                 "question1": "Génération des questions de niveau 1",
@@ -317,9 +327,10 @@ async def list_qc_services():
                 "enrichissement": "Enrichissement des données",
                 "equivalence": "Calcul des équivalences",
                 "caracterisation": "Caractérisation des produits",
+                "caracterisation_prix": "Caractérisation des prix Milvus (hors pipeline QC 1-7)",
             }.get(service.value, ""),
         })
-    
+
     return {
         "exchange": QC_EXCHANGE_NAME,
         "services": services,

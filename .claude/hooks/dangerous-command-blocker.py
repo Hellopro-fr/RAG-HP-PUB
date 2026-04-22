@@ -11,7 +11,7 @@ CATASTROPHIC = [
     r'rm\s+(-[a-zA-Z]*)?f?r?f?\s+/',           # rm on root
     r'rm\s+(-[a-zA-Z]*)?f?r?f?\s+~',            # rm on home
     r'rm\s+-rf\s+\*',                             # rm -rf *
-    r'\bdd\b.*\bof=/dev/',                         # dd to device
+    r'\bdd\b[^;|&]*\bof=/dev/',                        # dd to device
     r'\bmkfs\b',                                   # format filesystem
     r'\bmkswap\b',                                 # create swap
     r'\bfdisk\b',                                  # partition editor
@@ -23,16 +23,16 @@ CATASTROPHIC = [
 
 # Level 2: Critical path protection — block
 CRITICAL_PATHS = [
-    r'(rm|mv)\s+.*\.claude/',                      # .claude/ directory
-    r'(rm|mv)\s+.*\.git/',                         # .git directory
-    r'(rm|mv)\s+.*\.env($|\s)',                    # .env files
-    r'(rm|mv)\s+.*docker-compose\.yml',            # compose file
-    r'(rm|mv)\s+.*Cargo\.toml',                    # Rust manifest
-    r'(rm|mv)\s+.*requirements\.txt',              # Python deps
-    r'(rm|mv)\s+.*package\.json',                  # Node.js manifest
-    r'(rm|mv)\s+.*package-lock\.json',             # Node.js lockfile
-    r'(rm|mv)\s+.*protos/',                        # Proto definitions
-    r'(rm|mv)\s+.*libs/common-utils/',             # Shared Python lib
+    r'(rm|mv)\s+[^;|&]*\.claude/',                      # .claude/ directory
+    r'(rm|mv)\s+[^;|&]*\.git/',                         # .git directory
+    r'(rm|mv)\s+[^;|&]*\.env($|\s)',                    # .env files
+    r'(rm|mv)\s+[^;|&]*docker-compose\.yml',            # compose file
+    r'(rm|mv)\s+[^;|&]*Cargo\.toml',                    # Rust manifest
+    r'(rm|mv)\s+[^;|&]*requirements\.txt',              # Python deps
+    r'(rm|mv)\s+[^;|&]*package\.json',                  # Node.js manifest
+    r'(rm|mv)\s+[^;|&]*package-lock\.json',             # Node.js lockfile
+    r'(rm|mv)\s+[^;|&]*protos/',                        # Proto definitions
+    r'(rm|mv)\s+[^;|&]*libs/common-utils/',             # Shared Python lib
 ]
 
 # Level 3: Suspicious — warn only
@@ -55,22 +55,28 @@ def main():
     if not command:
         sys.exit(0)
 
+    def deny(reason):
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason
+        }}))
+        sys.exit(2)
+
     # Level 1: Catastrophic
     for pattern in CATASTROPHIC:
         if re.search(pattern, command, re.IGNORECASE):
-            print(f"🔴 BLOCKED: Catastrophic command detected: {command}", file=sys.stderr)
-            sys.exit(2)
+            deny(f"BLOCKED: Catastrophic command detected: {command}")
 
     # Level 2: Critical paths
     for pattern in CRITICAL_PATHS:
         if re.search(pattern, command, re.IGNORECASE):
-            print(f"🔴 BLOCKED: Command targets critical path: {command}", file=sys.stderr)
-            sys.exit(2)
+            deny(f"BLOCKED: Command targets critical path: {command}")
 
     # Level 3: Suspicious (warn only)
     for pattern in SUSPICIOUS:
         if re.search(pattern, command, re.IGNORECASE):
-            print(f"⚠️ WARNING: Suspicious command pattern: {command}", file=sys.stderr)
+            print(f"WARNING: Suspicious command pattern: {command}", file=sys.stderr)
             break
 
     sys.exit(0)

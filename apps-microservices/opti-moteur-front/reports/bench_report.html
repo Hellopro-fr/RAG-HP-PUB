@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<title>POC Typesense — Benchmark HelloPro</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 0; background: #f5f7fa; color: #222; }
+  header { background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: #fff; padding: 30px 40px; }
+  header h1 { margin: 0; font-size: 28px; }
+  header p { margin: 8px 0 0; opacity: 0.9; }
+  .kpi-bar { display: flex; gap: 15px; margin: 20px 40px; padding: 20px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .kpi { flex: 1; text-align: center; padding: 10px; border-right: 1px solid #eee; }
+  .kpi:last-child { border-right: none; }
+  .kpi .val { font-size: 26px; font-weight: 700; color: #1e3a8a; }
+  .kpi .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  .kpi.good .val { color: #059669; }
+  .kpi.bad .val { color: #dc2626; }
+  .query-block { background: #fff; margin: 20px 40px; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .query-block h2 { margin: 0 0 10px; font-size: 18px; color: #1e3a8a; }
+  .meta { font-weight: normal; font-size: 13px; color: #666; }
+  .filter-info { background: #ecfdf5; color: #065f46; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
+  .filter-info code { background: #fff; padding: 2px 6px; border-radius: 4px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+  .col { background: #fafbfc; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  .col-header { padding: 10px 12px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+  .col-header h3 { margin: 0; font-size: 13px; font-weight: 600; }
+  .lat { font-size: 11px; background: #3b82f6; color: #fff; padding: 2px 8px; border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+  th { background: #fafbfc; font-weight: 600; color: #666; font-size: 11px; text-transform: uppercase; }
+  td.rank { font-weight: 600; color: #3b82f6; width: 25px; }
+  td.cat { color: #666; font-size: 11px; }
+  td.score-cell { width: 50px; text-align: right; }
+  .score { background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+  footer { text-align: center; padding: 30px; color: #666; font-size: 13px; }
+</style></head><body>
+<header>
+  <h1>⚡ POC Typesense — Benchmark HelloPro</h1>
+  <p>Comparaison sur 26 requêtes commerciales réelles · Dataset 30k produits (CamemBERT 1024 dims)</p>
+</header>
+
+<div class="kpi-bar">
+  <div class="kpi bad"><div class="val">~6000</div><div class="label">Milvus prod (baseline)</div></div>
+  <div class="kpi"><div class="val">46</div><div class="label">TS Sémantique pur</div></div>
+  <div class="kpi"><div class="val">38</div><div class="label">TS BM25 pur</div></div>
+  <div class="kpi good"><div class="val">176</div><div class="label">TS Hybrid (solution)</div></div>
+  <div class="kpi good"><div class="val">×34</div><div class="label">Gain vitesse</div></div>
+</div>
+
+
+    <section class="query-block">
+        <h2>"armoire medicale" <span class="meta">2 mots · détecté: <em>Armoire médicale</em> (conf=100%)</span></h2>
+        <div class='filter-info'>🎯 Filter_by: <code>Armoire médicale</code></div>
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">57 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire à pharmacie garnie en métal - 1 porte - Pour professionnels et</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire à pharmacie en métal blanc - 1 porte - 45 x 32 x 19 cm - Ferme</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire vitrine médicale 60x140x30 - acier émaillé ou inoxydable avec </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoires de stockage de médicaments - compatibles avec chariots pour p</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire médicale vitrine 2 portes vitrées - 90x150x35 cm - 4 étagères </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire à pharmacie 1 porte vitrée - 60 × 180 × 43,5 cm - Vog Medical </td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire à pharmacie 2 portes</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire médicale de service Weppes Solutions - robuste, hygiénique et </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire à pharmacie 1 porte</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Meubles de rangement médicaux - Armoire avec parties basse métallique </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">41 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Banque de sang BBR 2100 - Armoire médicale en acier inox ou plastifié,</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire médicale de cabinet Wagner - 2 parties combinables - 80 x 90 x</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire médicale à double compartiments</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire médicale murale à portes coulissantes</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire à sondes TMC - portes rideaux, serrure à clés, 4 tringles téle</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire à pharmacie mélaminé - n-arm27942</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire médicale de rangement en inox - n-range0011 - acier inoxydable</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire médicale - 180 - Référence: AM-180</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de transport et stockage réf. CT65 - 300L - structure en acier</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire médicale de transfert ou stockage 3 colonnes, conçue dans des </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">172 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire vitrine médicale 60x140x30 - acier émaillé ou inoxydable avec </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.64</span></td></tr><tr><td class='rank'>2</td><td>Armoire médicale vitrine 2 portes vitrées - 90x150x35 cm - 4 étagères </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.63</span></td></tr><tr><td class='rank'>3</td><td>Armoire médicale de service Weppes Solutions - robuste, hygiénique et </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.62</span></td></tr><tr><td class='rank'>4</td><td>Armoire médicale de transfert ou stockage 1 colonne - Serrures sécuris</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>5</td><td>Armoire médicale de cabinet Wagner - 80x90x48 cm - portes vitrées, cas</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>6</td><td>Armoire médicale de cabinet Wagner - 2 parties combinables - 80 x 90 x</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>7</td><td>Grande armoire médicale réfrigérée IFM336TCE - 336 litres - contrôle é</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>8</td><td>Armoire médicale réfrigérée IFM 160E - stockage sécurisé pour pharmaci</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>9</td><td>Armoire médicale de stockage 30 plateaux - AGDMAR003 - structure acier</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.60</span></td></tr><tr><td class='rank'>10</td><td>Armoire médicale grande hauteur</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.60</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"armoire médicale" <span class="meta">2 mots · détecté: <em>Armoire médicale</em> (conf=100%)</span></h2>
+        <div class='filter-info'>🎯 Filter_by: <code>Armoire médicale</code></div>
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">32 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire médicale de service Weppes Solutions - robuste, hygiénique et </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire à pharmacie garnie en métal - 1 porte - Pour professionnels et</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire vitrine médicale 60x140x30 - acier émaillé ou inoxydable avec </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire médicale vitrine 2 portes vitrées - 90x150x35 cm - 4 étagères </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire à pharmacie en métal blanc - 1 porte - 45 x 32 x 19 cm - Ferme</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire à pharmacie 1 porte vitrée - 60 × 180 × 43,5 cm - Vog Medical </td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoires de stockage de médicaments - compatibles avec chariots pour p</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire médicale de transfert ou stockage 1 colonne - Serrures sécuris</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire médicale de transfert ou stockage - 2 colonnes modulaires avec</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Meubles de rangement médicaux - Armoire avec parties basse métallique </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">34 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Banque de sang BBR 2100 - Armoire médicale en acier inox ou plastifié,</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire médicale de cabinet Wagner - 2 parties combinables - 80 x 90 x</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire médicale à double compartiments</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire médicale murale à portes coulissantes</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire à sondes TMC - portes rideaux, serrure à clés, 4 tringles téle</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire à pharmacie mélaminé - n-arm27942</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire médicale de rangement en inox - n-range0011 - acier inoxydable</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire médicale - 180 - Référence: AM-180</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de transport et stockage réf. CT65 - 300L - structure en acier</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire médicale de transfert ou stockage 3 colonnes, conçue dans des </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">151 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire médicale de service Weppes Solutions - robuste, hygiénique et </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.65</span></td></tr><tr><td class='rank'>2</td><td>Armoire vitrine médicale 60x140x30 - acier émaillé ou inoxydable avec </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.64</span></td></tr><tr><td class='rank'>3</td><td>Armoire médicale vitrine 2 portes vitrées - 90x150x35 cm - 4 étagères </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.64</span></td></tr><tr><td class='rank'>4</td><td>Armoire médicale de transfert ou stockage 1 colonne - Serrures sécuris</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.62</span></td></tr><tr><td class='rank'>5</td><td>Armoire médicale de transfert ou stockage - 2 colonnes modulaires avec</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.62</span></td></tr><tr><td class='rank'>6</td><td>Armoire médicale de cabinet Wagner - 80x90x48 cm - portes vitrées, cas</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>7</td><td>Armoire médicale de cabinet Wagner - 2 parties combinables - 80 x 90 x</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>8</td><td>Grande armoire médicale réfrigérée IFM336TCE - 336 litres - contrôle é</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>9</td><td>Armoire médicale réfrigérée IFM 160E - stockage sécurisé pour pharmaci</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.60</span></td></tr><tr><td class='rank'>10</td><td>Vitrine murale 670 x 350 x 500 - armoire médicale en tôle électrozingu</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.60</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"armoire pharmacie" <span class="meta">2 mots · détecté: <em>Armoires à pharmacie</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">38 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire à pharmacie garnie en métal - 1 porte - Pour professionnels et</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire à pharmacie 1 porte</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoires de stockage de médicaments - compatibles avec chariots pour p</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire à pharmacie 2 portes</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>García de Pou Garcia de Pou 1 Unités - Armoire Pharmacie 52,5X19,5X53 </td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>García de Pou Garcia de Pou 1 Unités - Armoire Pharmacie 36X15X45 Cm B</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire à pharmacie en métal blanc - 1 porte - 45 x 32 x 19 cm - Ferme</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>TSAP002 - Armoire à pharmacie en métal 1 porte vide - 124 secours - di</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>13509 - Armoire à pharmacie en métal 2 portes avec fermeture sécurisée</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire à pharmacie réf. Af60 - Mélaminé - Conformité EN 120/92 - 48 o</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">34 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>García de Pou Garcia de Pou 1 Unités - Armoire Pharmacie 36X15X45 Cm B</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>García de Pou Garcia de Pou 1 Unités - Armoire Pharmacie 52,5X19,5X53 </td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>13509 - Armoire à pharmacie en métal 2 portes avec fermeture sécurisée</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire à pharmacie mélaminé - n-arm27942</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire à pharmacie 1 porte 450x320x190 mm - ARMPH1TLBC-FR03</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire à pharmacie réf. Af60 - Mélaminé - Conformité EN 120/92 - 48 o</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire à pharmacie design en métal laqué - porte en verre trempé - bl</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire à pharmacie garnie en métal - 1 porte - Pour professionnels et</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>TSAP002 - Armoire à pharmacie en métal 1 porte vide - 124 secours - di</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>344 - Armoire à pharmacie en métal pleine - 1 porte - Spécialement con</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">168 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire à pharmacie garnie en métal - 1 porte - Pour professionnels et</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.64</span></td></tr><tr><td class='rank'>2</td><td>Armoire à pharmacie 1 porte</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>3</td><td>Armoire à pharmacie 2 portes</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>4</td><td>García de Pou Garcia de Pou 1 Unités - Armoire Pharmacie 52,5X19,5X53 </td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.60</span></td></tr><tr><td class='rank'>5</td><td>García de Pou Garcia de Pou 1 Unités - Armoire Pharmacie 36X15X45 Cm B</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.60</span></td></tr><tr><td class='rank'>6</td><td>Armoire à pharmacie en métal blanc - 1 porte - 45 x 32 x 19 cm - Ferme</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>7</td><td>TSAP002 - Armoire à pharmacie en métal 1 porte vide - 124 secours - di</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>8</td><td>13509 - Armoire à pharmacie en métal 2 portes avec fermeture sécurisée</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.58</span></td></tr><tr><td class='rank'>9</td><td>Armoire à pharmacie réf. Af60 - Mélaminé - Conformité EN 120/92 - 48 o</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.58</span></td></tr><tr><td class='rank'>10</td><td>Armoire à pharmacie 1 porte vitrée - 60 × 180 × 43,5 cm - Vog Medical </td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.58</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"armoire pour médicaments hospitaliers" <span class="meta">4 mots · détecté: <em>Armoire de sécurité pour produits dangereux</em> (conf=70%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">33 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoires de stockage de médicaments - compatibles avec chariots pour p</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire à pharmacie garnie en métal - 1 porte - Pour professionnels et</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire à pharmacie 2 portes</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>TSAP002 - Armoire à pharmacie en métal 1 porte vide - 124 secours - di</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire médicale de transfert ou stockage 1 colonne - Serrures sécuris</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire médicale de transfert ou stockage - 2 colonnes modulaires avec</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire à pharmacie en métal blanc - 1 porte - 45 x 32 x 19 cm - Ferme</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire à pharmacie 1 porte</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire médicale de transfert ou stockage 3 colonnes, conçue dans des </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire vitrine médicale 60x140x30 - acier émaillé ou inoxydable avec </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">53 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoires de stockage de médicaments - compatibles avec chariots pour p</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoires de transport de médicaments - gamme ISO 600 x 400 - modulaire</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">158 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoires de stockage de médicaments - compatibles avec chariots pour p</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.60</span></td></tr><tr><td class='rank'>2</td><td>Armoire à pharmacie garnie en métal - 1 porte - Pour professionnels et</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>3</td><td>Armoires de transport de médicaments - gamme ISO 600 x 400 - modulaire</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.43</span></td></tr><tr><td class='rank'>4</td><td>Armoire médicale réfrigérée IFM 160E - stockage sécurisé pour pharmaci</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>5</td><td>344 - Armoire à pharmacie en métal pleine - 1 porte - Spécialement con</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'><span class='score'>0.39</span></td></tr><tr><td class='rank'>6</td><td>Armoire à médicaments</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.39</span></td></tr><tr><td class='rank'>7</td><td>Armoire médicale de transfert ou stockage 1 colonne - Serrures sécuris</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.37</span></td></tr><tr><td class='rank'>8</td><td>Armoire à médicaments mixte - portes rideaux, serrure à clés, 28 tiroi</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.37</span></td></tr><tr><td class='rank'>9</td><td>Armoire médicale de transfert ou stockage - 2 colonnes modulaires avec</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.37</span></td></tr><tr><td class='rank'>10</td><td>Armoire médicale de transfert ou stockage 3 colonnes, conçue dans des </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.37</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"meuble stockage médical" <span class="meta">3 mots · détecté: <em>Meuble armoire bas</em> (conf=63%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">38 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire médicale de service Weppes Solutions - robuste, hygiénique et </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire vitrine médicale 60x140x30 - acier émaillé ou inoxydable avec </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire médicale réfrigérée IFM 160E - stockage sécurisé pour pharmaci</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Stockeur rotatif automatisé pour dispositifs médicaux titan hd40</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire médicale de transfert ou stockage 1 colonne - Serrures sécuris</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Meubles de rangement médical semi-vitrée - 800x435x1885mm - avec étagè</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire médicale de transfert ou stockage 3 colonnes, conçue dans des </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire médicale de transfert ou stockage - 2 colonnes modulaires avec</td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire médicale vitrine 2 portes vitrées - 90x150x35 cm - 4 étagères </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Meubles de rangement médicaux semi-vitrés - Armoire avec partie basse </td><td class='cat'>Armoire médicale</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">51 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Cabinet en acier - Stockage en métal - Meuble de bureau à deux portes </td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Décoshop26 - Armoire de bureau caissons à tiroirs verrouillable meuble</td><td class='cat'>Armoires industrielles de stoc</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Helloshop26 - Casier de bureau armoire meuble de rangement pour bureau</td><td class='cat'>Armoires industrielles de stoc</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Helloshop26 - Armoire de bureau casier de bureau meuble de rangement p</td><td class='cat'>Armoires industrielles de stoc</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Helloshop26 - Armoire de bureau casier de bureau meuble de rangement p</td><td class='cat'>Armoires industrielles de stoc</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Meuble lave-mains sur pieds JOHANN décor chêne + vasque + miroir - bla</td><td class='cat'>Meubles de salle de bains</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Décoshop26 - Meuble de bureau armoire de rangement 5 étagères avec deu</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Décoshop26 - Meuble de bureau armoire de rangement 5 étagères avec deu</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Décoshop26 - Meuble de bureau armoire de rangement 5 étagères avec deu</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Décoshop26 - Caissons à tiroirs meuble de bureau armoire à dossiers 5 </td><td class='cat'>Armoires industrielles de stoc</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">185 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire médicale réfrigérée IFM 160E - stockage sécurisé pour pharmaci</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>2</td><td>Armoire médicale de transfert ou stockage 1 colonne - Serrures sécuris</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>3</td><td>Meubles de rangement médical semi-vitrée - 800x435x1885mm - avec étagè</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>4</td><td>Armoire médicale de transfert ou stockage 3 colonnes, conçue dans des </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>5</td><td>Armoire médicale de transfert ou stockage - 2 colonnes modulaires avec</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>6</td><td>Vitrine médicale réfrigérée professionnelle IFM 420E - Stockage fiable</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.34</span></td></tr><tr><td class='rank'>7</td><td>Armoire médicale de stockage 30 plateaux - AGDMAR003 - structure acier</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.34</span></td></tr><tr><td class='rank'>8</td><td>Armoire médicale de service Weppes Solutions - robuste, hygiénique et </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>9</td><td>Armoire vitrine médicale 60x140x30 - acier émaillé ou inoxydable avec </td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>10</td><td>Stockeur rotatif automatisé pour dispositifs médicaux titan hd40</td><td class='cat'>Armoire médicale</td><td class='score-cell'><span class='score'>0.28</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"pompe hydraulique" <span class="meta">2 mots · détecté: <em>Pompe à chape</em> (conf=35%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">38 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Pompe à piston à membrane autorégulatrice - série Hydra - pour filtres</td><td class='cat'>Pompe à piston</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Pompe à pied pompe à pédale adp</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Pompe à main pompes manuelles série ad</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Pompe à main A80 auto-amorçante rétro avec socle en fonte - Débit 2,4 </td><td class='cat'>Pompes hydrauliques auto-amorç</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Pompe auto-amorçante eau claire Marco UP12-PV-12 - 36 l/min - 2,5 bars</td><td class='cat'>Pompes hydrauliques auto-amorç</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Pompe immergée 4&quot; 2.2KW/3CV - Gros débit - Usage domestique ou profess</td><td class='cat'>Pompe d&#x27;arrosage</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>POMPE IMMERGÉE 4&quot; 2.2KW/3CV - 380V</td><td class='cat'>Pompe d&#x27;arrosage</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Pompe hydraulique manuelle série PM - compacte - simple ou double effe</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Pompe booster type H - série GH avec poignée pour entraînement manuel</td><td class='cat'>Pompes hydrauliques à engrenag</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Pompes verticales à ligne d&#x27;arbres  Gamme FE (haute pression)</td><td class='cat'>Pompes centrifuges verticales</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">37 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Pompe hydraulique manuel - ega master - 57505</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Pompe hydraulique manuelle 1l - rul7244</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Pompe hydraulique auto-amorçante 0.42 kW 230V - 1&quot; - Acier inox 316L -</td><td class='cat'>Pompes hydrauliques auto-amorç</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Pompe hydraulique à engrenages COREXTRUDE® - résistante aux hautes pre</td><td class='cat'>Pompes hydrauliques à engrenag</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Pompe hydraulique auto-amorçante 12V - 0.44kW - Acier inox 316L - Usag</td><td class='cat'>Pompes hydrauliques auto-amorç</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Concreteman - Pompe à béton stationnaire avec moteur Hatz diesel 19 kW</td><td class='cat'>Pompes à béton stationnaire</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Pompe hydraulique à engrenages - Transfert de produits chimiques - 24V</td><td class='cat'>Pompes hydrauliques à engrenag</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Pompe hydraulique 24V auto-amorçante 0.75kW - Acier inox 316L - Hauteu</td><td class='cat'>Pompes hydrauliques auto-amorç</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Pompe hydraulique à engrenages Poly AT - compacte avec aspiration opti</td><td class='cat'>Pompes hydrauliques à engrenag</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>FL700HTP-2 - Pompe hydraulique manuelle Fluke pour pressions jusqu&#x27;à 6</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">151 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Pompe hydraulique manuelle série PM - compacte - simple ou double effe</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'><span class='score'>0.52</span></td></tr><tr><td class='rank'>2</td><td>Pompe à piston à membrane autorégulatrice - série Hydra - pour filtres</td><td class='cat'>Pompe à piston</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>3</td><td>Pompe immergée 4&quot; 2.2KW/3CV - Gros débit - Usage domestique ou profess</td><td class='cat'>Pompe d&#x27;arrosage</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>4</td><td>POMPE IMMERGÉE 4&quot; 2.2KW/3CV - 380V</td><td class='cat'>Pompe d&#x27;arrosage</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>5</td><td>POMPE IMMERGÉE 4&quot; 1.1KW/1.5CV - 380V</td><td class='cat'>Pompe d&#x27;arrosage</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>6</td><td>Pompe à pied pompe à pédale adp</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'><span class='score'>0.41</span></td></tr><tr><td class='rank'>7</td><td>Pompe à main pompes manuelles série ad</td><td class='cat'>Pompes hydrauliques manuelles</td><td class='score-cell'><span class='score'>0.40</span></td></tr><tr><td class='rank'>8</td><td>Pompe à main A80 auto-amorçante rétro avec socle en fonte - Débit 2,4 </td><td class='cat'>Pompes hydrauliques auto-amorç</td><td class='score-cell'><span class='score'>0.40</span></td></tr><tr><td class='rank'>9</td><td>Pompe auto-amorçante eau claire Marco UP12-PV-12 - 36 l/min - 2,5 bars</td><td class='cat'>Pompes hydrauliques auto-amorç</td><td class='score-cell'><span class='score'>0.40</span></td></tr><tr><td class='rank'>10</td><td>Pompe booster type H - série GH avec poignée pour entraînement manuel</td><td class='cat'>Pompes hydrauliques à engrenag</td><td class='score-cell'><span class='score'>0.39</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"chariot élévateur électrique" <span class="meta">3 mots · détecté: <em>Batterie pour chariot élévateur</em> (conf=54%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">59 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Table Élévatrice avec Monte-Charges - Ref. 61.0 pour déplacement et él</td><td class='cat'>Table élévatrice</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Transpalette électrique CBD15 - Capacité 1500 kg - Batterie 24V/20Ah L</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Hayon élévateur - Option pour véhicules</td><td class='cat'>Hayon élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Transpalette électrique Stabilisée ELEP-15A - 1500kg - Batterie 24V-30</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Chariots élévateurs électriques - J2.2.-3.5XN - disponible en achat ou</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Hayon élévateur repliable</td><td class='cat'>Hayon élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Chariot porte-palan électrique HD 1.0 - 1 tonne - Tor Industries - Pou</td><td class='cat'>Chariot porte-palan</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Chariots élévateurs électriques - E4.0-5.5 XN - disponible en achat ou</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Chariot porte-palan mécanique GCL1Tx3M - entraînement par chaîne, capa</td><td class='cat'>Chariot porte-palan</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Chariot Multidirectionnel Électrique avec une Capacité de levage Jusqu</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">43 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Chariot élévateur électrique 4 roues CPD30-30 - 3000kg - levée 4m50 - </td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Chariots élévateurs électriques - J2.2.-3.5XN - disponible en achat ou</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Batteries au Plomb ouvert pour chariots élévateurs électrique de toute</td><td class='cat'>Batterie pour chariot élévateu</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Chariot Multidirectionnel Électrique avec une Capacité de levage Jusqu</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Manipulateurs REFLEX - Manipulateur électrique en acier inoxydable pou</td><td class='cat'>Gerbeur électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Robot filmeur de banderolage automatique sur batterie - Dimensions pal</td><td class='cat'>Robot filmeur</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Nacelles élévatrices à mât vertical - STAR6-10 - disponible en achat o</td><td class='cat'>Nacelle à mât vertical</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Climatiseur de véhicule Artik S - installation sur toit - puissance fr</td><td class='cat'>Climatiseurs de véhicules</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Batterie de traction pour chariot élévateur - 6V 240Ah M8-M - Décharge</td><td class='cat'>Batterie pour chariot élévateu</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Batterie de traction 2 V pour chariot élévateur, transpalette, nacelle</td><td class='cat'>Batterie pour chariot élévateu</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">174 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Chariot Multidirectionnel Électrique avec une Capacité de levage Jusqu</td><td class='cat'>Chariot élévateur</td><td class='score-cell'><span class='score'>0.52</span></td></tr><tr><td class='rank'>2</td><td>Chariot porte-palan électrique HD 1.0 - 1 tonne - Tor Industries - Pou</td><td class='cat'>Chariot porte-palan</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>3</td><td>Palan électrique avec un chariot PX 5T 6M 380V</td><td class='cat'>Palan</td><td class='score-cell'><span class='score'>0.45</span></td></tr><tr><td class='rank'>4</td><td>Palan électrique mobile à chaîne - 2 vitesses HHBDII 01-01T (1T x 6M/3</td><td class='cat'>Palan</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>5</td><td>Palan électrique avec chariot double vitesse HHBDII 03-01T - 3T - 12M </td><td class='cat'>Palan</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>6</td><td>Transpalette électrique CBD15 - Capacité 1500 kg - Batterie 24V/20Ah L</td><td class='cat'>Transpalette électrique</td><td class='score-cell'><span class='score'>0.43</span></td></tr><tr><td class='rank'>7</td><td>Chariot à mât rétractable BT RRE160 1566 - disponible en occasion et e</td><td class='cat'>Chariot élévateur</td><td class='score-cell'><span class='score'>0.43</span></td></tr><tr><td class='rank'>8</td><td>Hayon élévateur - Option pour véhicules</td><td class='cat'>Hayon élévateur</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>9</td><td>Transpalette électrique Stabilisée ELEP-15A - 1500kg - Batterie 24V-30</td><td class='cat'>Transpalette électrique</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>10</td><td>Chariot élévateur électrique 4 roues CPD30-30 - 3000kg - levée 4m50 - </td><td class='cat'>Chariot élévateur</td><td class='score-cell'><span class='score'>0.42</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"armoire réfrigérée pour vaccins" <span class="meta">4 mots · détecté: <em>Armoire réfrigérée</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">117 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire réfrigérée à casiers positive - idéale pour stockage organisé</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire réfrigérée GM - armoire frigorifique</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire réfrigérée à casiers négative - idéale pour conservation au fr</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire réfrigérée positive - inox ou blanc - stockage alimentaire hyg</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire frigorifique ventilée 400L - matériel frigorifique</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire murale réfrigérée suspendue Flag - entièrement en inox - pour </td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Vitrine négative - froid ventilé - armoire vitrée réfrigérante</td><td class='cat'>Armoires vitrées réfrigérantes</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Congélateur coffre à crème glacée, 400Litres - Iceshop - GTO400GI - GT</td><td class='cat'>Congélateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Chambres Froides Modulaires Monoblocs cavaliers  - INCOLD</td><td class='cat'>Groupe froid</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire murale réfrigérée Stone - inox - pour produits frais - personn</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">24 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire réfrigérée médical pour pharmacie &amp; laboratoire - Effimed - 84</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>ARMOIRE DE STOCKAGE VENTILEE +2/+8°C</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">185 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire réfrigérée à casiers positive - idéale pour stockage organisé</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.55</span></td></tr><tr><td class='rank'>2</td><td>Armoire réfrigérée à casiers négative - idéale pour conservation au fr</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.55</span></td></tr><tr><td class='rank'>3</td><td>Armoire murale réfrigérée suspendue Flag - entièrement en inox - pour </td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.52</span></td></tr><tr><td class='rank'>4</td><td>Armoire murale réfrigérée Stone - inox - pour produits frais - personn</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.51</span></td></tr><tr><td class='rank'>5</td><td>Armoire réfrigérée GM - armoire frigorifique</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>6</td><td>Armoire réfrigérée positive - inox ou blanc - stockage alimentaire hyg</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>7</td><td>Armoire murale réfrigérée suspendue Box - entièrement en inox - person</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.45</span></td></tr><tr><td class='rank'>8</td><td>Armoire réfrigérée positive 2 portes pleines - 1200 L inox - Ref produ</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.45</span></td></tr><tr><td class='rank'>9</td><td>Armoire réfrigérée positive 1 porte 400L Polar Série C - UNCD082</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>10</td><td>Armoire réfrigérée positive et négative - armoire froide réfrigérée</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.44</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"batterie lithium" <span class="meta">2 mots · détecté: <em>Armoire de stockage batterie lithium</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">51 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Batteries lithium rechargeables sur secteur ou par véhicule - Source d</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Batterie de démarrage Lithium - Format standard - HYPERION 20 (T6) Lit</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 40Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Batterie industrielle au Lithium Fer Phosphate (LiFePO4) et Lithium Po</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Kit batterie et chargeur pour vélo électrique 24V - 9Ah - 216Wh - auto</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Batterie de démarrage - Plomb AGM Marathon L12V15 12V 14Ah M6-M - Duré</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">35 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire pour batteries lithium-ion</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire de sécurité pour le stockage passif des batteries Lithium-ion</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire pour stocker et charger des batteries lithium avec sécurité al</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire de sécurité pour la charge de batteries lithium-ion</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire de charge batterie lithium-ion avec casier</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire de sécurité pour batteries lithium-ion - 1 porte</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité pour le stockage et la charge des batteries Lithiu</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité résistante au feu 90 minutes pour stockage et char</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité pour le stockage de batteries lithium-ion</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité 90 mn - Batterie lithium - Comptoir 2 portes à équ</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">166 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Batterie de démarrage Lithium - Format standard - HYPERION 20 (T6) Lit</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'><span class='score'>0.60</span></td></tr><tr><td class='rank'>2</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 40Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>3</td><td>Batterie industrielle au Lithium Fer Phosphate (LiFePO4) et Lithium Po</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>4</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>5</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>6</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>7</td><td>Batterie de démarrage Lithium-ion LiFePO4 12V haute performance 20Ah</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'><span class='score'>0.59</span></td></tr><tr><td class='rank'>8</td><td>Batterie médicale non rechargeable Heartstart 9V 4.2Ah - Lithium dioxy</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.58</span></td></tr><tr><td class='rank'>9</td><td>Batterie à décharge lente au Lithium - LIFEPO4 12.8V 105AH</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'><span class='score'>0.58</span></td></tr><tr><td class='rank'>10</td><td>Batterie industrielle au Lithium Fer Phosphate (LiFePO4) et Lithium Po</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.58</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"armoire sécurité inflammables" <span class="meta">3 mots · détecté: <em>Armoire de sécurité pour produits dangereux</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">49 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire coupe-feu - Résistance 15 à 90 minutes - Stockage de produits </td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire de sécurité pour produits inflammables - acier double paroi - </td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire pour stocker et charger des batteries lithium avec sécurité al</td><td class='cat'>Armoire de stockage batterie l</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire de sécurité pour produits inflammables - modèles bas, comptoir</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire de sécurité pour produits inflammables - capacité de 15L à 340</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité haute - 90 minutes - 2 portes verrouillables à clé</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité coupe-feu 90 mn - 220 L - fermeture automatique en</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité avec extincteur automatique - stockage 300l - infl</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">39 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire de sécurité sous paillasse 90min</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire de sécurité coupe-feu 90 min selon EN 14470-1</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire de sécurité pour produits inflammables - acier double paroi - </td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire de sécurité pour produits inflammables</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire de sécurité pour produits inflammables - modèles bas, comptoir</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité pour produits inflammables, corrosifs, toxiques et</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité pour produits inflammables - capacité 130 L - 1 po</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité pour produits inflammables - 240L - 2 portes - Aci</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">171 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire de sécurité pour produits inflammables - acier double paroi - </td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.64</span></td></tr><tr><td class='rank'>2</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.63</span></td></tr><tr><td class='rank'>3</td><td>Armoire de sécurité pour produits inflammables - modèles bas, comptoir</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.63</span></td></tr><tr><td class='rank'>4</td><td>Armoire de sécurité pour produits inflammables - capacité de 15L à 340</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.63</span></td></tr><tr><td class='rank'>5</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.62</span></td></tr><tr><td class='rank'>6</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.62</span></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité pour produits inflammables - 15L à 340L - acier do</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.62</span></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité pour produits inflammables 300L - extincteur CO2 -</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.61</span></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité ARMINFDP110-120 - fermeture automatique - pour pro</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.58</span></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité anti-feu - 2 portes - 90mn - EN 14470-1 - Stockage</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.58</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"extincteur" <span class="meta">1 mots · détecté: <em>Extincteur portatif</em> (conf=100%)</span></h2>
+        <div class='filter-info'>🎯 Filter_by: <code>Extincteur portatif</code></div>
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">55 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Extincteur à eau Pirtek - Classement au feu 13A, capacité 9 litres</td><td class='cat'>Extincteur portatif</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Extincteurs à mousse - Classement au feu 5A/55B - Pirtek - Spécificati</td><td class='cat'>Extincteur portatif</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Bouche d&#x27;incendie non incongelable DN100 - Protection incendie - Eau p</td><td class='cat'>Bornes incendie</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Extincteurs à poudre sèche polyvalents Pirtek - Classement au feu 8A/5</td><td class='cat'>Extincteur portatif</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Allume gaz Électrique pour chalumeaux</td><td class='cat'>Autres produits</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Groupe motopompe JET - Essence &amp; Diesel - Haute pression - Débit max. </td><td class='cat'>Groupes motopompes</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité avec extincteur automatique - stockage 300l - infl</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire comptoir à extincteur CO2 EXTINCTA - Réf NOVEXT 01100 - 1 port</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>STOP FIRE 1WS</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Poteau d&#x27;incendie ATLAS+ non renversable DN80-100 - raccords symétriqu</td><td class='cat'>Bornes incendie</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">33 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Extincteur à eau Pirtek - Classement au feu 13A, capacité 9 litres</td><td class='cat'>Extincteur portatif</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Extincteurs à poudre sèche polyvalents Pirtek - Classement au feu 8A/5</td><td class='cat'>Extincteur portatif</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Extincteurs à mousse - Classement au feu 5A/55B - Pirtek - Spécificati</td><td class='cat'>Extincteur portatif</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire de sécurité avec extincteur automatique - coupe-feu - stockage</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire haute à extincteur CO2 - 2 portes - EXTINCTA - Réf NOVEXT 0219</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire de sécurité avec extincteur automatique - stockage 300l - infl</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité pour produits dangereux - extincteur CO2 automatiq</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité anti-feu avec extincteur automatique CO2 - 300L - </td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité pour produits inflammables, corrosifs, toxiques et</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité pour produits inflammables 300L - extincteur CO2 -</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">379 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Extincteur à eau Pirtek - Classement au feu 13A, capacité 9 litres</td><td class='cat'>Extincteur portatif</td><td class='score-cell'><span class='score'>0.69</span></td></tr><tr><td class='rank'>2</td><td>Extincteurs à mousse - Classement au feu 5A/55B - Pirtek - Spécificati</td><td class='cat'>Extincteur portatif</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>3</td><td>Extincteurs à poudre sèche polyvalents Pirtek - Classement au feu 8A/5</td><td class='cat'>Extincteur portatif</td><td class='score-cell'><span class='score'>0.42</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"batterie industrielle 48V" <span class="meta">3 mots · détecté: <em>Batterie industrielle</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">41 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Batterie industrielle Li-Ion M4T28-BR12SH1 - 2.8V 48mAh - Marque ST</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Batterie 48V192</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Batterie valise Lithium - étanche IP65 - 24V ou 36V pour loisirs et ch</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Batterie industrielle Li-Ion 1S2P UBBL23-FL - PCM 3.7V 4.8Ah - 300 cyc</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Batterie industrielle au Lithium Fer Phosphate (LiFePO4) et Lithium Po</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Batterie médicale non rechargeable Heartstart 9V 4.2Ah - Lithium dioxy</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Batterie de chariots élévateurs - Largeur commune 198 mm ou 157 mm</td><td class='cat'>Batterie pour chariot élévateu</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Batterie industrielle au Lithium Fer Phosphate (LiFePO4) et Lithium Po</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Batteries lithium rechargeables sur secteur ou par véhicule - Source d</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Batterie industrielle NiMH - Appel malade Blick 3.6V 300mAh - Version </td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">39 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Batterie industrielle NiMH 48V 3800mAh - 40x 4/3A VH 40S1P - Compatibl</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Batterie industrielle NiMh 4.8V 9Ah - LEDLENSER X21R - pour ancienne v</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Pack bio NiCd 4.8V 1.8Ah Holtex Omron907 F - Batterie industrielle</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Batterie industrielle NiMH 4/V80H KM.SLF 4.8V 80mAh - Marque Varta</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Batterie industrielle NiCd 4 CS 1300 - 4.8V 1.6Ah - Marque NX</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Batterie industrielle Nicd 4x AA ST1 F100 4.8V 700mAh XHP-2 - Marque N</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Batterie industrielle NiMH 4x AAA 4S1P ST1 4.8V 800mAh MOLEX - Marque </td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Batterie industrielle NiMH 4x V80H 4S1P ST4 - 4.8V 80mAh - Compatible </td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Batterie industrielle Nimh 4x AAA 4S1P ST2 4.8V 0.8Ah JST - Marque NX</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Batterie industrielle Nimh 4x AA 4S1P ST1 - 4.8V 2500mAh JST - Marque </td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">161 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Batterie industrielle Li-Ion M4T28-BR12SH1 - 2.8V 48mAh - Marque ST</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.54</span></td></tr><tr><td class='rank'>2</td><td>Batterie industrielle Li-Ion 1S2P UBBL23-FL - PCM 3.7V 4.8Ah - 300 cyc</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.51</span></td></tr><tr><td class='rank'>3</td><td>Batterie industrielle au Lithium Fer Phosphate (LiFePO4) et Lithium Po</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.50</span></td></tr><tr><td class='rank'>4</td><td>Batterie industrielle au Lithium Fer Phosphate (LiFePO4) et Lithium Po</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>5</td><td>Batterie industrielle NiMH - Appel malade Blick 3.6V 300mAh - Version </td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>6</td><td>Batterie industrielle Li-Ion 4S1P UBBL22 + PCM - 14.4V 2.4Ah - Ultrali</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>7</td><td>Batterie industrielle Li-Ion 4S3P ICR-18650 + PCM (99Wh) - 15V 6.6Ah a</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>8</td><td>Batterie industrielle NiMH 4/V80H KM.SLF 4.8V 80mAh - Marque Varta</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>9</td><td>Batterie 48V192</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>10</td><td>Batterie valise Lithium - étanche IP65 - 24V ou 36V pour loisirs et ch</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.43</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"chariot manutention" <span class="meta">2 mots · détecté: <em>Chariot de manutention</em> (conf=80%)</span></h2>
+        <div class='filter-info'>🎯 Filter_by: <code>Chariot de manutention</code></div>
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">36 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Chariot porte-palan mécanique GCL1Tx3M - entraînement par chaîne, capa</td><td class='cat'>Chariot porte-palan</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Rampe de chargement pliable 1,6T</td><td class='cat'>Rampe de chargement pliable</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Chariot porte-palan mécanique GCL5Tx3M - 5 tonnes - hauteur de levage </td><td class='cat'>Chariot porte-palan</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Mini-grue araignée C6 Hoeflon - Multifonction - 3000 kg - Location ave</td><td class='cat'>Mini-grue</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Chariot à mât rétractable BT RRE160 1566 - disponible en occasion et e</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Table élévatrice à double ciseaux TOR PTS1500 - 1500KG/500-1700MM - Ca</td><td class='cat'>Table élévatrice</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Chariot Multidirectionnel Électrique avec une Capacité de levage Jusqu</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Chariot sur rail en Rhône  avec une Capacité de charge jusqu&#x27;à 350T po</td><td class='cat'>Chariot élévateur</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Mini-grue araignée C6e Hoeflon - puissante, légère et compacte - capac</td><td class='cat'>Grues araignées</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Table élévatrice à double ciseaux TOR PTS150 - capacité 150kg à 1 tonn</td><td class='cat'>Table élévatrice</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">41 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>BATTERIE TRACTION 12X 2EPZS315SC 24V 315AH M10-F</td><td class='cat'>Batterie pour chariot élévateu</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>BATTERIE TRACTION TAB 5PZS450-L 2V 450AH M10-F</td><td class='cat'>Batterie pour chariot élévateu</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Batterie de traction 24x pour applications logistiques - 48V 465Ah - M</td><td class='cat'>Batterie pour chariot élévateu</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Toolland Chariot de transport, pliable, acier, noir, charge max. 300 k</td><td class='cat'>Chariot de manutention</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Chariot inox rolls grand modèle - CHARRLL1INX-SC02</td><td class='cat'>Chariot de manutention</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>K-RYOLE Kros Builder 250 Chariot à main électrique</td><td class='cat'>Chariot de manutention</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Option 3ème roue chariot diable bouteille - SORI</td><td class='cat'>Accessoires et pièces pour cha</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>SARO Chariot de transport 600X400 bleu Modèle TRB - 39249000</td><td class='cat'>Chariot de manutention</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Chariot de manutention pose de garde-corps - WLU/KS Premium 5.1 360 kg</td><td class='cat'>Potence de levage</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Chariot grillagés gris anthracite</td><td class='cat'>Chariots manuels grillagés</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">50 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Toolland Chariot de transport, pliable, acier, noir, charge max. 300 k</td><td class='cat'>Chariot de manutention</td><td class='score-cell'><span class='score'>0.55</span></td></tr><tr><td class='rank'>2</td><td>Chariot inox rolls grand modèle - CHARRLL1INX-SC02</td><td class='cat'>Chariot de manutention</td><td class='score-cell'><span class='score'>0.52</span></td></tr><tr><td class='rank'>3</td><td>K-RYOLE Kros Builder 250 Chariot à main électrique</td><td class='cat'>Chariot de manutention</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>4</td><td>SARO Chariot de transport 600X400 bleu Modèle TRB - 39249000</td><td class='cat'>Chariot de manutention</td><td class='score-cell'><span class='score'>0.46</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"transpalette manuel" <span class="meta">2 mots · détecté: <em>Transpalette manuel</em> (conf=100%)</span></h2>
+        <div class='filter-info'>🎯 Filter_by: <code>Transpalette manuel</code></div>
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">39 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Transpalette électrique Stabilisée ELEP-15A - 1500kg - Batterie 24V-30</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Transpalettes manuels Série Inox ou Galvanisé - disponible en achat ou</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Transpalettes manuels i-ton standards - matériaux technopolymères robu</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Transpalette électrique de mise à niveau - P2.0HL - disponible en acha</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Transpalettes manuels à fourches larges</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Transpalettes manuels Série Standard - disponible en achat ou location</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Transpalette électrique hybride T20i - moteur sans balais, batterie Li</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Transpalettes manuels Série Peseur - disponible en achat ou location c</td><td class='cat'>Transpalette peseur</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Transpalette électrique CESAB P216 E005380 - disponible en occasion et</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Transpalette électrique ultra compact Pramac CX12 Plus - 1200kg - tout</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">32 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Transpalette manuel galvanisé - 4740 - capacité de levage 2500 kg</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Transpalettes manuels Série Inox ou Galvanisé - disponible en achat ou</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Transpalettes manuels i-ton standards - matériaux technopolymères robu</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Transpalettes manuels Série Standard - disponible en achat ou location</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Transpalettes manuels à fourches larges</td><td class='cat'>Transpalette manuel</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Transpalette manuel peseur avec indicateur LCD - Vérifications périodi</td><td class='cat'>Transpalette peseur</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Transpalette haute levée électrique 1500 kg</td><td class='cat'>Transpalette haute levée</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Transpalette électrique de mise à niveau - P2.0HL - disponible en acha</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Transpalette électrique ultra compact Pramac CX12 Plus - 1200kg - tout</td><td class='cat'>Transpalette électrique</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Transpalettes manuels Série Peseur - disponible en achat ou location c</td><td class='cat'>Transpalette peseur</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">51 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Transpalette manuel galvanisé - 4740 - capacité de levage 2500 kg</td><td class='cat'>Transpalette manuel</td><td class='score-cell'><span class='score'>0.71</span></td></tr><tr><td class='rank'>2</td><td>Transpalettes manuels Série Inox ou Galvanisé - disponible en achat ou</td><td class='cat'>Transpalette manuel</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>3</td><td>Transpalettes manuels i-ton standards - matériaux technopolymères robu</td><td class='cat'>Transpalette manuel</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>4</td><td>Transpalettes manuels à fourches larges</td><td class='cat'>Transpalette manuel</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>5</td><td>Transpalettes manuels Série Standard - disponible en achat ou location</td><td class='cat'>Transpalette manuel</td><td class='score-cell'><span class='score'>0.48</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"vestiaire metallique 2 portes" <span class="meta">4 mots · détecté: <em>Vestiaires multicases</em> (conf=97%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">33 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire de sécurité FM haute manuelle - MC60S - Acier double paroi pou</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire Z - DLM 730/I en acier laminé à froid avec portes renforcées e</td><td class='cat'>Armoires à portes pliantes</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire métallique à portes et à tiroirs</td><td class='cat'>Armoires à portes coulissantes</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire à pharmacie 2 portes</td><td class='cat'>Armoires à pharmacie</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Meuble de service avec portes battantes</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire de sécurité SC60 - 228L - Fermeture automatique - Construction</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sûreté pour produits dangereux - modèle comptoir à 2 portes</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire d&amp;#039;entretien vercors</td><td class='cat'>Armoires d&#x27;entretien</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Ensemble de 2 armoires basses en mélaminé ABA Denomics</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Vestiaire 2 casiers - métallique gris - Budget</td><td class='cat'>Vestiaires industrie propre</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">23 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Vestiaire métallique 2 portes grises perforées MW Tools KL20G</td><td class='cat'>Vestiaires industrie salissant</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Vestiaire 2 casiers - métallique gris - Budget</td><td class='cat'>Vestiaires industrie propre</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">172 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire métallique à portes et à tiroirs</td><td class='cat'>Armoires à portes coulissantes</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>2</td><td>Vestiaire 2 casiers - métallique gris - Budget</td><td class='cat'>Vestiaires industrie propre</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>3</td><td>Armoire Z - DLM 730/I en acier laminé à froid avec portes renforcées e</td><td class='cat'>Armoires à portes pliantes</td><td class='score-cell'><span class='score'>0.41</span></td></tr><tr><td class='rank'>4</td><td>Meuble de service avec portes battantes</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'><span class='score'>0.39</span></td></tr><tr><td class='rank'>5</td><td>Armoire 2 portes coulissantes largeur 1428 mm</td><td class='cat'>Armoires à portes coulissantes</td><td class='score-cell'><span class='score'>0.39</span></td></tr><tr><td class='rank'>6</td><td>Armoires à portes coulissantes - Easy Slide - serrure intégrée et choi</td><td class='cat'>Armoires à portes coulissantes</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>7</td><td>Armoire mi-haute portes battantes Denomics 2 étagères serrure et clés</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>8</td><td>Ensemble de 2 armoires basses portes en laqué ABA Denomics</td><td class='cat'>Armoires à portes battantes</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>9</td><td>Armoire vestiaire - DLM 731/II - acier laminé à froid - 2 compartiment</td><td class='cat'>Armoires à portes pliantes</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>10</td><td>Armoire 2 portes coulissantes largeur 1020 mm</td><td class='cat'>Armoires à portes coulissantes</td><td class='score-cell'><span class='score'>0.38</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"compresseur air atelier" <span class="meta">3 mots · détecté: <em>Rouleau compresseur</em> (conf=56%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">47 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Compresseur à piston -  insonorisé - DBS 500 - 5,5kW</td><td class='cat'>Compresseurs</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Compresseur airpower 200/10/5 ty - sans huile</td><td class='cat'>Compresseurs</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Compresseur mobile à entraînement par courroie à huile cuve 50 L 1,5 k</td><td class='cat'>Compresseurs</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>BMS Alpha CR Machines à Chape - BMS Worker - 2,2 Litres - Puissant Mot</td><td class='cat'>Pompe à chape</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Compresseur à piston - DB 750 sur 500L - 5,5 kW - 500 litres</td><td class='cat'>Compresseurs</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Rafraîchisseur par évaporation portable - Master BC 221 pour usine, ha</td><td class='cat'>Rafraîchisseur d&#x27;air adiabatiq</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Alpha e32 pompe à chape - bms worker - moteur électrique de 11 kw – ré</td><td class='cat'>Pompe à chape</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Unités d&#x27;aspiration mobiles S-8 D/E - Electrique ou Diesel - De 22 kW </td><td class='cat'>Unité d&#x27;aspiration mobile</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Sableuse TRILOGY 40 - 40 L, légère, rapide et écologique - Pression ré</td><td class='cat'>Sableuses</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>G 070-932 - Climatiseur professionnel Aermec - Puissance frigorifique </td><td class='cat'>Armoire de précision</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">130 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Compresseur airpower 275/8/50 silent - sans huile</td><td class='cat'>Compresseurs</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Sableuse TRILOGY 40 - 40 L, légère, rapide et écologique - Pression ré</td><td class='cat'>Sableuses</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Aérogommeuse - TRILOGY 40 - Triple technologie SEC, H2O, HELIX - IBIX</td><td class='cat'>Aérogommage</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">428 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Compresseur à piston -  insonorisé - DBS 500 - 5,5kW</td><td class='cat'>Compresseurs</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>2</td><td>Rafraîchisseur par évaporation portable - Master BC 221 pour usine, ha</td><td class='cat'>Rafraîchisseur d&#x27;air adiabatiq</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>3</td><td>Compresseur airpower 200/10/5 ty - sans huile</td><td class='cat'>Compresseurs</td><td class='score-cell'><span class='score'>0.34</span></td></tr><tr><td class='rank'>4</td><td>Compresseur mobile à entraînement par courroie à huile cuve 50 L 1,5 k</td><td class='cat'>Compresseurs</td><td class='score-cell'><span class='score'>0.33</span></td></tr><tr><td class='rank'>5</td><td>BMS Alpha CR Machines à Chape - BMS Worker - 2,2 Litres - Puissant Mot</td><td class='cat'>Pompe à chape</td><td class='score-cell'><span class='score'>0.32</span></td></tr><tr><td class='rank'>6</td><td>Compresseur à piston - DB 750 sur 500L - 5,5 kW - 500 litres</td><td class='cat'>Compresseurs</td><td class='score-cell'><span class='score'>0.32</span></td></tr><tr><td class='rank'>7</td><td>Compresseur airpower 275/8/50 silent - sans huile</td><td class='cat'>Compresseurs</td><td class='score-cell'><span class='score'>0.31</span></td></tr><tr><td class='rank'>8</td><td>Compresseur 1850w primair mm 13/50-4 + tuyau + soufflette - LACME - 10</td><td class='cat'>Compresseurs</td><td class='score-cell'><span class='score'>0.31</span></td></tr><tr><td class='rank'>9</td><td>Compresseur 580/10/100 h/ 400 v</td><td class='cat'>Compresseurs</td><td class='score-cell'><span class='score'>0.31</span></td></tr><tr><td class='rank'>10</td><td>Refroidisseur à air - Vitesse variable - FRIOVAR</td><td class='cat'>Refroidisseurs</td><td class='score-cell'><span class='score'>0.30</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"rayonnage metallique lourd" <span class="meta">3 mots · détecté: <em>Rayonnage léger</em> (conf=54%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">44 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Rayonnage cantilever lourd, idéal pour le stockage de matériaux de con</td><td class='cat'>Rayonnage cantilever</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Plate-forme sur rayonnage - Marques Alser, Arestan, Dexion, Duwic, et </td><td class='cat'>Mezzanine industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Rayonnage sécurisé grillagé - capacité 350 kg par niveau - 2 ou 3 nive</td><td class='cat'>Rayonnage léger</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Rayonnage léger RACK Galvanisé - H2500 mm - Acier robuste pour extérie</td><td class='cat'>Rayonnage léger</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Helloshop26 - Rayonnage d&#x27;atelier lourd étagères enfichables 160 cm ar</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Rayonnage léger RACK Galvanisé H2500 - acier galvanisé, étagères régla</td><td class='cat'>Rayonnage léger</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>SimonRack Etagère métallique sans vis Maderclick 3 étagères. Couleur g</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Rayonnage léger RACK Galvanisé - H2500 mm - Acier robuste pour usage e</td><td class='cat'>Rayonnage léger</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Rayonnage léger RACK Galvanisé H2500 - acier galvanisé, 5 niveaux de t</td><td class='cat'>Rayonnage léger</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Rayonnage léger RACK Galvanisé H2500 - acier galvanisé robuste, 5 nive</td><td class='cat'>Rayonnage léger</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">20 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Rayonnage sécurisé grillagé - capacité 350 kg par niveau - 2 ou 3 nive</td><td class='cat'>Rayonnage léger</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Rayonnage adaptable pour une gestion optimale des archives - Adaptiv -</td><td class='cat'>Vestiaires multicases</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>SimonRack Étagère metallique sans vis Simonhome Click Wood Plus 4/300 </td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>SimonRack Etagère métallique sans vis Maderclick 3 étagères. Couleur g</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>SimonRack Simongarden Étagère de jardin en métal Comfort avec vis. Cou</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">159 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Helloshop26 - Rayonnage d&#x27;atelier lourd étagères enfichables 160 cm ar</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>2</td><td>Rayonnage cantilever lourd, idéal pour le stockage de matériaux de con</td><td class='cat'>Rayonnage cantilever</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>3</td><td>Rayonnage Mi-lourd - Noir - Hauteur 2100mm, Longueur 1800mm, Profondeu</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>4</td><td>Rayonnage mi-lourd - Longueur totale du lot 11 920mm - TIXIT</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>5</td><td>Rayonnage mi-lourd galvanisé - Hauteur 2500mm, Longueur 2700mm, Profon</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>6</td><td>Rayonnage cantilever mi-lourd - stockage de bois et charges longues - </td><td class='cat'>Rayonnage cantilever</td><td class='score-cell'><span class='score'>0.45</span></td></tr><tr><td class='rank'>7</td><td>SimonRack Etagère métallique sans vis Maderclick 3 étagères. Couleur g</td><td class='cat'>Rayonnage mi-lourd et lourd</td><td class='score-cell'><span class='score'>0.41</span></td></tr><tr><td class='rank'>8</td><td>Rayonnage sécurisé grillagé - capacité 350 kg par niveau - 2 ou 3 nive</td><td class='cat'>Rayonnage léger</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>9</td><td>Rayonnage léger RACK Galvanisé - H2500 mm - Acier robuste pour extérie</td><td class='cat'>Rayonnage léger</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>10</td><td>Rayonnage léger RACK Galvanisé H2500 - acier galvanisé, étagères régla</td><td class='cat'>Rayonnage léger</td><td class='score-cell'><span class='score'>0.38</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"groupe electrogene diesel" <span class="meta">3 mots · détecté: <em>Groupe électrogène industriel</em> (conf=88%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">74 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Groupe électrogène diesel monophasé - démarrage électrique - puissance</td><td class='cat'>Groupe électrogène portable</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>BATTERIES AUTO - PL - INDUSTRIE</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>FPT - Iveco Motors F32 MNT - Moteur diesel 4 cylindres en ligne - 65 k</td><td class='cat'>Moteurs diesel</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Groupe motopompe à incendie diesel NFPA 20 - 1820m3/h sur banc test</td><td class='cat'>Groupes motopompes</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Groupe électrogène portable ACCESS 2200 XL - Monophasé, essence, puiss</td><td class='cat'>Groupe électrogène portable</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>BATTERIES SPECIALES OPTIMA RED TOP</td><td class='cat'>Batterie de démarrage</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>CHARGEUR CONVERTISSEUR AVEC BATTERIE GEL AGM</td><td class='cat'>Batteries solaires</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Groupe électrogène diesel PRO100-2 - 100 kVA / 80 kW - FG Wilson - Com</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Groupe électrogène diesel P938-1 - 850.0 kVA à 937.5 kVA - Moteur Perk</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Groupe électrogène diesel P250-5 - 250 kVA / 200 kW - Moteur Perkins 1</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">38 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Groupe électrogène Diesel avec cocon &lt;br&gt; 25 GTC 12V 400/230V</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Groupe électrogène Diesel avec cocon &lt;br&gt; 35 GT GTC 12V 400/230V</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Groupe électrogène diesel ou HVO P55-3 - 50.0 kVA / 40.0 kW à 62.5 kVA</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Groupe électrogène diesel P313-5 - 225 à 375 kVA - Perkins 1506A-E88TA</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Groupe électrogène diesel ou HVO P50-4 - 50 kVA / 40 kW - Perkins 1103</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Groupe électrogène diesel monophasé - démarrage électrique - puissance</td><td class='cat'>Groupe électrogène portable</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Groupe électrogène diesel PRO100-2 - 100 kVA / 80 kW - FG Wilson - Com</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Groupe Électrogène diesel PRO30-2 - 30kVA / 24 kW à 35.8 kVA / 28.6 kW</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Groupe électrogène diesel P344-5 - 225 à 375 kVA - Moteur Perkins 1506</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Groupe électrogène diesel P300-4 - Perkins 1506D-E88TAG4, 275-300 kVA,</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">161 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Groupe électrogène diesel monophasé - démarrage électrique - puissance</td><td class='cat'>Groupe électrogène portable</td><td class='score-cell'><span class='score'>0.60</span></td></tr><tr><td class='rank'>2</td><td>Groupe électrogène industriel diesel P1001-1 - 60Hz - 900 kVA à 1000 k</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'><span class='score'>0.56</span></td></tr><tr><td class='rank'>3</td><td>Groupe électrogène portable ACCESS 2200 XL - Monophasé, essence, puiss</td><td class='cat'>Groupe électrogène portable</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>4</td><td>Groupe électrogène portable ACCESS 8000 - monophasé, essence, puissanc</td><td class='cat'>Groupe électrogène portable</td><td class='score-cell'><span class='score'>0.46</span></td></tr><tr><td class='rank'>5</td><td>Groupe électrogène portable - EXPLORER 6510 XL27 - usage intensif, 5.8</td><td class='cat'>Groupe électrogène portable</td><td class='score-cell'><span class='score'>0.45</span></td></tr><tr><td class='rank'>6</td><td>Groupe motopompe à incendie diesel NFPA 20 - 1820m3/h sur banc test</td><td class='cat'>Groupes motopompes</td><td class='score-cell'><span class='score'>0.43</span></td></tr><tr><td class='rank'>7</td><td>Groupe électrogène Diesel avec cocon &lt;br&gt; 25 GTC 12V 400/230V</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>8</td><td>Groupe électrogène Diesel avec cocon &lt;br&gt; 35 GT GTC 12V 400/230V</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>9</td><td>Groupe électrogène diesel ou HVO P55-3 - 50.0 kVA / 40.0 kW à 62.5 kVA</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>10</td><td>Groupe électrogène diesel P313-5 - 225 à 375 kVA - Perkins 1506A-E88TA</td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'><span class='score'>0.42</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"extincteur CO2 6kg" <span class="meta">3 mots · détecté: <em>Extincteur portatif</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">32 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire comptoir à extincteur CO2 - 2 portes - Réf NOVEXT 02100 - BIOL</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire comptoir à extincteur CO2 EXTINCTA - Réf NOVEXT 01100 - 1 port</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire de sécurité pour produits dangereux - extincteur CO2 automatiq</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire de sécurité pour produits inflammables 300L - extincteur CO2 -</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire de sécurité anti-feu avec extincteur automatique CO2 - 300L - </td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire haute à extincteur CO2 - 2 portes - EXTINCTA - Réf NOVEXT 0219</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité avec extincteur automatique - stockage 300l - infl</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité avec extincteur automatique - coupe-feu - stockage</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité à extincteur - réf AMS 20 - 20L - déclenchement au</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité à extincteur - réf AMS 10 - 10L - peinture époxy -</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">35 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire haute à extincteur CO2 - 2 portes - EXTINCTA - Réf NOVEXT 0219</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire de sécurité pour produits dangereux - extincteur CO2 automatiq</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire de sécurité pour produits inflammables 300L - extincteur CO2 -</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire haute à extincteur CO2 - EXTINCTA - Réf NOVEXT 01195 - 1 porte</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire comptoir à extincteur CO2 EXTINCTA - Réf NOVEXT 01100 - 1 port</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire comptoir à extincteur CO2 - 2 portes - Réf NOVEXT 02100 - BIOL</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité à extincteur - réf AMS 10 - 10L - peinture époxy -</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité à extincteur - réf AMS 100 - 100L - 3 étagères - s</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité anti-feu avec extincteur automatique CO2 - 300L - </td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité avec extincteur automatique - coupe-feu - stockage</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">161 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire comptoir à extincteur CO2 EXTINCTA - Réf NOVEXT 01100 - 1 port</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.55</span></td></tr><tr><td class='rank'>2</td><td>Armoire de sécurité pour produits dangereux - extincteur CO2 automatiq</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.54</span></td></tr><tr><td class='rank'>3</td><td>Armoire de sécurité pour produits inflammables 300L - extincteur CO2 -</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.53</span></td></tr><tr><td class='rank'>4</td><td>Armoire de sécurité anti-feu avec extincteur automatique CO2 - 300L - </td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.53</span></td></tr><tr><td class='rank'>5</td><td>Armoire haute à extincteur CO2 - 2 portes - EXTINCTA - Réf NOVEXT 0219</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.52</span></td></tr><tr><td class='rank'>6</td><td>Armoire haute à extincteur CO2 - EXTINCTA - Réf NOVEXT 01195 - 1 porte</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.50</span></td></tr><tr><td class='rank'>7</td><td>Armoire comptoir à extincteur CO2 - 2 portes - Réf NOVEXT 02100 - BIOL</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.46</span></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité avec extincteur automatique - stockage 300l - infl</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.44</span></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité avec extincteur automatique - coupe-feu - stockage</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.43</span></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité à extincteur - réf AMS 10 - 10L - peinture époxy -</td><td class='cat'>Armoire anti-feu</td><td class='score-cell'><span class='score'>0.43</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"armoire inox alimentaire" <span class="meta">3 mots · détecté: <em>Armoire réfrigérée</em> (conf=51%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">39 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire réfrigérée positive - inox ou blanc - stockage alimentaire hyg</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire murale réfrigérée Stone - inox - pour produits frais - personn</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire murale réfrigérée suspendue Flag - entièrement en inox - pour </td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire murale réfrigérée suspendue Box - entièrement en inox - person</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire murale réfrigérée suspendue Box Design - entièrement en inox -</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>A.C.L - Armoire réfrigérée positive 1 porte pleine 700 L - Finition In</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire réfrigérée positive 2 portes pleines - 1200 L inox - Ref produ</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire murale inox ouverte (L)1200 x (P)400 mm</td><td class='cat'>Armoires ouvertes</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Armoire réfrigéré 650L</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Matériel HORECA Armoire Suspendue en Inox - GDWCS204 - 761885992193</td><td class='cat'>Armoires à portes coulissantes</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">38 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire réfrigérée positive - inox ou blanc - stockage alimentaire hyg</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire de protection informatique Agro-alimentaire en inox</td><td class='cat'>Armoires de protections inform</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Armoire positive ventilée – 2 portes GN 2/1 – 1300 L</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>AR5-TN/PM - Armoire frigorifique GN1/1 avec cellule de refroidissement</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>ARMOIRES DE FERMENTATION A CHARIOTS AFC - CFI</td><td class='cat'>Armoires de fermentation</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire de maintien en température 5 niveaux GN1/1 - TOURNUS EQUIPEMEN</td><td class='cat'>Armoires chauffantes</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire en inox portes battantes</td><td class='cat'>Armoire d&#x27;atelier</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Armoire de maintien en température TOURNUS EQUIPEMENT - 15 niveaux GN1</td><td class='cat'>Armoires chauffantes</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Chariot mobile de maintien en température TOURNUS EQUIPEMENT - Fabrica</td><td class='cat'>Armoires chauffantes</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>A.C.L - Armoire réfrigérée positive 1 porte pleine 700 L - Finition In</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">164 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Armoire réfrigérée positive - inox ou blanc - stockage alimentaire hyg</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.66</span></td></tr><tr><td class='rank'>2</td><td>Armoire murale réfrigérée Stone - inox - pour produits frais - personn</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.54</span></td></tr><tr><td class='rank'>3</td><td>Armoire murale réfrigérée suspendue Flag - entièrement en inox - pour </td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.53</span></td></tr><tr><td class='rank'>4</td><td>Armoire murale réfrigérée suspendue Box - entièrement en inox - person</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.53</span></td></tr><tr><td class='rank'>5</td><td>Armoire murale réfrigérée suspendue Box Design - entièrement en inox -</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.53</span></td></tr><tr><td class='rank'>6</td><td>Armoire réfrigérée positive 2 portes pleines - 1200 L inox - Ref produ</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.51</span></td></tr><tr><td class='rank'>7</td><td>Armoire réfrigérée positive 1 porte pleine 455 L - Inox  - N500IP</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.50</span></td></tr><tr><td class='rank'>8</td><td>Armoire réfrigérée négative double porte 744L Polar inox, 650W, 220V, </td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>9</td><td>Armoire murale inox ouverte (L)1200 x (P)400 mm</td><td class='cat'>Armoires ouvertes</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>10</td><td>A.C.L - Armoire réfrigérée positive 2 portes pleines 1400 L - Finition</td><td class='cat'>Armoire réfrigérée</td><td class='score-cell'><span class='score'>0.47</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"coffre fort professionnel" <span class="meta">3 mots · détecté: <em>Coffre-fort de sécurité</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">42 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Coffre-fort Haute Sécurité - Master Lock - T6-331ml - Combinaison élec</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Armoire de sécurité anti-effraction pour fusils - capacité 5 ou 8 fusi</td><td class='cat'>Armoires de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Coffre de sécurité de dépôt de fonds - Serrure électronique</td><td class='cat'>Coffres de transfert de fond</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Armoire forte blindée - H.1m - L.1m20 - Protection contre le vol et va</td><td class='cat'>Armoires de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Armoire forte blindée - Serrure à clé certifiée A2P</td><td class='cat'>Armoires de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Armoire forte blindée - Serrure à clé</td><td class='cat'>Armoires de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Armoire forte pour documents conception anti-effraction</td><td class='cat'>Armoires de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Coffre-fort à clef pour 5 fusils - Armoire de sécurité à fermeture à c</td><td class='cat'>Armoires pour armes</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Coffre fort blindé ignifugé Hartmann 220 litres serrure électronique</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Coffre-fort Orkos Hospitality TSQ pour hôtel</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">18 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Coffre-fort Haute Sécurité - Master Lock - T6-331ml - Combinaison élec</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Poste à souder à l&#x27;arc 200A Inverter PRO200+ Numérique Mallette Luxe P</td><td class='cat'>Poste à souder professionnel</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Store Screen ZIP Coffre 85 Véozip Ferrari Micro-Perforé Électrique M-S</td><td class='cat'>Stores d&#x27;extérieur</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Moustiquaire ZIP Coffre 85 Électrique Somfy Verticale Extérieur pour F</td><td class='cat'>Moustiquaires</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">169 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Coffre-fort Haute Sécurité - Master Lock - T6-331ml - Combinaison élec</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.52</span></td></tr><tr><td class='rank'>2</td><td>Coffre fort blindé ignifugé Hartmann 220 litres serrure électronique</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.50</span></td></tr><tr><td class='rank'>3</td><td>Coffre-fort Orkos Hospitality TSQ pour hôtel</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.50</span></td></tr><tr><td class='rank'>4</td><td>Coffre-fort certifié - Serrure Dormakaba 71111 - Double paroi en acier</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>5</td><td>Coffre fort blindé ignifugé Hartmann 54 litres serrure électronique</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>6</td><td>Coffre-fort haute sécurité - clé et combinaison - acier 50mm - beige</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>7</td><td>Coffre-fort haute sécurité - 4 compteurs - serrure DORMAKABA - beige R</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>8</td><td>Coffre-fort anti-feu MB 60 - Hartmann - Classe S2 - Protection anti-ef</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>9</td><td>Coffre-fort de bureau digital - double paroi anti-feu - combinaison él</td><td class='cat'>Coffre-fort de sécurité</td><td class='score-cell'><span class='score'>0.48</span></td></tr><tr><td class='rank'>10</td><td>Coffre-fort à clef pour 5 fusils - Armoire de sécurité à fermeture à c</td><td class='cat'>Armoires pour armes</td><td class='score-cell'><span class='score'>0.43</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"palette plastique industrielle" <span class="meta">3 mots · détecté: <em>Caisse-palette en plastique</em> (conf=62%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">43 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Palette en carton ondulé KAYPAL® - propre, écologique, économique et e</td><td class='cat'>Palette en carton</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Palettes Europe - EUR EPAL en bois à quatre entrées</td><td class='cat'>Palette en bois</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Palette plastique multi usages à semelles - MED68/PP/3S, réutilisable </td><td class='cat'>Palette en plastique</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Palette légère à plots - 4 entrées</td><td class='cat'>Palette en bois</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Palette en carton APPA® 600x800 - légère, résistante, conforme ISPM-15</td><td class='cat'>Palette en carton</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Bobines de film étirable machine 160% pour palettisation 500 mm - FPAL</td><td class='cat'>Films étirables</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Palette réversible</td><td class='cat'>Palette en bois</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Bobines de film étirable machine 160% pour palettisation 500 mm - FPAL</td><td class='cat'>Films étirables</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Palette plastique recyclé - TC1/ECO - idéale pour charges lourdes avec</td><td class='cat'>Palette en plastique</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Bobines de film étirable machine 220% pour palettisation 500 mm - FPAL</td><td class='cat'>Films étirables</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">25 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Palette plastique multi usages à semelles - MED68/PP/3S, réutilisable </td><td class='cat'>Palette en plastique</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Caisse-palette pliable en PEHD - 1000x1200 mm - 720 L - 2 semelles - P</td><td class='cat'>Caisse-palette en plastique</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Bac de rétention souple pour palette 1200x1200 mm - BRS062 - PVC résis</td><td class='cat'>Bac de rétention en plastique </td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Contrôleur de débit - Embout de tube plastique avec câble gainé en PVC</td><td class='cat'>Contrôleurs de débit</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Palette en carton ondulé KAYPAL® - propre, écologique, économique et e</td><td class='cat'>Palette en carton</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">176 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Palette plastique multi usages à semelles - MED68/PP/3S, réutilisable </td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.51</span></td></tr><tr><td class='rank'>2</td><td>Palette plastique recyclé - TC1/ECO - idéale pour charges lourdes avec</td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.51</span></td></tr><tr><td class='rank'>3</td><td>Palette plastique 1200x800 medium recyclée ajourée pour charges moyenn</td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.50</span></td></tr><tr><td class='rank'>4</td><td>Palette plastique 1200x800 hygiénique couleur pleine à semelles</td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.50</span></td></tr><tr><td class='rank'>5</td><td>Palette plastique 3 semelles monobloc - UP1012/PA/R - PE recyclé, char</td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>6</td><td>Palette en plastique recyclé 800 x 1200 mm - export - charge 2000 kg/1</td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.49</span></td></tr><tr><td class='rank'>7</td><td>Palette en plastique 1300x1100 mm - MED1311/PP/3S - utilisable en rack</td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>8</td><td>Caisse-palette en plastique 650L grise - Réf. 3AA010 - PEHD injecté, q</td><td class='cat'>Caisse-palette en plastique</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>9</td><td>Mini palette plastique alimentaire H2 - résistante de -40°C à +70°C - </td><td class='cat'>Palette en plastique</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>10</td><td>Palette en carton ondulé KAYPAL® - propre, écologique, économique et e</td><td class='cat'>Palette en carton</td><td class='score-cell'><span class='score'>0.42</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"ventilateur industriel" <span class="meta">2 mots · détecté: <em>Ventilateur industriel plafond </em> (conf=50%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">36 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Helice ventilateur 12 pales 35° ø750 soufflante</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Helice ventilateur 4 pales 30° ø 350-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Helice ventilateur 4 pales 30° ø 240-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Compresseur à piston - DB 750 sur 500L - 5,5 kW - 500 litres</td><td class='cat'>Compresseurs</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Helice ventilateur 4 pales 30° ø 650 asp-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Système de ventilation pour habitation par insufflation (VMI) - Pureve</td><td class='cat'>Caisson de ventilation</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Helice ventilateur 4 pales 20° ø 450-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Helice ventilateur 4 pales 30° ø762 al16 aspirante-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Helice ventilateur 5 pales 28° ø154 aspirante</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Helice ventilateur 5 pales 28° ø200 aspirante-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">40 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Ventilateur de plafond industriel 3m diamètre - télécommande, réversib</td><td class='cat'>Ventilateur industriel plafond</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Ventilateur de plafond industriel DVW - 900 mm et 1400 mm pour été et </td><td class='cat'>Ventilateur industriel plafond</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Ventilateur de remorque CoolMan 2800 - Ref. 75.5 - Trois vitesses jusq</td><td class='cat'>Ventilateur centrifuge industr</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>SCHROFF CompacPRO, Coffret de bureau non blindé, 3 U, 84 HP, 451 mm</td><td class='cat'>Ventilateur hélicoïde industri</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Usb485i - Convertisseur USB vers RS232 / RS422 / RS485 industriel isol</td><td class='cat'>Convertisseurs séries</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Climatiseur évaporatif AD BIGGER PREMIUM - 46 922 m3/h à 60 644 m3/h a</td><td class='cat'>Climatiseurs par évaporation o</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Elastel EG410</td><td class='cat'>Passerelles industrielles</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Advantech PPC-3000 - Panel PC industriel avec écrans LCD tactile résis</td><td class='cat'>Panel pc</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Moulin microniseur séparateur MMS - broyage fin et ultrafin avec class</td><td class='cat'>Microniseur industriel</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Groupe électrogène diesel PRO150-1 - 150 kVA / 120 kW à 172 kVA / 137 </td><td class='cat'>Groupe électrogène industriel</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">161 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Ventilateur de plafond industriel 3m diamètre - télécommande, réversib</td><td class='cat'>Ventilateur industriel plafond</td><td class='score-cell'><span class='score'>0.55</span></td></tr><tr><td class='rank'>2</td><td>Ventilateur de plafond industriel DVW - 900 mm et 1400 mm pour été et </td><td class='cat'>Ventilateur industriel plafond</td><td class='score-cell'><span class='score'>0.45</span></td></tr><tr><td class='rank'>3</td><td>Helice ventilateur 12 pales 35° ø750 soufflante</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>4</td><td>Helice ventilateur 4 pales 30° ø 350-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>5</td><td>Helice ventilateur 4 pales 30° ø 240-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>6</td><td>Helice ventilateur 4 pales 30° ø 650 asp-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>7</td><td>Helice ventilateur 4 pales 20° ø 450-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>8</td><td>Helice ventilateur 4 pales 30° ø762 al16 aspirante-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.34</span></td></tr><tr><td class='rank'>9</td><td>Helice ventilateur 5 pales 28° ø154 aspirante</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.34</span></td></tr><tr><td class='rank'>10</td><td>Helice ventilateur 5 pales 28° ø200 aspirante-xnw</td><td class='cat'>Hélices de ventilateurs</td><td class='score-cell'><span class='score'>0.34</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"perceuse sans fil 18V" <span class="meta">4 mots · détecté: <em>Perceuses à colonne</em> (conf=43%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">43 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Visseuse pour plaque de plâtre sur batterie DW 45 18.0-EC M SET 2.5  -</td><td class='cat'>Visseuses</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Scie sabre RS 25 18.0-EC  -  FLEX  -  Réf. AG03008</td><td class='cat'>Autres produits</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Visseuse sans fil pour plaquiste  DWC 18-4500 HPC 4,0 I-Plus DURADRIVE</td><td class='cat'>Visseuses</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Batterie / accu li-ion provolt appv 18-20 pour outils sans fil</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Batterie / accu li-ion provolt appv 18-40 pour outils sans fil</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Meuleuse d&#x27;angle 18 v gws 18v-10 p professionnal 125 mm (sans batterie</td><td class='cat'>Meuleuse à angle</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Débroussailleuse coupe-bordure sans fil fs 18-0 /ss accu ni chargeur</td><td class='cat'>Autres produits</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Meuleuse d&#x27;angle 18v gwx 18v-15 p avec x-lock (sans batterie ni charge</td><td class='cat'>Meuleuse à angle</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Scie à onglet radiale sur batterie SMS 190 18.0-EC  -  FLEX  -  Réf. A</td><td class='cat'>Scies circulaires</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Batterie / accu li-ion 20 v - ap 20-40 pour outils sans fil güde</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">15 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Batterie / accu li-ion provolt appv 18-40 pour outils sans fil</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Batterie / accu li-ion provolt appv 18-20 pour outils sans fil</td><td class='cat'>Batterie industrielle</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">163 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Batterie / accu li-ion provolt appv 18-20 pour outils sans fil</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>2</td><td>Batterie / accu li-ion provolt appv 18-40 pour outils sans fil</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>3</td><td>Visseuse sans fil pour plaquiste  DWC 18-4500 HPC 4,0 I-Plus DURADRIVE</td><td class='cat'>Visseuses</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>4</td><td>Meuleuse d&#x27;angle 18 v gws 18v-10 p professionnal 125 mm (sans batterie</td><td class='cat'>Meuleuse à angle</td><td class='score-cell'><span class='score'>0.37</span></td></tr><tr><td class='rank'>5</td><td>Débroussailleuse coupe-bordure sans fil fs 18-0 /ss accu ni chargeur</td><td class='cat'>Autres produits</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>6</td><td>Meuleuse d&#x27;angle 18v gwx 18v-15 p avec x-lock (sans batterie ni charge</td><td class='cat'>Meuleuse à angle</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>7</td><td>Batterie / accu li-ion 20 v - ap 20-40 pour outils sans fil güde</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.36</span></td></tr><tr><td class='rank'>8</td><td>Batterie / accu li-ion 20 v - ap 20-20 pour outils sans fil güde</td><td class='cat'>Batterie industrielle</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>9</td><td>Pistolet a colle chaud sans fil -   - HK 18 LTX 20 - 18 V - MetaBOX 14</td><td class='cat'>Pistolet à colle</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>10</td><td>Pince à sertir 18v romax compact iii basic sans mâchoire + batterie 2a</td><td class='cat'>Sertisseuses électriques</td><td class='score-cell'><span class='score'>0.34</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"echelle telescopique aluminium" <span class="meta">3 mots · détecté: <em>Échelle à crinoline</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">39 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Élévateurs PMR - modèle Steppy - plateforme élévatrice polyvalente pou</td><td class='cat'>Élévateur PMR</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Table Élévatrice avec Monte-Charges - Ref. 61.0 pour déplacement et él</td><td class='cat'>Table élévatrice</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Échelle à crinoline sur mesure - Aluminium - Sortie de face et latéral</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Échelle à crinoline en acier galvanisé ou aluminium - Palier intermédi</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Ascenseur de chantier pour personnes et matériaux jusqu&#x27;à 1000 kg - EP</td><td class='cat'>Ascenseur de chantier</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Plateforme élévatrice sur mâts - PEC 90</td><td class='cat'>Plateforme de travail</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Plateforme élévatrice sur mâts pour travaux lourds - PEC 150</td><td class='cat'>Plateforme de travail</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Ascenseur de chantier pour personnes et matériaux jusqu&#x27;à 3200 kg - PM</td><td class='cat'>Ascenseur de chantier</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Mini-grue araignée C6 Hoeflon - Pour les endroits difficiles d&#x27;accès -</td><td class='cat'>Mini-grue</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Mini-grue araignée C6e Hoeflon - puissante, légère et compacte - capac</td><td class='cat'>Grues araignées</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">34 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Benne acier pour véhicule utilitaire 3.5T - usages intensifs - KEROCK</td><td class='cat'>Bennes pour véhicules utilitai</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Grappin coupeur  pour pelles, chargeuses agricoles, chariots télescopi</td><td class='cat'>Grappin coupeur forestier</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">183 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Échelle à crinoline sur mesure - Aluminium - Sortie de face et latéral</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'><span class='score'>0.47</span></td></tr><tr><td class='rank'>2</td><td>Échelle à crinoline en acier galvanisé ou aluminium - Palier intermédi</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'><span class='score'>0.46</span></td></tr><tr><td class='rank'>3</td><td>Échelle à crinoline en aluminium - Sécurisation des accès extérieurs e</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'><span class='score'>0.43</span></td></tr><tr><td class='rank'>4</td><td>Échelle avec crinoline en aluminium - Sortie de face - Sans condamnati</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>5</td><td>Échelle de sécurité à crinoline en aluminium - Sortie de face - Hauteu</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>6</td><td>Échelle à crinoline aluminium - Sortie de face - Sans condamnation - H</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>7</td><td>Échelle à crinoline en aluminium - sortie latérale avec palier 0.60m e</td><td class='cat'>Échelle à crinoline</td><td class='score-cell'><span class='score'>0.42</span></td></tr><tr><td class='rank'>8</td><td>Nacelle /Plate-forme élévatrice télescopique à 1 mât GTWY6-100 : 125 k</td><td class='cat'>Nacelle télescopique</td><td class='score-cell'><span class='score'>0.35</span></td></tr><tr><td class='rank'>9</td><td>Escabeau en acier 4 marches pliable blanc - echelle</td><td class='cat'>Autres produits</td><td class='score-cell'><span class='score'>0.32</span></td></tr><tr><td class='rank'>10</td><td>Nouvelle commande télescopique pour TROMPEX - manipulation de charges </td><td class='cat'>Autres produits</td><td class='score-cell'><span class='score'>0.31</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+    <section class="query-block">
+        <h2>"signalisation securite" <span class="meta">2 mots · détecté: <em>Signalisations sécurité travail</em> (conf=100%)</span></h2>
+        
+        <div class="cols">
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🧠 Sémantique pur (simule Milvus)</h3>
+            <div class="lat">48 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Radar pédagogique METIS® 3002 Connect</td><td class='cat'>Panneaux indicateurs de vitess</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Signalisation embarquée B.U.S. - Barre universelle simplifiée pour gyr</td><td class='cat'>Signalisations pour véhicules</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Panneaux solaire intégré A 700 mm classe 2 leds clignotant fabriqués e</td><td class='cat'>Signalisations temporaires</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Panneaux solaire intégré A 700 mm classe 2 leds clignotant fabriqués e</td><td class='cat'>Signalisations temporaires</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Remorques de balisage et voiries PTAC 500 kg sans permis E, simple ou </td><td class='cat'>Remorque porte-panneaux</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Radar pédagogique solaire spécial école fabriqué en France - RDPG-TF11</td><td class='cat'>Panneaux indicateurs de vitess</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Unité de bord de route C-ITS - V2I station outdoor</td><td class='cat'>Passerelles de télécommunicati</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Panneaux solaire A 700 mm classe 2 leds clignotant fabriqués en France</td><td class='cat'>Signalisations temporaires</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Détection de trafic : le radar</td><td class='cat'>Comptage de véhicules</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Tourniquet piéton bidirectionnel à double sens - LBA T20</td><td class='cat'>Tourniquets d&#x27;accès piétons</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>🔤 BM25 pur (keyword)</h3>
+            <div class="lat">40 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Protection d&#x27;angle en mousse EVA - légère, économique et conforme dire</td><td class='cat'>Protection d&#x27;angle</td><td class='score-cell'></td></tr><tr><td class='rank'>2</td><td>Protection d&#x27;angle en caoutchouc - couleurs contrastées - versions ang</td><td class='cat'>Protection d&#x27;angle</td><td class='score-cell'></td></tr><tr><td class='rank'>3</td><td>Barrière levante automatique de protection renforcée avec lisse axiale</td><td class='cat'>Barrière levante</td><td class='score-cell'></td></tr><tr><td class='rank'>4</td><td>Coffre à poisons 12 litres - Réf AMS 520 - BIOLAB - Ventilation forcée</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr><tr><td class='rank'>5</td><td>Ruban de signalisation - OUTIL PARFAIT - Réf. AG00643</td><td class='cat'>Signalisations sécurité travai</td><td class='score-cell'></td></tr><tr><td class='rank'>6</td><td>Balise de signalisation rouge et blanche - Support de chaîne - Hauteur</td><td class='cat'>Signalisations sécurité travai</td><td class='score-cell'></td></tr><tr><td class='rank'>7</td><td>Banderole de signalisation - Limite de la zone de travail en tissu vin</td><td class='cat'>Signalisations sécurité travai</td><td class='score-cell'></td></tr><tr><td class='rank'>8</td><td>Portail ultra-rapide avec intelligence artificielle - Longueur max 5 m</td><td class='cat'>Portails battants</td><td class='score-cell'></td></tr><tr><td class='rank'>9</td><td>Barrière levante automatique - lisse axiale jusqu&#x27;à 10 m - service int</td><td class='cat'>Barrière levante</td><td class='score-cell'></td></tr><tr><td class='rank'>10</td><td>Armoire à poison - Exacta Optech - acier galvanisé, 2 étagères, 1 port</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'></td></tr></tbody>
+        </table>
+    </div>
+    
+            
+    <div class="col">
+        <div class="col-header">
+            <h3>⚡ Hybrid Typesense (solution)</h3>
+            <div class="lat">160 ms </div>
+        </div>
+        <table>
+            <thead><tr><th>#</th><th>Produit</th><th>Catégorie</th><th>Score</th></tr></thead>
+            <tbody><tr><td class='rank'>1</td><td>Banderole de signalisation - Limite de la zone de travail en tissu vin</td><td class='cat'>Signalisations sécurité travai</td><td class='score-cell'><span class='score'>0.39</span></td></tr><tr><td class='rank'>2</td><td>Balise de signalisation rouge et blanche - Support de chaîne - Hauteur</td><td class='cat'>Signalisations sécurité travai</td><td class='score-cell'><span class='score'>0.38</span></td></tr><tr><td class='rank'>3</td><td>Signalisation embarquée B.U.S. - Barre universelle simplifiée pour gyr</td><td class='cat'>Signalisations pour véhicules</td><td class='score-cell'><span class='score'>0.37</span></td></tr><tr><td class='rank'>4</td><td>Coffre à poisons 12 litres - Réf AMS 520 - BIOLAB - Ventilation forcée</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>5</td><td>Ruban de signalisation - OUTIL PARFAIT - Réf. AG00643</td><td class='cat'>Signalisations sécurité travai</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>6</td><td>Bande de signalisation - 10cm x 10m - Réf. AG01112 - MG DECO</td><td class='cat'>Signalisations sécurité travai</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>7</td><td>Armoire de sécurité passive POLYPASS 300L - 2 portes pleines - 1100x50</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>8</td><td>Armoire de sécurité passive monocolonne POLYPASS - BIOLAB - 1 porte pl</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>9</td><td>Armoire de sécurité passive COMBIPASS - 1160 x 500 x h 1950 mm - 2+1 c</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.28</span></td></tr><tr><td class='rank'>10</td><td>Armoire de sécurité POLYPASS 2 compartiments - 2x130 litres - 1100x500</td><td class='cat'>Armoire de sécurité pour produ</td><td class='score-cell'><span class='score'>0.28</span></td></tr></tbody>
+        </table>
+    </div>
+    
+        </div>
+    </section>
+    
+
+<footer>POC généré le 2026-04-21 10:20 · 26 requêtes · ms de latence en haut de chaque colonne</footer>
+</body></html>

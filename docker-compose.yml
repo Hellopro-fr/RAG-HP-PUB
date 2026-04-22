@@ -207,6 +207,12 @@ services:
       - services-net
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.settimeout(3); s.connect(('localhost', 50051)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     logging: *logging_defaults
 
   embedding-model-service:
@@ -856,8 +862,10 @@ services:
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
-      - llm-service
-      - deepseek-metrics-collector-service
+      llm-service:
+        condition: service_healthy
+      deepseek-metrics-collector-service:
+        condition: service_started
     networks:
       - services-net
     logging: *logging_defaults
@@ -1205,6 +1213,7 @@ services:
       dockerfile: ./apps-microservices/crawler-service/Dockerfile
     profiles: ["crawling"]
     init: true
+    stop_grace_period: 30s
     expose:
       - "8503"
     volumes:
@@ -1241,7 +1250,7 @@ services:
     env_file:
       - .env
     environment:
-      - MAX_CONCURRENT_JOBS=2
+      - MAX_CONCURRENT_JOBS=4
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     deploy:
       replicas: 1
@@ -1625,6 +1634,37 @@ services:
       - services-ext-net
       - services-global-net
 
+  # --- OPTIM: copie isolée pour agent-optim-scoring (ne pas modifier en prod) ---
+  graph-rag-api-recherche-optim-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-api-recherche-optim-service/Dockerfile
+    profiles: ["graph-rag-optim"]
+    ports:
+      - "8625:8525"
+      - "8665:8565"
+    environment:
+      API_PORT: 8525
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      RERANKING_SERVICE_URL: reranking-model-service:50053
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PROMETHEUS_PORT: 8565
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
+    networks:
+      - services-net
+      - services-ext-net
+      - services-global-net
+
   graph-rag-api-recherche-service-debug:
     build:
       context: .
@@ -1723,18 +1763,20 @@ services:
       - TRACKING_BASE_PATH=/app/tracking
     volumes:
       # Monte tous les dossiers tracking des services QC (paths VM)
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking/question1:ro
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking/question2aN:ro
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking/caracteristiques:ro
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking/valeurs:ro
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement:ro
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence:ro
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking/question1
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking/question2aN
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking/caracteristiques
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking/valeurs
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation
       # Monte les dossiers tracking des services prix (paths VM)
-      - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking/prix-extraction-produits:ro
-      - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking/prix-extraction-siteweb:ro
-      - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking/prix-extraction-message:ro
-      - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking/prix-extraction-devis:ro
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking/prix-extraction-produits
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking/prix-extraction-siteweb
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking/prix-extraction-message
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking/prix-extraction-devis
+      - /mnt/data/docker/images/prix-extraction/prix-caracterisation:/app/tracking/prix-caracterisation
+      - /mnt/data/docker/images/prix-extraction/prix-traitement:/app/tracking/prix-traitement
     networks:
       - services-net
     logging: *logging_defaults
@@ -1886,7 +1928,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking
     deploy:
@@ -1907,7 +1948,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     env_file:
       - .env
     volumes:
@@ -1930,7 +1970,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking
     deploy:
@@ -1951,7 +1990,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
-      MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking
     deploy:
@@ -1975,6 +2013,30 @@ services:
       SERVICE_NAME: prix-traitement
     env_file:
       - .env
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-traitement:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # Caractérisation des prix Milvus (collection `prix`) → table caracterisation_prix_produit_ia (_cppi)
+  # Pipeline indépendant du QC 1-7 (exchange dédié `prix_pipeline_exchange`).
+  prix-caracterisation:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-caracterisation/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
+    env_file:
+      - .env
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-caracterisation:/app/tracking
+    deploy:
+      replicas: 1
     networks:
       - services-net
     logging: *logging_defaults
@@ -2009,8 +2071,9 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8583:8583"
+      - "${MCP_GOOGLE_ANALYTICS_PORT:-8583}:${MCP_GOOGLE_ANALYTICS_PORT:-8583}"
     environment:
+      - MCP_PORT=${MCP_GOOGLE_ANALYTICS_PORT:-8583}
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
       - GOOGLE_PROJECT_ID=${GOOGLE_ANALYTICS_PROJECT_ID}
       # Set to "p12" to use P12 key format instead of JSON
@@ -2020,6 +2083,30 @@ services:
     volumes:
       - ${GOOGLE_ANALYTICS_CREDENTIALS_PATH:-./secrets/gcp-analytics-credentials.json}:/secrets/gcp-credentials.json:ro
       - ${GOOGLE_ANALYTICS_P12_PATH:-./secrets/gcp-analytics-credentials.p12}:/secrets/gcp-credentials.p12:ro
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  mcp-google-analytics-minisite-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-google-analytics-service/Dockerfile
+    container_name: mcp-google-analytics-minisite-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "${MCP_GOOGLE_ANALYTICS_PORT_MINISITE:-8594}:${MCP_GOOGLE_ANALYTICS_PORT_MINISITE:-8594}"
+    environment:
+      - MCP_PORT=${MCP_GOOGLE_ANALYTICS_PORT_MINISITE:-8594}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
+      - GOOGLE_PROJECT_ID=${GOOGLE_ANALYTICS_PROJECT_ID_MINISITE}
+      # Set to "p12" to use P12 key format instead of JSON
+      - GOOGLE_CREDENTIALS_TYPE=${GOOGLE_CREDENTIALS_TYPE_MINISITE:-json}
+      - GOOGLE_SERVICE_ACCOUNT_EMAIL=${GOOGLE_SERVICE_ACCOUNT_EMAIL_MINISITE:-}
+      - GOOGLE_P12_PASSWORD=${GOOGLE_P12_PASSWORD_MINISITE:-notasecret}
+    volumes:
+      - ${GOOGLE_ANALYTICS_CREDENTIALS_PATH_MINISITE:-./secrets/gcp-analytics-credentials.json}:/secrets/gcp-credentials.json:ro
+      - ${GOOGLE_ANALYTICS_P12_PATH_MINISITE:-./secrets/gcp-analytics-credentials.p12}:/secrets/gcp-credentials.p12:ro
     networks:
       - services-net
     logging: *logging_defaults
@@ -2097,6 +2184,27 @@ services:
       - LEEXI_API_KEY_SECRET=${LEEXI_API_KEY_SECRET}
       - LEEXI_API_BASE_URL=${LEEXI_API_BASE_URL:-https://public-api.leexi.ai/v1}
       - MCP_PORT=8589
+      # Shared secret enabling /admin/users + /admin/teams (consumed by mcp-gateway-service)
+      - MCP_LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP Classification Produit Service ──────────────────────────────────
+  mcp-classification-produit-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-classification-produit-service/Dockerfile
+    container_name: mcp-classification-produit-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8593:8593"
+    environment:
+      - MCP_PORT=8593
+      - MCP_SERVICE_NAME=mcp-classification-produit
+      - MCP_SERVICE_VERSION=0.1.0
+      - CLASSIFICATION_API_URL=http://api-classification-lb:80
     networks:
       - services-net
     logging: *logging_defaults
@@ -2142,12 +2250,21 @@ services:
       - JWT_AUDIENCE=${JWT_AUDIENCE}
       - AUTH_URL=${AUTH_URL}
       - SCOPE_TOKEN_REQUIRED=${MCP_SCOPE_TOKEN_REQUIRED}
-      - GATEWAY_PUBLIC_URL=${MCP_GATEWAY_PUBLIC_URL}
+      - GATEWAY_PUBLIC_URL=${GATEWAY_PUBLIC_URL}
       - ALLOW_INTERNAL_URLS=${MCP_ALLOW_INTERNAL_URLS:-true}
       - ADMIN_EMAILS=${MCP_ADMIN_EMAILS}
       - FALLBACK_USER=${MCP_FALLBACK_USER}
       - FALLBACK_PASS=${MCP_FALLBACK_PASS}
       - FALLBACK_EMAIL=${MCP_FALLBACK_EMAIL}
+      # Leexi admin proxy (users/teams listing + ownership filter on tokens)
+      - LEEXI_INTERNAL_URL=${LEEXI_INTERNAL_URL}
+      - LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
+      - ALLOWED_EMAILS=${MCP_ALLOWED_EMAILS}
+      # Google Sheets import (OAuth2)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    volumes:
+      - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:
     #   mysql:
     #     condition: service_healthy

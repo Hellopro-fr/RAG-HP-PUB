@@ -133,8 +133,12 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture the allowed-participants header into the context before detaching
+	// from the HTTP request cancellation (context.WithoutCancel strips it).
+	msgCtx := enrichRequestContext(r)
+
 	go func() {
-		resp := s.handler.Handle(context.WithoutCancel(r.Context()), &req)
+		resp := s.handler.Handle(context.WithoutCancel(msgCtx), &req)
 		if resp == nil {
 			return
 		}

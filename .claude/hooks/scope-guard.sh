@@ -3,15 +3,19 @@
 # Adapted from claude-code-templates/scope-guard for RAG-HP-PUB.
 # Non-blocking: always exits 0, prints warnings to stderr.
 
-# Find the most recently modified spec file (within last 60 min)
 SPEC_FILE=""
-if command -v find >/dev/null 2>&1; then
-    SPEC_FILE=$(find "$CLAUDE_PROJECT_DIR" -maxdepth 3 -name "*.spec.md" -newer "$CLAUDE_PROJECT_DIR/.git/HEAD" 2>/dev/null | head -1)
+if [ -n "$CLAUDE_PROJECT_DIR" ]; then
+    SPEC_FILE=$(git -C "$CLAUDE_PROJECT_DIR" diff --name-only HEAD~5 HEAD 2>/dev/null | grep -E '\.spec\.md$' | head -1)
+    if [ -n "$SPEC_FILE" ]; then
+        SPEC_FILE="$CLAUDE_PROJECT_DIR/$SPEC_FILE"
+    fi
 fi
 
-# Also check superpowers plan files
 if [ -z "$SPEC_FILE" ]; then
-    SPEC_FILE=$(find "$CLAUDE_PROJECT_DIR/docs/superpowers" -maxdepth 2 -name "*.md" -newer "$CLAUDE_PROJECT_DIR/.git/HEAD" 2>/dev/null | head -1)
+    SPEC_FILE=$(git -C "$CLAUDE_PROJECT_DIR" diff --name-only HEAD~5 HEAD 2>/dev/null | grep -E '^docs/superpowers/.*\.md$' | head -1)
+    if [ -n "$SPEC_FILE" ]; then
+        SPEC_FILE="$CLAUDE_PROJECT_DIR/$SPEC_FILE"
+    fi
 fi
 
 if [ -z "$SPEC_FILE" ]; then

@@ -8,12 +8,19 @@ import (
 // CachedClient holds the resolved scope for an OAuth2 client.
 type CachedClient struct {
 	ID           string
+	Name         string                     // human-readable client name; surfaced as serverInfo.name
 	ServerIDs    map[string]bool            // set of allowed server IDs
 	AllowedTools map[string]map[string]bool // server_id -> tool_name -> true; nil = all tools
 	ExpiresAt    *time.Time
 	IsActive     bool
 	TTL          int // access token TTL in seconds
 	FetchedAt    time.Time
+
+	// Leexi participant scope — mirrors scopetoken.CachedToken. See that struct
+	// for the semantics of each mode.
+	LeexiFilterMode       string
+	LeexiAllowedUserUUIDs []string
+	LeexiAllowedTeamUUIDs []string
 }
 
 // Cache provides an in-memory TTL cache for OAuth2 client scope lookups.

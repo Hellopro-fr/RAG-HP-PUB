@@ -46,7 +46,7 @@ def main():
         sys.exit(0)
 
     # Get first line only
-    first_line = message.split('\n')[0].strip()
+    first_line = message.split('\n')[0].strip('\r\n \t')
 
     if re.match(PATTERN, first_line):
         sys.exit(0)

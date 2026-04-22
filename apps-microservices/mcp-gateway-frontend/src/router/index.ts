@@ -6,6 +6,7 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     title?: string
     minRole?: UserRole
+    layout?: 'docs'
   }
 }
 
@@ -25,8 +26,42 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/views/PrivacyPolicyView.vue'),
+      meta: { requiresAuth: false, title: 'Politique de confidentialité' }
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: () => import('@/views/AppHomepageView.vue'),
+      meta: { requiresAuth: false, title: 'MCP Gateway' }
+    },
+    {
+      path: '/docs',
+      name: 'docs',
+      component: () => import('@/views/DocsServersView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: 'Documentation' }
+    },
+    {
+      path: '/docs/:serverSlug',
+      name: 'docs-server',
+      component: () => import('@/views/DocsServerDetailView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: 'Documentation serveur' }
+    },
+    {
       path: '/',
-      redirect: '/tokens'
+      name: 'home',
+      redirect: () => {
+        const authStore = useAuthStore()
+        return authStore.isAdmin ? '/dashboard' : '/tokens'
+      }
+    },
+    {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('@/views/DashboardView.vue'),
+      meta: { requiresAuth: true, title: 'Tableau de bord', minRole: 'admin' }
     },
     {
       path: '/servers/new',
@@ -39,6 +74,12 @@ const router = createRouter({
       name: 'server-edit',
       component: () => import('@/views/ServerFormView.vue'),
       meta: { requiresAuth: true, title: 'Modifier le serveur', minRole: 'admin' }
+    },
+    {
+      path: '/servers/:id/documentation',
+      name: 'server-doc',
+      component: () => import('@/views/ServerDocView.vue'),
+      meta: { requiresAuth: true, title: 'Documentation serveur', minRole: 'admin' }
     },
     {
       path: '/tokens/new',
@@ -71,6 +112,18 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Serveurs MCP', minRole: 'read-only' }
     },
     {
+      path: '/servers/import-google',
+      name: 'google-sheets-import',
+      component: () => import('@/views/GoogleSheetsImportView.vue'),
+      meta: { requiresAuth: true, title: 'Import Google Sheets', minRole: 'admin' }
+    },
+    {
+      path: '/docs-admin',
+      name: 'docs-admin',
+      component: () => import('@/views/DocsAdminView.vue'),
+      meta: { requiresAuth: true, title: 'Documentation', minRole: 'admin' }
+    },
+    {
       path: '/tokens',
       name: 'tokens',
       component: () => import('@/views/TokensView.vue'),
@@ -85,8 +138,50 @@ const router = createRouter({
     {
       path: '/install-guide',
       name: 'install-guide',
-      component: () => import('@/views/InstallGuideView.vue'),
-      meta: { requiresAuth: true, title: "Guide d'installation" }
+      component: () => import('@/views/InstallGuidesListView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: "Guide d'installation" }
+    },
+    {
+      path: '/install-guide/config/:slug',
+      name: 'install-guide-config',
+      component: () => import('@/views/InstallConfigDetailView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: 'Configuration MCP' }
+    },
+    {
+      path: '/install-guide/:slug',
+      name: 'install-guide-detail',
+      component: () => import('@/views/InstallGuideDetailView.vue'),
+      meta: { requiresAuth: false, layout: 'docs', title: "Guide d'installation" }
+    },
+    {
+      path: '/install-guides-admin',
+      name: 'install-guides-admin',
+      component: () => import('@/views/InstallGuidesAdminView.vue'),
+      meta: { requiresAuth: true, title: "Guides d'installation", minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/executors/new',
+      name: 'executor-create',
+      component: () => import('@/views/ExecutorFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvel executeur', minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/executors/:id/edit',
+      name: 'executor-edit',
+      component: () => import('@/views/ExecutorFormView.vue'),
+      meta: { requiresAuth: true, title: 'Modifier executeur', minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/configs/new',
+      name: 'config-create',
+      component: () => import('@/views/ConfigFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle configuration', minRole: 'admin' }
+    },
+    {
+      path: '/install-guides-admin/configs/:id/edit',
+      name: 'config-edit',
+      component: () => import('@/views/ConfigFormView.vue'),
+      meta: { requiresAuth: true, title: 'Modifier configuration', minRole: 'admin' }
     },
     {
       path: '/users',
@@ -99,6 +194,12 @@ const router = createRouter({
       name: 'audit-logs',
       component: () => import('@/views/AuditLogView.vue'),
       meta: { requiresAuth: true, title: "Journal d'audit", minRole: 'admin' }
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+      meta: { requiresAuth: true, title: 'Paramètres', minRole: 'admin' }
     }
   ]
 })

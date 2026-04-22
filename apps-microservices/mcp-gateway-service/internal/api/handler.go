@@ -48,6 +48,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		h.handleDiscoverAll(w, r)
 	})
 
+	apiMux.HandleFunc("/api/v1/servers/generate-slugs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleGenerateSlugs(w, r)
+	})
+
 	apiMux.HandleFunc("/api/v1/tags", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
@@ -116,6 +125,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
 	}
 
+	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
+	//    user/team picker). Always mounted; the handlers themselves return
+	//    503 when LEEXI_INTERNAL_URL / LEEXI_ADMIN_TOKEN are unset.
+	apiMux.HandleFunc("/api/v1/leexi/users", h.handleLeexiUsers)
+	apiMux.HandleFunc("/api/v1/leexi/teams", h.handleLeexiTeams)
+
 	// ── OAuth2 client routes ─────────────────────────────────────────────────
 	if h.oauth2Repo != nil {
 		apiMux.HandleFunc("/api/v1/oauth2/clients", h.handleOAuth2Clients)
@@ -132,6 +147,104 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	if h.auditRepo != nil {
 		apiMux.HandleFunc("/api/v1/audit-logs", h.handleAuditLogs)
 	}
+
+	// ── Install guide admin routes ────────────────────────────────────────────
+	if h.installGuideRepo != nil {
+		apiMux.HandleFunc("/api/v1/install-guides/executors", h.handleExecutors)
+		apiMux.HandleFunc("/api/v1/install-guides/executors/", h.handleExecutorByID)
+		apiMux.HandleFunc("/api/v1/install-guides/configs", h.handleConfigs)
+		apiMux.HandleFunc("/api/v1/install-guides/configs/", h.handleConfigByID)
+	}
+
+	// ── Google Sheets import routes ──────────────────────────────────────────
+	if h.googleTokenRepo != nil {
+		apiMux.HandleFunc("/api/v1/google/auth-url", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleAuthURL(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/callback", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleCallback(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/disconnect", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodDelete {
+				w.Header().Set("Allow", "DELETE")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleDisconnect(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/status", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleGoogleStatus(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/spreadsheets", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleListSpreadsheets(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/sheets/info", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleSheetInfo(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/sheets/preview", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleSheetPreview(w, r)
+		})
+		apiMux.HandleFunc("/api/v1/google/sheets/import", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleSheetImport(w, r)
+		})
+	}
+
+	// ── Server icons routes ──────────────────────────────────────────────────
+	apiMux.HandleFunc("/api/v1/server-icons", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.handleListIcons(w, r)
+		case http.MethodPost:
+			h.handleUploadIcon(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+
+	// ── Documentation image upload ───────────────────────────────────────────
+	apiMux.HandleFunc("/api/v1/doc-images", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleUploadImage(w, r)
+	})
 
 	// Routes avec {id} — on utilise un handler prefix pour capturer le pattern
 	apiMux.HandleFunc("/api/v1/servers/", func(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +312,18 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// OpenAPI spec (hors middleware API pour ne pas nécessiter le préfixe /api/)
 	mux.HandleFunc("/openapi.json", h.handleOpenAPI)
 
+	// Public docs endpoints (no auth, no role check)
+	mux.HandleFunc("/api/v1/public/docs", h.handleListDocServers)
+	mux.HandleFunc("/api/v1/public/docs/", h.handleGetDocServer)
+
+	// Public install guide endpoints (no auth)
+	if h.installGuideRepo != nil {
+		mux.HandleFunc("/api/v1/public/install-guides/executors", h.handlePublicExecutors)
+		mux.HandleFunc("/api/v1/public/install-guides/executors/", h.handlePublicExecutorBySlug)
+		mux.HandleFunc("/api/v1/public/install-guides/configs", h.handlePublicConfigs)
+		mux.HandleFunc("/api/v1/public/install-guides/configs/", h.handlePublicConfigBySlug)
+	}
+
 	// Applique les middlewares et monte sur le mux principal
 	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit, roleCheckMiddleware)
 	mux.Handle("/api/", wrapped)
@@ -236,8 +361,8 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
-	// User and audit management always require admin
-	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") {
+	// User, audit, install guide, and Google management always require admin
+	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") {
 		return true
 	}
 	// Server writes require admin

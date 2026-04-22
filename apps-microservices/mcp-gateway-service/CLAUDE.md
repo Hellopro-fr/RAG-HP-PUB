@@ -130,6 +130,12 @@ Dockerfile                   # Multi-stage build
 - `GET/PUT/DELETE /oauth2/clients/{id}` — Get / update / delete client
 - `POST /oauth2/clients/{id}/revoke` — Revoke client
 
+### Leexi proxy (used by token / OAuth2 client creation forms)
+- `GET /api/v1/leexi/users` — List Leexi workspace users (proxied from mcp-leexi-service `/admin/users`)
+- `GET /api/v1/leexi/teams` — List Leexi teams (derived from the user payload)
+
+Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
+
 ### OAuth2 Authorization Server (public, no admin auth — MCP spec-compliant)
 - `GET /.well-known/oauth-authorization-server` — Server metadata discovery (RFC 8414)
 - `GET/POST /authorize` — Authorization Code flow: login + consent screen
@@ -165,6 +171,8 @@ Dockerfile                   # Multi-stage build
 | `OAUTH2_ACCESS_TOKEN_TTL` | `3600` | Default access token lifetime in seconds (overridable per client) |
 | `OAUTH2_REFRESH_TOKEN_TTL` | `2592000` | Refresh token lifetime in seconds (default 30 days) |
 | `ALLOW_INTERNAL_URLS` | `false` | Set to `true` to allow Docker-internal/private IP ranges (172.x.x.x, 10.x.x.x, etc.) as backend URLs — required when gateway and backends share a Docker network |
+| `LEEXI_INTERNAL_URL` | — | In-cluster URL of mcp-leexi-service (e.g. `http://mcp-leexi-service:8589`). Required for Leexi-scoped tokens. |
+| `LEEXI_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-leexi-service `/admin/*`. Must match `MCP_LEEXI_ADMIN_TOKEN` on the Leexi side. |
 
 ## Database
 
@@ -200,6 +208,7 @@ Connection pooling: max 25 open, 5 idle connections.
 - Graceful shutdown (10s drain) on SIGINT/SIGTERM.
 - Encryption is optional: runs without `ENCRYPTION_KEY`, but auth headers are stored in plaintext.
 - Tools have an `is_active` flag (default `true`). Inactive tools are excluded from token scope selection in the UI. Tool active state is preserved across server rediscovery.
+- Scope tokens and OAuth2 clients carry an optional **Leexi ownership filter** (`LeexiFilterMode` + `LeexiAllowedUserUUIDs` + `LeexiAllowedTeamUUIDs`). When the filter is set and the request targets the Leexi-tagged backend (`ToolPrefix == "leexi"`), the gateway adds `X-Leexi-Allowed-Participants` to the outbound MCP request. mcp-leexi-service then enforces the scope server-side. See `internal/leexiadmin/` for the user/team resolution and cache (5 min TTL).
 - OAuth2 Authorization Server is MCP spec-compliant: OAuth 2.1, RFC 8414 (metadata), RFC 7591 (dynamic registration), PKCE (S256).
 - MCP endpoints return 401 + `WWW-Authenticate` header when no auth is provided, triggering Claude.ai's OAuth2 discovery flow.
 - Unit tests in `internal/authserver/*_test.go`, `internal/oauth2/*_test.go`, `internal/repository/*_test.go`, `internal/db/mysql_test.go`.

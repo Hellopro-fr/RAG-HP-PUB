@@ -66,5 +66,36 @@ export const serversApi = {
 
   listTools(): Promise<unknown[]> {
     return api.get<unknown[]>(`${BASE}/tools`)
+  },
+
+  async listIcons(): Promise<string[]> {
+    const response = await api.get<{ icons: string[] }>(`${BASE}/server-icons`)
+    return response.icons || []
+  },
+
+  async uploadIcon(file: File): Promise<string> {
+    const formData = new FormData()
+    formData.append('icon', file)
+
+    const url = `${BASE}/server-icons`
+    const headers: Record<string, string> = {}
+    const token = localStorage.getItem('auth_token')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => undefined)
+      throw new Error(errorBody?.error || 'Failed to upload icon')
+    }
+
+    const result = await response.json()
+    return result.icon
   }
 }

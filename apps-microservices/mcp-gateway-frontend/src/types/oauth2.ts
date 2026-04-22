@@ -1,4 +1,5 @@
 import type { ServerToolScope } from './token'
+import type { LeexiFilter } from './leexi'
 
 export interface OAuth2Client {
   id: string
@@ -17,6 +18,7 @@ export interface OAuth2Client {
   redirect_uris?: string[]
   grant_types?: string[]
   dynamically_registered: boolean
+  leexi_filter?: LeexiFilter
 }
 
 export interface OAuth2ClientListResponse {
@@ -31,6 +33,7 @@ export interface CreateOAuth2ClientRequest {
   server_tools?: ServerToolScope[]
   access_token_ttl?: number
   expires_at?: string
+  leexi_filter?: LeexiFilter
 }
 
 export interface UpdateOAuth2ClientRequest extends Partial<CreateOAuth2ClientRequest> {}

@@ -17,7 +17,14 @@
     "@primevue/themes": "^4.3.0",
     "primeicons": "^7.0.0",
     "radix-vue": "^1.9.0",
-    "vue-draggable-plus": "^0.6.0"
+    "vue-draggable-plus": "^0.6.0",
+    "@tiptap/vue-3": "^2.11.0",
+    "@tiptap/starter-kit": "^2.11.0",
+    "@tiptap/extension-link": "^2.11.0",
+    "@tiptap/extension-image": "^2.11.0",
+    "@tiptap/extension-underline": "^2.11.0",
+    "@tiptap/extension-text-align": "^2.11.0",
+    "@tiptap/extension-placeholder": "^2.11.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

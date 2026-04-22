@@ -11,12 +11,34 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import jwt from 'jsonwebtoken';
+import { auditMiddleware, readAuditEntries, rotateOldLogs, logAuditEntry } from './src/lib/auditLog.js';
+import { replayCallback } from './src/lib/callbacks.js';
+import {
+  parseWindow as parseCapacityWindow,
+  snapshotCapacity,
+  readCapacityHistory,
+  SNAPSHOT_INTERVAL_MS,
+} from './src/lib/capacityHistory.js';
+import { parseStatsWindow, computeSystemStats } from './src/lib/systemStats.js';
+import { verifyPassword, looksLikeScryptHash } from './src/lib/password.js';
+import {
+  parseReplicaWindow,
+  persistHeartbeat,
+  readReplicaHistory,
+  readAllReplicasHistory,
+} from './src/lib/replicaHistory.js';
+import { persistJobPerf, readJobPerf } from './src/lib/jobPerformance.js';
+import { computeCapacityPlanning } from './src/lib/capacityPlanning.js';
+import { computeTimeline } from './src/lib/timeline.js';
+import { parseDomainWindow, aggregateDomains, jobsForDomain } from './src/lib/domains.js';
+import { evaluateAlerts, DEFAULT_THRESHOLDS } from './src/lib/alerts.js';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
 const CRAWLER_STORAGE_PATH = process.env.CRAWLER_STORAGE_PATH || '/app/storage';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const JWT_SECRET = process.env.JWT_SECRET;
+const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS; // comma-separated, optional
 
 const CRAWL_UPDATES_CHANNEL = 'crawl_updates';
 const CRAWL_JOB_PREFIX = 'crawl_job:';
@@ -26,12 +48,29 @@ const FAILED_CALLBACKS_KEY = 'crawl_jobs:failed_callbacks';
 
 const missingVars = [];
 if (!REDIS_URL) missingVars.push('REDIS_URL');
-if (!ADMIN_PASSWORD) missingVars.push('ADMIN_PASSWORD');
+if (!ADMIN_PASSWORD_HASH) missingVars.push('ADMIN_PASSWORD_HASH');
 if (!JWT_SECRET) missingVars.push('JWT_SECRET');
 
 if (missingVars.length > 0) {
   console.error(`FATAL ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
-  process.exit(1);
+  if (missingVars.includes('ADMIN_PASSWORD_HASH')) {
+    console.error('');
+    console.error('Generate a hash with:');
+    console.error('  node -e "import(\'./src/lib/password.js\').then(m => m.hashPassword(process.argv[1]).then(console.log))" YOUR_PASSWORD');
+    console.error('');
+    console.error('NOTE: legacy ADMIN_PASSWORD (plain text) is no longer accepted — set ADMIN_PASSWORD_HASH instead.');
+  }
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
+}
+
+if (ADMIN_PASSWORD_HASH && !looksLikeScryptHash(ADMIN_PASSWORD_HASH)) {
+  console.error('FATAL ERROR: ADMIN_PASSWORD_HASH does not look like a scrypt$ hash.');
+  console.error('It must be generated with src/lib/password.js hashPassword().');
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
+}
+
+if (process.env.ADMIN_PASSWORD) {
+  console.warn('WARN: legacy ADMIN_PASSWORD env var detected — it is ignored. Remove it from your env.');
 }
 
 // --- Persistent Redis Client ---
@@ -49,17 +88,54 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Trust the first reverse proxy (nginx in front of us). Required so that
+// req.ip / req.ips / X-Forwarded-For are interpreted correctly by
+// express-rate-limit and the audit log. Configurable via TRUST_PROXY env var
+// (number of proxy hops; default 1 for our nginx -> backend setup).
+const TRUST_PROXY_HOPS = parseInt(process.env.TRUST_PROXY || '1', 10);
+app.set('trust proxy', Number.isFinite(TRUST_PROXY_HOPS) ? TRUST_PROXY_HOPS : 1);
+
 // Security Middleware
 app.use(helmet());
+
+// Global rate limit. Tuned for a live dashboard (React Query background
+// refetch every 30s on multiple endpoints + WebSocket-driven invalidations
+// can easily reach ~30 req/min/user). The previous 100 req/15min was too low
+// and caused 429s after a few minutes of normal use.
+//
+// /api/login is explicitly skipped at the user's request (internal tool,
+// shared NAT egress IP). Audit log still records every login attempt.
+//
+// Configurable via env: RATE_LIMIT_MAX (default 600), RATE_LIMIT_WINDOW_MS
+// (default 900000 = 15 min).
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '600', 10);
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/api/login',
 });
 app.use(limiter);
 
-app.use(cors());
+// CORS: allowlist if CORS_ALLOWED_ORIGINS is set, else permissive with a warning.
+// Same-origin requests (no Origin header) and tools like curl/postman are always allowed.
+if (CORS_ALLOWED_ORIGINS) {
+  const allowed = CORS_ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+  console.log(`[cors] allowlist active (${allowed.length} origins)`);
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // server-to-server / curl
+      if (allowed.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+  }));
+} else {
+  console.warn('WARN: CORS_ALLOWED_ORIGINS not set — allowing all origins. Set it for production.');
+  app.use(cors());
+}
 app.use(express.json({ limit: '50mb' })); // Support large JSON payloads for request_urls
 
 // Authentication Middleware
@@ -76,13 +152,28 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Login Endpoint
-app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
+// Login Endpoint — verifies password against scrypt hash in ADMIN_PASSWORD_HASH.
+// (No per-endpoint IP rate-limit: removed at user request because the dashboard
+// is internal and shared NAT IPs were causing self-DoS. The global limiter
+// above still applies in addition to the audit log of every attempt.)
+app.post('/api/login', async (req, res) => {
+  const { password } = req.body || {};
+  if (typeof password !== 'string' || password.length === 0) {
+    await logAuditEntry({ user: 'anonymous', action: 'login_attempt', status: 'error', ip: req.ip, metadata: { reason: 'missing_password' } });
+    return res.status(400).json({ error: 'Password required' });
+  }
+  let ok = false;
+  try {
+    ok = await verifyPassword(password, ADMIN_PASSWORD_HASH);
+  } catch (err) {
+    console.error('Login verification error:', err);
+  }
+  if (ok) {
     const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    await logAuditEntry({ user: 'admin', action: 'login_success', status: 'ok', ip: req.ip });
     res.json({ token });
   } else {
+    await logAuditEntry({ user: 'anonymous', action: 'login_failure', status: 'error', ip: req.ip });
     res.status(401).json({ error: 'Invalid password' });
   }
 });
@@ -192,8 +283,14 @@ app.get('/api/jobs', async (req, res) => {
 
     const jobsData = await client.mGet(jobKeys);
     const jobs = jobsData
-      .map(str => str ? JSON.parse(str) : null)
+      .map(str => {
+        if (!str) return null;
+        try { return JSON.parse(str); } catch { return null; }
+      })
       .filter(Boolean)
+      // Skip malformed entries without a crawl_id — they would surface as
+      // id: undefined on the front and trigger /api/jobs/undefined/details 404s.
+      .filter(job => job && typeof job.crawl_id === 'string' && job.crawl_id.length > 0)
       .map(job => ({
         ...job,
         id: job.crawl_id,
@@ -205,6 +302,155 @@ app.get('/api/jobs', async (req, res) => {
   } catch (error) {
     console.error('Error fetching initial jobs from Redis:', error);
     res.status(500).json({ error: 'Failed to fetch jobs' });
+  }
+});
+
+// Per-job CPU/RAM performance history (from heartbeats). Retained 24h.
+app.get('/api/jobs/:id/performance', async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+    const result = await readJobPerf(client, req.params.id);
+    res.json({ job_id: req.params.id, ...result });
+  } catch (error) {
+    console.error('Error fetching job performance:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch performance' });
+  }
+});
+
+// Replay endpoint: aggregates everything needed for the scrubber/player UI.
+// Returns perf points + job metadata + derived event markers + audit actions.
+// High-CPU threshold (fraction 0..1) for marking "hot" zones, default 0.85.
+const REPLAY_HIGH_CPU = parseFloat(process.env.REPLAY_HIGH_CPU || '0.85');
+app.get('/api/jobs/:id/replay', async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    const client = await ensureRedisConnected();
+
+    // 1. Fetch performance points + summary
+    const perf = await readJobPerf(client, jobId);
+
+    // 2. Fetch job metadata from Redis
+    let jobInfo = null;
+    try {
+      const raw = await client.get(`${CRAWL_JOB_PREFIX}${jobId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        jobInfo = {
+          id: parsed.crawl_id || jobId,
+          domain: parsed.domain,
+          status: parsed.status,
+          start_time: parsed.start_time,
+          crawl_mode: parsed.crawl_mode,
+          oom_restart_count: parsed.oom_restart_count || 0,
+          previous_crawl_id: parsed.previous_crawl_id,
+        };
+      }
+    } catch { /* swallow */ }
+
+    // 3. Build event markers from the points
+    const events = [];
+
+    if (perf.summary) {
+      if (perf.summary.peak_cpu_at) {
+        events.push({
+          ts: perf.summary.peak_cpu_at,
+          kind: 'peak_cpu',
+          label: `Peak CPU ${(perf.summary.peak_cpu * 100).toFixed(1)}%`,
+          severity: perf.summary.peak_cpu > REPLAY_HIGH_CPU ? 'warn' : 'info',
+        });
+      }
+      if (perf.summary.peak_ram_at) {
+        events.push({
+          ts: perf.summary.peak_ram_at,
+          kind: 'peak_ram',
+          label: `Peak RAM ${(perf.summary.peak_ram / 1024 / 1024).toFixed(0)} MB`,
+          severity: 'info',
+        });
+      }
+    }
+
+    // 4. High-CPU zones: contiguous segments where cpu > threshold
+    const hotZones = [];
+    if (perf.points && perf.points.length > 1) {
+      let zoneStart = null;
+      let zoneMaxCpu = 0;
+      for (const p of perf.points) {
+        if ((p.cpu || 0) > REPLAY_HIGH_CPU) {
+          if (zoneStart === null) zoneStart = p.ts;
+          if ((p.cpu || 0) > zoneMaxCpu) zoneMaxCpu = p.cpu;
+        } else if (zoneStart !== null) {
+          hotZones.push({ from: zoneStart, to: p.ts, max_cpu: zoneMaxCpu });
+          zoneStart = null;
+          zoneMaxCpu = 0;
+        }
+      }
+      // Close any open zone at the end of the series
+      if (zoneStart !== null) {
+        hotZones.push({
+          from: zoneStart,
+          to: perf.points[perf.points.length - 1].ts,
+          max_cpu: zoneMaxCpu,
+        });
+      }
+      for (const z of hotZones) {
+        events.push({
+          ts: z.from,
+          kind: 'hot_cpu_zone',
+          label: `CPU > ${(REPLAY_HIGH_CPU * 100).toFixed(0)}% pendant ${Math.max(1, Math.round((z.to - z.from) / 1000))}s (max ${(z.max_cpu * 100).toFixed(0)}%)`,
+          severity: 'warn',
+          duration_ms: z.to - z.from,
+        });
+      }
+    }
+
+    // 5. OOM events (approximate — we only know the final count)
+    if (jobInfo && jobInfo.oom_restart_count > 0 && perf.points && perf.points.length > 0) {
+      events.push({
+        ts: perf.points[0].ts, // anchor at job start (imprecise but safe)
+        kind: 'oom_summary',
+        label: `${jobInfo.oom_restart_count} OOM restart${jobInfo.oom_restart_count > 1 ? 's' : ''} pendant le crawl`,
+        severity: 'critical',
+      });
+    }
+
+    // 6. Audit actions targeting this job (drop, dedupe, clean, repair, queue_file_edit)
+    try {
+      const windowMs = 7 * 24 * 60 * 60 * 1000;
+      const from = perf.points && perf.points.length
+        ? new Date(perf.points[0].ts - 60_000).toISOString()
+        : new Date(Date.now() - windowMs).toISOString();
+      const to = new Date().toISOString();
+      const audit = await readAuditEntries({ from, to, target: jobId, limit: 200 });
+      for (const e of audit.items || []) {
+        events.push({
+          ts: Date.parse(e.ts),
+          kind: 'audit',
+          label: `${e.action} par ${e.user}${e.status === 'error' ? ' (échec)' : ''}`,
+          severity: e.status === 'error' ? 'warn' : 'info',
+          action: e.action,
+          user: e.user,
+        });
+      }
+    } catch (err) {
+      // Audit is best-effort; missing = no annotations
+      console.warn('[replay] audit lookup failed:', err.message);
+    }
+
+    // Sort events chronologically
+    events.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+    res.json({
+      job_id: jobId,
+      job: jobInfo,
+      points: perf.points,
+      summary: perf.summary,
+      events,
+      hot_zones: hotZones,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error building replay:', error);
+    res.status(500).json({ error: error.message || 'Failed to build replay' });
   }
 });
 
@@ -373,107 +619,91 @@ const matchesPattern = (url, pattern) => {
 
 app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 50;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
   const search = (req.query.search || '').toLowerCase();
+  const status = ['all', 'pending', 'handled'].includes(req.query.status) ? req.query.status : 'all';
 
   try {
     const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.json({ items: [], total: 0, page, limit });
+      return res.json({
+        items: [], total: 0, page, limit, totalPages: 0,
+        counts: { total: 0, pending: 0, handled: 0 },
+      });
     }
 
-    let matchingFiles = [];
-
-    if (search) {
-      // Native FS search — no shell exec, no injection risk
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const domainDir = join(baseDir, entry.name);
-          const domainFiles = await readdir(domainDir);
-
-          for (const file of domainFiles) {
-            if (file.endsWith('.json')) {
-              try {
-                const filePath = join(domainDir, file);
-                const content = await readFile(filePath, 'utf-8');
-                if (content.toLowerCase().includes(search)) {
-                  matchingFiles.push({
-                    name: file,
-                    domain: entry.name,
-                    fullPath: filePath,
-                    relativePath: join(entry.name, file)
-                  });
-                }
-              } catch (e) {
-                // Skip unreadable files
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // No search, list all files
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const domainDir = join(baseDir, entry.name);
-          const domainFiles = await readdir(domainDir);
-
-          for (const file of domainFiles) {
-            if (file.endsWith('.json')) {
-              matchingFiles.push({
-                name: file,
-                domain: entry.name,
-                fullPath: join(domainDir, file),
-                relativePath: join(entry.name, file)
-              });
-            }
-          }
+    // Single pass over every file. Produces both the unfiltered counts AND the filtered page.
+    const allFiles = [];
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const domainDir = join(baseDir, entry.name);
+      const domainFiles = await readdir(domainDir);
+      for (const file of domainFiles) {
+        if (!file.endsWith('.json')) continue;
+        const filePath = join(domainDir, file);
+        try {
+          const content = await readFile(filePath, 'utf-8');
+          const data = JSON.parse(content);
+          allFiles.push({
+            name: file,
+            domain: entry.name,
+            path: join(entry.name, file),
+            url: data.url,
+            method: data.method,
+            retryCount: data.retryCount,
+            errorMessages: data.errorMessages,
+            // Crawlee v3 marks a request as handled by setting orderNo to null (pending
+            // requests have a positive number used for FIFO ordering). handledAt IS set
+            // too, but it lives inside the nested `json` string field, not at the top
+            // level — so checking data.handledAt is always undefined here.
+            isHandled: data.orderNo === null,
+            rawContent: content, // for search (matches legacy behavior)
+          });
+        } catch {
+          // Unreadable / malformed — still counted in total but shown as "Error reading file"
+          allFiles.push({
+            name: file,
+            domain: entry.name,
+            path: join(entry.name, file),
+            url: 'Error reading file',
+            method: 'UNKNOWN',
+            isHandled: false,
+            rawContent: '',
+          });
         }
       }
     }
 
-    const total = matchingFiles.length;
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedFiles = matchingFiles.slice(startIndex, endIndex);
+    // Unfiltered counts — drives the UI counts bar.
+    const counts = {
+      total: allFiles.length,
+      pending: allFiles.filter(f => !f.isHandled).length,
+      handled: allFiles.filter(f => f.isHandled).length,
+    };
 
-    // Read content ONLY for the current page
-    const items = await Promise.all(paginatedFiles.map(async (f) => {
-      try {
-        const content = await readFile(f.fullPath, 'utf-8');
-        const data = JSON.parse(content);
-        return {
-          name: f.name,
-          domain: f.domain,
-          path: f.relativePath,
-          url: data.url,
-          method: data.method,
-          retryCount: data.retryCount,
-          errorMessages: data.errorMessages
-        };
-      } catch (err) {
-        console.error(`Error reading queue file ${f.name}:`, err);
-        return {
-          name: f.name,
-          domain: f.domain,
-          path: f.relativePath,
-          url: 'Error reading file',
-          method: 'UNKNOWN'
-        };
-      }
+    // Apply search + status filters for the page set.
+    let matching = allFiles;
+    if (search) matching = matching.filter(f => f.rawContent.toLowerCase().includes(search));
+    if (status === 'pending') matching = matching.filter(f => !f.isHandled);
+    else if (status === 'handled') matching = matching.filter(f => f.isHandled);
+
+    const total = matching.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIdx = (page - 1) * limit;
+    const pageItems = matching.slice(startIdx, startIdx + limit).map(f => ({
+      name: f.name,
+      domain: f.domain,
+      path: f.path,
+      url: f.url,
+      method: f.method,
+      retryCount: f.retryCount,
+      errorMessages: f.errorMessages,
+      isHandled: f.isHandled,  // NEW — used by the frontend row status glyph
     }));
 
-    res.json({
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit)
-    });
-
+    res.json({ items: pageItems, total, page, limit, totalPages, counts });
   } catch (error) {
     console.error(`Error listing request queues for job ${id}:`, error);
     res.status(500).json({ error: 'Failed to list request queues' });
@@ -507,7 +737,9 @@ app.get('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/:domain/:filename',
+  auditMiddleware('queue_file_edit', { captureParams: ['id', 'domain', 'filename'] }),
+  async (req, res) => {
   const { id, domain, filename } = req.params;
   const content = req.body;
 
@@ -532,7 +764,9 @@ app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/repair',
+  auditMiddleware('queue_repair', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
@@ -589,7 +823,9 @@ app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
 });
 
 // Endpoint to DROP the entire request queue (RESET)
-app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/drop',
+  auditMiddleware('queue_drop', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
@@ -690,8 +926,11 @@ app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {
                   }
                 }
 
-                // Check if handled
-                if (data.handledAt) {
+                // Check if handled — Crawlee v3 sets orderNo to null when a request is
+                // marked as handled. handledAt is ALSO set but it lives inside the
+                // nested `json` string field, not at the top level, so data.handledAt
+                // here is always undefined.
+                if (data.orderNo === null) {
                   stats.handled++;
                 } else {
                   stats.pending++;
@@ -772,6 +1011,128 @@ async function findDatasetDir(jobId, datasetName = null) {
   return null;
 }
 
+/**
+ * Discover the three dataset subdirectories (main/error/nfr) for a job.
+ * Returns { mainDir, errorDir, nfrDir, domain } — any dir may be null if absent.
+ * Does NOT require Redis — the domain is recovered from the directory names.
+ */
+async function listDatasetDirs(jobId) {
+  const datasetsRoot = join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'datasets');
+  if (!existsSync(datasetsRoot)) {
+    return { mainDir: null, errorDir: null, nfrDir: null, domain: null };
+  }
+  const entries = await readdir(datasetsRoot, { withFileTypes: true });
+  let mainName = null, errorName = null, nfrName = null;
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('error-')) errorName = e.name;
+    else if (e.name.startsWith('nfr-')) nfrName = e.name;
+    else if (!mainName) mainName = e.name;
+  }
+  const domain = mainName || errorName?.slice('error-'.length) || nfrName?.slice('nfr-'.length) || null;
+  return {
+    mainDir:  mainName  ? join(datasetsRoot, mainName)  : null,
+    errorDir: errorName ? join(datasetsRoot, errorName) : null,
+    nfrDir:   nfrName   ? join(datasetsRoot, nfrName)   : null,
+    domain,
+  };
+}
+
+/** Count valid JSON files in a directory (malformed files excluded). */
+async function countValidJsonFiles(dir) {
+  if (!dir || !existsSync(dir)) return 0;
+  const files = await readdir(dir);
+  let count = 0;
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const content = await readFile(join(dir, f), 'utf-8');
+      JSON.parse(content);
+      count++;
+    } catch {
+      // malformed — skip silently, matches existing scanDataset() behavior
+    }
+  }
+  return count;
+}
+
+app.get('/api/jobs/:id/dataset/counts', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { mainDir, errorDir, nfrDir } = await listDatasetDirs(id);
+    const [success, error, nfr] = await Promise.all([
+      countValidJsonFiles(mainDir),
+      countValidJsonFiles(errorDir),
+      countValidJsonFiles(nfrDir),
+    ]);
+    res.json({ success, error, nfr });
+  } catch (err) {
+    console.error(`Error counting datasets for job ${id}:`, err);
+    res.status(500).json({ error: 'Failed to count datasets' });
+  }
+});
+
+/** Derive a human-readable error string from an error-dataset entry. */
+function deriveErrorMessage(entry) {
+  if (Array.isArray(entry.errorMessages) && entry.errorMessages.length > 0) {
+    return String(entry.errorMessages[0]);
+  }
+  if (entry.statusCode !== undefined) {
+    const text = entry.statusText ? ` ${entry.statusText}` : '';
+    return `HTTP ${entry.statusCode}${text}`;
+  }
+  return 'Unknown error';
+}
+
+app.get('/api/jobs/:id/dataset/urls', async (req, res) => {
+  const { id } = req.params;
+  const category = String(req.query.category || '');
+  if (!['success', 'error', 'nfr'].includes(category)) {
+    return res.status(400).json({ error: 'Invalid category. Must be one of: success, error, nfr' });
+  }
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+  const search = String(req.query.search || '').toLowerCase();
+
+  try {
+    const dirs = await listDatasetDirs(id);
+    const dir = category === 'success' ? dirs.mainDir
+              : category === 'error'   ? dirs.errorDir
+              :                          dirs.nfrDir;
+
+    if (!dir || !existsSync(dir)) {
+      return res.json({ category, total: 0, page, totalPages: 0, items: [] });
+    }
+
+    const filenames = (await readdir(dir)).filter(n => n.endsWith('.json'));
+
+    // Single pass: read every file, skip malformed, apply optional search, then paginate.
+    // Gives an accurate `total` (malformed files excluded) regardless of search.
+    const valid = [];
+    for (const name of filenames) {
+      try {
+        const raw = await readFile(join(dir, name), 'utf-8');
+        const data = JSON.parse(raw);
+        if (!data.url) continue;
+        if (search && !data.url.toLowerCase().includes(search)) continue;
+        valid.push(category === 'error'
+          ? { url: data.url, error: deriveErrorMessage(data) }
+          : { url: data.url });
+      } catch {
+        console.warn(`[dataset/urls] skipped malformed file ${join(dir, name)}`);
+      }
+    }
+    const total = valid.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIdx = (page - 1) * limit;
+    const items = valid.slice(startIdx, startIdx + limit);
+    res.json({ category, total, page, totalPages, items });
+  } catch (err) {
+    console.error(`Error listing dataset URLs for job ${id}:`, err);
+    res.status(500).json({ error: 'Failed to list dataset URLs' });
+  }
+});
+
 app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   const { id } = req.params;
   try {
@@ -850,7 +1211,9 @@ app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
+app.post('/api/jobs/:id/dataset/deduplicate',
+  auditMiddleware('dataset_deduplicate', { captureParams: ['id'] }),
+  async (req, res) => {
   const { id } = req.params;
   try {
     // Get job data to find domain
@@ -933,7 +1296,9 @@ app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/clean-patterns',
+  auditMiddleware('queue_clean_patterns', { captureParams: ['id'] }),
+  async (req, res) => {
 
   const { id } = req.params;
   try {
@@ -1021,6 +1386,155 @@ app.get('/api/capacity', authenticateToken, async (req, res) => {
   }
 });
 
+// Active alerts evaluated NOW from current state (jobs + capacity + replicas + callbacks).
+// Phase 3 thresholds = env vars (see src/lib/alerts.js DEFAULT_THRESHOLDS).
+app.get('/api/alerts', authenticateToken, async (req, res) => {
+  try {
+    const client = await ensureRedisConnected();
+
+    // Gather inputs in parallel
+    const [jobs, capacityRaw, callbacksRaw, replicasHistory] = await Promise.all([
+      loadAllJobs(client),
+      readCapacityHistory(client, 60 * 60 * 1000), // last 1h
+      client.lLen(FAILED_CALLBACKS_KEY).catch(() => 0),
+      readAllReplicasHistory(client, 60 * 60 * 1000),
+    ]);
+
+    // Map replica points to {ts, cpu} only (alerts engine only needs cpu)
+    const replicasForAlerts = {};
+    for (const [id, points] of Object.entries(replicasHistory)) {
+      replicasForAlerts[id] = points.map(p => ({ ts: p.ts, cpu: p.cpu }));
+    }
+
+    const alerts = evaluateAlerts({
+      jobs,
+      capacityPoints: capacityRaw,
+      replicasHistory: replicasForAlerts,
+      failedCallbackCount: callbacksRaw,
+    });
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      thresholds: DEFAULT_THRESHOLDS,
+      count: alerts.length,
+      alerts,
+    });
+  } catch (error) {
+    console.error('Error evaluating alerts:', error);
+    res.status(500).json({ error: error.message || 'Failed to evaluate alerts' });
+  }
+});
+
+// Aggregated list of domains over a window (default 7d).
+app.get('/api/domains', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '7d';
+    const windowMs = parseDomainWindow(windowKey);
+    const client = await ensureRedisConnected();
+    const jobs = await loadAllJobs(client);
+    const domains = aggregateDomains(jobs, Date.now(), windowMs);
+    res.json({ window: windowKey, count: domains.length, domains });
+  } catch (error) {
+    console.error('Error fetching domains:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch domains' });
+  }
+});
+
+// Per-domain detail: jobs in the window + run chain via previous_crawl_id.
+app.get('/api/domains/:domain', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '7d';
+    const windowMs = parseDomainWindow(windowKey);
+    const client = await ensureRedisConnected();
+    const jobs = await loadAllJobs(client);
+    const detail = jobsForDomain(jobs, req.params.domain, windowMs);
+    res.json({
+      domain: req.params.domain,
+      window: windowKey,
+      total_jobs: detail.jobs.length,
+      jobs: detail.jobs,
+      chain: detail.chain,
+    });
+  } catch (error) {
+    console.error('Error fetching domain detail:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch domain detail' });
+  }
+});
+
+// Stacked timeline of jobs by start_time bucket. Used by Overview to plot
+// success/failure/running per minute (or coarser) on a sliding window.
+// Accepts either ?window=1h|6h|24h|7d OR ?from=ISO&to=ISO for a custom range.
+// Custom range gets auto-granularity (1min–6h depending on span width).
+app.get('/api/timeline', authenticateToken, async (req, res) => {
+  try {
+    const { window: windowKey, from, to } = req.query;
+    const client = await ensureRedisConnected();
+    const result = await computeTimeline(client, windowKey || '6h', {
+      loadJobs: loadAllJobs,
+      from: from || undefined,
+      to: to || undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error computing timeline:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute timeline' });
+  }
+});
+
+// Per-replica CPU/RAM history (single replica or batch for all known)
+// Capacity planning: aggregate RAM usage per replica to help operators
+// decide whether to downsize allocation / run more replicas / etc.
+app.get('/api/capacity-planning/ram', authenticateToken, async (req, res) => {
+  try {
+    const windowKey = req.query.window || '1h';
+    const client = await ensureRedisConnected();
+    const result = await computeCapacityPlanning(client, windowKey);
+    res.json(result);
+  } catch (error) {
+    console.error('Error computing capacity planning:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute capacity planning' });
+  }
+});
+
+app.get('/api/replicas/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseReplicaWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const data = await readAllReplicasHistory(client, windowMs);
+    res.json({ window: windowStr, replicas: data });
+  } catch (error) {
+    console.error('Error fetching all replicas history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch replica history' });
+  }
+});
+
+app.get('/api/replicas/:replicaId/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseReplicaWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const points = await readReplicaHistory(client, req.params.replicaId, windowMs);
+    res.json({ replicaId: req.params.replicaId, window: windowStr, count: points.length, points });
+  } catch (error) {
+    console.error('Error fetching replica history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch replica history' });
+  }
+});
+
+app.get('/api/capacity/history', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '1h';
+    const windowMs = parseCapacityWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const points = await readCapacityHistory(client, windowMs);
+    res.json({ window: windowStr, count: points.length, points });
+  } catch (error) {
+    console.error('Error fetching capacity history:', error);
+    res.status(400).json({ error: error.message || 'Failed to fetch capacity history' });
+  }
+});
+
 app.get('/api/callbacks', authenticateToken, async (req, res) => {
   try {
     const client = await ensureRedisConnected();
@@ -1033,6 +1547,185 @@ app.get('/api/callbacks', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching pending callbacks:', error);
     res.status(500).json({ error: 'Failed to fetch callbacks' });
+  }
+});
+
+// Replay a single failed callback by index (HTTP GET to its url + params).
+// On success, LREM the entry. On failure, increment manual_retry_attempts.
+app.post('/api/callbacks/:index/retry', authenticateToken,
+  auditMiddleware('callback_retry', { captureParams: ['index'] }),
+  async (req, res) => {
+    const index = parseInt(req.params.index, 10);
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).json({ error: 'Invalid index' });
+    }
+    try {
+      const client = await ensureRedisConnected();
+      const original = await client.lIndex(FAILED_CALLBACKS_KEY, index);
+      if (original === null) return res.status(404).json({ error: 'Entry not found' });
+
+      let entry;
+      try { entry = JSON.parse(original); }
+      catch { return res.status(400).json({ error: 'Stored entry is not valid JSON' }); }
+
+      const result = await replayCallback(entry);
+
+      if (result.ok) {
+        // Remove first occurrence matching the original payload
+        const removed = await client.lRem(FAILED_CALLBACKS_KEY, 1, original);
+        return res.json({
+          success: true,
+          status: result.status,
+          error: null,
+          removed: removed > 0,
+          manual_retry_attempts: (entry.manual_retry_attempts || 0) + 1,
+        });
+      } else {
+        // Persist the failure attempt back at the same index
+        const updated = {
+          ...entry,
+          manual_retry_attempts: (entry.manual_retry_attempts || 0) + 1,
+          last_manual_retry_error: result.error,
+          last_manual_retry_at: new Date().toISOString(),
+        };
+        await client.lSet(FAILED_CALLBACKS_KEY, index, JSON.stringify(updated));
+        return res.status(502).json({
+          success: false,
+          status: result.status,
+          error: result.error,
+          manual_retry_attempts: updated.manual_retry_attempts,
+        });
+      }
+    } catch (error) {
+      console.error('Error retrying callback:', error);
+      res.status(500).json({ error: 'Failed to retry callback' });
+    }
+  }
+);
+
+// Delete a single failed callback entry by index.
+app.delete('/api/callbacks/:index', authenticateToken,
+  auditMiddleware('callback_delete', { captureParams: ['index'] }),
+  async (req, res) => {
+    const index = parseInt(req.params.index, 10);
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).json({ error: 'Invalid index' });
+    }
+    try {
+      const client = await ensureRedisConnected();
+      const original = await client.lIndex(FAILED_CALLBACKS_KEY, index);
+      if (original === null) return res.status(404).json({ error: 'Entry not found' });
+      const removed = await client.lRem(FAILED_CALLBACKS_KEY, 1, original);
+      res.json({ deleted: removed > 0 });
+    } catch (error) {
+      console.error('Error deleting callback:', error);
+      res.status(500).json({ error: 'Failed to delete callback' });
+    }
+  }
+);
+
+// Clear the entire failed-callbacks list.
+app.post('/api/callbacks/clear', authenticateToken,
+  auditMiddleware('callback_clear_all'),
+  async (req, res) => {
+    try {
+      const client = await ensureRedisConnected();
+      const cleared = await client.lLen(FAILED_CALLBACKS_KEY);
+      await client.del(FAILED_CALLBACKS_KEY);
+      res.json({ cleared });
+    } catch (error) {
+      console.error('Error clearing callbacks:', error);
+      res.status(500).json({ error: 'Failed to clear callbacks' });
+    }
+  }
+);
+
+// Helper used by /api/system/stats: load all jobs in the same shape /api/jobs returns.
+async function loadAllJobs(client) {
+  const jobKeys = await client.keys(`${CRAWL_JOB_PREFIX}*`);
+  if (jobKeys.length === 0) return [];
+  const raw = await client.mGet(jobKeys);
+  return raw
+    .map(s => { try { return s ? JSON.parse(s) : null; } catch { return null; } })
+    .filter(Boolean)
+    // Skip malformed entries without a crawl_id (same hardening as /api/jobs).
+    // Also expose .id for downstream aggregators that read job.id.
+    .filter(job => job && typeof job.crawl_id === 'string' && job.crawl_id.length > 0)
+    .map(job => ({ ...job, id: job.crawl_id }));
+}
+
+// Aggregated stats over a time window (1h | 24h | 7d). Used by the dashboard
+// for KPI cards and tendances.
+app.get('/api/system/stats', authenticateToken, async (req, res) => {
+  try {
+    const windowStr = req.query.window || '24h';
+    const windowMs = parseStatsWindow(windowStr);
+    const client = await ensureRedisConnected();
+    const stats = await computeSystemStats(client, windowMs, { loadJobs: loadAllJobs });
+    res.json({ window: windowStr, ...stats, generated_at: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error computing system stats:', error);
+    res.status(400).json({ error: error.message || 'Failed to compute stats' });
+  }
+});
+
+// System health detail (authenticated) — for dashboard "system" view.
+// Note: /health (below) remains unauthenticated for k8s/LB probes.
+app.get('/api/system/health', authenticateToken, async (req, res) => {
+  const startedAt = Date.now();
+  const checks = {};
+
+  // Redis ping (with a small timeout via Promise.race)
+  try {
+    const client = await ensureRedisConnected();
+    const pingPromise = client.ping();
+    const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1500));
+    await Promise.race([pingPromise, timeoutPromise]);
+    checks.redis = { status: 'ok' };
+  } catch (err) {
+    checks.redis = { status: 'down', error: err.message };
+  }
+
+  // Storage path readability
+  try {
+    const st = await stat(CRAWLER_STORAGE_PATH);
+    checks.storage = { status: st.isDirectory() ? 'ok' : 'down', path: CRAWLER_STORAGE_PATH };
+  } catch (err) {
+    checks.storage = { status: 'down', path: CRAWLER_STORAGE_PATH, error: err.message };
+  }
+
+  // WebSocket clients count
+  checks.ws_clients = clients.size;
+
+  // Process info
+  const overall = checks.redis.status === 'ok' && checks.storage.status === 'ok' ? 'ok' : 'degraded';
+  res.json({
+    status: overall,
+    checks,
+    process: {
+      uptime_seconds: Math.floor(process.uptime()),
+      node_version: process.version,
+      pid: process.pid,
+    },
+    response_time_ms: Date.now() - startedAt,
+  });
+});
+
+app.get('/api/audit', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, action, user, limit, offset } = req.query;
+    const result = await readAuditEntries({
+      from: from || undefined,
+      to: to || undefined,
+      action: action || undefined,
+      user: user || undefined,
+      limit: limit !== undefined ? Number(limit) : undefined,
+      offset: offset !== undefined ? Number(offset) : undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error reading audit log:', error);
+    res.status(400).json({ error: error.message || 'Failed to read audit log' });
   }
 });
 
@@ -1054,10 +1747,19 @@ async function setupRedisListener() {
       }
     });
 
-    await subscriber.subscribe('crawler:heartbeat', (message) => {
+    await subscriber.subscribe('crawler:heartbeat', async (message) => {
       try {
         const heartbeat = JSON.parse(message);
         broadcast({ type: 'replica_heartbeat', data: heartbeat });
+        // Persist into per-replica AND per-job time series.
+        // Uses the persistent client (not the subscriber) since SUBSCRIBE clients
+        // cannot run other commands. Fire-and-forget — never blocks broadcast.
+        ensureRedisConnected()
+          .then(c => Promise.all([
+            persistHeartbeat(c, heartbeat),
+            persistJobPerf(c, heartbeat),
+          ]))
+          .catch(err => console.error('[heartbeatPersist] error:', err.message));
       } catch (e) {
         console.error('Failed to parse heartbeat:', e);
       }
@@ -1068,15 +1770,39 @@ async function setupRedisListener() {
   }
 }
 
-ensureRedisConnected()
-  .then(() => {
-    console.log('Connected to Redis (persistent client).');
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`Crawler Monitor Backend running on port ${PORT}`);
-      setupRedisListener();
-    });
-  })
-  .catch(err => {
-    console.error('Failed to connect to Redis:', err);
+async function start() {
+  await ensureRedisConnected();
+  console.log('Connected to Redis (persistent client).');
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Crawler Monitor Backend running on port ${PORT}`);
+    setupRedisListener();
+    // Audit log: prune old files at boot, then once a day
+    rotateOldLogs().then(r => {
+      if (r.deleted) console.log(`[audit] pruned ${r.deleted} old log files`);
+    }).catch(err => console.error('[audit] initial rotation failed:', err.message));
+    setInterval(() => {
+      rotateOldLogs().catch(err => console.error('[audit] rotation failed:', err.message));
+    }, 24 * 60 * 60 * 1000);
+
+    // Capacity history snapshot: every 60s into Redis sorted set (capped at 24h)
+    const takeCapacitySnapshot = async () => {
+      try {
+        const client = await ensureRedisConnected();
+        await snapshotCapacity(client, CRAWL_RUNNING_COUNT_KEY, CRAWL_MAX_GLOBAL_KEY);
+      } catch (err) {
+        console.error('[capacity] snapshot failed:', err.message);
+      }
+    };
+    takeCapacitySnapshot();
+    setInterval(takeCapacitySnapshot, SNAPSHOT_INTERVAL_MS);
+  });
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  start().catch(err => {
+    console.error('Failed to start server:', err);
     process.exit(1);
   });
+}
+
+export { app };

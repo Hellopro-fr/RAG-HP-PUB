@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -41,9 +42,14 @@ func requestLogger(next http.Handler) http.Handler {
 const maxRequestBodySize = 1 << 20
 
 // bodyLimit restricts request body size to prevent OOM from oversized payloads.
+// Multipart form uploads (icons, doc images) are skipped — those handlers enforce
+// their own per-endpoint size limits (currently 2 MB and 5 MB respectively).
 func bodyLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+		ct := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "multipart/form-data") {
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+		}
 		next.ServeHTTP(w, r)
 	})
 }

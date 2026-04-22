@@ -8,10 +8,10 @@ class Settings(BaseSettings):
 
     # RabbitMQ
     RABBITMQ_URL: str = "amqp://user:password@localhost:5672/"
-    MAX_CONCURRENCY: int = 10  # Nombre de messages traités en parallèle
+    MAX_CONCURRENCY: int = 2  # Nombre de messages traités en parallèle
 
     # LLM Provider selection - "gemini" ou "deepseek"
-    LLM_PROVIDER: str = "gemini"
+    LLM_PROVIDER: str = "deepseek"
 
     # LLM - Gemini
     GEMINI_API_KEY: str
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
 
     # Prompt statique - Produits
-    PROMPT_ID: str = "141"
+    PROMPT_ID: str = "124"
 
     # API HelloPro
     HP_TOKEN: str

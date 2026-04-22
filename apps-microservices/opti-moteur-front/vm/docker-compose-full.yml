@@ -1,0 +1,16 @@
+services:
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: typesense-full
+    ports:
+      - "8108:8108"
+    volumes:
+      - ./typesense-data-full:/data
+    command: >-
+      --data-dir /data
+      --api-key=hp_poc_2026
+      --enable-cors
+    restart: unless-stopped
+    mem_limit: 32g           # cap dur : Typesense ne mangera jamais plus
+    mem_reservation: 24g     # reserve 24 GB pour eviter la contention
+    cpus: 8                   # cap 8 cores (pour ne pas priver les autres services)

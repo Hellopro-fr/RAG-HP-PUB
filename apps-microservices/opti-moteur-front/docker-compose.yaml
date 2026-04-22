@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  opti-moteur-front:
+    build:
+      context: ../..
+      dockerfile: apps-microservices/opti-moteur-front/Dockerfile
+    container_name: opti-moteur-front
+    ports:
+      - "8570:8570"
+    env_file:
+      - .env
+    depends_on:
+      - typesense
+    restart: unless-stopped
+
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: typesense-opti-moteur
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense-data:/data
+    command: >-
+      --data-dir /data
+      --api-key=${TYPESENSE_API_KEY:-hp_poc_2026}
+      --enable-cors
+    restart: unless-stopped
+    # Prod: limiter la RAM via mem_limit
+    # mem_limit: 32g
+
+volumes:
+  typesense-data:

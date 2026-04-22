@@ -30,6 +30,14 @@
         >
           Importer .mcp.json
         </button>
+        <router-link
+          v-if="authStore.isAdmin"
+          to="/servers/import-google"
+          class="px-4 py-2 text-sm font-medium text-green-600 border border-green-300 rounded-md hover:bg-green-50 dark:text-green-400 dark:border-green-600 dark:hover:bg-green-900/20"
+        >
+          <i class="pi pi-file-excel mr-1" />
+          Google Sheets
+        </router-link>
         <button
           v-if="authStore.isAdmin"
           class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
@@ -64,6 +72,7 @@
           @delete="handleDelete"
           @details="handleDetails"
           @discover="handleDiscover"
+          @documentation="handleDocumentation"
         />
       </div>
 
@@ -89,6 +98,7 @@
       @close="showImportModal = false"
       @imported="loadServers"
     />
+
 
     <ConfirmDialog
       :open="!!deletingServerId"
@@ -179,6 +189,10 @@ function handleEdit(server: Server) {
   router.push('/servers/' + server.id + '/edit')
 }
 
+function handleDocumentation(id: string) {
+  router.push('/servers/' + id + '/documentation')
+}
+
 function handleDelete(id: string) {
   deletingServerId.value = id
 }
@@ -209,4 +223,5 @@ async function handleDiscoverAll() {
     discoveringAll.value = false
   }
 }
+
 </script>

@@ -42,17 +42,19 @@ func RegisterHandlers(mux *http.ServeMux, cfg Config, userRepo *repository.UserR
 }
 
 func handleLoginPage(w http.ResponseWriter, r *http.Request, cfg Config) {
-	// If already authenticated, redirect to UI
+	// If already authenticated, redirect to the SPA dashboard
 	if session, err := GetSession(r, cfg.JWTSecret); err == nil {
 		if _, err := ValidateJWT(session.Token, cfg.JWTSecret, cfg.JWTAudience); err == nil {
-			http.Redirect(w, r, "/ui/", http.StatusSeeOther)
+			http.Redirect(w, r, "/tokens", http.StatusSeeOther)
 			return
 		}
 	}
 
-	errorMsg := r.URL.Query().Get("error")
-	username := r.URL.Query().Get("username")
-	renderLoginPage(w, errorMsg, username)
+	// In production, nginx serves the Vue SPA for GET /login.
+	// This handler is only reached when accessing the Go backend directly (dev mode).
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message":"Login page is served by the Vue SPA frontend"}`))
 }
 
 func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userRepo *repository.UserRepo) {
@@ -133,6 +135,33 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 		return
 	}
 
+	// Upsert user record BEFORE access check so the user exists in DB even if not allowed.
+	// This lets admins see and authorize users from the UI.
+	role := RoleConfigOnly
+	isAllowed := true // default: allowed when no userRepo (DB disabled)
+	if userRepo != nil {
+		user, upsertErr := userRepo.UpsertOnLogin(authResp.Email, authResp.DisplayName)
+		if upsertErr != nil {
+			log.Printf("[auth] failed to upsert user on login for %s: %v", authResp.Email, upsertErr)
+		} else if user != nil {
+			role = user.Role
+			isAllowed = user.IsAllowed
+		}
+	}
+
+	// Check if user is allowed to access the UI (from DB is_allowed field)
+	if !isAllowed {
+		log.Printf("[auth] user %s (%s) is not allowed (is_allowed=false)", authResp.DisplayName, authResp.Email)
+		if isJSON {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"Accès non autorisé. Votre compte n'est pas dans la liste des utilisateurs autorisés. Contactez un administrateur."}`))
+		} else {
+			http.Redirect(w, r, "/login?error="+url.QueryEscape("Accès non autorisé. Contactez un administrateur.")+"&username="+url.QueryEscape(username), http.StatusSeeOther)
+		}
+		return
+	}
+
 	// Generate our own JWT for the session (or use the one from hellopro)
 	token := authResp.Token
 	if token == "" {
@@ -169,17 +198,6 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 	}
 
 	log.Printf("[auth] user %s (%s) logged in", authResp.DisplayName, authResp.Email)
-
-	// Upsert user record and retrieve role for the login response.
-	role := RoleConfigOnly
-	if userRepo != nil {
-		user, upsertErr := userRepo.UpsertOnLogin(authResp.Email, authResp.DisplayName)
-		if upsertErr != nil {
-			log.Printf("[auth] failed to upsert user on login for %s: %v", authResp.Email, upsertErr)
-		} else if user != nil {
-			role = user.Role
-		}
-	}
 
 	if isJSON {
 		w.Header().Set("Content-Type", "application/json")
@@ -241,113 +259,3 @@ func AuthenticateHellopro(authURL, username, password string) (*HelloProAuthResp
 	return &authResp, nil
 }
 
-func renderLoginPage(w http.ResponseWriter, errorMsg, username string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; default-src 'self' https://cdn.tailwindcss.com; script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
-
-	errorHTML := ""
-	if errorMsg != "" {
-		errorHTML = fmt.Sprintf(`<p class="text-red-500 font-bold text-sm text-center">%s</p>`, escapeHTML(errorMsg))
-	}
-
-	usernameVal := ""
-	if username != "" {
-		usernameVal = fmt.Sprintf(` value="%s"`, escapeHTML(username))
-	}
-
-	html := `<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="noindex">
-    <title>Authentification - MCP Server Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = { theme: { extend: { colors: {
-        brand: { 50:'#f0f7ff', 100:'#e0effe', 200:'#bae0fd', 300:'#7ccbfc', 400:'#36b2f8', 500:'#0c96e9', 600:'#0078c7', 700:'#005fa1', 800:'#035185', 900:'#07446e' }
-      }}}}
-    </script>
-    <style>
-        .auth-bg { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%); }
-        .input-field:focus { border-color: #0c96e9; box-shadow: 0 0 0 3px rgba(12, 150, 233, 0.2); }
-        .btn-primary { background: linear-gradient(to right, #005fa1, #0078c7); transition: all 0.3s ease; }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -10px rgba(0, 120, 199, 0.6); }
-    </style>
-</head>
-<body class="min-h-screen bg-gray-50">
-    <div class="flex min-h-screen items-center justify-center p-4">
-        <div class="auth-bg w-full max-w-md rounded-xl bg-white p-8 shadow-xl">
-            <div class="mb-8 text-center">
-                <div class="mx-auto w-12 h-12 rounded-xl bg-brand-600 flex items-center justify-center mb-4">
-                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
-                </div>
-                <h1 class="text-2xl font-bold text-gray-800">MCP Server Manager</h1>
-                <p class="mt-2 text-gray-500">Connectez-vous a votre compte</p>
-            </div>
-
-            <form class="space-y-5" method="post" action="/login" id="loginForm">
-                ` + errorHTML + `
-                <div>
-                    <label for="username" class="block text-sm font-medium text-gray-700">Nom d'utilisateur <span class="text-red-600">*</span></label>
-                    <div class="mt-1 relative">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                        </div>
-                        <input id="username" name="username" type="text" required
-                            class="input-field block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none text-sm"
-                            placeholder="Votre nom d'utilisateur"` + usernameVal + `>
-                    </div>
-                </div>
-
-                <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700">Mot de passe <span class="text-red-600">*</span></label>
-                    <div class="mt-1 relative">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                        </div>
-                        <input id="password" name="password" type="password" required
-                            class="input-field block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none text-sm"
-                            placeholder="Votre mot de passe">
-                    </div>
-                </div>
-
-                <button type="submit" id="submitBtn"
-                    class="btn-primary w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500">
-                    <span id="btnText">Se connecter</span>
-                    <svg id="spinner" class="ml-2 hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
-                </button>
-            </form>
-        </div>
-    </div>
-    <script>
-        document.querySelectorAll('input').forEach(el => el.addEventListener('focus', () => {
-            const err = document.querySelector('.text-red-500');
-            if (err) err.classList.add('hidden');
-        }));
-        document.getElementById('loginForm').addEventListener('submit', function() {
-            document.getElementById('btnText').textContent = 'Connexion...';
-            document.getElementById('spinner').classList.remove('hidden');
-            document.getElementById('submitBtn').disabled = true;
-        });
-    </script>
-</body>
-</html>`
-
-	w.Write([]byte(html))
-}
-
-func escapeHTML(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&#39;")
-	return s
-}

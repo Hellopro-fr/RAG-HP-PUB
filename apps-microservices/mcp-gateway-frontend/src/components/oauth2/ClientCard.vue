@@ -28,6 +28,13 @@
           >
             {{ client.dynamically_registered ? 'Dynamic' : 'Manuel' }}
           </span>
+          <span
+            v-if="leexiBadge"
+            class="text-xs px-2 py-0.5 rounded-full font-medium shrink-0 bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400"
+            :title="`Filtre Leexi : ${leexiBadge}`"
+          >
+            <i class="pi pi-filter text-[10px] mr-1" />Leexi: {{ leexiBadge }}
+          </span>
         </div>
 
         <!-- Action buttons -->
@@ -167,6 +174,23 @@ const clipboard = useClipboard()
 const serversStore = useServersStore()
 
 const gatewayMcpUrl = computed(() => window.location.origin + '/mcp')
+
+// One-line summary of the per-client Leexi filter shown next to the status
+// chips at the top of the card. null = no filter (default).
+const leexiBadge = computed<string | null>(() => {
+  const f = props.client.leexi_filter
+  if (!f || f.mode === 'none') return null
+  switch (f.mode) {
+    case 'users':
+      return `${(f.user_uuids || []).length} user(s)`
+    case 'teams':
+      return `${(f.team_uuids || []).length} team(s)`
+    case 'creator':
+      return 'creator only'
+    default:
+      return null
+  }
+})
 
 const maskedClientId = computed(() => {
   const id = props.client.id || ''

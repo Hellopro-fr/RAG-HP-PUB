@@ -117,7 +117,7 @@ async function handleLogin() {
   errorMessage.value = ''
   try {
     await authStore.login(username.value, password.value)
-    const redirect = (route.query.redirect as string) || '/servers'
+    const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : 'Erreur de connexion'

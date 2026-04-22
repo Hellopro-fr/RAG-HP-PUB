@@ -488,10 +488,7 @@ export const startCrawler = async (
                 launcher: firefox,
                 launchOptions: {
                     ...camoufoxOpts,
-                    args: [
-                        ...(camoufoxOpts.args || []),
-                        '--ignore-certificate-errors',
-                    ],
+                    ignoreHTTPSErrors: true,
                 },
             },
         } : {}),
@@ -518,6 +515,7 @@ export const startCrawler = async (
             preLaunchHooks: [
                 (_pageId, launchContext) => {
                     launchContext.launchOptions ??= {};
+                    (launchContext.launchOptions as any).ignoreHTTPSErrors = true;
                     launchContext.launchOptions.args ??= [];
                     launchContext.launchOptions.args.push('--ignore-certificate-errors');
                 },

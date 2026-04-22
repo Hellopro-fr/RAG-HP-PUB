@@ -102,6 +102,39 @@ Prevents crawling duplicate French regional variants (e.g., `/fr-BE/`, `/fr-CA/`
 
 The GCS fallback (step 2) handles legacy crawls stuck at `finished` due to a previous bug where `_mark_as_archived` was never called.
 
+### Tmp file isolation via `.staging/`
+
+Archives are first written to `/app/archives/.staging/{crawl_id}.tar.gz` and only moved to `/app/archives/{crawl_id}.tar.gz` after size and integrity checks pass. The upload daemon (`tools/upload_daemon.sh`) uses `find -maxdepth 1`, which ignores subdirectories — so it only sees completed archives.
+
+**Do not change the daemon to scan subdirectories** without also updating the tmp file location in `_create_archive`. Otherwise the daemon will race the tmp file and cause `FileNotFoundError` during archiving.
+
+### Pre-flight disk space check
+
+Before creating a new archive, `archive_crawl` measures the source directory (`os.walk` + `size * 1.5` for gzip + safety margin, floored at 1 GB) and checks free space on `/app/archives/` via `shutil.disk_usage`. If free space is less than required, it responds with **503** carrying this body:
+
+```json
+{
+  "detail": {
+    "error_code": "INSUFFICIENT_DISK_SPACE",
+    "required_bytes": 524288000,
+    "available_bytes": 104857600,
+    "disk_state": {
+      "free_bytes": 104857600,
+      "total_bytes": 21474836480,
+      "used_pct": 99.51,
+      "file_count": 47,
+      "oldest_file_age_seconds": 7200
+    }
+  }
+}
+```
+
+**Fail-open policy:** if the measurement helpers themselves raise (permissions, filesystem error), the check is skipped and archive creation proceeds. Broken measurement must never block archiving; the staging-dir `finally` block still cleans up partial files on disk-full.
+
+Every archive attempt also logs a baseline disk state (`info`) and, on failure, a second disk state (`error`) so operational logs show the buffer pressure at both checkpoints.
+
+Spec: `docs/superpowers/specs/2026-04-18-archive-disk-space-preflight-design.md`.
+
 ## robots.txt Blanket Block Bypass
 
 At startup, after fetching robots.txt, the crawler checks if the site has a blanket block (`Disallow: *` or `Disallow: /`) using a multi-path probe (`isBlanketBlock` in `robotsTxtGuard.ts`). Three diverse URLs are tested against `isAllowed()` — if all are blocked, `robots` is set to `undefined`, disabling all robots.txt filtering for the crawl.
@@ -122,6 +155,40 @@ The crawler uses **Camoufox** (stealth Firefox with C++ anti-detection patches) 
 - Dependency: `camoufox-js` — browser binary baked into Docker image at build time
 - **Dockerfile requirement:** The Camoufox binary is fetched in Stage 1 (builder) via `npx camoufox-js fetch` and must be explicitly copied to Stage 2: `COPY --from=builder /root/.cache/camoufox /root/.cache/camoufox`
 
+## Reconciliation Leader Election
+
+`reconcile_jobs` runs on every replica's monitoring loop. To prevent multiple replicas from detecting the same stale job simultaneously (and each firing a duplicate failure webhook), only one replica runs the full scan at a time.
+
+- **Lock key:** `reconcile_leader_lock` (Redis `SET NX`)
+- **Lock TTL:** `RECONCILIATION_INTERVAL_SECONDS * 2` — safety margin for slow scans; auto-recovers if leader dies
+- **Ownership-safe release:** the `finally` block only deletes the lock if the current Redis value equals this replica's `replica_id` — prevents a slow leader from clobbering a new leader's lock after TTL expiry
+- **Architecture:** public `reconcile_jobs` is a thin wrapper around the lock; the actual scanning logic lives in `_reconcile_locked`
+
+Complementary protections in the same fix:
+- `start_crawl` writes `last_heartbeat=now()` in the initial `job_data` to close the 60-second blind window between start and the first monitor-loop heartbeat tick.
+- The stale-detection local override trusts `self.local_processes` (not `replica_id` in Redis) as the authoritative source of process ownership. A replica never kills a PID it owns, regardless of what Redis reports.
+
+Spec: `docs/superpowers/specs/2026-04-18-reconciliation-leader-election-design.md`.
+
+## Failure Webhook Idempotency
+
+Failure webhooks include a `request_id` UUID generated once per crawl failure and persisted in `job_data["failure_webhook_request_id"]`. PHP dedupes by this UUID so duplicate deliveries (common during shutdown + reconciliation replay) process at most once.
+
+**Client-side (this service):**
+- `_get_or_create_failure_request_id(job_info)` returns an existing UUID if present, else generates and persists one.
+- The UUID is threaded through all 6 failure-webhook callsites: OOM max-restarts, OOM relaunch failure, monitor exit, force-finish, shutdown, reconciliation stale detection.
+- Shutdown path uses a bounded `_send_webhook_once` (5-second timeout, no retries) via `shutdown=True`. If delivery fails, the persisted UUID lets reconciliation replay with the same identifier.
+- Docker `stop_grace_period: 30s` gives the shutdown path enough headroom.
+
+**PHP-side contract (`script_process_detect_fiche_produit.php`):**
+- Read the `request_id` query parameter.
+- Look up in a dedup store (Redis/MySQL/APC), TTL ≥ 24h.
+- If found: return `HTTP 200` with no side effects.
+- If not found: store, then process normally.
+- If `request_id` is absent (legacy calls): process normally (backward compatible).
+
+Spec: `docs/superpowers/specs/2026-04-18-webhook-idempotency-design.md`.
+
 ## Exit Codes (Node.js → Python)
 
 | Code | Meaning | Python Behavior |
@@ -131,6 +198,29 @@ The crawler uses **Camoufox** (stealth Firefox with C++ anti-detection patches) 
 | 3 | OOM relaunch | Status: `restarting_oom`, auto-relaunch (up to `MAX_OOM_RESTARTS`) |
 | 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
 | Other | Failure | Status: `failed`, failure webhook |
+
+## Capacity Counter Invariants
+
+The global capacity counter (Redis key `crawl_jobs:running_count`) is authoritative for capacity gating. Every state transition that changes whether a job is "holding a slot" must keep the counter in sync.
+
+**Slot-holding statuses:** `running`, `restarting_oom`, `stopping`
+**Terminal statuses:** `finished`, `failed`, `stopped`
+
+**Transition rules:**
+- Starting a job: increment counter (in `start_crawl`, unless `is_restart=True`)
+- Process exits normally (code 0/2): decrement counter (in `_monitor_process`)
+- Process exits OOM (code 3) AND job is still `restarting_oom`: keep counter reserved, schedule relaunch
+- Process exits OOM (code 3) AND job is already terminal: skip OOM path, counter already released by whoever transitioned
+- Stale detection transitions job to terminal: decrement counter AND SIGKILL subprocess if still alive
+- `force_finish_crawl`: decrement counter only if current status (re-read at decrement time) is still slot-holding
+- OOM max-restarts reached (in `_relaunch_oom_crawl`): decrement counter, mark failed
+
+**Guards:**
+- Stale handler decrements counter before writing terminal status (prevents drift)
+- Stale handler kills subprocess (prevents zombie OOM-relaunch)
+- `_monitor_process` re-reads status before entering OOM branch (prevents overwriting terminal status)
+- `_relaunch_oom_crawl` re-reads status at entry (prevents ghost relaunch of failed jobs)
+- `force_finish_crawl` re-reads status before decrement (prevents double-decrement)
 
 ## Conventions
 

@@ -13,6 +13,7 @@ import (
 	embeddingpb "github.com/hellopro/mcp-api-recherche/proto/gen/embedding"
 	rerankingpb "github.com/hellopro/mcp-api-recherche/proto/gen/reranking"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // SearchParams holds parsed parameters for a search operation.
@@ -275,8 +276,39 @@ func (so *SearchOrchestrator) executeSearch(
 		resp, err = so.databaseClient.ClassicSearch(ctx, req)
 
 	case "hybrid":
+		// Hybrid search options — mirrors the production hybrid_options payload
+		// used by api-recherche so both services hit Milvus with the same
+		// RRF + BM25 configuration and recall characteristics.
 		denseWeight := float32(0.7)
 		sparseWeight := float32(0.3)
+		const (
+			rankerType           = "rrf" // "weighted" or "rrf" (Reciprocal Rank Fusion)
+			rrfK                 = 60    // RRF smoothing constant (10–100)
+			dropRatioSearch      = 0.0   // BM25: proportion of low-weight terms to ignore
+			denseLimitMultiplier = 5     // over-fetch factor for fusion (5 = wider candidate pool)
+			ef                   = 5000  // HNSW search breadth (higher = better recall, slower)
+		)
+		// snake_case keys required: database-recherche-service unpacks **kwargs
+		// into the use_case, which only binds snake_case parameter names.
+		// camelCase keys silently fall back to ranker_type="weighted".
+		// radius / range_filter intentionally omitted (null in production payload,
+		// no-op on the DB side).
+		options, optErr := structpb.NewStruct(map[string]any{
+			"ranker_type":            rankerType,
+			"rrf_k":                  float64(rrfK),
+			"drop_ratio_search":      dropRatioSearch,
+			"dense_limit_multiplier": float64(denseLimitMultiplier),
+			"ef":                     float64(ef),
+		})
+		if optErr != nil {
+			return nil, fmt.Errorf("build hybrid options: %w", optErr)
+		}
+		log.Printf("[search] hybrid request for %s: ranker_type=%s, rrf_k=%d, "+
+			"drop_ratio_search=%.2f, dense_limit_multiplier=%d, ef=%d, "+
+			"dense_weight=%.2f, sparse_weight=%.2f",
+			collection, rankerType, rrfK,
+			dropRatioSearch, denseLimitMultiplier, ef,
+			denseWeight, sparseWeight)
 		req := &databasepb.HybridSearchRequest{
 			CollectionName:  collection,
 			DenseVector:     queryVector,
@@ -286,6 +318,7 @@ func (so *SearchOrchestrator) executeSearch(
 			SparseWeight:    &sparseWeight,
 			OutputFields:    outputFields,
 			SourceService:   strPtr("mcp-api-recherche"),
+			Options:         options,
 		}
 		if filterExpr != "" {
 			req.FilterExpression = &filterExpr

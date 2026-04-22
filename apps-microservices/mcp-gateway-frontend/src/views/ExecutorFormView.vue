@@ -1,0 +1,312 @@
+<template>
+  <div>
+    <PageBreadcrumb :page-title="isEdit ? 'Modifier executeur' : 'Nouvel executeur'" />
+
+    <div v-if="loading" class="text-center py-12">
+      <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
+    </div>
+
+    <template v-else>
+      <!-- Info card -->
+      <div class="bg-white dark:bg-gray-900 rounded-lg shadow-theme-xs border border-gray-200 dark:border-gray-800 p-5 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug *</label>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-400 dark:text-gray-500 shrink-0">/install-guide/</span>
+              <input v-model="form.slug" type="text" class="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30" placeholder="npx" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Label *</label>
+            <input v-model="form.label" type="text" class="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30" placeholder="npx" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sub</label>
+            <input v-model="form.sub" type="text" class="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30" placeholder="Node.js" />
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+          <WysiwygEditor v-model="form.description" placeholder="Description courte affichee sur la carte..." />
+        </div>
+
+        <div class="mt-4">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Intro</label>
+          <WysiwygEditor v-model="form.intro" placeholder="Introduction detaillee affichee en haut de la page..." />
+        </div>
+
+        <div class="mt-4">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Configuration MCP (JSON)
+          </label>
+          <textarea
+            v-model="form.mcp_config"
+            rows="10"
+            placeholder='{&#10;  "mcpServers": {&#10;    "<server-name>": { "command": "npx", "args": [...] }&#10;  }&#10;}'
+            class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-mono dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+          />
+          <div class="mt-2 p-2 rounded-md bg-gray-50 dark:bg-gray-800/60 text-[11px] text-gray-600 dark:text-gray-400">
+            <p class="font-medium mb-1 text-gray-700 dark:text-gray-300">Variables disponibles (utilis&eacute;es aussi par la Commande CLI ci-dessous) :</p>
+            <ul class="space-y-0.5">
+              <li><code class="bg-white dark:bg-gray-900 px-1 rounded">&lt;server-name&gt;</code> &rarr; nom du serveur (.mcp.json) du jeton</li>
+              <li><code class="bg-white dark:bg-gray-900 px-1 rounded">&lt;token&gt;</code> &rarr; jeton g&eacute;n&eacute;r&eacute;</li>
+              <li><code class="bg-white dark:bg-gray-900 px-1 rounded">&lt;gateway-url&gt;</code> &rarr; URL du gateway (sans protocole)</li>
+              <li><code class="bg-white dark:bg-gray-900 px-1 rounded">https://&lt;gateway-url&gt;</code> &rarr; URL compl&egrave;te avec protocole courant</li>
+              <li><code class="bg-white dark:bg-gray-900 px-1 rounded">"&lt;allow-http&gt;"</code> &rarr; <code class="bg-white dark:bg-gray-900 px-1 rounded">"--allow-http"</code> si activ&eacute; sur le jeton, sinon la ligne est supprim&eacute;e</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icone</label>
+            <PrimeIconPicker v-model="form.icon" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Couleur</label>
+            <ColorClassPicker v-model="form.color" />
+          </div>
+        </div>
+
+        <!-- Import / Export -->
+        <div class="mt-4 pt-4">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="flex-1 border-t border-gray-200 dark:border-gray-700" />
+            <span class="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">ou</span>
+            <div class="flex-1 border-t border-gray-200 dark:border-gray-700" />
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="h-10 inline-flex items-center gap-1.5 px-4 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition shrink-0"
+              @click="handleExport"
+            >
+              <i class="pi pi-download text-xs" />
+              Exporter JSON
+            </button>
+            <div
+              class="h-10 flex-1 min-w-0 flex items-center justify-center gap-2 px-4 rounded-lg border-2 border-dashed transition-colors cursor-pointer"
+              :class="dragOverImport
+                ? 'border-brand-400 bg-brand-50/50 dark:bg-brand-500/5 text-brand-600 dark:text-brand-400'
+                : 'border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600'"
+              @dragover.prevent="dragOverImport = true"
+              @dragleave="dragOverImport = false"
+              @drop.prevent="handleDropImport"
+              @click="(fileInput as HTMLInputElement)?.click()"
+            >
+              <i class="pi pi-upload text-xs" />
+              <span class="text-xs font-medium">Glisser un fichier JSON ici ou cliquer pour importer</span>
+              <input ref="fileInput" type="file" accept=".json" class="hidden" @change="handleImport" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Page builder -->
+      <div class="mb-6">
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Contenu de la page</h2>
+        <ExecutorPageBuilder v-model="contentElements" />
+      </div>
+
+      <!-- Actions -->
+      <div class="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700 mb-6">
+        <button
+          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
+          :disabled="submitting"
+          @click="handleSave"
+        >
+          {{ submitting ? 'Enregistrement...' : (isEdit ? 'Mettre a jour' : 'Creer') }}
+        </button>
+        <button
+          class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 inline-flex items-center gap-1.5"
+          title="Convertir tous les accents en entites HTML"
+          @click="encodeAllEntities"
+        >
+          <span class="font-mono font-semibold">&amp;</span>
+          Encoder accents
+        </button>
+        <button
+          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+          @click="$router.push('/install-guides-admin')"
+        >
+          Annuler
+        </button>
+      </div>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { installGuidesAdminApi } from '@/api/install-guides'
+import { useToast } from '@/composables/useToast'
+import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
+import WysiwygEditor from '@/components/shared/WysiwygEditor.vue'
+import ExecutorPageBuilder from '@/components/install-guides/ExecutorPageBuilder.vue'
+import PrimeIconPicker from '@/components/shared/PrimeIconPicker.vue'
+import ColorClassPicker from '@/components/shared/ColorClassPicker.vue'
+import type { ExecutorElement } from '@/types/install-guide'
+import { encodeHtmlEntities, encodeTextEntities } from '@/utils/htmlEntities'
+
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+
+const loading = ref(false)
+const submitting = ref(false)
+const isEdit = computed(() => !!route.params.id)
+
+const form = ref({
+  slug: '',
+  label: '',
+  sub: '',
+  description: '',
+  intro: '',
+  mcp_config: '',
+  icon: '',
+  color: '',
+  display_order: 0,
+  is_active: true,
+})
+
+const contentElements = ref<ExecutorElement[]>([])
+const dragOverImport = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+onMounted(async () => {
+  if (isEdit.value) {
+    loading.value = true
+    try {
+      const e = await installGuidesAdminApi.getExecutor(Number(route.params.id))
+      form.value = {
+        slug: e.slug,
+        label: e.label,
+        sub: e.sub,
+        description: e.description,
+        intro: e.intro,
+        mcp_config: e.mcp_config || '',
+        icon: e.icon,
+        color: e.color,
+        display_order: e.display_order,
+        is_active: e.is_active,
+      }
+      contentElements.value = (e.content || []).map((el: any) => ({
+        ...el,
+        id: el.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        props: el.props || {},
+      }))
+    } catch {
+      toast.error('Executeur introuvable')
+      router.push('/install-guides-admin')
+    } finally {
+      loading.value = false
+    }
+  }
+})
+
+// Fields that must NOT be entity-encoded — slugs, technical IDs, URLs, file paths,
+// CSS classes, icon names, and machine-readable code blocks.
+const skipEncodingKeys = new Set([
+  'slug', 'icon', 'color', 'display_order', 'is_active',
+  'src', 'image', 'link', 'url', 'cssClass', 'class',
+  'mcp_config', 'cli_add_cmd', 'verify', 'code',
+])
+
+function encodeAllEntities() {
+  // Top-level form fields
+  if (form.value.label) form.value.label = encodeTextEntities(form.value.label)
+  if (form.value.sub) form.value.sub = encodeTextEntities(form.value.sub)
+  if (form.value.description) form.value.description = encodeHtmlEntities(form.value.description)
+  if (form.value.intro) form.value.intro = encodeHtmlEntities(form.value.intro)
+
+  // Page-builder elements
+  contentElements.value = contentElements.value.map(el => {
+    const newProps: Record<string, any> = {}
+    for (const [k, v] of Object.entries(el.props || {})) {
+      if (skipEncodingKeys.has(k) || typeof v !== 'string') {
+        newProps[k] = v
+        continue
+      }
+      const isHtmlish = /<[a-zA-Z\/!]/.test(v)
+      newProps[k] = isHtmlish ? encodeHtmlEntities(v) : encodeTextEntities(v)
+    }
+    return { ...el, props: newProps }
+  })
+  toast.success('Accents convertis en entites HTML')
+}
+
+async function handleSave() {
+  if (!form.value.slug || !form.value.label) {
+    toast.error('Slug et label sont obligatoires')
+    return
+  }
+
+  submitting.value = true
+  try {
+    const payload = { ...form.value, content: contentElements.value }
+    if (isEdit.value) {
+      await installGuidesAdminApi.updateExecutor(Number(route.params.id), payload)
+      toast.success('Executeur mis a jour')
+    } else {
+      await installGuidesAdminApi.createExecutor(payload)
+      toast.success('Executeur cree')
+    }
+    router.push('/install-guides-admin')
+  } catch (err: any) {
+    toast.error(err?.body?.error || 'Erreur lors de l\'enregistrement')
+  } finally {
+    submitting.value = false
+  }
+}
+
+function handleExport() {
+  const data = { ...form.value, content: contentElements.value }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `executor-${form.value.slug || 'new'}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function applyImportData(data: any) {
+  if (data.slug) form.value.slug = data.slug
+  if (data.label) form.value.label = data.label
+  if (data.sub !== undefined) form.value.sub = data.sub
+  if (data.description !== undefined) form.value.description = data.description
+  if (data.intro !== undefined) form.value.intro = data.intro
+  if (data.mcp_config !== undefined) form.value.mcp_config = data.mcp_config
+  if (data.icon) form.value.icon = data.icon
+  if (data.color) form.value.color = data.color
+  if (data.content) {
+    contentElements.value = data.content.map((el: any) => ({
+      ...el,
+      id: el.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      props: el.props || {},
+    }))
+  }
+  toast.success('Donnees importees')
+}
+
+function handleImport(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  file.text().then(text => {
+    try { applyImportData(JSON.parse(text)) } catch { toast.error('JSON invalide') }
+  })
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+function handleDropImport(e: DragEvent) {
+  dragOverImport.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  file.text().then(text => {
+    try { applyImportData(JSON.parse(text)) } catch { toast.error('JSON invalide') }
+  })
+}
+</script>
