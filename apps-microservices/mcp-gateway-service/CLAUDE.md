@@ -147,6 +147,17 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 - `POST /message?sessionId={id}` — Send JSON-RPC over SSE
 - `POST /mcp` — Streamable HTTP JSON-RPC
 
+### Template Catalog (`/api/v1/`)
+- `GET /templates` — list available templates (seeded: GA4, GSC) with live instance counts
+- `GET /templates/{slug}` — template detail
+- `GET/POST /template-instances` — list / create instance (POST is multipart: template_slug, name, extra_env JSON, credentials file)
+- `GET/DELETE /template-instances/{id}` — detail / remove (DELETE kills runner subprocess + removes mcp_servers row)
+- `POST /template-instances/{id}/restart` — respawn subprocess
+- `POST /template-instances/{id}/rotate-credentials` — upload replacement SA JSON + respawn
+
+### Runner Sync (internal, shared-secret auth via `X-Admin-Token`)
+- `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)
+
 ### Other
 - `GET /health` — Health probe
 - `GET /openapi.json` — OpenAPI spec
@@ -173,14 +184,18 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `ALLOW_INTERNAL_URLS` | `false` | Set to `true` to allow Docker-internal/private IP ranges (172.x.x.x, 10.x.x.x, etc.) as backend URLs — required when gateway and backends share a Docker network |
 | `LEEXI_INTERNAL_URL` | — | In-cluster URL of mcp-leexi-service (e.g. `http://mcp-leexi-service:8589`). Required for Leexi-scoped tokens. |
 | `LEEXI_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-leexi-service `/admin/*`. Must match `MCP_LEEXI_ADMIN_TOKEN` on the Leexi side. |
+| `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8590`). Required to spawn template instances. |
+| `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the runner admin API (sent as `X-Admin-Token`). The runner uses the SAME value when calling back via `/api/v1/internal/runner/sync`. |
 
 ## Database
 
-**MySQL** with GORM auto-migration. 15 tables:
+**MySQL** with GORM auto-migration. 17 tables:
 
 | Table | Purpose |
 |---|---|
 | `mcp_servers` | Backend servers (name, URL, health, capabilities) |
+| `templates` | Template catalog (seed: `ga` GA4, `gsc` GSC) — defines stdio_command, default_env with `{instance_id}` placeholder, and required_extra_env schema |
+| `template_instances` | One row per admin-uploaded SA JSON — encrypted credentials, credentials_hash, runner_port/status, FK to `mcp_servers.id` |
 | `server_tools` | Tools per server (name, description, inputSchema, is_active) |
 | `server_resources` | Resources per server (URI, name, mimeType) |
 | `server_prompts` | Prompts per server |
