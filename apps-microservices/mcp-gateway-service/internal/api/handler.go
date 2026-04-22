@@ -221,6 +221,17 @@ func (h *Handler) Register(mux *http.ServeMux) {
 			}
 			h.handleSheetImport(w, r)
 		})
+		// Template-instance batch import from a Google Sheet. Admin-only via
+		// the /api/v1/google/* prefix match in isAdminOnly; the handler itself
+		// also guards on the templates feature wiring.
+		apiMux.HandleFunc("/api/v1/google/sheets/import-instances", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleImportInstancesFromSheet(w, r)
+		})
 	}
 
 	// ── Templates + template instances ───────────────────────────────────────

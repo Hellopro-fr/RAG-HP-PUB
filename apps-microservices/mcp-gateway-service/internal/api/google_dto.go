@@ -67,6 +67,29 @@ type SheetImportResultEntry struct {
 	Message string `json:"message,omitempty"`
 }
 
+// InstanceSheetImportRequest is the request body for
+// POST /api/v1/google/sheets/import-instances. Mirrors the server-import shape
+// (SheetImportRequest) but scoped to a single template: every row becomes one
+// template instance (with its own credentials + extra_env).
+type InstanceSheetImportRequest struct {
+	SpreadsheetID string `json:"spreadsheet_id"`
+	SheetName     string `json:"sheet_name"`
+	TemplateSlug  string `json:"template_slug"`
+	// Column mapping — all required, all non-empty for the import to proceed.
+	NameColumn        string `json:"name_column"`
+	CredentialsColumn string `json:"credentials_column"`
+	// ExtraEnvColumns maps a template's required_extra_env key to the sheet
+	// column header that holds its value. One entry per schema field; the
+	// handler validates that every required key has a non-empty mapping.
+	ExtraEnvColumns map[string]string `json:"extra_env_columns,omitempty"`
+	// Optional overrides applied to EVERY row (mirror server-import semantics).
+	AutoDiscover    bool   `json:"auto_discover,omitempty"`
+	FixedTags       string `json:"fixed_tags,omitempty"` // comma-separated
+	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"`
+	FixedIcon       string `json:"fixed_icon,omitempty"`
+	NamePrefix      string `json:"name_prefix,omitempty"`
+}
+
 // SheetImportResponse is the response for POST /api/v1/google/sheets/import.
 type SheetImportResponse struct {
 	Total    int                      `json:"total"`
