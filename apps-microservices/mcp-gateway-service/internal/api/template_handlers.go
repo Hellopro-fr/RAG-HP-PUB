@@ -269,10 +269,15 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	hash := sha256.Sum256(credBytes)
 	hashHex := hex.EncodeToString(hash[:])
 
-	// Decode stdio_args + compute env
-	var stdioArgs []string
+	// Decode stdio_args + compute env. Initialise to an empty slice so a
+	// null JSON never reaches the runner — Pydantic's list[str] rejects null
+	// and returns 422.
+	stdioArgs := []string{}
 	if len(tpl.StdioArgs) > 0 {
 		_ = json.Unmarshal(tpl.StdioArgs, &stdioArgs)
+		if stdioArgs == nil {
+			stdioArgs = []string{}
+		}
 	}
 	env := renderEnv(tpl.DefaultEnv, extraEnv, instanceID)
 
@@ -574,10 +579,14 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Respawn with the new credentials
-	var stdioArgs []string
+	// Respawn with the new credentials. See handleCreateInstance for why the
+	// slice is initialised to empty rather than left nil.
+	stdioArgs := []string{}
 	if len(tpl.StdioArgs) > 0 {
 		_ = json.Unmarshal(tpl.StdioArgs, &stdioArgs)
+		if stdioArgs == nil {
+			stdioArgs = []string{}
+		}
 	}
 	var extraEnv map[string]string
 	if len(inst.ExtraEnv) > 0 {
