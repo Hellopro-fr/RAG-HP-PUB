@@ -94,12 +94,52 @@ class CheckUrlsResponse(BaseModel):
 
 # --- FONCTIONS UTILITAIRES ---
 
+def _generate_url_variants(url: str) -> List[str]:
+    """
+    Génère les variantes d'une URL pour une recherche tolérante dans Milvus.
+
+    Variantes générées (dédupliquées) :
+      - L'URL brute
+      - Avec/sans slash final
+      - Avec/sans préfixe "www."
+      - Combinaisons des deux (4 variantes au total dans le cas standard)
+
+    Nécessaire car Milvus stocke les URLs selon le format exact envoyé à
+    l'ingestion, mais les consommateurs (scripts BO, healing) peuvent envoyer
+    une forme normalisée (trailing slash retiré, etc.). Sans cette tolérance,
+    des URLs pourtant présentes dans Milvus sont déclarées "missing".
+    """
+    variants = {url}
+
+    # Variantes slash final
+    if url.endswith('/'):
+        variants.add(url.rstrip('/'))
+    else:
+        variants.add(url + '/')
+
+    # Variantes www.
+    www_variants = set()
+    for v in variants:
+        if '://www.' in v:
+            www_variants.add(v.replace('://www.', '://', 1))
+        elif '://' in v:
+            parts = v.split('://', 1)
+            if len(parts) == 2:
+                www_variants.add(f"{parts[0]}://www.{parts[1]}")
+    variants.update(www_variants)
+
+    return list(variants)
+
+
 async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[str]) -> Dict:
     """
-    Vérifie une liste d'URLs dans Milvus.
+    Vérifie une liste d'URLs dans Milvus avec tolérance de normalisation.
+
+    Chaque URL est étendue en plusieurs variantes (slash/www) pour retrouver
+    les entrées présentes sous une forme légèrement différente.
 
     Retourne:
-    - found_urls: Set[str] - URLs trouvées (hors header/footer)
+    - found_urls: Set[str] - URLs originales trouvées (hors header/footer)
     - has_header: bool
     - has_footer: bool
     """
@@ -107,10 +147,20 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
     has_header = False
     has_footer = False
 
-    total = len(urls_to_check)
+    # Mapping variante → URLs originales qui ont généré cette variante
+    variant_to_originals: Dict[str, Set[str]] = {}
+    all_variants: Set[str] = set()
+
+    for url in urls_to_check:
+        for variant in _generate_url_variants(url):
+            variant_to_originals.setdefault(variant, set()).add(url)
+            all_variants.add(variant)
+
+    all_variants_list = list(all_variants)
+    total = len(all_variants_list)
 
     for i in range(0, total, CHUNK_SIZE):
-        batch = urls_to_check[i:i + CHUNK_SIZE]
+        batch = all_variants_list[i:i + CHUNK_SIZE]
 
         # Echapper les backslashes PUIS les guillemets simples dans les URLs
         # Important: échapper \ d'abord, sinon on double-échappe les \' qu'on vient d'ajouter
@@ -130,7 +180,7 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
                 )
 
             for entity in results:
-                url = entity[URL_FIELD_NAME]
+                url_found = entity[URL_FIELD_NAME]
                 page_type = entity.get(FILTER_FIELD_NAME, "")
 
                 if page_type == 'header':
@@ -138,9 +188,12 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
                 elif page_type == 'footer':
                     has_footer = True
 
-                # On considère trouvé si ce n'est pas header/footer
+                # On considère trouvé si ce n'est pas header/footer.
+                # L'URL trouvée peut être une variante : on marque comme trouvées
+                # toutes les URLs originales qui ont généré cette variante.
                 if page_type not in ['header', 'footer']:
-                    found_urls.add(url)
+                    originals = variant_to_originals.get(url_found, set())
+                    found_urls.update(originals)
 
         except Exception as e:
             logger.error(f"Erreur lors de la requête Milvus: {e}")
