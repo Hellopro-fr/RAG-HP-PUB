@@ -474,6 +474,30 @@ func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.registry.Unregister(id)
+
+	// If this server is backed by a template instance, route through the
+	// template-aware delete path: kill the runner subprocess + shred credentials
+	// first, then delete both rows in one transaction. Otherwise the runner
+	// would keep the subprocess alive forever and the SA JSON would persist on
+	// tmpfs, while the template_instances row would point at a now-deleted
+	// mcp_server_id.
+	if h.instanceRepo != nil {
+		if inst, ferr := h.instanceRepo.FindByMCPServerID(id); ferr == nil && inst != nil {
+			if h.runner != nil {
+				if kerr := h.runner.Kill(r.Context(), inst.ID); kerr != nil {
+					log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
+				}
+			}
+			if derr := h.instanceRepo.DeleteWithMCPServer(inst.ID); derr != nil {
+				log.Printf("[api] template-aware delete failed for %s: %v", inst.ID, derr)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
 	if err := h.repo.Delete(id); err != nil {
 		log.Printf("[api] delete server error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})

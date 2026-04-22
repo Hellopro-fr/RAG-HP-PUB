@@ -212,6 +212,39 @@ func TestInstanceRepo_DeleteWithMCPServer(t *testing.T) {
 	}
 }
 
+func TestInstanceRepo_FindByMCPServerID(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	enc := newTestEncryptor(t)
+	repo := NewInstanceRepo(gdb, enc)
+
+	serverID := uuid.New().String()
+	instID := uuid.New().String()
+	inst := &db.TemplateInstance{
+		ID:              instID,
+		TemplateSlug:    "ga",
+		Name:            "test",
+		CredentialsHash: "h",
+		MCPServerID:     serverID,
+		RunnerStatus:    "running",
+	}
+	if err := repo.Create(inst, []byte(`{}`)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := repo.FindByMCPServerID(serverID)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got.ID != instID {
+		t.Errorf("ID = %q, want %q", got.ID, instID)
+	}
+
+	// Server that has no template instance backing it → ErrRecordNotFound.
+	if _, err := repo.FindByMCPServerID(uuid.New().String()); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("want ErrRecordNotFound for missing server, got %v", err)
+	}
+}
+
 func TestInstanceRepo_CountsByTemplate(t *testing.T) {
 	gdb := newTemplateTestDB(t)
 	enc := newTestEncryptor(t)

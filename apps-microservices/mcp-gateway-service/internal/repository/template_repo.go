@@ -89,6 +89,17 @@ func (r *InstanceRepo) GetByID(id string) (*db.TemplateInstance, error) {
 	return &inst, nil
 }
 
+// FindByMCPServerID looks up the template instance that backs a given
+// mcp_servers row. Returns gorm.ErrRecordNotFound when the server isn't
+// template-backed — callers distinguish that from other DB errors.
+func (r *InstanceRepo) FindByMCPServerID(serverID string) (*db.TemplateInstance, error) {
+	var inst db.TemplateInstance
+	if err := r.db.First(&inst, "mcp_server_id = ?", serverID).Error; err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
 // ListAll returns all template instances, newest first.
 func (r *InstanceRepo) ListAll() ([]db.TemplateInstance, error) {
 	var out []db.TemplateInstance
