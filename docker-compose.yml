@@ -2254,11 +2254,45 @@ services:
       # Google Sheets import (OAuth2)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+        # Google Templates runner sidecar (dynamic SA-JSON-backed MCP instances)
+      - GOOGLE_TEMPLATES_RUNNER_URL=http://mcp-google-templates-runner:8595
+      - GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
     volumes:
       - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:
     #   mysql:
     #     condition: service_healthy
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  mcp-google-templates-runner:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-google-templates-runner/Dockerfile
+    container_name: mcp-google-templates-runner
+    profiles: ["mcp"]
+    restart: unless-stopped
+    expose:
+      - "8595"
+      - "15000-15099"
+    environment:
+      - MCP_GATEWAY_URL=http://mcp-gateway-service:8592
+      - MCP_GATEWAY_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      - RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      - RUNNER_PORT=8595
+      - RUNNER_INSTANCE_PORT_START=15000
+      - RUNNER_INSTANCE_PORT_END=15099
+      - SECRETS_DIR=/tmp/secrets
+    tmpfs:
+      - /tmp/secrets:mode=700,uid=1000,size=16m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8595/admin/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - mcp-gateway-service
     networks:
       - services-net
     logging: *logging_defaults
