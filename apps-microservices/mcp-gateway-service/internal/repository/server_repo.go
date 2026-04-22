@@ -298,11 +298,15 @@ func (r *ServerRepo) ListWithDocs() ([]db.MCPServer, error) {
 	return servers, err
 }
 
-// GetByDocSlug returns a server by its documentation slug.
+// GetByDocSlug returns a server by its documentation slug. Template-backed
+// servers are excluded — they always have a slug (required by the UNIQUE
+// index) but they're never meant to surface docs. Returning them here would
+// let /docs/{guessed-slug} bypass the list filters.
 func (r *ServerRepo) GetByDocSlug(slug string) (*db.MCPServer, error) {
 	var srv db.MCPServer
 	err := r.db.
 		Where("doc_slug = ?", slug).
+		Where("id NOT IN (SELECT mcp_server_id FROM template_instances)").
 		Preload("Tools").
 		First(&srv).Error
 	if err != nil {
