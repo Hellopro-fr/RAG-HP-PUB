@@ -167,7 +167,10 @@ def score_constraint(
     """
     blocked_val = scoring_params["blocked_val"]
     different_val = scoring_params["different_val"]
-    c_unknown_score = scoring_params["c_unknown_score"]
+    # P1 (iter 1) — Pénalité pour caractéristique absente du produit.
+    # Pipeline par défaut = V2 (v=2). Un cap négatif garantit la pénalité
+    # même si le harness envoie 0. Aligné sur V4 (-0.8).
+    c_unknown_score = min(scoring_params["c_unknown_score"], -0.8)
 
     target_list = constraint.get("target_list", [])
     blocking_list = constraint.get("blocking_list", [])

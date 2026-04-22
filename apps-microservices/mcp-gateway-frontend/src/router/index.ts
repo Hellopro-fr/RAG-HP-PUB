@@ -124,6 +124,33 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Documentation', minRole: 'admin' }
     },
     {
+      path: '/admin/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplatesView.vue'),
+      meta: { requiresAuth: true, title: 'Templates', minRole: 'admin' }
+    },
+    {
+      path: '/admin/templates/:slug/new',
+      name: 'template-instance-new',
+      component: () => import('@/views/TemplateInstanceFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle instance', minRole: 'admin' },
+      props: true
+    },
+    {
+      path: '/admin/templates/:slug/import-from-sheet',
+      name: 'template-instance-sheet-import',
+      component: () => import('@/views/TemplateInstanceSheetImportView.vue'),
+      meta: { requiresAuth: true, title: 'Import depuis Sheets', minRole: 'admin' },
+      props: true
+    },
+    {
+      path: '/admin/templates/:slug',
+      name: 'template-detail',
+      component: () => import('@/views/TemplateDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Template', minRole: 'admin' },
+      props: true
+    },
+    {
       path: '/tokens',
       name: 'tokens',
       component: () => import('@/views/TokensView.vue'),

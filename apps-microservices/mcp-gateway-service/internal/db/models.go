@@ -31,6 +31,12 @@ type MCPServer struct {
 	// Icon is a URL or path to the server's icon image.
 	Icon string `gorm:"type:varchar(512);not null;default:''" json:"icon"`
 
+	// TemplateSlug links this server to a template catalog row when the server
+	// was created via one of the templates flows (stdio instance or http_batch
+	// sheet import). Empty string means "regular server". Used to filter
+	// template-origin rows out of the docs list and the docs-admin list.
+	TemplateSlug string `gorm:"type:varchar(64);not null;default:'';index:idx_template_slug" json:"template_slug,omitempty"`
+
 	// Documentation fields — used by the public /docs pages.
 	DocSlug        string          `gorm:"type:varchar(128);uniqueIndex:uq_doc_slug" json:"doc_slug,omitempty"`
 	DocDescription string          `gorm:"type:text" json:"doc_description,omitempty"`
@@ -359,6 +365,11 @@ type Template struct {
 	ToolPrefix       string          `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
 	Tags             json.RawMessage `gorm:"type:json" json:"tags"`
 	IsActive         bool            `gorm:"not null;default:true;index:idx_template_active" json:"is_active"`
+	// Kind distinguishes template categories:
+	//   "stdio"      — spawns a subprocess via mcp-google-templates-runner (ga, gsc, ...)
+	//   "http_batch" — batch-creates full HTTP mcp_servers via Google Sheets import
+	// Frontend uses this to route clicks differently on the templates catalog.
+	Kind string `gorm:"type:varchar(16);not null;default:'stdio';index:idx_template_kind" json:"kind"`
 	CreatedAt        time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt        time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 }
