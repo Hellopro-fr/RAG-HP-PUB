@@ -1913,7 +1913,6 @@ class RecommendationService:
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
             - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans la fiche.
-            - Sous-type avec une forme physique ou un mode d'installation structurellement différent de ce que l'acheteur a explicitement demandé (ex : sur-pied vs comptoir, sur-pied vs mural, porteur vs remorqué) → éliminatoire si lisible dans la fiche et si le besoin précise ce sous-type.
             
             **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité.
             
@@ -1932,7 +1931,7 @@ class RecommendationService:
             Usage cohérent, rien ne contredit le besoin sur les critiques. Des caractéristiques ne sont pas renseignées, ce qui empêche de confirmer la compatibilité complète. Écarts uniquement sur secondaires → score 3 aussi.
             
             **Score 2 — Correspondance partielle**
-            Bon univers mais écart(s) sur des critiques sans être éliminatoire : valeur numérique hors tolérance 20% mais dans 50%–200% de la cible, valeur textuelle critique proche mais pas exacte, sous-type proche mais pas exactement celui demandé (même forme de base, légère variante de spec — pas de différence d'installation ou d'usage structurel). L'acheteur devra vérifier.
+            Bon univers mais écart(s) sur des critiques sans être éliminatoire : valeur numérique hors tolérance 20% mais dans 50%–200% de la cible, valeur textuelle critique proche mais pas exacte, sous-type proche mais pas exactement celui demandé. L'acheteur devra vérifier.
             
             **Score 1 — Ne correspond pas**
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
