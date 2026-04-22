@@ -15,7 +15,7 @@ FLUSH PRIVILEGES;
 --     < apps-microservices/mcp-gateway-service/init-db/init-mcp-gateway-db.sql
 -- -------------------------------------------------------------------
 INSERT INTO templates
-  (slug, name, description, icon, stdio_command, stdio_args, default_env, required_extra_env, tool_prefix, tags, is_active, created_at, updated_at)
+  (slug, name, description, icon, stdio_command, stdio_args, default_env, required_extra_env, tool_prefix, tags, kind, is_active, created_at, updated_at)
 VALUES
   ('ga',
    'Google Analytics 4',
@@ -27,6 +27,7 @@ VALUES
    '[{"key":"GOOGLE_PROJECT_ID","label":"GCP project ID","required":true}]',
    'ga',
    '["analytics","google"]',
+   'stdio',
    1,
    NOW(3), NOW(3)),
   ('gsc',
@@ -39,6 +40,20 @@ VALUES
    '[{"key":"GSC_SITE_URL","label":"Search Console property URL","required":true}]',
    'gsc',
    '["seo","google","search-console"]',
+   'stdio',
+   1,
+   NOW(3), NOW(3)),
+  ('custom-http',
+   'Serveur HTTP (import Sheets)',
+   'Importe des serveurs MCP HTTP en masse depuis une feuille Google Sheets.',
+   '',
+   '',
+   '[]',
+   '{}',
+   '[]',
+   '',
+   '["http","custom"]',
+   'http_batch',
    1,
    NOW(3), NOW(3))
 ON DUPLICATE KEY UPDATE
@@ -50,4 +65,5 @@ ON DUPLICATE KEY UPDATE
   required_extra_env=VALUES(required_extra_env),
   tool_prefix=VALUES(tool_prefix),
   tags=VALUES(tags),
+  kind=VALUES(kind),
   updated_at=NOW(3);

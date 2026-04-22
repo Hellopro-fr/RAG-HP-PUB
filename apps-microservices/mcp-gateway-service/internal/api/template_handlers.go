@@ -91,6 +91,7 @@ func toTemplateResponse(t db.Template, count int) TemplateResponse {
 		RequiredExtraEnv: t.RequiredExtraEnv,
 		ToolPrefix:       t.ToolPrefix,
 		Tags:             t.Tags,
+		Kind:             t.Kind,
 		InstanceCount:    count,
 	}
 }
@@ -208,6 +209,15 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	tpl, err := h.templateRepo.GetBySlug(slug)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "unknown template: " + slug})
+		return
+	}
+	// Only "stdio" templates create per-instance subprocesses. http_batch rows
+	// are admin shortcuts that bulk-create full HTTP mcp_servers via the
+	// existing server-import flow — they cannot accept SA JSON nor spawn.
+	if tpl.Kind != "" && tpl.Kind != "stdio" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: fmt.Sprintf("template %s does not support instance creation", tpl.Slug),
+		})
 		return
 	}
 
@@ -787,6 +797,7 @@ func toTemplateExportRow(t db.Template) TemplateExportRow {
 		Icon:         t.Icon,
 		StdioCommand: t.StdioCommand,
 		ToolPrefix:   t.ToolPrefix,
+		Kind:         t.Kind,
 		IsActive:     t.IsActive,
 	}
 	if len(t.StdioArgs) > 0 {
@@ -844,9 +855,22 @@ func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) 
 
 	rows := make([]db.Template, 0, len(payload.Templates))
 	for idx, row := range payload.Templates {
-		if strings.TrimSpace(row.Slug) == "" || strings.TrimSpace(row.Name) == "" || strings.TrimSpace(row.StdioCommand) == "" {
+		// slug + name are always required. stdio_command is required for
+		// "stdio" templates (which spawn subprocesses); "http_batch" rows carry
+		// no stdio command.
+		kind := row.Kind
+		if kind == "" {
+			kind = "stdio"
+		}
+		if strings.TrimSpace(row.Slug) == "" || strings.TrimSpace(row.Name) == "" {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{
-				Error: fmt.Sprintf("template at index %d: slug, name, and stdio_command are required", idx),
+				Error: fmt.Sprintf("template at index %d: slug and name are required", idx),
+			})
+			return
+		}
+		if kind == "stdio" && strings.TrimSpace(row.StdioCommand) == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error: fmt.Sprintf("template at index %d: stdio_command is required for stdio templates", idx),
 			})
 			return
 		}
@@ -870,6 +894,12 @@ func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) 
 // json.RawMessage for GORM. Any field that fails to marshal surfaces a
 // per-slug 400 response via a typed error.
 func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
+	// Default unset `kind` to "stdio" for backward compatibility with dumps
+	// created before the column existed.
+	kind := row.Kind
+	if kind == "" {
+		kind = "stdio"
+	}
 	t := db.Template{
 		Slug:         row.Slug,
 		Name:         row.Name,
@@ -877,6 +907,7 @@ func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
 		Icon:         row.Icon,
 		StdioCommand: row.StdioCommand,
 		ToolPrefix:   row.ToolPrefix,
+		Kind:         kind,
 		IsActive:     row.IsActive,
 	}
 	var err error

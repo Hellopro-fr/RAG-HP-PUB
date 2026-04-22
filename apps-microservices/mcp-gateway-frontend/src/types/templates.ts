@@ -19,6 +19,11 @@ export interface Template {
   required_extra_env: RequiredExtraEnvField[]
   tool_prefix: string
   tags: string[]
+  // Template category:
+  //   'stdio'      — spawns a subprocess via the runner (ga, gsc, ...)
+  //   'http_batch' — catalog shortcut that routes to the generic Google Sheets
+  //                  server-import flow (no template instance / runner involvement)
+  kind: 'stdio' | 'http_batch'
   instance_count: number
 }
 

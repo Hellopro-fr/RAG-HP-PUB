@@ -63,10 +63,10 @@
       <router-link
         v-for="template in templatesStore.templates"
         :key="template.slug"
-        :to="{ name: 'template-detail', params: { slug: template.slug } }"
+        :to="templateTarget(template)"
         class="block bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 shadow-theme-xs hover:shadow-theme-md hover:border-brand-300 dark:hover:border-brand-500/40 transition-all p-5"
       >
-        <!-- Row 1: icon + name + instance count -->
+        <!-- Row 1: icon + name + kind badge + instance count -->
         <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0">
             <div
@@ -85,11 +85,21 @@
               {{ template.name }}
             </h3>
           </div>
-          <span
-            class="text-xs px-2 py-0.5 rounded-full font-medium shrink-0 bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400"
-          >
-            {{ template.instance_count }} instance{{ template.instance_count > 1 ? 's' : '' }}
-          </span>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <span
+              v-if="template.kind === 'http_batch'"
+              class="text-xs px-2 py-0.5 rounded-full font-medium bg-brand-500 text-white dark:bg-brand-500"
+              title="Import HTTP en masse depuis Google Sheets"
+            >
+              HTTP
+            </span>
+            <span
+              v-else
+              class="text-xs px-2 py-0.5 rounded-full font-medium bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400"
+            >
+              {{ template.instance_count }} instance{{ template.instance_count > 1 ? 's' : '' }}
+            </span>
+          </div>
         </div>
 
         <!-- Description -->
@@ -134,11 +144,13 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import type { RouteLocationRaw } from 'vue-router'
 import { useTemplatesStore } from '@/stores/templates'
 import { useAuthStore } from '@/stores/auth'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import ImportTemplatesModal from '@/components/templates/ImportTemplatesModal.vue'
 import { ApiError } from '@/types/api'
+import type { Template } from '@/types/templates'
 
 const templatesStore = useTemplatesStore()
 const authStore = useAuthStore()
@@ -150,6 +162,18 @@ const exportError = ref('')
 onMounted(() => {
   templatesStore.fetchTemplates()
 })
+
+// templateTarget routes a catalog card based on its kind:
+//   - stdio       → the usual per-template detail view (instance list / create)
+//   - http_batch  → the existing generic Google Sheets server-import flow,
+//                   with ?from=templates so the import view's back-link
+//                   returns here rather than to /servers.
+function templateTarget(template: Template): RouteLocationRaw {
+  if (template.kind === 'http_batch') {
+    return { name: 'google-sheets-import', query: { from: 'templates' } }
+  }
+  return { name: 'template-detail', params: { slug: template.slug } }
+}
 
 // onExport triggers a browser download of the full catalog. We build a
 // temporary <a> + object URL because the backend sets Content-Disposition,

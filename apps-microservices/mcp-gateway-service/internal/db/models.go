@@ -359,6 +359,11 @@ type Template struct {
 	ToolPrefix       string          `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
 	Tags             json.RawMessage `gorm:"type:json" json:"tags"`
 	IsActive         bool            `gorm:"not null;default:true;index:idx_template_active" json:"is_active"`
+	// Kind distinguishes template categories:
+	//   "stdio"      — spawns a subprocess via mcp-google-templates-runner (ga, gsc, ...)
+	//   "http_batch" — batch-creates full HTTP mcp_servers via Google Sheets import
+	// Frontend uses this to route clicks differently on the templates catalog.
+	Kind string `gorm:"type:varchar(16);not null;default:'stdio';index:idx_template_kind" json:"kind"`
 	CreatedAt        time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt        time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 }

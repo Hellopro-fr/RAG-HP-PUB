@@ -16,6 +16,7 @@ type TemplateResponse struct {
 	RequiredExtraEnv json.RawMessage `json:"required_extra_env"`
 	ToolPrefix       string          `json:"tool_prefix"`
 	Tags             json.RawMessage `json:"tags"`
+	Kind             string          `json:"kind"`
 	InstanceCount    int             `json:"instance_count"`
 }
 
@@ -58,6 +59,7 @@ type TemplateExportRow struct {
 	RequiredExtraEnv []map[string]interface{} `json:"required_extra_env"`
 	ToolPrefix       string                   `json:"tool_prefix"`
 	Tags             []string                 `json:"tags"`
+	Kind             string                   `json:"kind"`
 	IsActive         bool                     `json:"is_active"`
 }
 
