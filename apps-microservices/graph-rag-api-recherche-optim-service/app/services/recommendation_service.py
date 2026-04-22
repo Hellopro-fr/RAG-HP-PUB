@@ -1907,11 +1907,11 @@ class RecommendationService:
             ### ÉTAPE 2 — Évaluer chaque produit
             Évalue chaque produit **indépendamment**, en le comparant uniquement au besoin reformulé.
             
-            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans le DESCRIPTIF ou les CARACTERISTIQUES du produit** — jamais depuis le TITRE seul, jamais inféré ou supposé. Si ambigu ou non confirmé : pas de score 1.
-
-            Écarts d'usage éliminatoires (si factuellement vérifiables dans le DESCRIPTIF ou les CARACTERISTIQUES) :
+            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans la fiche** — pas inféré ou supposé. Si ambigu ou non confirmé : pas de score 1.
+            
+            Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
-            - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans le DESCRIPTIF ou les CARACTERISTIQUES (pas dans le titre seul).
+            - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans la fiche.
             
             **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité.
             
