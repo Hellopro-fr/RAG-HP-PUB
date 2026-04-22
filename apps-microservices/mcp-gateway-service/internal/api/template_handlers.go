@@ -357,10 +357,11 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		HealthStatus:        "healthy",
 		ToolPrefix:          firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix),
 		Icon:                firstNonEmpty(icon, tpl.Icon),
-		// Docs off by default for template-backed servers — admins opt in per
-		// instance by editing the server later. Avoids publishing a public
-		// docs page with a placeholder description for every uploaded SA JSON.
-		DocSlug:   "",
+		// Generate a unique doc_slug so the UNIQUE index on mcp_servers is
+		// satisfied — empty strings would collide on the second row. The
+		// slug is never surfaced: ServerRepo.ListWithDocs, GetByDocSlug and
+		// the docs-admin filter all exclude template-backed servers.
+		DocSlug:   generateDocSlug(tpl.Name+"-"+name, mcpServerID),
 		CreatedBy: auth.UserEmailFromContext(r.Context()),
 	}
 	if err := h.repo.Create(&mcpSrv); err != nil {
