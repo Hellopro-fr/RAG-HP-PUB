@@ -42,6 +42,7 @@ func newTemplateTestDB(t *testing.T) *gorm.DB {
 			tool_prefix         TEXT NOT NULL DEFAULT '',
 			tags                TEXT,
 			is_active           INTEGER NOT NULL DEFAULT 1,
+			kind                TEXT NOT NULL DEFAULT 'stdio',
 			created_at          datetime,
 			updated_at          datetime
 		);
@@ -155,7 +156,8 @@ func TestTemplateRepo_Upsert(t *testing.T) {
 
 	repo := NewTemplateRepo(gdb)
 
-	// Upsert: update "ga" + insert brand-new "gsc".
+	// Upsert: update "ga" + insert brand-new "gsc" + an http_batch row to
+	// assert the `kind` column round-trips through Upsert.
 	err := repo.Upsert([]db.Template{
 		{
 			Slug:         "ga",
@@ -163,25 +165,34 @@ func TestTemplateRepo_Upsert(t *testing.T) {
 			Description:  "new desc",
 			StdioCommand: "analytics-mcp",
 			IsActive:     true,
+			Kind:         "stdio",
 		},
 		{
 			Slug:         "gsc",
 			Name:         "GSC",
 			StdioCommand: "mcp-gsc",
 			IsActive:     true,
+			Kind:         "stdio",
+		},
+		{
+			Slug:         "custom-http",
+			Name:         "Custom HTTP",
+			StdioCommand: "",
+			IsActive:     true,
+			Kind:         "http_batch",
 		},
 	})
 	if err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 
-	// Both rows present.
+	// All rows present.
 	all, err := repo.ListAll()
 	if err != nil {
 		t.Fatalf("ListAll: %v", err)
 	}
-	if len(all) != 2 {
-		t.Fatalf("want 2 rows after upsert, got %d", len(all))
+	if len(all) != 3 {
+		t.Fatalf("want 3 rows after upsert, got %d", len(all))
 	}
 	byslug := map[string]db.Template{}
 	for _, row := range all {
@@ -195,6 +206,13 @@ func TestTemplateRepo_Upsert(t *testing.T) {
 	}
 	if byslug["gsc"].Name != "GSC" {
 		t.Errorf("gsc.Name = %q, want %q", byslug["gsc"].Name, "GSC")
+	}
+	// kind round-trip: stdio templates preserve "stdio", http_batch preserves "http_batch".
+	if byslug["ga"].Kind != "stdio" {
+		t.Errorf("ga.Kind = %q, want %q", byslug["ga"].Kind, "stdio")
+	}
+	if byslug["custom-http"].Kind != "http_batch" {
+		t.Errorf("custom-http.Kind = %q, want %q", byslug["custom-http"].Kind, "http_batch")
 	}
 }
 

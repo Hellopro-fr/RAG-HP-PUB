@@ -394,6 +394,16 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "unknown template: " + req.TemplateSlug})
 		return
 	}
+	// Only "stdio" templates spawn subprocesses — http_batch rows are a UI
+	// shortcut that routes to the generic /servers/import-google flow and must
+	// never be passed here. Fail fast with a descriptive 400 instead of a
+	// confusing runner-side error later.
+	if tpl.Kind != "" && tpl.Kind != "stdio" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: fmt.Sprintf("template %s is not an instance-creating template (kind=%s)", tpl.Slug, tpl.Kind),
+		})
+		return
+	}
 
 	// Every required schema field MUST be mapped before any network work. We
 	// reuse the template_dto schema shape (key + required).
