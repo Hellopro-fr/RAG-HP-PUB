@@ -170,11 +170,18 @@ class Supervisor:
             # execvp which consults PATH), then overlay the template's env.
             # Without PATH, execvp fails with FileNotFoundError even when the
             # binary is installed in /usr/local/bin.
+            #
+            # GOOGLE_APPLICATION_CREDENTIALS is anchored to the canonical
+            # per-instance path AFTER the template env so the runner owns the
+            # value regardless of what the gateway's template row says. This
+            # makes the system resilient to stale default_env strings pointing
+            # at the pre-per-instance-dir flat layout.
             proc_env = {
                 "PATH": os.environ.get("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"),
                 "HOME": os.environ.get("HOME", "/tmp"),
                 "LANG": os.environ.get("LANG", "C.UTF-8"),
                 **inst.spec.env,
+                "GOOGLE_APPLICATION_CREDENTIALS": self._creds.credential_file_for(inst.instance_id),
             }
             try:
                 proc = await asyncio.create_subprocess_exec(
