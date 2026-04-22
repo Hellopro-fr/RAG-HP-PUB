@@ -308,7 +308,7 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 
 	// 4) Update mcp_servers URL + instance port
 	// NOTE: assumes the gateway and runner share a Docker network — GoogleTemplatesRunnerURL
-	// is the in-cluster URL (e.g. http://mcp-google-templates-runner:8590). If the runner is
+	// is the in-cluster URL (e.g. http://mcp-google-templates-runner:8594). If the runner is
 	// ever exposed through a proxy or different public host, this extraction will need to
 	// point at that public address instead. Consider a separate GOOGLE_TEMPLATES_RUNNER_PUBLIC_HOST env var.
 	runnerHost := strings.TrimPrefix(strings.TrimPrefix(h.config.GoogleTemplatesRunnerURL, "http://"), "https://")

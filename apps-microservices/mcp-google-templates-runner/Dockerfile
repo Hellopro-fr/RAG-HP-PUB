@@ -18,7 +18,7 @@ RUN chmod +x /app/entrypoint.sh
 RUN useradd -u 1000 -m runner
 USER runner
 
-EXPOSE 8590
+EXPOSE 8594
 # Dynamic instance ports (from config) are exposed via docker-compose `expose:` declarations.
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8590"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8594"]

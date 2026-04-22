@@ -15,7 +15,7 @@ Python sidecar that hosts stdio MCP servers spawned by the gateway's Templates f
 | `MCP_GATEWAY_URL` | — | Base URL of mcp-gateway-service for startup sync |
 | `MCP_GATEWAY_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to the gateway |
 | `RUNNER_ADMIN_TOKEN` | — | Required `X-Admin-Token` on incoming `/admin/*` requests |
-| `RUNNER_PORT` | `8590` | Admin API port |
+| `RUNNER_PORT` | `8594` | Admin API port (8590 was already taken by qc-tracking-service) |
 | `RUNNER_INSTANCE_PORT_START` | `15000` | First port in the dynamic pool |
 | `RUNNER_INSTANCE_PORT_END` | `15099` | Last port in the dynamic pool |
 | `SECRETS_DIR` | `/tmp/secrets` | Tmpfs dir for per-instance credential files |
