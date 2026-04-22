@@ -47,7 +47,7 @@ class CaracterisationPrixGenerator:
     DEEPSEEK_MODEL = "deepseek-chat"
 
     # ID étape prix
-    ETAPE = "12"
+    ETAPE = "13"
     ID_PROCESS = "37"
 
     # Traitement parallèle
