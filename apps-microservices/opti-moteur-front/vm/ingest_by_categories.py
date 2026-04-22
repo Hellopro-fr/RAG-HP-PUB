@@ -189,16 +189,32 @@ def row_to_doc(row):
 
 
 def ts_flush(jsonl_batch):
-    body = "\n".join(jsonl_batch)
+    """
+    Raw HTTP POST avec encodage UTF-8 explicite.
+    Contourne un bug du client typesense-python 0.21.0 qui utilise latin-1
+    et fait planter les produits contenant ', EUR, bullet, TM, oe, etc.
+    """
+    if not jsonl_batch:
+        return 0, 0
+    body = "\n".join(jsonl_batch).encode("utf-8")
+    url = f"http://{TS_HOST}:{TS_PORT}/collections/{TS_COLLECTION}/documents/import?action=upsert"
     try:
-        res = ts_client.collections[TS_COLLECTION].documents.import_(
-            body, {"action": "upsert"}
+        r = requests.post(
+            url,
+            headers={
+                "X-TYPESENSE-API-KEY": TS_KEY,
+                "Content-Type": "text/plain; charset=utf-8",
+            },
+            data=body,
+            timeout=300,
         )
+        r.raise_for_status()
+        text = r.text
     except Exception as e:
         print(f"\n[WARN] flush error: {e}", file=sys.stderr)
         return 0, len(jsonl_batch)
-    ok = res.count('"success":true')
-    err = res.count('"success":false')
+    ok = text.count('"success":true')
+    err = text.count('"success":false')
     return ok, err
 
 
