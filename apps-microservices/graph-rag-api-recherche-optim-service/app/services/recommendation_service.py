@@ -1138,7 +1138,7 @@ class RecommendationService:
         absolute_threshold = (
             request.scoring.absolute_threshold
             if request.scoring.absolute_threshold is not None
-            else 0.2
+            else 0.3
         )
         relative_tolerance = (
             request.scoring.relative_tolerance
