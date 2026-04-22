@@ -163,8 +163,18 @@
       @created="onCreated"
     />
 
-    <!-- Task 27: RotateCredentialsModal (rotateTarget) -->
-    <!-- Task 27: InstanceLogsModal (logsTarget) -->
+    <RotateCredentialsModal
+      :instance="rotateTarget"
+      :open="rotateTarget !== null"
+      @update:open="(o) => { if (!o) rotateTarget = null }"
+      @rotated="onRotated"
+    />
+
+    <InstanceLogsModal
+      :instance="logsTarget"
+      :open="logsTarget !== null"
+      @update:open="(o) => { if (!o) logsTarget = null }"
+    />
   </div>
 </template>
 
@@ -177,6 +187,8 @@ import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import TemplateInstanceCard from '@/components/templates/TemplateInstanceCard.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import AddInstanceModal from '@/components/templates/AddInstanceModal.vue'
+import RotateCredentialsModal from '@/components/templates/RotateCredentialsModal.vue'
+import InstanceLogsModal from '@/components/templates/InstanceLogsModal.vue'
 import type { Template, TemplateInstance } from '@/types/templates'
 
 const props = defineProps<{
@@ -281,12 +293,16 @@ async function confirmDelete(): Promise<void> {
 }
 
 function onRotate(inst: TemplateInstance): void {
-  // Task 27: open RotateCredentialsModal
   rotateTarget.value = inst
 }
 
 function onLogs(inst: TemplateInstance): void {
-  // Task 27: open InstanceLogsModal
   logsTarget.value = inst
+}
+
+async function onRotated(): Promise<void> {
+  rotateTarget.value = null
+  toast.success('Clé renouvelée')
+  await refetchInstances()
 }
 </script>

@@ -6,77 +6,24 @@
         class="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-gray-900 p-6 shadow-theme-xl max-h-[90vh] overflow-y-auto"
       >
         <DialogTitle class="text-lg font-semibold text-gray-900 dark:text-white">
-          Ajouter une instance {{ template.name }}
+          Renouveler la clé &mdash; {{ instance?.name ?? '' }}
         </DialogTitle>
         <DialogDescription class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Renseignez un nom, les variables requises, et importez le fichier JSON du compte de service.
+          Téléversez une nouvelle clé JSON de compte de service. L'instance sera
+          redémarrée avec les nouvelles identifiants. L'ancienne clé est détruite.
         </DialogDescription>
 
         <form class="mt-5 space-y-5" @submit.prevent="submit">
-          <!-- Name -->
-          <div>
-            <label
-              for="instance-name"
-              class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >
-              Nom <span class="text-error-500">*</span>
-            </label>
-            <input
-              id="instance-name"
-              v-model="name"
-              type="text"
-              maxlength="255"
-              required
-              autocomplete="off"
-              class="w-full px-3 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="Ex: projet-ventes-europe"
-            />
-          </div>
-
-          <!-- Required extra env -->
-          <fieldset
-            v-if="template.required_extra_env && template.required_extra_env.length > 0"
-            class="space-y-3 border border-gray-200 dark:border-gray-800 rounded-md p-4"
-          >
-            <legend class="px-1 text-xs font-semibold text-gray-700 dark:text-gray-300">
-              Variables d'environnement
-            </legend>
-            <div
-              v-for="field in template.required_extra_env"
-              :key="field.key"
-              class="space-y-1"
-            >
-              <label
-                :for="`env-${field.key}`"
-                class="block text-xs font-medium text-gray-700 dark:text-gray-300"
-              >
-                {{ field.label }}
-                <code class="ml-1 font-mono text-[11px] text-gray-500 dark:text-gray-400">
-                  {{ field.key }}
-                </code>
-                <span v-if="field.required" class="text-error-500">*</span>
-              </label>
-              <input
-                :id="`env-${field.key}`"
-                v-model="extraEnv[field.key]"
-                type="text"
-                :required="field.required"
-                autocomplete="off"
-                class="w-full px-3 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-          </fieldset>
-
           <!-- Service account JSON file -->
           <div>
             <label
-              for="instance-credentials"
+              for="rotate-credentials"
               class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              Clé JSON du compte de service <span class="text-error-500">*</span>
+              Nouvelle clé JSON du compte de service <span class="text-error-500">*</span>
             </label>
             <input
-              id="instance-credentials"
+              id="rotate-credentials"
               type="file"
               accept="application/json,.json"
               required
@@ -98,7 +45,7 @@
               {{ fileError }}
             </p>
             <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-              Fichier JSON (max 16 Ko). Le contenu ne quitte jamais le navigateur tant que vous ne cliquez pas sur Créer.
+              Fichier JSON (max 16 Ko). Le contenu ne quitte jamais le navigateur tant que vous ne cliquez pas sur Renouveler.
             </p>
           </div>
 
@@ -126,7 +73,7 @@
               class="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
               :disabled="!canSubmit"
             >
-              {{ submitting ? 'Création…' : "Créer l'instance" }}
+              {{ submitting ? 'Rotation…' : 'Renouveler' }}
             </button>
           </div>
         </form>
@@ -136,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   DialogRoot,
   DialogPortal,
@@ -148,22 +95,20 @@ import {
 import { useTemplatesStore } from '@/stores/templates'
 import { ApiError } from '@/types/api'
 import { validateSaJson } from './validateSaJson'
-import type { Template, TemplateInstance } from '@/types/templates'
+import type { TemplateInstance } from '@/types/templates'
 
 const props = defineProps<{
-  template: Template
+  instance: TemplateInstance | null
   open: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  created: [instance: TemplateInstance]
+  rotated: []
 }>()
 
 const store = useTemplatesStore()
 
-const name = ref('')
-const extraEnv = reactive<Record<string, string>>({})
 const file = ref<File | null>(null)
 const fileInfo = ref('')
 const fileError = ref('')
@@ -171,12 +116,10 @@ const submitError = ref('')
 const submitting = ref(false)
 
 const canSubmit = computed(
-  () => !!name.value && !!file.value && !fileError.value && !submitting.value
+  () => !!file.value && !fileError.value && !submitting.value && !!props.instance
 )
 
 function resetForm(): void {
-  name.value = ''
-  for (const k of Object.keys(extraEnv)) delete extraEnv[k]
   file.value = null
   fileInfo.value = ''
   fileError.value = ''
@@ -207,17 +150,12 @@ async function onFile(e: Event): Promise<void> {
 }
 
 async function submit(): Promise<void> {
-  if (!file.value) return
+  if (!file.value || !props.instance) return
   submitting.value = true
   submitError.value = ''
   try {
-    const inst = await store.createInstance({
-      template_slug: props.template.slug,
-      name: name.value,
-      extra_env: Object.keys(extraEnv).length ? { ...extraEnv } : undefined,
-      credentials: file.value
-    })
-    emit('created', inst)
+    await store.rotateCredentials(props.instance.id, file.value)
+    emit('rotated')
     emit('update:open', false)
   } catch (e: unknown) {
     if (e instanceof ApiError) {
@@ -226,7 +164,7 @@ async function submit(): Promise<void> {
     } else if (e instanceof Error) {
       submitError.value = e.message
     } else {
-      submitError.value = 'Échec de la création'
+      submitError.value = 'Échec de la rotation'
     }
   } finally {
     submitting.value = false
