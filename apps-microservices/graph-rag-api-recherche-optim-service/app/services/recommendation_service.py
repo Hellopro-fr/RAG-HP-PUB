@@ -1738,18 +1738,20 @@ class RecommendationService:
                             carac_entry["unite"] = unite
                         filtered_caracs.append(carac_entry)
 
+            _raw_desc = re.sub(
+                r"\s+",
+                " ",
+                re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                    "\xa0", " "
+                ),
+            ).strip()
             formatted_product = {
                 "id_produit": str(id_produit),
                 "titre": info.get(
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
-                "description": re.sub(
-                    r"\s+",
-                    " ",
-                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
-                        "\xa0", " "
-                    ),
-                ).strip(),
+                # P3: explicit marker when description is absent so LLM uses characteristics, not title inference
+                "description": _raw_desc if _raw_desc else "[AUCUN DESCRIPTIF DISPONIBLE]",
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "type": etat_societe_label,
@@ -1906,8 +1908,10 @@ class RecommendationService:
             
             ### ÉTAPE 2 — Évaluer chaque produit
             Évalue chaque produit **indépendamment**, en le comparant uniquement au besoin reformulé.
-            
-            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans la fiche** — pas inféré ou supposé. Si ambigu ou non confirmé : pas de score 1.
+
+            ⚠️ **Avant tout jugement d'usage, lis le champ DESCRIPTIF de la fiche.** Si le descriptif est `[AUCUN DESCRIPTIF DISPONIBLE]`, base-toi exclusivement sur les CARACTERISTIQUES pour évaluer le sous-type et l'usage — ne déduis jamais le sous-type depuis le TITRE seul.
+
+            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans le DESCRIPTIF ou les CARACTERISTIQUES** — pas inféré ou supposé depuis le titre seul. Si ambigu ou non confirmé : pas de score 1.
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
