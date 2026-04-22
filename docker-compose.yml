@@ -2254,7 +2254,7 @@ services:
       # Google Sheets import (OAuth2)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-        # Google Templates runner sidecar (dynamic SA-JSON-backed MCP instances)
+      # Google Templates runner sidecar (dynamic SA-JSON-backed MCP instances)
       - GOOGLE_TEMPLATES_RUNNER_URL=http://mcp-google-templates-runner:8595
       - GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
     volumes:
