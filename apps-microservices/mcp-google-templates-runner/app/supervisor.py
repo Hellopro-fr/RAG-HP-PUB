@@ -4,6 +4,7 @@ import asyncio
 import collections
 import dataclasses
 import logging
+import os
 import signal
 import time
 from typing import Optional
@@ -164,7 +165,17 @@ class Supervisor:
                     "--stateless",
                     "--", inst.spec.stdio_command, *inst.spec.stdio_args,
                 ]
-            proc_env = {**inst.spec.env}
+            # Build a minimal environment: inherit PATH/HOME/LANG so the child
+            # can resolve the executable (asyncio.create_subprocess_exec uses
+            # execvp which consults PATH), then overlay the template's env.
+            # Without PATH, execvp fails with FileNotFoundError even when the
+            # binary is installed in /usr/local/bin.
+            proc_env = {
+                "PATH": os.environ.get("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"),
+                "HOME": os.environ.get("HOME", "/tmp"),
+                "LANG": os.environ.get("LANG", "C.UTF-8"),
+                **inst.spec.env,
+            }
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *argv,
