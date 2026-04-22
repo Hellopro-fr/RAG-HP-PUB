@@ -236,6 +236,28 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		}
 		h.handleListTemplates(w, r)
 	})
+	// /templates/export and /templates/import are registered with exact paths
+	// BEFORE the /templates/ slug catch-all below. net/http's ServeMux prefers
+	// the longer literal match over a prefix pattern, so these never fall into
+	// handleGetTemplate. Extra defence-in-depth: handleGetTemplate explicitly
+	// rejects the slugs "export" and "import" to avoid accidental collisions
+	// if the mux behaviour ever regresses.
+	apiMux.HandleFunc("/api/v1/templates/export", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleExportTemplates(w, r)
+	})
+	apiMux.HandleFunc("/api/v1/templates/import", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleImportTemplates(w, r)
+	})
 	apiMux.HandleFunc("/api/v1/templates/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
@@ -449,6 +471,11 @@ func isAdminOnly(path, method string) bool {
 	// GET routes on /api/v1/templates and /api/v1/template-instances stay open to all authenticated users.
 	if strings.HasPrefix(path, "/api/v1/template-instances") &&
 		(method == http.MethodPost || method == http.MethodDelete) {
+		return true
+	}
+	// Catalog import/export ship the whole seed definition, including inactive
+	// rows and internal config — admin-only even for the GET export.
+	if path == "/api/v1/templates/export" || path == "/api/v1/templates/import" {
 		return true
 	}
 	return false

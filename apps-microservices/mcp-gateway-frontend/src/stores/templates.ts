@@ -50,6 +50,21 @@ export const useTemplatesStore = defineStore('templates', () => {
     await templatesApi.rotate(id, credentials)
   }
 
+  // exportCatalog delegates to the API module and returns the raw blob so
+  // the caller can trigger a browser download. Kept as a thin wrapper to
+  // keep view logic consistent with the rest of the store's surface.
+  async function exportCatalog(): Promise<Blob> {
+    return await templatesApi.exportCatalog()
+  }
+
+  // importCatalog uploads the JSON file and refreshes the catalog list on
+  // success so the UI reflects new/updated rows without a manual reload.
+  async function importCatalog(file: File): Promise<{ imported: number }> {
+    const result = await templatesApi.importCatalog(file)
+    await fetchTemplates()
+    return result
+  }
+
   return {
     templates,
     instances,
@@ -59,6 +74,8 @@ export const useTemplatesStore = defineStore('templates', () => {
     createInstance,
     deleteInstance,
     restartInstance,
-    rotateCredentials
+    rotateCredentials,
+    exportCatalog,
+    importCatalog
   }
 })

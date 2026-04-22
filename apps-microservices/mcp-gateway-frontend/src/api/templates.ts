@@ -62,5 +62,27 @@ export const templatesApi = {
 
   delete(id: string): Promise<void> {
     return api.del<void>(`${BASE}/template-instances/${id}`)
+  },
+
+  // exportCatalog downloads the full template catalog as a JSON blob. The
+  // caller is responsible for saving the blob via URL.createObjectURL — this
+  // keeps the module free of DOM side effects and makes the helper reusable
+  // from any component.
+  exportCatalog(): Promise<Blob> {
+    return api.getBlob(`${BASE}/templates/export`)
+  },
+
+  // importCatalog reads the file client-side, parses it into the export
+  // envelope shape, and POSTs the decoded object to the backend. Parsing up
+  // front surfaces malformed JSON with a readable error before a round-trip.
+  async importCatalog(file: File): Promise<{ imported: number }> {
+    const text = await file.text()
+    let payload: unknown
+    try {
+      payload = JSON.parse(text)
+    } catch (e) {
+      throw new Error('Fichier JSON invalide')
+    }
+    return api.post<{ imported: number }>(`${BASE}/templates/import`, payload)
   }
 }

@@ -150,6 +150,8 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 ### Template Catalog (`/api/v1/`)
 - `GET /templates` — list available templates (seeded: GA4, GSC) with live instance counts
 - `GET /templates/{slug}` — template detail
+- `GET /templates/export` — download the full catalog as JSON (active + inactive)
+- `POST /templates/import` — upsert templates from JSON (slug-keyed, transactional, no instances)
 - `GET/POST /template-instances` — list / create instance (POST is multipart: template_slug, name, extra_env JSON, credentials file)
 - `GET/DELETE /template-instances/{id}` — detail / remove (DELETE kills runner subprocess + removes mcp_servers row)
 - `POST /template-instances/{id}/restart` — respawn subprocess

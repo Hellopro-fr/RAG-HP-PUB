@@ -6,6 +6,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // TemplateRepo provides read-only access to the seed-data templates catalog.
@@ -33,6 +34,42 @@ func (r *TemplateRepo) GetBySlug(slug string) (*db.Template, error) {
 		return nil, err
 	}
 	return &t, nil
+}
+
+// ListAll returns every template row, active + inactive, ordered by slug.
+// Used by the export handler; routine catalog listing should keep using
+// ListActive so inactive seeds stay hidden from the UI.
+func (r *TemplateRepo) ListAll() ([]db.Template, error) {
+	var out []db.Template
+	err := r.db.Order("slug ASC").Find(&out).Error
+	return out, err
+}
+
+// Upsert creates each template by slug or overwrites the existing row.
+// Runs in a single transaction — either all rows apply or none do. The
+// caller must pre-validate required fields (slug, name, stdio_command).
+func (r *TemplateRepo) Upsert(tpls []db.Template) error {
+	if len(tpls) == 0 {
+		return nil
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		return tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "slug"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"name",
+				"description",
+				"icon",
+				"stdio_command",
+				"stdio_args",
+				"default_env",
+				"required_extra_env",
+				"tool_prefix",
+				"tags",
+				"is_active",
+				"updated_at",
+			}),
+		}).Create(&tpls).Error
+	})
 }
 
 // InstanceRepo manages TemplateInstance rows. All writes encrypt the

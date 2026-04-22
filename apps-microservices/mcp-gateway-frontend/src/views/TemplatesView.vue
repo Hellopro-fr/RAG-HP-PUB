@@ -2,8 +2,40 @@
   <div>
     <PageBreadcrumb page-title="Templates" />
 
-    <p class="text-sm text-gray-500 dark:text-gray-400 -mt-3 mb-6">
-      Catalogue de templates MCP prêts à déployer. Choisissez un template pour créer une instance.
+    <div class="-mt-3 mb-6 flex items-start justify-between gap-4 flex-wrap">
+      <p class="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+        Catalogue de templates MCP prêts à déployer. Choisissez un template pour créer une instance.
+      </p>
+      <!-- Admin-only catalog import/export. Exports include inactive templates
+           so a round-trip restores exact catalog state; instances/credentials
+           are never part of either payload. -->
+      <div v-if="authStore.isAdmin" class="flex gap-2 shrink-0">
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="exporting"
+          @click="onExport"
+        >
+          <i class="pi pi-download text-[11px]" />
+          {{ exporting ? 'Export…' : 'Exporter' }}
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md"
+          @click="importOpen = true"
+        >
+          <i class="pi pi-upload text-[11px]" />
+          Importer
+        </button>
+      </div>
+    </div>
+
+    <p
+      v-if="exportError"
+      class="mb-4 rounded-md bg-error-50 dark:bg-error-500/15 px-3 py-2 text-xs text-error-600 dark:text-error-400"
+    >
+      <i class="pi pi-exclamation-triangle text-[11px] mr-1" />
+      {{ exportError }}
     </p>
 
     <!-- Loading (initial load only) -->
@@ -92,17 +124,65 @@
         </div>
       </router-link>
     </div>
+
+    <ImportTemplatesModal
+      v-model:open="importOpen"
+      @imported="templatesStore.fetchTemplates()"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useTemplatesStore } from '@/stores/templates'
+import { useAuthStore } from '@/stores/auth'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
+import ImportTemplatesModal from '@/components/templates/ImportTemplatesModal.vue'
+import { ApiError } from '@/types/api'
 
 const templatesStore = useTemplatesStore()
+const authStore = useAuthStore()
+
+const importOpen = ref(false)
+const exporting = ref(false)
+const exportError = ref('')
 
 onMounted(() => {
   templatesStore.fetchTemplates()
 })
+
+// onExport triggers a browser download of the full catalog. We build a
+// temporary <a> + object URL because the backend sets Content-Disposition,
+// but fetch() honours that header only for navigations, not XHR — so the
+// save-as dialog must be triggered manually.
+async function onExport(): Promise<void> {
+  exporting.value = true
+  exportError.value = ''
+  try {
+    const blob = await templatesStore.exportCatalog()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const today = new Date().toISOString().slice(0, 10)
+    a.download = `templates-export-${today}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    // Revoke on next tick to ensure the download has started before the URL
+    // is invalidated. Browsers keep the blob alive as long as the fetch
+    // triggered by the download is in-flight.
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (e: unknown) {
+    if (e instanceof ApiError) {
+      const body = e.body as { error?: string } | undefined
+      exportError.value = body?.error ?? e.message
+    } else if (e instanceof Error) {
+      exportError.value = e.message
+    } else {
+      exportError.value = "Échec de l'export"
+    }
+  } finally {
+    exporting.value = false
+  }
+}
 </script>

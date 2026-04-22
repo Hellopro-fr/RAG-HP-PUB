@@ -108,6 +108,96 @@ func TestTemplateRepo_ListActive(t *testing.T) {
 	}
 }
 
+func TestTemplateRepo_ListAll(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	if err := gdb.Create(&db.Template{Slug: "ga", Name: "GA4", StdioCommand: "analytics-mcp", IsActive: true}).Error; err != nil {
+		t.Fatalf("seed ga: %v", err)
+	}
+	if err := gdb.Create(&db.Template{Slug: "gsc", Name: "GSC", StdioCommand: "mcp-gsc", IsActive: true}).Error; err != nil {
+		t.Fatalf("seed gsc: %v", err)
+	}
+	// Inactive row inserted via raw SQL — GORM would override is_active=0 with the default:true tag.
+	if err := gdb.Exec(
+		"INSERT INTO templates (slug, name, stdio_command, is_active) VALUES (?, ?, ?, 0)",
+		"old", "Old", "x",
+	).Error; err != nil {
+		t.Fatalf("insert inactive: %v", err)
+	}
+
+	repo := NewTemplateRepo(gdb)
+	all, err := repo.ListAll()
+	if err != nil {
+		t.Fatalf("ListAll err: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("ListAll: want 3 rows, got %d", len(all))
+	}
+	active, err := repo.ListActive()
+	if err != nil {
+		t.Fatalf("ListActive err: %v", err)
+	}
+	if len(active) != 2 {
+		t.Errorf("ListActive: want 2 rows, got %d", len(active))
+	}
+}
+
+func TestTemplateRepo_Upsert(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	// Seed one existing row that will be updated by Upsert.
+	if err := gdb.Create(&db.Template{
+		Slug:         "ga",
+		Name:         "GA4 old",
+		StdioCommand: "analytics-mcp",
+		IsActive:     true,
+	}).Error; err != nil {
+		t.Fatalf("seed ga: %v", err)
+	}
+
+	repo := NewTemplateRepo(gdb)
+
+	// Upsert: update "ga" + insert brand-new "gsc".
+	err := repo.Upsert([]db.Template{
+		{
+			Slug:         "ga",
+			Name:         "GA4 updated",
+			Description:  "new desc",
+			StdioCommand: "analytics-mcp",
+			IsActive:     true,
+		},
+		{
+			Slug:         "gsc",
+			Name:         "GSC",
+			StdioCommand: "mcp-gsc",
+			IsActive:     true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	// Both rows present.
+	all, err := repo.ListAll()
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("want 2 rows after upsert, got %d", len(all))
+	}
+	byslug := map[string]db.Template{}
+	for _, row := range all {
+		byslug[row.Slug] = row
+	}
+	if byslug["ga"].Name != "GA4 updated" {
+		t.Errorf("ga.Name = %q, want %q", byslug["ga"].Name, "GA4 updated")
+	}
+	if byslug["ga"].Description != "new desc" {
+		t.Errorf("ga.Description = %q, want %q", byslug["ga"].Description, "new desc")
+	}
+	if byslug["gsc"].Name != "GSC" {
+		t.Errorf("gsc.Name = %q, want %q", byslug["gsc"].Name, "GSC")
+	}
+}
+
 func TestTemplateRepo_GetBySlug_NotFound(t *testing.T) {
 	gdb := newTemplateTestDB(t)
 	repo := NewTemplateRepo(gdb)

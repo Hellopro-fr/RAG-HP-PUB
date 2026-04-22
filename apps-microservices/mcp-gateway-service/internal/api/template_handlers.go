@@ -57,6 +57,14 @@ func (h *Handler) handleGetTemplate(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// Defence-in-depth: "export" and "import" are reserved sub-paths of
+	// /api/v1/templates/ and are registered with exact handlers above. This
+	// guard ensures we never silently fall through to a slug lookup if the
+	// mux routing order ever regresses.
+	if slug == "export" || slug == "import" {
+		http.NotFound(w, r)
+		return
+	}
 	t, err := h.templateRepo.GetBySlug(slug)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -642,4 +650,186 @@ func extractInstanceID(path, suffix string) string {
 	rest = strings.TrimPrefix(rest, "/")
 	rest = strings.TrimSuffix(rest, suffix)
 	return strings.TrimSuffix(rest, "/")
+}
+
+// maxTemplateImportBody caps the catalog import JSON at 256 KB. 2 real
+// templates serialize to < 2 KB, so this is ~100× headroom for reasonable
+// growth without enabling DoS via giant uploads.
+const maxTemplateImportBody = 256 * 1024
+
+// handleExportTemplates returns the entire catalog as a JSON attachment.
+// Active + inactive rows are included so a re-imported dump restores the
+// exact catalog state. Instances and credentials are intentionally excluded.
+func (h *Handler) handleExportTemplates(w http.ResponseWriter, r *http.Request) {
+	if h.templateRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
+		return
+	}
+	rows, err := h.templateRepo.ListAll()
+	if err != nil {
+		log.Printf("[templates] export list failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "list templates failed"})
+		return
+	}
+	out := TemplateExportPayload{
+		Version:    1,
+		ExportedAt: time.Now().UTC(),
+		Templates:  make([]TemplateExportRow, 0, len(rows)),
+	}
+	for _, t := range rows {
+		out.Templates = append(out.Templates, toTemplateExportRow(t))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="templates-export.json"`)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// toTemplateExportRow decodes the json.RawMessage fields into their native
+// types so the export is human-editable (arrays/objects instead of escaped
+// strings). Malformed JSON in the DB defaults to empty values rather than
+// failing the whole export — the DB is the source of truth.
+func toTemplateExportRow(t db.Template) TemplateExportRow {
+	row := TemplateExportRow{
+		Slug:         t.Slug,
+		Name:         t.Name,
+		Description:  t.Description,
+		Icon:         t.Icon,
+		StdioCommand: t.StdioCommand,
+		ToolPrefix:   t.ToolPrefix,
+		IsActive:     t.IsActive,
+	}
+	if len(t.StdioArgs) > 0 {
+		_ = json.Unmarshal(t.StdioArgs, &row.StdioArgs)
+	}
+	if len(t.DefaultEnv) > 0 {
+		_ = json.Unmarshal(t.DefaultEnv, &row.DefaultEnv)
+	}
+	if len(t.RequiredExtraEnv) > 0 {
+		_ = json.Unmarshal(t.RequiredExtraEnv, &row.RequiredExtraEnv)
+	}
+	if len(t.Tags) > 0 {
+		_ = json.Unmarshal(t.Tags, &row.Tags)
+	}
+	return row
+}
+
+// handleImportTemplates accepts a JSON body matching the export shape and
+// upserts every row by slug in one transaction. Body cap: 256 KB. Unknown
+// top-level fields are ignored. Each row must have non-empty slug, name,
+// and stdio_command — first offender aborts the whole import.
+func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) {
+	if h.templateRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
+		return
+	}
+	// Enforce the per-endpoint cap. http.MaxBytesReader makes Read return a
+	// *http.MaxBytesError once the client exceeds it; we map that to 413
+	// explicitly. Any other read error (broken connection, slow client) is a
+	// generic 400.
+	r.Body = http.MaxBytesReader(w, r.Body, maxTemplateImportBody)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: "payload too large (max 256 KB)"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "read body: " + err.Error()})
+		return
+	}
+
+	var payload TemplateExportPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	// Distinguish "missing templates key" from "empty list". An export always
+	// includes the key, even when empty, so a missing key implies a malformed
+	// or unrelated file.
+	if payload.Templates == nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing templates: []"})
+		return
+	}
+
+	rows := make([]db.Template, 0, len(payload.Templates))
+	for idx, row := range payload.Templates {
+		if strings.TrimSpace(row.Slug) == "" || strings.TrimSpace(row.Name) == "" || strings.TrimSpace(row.StdioCommand) == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error: fmt.Sprintf("template at index %d: slug, name, and stdio_command are required", idx),
+			})
+			return
+		}
+		tpl, err := fromTemplateExportRow(row)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+		rows = append(rows, tpl)
+	}
+
+	if err := h.templateRepo.Upsert(rows); err != nil {
+		log.Printf("[templates] import upsert failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "import failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"imported": len(rows)})
+}
+
+// fromTemplateExportRow re-encodes the decoded JSON fields back to
+// json.RawMessage for GORM. Any field that fails to marshal surfaces a
+// per-slug 400 response via a typed error.
+func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
+	t := db.Template{
+		Slug:         row.Slug,
+		Name:         row.Name,
+		Description:  row.Description,
+		Icon:         row.Icon,
+		StdioCommand: row.StdioCommand,
+		ToolPrefix:   row.ToolPrefix,
+		IsActive:     row.IsActive,
+	}
+	var err error
+	if t.StdioArgs, err = marshalField(row.StdioArgs, row.Slug, "stdio_args"); err != nil {
+		return t, err
+	}
+	if t.DefaultEnv, err = marshalField(row.DefaultEnv, row.Slug, "default_env"); err != nil {
+		return t, err
+	}
+	if t.RequiredExtraEnv, err = marshalField(row.RequiredExtraEnv, row.Slug, "required_extra_env"); err != nil {
+		return t, err
+	}
+	if t.Tags, err = marshalField(row.Tags, row.Slug, "tags"); err != nil {
+		return t, err
+	}
+	return t, nil
+}
+
+// marshalField encodes v as JSON. nil or empty input produces nil so GORM
+// writes a SQL NULL instead of a literal "null" string. Marshal failures
+// surface the offending slug + field name in the returned error.
+func marshalField(v interface{}, slug, field string) (json.RawMessage, error) {
+	if v == nil {
+		return nil, nil
+	}
+	// Reject obviously-empty inputs — keeps DB columns NULL-able after import.
+	switch typed := v.(type) {
+	case []string:
+		if len(typed) == 0 {
+			return nil, nil
+		}
+	case map[string]string:
+		if len(typed) == 0 {
+			return nil, nil
+		}
+	case []map[string]interface{}:
+		if len(typed) == 0 {
+			return nil, nil
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("template %s: %s is invalid JSON", slug, field)
+	}
+	return b, nil
 }
