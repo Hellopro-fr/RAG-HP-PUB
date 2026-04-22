@@ -57,6 +57,11 @@ type SheetImportRequest struct {
 	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"` // Tool prefix applied to all servers (overrides sheet column)
 	FixedIcon            string `json:"fixed_icon,omitempty"`             // Icon applied to all servers (overrides sheet column)
 	DisableDocumentation bool   `json:"disable_documentation,omitempty"` // When true, imported servers have no documentation page
+	// TemplateSlug is set when the import was launched from the templates
+	// catalog (e.g. custom-http). Empty for regular server imports from
+	// /servers/import-google. Stamped on every created mcp_servers row so the
+	// docs / docs-admin filters can exclude these rows uniformly.
+	TemplateSlug string `json:"template_slug,omitempty"`
 }
 
 // SheetImportResultEntry represents the import status of a single row.

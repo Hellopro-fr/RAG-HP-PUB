@@ -298,25 +298,20 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Opt-in filter used by the docs-admin view: hide servers that are backed
-	// by a template instance. Template catalogs manage their own docs flow, so
-	// exposing template-backed servers in the docs admin would be confusing.
-	if r.URL.Query().Get("exclude_templates") == "true" && h.instanceRepo != nil {
-		if instances, ierr := h.instanceRepo.ListAll(); ierr == nil {
-			templateBacked := make(map[string]struct{}, len(instances))
-			for _, inst := range instances {
-				templateBacked[inst.MCPServerID] = struct{}{}
+	// Opt-in filter used by the docs-admin view: hide servers that originated
+	// from a template (stdio instance OR http_batch sheet import). Template
+	// catalogs manage their own docs flow, so exposing template-origin servers
+	// in the docs admin would be confusing. The filter reads the first-class
+	// template_slug column so both template paths are covered uniformly
+	// without a join against template_instances.
+	if r.URL.Query().Get("exclude_templates") == "true" {
+		filtered := servers[:0]
+		for _, s := range servers {
+			if s.TemplateSlug == "" {
+				filtered = append(filtered, s)
 			}
-			filtered := servers[:0]
-			for _, s := range servers {
-				if _, ok := templateBacked[s.ID]; !ok {
-					filtered = append(filtered, s)
-				}
-			}
-			servers = filtered
-		} else {
-			log.Printf("[api] exclude_templates list instances failed (returning unfiltered): %v", ierr)
 		}
+		servers = filtered
 	}
 
 	resp := ListServersResponse{
@@ -815,6 +810,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		DocSlug:             srv.DocSlug,
 		DocDescription:      srv.DocDescription,
 		DocConfigGuide:      srv.DocConfigGuide,
+		TemplateSlug:        srv.TemplateSlug,
 		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,

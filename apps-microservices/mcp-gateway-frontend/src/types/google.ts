@@ -52,6 +52,10 @@ export interface SheetImportRequest {
   fixed_tool_prefix?: string
   fixed_icon?: string
   disable_documentation?: boolean
+  // Non-empty when the import was launched from the templates catalog
+  // (e.g. custom-http). Stamped on every imported mcp_servers row so the
+  // docs / docs-admin lists can filter template-origin rows uniformly.
+  template_slug?: string
 }
 
 export interface SheetImportResultEntry {

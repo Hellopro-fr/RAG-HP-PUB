@@ -705,6 +705,11 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 		MCPTransport:        "http",
 		DocSlug:             generateDocSlug(name, id),
 		CreatedBy:           userEmail,
+		// TemplateSlug is non-empty only when the caller is the templates
+		// catalog (e.g. custom-http). The regular /servers/import-google
+		// flow leaves this empty so the imported rows show up in the docs
+		// and docs-admin lists as normal servers.
+		TemplateSlug: req.TemplateSlug,
 	}
 
 	// Apply optional mapped fields

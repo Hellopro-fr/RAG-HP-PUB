@@ -444,6 +444,10 @@ func (h *Handler) createInstanceFromSpec(
 		HealthStatus:        "healthy",
 		ToolPrefix:          firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix),
 		Icon:                firstNonEmpty(icon, tpl.Icon),
+		// TemplateSlug flags this row as template-origin so ListWithDocs,
+		// GetByDocSlug and the docs-admin exclude_templates filter can all
+		// skip it via a single column predicate.
+		TemplateSlug: tpl.Slug,
 		// Generate a unique doc_slug so the UNIQUE index on mcp_servers is
 		// satisfied — empty strings would collide on the second row. The
 		// slug is never surfaced: ServerRepo.ListWithDocs, GetByDocSlug and

@@ -55,6 +55,8 @@ func newTemplateTestDB(t *testing.T) *gorm.DB {
 			mcp_transport        TEXT NOT NULL DEFAULT 'http',
 			tool_prefix          TEXT NOT NULL DEFAULT '',
 			icon                 TEXT NOT NULL DEFAULT '',
+			template_slug        TEXT NOT NULL DEFAULT '',
+			doc_slug             TEXT,
 			is_active            INTEGER NOT NULL DEFAULT 1,
 			health_status        TEXT NOT NULL DEFAULT 'unknown',
 			created_by           TEXT NOT NULL DEFAULT '',
