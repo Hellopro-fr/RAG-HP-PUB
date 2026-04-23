@@ -110,6 +110,27 @@ func (e GatewayShutdownEvent) ToPayload(envLabel, gatewayURL string) ([]byte, er
 	)
 }
 
+// UnauthorizedLoginEvent fires when someone tries to log into the admin UI
+// and the attempt is rejected: wrong credentials, backend auth error, or
+// (most importantly) a valid user who is not on the allowlist. Distinct from
+// UnauthorizedEvent, which covers MCP-endpoint auth failures.
+type UnauthorizedLoginEvent struct {
+	Username string
+	ClientIP string
+	Reason   string
+}
+
+func (e UnauthorizedLoginEvent) ToPayload(envLabel, gatewayURL string) ([]byte, error) {
+	return buildPayload(
+		fmt.Sprintf(":no_entry: %sUnauthorized admin login attempt", envPrefix(envLabel)),
+		fmt.Sprintf("Username: `%s`", e.Username),
+		fmt.Sprintf("Client IP: `%s`", e.ClientIP),
+		fmt.Sprintf("Reason: `%s`", truncate(e.Reason, 200)),
+		fmt.Sprintf("Detected at: %s", nowUTC()),
+		gatewayFooter(gatewayURL),
+	)
+}
+
 // TestEvent is posted from the admin "try webhook" button so an operator can
 // confirm their Slack setup works end-to-end without waiting for a real
 // incident. Includes the triggering user's email when available.
