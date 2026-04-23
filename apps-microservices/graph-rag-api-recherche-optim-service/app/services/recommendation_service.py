@@ -1919,8 +1919,10 @@ class RecommendationService:
             **3. Caractéristiques secondaires.** Un écart dégrade légèrement, jamais éliminatoire.
             
             **Tolérance numérique (critiques et secondaires) :**
-            - Minimum exigé : acceptable si ≥ 80% / Maximum exigé : acceptable si ≤ 120%
-            - Valeur égale exigée : acceptable entre 90% et 110%
+            - max: X → Score 4 si valeur ≤ X × 1.20 / Score 2 si X × 1.20 < valeur ≤ X × 2.00 / Score 1 si valeur > X × 2.00
+            - min: X → Score 4 si valeur ≥ X × 0.80 / Score 2 si X × 0.50 ≤ valeur < X × 0.80 / Score 1 si valeur < X × 0.50
+            - exact: V → Score 4 si 0.90V ≤ valeur ≤ 1.10V / Score 2 si dans 50–200% hors 90–110% / Score 1 si hors 50–200%
+            - **Exemple** : max: 18 kg → Score 4 si ≤ 21.6 kg / Score 2 si 21.6–36 kg / Score 1 si > 36 kg
             
             ### ÉTAPE 3 — Attribuer un score
             
@@ -1991,7 +1993,7 @@ class RecommendationService:
             - [ ] Usage vérifié en premier, écart éliminatoire uniquement si factuel et lisible dans la fiche
             - [ ] Chaque produit évalué indépendamment
             - [ ] Critiques vérifiés avant secondaires — écart critique = impact fort, secondaire = léger
-            - [ ] Tolérance numérique 20% appliquée
+            - [ ] Tolérance numérique appliquée : max:X → Score 4 si ≤1.20X / Score 2 si 1.20X–2.00X / Score 1 si >2.00X
             - [ ] Score 1 réservé aux incompatibilités certaines et factuelles
             - [ ] Valeur textuelle présente + incompatible sur critique = score 1 / absente = score 3
             - [ ] Valeur numérique hors 20% mais dans 50%–200% = score 2 / hors 50%–200% = score 1
