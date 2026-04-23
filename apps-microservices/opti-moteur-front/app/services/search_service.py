@@ -23,6 +23,7 @@ def search(
     collection: Optional[str] = None,
     top_k: Optional[int] = None,
     candidates: Optional[int] = None,
+    offset: int = 0,
     apply_filter_by_category: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -72,9 +73,10 @@ def search(
     ranked = rerank_candidates(groups, query, use_vector=use_vector)
     rerank_ms = (time.time() - t2) * 1000
 
-    # 5. Shape output
+    # 5. Shape output (applique offset pour pagination AJAX)
     hits_out = []
-    for r in ranked[:top_k]:
+    paged = ranked[offset:offset + top_k] if offset > 0 else ranked[:top_k]
+    for r in paged:
         d = r["doc"]
         hits_out.append({
             "id_produit":   d.get("id_produit"),

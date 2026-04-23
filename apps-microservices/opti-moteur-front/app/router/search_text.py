@@ -57,6 +57,7 @@ def search_by_text(req: SearchTextRequest):
             collection=req.collection,
             top_k=req.top_k,
             candidates=req.candidates,
+            offset=req.offset or 0,
             apply_filter_by_category=req.apply_filter_by_category,
         )
     except Exception as e:
