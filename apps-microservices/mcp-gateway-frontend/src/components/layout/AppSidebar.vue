@@ -21,7 +21,7 @@
       ]"
     >
       <router-link to="/" class="flex items-center gap-2">
-        <i class="pi pi-box text-xl text-brand-500" />
+        <img src="/images/servers/hp-logo.svg" alt="Hellopro" class="w-6 h-6" />
         <span
           v-if="isExpanded || isHovered || isMobileOpen"
           class="text-lg font-bold tracking-wide text-gray-900 dark:text-white"
