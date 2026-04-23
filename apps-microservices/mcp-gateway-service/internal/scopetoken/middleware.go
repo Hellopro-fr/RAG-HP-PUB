@@ -8,7 +8,26 @@ import (
 	"time"
 
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/slack"
 )
+
+// notifyUnauthorized alerts Slack (if configured) about a rejected MCP request.
+// Cooldown gating lives inside the client.
+func notifyUnauthorized(c *slack.Client, r *http.Request, reason string) {
+	if c == nil {
+		return
+	}
+	ip := slack.ClientIP(r)
+	endpoint := r.URL.Path
+	if !c.AllowAuthAlert(ip, endpoint) {
+		return
+	}
+	c.Notify(slack.UnauthorizedEvent{
+		ClientIP: ip,
+		Endpoint: endpoint,
+		Reason:   reason,
+	})
+}
 
 // AllowedServersContextKey is the context key for scope-allowed server IDs.
 // Uses a plain string so both scopetoken and transport packages can read it.
@@ -45,7 +64,9 @@ func LeexiFilterFromContext(ctx context.Context) (*LeexiFilterContext, bool) {
 
 // Middleware returns an HTTP middleware that validates X-MCP-Scope-Token
 // and stores the allowed server IDs and tool selections in the request context.
-func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(http.Handler) http.Handler {
+// slackClient is optional; when set, every 401/403 fires an UnauthorizedEvent
+// (rate-limited inside the client).
+func Middleware(cache *Cache, repo *repository.TokenRepo, required bool, slackClient *slack.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rawToken := r.Header.Get("X-MCP-Scope-Token")
@@ -53,6 +74,7 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 			if rawToken == "" {
 				if required {
 					http.Error(w, `{"error":"X-MCP-Scope-Token header required"}`, http.StatusUnauthorized)
+					notifyUnauthorized(slackClient, r, "missing X-MCP-Scope-Token")
 					return
 				}
 				// No token, no scope restriction — full access (backward compat)
@@ -74,6 +96,7 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 				if err != nil {
 					log.Printf("[scope] invalid token: %s...", hash[:8])
 					http.Error(w, `{"error":"invalid scope token"}`, http.StatusUnauthorized)
+					notifyUnauthorized(slackClient, r, "invalid scope token")
 					return
 				}
 				serverIDs := make(map[string]bool, len(dbToken.Servers))
@@ -118,10 +141,12 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool) func(ht
 			// Validate
 			if !ct.IsActive {
 				http.Error(w, `{"error":"scope token is revoked"}`, http.StatusForbidden)
+				notifyUnauthorized(slackClient, r, "revoked scope token")
 				return
 			}
 			if ct.ExpiresAt != nil && ct.ExpiresAt.Before(time.Now()) {
 				http.Error(w, `{"error":"scope token has expired"}`, http.StatusForbidden)
+				notifyUnauthorized(slackClient, r, "expired scope token")
 				return
 			}
 

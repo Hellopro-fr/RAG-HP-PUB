@@ -11,11 +11,35 @@ import (
 
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"github.com/hellopro/mcp-gateway/internal/slack"
 )
+
+// notifyUnauthorized fires a Slack alert for a rejected MCP request, gated by
+// the per-(ip,endpoint) cooldown so noisy scanners can't flood the channel.
+// Safe to call with a nil client (no-op).
+func notifyUnauthorized(slackClient *slack.Client, r *http.Request, reason string) {
+	if slackClient == nil {
+		return
+	}
+	ip := slack.ClientIP(r)
+	endpoint := r.URL.Path
+	if !slackClient.AllowAuthAlert(ip, endpoint) {
+		return
+	}
+	slackClient.Notify(slack.UnauthorizedEvent{
+		ClientIP: ip,
+		Endpoint: endpoint,
+		Reason:   reason,
+	})
+}
 
 // CombinedMiddleware validates either Bearer token or X-MCP-Scope-Token.
 // If neither is present, returns 401 with WWW-Authenticate header per MCP spec.
 // Both mechanisms inject the same context keys so the ScopedGateway works unchanged.
+//
+// slackClient is optional; when non-nil it fires an UnauthorizedEvent on every
+// 401/403 this middleware emits (with per-(ip,endpoint) cooldown inside the
+// client so noisy scanners don't flood Slack).
 func CombinedMiddleware(
 	oauth2Cache *Cache,
 	oauth2Repo *repository.OAuth2Repo,
@@ -23,6 +47,7 @@ func CombinedMiddleware(
 	tokenRepo *repository.TokenRepo,
 	jwtSecret string,
 	publicURL string,
+	slackClient *slack.Client,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +60,7 @@ func CombinedMiddleware(
 					log.Printf("[oauth2] invalid bearer token: %v", err)
 					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="invalid_token", resource_metadata="%s/.well-known/oauth-authorization-server"`, publicURL))
 					http.Error(w, `{"error":"invalid_token","error_description":"invalid or expired access token"}`, http.StatusUnauthorized)
+					notifyUnauthorized(slackClient, r, "invalid bearer token: "+err.Error())
 					return
 				}
 
@@ -43,6 +69,7 @@ func CombinedMiddleware(
 					client, err := oauth2Repo.FindByID(clientID)
 					if err != nil {
 						http.Error(w, `{"error":"invalid_token","error_description":"client not found"}`, http.StatusUnauthorized)
+						notifyUnauthorized(slackClient, r, "bearer client_id not found")
 						return
 					}
 
@@ -86,10 +113,12 @@ func CombinedMiddleware(
 
 				if !cc.IsActive {
 					http.Error(w, `{"error":"invalid_token","error_description":"client is revoked"}`, http.StatusForbidden)
+					notifyUnauthorized(slackClient, r, "revoked oauth2 client")
 					return
 				}
 				if cc.ExpiresAt != nil && cc.ExpiresAt.Before(time.Now()) {
 					http.Error(w, `{"error":"invalid_token","error_description":"client has expired"}`, http.StatusForbidden)
+					notifyUnauthorized(slackClient, r, "expired oauth2 client")
 					return
 				}
 
@@ -115,7 +144,7 @@ func CombinedMiddleware(
 			scopeTokenHeader := r.Header.Get("X-MCP-Scope-Token")
 			if scopeTokenHeader != "" {
 				// Delegate to scope token middleware (always required)
-				scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, true)
+				scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, true, slackClient)
 				scopeMW(next).ServeHTTP(w, r)
 				return
 			}
@@ -129,6 +158,7 @@ func CombinedMiddleware(
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"unauthorized","error_description":"authentication required"}`))
+			notifyUnauthorized(slackClient, r, "no Authorization header or X-MCP-Scope-Token")
 		})
 	}
 }

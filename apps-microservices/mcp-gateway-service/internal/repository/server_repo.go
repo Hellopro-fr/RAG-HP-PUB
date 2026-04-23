@@ -150,11 +150,15 @@ func (r *ServerRepo) SetToolActive(serverID string, toolName string, active bool
 // SaveDiscoveredCapabilities replaces tools, resources, and prompts for a server.
 // It also updates the server's discovered metadata.
 // Tool is_active status is preserved across rediscovery for tools that already exist.
-func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+// Returns the number of tools that existed BEFORE this call, so the caller can
+// detect regressions (prev > 0 && new == 0) and alert on backends that have
+// lost their toolkit.
+func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) (prevToolCount int, err error) {
+	err = r.db.Transaction(func(tx *gorm.DB) error {
 		// Snapshot existing tool active states before deletion
 		var existingTools []db.ServerTool
 		tx.Where("server_id = ?", srv.ID).Find(&existingTools)
+		prevToolCount = len(existingTools)
 		toolActiveState := make(map[string]bool, len(existingTools))
 		for _, t := range existingTools {
 			toolActiveState[t.Name] = t.IsActive
@@ -225,6 +229,7 @@ func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
 		}
 		return tx.Model(&db.MCPServer{}).Where("id = ?", srv.ID).Updates(updates).Error
 	})
+	return
 }
 
 // ClearCapabilities removes all tools, resources, and prompts for a server

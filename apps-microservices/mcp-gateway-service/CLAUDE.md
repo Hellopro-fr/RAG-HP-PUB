@@ -188,6 +188,9 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `LEEXI_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-leexi-service `/admin/*`. Must match `MCP_LEEXI_ADMIN_TOKEN` on the Leexi side. |
 | `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8595`). Required to spawn template instances. |
 | `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the runner admin API (sent as `X-Admin-Token`). The runner uses the SAME value when calling back via `/api/v1/internal/runner/sync`. |
+| `SLACK_WEBHOOK_URL` | — | Slack incoming-webhook URL (`https://hooks.slack.com/services/...`). Empty = notifications disabled. |
+| `SLACK_ENV_LABEL` | — | Optional prefix shown on every message (e.g. `prod`, `staging`). |
+| `SLACK_AUTH_ALERT_COOLDOWN` | `600` | Seconds between duplicate unauthorized alerts per (ip, endpoint). `0` disables the cooldown. |
 
 ## Database
 
@@ -229,6 +232,23 @@ Connection pooling: max 25 open, 5 idle connections.
 - OAuth2 Authorization Server is MCP spec-compliant: OAuth 2.1, RFC 8414 (metadata), RFC 7591 (dynamic registration), PKCE (S256).
 - MCP endpoints return 401 + `WWW-Authenticate` header when no auth is provided, triggering Claude.ai's OAuth2 discovery flow.
 - Unit tests in `internal/authserver/*_test.go`, `internal/oauth2/*_test.go`, `internal/repository/*_test.go`, `internal/db/mysql_test.go`.
+
+### Slack notifications (`internal/slack/`)
+
+Posts six event types to a Slack incoming webhook when `SLACK_WEBHOOK_URL` is set. Empty URL = silently disabled (local dev and existing deployments untouched).
+
+| Event | Trigger |
+|---|---|
+| `ServerDown` | Health checker detects a backend transitioning to `unhealthy`. |
+| `ServerUp` | Health checker detects a backend recovering (`unhealthy`/`unknown` → `healthy`), includes downtime duration. |
+| `ToolsRegression` | `SaveDiscoveredCapabilities` sees `prevToolCount > 0 && len(newTools) == 0` for a server — fires from `api.Handler.saveBackendCapabilities`. |
+| `Unauthorized` | OAuth2 or scope-token middleware returns 401/403 on an MCP endpoint (`/sse`, `/mcp`, `/message`). Rate-limited per (ip, endpoint) by `SLACK_AUTH_ALERT_COOLDOWN`. |
+| `GatewayShutdown` | SIGINT/SIGTERM received in `main.go` before drain. |
+| `GatewayPanic` | Best-effort: deferred recover() in the HTTP-server goroutine posts synchronously before exit. |
+
+**Limitation:** The gateway cannot self-report SIGKILL, OOM, or hardware death — the process is already gone. For those, pair with an external watcher (Kubernetes liveness probe + alertmanager, or an uptime monitor polling `/health`).
+
+**Dispatch:** `Notify` is non-blocking (buffered channel, size 64; overflow drops with a log line). `NotifySync` posts inline with a 2 s timeout — used only by panic / shutdown paths where the worker goroutine is about to die.
 
 ## What This Provides to Other Services
 
