@@ -19,22 +19,25 @@ logger = logging.getLogger(__name__)
 
 def search(
     query: str,
-    query_vector: List[float],
+    query_vector: Optional[List[float]] = None,
     collection: Optional[str] = None,
     top_k: Optional[int] = None,
     candidates: Optional[int] = None,
     apply_filter_by_category: bool = True,
 ) -> Dict[str, Any]:
     """
-    Execute une recherche hybride avec fallback sans filter_by si trop restrictif.
-    Retourne un dict {query, results, detected_cat, confidence, filter_cats,
-    latency_ms_ts, latency_ms_rerank}.
+    Execute une recherche hybride (BM25 + kNN vecteur) OU BM25 pur selon la
+    presence de query_vector. Fallback sans filter_by si trop restrictif.
+
+    Si `query_vector` est None -> pipeline BM25 pur (pas d'appel vectoriel a
+    Typesense, reranker sans poids vecteur). Utile pour benchmark sans embedding.
     """
     collection = collection or settings.TYPESENSE_COLLECTION
     top_k = top_k or settings.DEFAULT_TOP_K
     candidates = candidates or settings.CANDIDATES_TOP_K
+    use_vector = query_vector is not None
 
-    # 1. Category detection
+    # 1. Category detection (inchange, text-only)
     t0 = time.time()
     cat_detected, conf, valid_cats = detect_categories(query, collection=collection)
     detect_ms = (time.time() - t0) * 1000
@@ -44,7 +47,7 @@ def search(
     if apply_filter_by_category and conf >= settings.CAT_FILTER_THRESHOLD and valid_cats:
         filter_cats = valid_cats
 
-    # 3. Hybrid search
+    # 3. Hybrid or BM25-only search
     t1 = time.time()
     ts_result = _hybrid_typesense_search(
         query, query_vector, collection, candidates, filter_cats=filter_cats,
@@ -64,9 +67,9 @@ def search(
         filter_cats = None
     ts_ms = (time.time() - t1) * 1000
 
-    # 4. Re-rank
+    # 4. Re-rank (formule adaptee selon use_vector)
     t2 = time.time()
-    ranked = rerank_candidates(groups, query)
+    ranked = rerank_candidates(groups, query, use_vector=use_vector)
     rerank_ms = (time.time() - t2) * 1000
 
     # 5. Shape output
@@ -117,13 +120,16 @@ _MAX_PAGES = 4
 
 def _hybrid_typesense_search(
     query: str,
-    query_vector: List[float],
+    query_vector: Optional[List[float]],
     collection: str,
     candidates: int,
     filter_cats: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Recherche hybride paginee pour couvrir jusqu'a `candidates` documents uniques.
+    Recherche paginee pour couvrir jusqu'a `candidates` documents uniques.
+
+    Si `query_vector` est None -> BM25 pur (pas de vector_query envoye).
+    Sinon -> hybrid BM25 + kNN sur embedding.
 
     Typesense capse `per_page` et `k` (vector kNN) a 250 pour les recherches
     hybrides. Pour remonter plus de candidats (utile pour les grosses
@@ -134,9 +140,7 @@ def _hybrid_typesense_search(
     page, puis client-side a travers les pages (un meme id_produit peut
     apparaitre sur plusieurs pages si ses chunks sont distribues).
     """
-    vec_str = json.dumps(query_vector)
     per_page = min(max(candidates, 1), _PER_PAGE_CAP)
-    # Nombre de pages necessaires pour couvrir `candidates` docs, cap _MAX_PAGES
     num_pages = min((candidates + per_page - 1) // per_page, _MAX_PAGES)
     num_pages = max(num_pages, 1)
 
@@ -145,13 +149,16 @@ def _hybrid_typesense_search(
         "q": query,
         "query_by": "nom_produit,categorie,text",
         "query_by_weights": "5,10,1",
-        "vector_query": f"embedding:({vec_str}, k:{per_page})",
         "per_page": per_page,
         "group_by": "id_produit",
         "group_limit": 1,
         "typo_tokens_threshold": 3,
         "drop_tokens_threshold": 2,
     }
+    # Ajoute le vector_query seulement si un vecteur est fourni (mode hybride)
+    if query_vector is not None:
+        vec_str = json.dumps(query_vector)
+        base_params["vector_query"] = f"embedding:({vec_str}, k:{per_page})"
     if filter_cats:
         escaped = ",".join(f"`{c}`" for c in filter_cats)
         base_params["filter_by"] = f"categorie:=[{escaped}]"

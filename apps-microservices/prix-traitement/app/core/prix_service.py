@@ -951,10 +951,12 @@ def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[st
     adjusted = False
 
     if max_ex > borne_haute:
-        new_haute = _math.ceil(max_ex / 10) * 10
+        # ≥ 1000 : arrondi à la dizaine supérieure ; < 1000 : arrondi simple supérieur (ceil)
+        new_haute = _math.ceil(max_ex / 10) * 10 if max_ex >= 1000 else _math.ceil(max_ex)
         adjusted = True
     if min_ex < borne_basse:
-        new_basse = _math.floor(min_ex / 10) * 10
+        # ≥ 1000 : arrondi à la dizaine inférieure ; < 1000 : arrondi simple inférieur (floor)
+        new_basse = _math.floor(min_ex / 10) * 10 if min_ex >= 1000 else _math.floor(min_ex)
         adjusted = True
 
     if not adjusted:
