@@ -150,7 +150,7 @@ func main() {
 
 	// Mount login/logout routes
 	if authCfg.Enabled {
-		auth.RegisterHandlers(mux, authCfg, userRepo)
+		auth.RegisterHandlers(mux, authCfg, userRepo, slackClient)
 		log.Println("[main] authentication enabled — login at /login")
 	}
 

@@ -99,6 +99,19 @@ func TestGatewayShutdownPayload(t *testing.T) {
 	}
 }
 
+func TestUnauthorizedLoginPayload(t *testing.T) {
+	m := payloadFor(t,
+		UnauthorizedLoginEvent{Username: "bob@example.com", ClientIP: "1.2.3.4", Reason: "not in allowlist"},
+		"prod", "https://gw",
+	)
+	text := textOf(t, m)
+	for _, want := range []string{"prod", "admin login attempt", "bob@example.com", "1.2.3.4", "not in allowlist"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestTestEventPayload(t *testing.T) {
 	m := payloadFor(t, TestEvent{TriggeredBy: "alice@example.com"}, "staging", "https://gw")
 	text := textOf(t, m)
