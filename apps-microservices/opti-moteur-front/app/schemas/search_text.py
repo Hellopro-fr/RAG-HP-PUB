@@ -18,6 +18,15 @@ class SearchTextRequest(BaseModel):
     collection: Optional[str] = Field(None, description="Collection Typesense (override settings)")
     top_k: Optional[int] = Field(10, ge=1, le=2000, description="Nombre de resultats a retourner")
     candidates: Optional[int] = Field(50, ge=10, le=2000, description="Candidats pour re-rank")
+    offset: Optional[int] = Field(
+        0,
+        ge=0,
+        le=2000,
+        description=(
+            "Decalage dans les resultats re-ranked, pour la pagination AJAX. "
+            "Ex: offset=40 top_k=40 -> page 2 (produits 41-80)."
+        ),
+    )
     apply_filter_by_category: bool = Field(True, description="Applique filter_by si categorie detectee")
     use_vector: bool = Field(
         True,
