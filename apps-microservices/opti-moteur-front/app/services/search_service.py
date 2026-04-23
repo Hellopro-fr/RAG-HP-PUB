@@ -79,13 +79,22 @@ def search(
     for r in paged:
         d = r["doc"]
         hits_out.append({
-            "id_produit":   d.get("id_produit"),
-            "nom_produit":  d.get("nom_produit") or "",
-            "categorie":    d.get("categorie") or "",
-            "fournisseur":  d.get("fournisseur") or "",
-            "marque":       d.get("marque") or "",
-            "prix_ht":      d.get("prix_ht"),
-            "score":        round(r["final_score"], 4),
+            "id_produit":    d.get("id_produit"),
+            "nom_produit":   d.get("nom_produit") or "",
+            "categorie":     d.get("categorie") or "",
+            # id_categorie : indispensable pour reconstruire l'URL fiche produit cote front
+            # (pattern /<slug>-<id_categorie>-<id_produit>-produit.html). Sans ce champ,
+            # PHP filtre et rejette les hits -> 0 resultat affiche malgre 30 hits API.
+            "id_categorie":  str(d.get("id_categorie") or ""),
+            "fournisseur":   d.get("fournisseur") or "",
+            "id_fournisseur": str(d.get("id_fournisseur") or ""),
+            "marque":        d.get("marque") or "",
+            # etat / affichage : utilises cote PHP pour le boost "societe cliente"
+            # (etat == 'Client' OU (etat == 'Pause' AND affichage == 'Complet')).
+            "etat":          d.get("etat") or "",
+            "affichage":     d.get("affichage") or "",
+            "prix_ht":       d.get("prix_ht"),
+            "score":         round(r["final_score"], 4),
             "scores_detail": {
                 "vector":     round(r["vec_score"], 4),
                 "bm25":       round(r["bm25_score"], 4),
