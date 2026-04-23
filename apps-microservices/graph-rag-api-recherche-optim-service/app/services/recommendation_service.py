@@ -2213,6 +2213,15 @@ class RecommendationService:
             query_time = time.perf_counter() - query_start
             logging.warning("[RERANK-TIMING] cypher_query: %.3fs (%d results)", query_time, len(results) if results else 0)
 
+            if not results:
+                # P5: fallback — zero-result parcours → retry without absolute_threshold filter
+                fallback_params = dict(params)
+                fallback_params["absolute_threshold"] = -1.0
+                fallback_start = time.perf_counter()
+                results = await clients.execute_cypher(cypher_query, fallback_params)
+                fallback_time = time.perf_counter() - fallback_start
+                logging.warning("[RERANK-TIMING][P5-FALLBACK] cypher_fallback: %.3fs (%d results)", fallback_time, len(results) if results else 0)
+
             # --- DEBUG: Diversity Algorithm Output ---
             if results:
                 pre_diversity_debug = results[0].get("pre_diversity_debug", [])
