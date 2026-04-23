@@ -11,8 +11,8 @@
 
       <div class="relative z-10 text-center max-w-md">
         <!-- Logo / Icon -->
-        <div class="mx-auto mb-8 w-20 h-20 rounded-2xl bg-brand-500 flex items-center justify-center">
-          <i class="pi pi-server text-3xl text-white" />
+        <div class="mx-auto mb-8 w-20 h-20 rounded-2xl bg-white flex items-center justify-center p-3 shadow-lg">
+          <img src="/images/servers/hp-logo.svg" alt="Hellopro" class="w-full h-full object-contain" />
         </div>
 
         <h1 class="text-3xl font-bold text-white mb-4">MCP Gateway</h1>
@@ -29,8 +29,8 @@
       <div class="w-full max-w-sm">
         <!-- Mobile-only branding -->
         <div class="lg:hidden text-center mb-8">
-          <div class="mx-auto mb-4 w-14 h-14 rounded-xl bg-brand-500 flex items-center justify-center">
-            <i class="pi pi-server text-2xl text-white" />
+          <div class="mx-auto mb-4 w-14 h-14 rounded-xl bg-white flex items-center justify-center p-2 shadow-theme-sm border border-gray-200 dark:border-gray-700">
+            <img src="/images/servers/hp-logo.svg" alt="Hellopro" class="w-full h-full object-contain" />
           </div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">MCP Gateway</h1>
         </div>
