@@ -209,12 +209,28 @@ def inspect_archive(
         # 4. Resolve domain via multi-source lookup (payload, snapshot, tar inference).
         domain = _resolve_domain_name(tar, members, payload)
 
-        # 5. Get expected count. Node.js writes 'success' (the successful URL count);
-        #    'stored_files_count' is added by Python in-memory at webhook-send time
-        #    and NOT persisted to disk, so this is a future-proofing fallback only.
-        expected = payload.get("stored_files_count")
-        if expected is None:
-            expected = payload.get("success")
+        # 5. Get expected count. Prefer _status_snapshot.json.urls_crawled when
+        #    present — it matches the main-domain file count precisely. Node's
+        #    'success' field conflates main + NFR + error counts and drifts by
+        #    various magnitudes (confirmed live against 1806/selux.com:
+        #    success=10054, urls_crawled=1324, main files=1324, nfr=8728).
+        #    Fall back to payload's 'stored_files_count' or 'success' only when
+        #    the snapshot is absent or lacks urls_crawled.
+        snapshot = _read_json_member(tar, "_status_snapshot.json")
+        expected = None
+        if snapshot and isinstance(snapshot.get("urls_crawled"), (int, float)):
+            expected = int(snapshot["urls_crawled"])
+            details["expected_count_source"] = "snapshot.urls_crawled"
+        else:
+            fallback = payload.get("stored_files_count")
+            if fallback is not None:
+                expected = fallback
+                details["expected_count_source"] = "payload.stored_files_count"
+            else:
+                fallback = payload.get("success")
+                if fallback is not None:
+                    expected = fallback
+                    details["expected_count_source"] = "payload.success"
 
         # 6. Row count check — best-effort. Skip (with warning) if we lack either input.
         if domain is None:
