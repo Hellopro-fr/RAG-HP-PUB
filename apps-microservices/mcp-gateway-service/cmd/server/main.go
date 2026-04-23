@@ -107,11 +107,16 @@ func main() {
 		auditRepo = repository.NewAuditRepo(database)
 		installGuideRepo = repository.NewInstallGuideRepo(database)
 
-		// Charge les serveurs actifs depuis la base de données
-		loadServersFromDB(gw, registry, repo)
-
-		// Démarre le health checker
+		// Instantiate the health checker BEFORE initial load so loadServersFromDB
+		// can route startup-time transitions through the same Slack-aware path
+		// the periodic loop uses (otherwise a backend broken at gateway start
+		// gets silently persisted as "unhealthy" and later checks skip it via
+		// the same-state guard — no Slack alert ever fires).
 		healthChecker = health.NewChecker(repo, gw, registry, time.Duration(cfg.HealthCheckInterval)*time.Second, slackClient)
+
+		// Charge les serveurs actifs depuis la base de données
+		loadServersFromDB(gw, registry, repo, healthChecker)
+
 		healthChecker.Start()
 	} else {
 		log.Println("[main] MYSQL_DSN not set — running without database (in-memory only)")
@@ -315,7 +320,9 @@ func main() {
 }
 
 // loadServersFromDB charge tous les serveurs actifs depuis MySQL et les enregistre.
-func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *repository.ServerRepo) {
+// Transitions (healthy↔unhealthy) are routed through healthChecker.ApplyHealthResult
+// so Slack sees them.
+func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *repository.ServerRepo, checker *health.Checker) {
 	servers, err := repo.ListActive()
 	if err != nil {
 		log.Printf("[main] warn: failed to load servers from DB: %v", err)
@@ -341,7 +348,7 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 			// Tente la découverte en direct
 			if err := gw.DiscoverAndRegister(ctx, s.ID, s.URL, authHeaders); err != nil {
 				log.Printf("[main] warn: discovery failed for %s (%s): %v — using cached capabilities", s.Name, s.URL, err)
-				_ = repo.UpdateHealth(s.ID, "unhealthy", err.Error())
+				checker.ApplyHealthResult(&s, err)
 				// Utilise les capabilities cachées de la DB
 				registerFromDBCache(gw, &s)
 			} else {
@@ -356,7 +363,7 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 					toolStates[t.Name] = t.IsActive
 				}
 				reg.SyncToolActiveStates(s.ID, toolStates)
-				_ = repo.UpdateHealth(s.ID, "healthy", "")
+				checker.ApplyHealthResult(&s, nil)
 			}
 		}(srv)
 	}

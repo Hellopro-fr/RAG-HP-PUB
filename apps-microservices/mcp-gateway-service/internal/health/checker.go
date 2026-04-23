@@ -99,18 +99,7 @@ func (c *Checker) checkOne(srv *db.MCPServer, authHeaders map[string]string) {
 	err := c.gw.DiscoverAndRegister(ctx, srv.ID, srv.URL, authHeaders)
 
 	if err != nil {
-		// Le serveur n'est pas joignable
-		if srv.HealthStatus != "unhealthy" {
-			log.Printf("[health] server %s (%s) became unhealthy: %v", srv.ID, srv.URL, err)
-			c.recordDown(srv.ID)
-			c.slack.Notify(slack.ServerDownEvent{
-				ServerID:   srv.ID,
-				ServerName: displayName(srv),
-				ServerURL:  srv.URL,
-				Err:        err.Error(),
-			})
-		}
-		_ = c.repo.UpdateHealth(srv.ID, "unhealthy", err.Error())
+		c.ApplyHealthResult(srv, err)
 		// Keep cached capabilities — they are still valid, the server is just temporarily unreachable.
 		// Capabilities get refreshed on the next successful discovery.
 		return
@@ -131,7 +120,34 @@ func (c *Checker) checkOne(srv *db.MCPServer, authHeaders map[string]string) {
 		c.registry.SyncToolActiveStates(srv.ID, toolStates)
 	}
 
-	// Le serveur est joignable
+	c.ApplyHealthResult(srv, nil)
+}
+
+// ApplyHealthResult updates the server's health status, fires Slack transition
+// events, and maintains downtime tracking based on the outcome of a discovery
+// attempt. Shared between the periodic health checker and startup's
+// loadServersFromDB so that backends broken at gateway-start ALSO surface on
+// Slack instead of being silently persisted as "unhealthy" and then skipped by
+// the same-state guard on subsequent checks.
+//
+// srv.HealthStatus must be the PREVIOUS status (as read from the DB) so the
+// transition detection works correctly. discoveryErr == nil signals success.
+func (c *Checker) ApplyHealthResult(srv *db.MCPServer, discoveryErr error) {
+	if discoveryErr != nil {
+		if srv.HealthStatus != "unhealthy" {
+			log.Printf("[health] server %s (%s) became unhealthy: %v", srv.ID, srv.URL, discoveryErr)
+			c.recordDown(srv.ID)
+			c.slack.Notify(slack.ServerDownEvent{
+				ServerID:   srv.ID,
+				ServerName: displayName(srv),
+				ServerURL:  srv.URL,
+				Err:        discoveryErr.Error(),
+			})
+		}
+		_ = c.repo.UpdateHealth(srv.ID, "unhealthy", discoveryErr.Error())
+		return
+	}
+
 	if srv.HealthStatus == "unhealthy" || srv.HealthStatus == "unknown" {
 		log.Printf("[health] server %s (%s) is now healthy", srv.ID, srv.URL)
 		downFor := c.clearDown(srv.ID)
