@@ -2257,6 +2257,8 @@ services:
       # Google Templates runner sidecar (dynamic SA-JSON-backed MCP instances)
       - GOOGLE_TEMPLATES_RUNNER_URL=http://mcp-google-templates-runner:8595
       - GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - SLACK_ENV_LABEL=${SLACK_ENV_LABEL:-dev}
     volumes:
       - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:
