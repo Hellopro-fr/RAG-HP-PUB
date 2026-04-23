@@ -1832,13 +1832,6 @@ class RecommendationService:
                         readable = valeur_id_to_name.get(str(v), str(v))
                         text_values.append(readable)
                     valeur_parts.append(", ".join(text_values))
-                    # P2: also expose blocking values so LLM can detect incompatibilities in descriptif/characteristics
-                    if isinstance(carac.valeurs_bloquantes, list) and carac.valeurs_bloquantes:
-                        blocking_names = [
-                            valeur_id_to_name.get(str(v), str(v))
-                            for v in carac.valeurs_bloquantes
-                        ]
-                        valeur_parts.append(f"[⛔ Incompatible: {', '.join(blocking_names)}]")
 
                 valeur_str = ", ".join(valeur_parts) if valeur_parts else "Non spécifié"
                 line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str}"
@@ -1921,7 +1914,7 @@ class RecommendationService:
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
             - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans la fiche.
             
-            **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité. Si les CARACTERISTIQUES_CRITIQUES listent des valeurs incompatibles (⛔), vérifie si le descriptif ou les caractéristiques du produit en mentionnent une explicitement — si oui : Score 2 minimum pour ce produit.
+            **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité.
             
             **3. Caractéristiques secondaires.** Un écart dégrade légèrement, jamais éliminatoire.
             
