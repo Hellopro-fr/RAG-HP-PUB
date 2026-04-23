@@ -131,6 +131,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	apiMux.HandleFunc("/api/v1/leexi/users", h.handleLeexiUsers)
 	apiMux.HandleFunc("/api/v1/leexi/teams", h.handleLeexiTeams)
 
+	// ── Slack notifications admin routes ──────────────────────────────────────
+	// Status is always mounted; the handler reports enabled=false when the
+	// webhook URL is unset. Test returns 503 in that case.
+	apiMux.HandleFunc("/api/v1/slack/status", h.handleSlackStatus)
+	apiMux.HandleFunc("/api/v1/slack/test", h.handleSlackTest)
+
 	// ── OAuth2 client routes ─────────────────────────────────────────────────
 	if h.oauth2Repo != nil {
 		apiMux.HandleFunc("/api/v1/oauth2/clients", h.handleOAuth2Clients)
@@ -469,8 +475,8 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
-	// User, audit, install guide, and Google management always require admin
-	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") {
+	// User, audit, install guide, Google, and Slack admin endpoints always require admin
+	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") || strings.HasPrefix(path, "/api/v1/slack") {
 		return true
 	}
 	// Server writes require admin

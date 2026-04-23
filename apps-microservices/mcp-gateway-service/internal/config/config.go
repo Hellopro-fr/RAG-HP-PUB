@@ -54,6 +54,13 @@ type Config struct {
 	// Google templates runner (mcp-google-templates-runner sidecar).
 	GoogleTemplatesRunnerURL        string // GOOGLE_TEMPLATES_RUNNER_URL
 	GoogleTemplatesRunnerAdminToken string // GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN
+
+	// Slack notifications. Posts ServerDown/ServerUp/ToolsRegression/Unauthorized/
+	// Shutdown/Panic events to an incoming webhook. Disabled when SlackWebhookURL
+	// is empty — keeps local dev and existing deployments unchanged.
+	SlackWebhookURL        string // SLACK_WEBHOOK_URL — empty disables all notifications
+	SlackEnvLabel          string // SLACK_ENV_LABEL — prefix like "prod" shown in every message
+	SlackAuthAlertCooldown int    // SLACK_AUTH_ALERT_COOLDOWN — seconds between duplicate unauthorized alerts per (ip, endpoint); default 600
 }
 
 func Load() *Config {
@@ -89,6 +96,13 @@ func Load() *Config {
 	if v := os.Getenv("OAUTH2_REFRESH_TOKEN_TTL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			refreshTTL = n
+		}
+	}
+
+	slackAuthCooldown := 600
+	if v := os.Getenv("SLACK_AUTH_ALERT_COOLDOWN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			slackAuthCooldown = n
 		}
 	}
 
@@ -129,6 +143,10 @@ func Load() *Config {
 
 		GoogleTemplatesRunnerURL:        os.Getenv("GOOGLE_TEMPLATES_RUNNER_URL"),
 		GoogleTemplatesRunnerAdminToken: os.Getenv("GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN"),
+
+		SlackWebhookURL:        os.Getenv("SLACK_WEBHOOK_URL"),
+		SlackEnvLabel:          os.Getenv("SLACK_ENV_LABEL"),
+		SlackAuthAlertCooldown: slackAuthCooldown,
 	}
 }
 
