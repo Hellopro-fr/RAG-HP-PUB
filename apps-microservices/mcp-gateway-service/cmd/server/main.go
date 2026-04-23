@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,8 +30,26 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"github.com/hellopro/mcp-gateway/internal/slack"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
+
+// goSafeExit runs fn in a goroutine. A panic posts a best-effort Slack alert
+// (synchronously, before the process exits) and then terminates via
+// log.Fatalf. Used for critical loops whose death would otherwise silently
+// take down the service.
+func goSafeExit(slackClient *slack.Client, where string, fn func()) {
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				stack := string(debug.Stack())
+				slackClient.NotifySync(slack.GatewayPanicEvent{Where: where, Err: rec, Stack: stack})
+				log.Fatalf("[main] PANIC in %s: %v\n%s", where, rec, stack)
+			}
+		}()
+		fn()
+	}()
+}
 
 func main() {
 	cfg := config.Load()
@@ -46,6 +65,14 @@ func main() {
 	}
 
 	log.Printf("[main] starting %s v%s on :%s", cfg.Name, cfg.Version, cfg.Port)
+
+	// Slack notifications — disabled when SLACK_WEBHOOK_URL is unset.
+	// Wired into the health checker, API handler, and MCP auth middleware so
+	// backend outages, tool regressions, and unauthorized attempts surface to
+	// on-call without tail-ing container logs. See internal/slack for the full
+	// set of events and the SIGKILL/OOM limitation.
+	slackClient := slack.New(cfg.SlackWebhookURL, cfg.SlackEnvLabel, cfg.GatewayPublicURL, cfg.SlackAuthAlertCooldown)
+	defer slackClient.Close()
 
 	registry := gateway.NewRegistry()
 	gw := gateway.New(cfg.Name, cfg.Version, registry)
@@ -84,7 +111,7 @@ func main() {
 		loadServersFromDB(gw, registry, repo)
 
 		// Démarre le health checker
-		healthChecker = health.NewChecker(repo, gw, registry, time.Duration(cfg.HealthCheckInterval)*time.Second)
+		healthChecker = health.NewChecker(repo, gw, registry, time.Duration(cfg.HealthCheckInterval)*time.Second, slackClient)
 		healthChecker.Start()
 	} else {
 		log.Println("[main] MYSQL_DSN not set — running without database (in-memory only)")
@@ -164,6 +191,7 @@ func main() {
 		apiHandler.SetLeexiAdmin(leexiAdminClient)
 		apiHandler.SetUploadDir(cfg.UploadDir)
 		apiHandler.SetInstallGuideRepo(installGuideRepo)
+		apiHandler.SetSlack(slackClient)
 
 		// Google Sheets import (optional — only enabled when GOOGLE_CLIENT_ID is set)
 		if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
@@ -227,7 +255,7 @@ func main() {
 	streamableServer.Register(mcpMux)
 
 	// Wrap MCP routes with combined OAuth2 + scope token middleware
-	combinedMW := oauth2pkg.CombinedMiddleware(oauth2Cache, oauth2Repo, tokenCache, tokenRepo, cfg.JWTSecret, cfg.GatewayPublicURL)
+	combinedMW := oauth2pkg.CombinedMiddleware(oauth2Cache, oauth2Repo, tokenCache, tokenRepo, cfg.JWTSecret, cfg.GatewayPublicURL, slackClient)
 	mux.Handle("/sse", combinedMW(mcpMux))
 	mux.Handle("/message", combinedMW(mcpMux))
 	mux.Handle("/mcp", combinedMW(mcpMux))
@@ -258,19 +286,20 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() {
+	goSafeExit(slackClient, "http-server", func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("[main] server error: %v", err)
 		}
-	}()
+	})
 
 	log.Printf("[main] ready — SSE: http://0.0.0.0:%s/sse | HTTP: http://0.0.0.0:%s/mcp", cfg.Port, cfg.Port)
 	if repo != nil {
 		log.Printf("[main] ready — REST API: http://0.0.0.0:%s/api/v1/servers", cfg.Port)
 	}
 
-	<-stop
-	log.Println("[main] shutting down...")
+	sig := <-stop
+	log.Printf("[main] shutting down (signal: %s)...", sig)
+	slackClient.NotifySync(slack.GatewayShutdownEvent{Signal: sig.String()})
 
 	if healthChecker != nil {
 		healthChecker.Stop()
@@ -388,3 +417,4 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 
 	gw.RegisterFromCache(backend)
 }
+

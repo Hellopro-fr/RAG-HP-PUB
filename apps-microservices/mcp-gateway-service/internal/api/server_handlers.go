@@ -20,6 +20,7 @@ import (
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
+	"github.com/hellopro/mcp-gateway/internal/slack"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
@@ -92,6 +93,9 @@ type Handler struct {
 	instanceRepo *repository.InstanceRepo
 	runner       *runnerclient.Client
 	config       *config.Config
+	// slack is the optional Slack notification client. nil disables all
+	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
+	slack *slack.Client
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -158,6 +162,11 @@ func (h *Handler) SetUploadDir(dir string) {
 // SetInstallGuideRepo sets the install guide repository.
 func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
 	h.installGuideRepo = repo
+}
+
+// SetSlack wires the Slack notifications client. Pass nil to disable.
+func (h *Handler) SetSlack(client *slack.Client) {
+	h.slack = client
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -717,9 +726,24 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 		dbSrv.Prompts = append(dbSrv.Prompts, sp)
 	}
 
-	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
+	prevToolCount, err := h.repo.SaveDiscoveredCapabilities(dbSrv)
+	if err != nil {
 		log.Printf("[api] save capabilities error for %s: %v", id, err)
 		return
+	}
+	// Regression: backend used to expose tools and now exposes none. Almost
+	// always a misconfigured backend — alert so an operator can investigate.
+	if prevToolCount > 0 && len(dbSrv.Tools) == 0 {
+		log.Printf("[api] tools regression on server %s: prev=%d, now=0", id, prevToolCount)
+		name := dbSrv.ServerName
+		if name == "" {
+			name = backend.Name
+		}
+		h.slack.Notify(slack.ToolsRegressionEvent{
+			ServerID:   id,
+			ServerName: name,
+			PrevCount:  prevToolCount,
+		})
 	}
 	// Sync tool active states from DB back to registry (SaveDiscoveredCapabilities
 	// preserves is_active for existing tools, but the registry has all tools as active)
