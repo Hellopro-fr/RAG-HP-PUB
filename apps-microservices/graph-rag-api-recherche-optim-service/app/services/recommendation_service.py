@@ -1834,7 +1834,29 @@ class RecommendationService:
                     valeur_parts.append(", ".join(text_values))
 
                 valeur_str = ", ".join(valeur_parts) if valeur_parts else "Non spécifié"
-                line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str}"
+                # P2 (iter 3) — Expose valeurs_bloquantes to LLM for explicit elimination
+                blocking_suffix = ""
+                if carac.valeurs_bloquantes:
+                    cat_valeurs = cat_def.get("valeurs", [])
+                    valeur_id_to_name = {
+                        str(v.get("id_valeur", "")): v.get("valeur", "")
+                        for v in cat_valeurs
+                    }
+                    if isinstance(carac.valeurs_bloquantes, list):
+                        blocking_names = [
+                            valeur_id_to_name.get(str(v), str(v))
+                            for v in carac.valeurs_bloquantes
+                        ]
+                        blocking_suffix = f" ⛔ VALEURS BLOQUANTES (éliminatoires): {', '.join(blocking_names)}"
+                    elif isinstance(carac.valeurs_bloquantes, dict):
+                        parts = []
+                        if carac.valeurs_bloquantes.get("min") is not None:
+                            parts.append(f"< {carac.valeurs_bloquantes['min']} {unite}".strip())
+                        if carac.valeurs_bloquantes.get("max") is not None:
+                            parts.append(f"> {carac.valeurs_bloquantes['max']} {unite}".strip())
+                        if parts:
+                            blocking_suffix = f" ⛔ VALEURS BLOQUANTES (éliminatoires si): {', '.join(parts)}"
+                line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str}{blocking_suffix}"
                 caracteristiques_critiques_lines.append(line)
 
         caracteristiques_critiques = "\n".join(caracteristiques_critiques_lines)
