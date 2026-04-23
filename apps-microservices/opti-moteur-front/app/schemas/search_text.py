@@ -19,3 +19,11 @@ class SearchTextRequest(BaseModel):
     top_k: Optional[int] = Field(10, ge=1, le=2000, description="Nombre de resultats a retourner")
     candidates: Optional[int] = Field(50, ge=10, le=2000, description="Candidats pour re-rank")
     apply_filter_by_category: bool = Field(True, description="Applique filter_by si categorie detectee")
+    use_vector: bool = Field(
+        True,
+        description=(
+            "Si True (defaut) : pipeline hybride (BM25 + kNN vecteur CamemBERT + rerank). "
+            "Si False : pur BM25 + name_match + cat_match (pas d'appel a api-embedding-service, "
+            "plus rapide d'environ 300-500 ms, perd la remontee semantique de synonymes)."
+        ),
+    )
