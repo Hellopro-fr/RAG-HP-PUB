@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-22
 **Service:** `tools/gcs_archive_audit.py` + operational runbook
-**Status:** Approved
+**Status:** Approved · Executed end-to-end 2026-04-22/23 — see **Post-execution findings** at the bottom.
 
 ## Problem
 
@@ -499,3 +499,68 @@ All additions and new scripts follow the existing TDD pattern in `tools/tests/`.
 10. **Implement `restore_from_reaudit.py`** + tests. Commit.
 11. **Phase 2.3 — Surgical restore** with collision check.
 12. **File follow-up ticket** for the middle-bucket decision (2.4).
+
+---
+
+## Post-execution findings (2026-04-22/23)
+
+The runbook executed end-to-end successfully. Two unplanned findings surfaced during live ops and are recorded here for future reference.
+
+### Finding 1 — Phase 2.1.5: prefer `_status_snapshot.json.urls_crawled` as `expected_count`
+
+**Scope addition, not a scope change.** The original Phase 2.0 investigation identified three classifier bugs (excess, expected=0, small drift). A fourth bug — structurally more fundamental — surfaced during Phase 1A live verification:
+
+- Node's `payload.success` field is not just "successful main-domain URLs." It aggregates **main + NFR counts** (Not-For-Rent URLs — auxiliary dataset in `storage/datasets/nfr-{domain}/`). For crawls with large NFR sets, `success` can be 10× or more than the main-domain file count, producing what looks like a massive deficit but is actually just NFR conflation.
+- Evidence from crawl `1806` (selux.com): `payload.success=10054`, but the archive contains exactly `urls_crawled=1324` main-domain files + `nfr_urls_crawled=8728` NFR files + `error_urls_crawled=124` error files. `urls_crawled + nfr_urls_crawled = 10052 ≈ success=10054`.
+- Similar pattern confirmed in `2517, 4606, 6207`.
+
+The Phase 2.0 investigation explicitly flagged this as "out of scope" (`bonus observation: snapshot.urls_crawled was the ground truth count in every archive inspected`). That turned out to be wrong — it was the primary fix all along.
+
+**Implementation** (commit `e7d49a3c`):
+- `inspect_archive` now reads `_status_snapshot.json`, and if it contains an integer `urls_crawled`, uses that as `expected_count`. Falls back to `payload.stored_files_count` → `payload.success` only when the snapshot is absent or lacks the field.
+- Records the chosen source in `details["expected_count_source"]` for transparency.
+- 6 new tests in `TestSnapshotUrlsCrawled`.
+
+**Effect on Phase 2.1 tags:** `EXCESS_FILES`, `FAILED_CRAWL_WITH_RESIDUE`, `COUNT_DRIFT` still fire, but are now much rarer — they only apply when the snapshot is absent. For modern archives, the snapshot is always present and the tags virtually never appear in production reports.
+
+### Finding 2 — Incidental `--resume` no-op fix
+
+The original `--resume` logic compared full `gs://bucket/...` URIs against bucket-stripped `object_name` strings in the skip set — they never matched, so `--resume` was effectively a no-op since its introduction. Surfaced while writing the `TestIncludeIds.test_include_ids_combined_with_resume` test. Fixed in the same commit as the `--include-ids` flag (`a25ac52e`) — one-line normalization at the loop's skip check.
+
+### Actual vs estimated outcomes
+
+| Metric | Original spec estimate | Actual |
+|---|---|---|
+| Classifier fixes | 3 | **4** (Phase 2.1.5 added) |
+| Quarantine archives reclassified OK | ~47 | **75** (77% of quarantine) |
+| Remaining `ROW_COUNT_MISMATCH` after re-audit | ~8 | **0** |
+| Update-mode queue size (`entries`) | ~23 | **4** |
+| Middle-bucket follow-up ticket | 1 anticipated | **None** (obviated — 0 middle-bucket archives survived the classifier fix) |
+
+### Final GCS state
+
+- `gs://{bucket}/crawls/`: 109 archives (18 original OK + 16 Phase 1A fresh uploads + 75 restored from quarantine)
+- `gs://{bucket}/crawls-quarantine/`: 22 redundant residue — 14 `CORRUPTED` (10 of them superseded by Phase 1A fresh copies now in `crawls/`; 4 have no local replacement and are in the update-mode queue) + 8 `WRONG_NAME` (`.tmp.tar.gz` counterparts of crawls whose mains are now in `crawls/`). Eligible for cleanup; versioning is off so deletion would be permanent. Default: keep as forensic given negligible storage cost.
+- `gs://{bucket}/crawls-quarantine-rejected/`: 0 objects (never triggered — no Phase 1A upload failed its post-upload verification).
+- `gs://{bucket}/remediation/`: 11 artifacts (pre-flight snapshot, source report backup, Phase 1A pre- and post-2.1.5 verifications, Phase 1B preflight + log, Phase 2 investigation notes, quarantine re-audit, Phase 2.3 dry-run + real-run logs, update-mode queue v1 and v2).
+
+### Final update-mode queue (4 entries)
+
+- `1427` — CORRUPTED, no local replacement
+- `1933` — CORRUPTED, no local replacement
+- `3559` — CORRUPTED, no local replacement
+- `4066` — CORRUPTED, no local replacement
+
+Artifact: `gs://{bucket}/remediation/update_mode_queue_v2_2026-04-22.json`. Handoff to the operator/scheduler is outside the runbook's scope.
+
+### Commits (this runbook's implementation)
+
+- `0dcc13ec` docs(tools): add GCS quarantine remediation runbook spec
+- `d15ad839` docs(tools): add implementation plan for quarantine remediation
+- `a25ac52e` feat(tools): add `--include-ids` flag to `gcs_archive_audit.py` (+ incidental `--resume` fix)
+- `00a94243` fix(tools): gcs audit classifier — three false-positive fixes (Phase 2.1)
+- `62204454` feat(tools): add `build_update_mode_queue.py` — queue builder
+- `e7d49a3c` fix(tools): prefer `snapshot.urls_crawled` for gcs audit `expected_count` (Phase 2.1.5)
+- `22c54c4e` feat(tools): add `restore_from_reaudit.py` — surgical quarantine restore
+
+Tools test suite: 0 → **81 tests**, all green.

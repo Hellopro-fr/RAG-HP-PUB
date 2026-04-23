@@ -4,7 +4,7 @@
     {
       "id": 0,
       "subject": "Task 0: Phase 0 — Pre-flight Checks",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Capture bucket versioning state, confirm upload daemon running, snapshot quarantine prefix, back up the source report. No code changes.\n\n**Files:** none (operational artifacts only)\n\n**Acceptance Criteria:**\n- Bucket versioning state recorded in the operator log\n- Upload daemon confirmed running\n- quarantine_snapshot_YYYY-MM-DD.txt uploaded to gs://{bucket}/remediation/\n- corrected_report.json copied to gs://{bucket}/remediation/2026-04-19_corrected_report.json\n\n**Verify:** `gcloud storage ls gs://$BUCKET/remediation/`\n\n**Steps:** 6 (set env, check versioning, confirm daemon, snapshot quarantine, backup report, verify artifacts). See plan Task 0 for full commands.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"gcloud storage ls gs://$BUCKET/remediation/\", \"acceptanceCriteria\": [\"bucket versioning state recorded\", \"upload daemon confirmed running\", \"quarantine snapshot uploaded to GCS\", \"source report backed up to GCS\"]}\n```"
     },
     {
@@ -17,39 +17,39 @@
     {
       "id": 2,
       "subject": "Task 2: Phase 2.0 + 2.1 — Investigate and Fix Classifier",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Confirm three hypothesized classifier bugs against real archives, then apply the three fixes TDD-style.\n\n**Files:**\n- Modify: tools/gcs_archive_audit.py\n- Modify: tools/tests/test_gcs_archive_audit.py\n- Upload: gs://{bucket}/remediation/phase2_investigation_YYYY-MM-DD.md\n\n**Acceptance Criteria:**\n- Investigation notes uploaded for 3487, 4398, 2754/5441\n- 5 new TestClassifierBugFixes tests pass\n- Existing test_row_count_mismatch still passes\n- secondary_tags propagate from details into entry in main\n\n**Verify:** `pytest tools/tests/test_gcs_archive_audit.py -v`\n\n**Steps:** 13 (investigate 3 archives, upload notes, write 5 failing tests, modify inspect_archive signature+logic, thread row_count_tolerance through _inspect_one, add --row-count-tolerance CLI flag, propagate secondary_tags in main, run tests, commit EN+FR). See plan Task 2 for exact code.\n\n```json:metadata\n{\"files\": [\"tools/gcs_archive_audit.py\", \"tools/tests/test_gcs_archive_audit.py\"], \"verifyCommand\": \"pytest tools/tests/test_gcs_archive_audit.py -v\", \"acceptanceCriteria\": [\"investigation notes uploaded to GCS\", \"5 new TestClassifierBugFixes tests pass\", \"existing test_row_count_mismatch still passes\", \"one commit landed (EN+FR)\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: Phase 1A — Upload Pending Locals and Verify",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0, 1, 2],
       "description": "**Goal:** Let the upload daemon process the 10 pending .tar.gz files in crawler_archives/ and verify each lands OK using the corrected classifier.\n\n**Files:** none (operational artifacts only)\n\n**Acceptance Criteria:**\n- Pre-upload sanity check run on all 10 locals\n- All passing locals uploaded (daemon log 'Upload successful')\n- Targeted audit shows all OK; any failures rolled back to crawls-quarantine-rejected/\n- phase1a_verification_YYYY-MM-DD.json uploaded to gs://{bucket}/remediation/\n\n**Verify:** inspect phase1a_verification.json categories\n\n**Steps:** 7 (sanity each local, wait for daemon, verify uploads landed, run targeted audit, inspect result, rollback failures, upload verification). See plan Task 3 for full commands.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"python -c \\\"import json; d=json.load(open('phase1a_verification.json')); print(set(a['category'] for a in d['archives']))\\\"\", \"acceptanceCriteria\": [\"sanity pre-check run on all 10 locals\", \"all passing locals uploaded\", \"targeted audit shows all OK\", \"verification JSON uploaded to GCS\"]}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: Phase 1B — Delete Two Safe Duplicate .tmp Archives",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0, 1],
       "description": "**Goal:** Delete gs://{bucket}/crawls-quarantine/4365.tmp.tar.gz and 5934.tmp.tar.gz after confirming each main counterpart still classifies OK.\n\n**Files:** none (operational artifacts only)\n\n**Acceptance Criteria:**\n- Preflight re-audit confirms 4365 and 5934 mains are OK\n- Both .tmp.tar.gz objects deleted\n- gcloud ls shows 'not found' for both\n- phase1b_preflight.json + phase1b_log_YYYY-MM-DD.md uploaded to GCS\n\n**Verify:** `for id in 4365 5934; do gcloud storage ls gs://$BUCKET/crawls-quarantine/$id.tmp.tar.gz 2>&1 | grep -q not.found && echo $id gone; done`\n\n**Steps:** 5 (pre-delete ls both, re-audit mains with --include-ids, delete the 2 tmps, verify gone, upload artifacts). See plan Task 4 for full commands.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"for id in 4365 5934; do gcloud storage ls gs://$BUCKET/crawls-quarantine/$id.tmp.tar.gz 2>&1 | grep -q 'not found\\\\|One or more URLs' && echo $id gone; done\", \"acceptanceCriteria\": [\"preflight re-audit shows both mains OK\", \"both .tmp.tar.gz removed\", \"verify both now return not-found\", \"preflight JSON + operator log uploaded to GCS\"]}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: Phase 1C — Build and Upload Update-Mode Queue",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** Implement tools/build_update_mode_queue.py (TDD) + run it to produce and upload gs://{bucket}/remediation/update_mode_queue_YYYY-MM-DD.json.\n\n**Files:**\n- Create: tools/build_update_mode_queue.py\n- Create: tools/tests/test_build_update_mode_queue.py\n- Upload: gs://{bucket}/remediation/update_mode_queue_YYYY-MM-DD.json\n\n**Acceptance Criteria:**\n- 10 tests pass in TestClassifyEntry (corrupted→entries, major→entries, minor→deferred, excess→deferred, expected_zero→deferred, tmp_sibling_row_mismatch→deferred, ok→skipped, wrong_name→skipped, exclude_ids filters, threshold_override)\n- Queue generated against real corrected_report.json has ~23 entries and ~50 deferred\n- Queue uploaded to GCS\n\n**Verify:** `pytest tools/tests/test_build_update_mode_queue.py -v`\n\n**Steps:** 8 (write 10 failing tests, implement script, run tests, commit EN+FR, generate real queue with --exclude-ids from #3 survivors, sanity-check output, upload to GCS, hand URI to ops). See plan Task 5 for exact code.\n\n```json:metadata\n{\"files\": [\"tools/build_update_mode_queue.py\", \"tools/tests/test_build_update_mode_queue.py\"], \"verifyCommand\": \"pytest tools/tests/test_build_update_mode_queue.py -v\", \"acceptanceCriteria\": [\"10 tests pass in TestClassifyEntry\", \"one commit landed (EN+FR)\", \"queue JSON generated with ~23 entries\", \"queue uploaded to gs://{bucket}/remediation/\"]}\n```"
     },
     {
       "id": 6,
       "subject": "Task 6: Phase 2.2 + 2.3 — Re-audit Quarantine and Surgically Restore",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2, 3, 4],
       "description": "**Goal:** Re-audit crawls-quarantine/ with the corrected classifier, implement tools/restore_from_reaudit.py (TDD), execute restore, file middle-bucket follow-up ticket.\n\n**Files:**\n- Create: tools/restore_from_reaudit.py\n- Create: tools/tests/test_restore_from_reaudit.py\n- Upload: gs://{bucket}/remediation/quarantine_reaudit_YYYY-MM-DD.json\n- Upload: gs://{bucket}/remediation/phase2_restore_log_YYYY-MM-DD.md\n\n**Acceptance Criteria:**\n- Re-audit JSON uploaded with ~47 reclassifications to OK (35 drift + 7 excess + 5 expected=0)\n- 5 tests pass in TestRestore\n- Dry-run log reviewed before real run\n- Real restore moves reclassified-OK archives with no collision\n- Restore log uploaded to GCS\n- Middle-bucket follow-up ticket filed with URL recorded in log\n\n**Verify:** `pytest tools/tests/test_restore_from_reaudit.py -v`\n\n**Steps:** 14 (re-audit, inspect counts, upload re-audit, write 5 failing tests, implement restore, run tests, commit EN+FR, dry-run, review, execute real, verify restores landed, upload logs, file follow-up ticket, mark complete). See plan Task 6 for exact code.\n\n```json:metadata\n{\"files\": [\"tools/restore_from_reaudit.py\", \"tools/tests/test_restore_from_reaudit.py\"], \"verifyCommand\": \"pytest tools/tests/test_restore_from_reaudit.py -v\", \"acceptanceCriteria\": [\"re-audit JSON uploaded with ~47 OK reclassifications\", \"5 tests pass in TestRestore\", \"one commit landed (EN+FR)\", \"dry-run log reviewed\", \"real restore executed and log uploaded\", \"follow-up ticket filed for middle bucket\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-22T00:00:00Z",
-  "notes": "Task 1 completed in commit a25ac52e."
+  "lastUpdated": "2026-04-23T09:00:00Z",
+  "notes": "All 7 plan tasks completed. Commits: 0dcc13ec (spec), d15ad839 (plan), a25ac52e (Task 1: --include-ids + incidental --resume fix), 00a94243 (Task 2: classifier tags), 62204454 (Task 5: build_update_mode_queue.py), e7d49a3c (Phase 2.1.5: snapshot.urls_crawled preference — scope addition discovered during live execution), 22c54c4e (Task 6: restore_from_reaudit.py). Final state: 109 archives in crawls/, 22 redundant residue in crawls-quarantine/, 4 crawl_ids in update-mode queue (1427, 1933, 3559, 4066) at gs://{bucket}/remediation/update_mode_queue_v2_2026-04-22.json."
 }
