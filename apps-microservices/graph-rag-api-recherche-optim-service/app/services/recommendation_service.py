@@ -1931,9 +1931,7 @@ class RecommendationService:
             Usage cohérent, rien ne contredit le besoin sur les critiques. Des caractéristiques ne sont pas renseignées, ce qui empêche de confirmer la compatibilité complète. Écarts uniquement sur secondaires → score 3 aussi.
             
             **Score 2 — Correspondance partielle**
-            Le produit est dans le bon univers mais présente un écart non-éliminatoire sur un critère critique. Deux cas :
-            (a) Écart numérique en limite de tolérance (proche mais hors de la zone 90-110 % / 80-120 %).
-            (b) Sous-type voisin dans la même famille d'usage : le produit remplit la même fonction principale que le besoin mais dans une variante (ex : mini-pelle 4t pour besoin 3t, épareuse latérale pour besoin non précisé, distributeur spirales quand la config n'a pas été demandée). Un sous-type structurellement incompatible — qui empêche l'usage principal demandé — reste un Score 1.
+            Bon univers mais écart(s) sur des critiques sans être éliminatoire : valeur numérique hors tolérance 20% mais dans 50%–200% de la cible, valeur textuelle critique proche mais pas exacte, sous-type proche mais pas exactement celui demandé. L'acheteur devra vérifier.
             
             **Score 1 — Ne correspond pas**
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
