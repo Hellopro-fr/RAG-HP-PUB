@@ -49,6 +49,21 @@ Dockerfile      # Multi-stage: node build → nginx serve
 - Global state (auth, servers) in Pinia; local state in composables
 - French UI labels, English code identifiers
 
+## Provider-scope filter panels
+
+The token and OAuth2 forms expose per-provider ownership-scope pickers when a
+backend with the matching `tool_prefix` is selected:
+
+| Component | Tool prefix | Backend DB field |
+|---|---|---|
+| `components/tokens/LeexiFilterPanel.vue` | `leexi` | `leexi_filter` (UUID strings) |
+| `components/tokens/RingoverFilterPanel.vue` | `ringover` | `ringover_filter` (integer IDs) |
+
+Each panel fetches `GET /api/v1/{provider}/users|teams` from the gateway
+(which proxies the MCP service `/admin/*` endpoints) and gracefully renders a
+disabled state on 503. The selected scope is serialised into the create /
+update payload only when the corresponding backend is in the picked set.
+
 ## What This Provides to Other Services
 
 - Admin UI for managing MCP servers, scope tokens, and OAuth2 clients

@@ -32,6 +32,12 @@ type CachedToken struct {
 	LeexiFilterMode       string   // "none" | "users" | "teams" | "creator"
 	LeexiAllowedUserUUIDs []string // for modes "users" and "creator"
 	LeexiAllowedTeamUUIDs []string // for mode "teams"
+
+	// Ringover user scope — same semantics as the Leexi fields above, but
+	// Ringover identifies users with integer IDs, so the slices hold ints.
+	RingoverFilterMode     string // "none" | "users" | "teams" | "creator"
+	RingoverAllowedUserIDs []int  // for modes "users" and "creator"
+	RingoverAllowedTeamIDs []int  // for mode "teams"
 }
 
 // Cache provides an in-memory TTL cache for scope token lookups.

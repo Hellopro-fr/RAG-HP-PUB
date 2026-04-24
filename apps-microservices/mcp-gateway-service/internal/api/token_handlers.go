@@ -128,6 +128,18 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	token.LeexiAllowedUserUUIDs = userUUIDs
 	token.LeexiAllowedTeamUUIDs = teamUUIDs
 
+	// Resolve and validate the optional Ringover ownership filter.
+	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, token.CreatedBy,
+	)
+	if rerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+		return
+	}
+	token.RingoverFilterMode = rMode
+	token.RingoverAllowedUserIDs = rUserIDs
+	token.RingoverAllowedTeamIDs = rTeamIDs
+
 	// Build server associations
 	for _, sid := range req.ServerIDs {
 		token.Servers = append(token.Servers, db.ScopeTokenServer{
@@ -217,6 +229,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:      token.CreatedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:      expiresStr,
 		LeexiFilter:    scopeTokenLeexiFilterToDTO(&token),
+		RingoverFilter: scopeTokenRingoverFilterToDTO(&token),
 	})
 }
 
@@ -281,6 +294,20 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 		updates["leexi_filter_mode"] = mode
 		updates["leexi_allowed_user_uuids"] = userUUIDs
 		updates["leexi_allowed_team_uuids"] = teamUUIDs
+	}
+
+	// Symmetric handling for the Ringover filter.
+	if req.RingoverFilter != nil {
+		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy,
+		)
+		if rerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+			return
+		}
+		updates["ringover_filter_mode"] = mode
+		updates["ringover_allowed_user_ids"] = userIDs
+		updates["ringover_allowed_team_ids"] = teamIDs
 	}
 
 	if len(updates) > 0 {
@@ -512,5 +539,6 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		UpdatedAt:      t.UpdatedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:      expiresStr,
 		LeexiFilter:    scopeTokenLeexiFilterToDTO(&t),
+		RingoverFilter: scopeTokenRingoverFilterToDTO(&t),
 	}
 }

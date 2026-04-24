@@ -206,6 +206,16 @@
           <LeexiFilterPanel v-model="form.leexi_filter" />
         </div>
 
+        <!-- Section 3b: Accès Ringover (only when a Ringover server is selected) -->
+        <div
+          v-if="hasRingoverServer"
+          v-show="isEdit || currentStep === ringoverStepIndex"
+          :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
+        >
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Ringover</h3>
+          <RingoverFilterPanel v-model="form.ringover_filter" />
+        </div>
+
         <!-- Section 4: TTL, expiration et vérification -->
         <div v-show="isEdit || currentStep === expirationStepIndex" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">TTL et expiration</h3>
@@ -294,6 +304,10 @@
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Leexi</dt>
                 <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ leexiFilterSummary }}</dd>
               </div>
+              <div v-if="hasRingoverServer" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Ringover</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ ringoverFilterSummary }}</dd>
+              </div>
             </dl>
           </div>
         </div>
@@ -337,9 +351,11 @@ import { useDragDrop } from '@/composables/useDragDrop'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import DragDropPanel from '@/components/shared/DragDropPanel.vue'
 import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
+import RingoverFilterPanel from '@/components/tokens/RingoverFilterPanel.vue'
 import InstructionsPicker from '@/components/llm-instructions/InstructionsPicker.vue'
 import type { OAuth2Client, CreateOAuth2ClientRequest } from '@/types/oauth2'
 import type { LeexiFilter } from '@/types/leexi'
+import type { RingoverFilter } from '@/types/ringover'
 
 const route = useRoute()
 const router = useRouter()
@@ -354,12 +370,22 @@ const dragDropReady = ref(false)
 const stepLabels = computed(() => {
   const labels = ['Informations de base', 'Serveurs et outils', 'Instructions LLM']
   if (hasLeexiServer.value) labels.push('Acc\u00e8s Leexi')
+  if (hasRingoverServer.value) labels.push('Acc\u00e8s Ringover')
   labels.push('TTL, expiration et vérification')
   return labels
 })
 const instructionsStepIndex = 2
 const leexiStepIndex = computed(() => (hasLeexiServer.value ? 3 : -1))
-const expirationStepIndex = computed(() => (hasLeexiServer.value ? 4 : 3))
+const ringoverStepIndex = computed(() => {
+  if (!hasRingoverServer.value) return -1
+  return hasLeexiServer.value ? 4 : 3
+})
+const expirationStepIndex = computed(() => {
+  let idx = 3
+  if (hasLeexiServer.value) idx++
+  if (hasRingoverServer.value) idx++
+  return idx
+})
 const lastStepIndex = computed(() => stepLabels.value.length - 1)
 const currentStep = ref(0)
 const loading = ref(false)
@@ -378,6 +404,13 @@ const hasLeexiServer = computed(() => {
   })
 })
 
+const hasRingoverServer = computed(() => {
+  return dragDrop.selected.value.some(s => {
+    const srv = serversStore.servers.find(x => x.id === s.id)
+    return srv?.tool_prefix === 'ringover'
+  })
+})
+
 const form = reactive({
   name: '',
   description: '',
@@ -385,6 +418,7 @@ const form = reactive({
   access_token_ttl: 86400,
   expires_at: '',
   leexi_filter: { mode: 'none' } as LeexiFilter,
+  ringover_filter: { mode: 'none' } as RingoverFilter,
   instruction_ids: [] as string[]
 })
 
@@ -410,6 +444,20 @@ const leexiFilterSummary = computed(() => {
       return `${(f.user_uuids || []).length} utilisateur(s)`
     case 'teams':
       return `${(f.team_uuids || []).length} \u00e9quipe(s)`
+    case 'creator':
+      return 'Cr\u00e9ateur du jeton uniquement'
+    default:
+      return 'Aucune restriction'
+  }
+})
+
+const ringoverFilterSummary = computed(() => {
+  const f = form.ringover_filter
+  switch (f.mode) {
+    case 'users':
+      return `${(f.user_ids || []).length} utilisateur(s)`
+    case 'teams':
+      return `${(f.team_ids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
     default:
@@ -458,6 +506,9 @@ onMounted(async () => {
       }
       if (client.leexi_filter) {
         form.leexi_filter = { ...client.leexi_filter }
+      }
+      if (client.ringover_filter) {
+        form.ringover_filter = { ...client.ringover_filter }
       }
       if (client.instruction_ids) {
         form.instruction_ids = [...client.instruction_ids]
@@ -518,6 +569,9 @@ async function handleSubmit() {
       // Only send the filter when the Leexi server is in scope.
       leexi_filter: hasLeexiServer.value
         ? (form.leexi_filter.mode === 'none' ? { mode: 'none' } : form.leexi_filter)
+        : { mode: 'none' },
+      ringover_filter: hasRingoverServer.value
+        ? (form.ringover_filter.mode === 'none' ? { mode: 'none' } : form.ringover_filter)
         : { mode: 'none' }
     }
 

@@ -30,6 +30,11 @@ type CachedClient struct {
 	LeexiFilterMode       string
 	LeexiAllowedUserUUIDs []string
 	LeexiAllowedTeamUUIDs []string
+
+	// Ringover user scope (integer IDs; same semantics as Leexi fields).
+	RingoverFilterMode     string
+	RingoverAllowedUserIDs []int
+	RingoverAllowedTeamIDs []int
 }
 
 // Cache provides an in-memory TTL cache for OAuth2 client scope lookups.

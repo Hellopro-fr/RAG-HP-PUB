@@ -43,6 +43,11 @@ const AllowedToolsContextKey = "scope_allowed_tools"
 // forwarding a tools/call to a Leexi-tagged backend.
 const LeexiFilterContextKey = "scope_leexi_filter"
 
+// RingoverFilterContextKey carries a *RingoverFilterContext describing the
+// per-request Ringover user scope. Read by gateway.ScopedGateway when
+// forwarding a tools/call to a Ringover-tagged backend.
+const RingoverFilterContextKey = "scope_ringover_filter"
+
 // ScopeNameContextKey carries the human-readable name of the active scope
 // token or OAuth2 client. ScopedGateway reads it to override serverInfo.name
 // on the MCP initialize response so clients see the credential label instead
@@ -83,6 +88,19 @@ type LeexiFilterContext struct {
 // LeexiFilterFromContext returns the typed filter info if any was set.
 func LeexiFilterFromContext(ctx context.Context) (*LeexiFilterContext, bool) {
 	v, ok := ctx.Value(LeexiFilterContextKey).(*LeexiFilterContext)
+	return v, ok
+}
+
+// RingoverFilterContext is the runtime view of the persisted Ringover scope.
+type RingoverFilterContext struct {
+	Mode             string
+	AllowedUserIDs   []int
+	AllowedTeamIDs   []int
+}
+
+// RingoverFilterFromContext returns the typed Ringover filter info if any was set.
+func RingoverFilterFromContext(ctx context.Context) (*RingoverFilterContext, bool) {
+	v, ok := ctx.Value(RingoverFilterContextKey).(*RingoverFilterContext)
 	return v, ok
 }
 
@@ -183,6 +201,15 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					_ = json.Unmarshal(dbToken.LeexiAllowedTeamUUIDs, &ct.LeexiAllowedTeamUUIDs)
 				}
 
+				// Decode persisted Ringover filter (JSON columns of ints).
+				ct.RingoverFilterMode = dbToken.RingoverFilterMode
+				if len(dbToken.RingoverAllowedUserIDs) > 0 {
+					_ = json.Unmarshal(dbToken.RingoverAllowedUserIDs, &ct.RingoverAllowedUserIDs)
+				}
+				if len(dbToken.RingoverAllowedTeamIDs) > 0 {
+					_ = json.Unmarshal(dbToken.RingoverAllowedTeamIDs, &ct.RingoverAllowedTeamIDs)
+				}
+
 				cache.Set(hash, ct)
 			}
 
@@ -218,6 +245,13 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					Mode:             ct.LeexiFilterMode,
 					AllowedUserUUIDs: ct.LeexiAllowedUserUUIDs,
 					AllowedTeamUUIDs: ct.LeexiAllowedTeamUUIDs,
+				})
+			}
+			if ct.RingoverFilterMode != "" && ct.RingoverFilterMode != "none" {
+				ctx = context.WithValue(ctx, RingoverFilterContextKey, &RingoverFilterContext{
+					Mode:           ct.RingoverFilterMode,
+					AllowedUserIDs: ct.RingoverAllowedUserIDs,
+					AllowedTeamIDs: ct.RingoverAllowedTeamIDs,
 				})
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))

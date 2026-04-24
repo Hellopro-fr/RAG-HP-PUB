@@ -2165,6 +2165,8 @@ services:
       - RINGOVER_API_KEY=${RINGOVER_API_KEY}
       - RINGOVER_API_BASE_URL=${RINGOVER_API_BASE_URL:-https://public-api.ringover.com/v2}
       - MCP_PORT=8586
+      # Shared secret enabling /admin/users + /admin/teams (consumed by mcp-gateway-service)
+      - MCP_RINGOVER_ADMIN_TOKEN=${MCP_RINGOVER_ADMIN_TOKEN}
     networks:
       - services-net
     logging: *logging_defaults
@@ -2259,6 +2261,9 @@ services:
       # Leexi admin proxy (users/teams listing + ownership filter on tokens)
       - LEEXI_INTERNAL_URL=${LEEXI_INTERNAL_URL}
       - LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
+      # Ringover admin proxy (symmetric to Leexi)
+      - RINGOVER_INTERNAL_URL=${RINGOVER_INTERNAL_URL}
+      - RINGOVER_ADMIN_TOKEN=${MCP_RINGOVER_ADMIN_TOKEN}
       - ALLOWED_EMAILS=${MCP_ALLOWED_EMAILS}
       # Google Sheets import (OAuth2)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}

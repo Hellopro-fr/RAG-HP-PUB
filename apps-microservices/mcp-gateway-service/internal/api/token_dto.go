@@ -26,6 +26,27 @@ type LeexiFilterDTO struct {
 	CreatorUUID string `json:"creator_uuid,omitempty"`
 }
 
+// RingoverFilterMode constants — same set as Leexi; reused so the frontend
+// shares the mode enum across providers.
+const (
+	RingoverFilterModeNone    = "none"
+	RingoverFilterModeUsers   = "users"
+	RingoverFilterModeTeams   = "teams"
+	RingoverFilterModeCreator = "creator"
+)
+
+// RingoverFilterDTO carries the per-token Ringover ownership scope from / to
+// the frontend. Ringover identifies users with numeric integer IDs, so the
+// user/team slices are int rather than UUID-strings.
+type RingoverFilterDTO struct {
+	Mode    string `json:"mode"`                // none | users | teams | creator
+	UserIDs []int  `json:"user_ids,omitempty"`  // Mode = users
+	TeamIDs []int  `json:"team_ids,omitempty"`  // Mode = teams
+	// CreatorUserID is set in responses only — the resolved user_id of the
+	// token creator's email when Mode = creator.
+	CreatorUserID int `json:"creator_user_id,omitempty"`
+}
+
 // CreateTokenRequest is the body for POST /api/v1/tokens.
 type CreateTokenRequest struct {
 	Name           string                `json:"name"`
@@ -38,6 +59,7 @@ type CreateTokenRequest struct {
 	AllowHTTP      bool                  `json:"allow_http,omitempty"`      // include --allow-http in generated mcp.json
 	ExpiresAt      *string               `json:"expires_at,omitempty"`      // RFC3339
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`    // nil = unrestricted (mode=none)
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"` // nil = unrestricted (mode=none)
 }
 
 // CreateTokenResponse is returned once on creation (includes raw token).
@@ -57,6 +79,7 @@ type CreateTokenResponse struct {
 	CreatedAt      string                `json:"created_at"`
 	ExpiresAt      *string               `json:"expires_at,omitempty"`
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 }
 
 // TokenResponse is the standard token response (no raw token).
@@ -78,6 +101,7 @@ type TokenResponse struct {
 	UpdatedAt      string                `json:"updated_at"`
 	ExpiresAt      *string               `json:"expires_at,omitempty"`
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 }
 
 // UpdateTokenRequest is the body for PUT /api/v1/tokens/{id}.
@@ -91,6 +115,7 @@ type UpdateTokenRequest struct {
 	ServerName     *string               `json:"server_name,omitempty"`
 	AllowHTTP      *bool                 `json:"allow_http,omitempty"`
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 }
 
 // CreateTokenResponse already declared above is extended via leexi_filter in

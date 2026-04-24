@@ -30,17 +30,22 @@ mcp-ringover-service/
 ├── internal/
 │   ├── config/config.go            # Environment-based configuration
 │   ├── mcp/types.go                # MCP protocol types (JSON-RPC, tools)
-│   ├── ringover/client.go          # HTTP client wrapping Ringover REST API
+│   ├── ringover/
+│   │   ├── client.go               # HTTP client wrapping Ringover REST API
+│   │   └── users.go                # Typed User/Team decoder + TeamsFromUsers aggregation
 │   ├── tools/
 │   │   ├── registry.go             # Tool registration and dispatch
 │   │   ├── handler.go              # MCP request handler (initialize, tools/list, tools/call)
-│   │   ├── calls.go                # get_calls, get_call_details tools
+│   │   ├── calls.go                # list_calls_by_date, search_calls, get_call_details tools
+│   │   ├── scope.go                # User-scope helpers (effectiveUserIDs, ownership check)
 │   │   ├── transcription.go        # get_call_transcription, get_call_summary, get_call_moments tools
-│   │   ├── contacts.go             # list_contacts tool
-│   │   └── users.go                # list_users tool
+│   │   ├── contacts.go             # list_contacts tool (deactivated)
+│   │   └── users.go                # list_users tool + response filter under scope
 │   └── transport/
 │       ├── sse.go                  # SSE server (MCP transport layer)
-│       └── streamable_http.go      # Streamable HTTP transport
+│       ├── streamable_http.go      # Streamable HTTP transport
+│       ├── scope.go                # Parses X-Ringover-Allowed-User-IDs into context
+│       └── admin.go                # /admin/users and /admin/teams (X-Admin-Token)
 ├── Dockerfile                      # 2-stage build
 └── go.mod
 ```
@@ -65,6 +70,35 @@ mcp-ringover-service/
 | `/message` | POST | Send JSON-RPC request (requires `sessionId` query param) |
 | `/mcp` | POST | Streamable HTTP transport (stateless) |
 | `/health` | GET | Liveness probe |
+| `/admin/users` | GET | Internal: list Ringover users (requires `X-Admin-Token`) |
+| `/admin/teams` | GET | Internal: list Ringover teams derived from users (requires `X-Admin-Token`) |
+
+## User-scope enforcement
+
+The gateway may restrict a request to a subset of Ringover agents by setting
+the `X-Ringover-Allowed-User-IDs` header with a comma-separated list of
+numeric user IDs. When present:
+
+- `list_calls_by_date` and `search_calls` switch from `GET /calls` to
+  `POST /calls` with `filter: "ADVANCED"` and `advanced.users = [ids]` for
+  true server-side filtering (Ringover's `GET /calls` has no user filter).
+- `search_calls` additionally intersects any caller-supplied `user_id`
+  argument with the allowed set — rejecting the call if the requested id is
+  outside the scope.
+- `get_call_details` verifies the response's `user_id` field is within the
+  allowed set and returns an MCP error otherwise (`/calls/{id}` has no
+  filter parameter; ownership is checked post-fetch).
+- `list_users` (when registered) filters out users that are not in the
+  allowed set.
+- The Empower tools (`get_call_transcription`, `get_call_summary`,
+  `get_call_moments`) apply the same post-fetch ownership check based on the
+  response's `user_id` field. These tools are currently deactivated in
+  `registry.go` (they require an Empower subscription), but the filter is
+  wired and ready for re-activation.
+
+Absent or empty header = unrestricted (preserves behaviour for direct,
+non-gateway callers). A header parsed to zero valid IDs is treated as
+"deny-all", not "unrestricted".
 
 ## Environment Variables
 
@@ -75,6 +109,7 @@ mcp-ringover-service/
 | `MCP_SERVICE_VERSION` | 0.1.0 | Service version |
 | `RINGOVER_API_KEY` | — | Ringover API key (required) |
 | `RINGOVER_API_BASE_URL` | `https://public-api.ringover.com/v2` | Ringover API base URL |
+| `MCP_RINGOVER_ADMIN_TOKEN` | — | Shared secret enabling `/admin/*` endpoints. When empty the endpoints are disabled. |
 
 ## Prerequisites
 

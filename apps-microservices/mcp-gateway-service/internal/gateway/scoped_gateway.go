@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
@@ -18,10 +20,19 @@ import (
 // it as the Leexi backend for the purposes of participant-scope header injection.
 const leexiToolPrefix = "leexi"
 
+// ringoverToolPrefix is the ToolPrefix matched to inject the Ringover
+// user-scope header onto outbound MCP requests.
+const ringoverToolPrefix = "ringover"
+
 // LeexiAllowedParticipantsHeader mirrors the constant defined in mcp-leexi-service
 // (transport.AllowedParticipantsHeader). Duplicated here to avoid a cross-module
 // import; both sides MUST stay in sync.
 const LeexiAllowedParticipantsHeader = "X-Leexi-Allowed-Participants"
+
+// RingoverAllowedUserIDsHeader mirrors the constant defined in
+// mcp-ringover-service (transport.AllowedUserIDsHeader). Both sides MUST stay
+// in sync.
+const RingoverAllowedUserIDsHeader = "X-Ringover-Allowed-User-IDs"
 
 // ScopedGateway wraps a Gateway but filters results to only the allowed server IDs
 // and optionally to specific tools per server.
@@ -39,6 +50,8 @@ type ScopedGateway struct {
 	// leexiAdmin (optional) is used to expand "teams" filter mode to user
 	// UUIDs at request time. nil = no team expansion (treat empty list).
 	leexiAdmin *leexiadmin.Client
+	// ringoverAdmin (optional) — same role as leexiAdmin for Ringover.
+	ringoverAdmin *ringoveradmin.Client
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -47,13 +60,14 @@ type ScopedGateway struct {
 // and the initialize response omits the `instructions` field.
 func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTools map[string]map[string]bool, instructions []InstructionView) *ScopedGateway {
 	return &ScopedGateway{
-		name:         gw.name,
-		version:      gw.version,
-		registry:     gw.registry,
-		allowedIDs:   allowedServerIDs,
-		allowedTools: allowedTools,
-		instructions: instructions,
-		leexiAdmin:   gw.leexiAdmin,
+		name:          gw.name,
+		version:       gw.version,
+		registry:      gw.registry,
+		allowedIDs:    allowedServerIDs,
+		allowedTools:  allowedTools,
+		instructions:  instructions,
+		leexiAdmin:    gw.leexiAdmin,
+		ringoverAdmin: gw.ringoverAdmin,
 	}
 }
 
@@ -140,27 +154,51 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 	for k, v := range backend.AuthHeaders {
 		headers[k] = v
 	}
-	if backend.ToolPrefix != leexiToolPrefix {
-		return headers
+	switch backend.ToolPrefix {
+	case leexiToolPrefix:
+		sg.injectLeexiHeader(ctx, headers)
+	case ringoverToolPrefix:
+		sg.injectRingoverHeader(ctx, headers)
 	}
+	return headers
+}
+
+func (sg *ScopedGateway) injectLeexiHeader(ctx context.Context, headers map[string]string) {
 	filter, ok := scopetoken.LeexiFilterFromContext(ctx)
 	if !ok || filter == nil {
-		return headers
+		return
 	}
-
 	participants := sg.resolveLeexiParticipants(ctx, filter)
 	if len(participants) == 0 {
 		// Resolution returned nothing — for "users"/"creator" this means an
-		// empty allow-list (deny everything); pass a sentinel that the
-		// downstream service interprets as "no calls allowed". Sending an
-		// empty header would be ambiguous, so we send a clearly invalid
-		// UUID that cannot match any real participant.
+		// empty allow-list (deny everything); pass a sentinel the downstream
+		// service interprets as "no calls allowed". Sending an empty header
+		// would be ambiguous, so we send a clearly invalid UUID.
 		log.Printf("[scoped] leexi filter mode=%q resolved to empty allow-list — sending deny sentinel", filter.Mode)
 		headers[LeexiAllowedParticipantsHeader] = "00000000-0000-0000-0000-000000000000"
-		return headers
+		return
 	}
 	headers[LeexiAllowedParticipantsHeader] = strings.Join(participants, ",")
-	return headers
+}
+
+func (sg *ScopedGateway) injectRingoverHeader(ctx context.Context, headers map[string]string) {
+	filter, ok := scopetoken.RingoverFilterFromContext(ctx)
+	if !ok || filter == nil {
+		return
+	}
+	ids := sg.resolveRingoverAllowedUsers(ctx, filter)
+	if len(ids) == 0 {
+		// Deny-all sentinel: "0" is never a real Ringover user_id, so the
+		// downstream service treats it as "allow no users".
+		log.Printf("[scoped] ringover filter mode=%q resolved to empty allow-list — sending deny sentinel", filter.Mode)
+		headers[RingoverAllowedUserIDsHeader] = "0"
+		return
+	}
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.Itoa(id)
+	}
+	headers[RingoverAllowedUserIDsHeader] = strings.Join(parts, ",")
 }
 
 // resolveLeexiParticipants turns a (mode, allowed-users, allowed-teams) tuple
@@ -182,6 +220,29 @@ func (sg *ScopedGateway) resolveLeexiParticipants(ctx context.Context, f *scopet
 			return nil
 		}
 		return uuids
+	default:
+		return nil
+	}
+}
+
+// resolveRingoverAllowedUsers is the Ringover-side mirror of
+// resolveLeexiParticipants. Returns the user-id set to inject into the
+// outbound header.
+func (sg *ScopedGateway) resolveRingoverAllowedUsers(ctx context.Context, f *scopetoken.RingoverFilterContext) []int {
+	switch f.Mode {
+	case "users", "creator":
+		return f.AllowedUserIDs
+	case "teams":
+		if sg.ringoverAdmin == nil || !sg.ringoverAdmin.Enabled() {
+			log.Printf("[scoped] ringover filter mode=teams but ringoveradmin client is not configured")
+			return nil
+		}
+		ids, err := sg.ringoverAdmin.ResolveTeamMembers(ctx, f.AllowedTeamIDs)
+		if err != nil {
+			log.Printf("[scoped] resolve ringover team members: %v", err)
+			return nil
+		}
+		return ids
 	default:
 		return nil
 	}
