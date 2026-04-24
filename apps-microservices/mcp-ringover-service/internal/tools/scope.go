@@ -102,3 +102,29 @@ func callTypeForPostCalls(callType string) []string {
 	}
 	return []string{callType}
 }
+
+// effectiveStatsUserID resolves the single user_id to send to /stats/team
+// under the active token scope.
+//
+// /stats/team accepts zero or one user_id query param; it has no multi-user
+// filter, so a scope wider than one user cannot be expressed server-side when
+// the caller did not narrow it themselves.
+//
+// Returns:
+//   - "" when unrestricted and no caller filter (pass-through = all users)
+//   - "<id>" when exactly one user is effectively allowed
+//   - err when the caller's user_id lies outside the scope, or when the scope
+//     allows multiple users and the caller did not pick one
+func effectiveStatsUserID(ctx context.Context, callerUserID string) (string, error) {
+	ids, err := effectiveUserIDs(ctx, callerUserID)
+	if err != nil {
+		return "", err
+	}
+	if len(ids) == 0 {
+		return "", nil
+	}
+	if len(ids) == 1 {
+		return strconv.Itoa(ids[0]), nil
+	}
+	return "", fmt.Errorf("token scope allows multiple Ringover users (%d); specify user_id to pick one", len(ids))
+}
