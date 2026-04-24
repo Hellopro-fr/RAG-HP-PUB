@@ -1931,7 +1931,7 @@ class RecommendationService:
             Usage cohérent, rien ne contredit le besoin sur les critiques. Des caractéristiques ne sont pas renseignées, ce qui empêche de confirmer la compatibilité complète. Écarts uniquement sur secondaires → score 3 aussi.
             
             **Score 2 — Correspondance partielle**
-            Bon univers mais écart(s) sur des critiques sans être éliminatoire : valeur numérique hors tolérance 20% mais dans 50%–200% de la cible, valeur textuelle critique proche mais pas exacte, sous-type proche mais pas exactement celui demandé. L'acheteur devra vérifier.
+            Bon univers mais écart(s) sur des critiques sans être éliminatoire : valeur numérique hors tolérance 20% mais dans 50%–200% de la cible, valeur textuelle critique proche mais pas exacte, sous-type proche mais pas exactement celui demandé (ex : puissance légèrement différente, capacité proche — pour des variations du même type, pas pour des types non interchangeables). L'acheteur devra vérifier.
             
             **Score 1 — Ne correspond pas**
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
@@ -1941,8 +1941,9 @@ class RecommendationService:
             - Valeur numérique critique < 50% ou > 200% de la valeur cible
             - Valeur textuelle **présente** et incompatible sur un critique (motorisation, interface, alimentation, norme…) — si absente : score 3, pas score 1
             - État neuf/occasion différent de ce que l'acheteur a demandé
-            
-            **En cas de doute entre score 1 et score 2 → toujours score 2.** Un seul critère éliminatoire suffit pour le score 1, à condition d'être factuel.
+            - **Sous-type structurel non interchangeable** : le type de produit est fondamentalement différent de celui demandé et ne remplit pas la même fonction, à condition que cette différence soit lisible dans le titre, le descriptif ou les caractéristiques (ex : pont enfoui ≠ pont ciseaux, distributeur comptoir ≠ distributeur sur pied)
+
+            **En cas de doute entre score 1 et score 2 → toujours score 2.** Un seul critère éliminatoire suffit pour le score 1, à condition d'être factuel. **Exception** : si le sous-type structurel du produit est clairement différent du sous-type demandé et cette différence est lisible dans la fiche → score 1 directement.
             
             ### ÉTAPE 4 — Décisions
             - **Score 1** → ÉCARTÉ → `produits_ecartes`
