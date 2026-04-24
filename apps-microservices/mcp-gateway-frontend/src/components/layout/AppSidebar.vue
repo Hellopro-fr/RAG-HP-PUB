@@ -267,6 +267,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
     name: 'Config MCP',
     path: '/tokens',
   })
+  gestionItems.push({
+    icon: 'pi pi-comment',
+    name: 'Instructions LLM',
+    path: '/llm-instructions',
+  })
   if (gestionItems.length > 0) {
     groups.push({ title: 'Gestion', items: gestionItems })
   }

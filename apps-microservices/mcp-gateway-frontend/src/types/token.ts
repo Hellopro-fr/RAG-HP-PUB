@@ -13,6 +13,7 @@ export interface ScopeToken {
   token_prefix: string
   server_ids: string[]
   server_tools: ServerToolScope[]
+  instruction_ids?: string[]
   mcp_command: string
   server_name?: string
   allow_http?: boolean
@@ -33,6 +34,7 @@ export interface CreateTokenRequest {
   description?: string
   server_ids: string[]
   server_tools?: ServerToolScope[]
+  instruction_ids?: string[]
   mcp_command?: string
   server_name?: string
   expires_at?: string
