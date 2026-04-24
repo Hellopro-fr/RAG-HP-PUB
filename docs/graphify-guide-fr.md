@@ -2,6 +2,10 @@
 
 Un graphe de connaissance persistant du monorepo, construit à partir du code (AST) et de la documentation (LLM). Survit aux sessions. Interrogeable depuis toute session Claude Code. Déjà intégré — aucune action requise pour en bénéficier passivement.
 
+> **Statut de déploiement (2026-04-24) : passif uniquement.** L'infrastructure est commitée mais les deux workflows CI (auto-rebuild et coverage-check) sont réglés sur `workflow_dispatch` seulement. Ils ne se déclenchent sur aucune PR ni push. Rien de votre workflow git normal ne change tant que l'équipe n'est pas briefée et que les workflows ne sont pas activés (édition YAML d'une ligne — voir la section « Activer les workflows CI » plus bas).
+
+---
+
 ## Ce que vous obtenez aujourd'hui
 
 **Un graphe unifié** à `graphify-out/`, commité sur `features/poc` :
@@ -375,6 +379,45 @@ Expose les outils : `query_graph`, `get_node`, `get_neighbors`, `get_community`,
 - Correction rapide d'un bug dans un fichier que vous connaissez
 - Questions non-architecturales (« comment fonctionne la compréhension de liste Python ? »)
 - Petits scripts (< 10 fichiers) où un grep suffit
+
+## Activer les workflows CI
+
+Les deux workflows GitHub Actions — `.github/workflows/graphify-auto-rebuild.yml` (rebuild auto sur push backbone) et `.github/workflows/graphify-coverage-check.yml` (bloque les PRs avec services non classifiés) — sont livrés en mode `workflow_dispatch`. Ils sont visibles dans l'onglet Actions et peuvent être lancés manuellement, mais ils ne se déclenchent pas sur les événements push ou pull_request.
+
+Ce gel est délibéré. Tant que l'équipe n'est pas briefée, on ne veut pas :
+
+- Des PRs d'équipier qui échouent parce qu'ils ont ajouté un service que la policy ne couvre pas encore.
+- Des commits bot (« chore(graphify): auto-rebuild ») qui apparaissent sur `main` / `features/poc` sans explication.
+
+L'activation est un changement d'une édition par fichier — en tête du bloc `on:` :
+
+```yaml
+# Avant (état livré) :
+on:
+  workflow_dispatch:
+  # --- ACTIVATE BY UNCOMMENTING BELOW AFTER THE TEAM BRIEFING ---
+  # push:
+  #   branches: [main, features/poc]
+  #   ...
+
+# Après (post-brief) :
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, features/poc]
+    ...
+```
+
+Faire ça pour les deux fichiers workflow dans un seul commit, pusher, vérifier que le prochain commit backbone déclenche bien un build. Ensuite vous pouvez aussi retirer l'entrée `workflow_dispatch:` si vous préférez un trigger push-only — inoffensif dans les deux cas.
+
+Ordre recommandé :
+
+1. Session de briefing (ou note Slack asynchrone avec un lien vers ce guide).
+2. Qui veut s'y mettre lance `pip install graphifyy` et `bash scripts/install-graphify-hook.sh`.
+3. Après 2-3 jours sans retour négatif, éditer les deux workflows pour décommenter les vrais triggers. Pusher. À partir de là, la CI prend le relais.
+4. Si une PR d'équipier échoue au coverage-check, le message d'échec lui dit exactement ce qu'il faut mettre à jour dans `services-policy.yml`.
+
+Rien dans le reste de ce guide ne suppose que les workflows sont actifs — toutes les voies locales (hook scoppé, `/graphify --update`, `python scripts/graphify_rebuild_scoped.py`) fonctionnent dans tous les cas.
 
 ## Pour aller plus loin
 

@@ -9,31 +9,46 @@ name: graphify auto-rebuild
 # `graphify hook install` path.
 
 on:
-  push:
-    # Restricted to the two deployed branches. Feature branches under
-    # features/** other than features/poc rebuild locally via the post-commit
-    # hook; CI only kicks in once work lands on an integration branch.
-    branches:
-      - main
-      - features/poc
-    paths:
-      # Backbone
-      - 'libs/**'
-      - 'protos/**'
-      - 'tools/**'
-      - 'model-optimizer/**'
-      - 'docs/**'
-      # Graphed services. MUST stay in sync with the `graphed:` list in
-      # graphify-out/services-policy.yml. When a service is promoted from
-      # not_graphed to graphed, add its path here in the same commit.
-      # Forgetting this line is silent: the service's code edits will not
-      # trigger CI rebuilds even though the service IS in graph.json.
-      - 'apps-microservices/crawler-service/**'
-      - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
-      # Scripts that feed the rebuild logic itself
-      - 'scripts/graphify_rebuild_scoped.py'
-      # Policy changes that may need a graph refresh
-      - 'graphify-out/services-policy.yml'
+  # ROLLOUT IS STAGED OFF FOR NOW.
+  #
+  # During the initial graphify rollout we do not want the workflow to start
+  # committing "chore(graphify): auto-rebuild" commits to main / features/poc
+  # before the team has been briefed about the tool. Until then, the
+  # workflow only runs on manual trigger (`workflow_dispatch`), so the
+  # infrastructure is present in the repo but nothing fires automatically.
+  #
+  # TO FULLY ACTIVATE after the briefing:
+  #   1. Remove the workflow_dispatch-only block below.
+  #   2. Restore the `push:` trigger (commented out under this block).
+  #      Feature branches under features/** other than features/poc rebuild
+  #      locally via the post-commit hook; CI only kicks in on deployed
+  #      integration branches.
+  #   3. Commit the change on main / features/poc.
+  workflow_dispatch:
+
+  # --- ACTIVATE BY UNCOMMENTING BELOW AFTER THE TEAM BRIEFING ---
+  # push:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     # Backbone
+  #     - 'libs/**'
+  #     - 'protos/**'
+  #     - 'tools/**'
+  #     - 'model-optimizer/**'
+  #     - 'docs/**'
+  #     # Graphed services. MUST stay in sync with the `graphed:` list in
+  #     # graphify-out/services-policy.yml. When a service is promoted from
+  #     # not_graphed to graphed, add its path here in the same commit.
+  #     # Forgetting this line is silent: the service's code edits will not
+  #     # trigger CI rebuilds even though the service IS in graph.json.
+  #     - 'apps-microservices/crawler-service/**'
+  #     - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
+  #     # Scripts that feed the rebuild logic itself
+  #     - 'scripts/graphify_rebuild_scoped.py'
+  #     # Policy changes that may need a graph refresh
+  #     - 'graphify-out/services-policy.yml'
 
 concurrency:
   # Serialize rebuilds per branch so two parallel pushes do not race on

@@ -9,22 +9,40 @@ name: graphify coverage check
 # branches so that a direct push still gets caught.
 
 on:
-  pull_request:
-    branches:
-      - main
-      - features/poc
-    paths:
-      - 'apps-microservices/**'
-      - 'graphify-out/services-policy.yml'
-      - 'scripts/graphify_check_service.py'
-  push:
-    branches:
-      - main
-      - features/poc
-    paths:
-      - 'apps-microservices/**'
-      - 'graphify-out/services-policy.yml'
-      - 'scripts/graphify_check_service.py'
+  # ENFORCEMENT IS STAGED OFF FOR NOW.
+  #
+  # During the initial graphify rollout we do not want to block teammate PRs
+  # with policy failures before the team has been briefed about what the
+  # policy is or how to update it. Until the briefing happens, this workflow
+  # only runs on manual trigger (`workflow_dispatch`) — which means you can
+  # run it yourself from the Actions tab to validate policy coverage, but
+  # teammate PRs will never see it.
+  #
+  # TO FULLY ACTIVATE after the briefing:
+  #   1. Remove the workflow_dispatch-only block below.
+  #   2. Restore the `pull_request` + `push` triggers (commented out under
+  #      this block). That makes the workflow fail any PR that adds a
+  #      service without updating graphify-out/services-policy.yml.
+  #   3. Commit the change on main / features/poc.
+  workflow_dispatch:
+
+  # --- ACTIVATE BY UNCOMMENTING BELOW AFTER THE TEAM BRIEFING ---
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     - 'apps-microservices/**'
+  #     - 'graphify-out/services-policy.yml'
+  #     - 'scripts/graphify_check_service.py'
+  # push:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     - 'apps-microservices/**'
+  #     - 'graphify-out/services-policy.yml'
+  #     - 'scripts/graphify_check_service.py'
 
 permissions:
   contents: read
