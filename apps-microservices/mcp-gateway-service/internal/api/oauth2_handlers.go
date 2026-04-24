@@ -170,6 +170,32 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.instructionRepo != nil && len(req.InstructionIDs) > 0 {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, req.ServerIDs)
+		if vErr != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the client's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceOAuth2ClientInstructions(client.ID, req.InstructionIDs); err != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
 	var expiresStr *string
 	if client.ExpiresAt != nil {
 		s := client.ExpiresAt.UTC().Format(time.RFC3339)
@@ -193,6 +219,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		SecretPrefix:          client.SecretPrefix,
 		ServerIDs:             req.ServerIDs,
 		ServerTools:           buildOAuth2ServerToolsResponse(client.Tools),
+		InstructionIDs:        req.InstructionIDs,
 		AccessTokenTTL:        client.AccessTokenTTL,
 		IsActive:              client.IsActive,
 		CreatedAt:             client.CreatedAt.UTC().Format(time.RFC3339),
@@ -275,6 +302,35 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 	if len(req.ServerIDs) > 0 {
 		if err := h.oauth2Repo.UpdateServers(id, req.ServerIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if req.InstructionIDs != nil && h.instructionRepo != nil {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		allowed := req.ServerIDs
+		if len(allowed) == 0 {
+			allowed = make([]string, 0, len(existing.Servers))
+			for _, s := range existing.Servers {
+				allowed = append(allowed, s.ServerID)
+			}
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, allowed)
+		if vErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the client's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceOAuth2ClientInstructions(id, req.InstructionIDs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -399,6 +455,14 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		serverIDs[i] = s.ServerID
 	}
 
+	var instructionIDs []string
+	if len(c.Instructions) > 0 {
+		instructionIDs = make([]string, 0, len(c.Instructions))
+		for _, i := range c.Instructions {
+			instructionIDs = append(instructionIDs, i.InstructionID)
+		}
+	}
+
 	var expiresStr *string
 	if c.ExpiresAt != nil {
 		s := c.ExpiresAt.UTC().Format(time.RFC3339)
@@ -422,6 +486,7 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		SecretPrefix:          c.SecretPrefix,
 		ServerIDs:             serverIDs,
 		ServerTools:           buildOAuth2ServerToolsResponse(c.Tools),
+		InstructionIDs:        instructionIDs,
 		AccessTokenTTL:        c.AccessTokenTTL,
 		IsActive:              c.IsActive,
 		CreatedBy:             c.CreatedBy,

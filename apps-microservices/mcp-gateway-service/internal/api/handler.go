@@ -125,6 +125,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
 	}
 
+	// ── LLM instruction routes ───────────────────────────────────────────────
+	if h.instructionRepo != nil {
+		apiMux.HandleFunc("/api/v1/llm-instructions", h.handleLLMInstructions)
+		apiMux.HandleFunc("/api/v1/llm-instructions/", h.handleLLMInstructionByID)
+	}
+
 	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
 	//    user/team picker). Always mounted; the handlers themselves return
 	//    503 when LEEXI_INTERNAL_URL / LEEXI_ADMIN_TOKEN are unset.

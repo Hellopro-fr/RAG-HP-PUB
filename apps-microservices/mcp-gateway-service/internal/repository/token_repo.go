@@ -44,7 +44,7 @@ func (r *TokenRepo) DecryptToken(token *db.ScopeToken) string {
 // GetByID returns a token with its server and tool associations.
 func (r *TokenRepo) GetByID(id string) (*db.ScopeToken, error) {
 	var token db.ScopeToken
-	err := r.db.Preload("Servers").Preload("Tools").Where("id = ?", id).First(&token).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("id = ?", id).First(&token).Error
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (r *TokenRepo) GetByID(id string) (*db.ScopeToken, error) {
 
 // ListAll returns all scope tokens with server and tool associations.
 func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
-	q := r.db.Preload("Servers").Preload("Tools").Order("created_at DESC")
+	q := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Order("created_at DESC")
 	if createdBy != "" {
 		q = q.Where("created_by = ? OR created_by = ''", createdBy)
 	}
@@ -65,7 +65,7 @@ func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
 // FindByHash looks up a token by its SHA-256 hash. This is the hot-path lookup.
 func (r *TokenRepo) FindByHash(hash string) (*db.ScopeToken, error) {
 	var token db.ScopeToken
-	err := r.db.Preload("Servers").Preload("Tools").Where("token_hash = ?", hash).First(&token).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("token_hash = ?", hash).First(&token).Error
 	if err != nil {
 		return nil, err
 	}

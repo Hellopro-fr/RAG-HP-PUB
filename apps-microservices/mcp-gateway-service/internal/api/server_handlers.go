@@ -96,6 +96,10 @@ type Handler struct {
 	// slack is the optional Slack notification client. nil disables all
 	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
 	slack *slack.Client
+	// instructionRepo backs the /api/v1/llm-instructions CRUD. The same repo
+	// is shared with scopetoken/oauth2 middleware to resolve per-scope
+	// instructions at cache-miss time.
+	instructionRepo *repository.InstructionRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -167,6 +171,11 @@ func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
 // SetSlack wires the Slack notifications client. Pass nil to disable.
 func (h *Handler) SetSlack(client *slack.Client) {
 	h.slack = client
+}
+
+// SetInstructionRepo wires the LLM-instruction repository.
+func (h *Handler) SetInstructionRepo(repo *repository.InstructionRepo) {
+	h.instructionRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
