@@ -827,7 +827,16 @@ class RecommendationServiceV2:
             fetch_time = parallel_time
 
             if not scored:
-                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
+                # P5 (iter 6) — Double fallback seuil pour parcours zéro-résultats
+                fallback_params_0 = {**scoring_params, "absolute_threshold": 0.0}
+                scored = self._score_raw_results(raw_results, flat_filters, fallback_params_0,
+                                                  user_id_pays, user_dept, user_typologie, id_categorie)
+                if not scored:
+                    fallback_params_neg = {**scoring_params, "absolute_threshold": -1.0}
+                    scored = self._score_raw_results(raw_results, flat_filters, fallback_params_neg,
+                                                      user_id_pays, user_dept, user_typologie, id_categorie)
+                if not scored:
+                    return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
 
             # 3. Diversity + top_p selection
             diversity_start = time.perf_counter()
@@ -926,7 +935,16 @@ class RecommendationServiceV2:
             fetch_time = parallel_time
 
             if not scored:
-                return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
+                # P5 (iter 6) — Double fallback seuil pour parcours zéro-résultats
+                fallback_params_0 = {**scoring_params, "absolute_threshold": 0.0}
+                scored = self._score_raw_results(raw_results, flat_filters, fallback_params_0,
+                                                  user_id_pays, user_dept, user_typologie, id_categorie)
+                if not scored:
+                    fallback_params_neg = {**scoring_params, "absolute_threshold": -1.0}
+                    scored = self._score_raw_results(raw_results, flat_filters, fallback_params_neg,
+                                                      user_id_pays, user_dept, user_typologie, id_categorie)
+                if not scored:
+                    return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
 
             # 3. Diversity + top_p
             diversity_start = time.perf_counter()
