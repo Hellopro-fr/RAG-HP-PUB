@@ -44,7 +44,7 @@ func (r *OAuth2Repo) DecryptSecret(client *db.OAuth2Client) string {
 // GetByID returns a client with its server and tool associations.
 func (r *OAuth2Repo) GetByID(id string) (*db.OAuth2Client, error) {
 	var client db.OAuth2Client
-	err := r.db.Preload("Servers").Preload("Tools").Where("id = ?", id).First(&client).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("id = ?", id).First(&client).Error
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (r *OAuth2Repo) GetByID(id string) (*db.OAuth2Client, error) {
 
 // ListAll returns all OAuth2 clients with server and tool associations.
 func (r *OAuth2Repo) ListAll(createdBy string) ([]db.OAuth2Client, error) {
-	q := r.db.Preload("Servers").Preload("Tools").Order("created_at DESC")
+	q := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Order("created_at DESC")
 	if createdBy != "" {
 		q = q.Where("created_by = ? OR created_by = ''", createdBy)
 	}
@@ -65,7 +65,7 @@ func (r *OAuth2Repo) ListAll(createdBy string) ([]db.OAuth2Client, error) {
 // FindBySecretHash looks up a client by its SHA-256 secret hash. This is the hot-path lookup for /oauth/token.
 func (r *OAuth2Repo) FindBySecretHash(hash string) (*db.OAuth2Client, error) {
 	var client db.OAuth2Client
-	err := r.db.Preload("Servers").Preload("Tools").Where("secret_hash = ?", hash).First(&client).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("secret_hash = ?", hash).First(&client).Error
 	if err != nil {
 		return nil, err
 	}

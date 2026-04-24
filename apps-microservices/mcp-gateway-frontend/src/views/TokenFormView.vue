@@ -267,6 +267,17 @@
           />
         </div>
 
+        <!-- Section: Instructions LLM — dedicated tab, fetches every page the
+             user owns and always displays each page's server tags so the
+             admin can see which backends it touches. -->
+        <div v-show="isEdit || currentStep === instructionsStepIndex" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Instructions LLM</h3>
+          <InstructionsPicker
+            v-model="form.instruction_ids"
+            :server-ids="selectedServerIdsForPicker"
+          />
+        </div>
+
         <!-- Section 3: Acc\u00e8s Leexi (only when a Leexi server is selected) -->
         <div
           v-if="hasLeexiServer"
@@ -397,6 +408,7 @@ import type { InstallExecutor } from '@/types/install-guide'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import DragDropPanel from '@/components/shared/DragDropPanel.vue'
 import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
+import InstructionsPicker from '@/components/llm-instructions/InstructionsPicker.vue'
 import type { ScopeToken, CreateTokenRequest } from '@/types/token'
 import type { LeexiFilter } from '@/types/leexi'
 
@@ -412,14 +424,16 @@ const executors = ref<InstallExecutor[]>([])
 // Step labels are dynamic: the "Acc\u00e8s Leexi" step is only shown when the
 // selected servers include the Leexi backend (detected via tool_prefix === 'leexi').
 const stepLabels = computed(() => {
-  const labels = ['Informations de base', 'Serveurs et outils']
+  const labels = ['Informations de base', 'Serveurs et outils', 'Instructions LLM']
   if (hasLeexiServer.value) labels.push('Acc\u00e8s Leexi')
   labels.push('Expiration et v\u00e9rification')
   return labels
 })
-// Computed step indices that account for the optional Leexi step.
-const leexiStepIndex = computed(() => (hasLeexiServer.value ? 2 : -1))
-const expirationStepIndex = computed(() => (hasLeexiServer.value ? 3 : 2))
+// Computed step indices. The Instructions LLM step is always present (index 2);
+// Leexi is conditional; expiration is always last.
+const instructionsStepIndex = 2
+const leexiStepIndex = computed(() => (hasLeexiServer.value ? 3 : -1))
+const expirationStepIndex = computed(() => (hasLeexiServer.value ? 4 : 3))
 const lastStepIndex = computed(() => stepLabels.value.length - 1)
 const currentStep = ref(0)
 const loading = ref(false)
@@ -448,8 +462,13 @@ const form = reactive({
   customArgsPrefix: '',
   expires_at: '',
   allow_http: true,
-  leexi_filter: { mode: 'none' } as LeexiFilter
+  leexi_filter: { mode: 'none' } as LeexiFilter,
+  instruction_ids: [] as string[]
 })
+
+// selectedServerIdsForPicker gives InstructionsPicker a reactive list of the
+// currently chosen server IDs so it can filter + auto-prune its selection.
+const selectedServerIdsForPicker = computed(() => dragDrop.getServerIds())
 
 const completedSteps = computed(() => {
   if (!isStep1Valid.value) return []
@@ -574,6 +593,9 @@ onMounted(async () => {
       if (token.leexi_filter) {
         form.leexi_filter = { ...token.leexi_filter }
       }
+      if (token.instruction_ids) {
+        form.instruction_ids = [...token.instruction_ids]
+      }
 
       dragDrop.initWithSelection(serversStore.servers, token.server_ids, token.server_tools)
       dragDropReady.value = true
@@ -618,6 +640,7 @@ async function handleSubmit() {
       description: form.description || undefined,
       server_ids: serverIds,
       server_tools: serverTools.length ? serverTools : undefined,
+      instruction_ids: form.instruction_ids.length ? [...form.instruction_ids] : undefined,
       mcp_command: form.mcp_command === 'custom'
         ? form.customCommand || 'custom'
         : form.mcp_command,

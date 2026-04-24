@@ -130,6 +130,11 @@ Dockerfile                   # Multi-stage build
 - `GET/PUT/DELETE /oauth2/clients/{id}` — Get / update / delete client
 - `POST /oauth2/clients/{id}/revoke` — Revoke client
 
+### LLM Instructions (`/api/v1/`)
+- `GET/POST /llm-instructions` — list (optional `?server_ids=csv` filter) / create
+- `GET/PUT/DELETE /llm-instructions/{id}` — detail / update / delete
+- `GET /llm-instructions/{id}/usage` — list tokens + OAuth2 clients that reference this instruction
+
 ### Leexi proxy (used by token / OAuth2 client creation forms)
 - `GET /api/v1/leexi/users` — List Leexi workspace users (proxied from mcp-leexi-service `/admin/users`)
 - `GET /api/v1/leexi/teams` — List Leexi teams (derived from the user payload)
@@ -194,7 +199,7 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 
 ## Database
 
-**MySQL** with GORM auto-migration. 17 tables:
+**MySQL** with GORM auto-migration. 21 tables:
 
 | Table | Purpose |
 |---|---|
@@ -215,6 +220,10 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `oauth2_authorization_codes` | Short-lived auth codes (PKCE, 10-min expiry, single-use) |
 | `oauth2_refresh_tokens` | Refresh tokens (SHA-256 hashed, 30-day TTL, rotation) |
 | `oauth2_consents` | Per-client per-user consent decisions |
+| `llm_instructions` | Reusable LLM instruction snippets (title, body, description) rendered into the MCP `initialize` response |
+| `llm_instruction_servers` | Many-to-many: which servers an instruction applies to |
+| `scope_token_instructions` | Many-to-many: which instructions a scope token injects |
+| `oauth2_client_instructions` | Many-to-many: which instructions an OAuth2 client injects |
 
 Connection pooling: max 25 open, 5 idle connections.
 
@@ -230,6 +239,7 @@ Connection pooling: max 25 open, 5 idle connections.
 - Tools have an `is_active` flag (default `true`). Inactive tools are excluded from token scope selection in the UI. Tool active state is preserved across server rediscovery.
 - Scope tokens and OAuth2 clients carry an optional **Leexi ownership filter** (`LeexiFilterMode` + `LeexiAllowedUserUUIDs` + `LeexiAllowedTeamUUIDs`). When the filter is set and the request targets the Leexi-tagged backend (`ToolPrefix == "leexi"`), the gateway adds `X-Leexi-Allowed-Participants` to the outbound MCP request. mcp-leexi-service then enforces the scope server-side. See `internal/leexiadmin/` for the user/team resolution and cache (5 min TTL).
 - OAuth2 Authorization Server is MCP spec-compliant: OAuth 2.1, RFC 8414 (metadata), RFC 7591 (dynamic registration), PKCE (S256).
+- **LLM instructions** are reusable snippets (title + body) linked to servers. Scope tokens and OAuth2 clients each pick a subset; at MCP `initialize` time, the gateway emits the composed `## <title>\n<body>` blocks (`\n\n`-joined, capped at 8 KiB) into the spec-defined `instructions` field. Picks are validated server-side: every `instruction_id` must share at least one server with the token/client's allowed set. Resolution happens once per scope-cache-miss (60 s TTL); instruction edits additionally invalidate both scope caches for immediate visibility.
 - MCP endpoints return 401 + `WWW-Authenticate` header when no auth is provided, triggering Claude.ai's OAuth2 discovery flow.
 - Unit tests in `internal/authserver/*_test.go`, `internal/oauth2/*_test.go`, `internal/repository/*_test.go`, `internal/db/mysql_test.go`.
 

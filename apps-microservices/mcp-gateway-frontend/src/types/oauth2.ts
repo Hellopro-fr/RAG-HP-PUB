@@ -9,6 +9,7 @@ export interface OAuth2Client {
   secret_prefix: string
   server_ids: string[]
   server_tools: ServerToolScope[]
+  instruction_ids?: string[]
   access_token_ttl: number
   is_active: boolean
   created_by?: string
@@ -31,6 +32,7 @@ export interface CreateOAuth2ClientRequest {
   redirect_uris?: string[]
   server_ids: string[]
   server_tools?: ServerToolScope[]
+  instruction_ids?: string[]
   access_token_ttl?: number
   expires_at?: string
   leexi_filter?: LeexiFilter

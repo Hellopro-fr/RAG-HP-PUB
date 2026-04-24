@@ -123,6 +123,7 @@ const BUILTIN_SVGS: { path: string; label: string }[] = [
   { path: '/images/servers/bdd.svg', label: 'Base de donnees' },
   { path: '/images/servers/google-analytics.svg', label: 'Google Analytics' },
   { path: '/images/servers/google-search-console.svg', label: 'Google Search Console' },
+  { path: '/images/servers/hp-logo.svg', label: 'Hellopro' },
   { path: '/images/servers/leexi.svg', label: 'Leexi' },
   { path: '/images/servers/neo4j.svg', label: 'Neo4j' },
   { path: '/images/servers/rag.svg', label: 'RAG Pipeline' },

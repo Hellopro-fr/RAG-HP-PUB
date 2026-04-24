@@ -5,12 +5,21 @@ import (
 	"time"
 )
 
+// CachedInstruction is a resolved snapshot of an LLM instruction carried by
+// this client — same shape and semantics as scopetoken.CachedInstruction.
+type CachedInstruction struct {
+	ID    string
+	Title string
+	Body  string
+}
+
 // CachedClient holds the resolved scope for an OAuth2 client.
 type CachedClient struct {
 	ID           string
 	Name         string                     // human-readable client name; surfaced as serverInfo.name
 	ServerIDs    map[string]bool            // set of allowed server IDs
 	AllowedTools map[string]map[string]bool // server_id -> tool_name -> true; nil = all tools
+	Instructions []CachedInstruction        // filtered + rendered into initialize.instructions
 	ExpiresAt    *time.Time
 	IsActive     bool
 	TTL          int // access token TTL in seconds

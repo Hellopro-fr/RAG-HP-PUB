@@ -49,6 +49,30 @@ const LeexiFilterContextKey = "scope_leexi_filter"
 // of the static gateway name.
 const ScopeNameContextKey = "scope_name"
 
+// AllowedInstructionsContextKey carries the resolved LLM instructions selected
+// into the active token / OAuth2 client, filtered to those whose linked
+// servers intersect the token/client's allowed server set. ScopedGateway
+// renders them into the MCP initialize response's `instructions` field.
+// Value type: []scopetoken.ResolvedInstruction.
+const AllowedInstructionsContextKey = "scope_allowed_instructions"
+
+// ResolvedInstruction is the runtime shape of an LLM instruction carried
+// through the request context. Mirrors (but doesn't import) the CachedInstruction
+// shape of both the scopetoken and oauth2 caches so either middleware can fill
+// it without a cross-package dependency.
+type ResolvedInstruction struct {
+	ID    string
+	Title string
+	Body  string
+}
+
+// AllowedInstructionsFromContext returns the resolved instruction list, if any.
+// The boolean return lets callers distinguish "no key set" from "empty list".
+func AllowedInstructionsFromContext(ctx context.Context) ([]ResolvedInstruction, bool) {
+	v, ok := ctx.Value(AllowedInstructionsContextKey).([]ResolvedInstruction)
+	return v, ok
+}
+
 // LeexiFilterContext is the runtime view of the persisted scope.
 type LeexiFilterContext struct {
 	Mode             string
@@ -63,10 +87,12 @@ func LeexiFilterFromContext(ctx context.Context) (*LeexiFilterContext, bool) {
 }
 
 // Middleware returns an HTTP middleware that validates X-MCP-Scope-Token
-// and stores the allowed server IDs and tool selections in the request context.
-// slackClient is optional; when set, every 401/403 fires an UnauthorizedEvent
-// (rate-limited inside the client).
-func Middleware(cache *Cache, repo *repository.TokenRepo, required bool, slackClient *slack.Client) func(http.Handler) http.Handler {
+// and stores the allowed server IDs, tool selections, and resolved LLM
+// instructions in the request context. slackClient is optional; when set,
+// every 401/403 fires an UnauthorizedEvent (rate-limited inside the client).
+// instructionRepo may be nil — scoping works without it; only the MCP
+// initialize `instructions` field is empty in that case.
+func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repository.InstructionRepo, required bool, slackClient *slack.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rawToken := r.Header.Get("X-MCP-Scope-Token")
@@ -126,6 +152,28 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool, slackCl
 					IsActive:     dbToken.IsActive,
 				}
 
+				// Resolve LLM instruction rows once per cache-miss. The
+				// repo flattens the token's picked pages into rows and filters
+				// each row by its own server scope, so the cache only ever
+				// holds renderable content.
+				if instructionRepo != nil && len(dbToken.Instructions) > 0 && len(serverIDs) > 0 {
+					allowedSlice := make([]string, 0, len(serverIDs))
+					for sid := range serverIDs {
+						allowedSlice = append(allowedSlice, sid)
+					}
+					rows, err := instructionRepo.ResolveForToken(dbToken.ID, allowedSlice)
+					if err == nil && len(rows) > 0 {
+						ct.Instructions = make([]CachedInstruction, 0, len(rows))
+						for _, row := range rows {
+							ct.Instructions = append(ct.Instructions, CachedInstruction{
+								ID: row.ID, Title: row.Title, Body: row.Body,
+							})
+						}
+					} else if err != nil {
+						log.Printf("[scope] resolve instructions for token %s: %v", dbToken.ID, err)
+					}
+				}
+
 				// Decode persisted Leexi filter (JSON columns) into typed slices.
 				ct.LeexiFilterMode = dbToken.LeexiFilterMode
 				if len(dbToken.LeexiAllowedUserUUIDs) > 0 {
@@ -157,6 +205,13 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, required bool, slackCl
 			}
 			if ct.Name != "" {
 				ctx = context.WithValue(ctx, ScopeNameContextKey, ct.Name)
+			}
+			if len(ct.Instructions) > 0 {
+				resolved := make([]ResolvedInstruction, 0, len(ct.Instructions))
+				for _, ci := range ct.Instructions {
+					resolved = append(resolved, ResolvedInstruction{ID: ci.ID, Title: ci.Title, Body: ci.Body})
+				}
+				ctx = context.WithValue(ctx, AllowedInstructionsContextKey, resolved)
 			}
 			if ct.LeexiFilterMode != "" && ct.LeexiFilterMode != "none" {
 				ctx = context.WithValue(ctx, LeexiFilterContextKey, &LeexiFilterContext{

@@ -4,7 +4,7 @@
       <!-- Header -->
       <div class="text-center mb-12">
         <div class="inline-flex items-center gap-3 mb-4">
-          <i class="pi pi-box text-3xl text-brand-500" />
+          <img src="/images/servers/hp-logo.svg" alt="Hellopro" class="w-10 h-10" />
           <h1 class="text-3xl font-bold text-gray-900 dark:text-white">MCP Gateway</h1>
         </div>
         <p class="text-lg text-gray-600 dark:text-gray-400">

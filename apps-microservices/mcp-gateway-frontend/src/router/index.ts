@@ -211,6 +211,30 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Modifier configuration', minRole: 'admin' }
     },
     {
+      path: '/llm-instructions',
+      name: 'llm-instructions',
+      component: () => import('@/views/LLMInstructionsView.vue'),
+      meta: { requiresAuth: true, title: 'Instructions LLM' }
+    },
+    {
+      path: '/llm-instructions/new',
+      name: 'llm-instruction-create',
+      component: () => import('@/views/LLMInstructionFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle instruction' }
+    },
+    {
+      path: '/llm-instructions/:id/edit',
+      name: 'llm-instruction-edit',
+      component: () => import('@/views/LLMInstructionFormView.vue'),
+      meta: { requiresAuth: true, title: 'Modifier instruction' }
+    },
+    {
+      path: '/llm-instructions/:id',
+      name: 'llm-instruction-detail',
+      component: () => import('@/views/LLMInstructionDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Instruction' }
+    },
+    {
       path: '/users',
       name: 'users',
       component: () => import('@/views/UsersView.vue'),

@@ -32,6 +32,10 @@ type ScopedGateway struct {
 	registry     *Registry
 	allowedIDs   map[string]bool
 	allowedTools map[string]map[string]bool // server_id → tool_name → true; nil = all tools
+	// instructions are the LLM instruction snippets the token / OAuth2 client
+	// has selected (already filtered by allowed servers upstream). Rendered into
+	// the MCP initialize response's `instructions` field.
+	instructions []InstructionView
 	// leexiAdmin (optional) is used to expand "teams" filter mode to user
 	// UUIDs at request time. nil = no team expansion (treat empty list).
 	leexiAdmin *leexiadmin.Client
@@ -39,13 +43,16 @@ type ScopedGateway struct {
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
 // from the given server IDs, optionally filtered to specific tools per server.
-func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTools map[string]map[string]bool) *ScopedGateway {
+// instructions may be nil/empty — the composer then returns an empty string
+// and the initialize response omits the `instructions` field.
+func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTools map[string]map[string]bool, instructions []InstructionView) *ScopedGateway {
 	return &ScopedGateway{
 		name:         gw.name,
 		version:      gw.version,
 		registry:     gw.registry,
 		allowedIDs:   allowedServerIDs,
 		allowedTools: allowedTools,
+		instructions: instructions,
 		leexiAdmin:   gw.leexiAdmin,
 	}
 }
@@ -85,6 +92,7 @@ func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request)
 		ProtocolVersion: mcp.ProtocolVersion,
 		Capabilities:    caps,
 		ServerInfo:      mcp.Implementation{Name: name, Version: sg.version},
+		Instructions:    ComposeInstructions(sg.instructions, name),
 	}
 	return okResp(req.ID, result)
 }

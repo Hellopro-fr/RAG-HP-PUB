@@ -186,6 +186,16 @@
           />
         </div>
 
+        <!-- Section: Instructions LLM — dedicated tab, always shows every
+             page with its server tags (renderability indicated inline). -->
+        <div v-show="isEdit || currentStep === instructionsStepIndex" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Instructions LLM</h3>
+          <InstructionsPicker
+            v-model="form.instruction_ids"
+            :server-ids="selectedServerIdsForPicker"
+          />
+        </div>
+
         <!-- Section 3: Acc\u00e8s Leexi (only when a Leexi server is selected) -->
         <div
           v-if="hasLeexiServer"
@@ -327,6 +337,7 @@ import { useDragDrop } from '@/composables/useDragDrop'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import DragDropPanel from '@/components/shared/DragDropPanel.vue'
 import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
+import InstructionsPicker from '@/components/llm-instructions/InstructionsPicker.vue'
 import type { OAuth2Client, CreateOAuth2ClientRequest } from '@/types/oauth2'
 import type { LeexiFilter } from '@/types/leexi'
 
@@ -341,13 +352,14 @@ const dragDropReady = ref(false)
 // Step labels are dynamic: the "Acc\u00e8s Leexi" step is only shown when the
 // selected servers include the Leexi backend (tool_prefix === 'leexi').
 const stepLabels = computed(() => {
-  const labels = ['Informations de base', 'Serveurs et outils']
+  const labels = ['Informations de base', 'Serveurs et outils', 'Instructions LLM']
   if (hasLeexiServer.value) labels.push('Acc\u00e8s Leexi')
   labels.push('TTL, expiration et vérification')
   return labels
 })
-const leexiStepIndex = computed(() => (hasLeexiServer.value ? 2 : -1))
-const expirationStepIndex = computed(() => (hasLeexiServer.value ? 3 : 2))
+const instructionsStepIndex = 2
+const leexiStepIndex = computed(() => (hasLeexiServer.value ? 3 : -1))
+const expirationStepIndex = computed(() => (hasLeexiServer.value ? 4 : 3))
 const lastStepIndex = computed(() => stepLabels.value.length - 1)
 const currentStep = ref(0)
 const loading = ref(false)
@@ -372,8 +384,11 @@ const form = reactive({
   redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
   access_token_ttl: 86400,
   expires_at: '',
-  leexi_filter: { mode: 'none' } as LeexiFilter
+  leexi_filter: { mode: 'none' } as LeexiFilter,
+  instruction_ids: [] as string[]
 })
+
+const selectedServerIdsForPicker = computed(() => dragDrop.getServerIds())
 
 const gatewayMcpUrl = computed(() => window.location.origin + '/mcp')
 const tokenEndpointUrl = computed(() => window.location.origin + '/token')
@@ -444,6 +459,9 @@ onMounted(async () => {
       if (client.leexi_filter) {
         form.leexi_filter = { ...client.leexi_filter }
       }
+      if (client.instruction_ids) {
+        form.instruction_ids = [...client.instruction_ids]
+      }
       dragDrop.initWithSelection(
         serversStore.servers,
         client.server_ids,
@@ -492,6 +510,7 @@ async function handleSubmit() {
       redirect_uris: form.redirect_uri ? [form.redirect_uri] : undefined,
       server_ids: serverIds,
       server_tools: serverTools.length ? serverTools : undefined,
+      instruction_ids: form.instruction_ids.length ? [...form.instruction_ids] : undefined,
       access_token_ttl: form.access_token_ttl,
       expires_at: expirationType.value === 'custom' && form.expires_at
         ? new Date(form.expires_at).toISOString()
