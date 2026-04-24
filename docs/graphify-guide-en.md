@@ -171,7 +171,7 @@ Long term, labels should be derived from community content (top-N node labels) r
 
 Four triggers, in order of coverage:
 
-1. **Any backbone push to `main` or `features/**`** → **automatic** via the CI workflow at `.github/workflows/graphify-auto-rebuild.yml`. GitHub Actions runs the scoped rebuild on an ephemeral runner (graphify installed there, not here) and commits the updated `graph.json` / `graph.html` / `GRAPH_REPORT.md` back to the same branch with `[skip graphify]` in the message to break the loop. Covers the "consume-only server" case — a server agent that commits code but has no graphify install relies entirely on CI for graph freshness. Runtime ~1 min per rebuild. Free on public repos; a few hundred minutes per month on private.
+1. **Any backbone push to `main` or `features/poc`** → **automatic** via the CI workflow at `.github/workflows/graphify-auto-rebuild.yml`. Only these two branches trigger CI — they are the deployed integration branches; other feature branches rely on the local hook so we do not burn CI minutes on exploratory work. GitHub Actions runs the scoped rebuild on an ephemeral runner (graphify installed there, not here) and commits the updated `graph.json` / `graph.html` / `GRAPH_REPORT.md` back to the same branch with `[skip graphify]` in the message to break the loop. Covers the "consume-only server" case — a server agent that commits code but has no graphify install relies entirely on CI for graph freshness. Runtime ~1 min per rebuild. Free on public repos; a few hundred minutes per month on private.
 2. **Code-only changes in scope, locally** → **automatic** via the scoped post-commit hook (if installed with `bash scripts/install-graphify-hook.sh`). Zero LLM cost. Runs in ~5-15s after commit. Redundant with CI but useful so your local `graph.json` is fresh for queries before the next push.
 3. **Doc / CLAUDE.md changes in scope** → the local hook (and CI) can only refresh AST; semantic re-extraction needs the LLM. CI / hook touch `graphify-out/.needs_update` and log a reminder. You then run `/graphify --update` from a Claude Code session when convenient. Cost is proportional to what you edited thanks to the semantic cache.
 4. **Full rebuild** → `/graphify .` from scratch. Avoid unless the graph is corrupted or the scope changed drastically — re-extracts every file.
@@ -224,7 +224,7 @@ Three independent paths keep the graph fresh. They are idempotent and safe to ru
 
 | Trigger | Where it runs | What it refreshes | Cost |
 |---------|---------------|-------------------|------|
-| `git push` to `main` / `features/**` touching in-scope files | GitHub Actions runner | Code AST + regenerated HTML / report, commits back to same branch | ~1 min CI per push, free tier |
+| `git push` to `main` or `features/poc` touching in-scope files | GitHub Actions runner | Code AST + regenerated HTML / report, commits back to same branch | ~1 min CI per push, free tier |
 | `git commit` on a machine with the scoped hook installed | Your local machine | Same as CI, but instant and locally visible before push | ~5-15 s |
 | `/graphify --update` from a Claude Code session | Your local machine | Semantic (LLM) re-extraction for changed docs / CLAUDE.md files | LLM tokens proportional to edited docs |
 

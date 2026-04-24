@@ -10,9 +10,12 @@ name: graphify auto-rebuild
 
 on:
   push:
+    # Restricted to the two deployed branches. Feature branches under
+    # features/** other than features/poc rebuild locally via the post-commit
+    # hook; CI only kicks in once work lands on an integration branch.
     branches:
       - main
-      - 'features/**'
+      - features/poc
     paths:
       # Backbone
       - 'libs/**'
