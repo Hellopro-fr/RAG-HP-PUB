@@ -63,12 +63,19 @@ func DecodeUsers(raw json.RawMessage) ([]User, error) {
 }
 
 func decodeUsersPayload(raw json.RawMessage) ([]rawUser, error) {
-	// Primary shape: { user_list: [...] }
-	var withList struct {
+	// Primary Ringover shape: { list_count: N, list: [...] }
+	var withRingoverList struct {
+		List []rawUser `json:"list"`
+	}
+	if err := json.Unmarshal(raw, &withRingoverList); err == nil && withRingoverList.List != nil {
+		return withRingoverList.List, nil
+	}
+	// Alternate: { user_list: [...] } (older / monitoring-aware shape).
+	var withUserList struct {
 		UserList []rawUser `json:"user_list"`
 	}
-	if err := json.Unmarshal(raw, &withList); err == nil && withList.UserList != nil {
-		return withList.UserList, nil
+	if err := json.Unmarshal(raw, &withUserList); err == nil && withUserList.UserList != nil {
+		return withUserList.UserList, nil
 	}
 	// Secondary: { data: [...] }
 	var withData struct {

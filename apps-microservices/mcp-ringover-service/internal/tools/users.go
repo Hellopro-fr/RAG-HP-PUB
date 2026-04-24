@@ -54,28 +54,37 @@ func filterUserListResponse(ctx context.Context, raw json.RawMessage) (json.RawM
 		return json.Marshal(filtered)
 	}
 
-	listRaw, ok := envelope["user_list"]
-	if !ok {
-		// Nothing to filter — safer to return empty than to leak unfiltered data.
-		envelope["user_list"] = json.RawMessage(`[]`)
-		if _, hasCount := envelope["user_list_count"]; hasCount {
-			envelope["user_list_count"] = json.RawMessage(`0`)
-		}
+	// Ringover's real /users response uses `list` + `list_count`, but we
+	// tolerate the older `user_list` + `user_list_count` envelope too so
+	// non-gateway callers that rely on either shape keep working.
+	listKey := ""
+	countKey := ""
+	if _, ok := envelope["list"]; ok {
+		listKey, countKey = "list", "list_count"
+	} else if _, ok := envelope["user_list"]; ok {
+		listKey, countKey = "user_list", "user_list_count"
+	}
+
+	if listKey == "" {
+		// Nothing to filter — safer to return an empty list than to leak
+		// unfiltered data under a declared scope.
+		envelope["list"] = json.RawMessage(`[]`)
+		envelope["list_count"] = json.RawMessage(`0`)
 		return json.Marshal(envelope)
 	}
 
 	var arr []json.RawMessage
-	if err := json.Unmarshal(listRaw, &arr); err != nil {
-		return nil, fmt.Errorf("user_list is not an array: %w", err)
+	if err := json.Unmarshal(envelope[listKey], &arr); err != nil {
+		return nil, fmt.Errorf("%s is not an array: %w", listKey, err)
 	}
 	filtered := filterUserArray(arr, allowedSet)
 	encoded, err := json.Marshal(filtered)
 	if err != nil {
 		return nil, err
 	}
-	envelope["user_list"] = encoded
-	if _, hasCount := envelope["user_list_count"]; hasCount {
-		envelope["user_list_count"] = json.RawMessage(fmt.Sprintf("%d", len(filtered)))
+	envelope[listKey] = encoded
+	if _, hasCount := envelope[countKey]; hasCount {
+		envelope[countKey] = json.RawMessage(fmt.Sprintf("%d", len(filtered)))
 	}
 	return json.Marshal(envelope)
 }
