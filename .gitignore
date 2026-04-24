@@ -137,3 +137,29 @@ apps-microservices/nextjs-formulaire-hp/package-lock.json
 
 .mcp.json
 .superpowers/
+
+# graphify — commit graph.json/graph.html/GRAPH_REPORT.md so teammates get fresh map.
+# Exclude only local-only artifacts.
+graphify-out/cache/
+**/graphify-out/cache/
+graphify-out/manifest.json
+**/graphify-out/manifest.json
+graphify-out/cost.json
+**/graphify-out/cost.json
+
+# graphify pipeline temp files (written to cwd during run)
+.graphify_python
+.graphify_detect.json
+.graphify_extract.json
+.graphify_ast.json
+.graphify_semantic.json
+.graphify_analysis.json
+.graphify_labels.json
+.graphify_cached.json
+.graphify_uncached.txt
+.graphify_incremental.json
+.graphify_old.json
+# Leaked chunk files / detect inside graphify-out dirs
+**/graphify-out/.graphify_*
+
+bash.exe.stackdump
