@@ -1,0 +1,49 @@
+name: graphify coverage check
+
+# Ensures every apps-microservices/<name> directory is classified in
+# graphify-out/services-policy.yml (either `graphed:` or `not_graphed:`).
+# Fails the PR if a dev adds a new service without updating the policy,
+# which is the safety net for the question "what if a dev forgets?".
+#
+# Runs on PRs targeting main or features/poc. Also runs on push to those
+# branches so that a direct push still gets caught.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - features/poc
+    paths:
+      - 'apps-microservices/**'
+      - 'graphify-out/services-policy.yml'
+      - 'scripts/graphify_check_service.py'
+  push:
+    branches:
+      - main
+      - features/poc
+    paths:
+      - 'apps-microservices/**'
+      - 'graphify-out/services-policy.yml'
+      - 'scripts/graphify_check_service.py'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pyyaml + pytest
+        run: pip install --quiet pyyaml pytest
+
+      - name: Run classifier unit tests
+        run: python -m pytest scripts/test_graphify_check_service.py -q
+
+      - name: Scan for unclassified services
+        run: python scripts/graphify_check_service.py --scan
