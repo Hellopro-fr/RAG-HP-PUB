@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.core.credentials import settings
 from app.core.typesense_client import typesense_client
+from app.services.synonyms_service import auto_generate_synonyms
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -117,5 +118,33 @@ def upsert_synonyms_batch(req: SynonymsBatchRequest, collection: Optional[str] =
 def delete_synonym(synonym_id: str, collection: Optional[str] = None):
     try:
         return typesense_client.delete_synonym(synonym_id, collection)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/synonyms/auto-generate",
+    summary="Auto-generer les synonymes depuis TOUTES les categories de la collection",
+)
+def synonyms_auto_generate(
+    collection: Optional[str] = None,
+    dry_run: bool = False,
+):
+    """
+    Scan toutes les categories ingerees dans Typesense, et pour chaque
+    categorie multi-tokens (ex: 'Mini-pelles (moins de 10 tonnes)') genere
+    automatiquement les variantes orthographiques equivalentes
+    (minipelles / mini pelles / mini-pelles) comme synonyme multi-way.
+
+    A appeler apres chaque ingestion de nouvelles categories. Sans liste
+    metier manuelle : la source de verite est le catalogue Typesense.
+
+    Parametres query :
+      - collection (optional) : override settings.TYPESENSE_COLLECTION
+      - dry_run (default false) : si true, calcule mais ne push rien
+        (utile pour revue avant activation).
+    """
+    try:
+        return auto_generate_synonyms(collection=collection, dry_run=dry_run)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
