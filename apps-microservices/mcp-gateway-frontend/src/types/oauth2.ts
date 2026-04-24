@@ -1,5 +1,6 @@
 import type { ServerToolScope } from './token'
 import type { LeexiFilter } from './leexi'
+import type { RingoverFilter } from './ringover'
 
 export interface OAuth2Client {
   id: string
@@ -20,6 +21,7 @@ export interface OAuth2Client {
   grant_types?: string[]
   dynamically_registered: boolean
   leexi_filter?: LeexiFilter
+  ringover_filter?: RingoverFilter
 }
 
 export interface OAuth2ClientListResponse {
@@ -36,6 +38,7 @@ export interface CreateOAuth2ClientRequest {
   access_token_ttl?: number
   expires_at?: string
   leexi_filter?: LeexiFilter
+  ringover_filter?: RingoverFilter
 }
 
 export interface UpdateOAuth2ClientRequest extends Partial<CreateOAuth2ClientRequest> {}
