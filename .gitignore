@@ -161,5 +161,8 @@ graphify-out/cost.json
 .graphify_old.json
 # Leaked chunk files / detect inside graphify-out dirs
 **/graphify-out/.graphify_*
+# Scoped-hook flag — set when a doc change in scope needs semantic refresh
+graphify-out/.needs_update
+**/graphify-out/.needs_update
 
 bash.exe.stackdump

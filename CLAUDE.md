@@ -179,12 +179,13 @@ Most Python/Rust microservices run on a remote server with GPU and network acces
 
 ## graphify
 
-This project has a graphify knowledge graph at `graphify-out/` (backbone: libs + protos + tools + model-optimizer + docs) and per-service graphs under `apps-microservices/<service>/graphify-out/` when present.
+This project has a **unified graphify knowledge graph** at `graphify-out/` covering libs + protos + tools + model-optimizer + docs + any merged-in services (crawler-service today; more added via `/graphify <service> --update`). 1700 nodes, ~3150 edges, 86 communities, with explicit cross-service edges (e.g. `crawler_capacity_counter --uses--> cache_service.py`).
 
 Rules:
-- Before answering architecture or codebase questions, read `graphify-out/GRAPH_REPORT.md` for god nodes and community structure. Check the relevant per-service `GRAPH_REPORT.md` if one exists.
+- Before answering architecture or codebase questions, read `graphify-out/GRAPH_REPORT.md` for god nodes, community structure, and suggested questions.
 - For cross-module "how does X relate to Y" questions, prefer the `/graphify query "<question>"`, `/graphify path "<A>" "<B>"`, or `/graphify explain "<concept>"` slash commands over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files.
 - After modifying code files in this session, run `/graphify --update` (the slash command inside this session, NOT the `graphify update .` CLI). The slash command uses the scoped manifest and re-extracts only changed files; the CLI rescans the whole directory and in this monorepo that pulls in `apps-microservices/` and explodes the graph.
+- For autonomous per-commit rebuilds: run `bash scripts/install-graphify-hook.sh` once per clone. The scoped post-commit hook respects `graphify-out/manifest.json`, runs AST only on in-scope changes, and never calls the LLM. Commits outside scope are silently ignored.
 - Remember edge honesty tags: EXTRACTED (AST-sourced, trust fully), INFERRED (LLM-reasoned, verify before refactoring shared components), AMBIGUOUS (flagged, verify). INFERRED edges may also have flipped direction — the graph is undirected, so interpret bidirectionally.
-- Do NOT run `graphify hook install` in this repo. See `docs/graphify-guide-en.md` § "Why no git hooks?" for the reason.
+- Do NOT run `graphify hook install` from the upstream CLI — it installs an unscoped hook that explodes the graph. Use `scripts/install-graphify-hook.sh` instead. See `docs/graphify-guide-en.md` § "Scoped hook vs. upstream hook" for the reason.
 - Full team guide: `docs/graphify-guide-en.md` (English) or `docs/graphify-guide-fr.md` (Français).

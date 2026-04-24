@@ -4,19 +4,21 @@ Un graphe de connaissance persistant du monorepo, construit à partir du code (A
 
 ## Ce que vous obtenez aujourd'hui
 
-Deux graphes préconstruits, commités sur `features/poc` :
+**Un graphe unifié** à `graphify-out/`, commité sur `features/poc` :
 
-| Graphe | Portée | Nœuds / Arêtes / Communautés | Emplacement |
-|--------|--------|------------------------------|-------------|
-| **Backbone** | `libs/`, `protos/`, `tools/`, `model-optimizer/`, `docs/` | 1240 / 2120 / 85 | `graphify-out/` |
-| **crawler-service** | `apps-microservices/crawler-service/` | 491 / 1056 / 18 | `apps-microservices/crawler-service/graphify-out/` |
+- 1700 nœuds, ~3150 arêtes, 86 communautés
+- Couvre : `libs/`, `protos/`, `tools/`, `model-optimizer/`, `docs/`, et `apps-microservices/crawler-service/`
+- 10 liens cross-service explicites depuis les concepts crawler-service vers les concepts backbone (par ex. `crawler_capacity_counter --uses--> cache_service.py`, `crawler_archiving_gcs_fallback --shares_data_with--> tools_upload_daemon`) — c'est ce qui permet de répondre à « comment le crawler utilise Redis » en une seule requête.
 
-Chaque dossier de graphe contient :
+Le dossier du graphe contient :
 
 - `graph.html` — visualisation interactive, à ouvrir dans un navigateur
-- `graph.json` — données brutes (consommées par la CLI `graphify` et MCP)
-- `GRAPH_REPORT.md` — rapport d'audit en texte clair avec god nodes, surprises, questions suggérées
-- `memory/` — Q&A sauvegardées des requêtes passées (promues en nœuds au prochain `--update`)
+- `graph.json` — données brutes (consommées par la CLI + MCP)
+- `GRAPH_REPORT.md` — rapport d'audit avec god nodes, surprises, questions suggérées
+- `labels.json` — noms de communautés (tracké ; préservé entre les rebuilds)
+- `memory/` — Q&A sauvegardées (auto-promues en nœuds au prochain update sémantique)
+
+Local uniquement (gitignoré) : `cache/`, `manifest.json`, `cost.json`, `.needs_update`.
 
 ## Pourquoi l'utiliser
 
@@ -36,23 +38,33 @@ Chaque dossier de graphe contient :
 ## Installation initiale (une fois par développeur)
 
 ```bash
+# 1. Installer la CLI graphify
 pip install graphifyy
+
+# 2. Installer le hook post-commit scoppé (mises à jour autonomes, aucun coût LLM pour les changements code)
+bash scripts/install-graphify-hook.sh
 ```
 
-C'est tout. Rien à installer dans le repo. Vérifier :
+Vérifier :
 
 ```bash
-graphify --version   # doit afficher une version
-which graphify       # doit résoudre vers votre chemin pip install
+graphify --version                # affiche une version
+ls .git/hooks/post-commit         # hook présent après install
 ```
 
-### Pourquoi pas de git hooks ?
+### Hook scoppé vs hook amont
 
-graphify propose un hook post-commit optionnel (`graphify hook install`) qui reconstruit le graphe après chaque commit. **Nous ne l'utilisons pas dans ce monorepo.**
+La commande amont `graphify hook install` installe un hook post-commit qui appelle `_rebuild_code(Path("."))` — rescanne tout le répertoire de travail à chaque commit. Dans ce monorepo de 2129 fichiers, ça aspire `apps-microservices/` dans le graphe, fait exploser `graph.json` de ~20x et dérive silencieusement la portée du graphe à chaque commit. **Ne pas lancer `graphify hook install`.**
 
-**Raison** : le `_rebuild_code` du hook rescanne tout le répertoire de travail. Dans ce monorepo de 2129 fichiers, un seul commit sur la backbone extrait l'AST des 1790 fichiers code (incluant les 90+ services hors du scope backbone), faisant exploser le `graph.json` commité par ~20x et dérivant la portée du graphe hors de ses limites.
+`scripts/install-graphify-hook.sh` installe un hook différent (`scripts/graphify-post-commit.sh`) qui délègue à `scripts/graphify_rebuild_scoped.py`. Le hook scoppé :
 
-**Contournement** : utiliser `/graphify --update` depuis une session Claude Code. Cette commande lit le manifeste scoppé (`graphify-out/manifest.json`) et ré-extrait uniquement les fichiers modifiés dans le jeu d'extraction initial — pas de dérive de portée, même zéro coût LLM pour les changements code-only. Voir **Mettre à jour le graphe** plus bas.
+1. Lit `graphify-out/manifest.json` — source unique de vérité pour la portée du graphe.
+2. Intersecte les fichiers modifiés du commit avec le manifeste. Hors scope = ignoré silencieusement ; pas de reconstruction.
+3. Pour les fichiers code dans le scope : ré-extrait l'AST uniquement sur ces fichiers, fusionne sur place, préserve les arêtes sémantiques + cross-links intactes. Zéro coût LLM.
+4. Pour les fichiers doc/config dans le scope : touche `graphify-out/.needs_update` et rappelle de lancer `/graphify --update` depuis une session Claude Code (la ré-extraction sémantique a besoin du LLM).
+5. Régénère `graph.json`, `graph.html`, `GRAPH_REPORT.md` en réutilisant les noms de communauté depuis `graphify-out/labels.json`.
+
+C'est la voie autonome : commiter normalement, la backbone + tout service graphé reste à jour sans y penser. Si le hook échoue pour une raison quelconque, le commit réussit quand même — le hook est side-effect-only.
 
 ## Intégration automatique avec Claude Code
 
@@ -81,21 +93,33 @@ Modes :
 
 Les réponses sont persistées dans `graphify-out/memory/` et promues en nœuds au prochain `--update`. Le graphe apprend de vos requêtes.
 
-## Étendre — grapher un nouveau service
+## Étendre — ajouter un service au graphe unifié
+
+Nous avons choisi de faire grandir **un seul graphe unifié** plutôt qu'un graphe isolé par service. Raisons : les requêtes cross-service (par ex. « comment `<service>` utilise Redis ? ») exigent un graphe où les concepts du service et ceux de `libs/common-utils` sont dans le même espace de noms, liés par des arêtes cross. Des graphes séparés par service ne peuvent pas répondre aux questions cross-service sans couture manuelle.
+
+**Pour ajouter un service** (exemple : `llm-service`) :
 
 ```bash
-cd apps-microservices/<service>
-# Avoir un CLAUDE.md dans le service est recommandé pour une extraction de concepts plus riche
-/graphify .
+# Depuis la racine du repo — le répertoire de travail compte, il pointe vers graphify-out/
+/graphify apps-microservices/llm-service --update
 ```
 
-La sortie atterrit dans `apps-microservices/<service>/graphify-out/`. À commiter.
+Le chemin `--update` du skill :
 
-**Quand grapher un service :**
+1. Lit le manifeste racine, remarque que les fichiers du service n'y sont pas.
+2. Re-détecte le sous-répertoire du service (crawler-service à 37 fichiers a pris ~1 min bout à bout).
+3. Dispatche un sous-agent sémantique pour ses docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Peu de tokens LLM — compter moins de 0,10 $ par service.
+4. Fusionne les nouveaux nœuds/arêtes dans `graphify-out/graph.json` et ajoute les fichiers au manifeste.
+
+Après la fusion, tout nouveau concept du `CLAUDE.md` du service qui référence des modules backbone est extrait automatiquement en cross-link (même mécanisme qui a produit les 10 arêtes crawler → libs/tools existantes).
+
+Si le CLAUDE.md du service est maigre, les cross-links le seront aussi — investir dans l'écriture du CLAUDE.md d'abord, grapher ensuite.
+
+**Quand ajouter un service :**
 
 - ≥ 20 fichiers
 - Développement actif / questions fréquentes
-- État interne complexe (conditions de course, élection de leader, orchestration)
+- État interne non trivial (conditions de course, élection de leader, orchestration, logique métier)
 
 **Quand ignorer :**
 
@@ -103,16 +127,23 @@ La sortie atterrit dans `apps-microservices/<service>/graphify-out/`. À commite
 - < 10 fichiers (un grep brut suffit)
 - Service déprécié / mort
 
+Après ajout d'un service, relire `GRAPH_REPORT.md` — les nouvelles communautés peuvent avoir besoin de noms dans `graphify-out/labels.json`. Mettre à jour et recommiter.
+
 ## Mettre à jour le graphe
 
-Deux déclencheurs, par ordre de préférence :
+Trois déclencheurs, par ordre de couverture :
 
-1. **Toute modification dans le scope backbone** → lancer `/graphify --update` depuis une session Claude Code. Utilise une détection incrémentale basée sur le manifeste :
-   - Changements code-only : ré-extraction AST des fichiers modifiés, **zéro coût LLM**, ~5-15s.
-   - Changements doc / CLAUDE.md : ré-extraction sémantique (LLM) des docs modifiées seulement. Cache hits pour le reste. Coût proportionnel à ce qui a été édité.
-2. **Reconstruction complète** → `/graphify .` depuis zéro. À éviter sauf changement structurel majeur — ré-extrait tout.
+1. **Changements code-only dans le scope** → **automatique** via le hook post-commit scoppé. Aucun coût LLM. Tourne en ~5-15s après le commit.
+2. **Changements doc / CLAUDE.md dans le scope** → le hook touche `graphify-out/.needs_update` et affiche un rappel. Lancer ensuite `/graphify --update` depuis une session Claude Code quand c'est pratique. La ré-extraction sémantique est facturée LLM mais cache-aware, donc le coût est proportionnel aux éditions.
+3. **Reconstruction complète** → `/graphify .` depuis zéro. À éviter sauf si le graphe est corrompu ou si la portée a changé drastiquement — ré-extrait tout.
 
-**Ne PAS lancer `graphify update .` en CLI** dans ce repo. La CLI invoque `_rebuild_code` qui rescanne tout le répertoire (pas de manifeste). Dans ce monorepo, ça aspire `apps-microservices/` et fait exploser le graphe. Toujours utiliser la slash command `/graphify --update` depuis une session Claude Code — elle passe par le skill qui lit d'abord le manifeste.
+**Ne PAS lancer `graphify update .` en CLI** dans ce repo. La CLI amont invoque `_rebuild_code` qui rescanne tout le répertoire (pas de manifeste). Dans ce monorepo, ça aspire `apps-microservices/` et fait exploser le graphe. Le hook scoppé et la slash command sont les voies supportées. Pour un rebuild AST à la demande sans commiter, appeler directement le script :
+
+```bash
+python scripts/graphify_rebuild_scoped.py path/to/file1.py path/to/file2.ts
+```
+
+Les arguments sont les fichiers modifiés — il respecte le manifeste et ne fait rien pour les chemins hors scope.
 
 Le coût cumulé en tokens par run est tracé dans `graphify-out/cost.json` (gitignoré, local uniquement).
 
@@ -127,17 +158,22 @@ Le coût cumulé en tokens par run est tracé dans `graphify-out/cost.json` (git
 ## Structure des fichiers
 
 ```
-graphify-out/                                  # graphe backbone
+graphify-out/                                  # graphe unifié (backbone + services graphés)
 ├── graph.html                                 # viz interactive
 ├── graph.json                                 # données brutes (entrée MCP/CLI)
 ├── GRAPH_REPORT.md                            # rapport d'audit
-├── memory/                                    # Q&A sauvegardées (tracké)
+├── labels.json                                # noms de communautés (tracké)
+├── memory/                                    # Q&A sauvegardées (tracké, promues en nœuds au prochain update)
 ├── cache/                                     # cache d'extraction local (gitignoré)
 ├── manifest.json                              # index mtime (gitignoré)
-└── cost.json                                  # log de tokens (gitignoré)
+├── cost.json                                  # log de tokens (gitignoré)
+└── .needs_update                              # flag écrit par le hook sur changements doc (gitignoré)
 
-apps-microservices/<service>/graphify-out/     # graphe par service
-└── (même structure)
+scripts/
+├── graphify_rebuild_scoped.py                 # rebuild AST scoppé (respect du manifeste)
+├── test_graphify_rebuild_scoped.py            # tests unitaires du script ci-dessus
+├── graphify-post-commit.sh                    # corps du hook post-commit
+└── install-graphify-hook.sh                   # installeur (copie le hook vers .git/hooks/)
 ```
 
 ## Optionnel : serveur MCP pour requêtes agent en direct
@@ -168,8 +204,11 @@ Expose les outils : `query_graph`, `get_node`, `get_neighbors`, `get_community`,
 | Symptôme | Correction |
 |----------|-----------|
 | `graphify: command not found` | `pip install graphifyy` |
-| `graphify update .` lancé et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé. `git checkout -- graphify-out/` pour restaurer. Utiliser `/graphify --update` depuis une session Claude Code à la place. |
-| Un membre de l'équipe a installé les git hooks — graphe rempli d'`apps-microservices/` | `graphify hook uninstall`, `git checkout -- graphify-out/`. Hooks intentionnellement non utilisés dans ce repo — voir « Pourquoi pas de git hooks ? » ci-dessus. |
+| `graphify update .` lancé et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé. `git checkout -- graphify-out/` pour restaurer. Utiliser `/graphify --update` depuis une session Claude Code, ou `python scripts/graphify_rebuild_scoped.py <fichiers>` directement. |
+| Équipier a lancé `graphify hook install` par erreur | `graphify hook uninstall` puis réinstaller le nôtre : `bash scripts/install-graphify-hook.sh`. `git checkout -- graphify-out/` si le graphe a été pollué. |
+| Hook post-commit déclenché mais n'a rien fait | Soit aucun fichier modifié n'est dans le manifeste (attendu pour les commits `apps-microservices/`), soit graphify n'est pas installé sur votre Python. Vérifier avec `python -c "import graphify"`. |
+| Sortie du hook mentionne `.needs_update` | Un doc/CLAUDE.md du scope a changé. La ré-extraction sémantique a besoin du LLM ; lancer `/graphify --update` dans une session Claude Code quand pratique. |
+| Nouveau service ajouté mais ses nœuds ne sont pas dans le graphe | Vous avez lancé `/graphify <service-path>` sans `--update`. Utiliser le flag update pour qu'il fusionne dans le graphe racine au lieu d'en créer un isolé. |
 | Scroll vertical cassé sur PowerShell 5.1 | Utiliser Windows Terminal, ou désinstaller `graspologic` : `pip uninstall graspologic` |
 | Direction d'arête fausse | Inhérent au graphe non-orienté ; interpréter bidirectionnellement ou reconstruire avec `--directed` |
 | Exclure un fichier de l'extraction | Créer `.graphifyignore` à la racine du repo (même syntaxe que `.gitignore`) |
