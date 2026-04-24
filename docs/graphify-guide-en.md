@@ -56,7 +56,7 @@ ls .git/hooks/post-commit         # hook present after install
 
 The upstream `graphify hook install` command ships a post-commit hook that calls `_rebuild_code(Path("."))` — it rescans the entire working directory on every commit. In this 2129-file monorepo that pulls `apps-microservices/` into the graph, explodes `graph.json` by ~20x, and silently drifts the graph scope every time someone commits. **Do not run `graphify hook install`.**
 
-`scripts/install-graphify-hook.sh` installs a different hook (`scripts/graphify-post-commit.sh`) that delegates to `scripts/graphify_rebuild_scoped.py`. The scoped hook:
+`scripts/install-graphify-hook.sh` installs two hooks (`post-commit` + `post-merge`) that delegate to `scripts/graphify_rebuild_scoped.py`. `post-commit` fires after your own commits; `post-merge` fires after `git pull` / `git merge` that absorb other teammates' work, so you do not need to remember to rebuild manually after pulling. Both share the same scoped-rebuild body:
 
 1. Derives the scope from `graphify-out/graph.json` — every node's `source_file` attribute is collected into an in-scope path set. `graph.json` is tracked, so every teammate gets the correct scope right after `git pull`. `manifest.json` is intentionally gitignored (mtime-based, invalid post-clone per upstream convention) and is only used as a fallback.
 2. Intersects the commit's changed files with that scope. Anything outside scope is silently skipped; no rebuild.
@@ -74,6 +74,52 @@ Already wired:
 - **`.claude/settings.json`** has a `PreToolUse` hook on `Glob|Grep` that injects a reminder to check the graph before raw search.
 
 No action needed. Every session starts graph-aware.
+
+## Pulling updates from the repository
+
+The usual case is `git pull` with your own unpushed graphify commits ahead of `origin/features/poc` and teammates' commits on the remote. Two rules keep the graph intact.
+
+### 1. Prefer `--rebase` over merge
+
+Your local graph commits replay on top of teammates' work. History stays linear, CI produces no extra merge-commit noise, and `graph.json` conflicts — if any — surface once at the top of the rebase instead of once per intermediate step. Make it the default for this repo:
+
+```bash
+git config pull.rebase true           # per-repo
+# or globally:
+git config --global pull.rebase true
+```
+
+A plain `git pull` without rebase still works; it just creates a merge commit and the post-merge hook will rebuild AST for the merged diff. Either strategy is safe, rebase is cleaner.
+
+### 2. Never hand-merge `graph.json`
+
+`graph.json` is a ~2 MB NetworkX serialization. Conflict markers leave invalid JSON and everything breaks. Same for `graph.html`, `GRAPH_REPORT.md`, and `labels.json` — they are all either auto-generated or mechanically maintained, so the right answer to a conflict is to regenerate, not hand-merge.
+
+Recovery recipe when git reports a conflict on any `graphify-out/*` file:
+
+```bash
+# Accept the remote side wholesale (or --ours if you prefer yours)
+git checkout --theirs graphify-out/graph.json graphify-out/graph.html \
+                      graphify-out/GRAPH_REPORT.md graphify-out/labels.json
+git add graphify-out/graph.json graphify-out/graph.html \
+        graphify-out/GRAPH_REPORT.md graphify-out/labels.json
+
+# Close the merge / rebase step
+git rebase --continue       # if rebasing
+# OR
+git commit                  # if merging
+
+# Regenerate locally to be consistent with the merged code
+python scripts/graphify_rebuild_scoped.py $(git diff --name-only HEAD~1 HEAD)
+```
+
+Community labels survive because `labels.json` is the remote's version — teammates keep their label edits too.
+
+### 3. Post-merge hook absorbs routine pulls
+
+If the installed post-merge hook fires cleanly (teammate's commits did not touch `graphify-out/*` files), you do nothing — the hook silently re-extracts AST for their changed code files and writes the updated `graph.json`. Push includes the rebuild as part of your next commit.
+
+If the hook did nothing (their changes were outside the graph scope), nothing to do.
 
 ## Querying the graph manually
 
@@ -262,8 +308,11 @@ graphify-out/                                  # unified graph (backbone + graph
 scripts/
 ├── graphify_rebuild_scoped.py                 # scoped AST rebuild (scope derived from graph.json)
 ├── test_graphify_rebuild_scoped.py            # unit tests for the above
+├── graphify_check_service.py                  # classifier / coverage scanner (reads services-policy.yml)
+├── test_graphify_check_service.py             # unit tests for the classifier
 ├── graphify-post-commit.sh                    # post-commit hook body
-└── install-graphify-hook.sh                   # installer (copies hook to .git/hooks/)
+├── graphify-post-merge.sh                     # post-merge hook body (fires after git pull / git merge)
+└── install-graphify-hook.sh                   # installer (copies both hooks to .git/hooks/)
 
 .github/workflows/
 └── graphify-auto-rebuild.yml                  # CI autonomous rebuild on push
@@ -314,6 +363,9 @@ Exposes tools: `query_graph`, `get_node`, `get_neighbors`, `get_community`, `god
 | Post-commit hook fired but did nothing | Either no changed files are in the graph scope (expected for `apps-microservices/` commits on non-graphed services), or graphify isn't installed on your Python. Run `python -c "import graphify"` to check. |
 | Hook output mentions `.needs_update` | A doc/CLAUDE.md in scope changed. Semantic re-extraction needs the LLM; run `/graphify --update` in a Claude Code session at your convenience. |
 | Added a new service but its nodes aren't in the graph | You ran `/graphify <service-path>` but not `--update`. Use the update flag so it merges into the root graph instead of creating a standalone one. |
+| Merge / rebase conflict on `graphify-out/graph.json` | Do not hand-merge. See § "Pulling updates from the repository" for the accept-theirs + regenerate recipe. Touching the raw JSON corrupts it. |
+| Merge conflict on `graphify-out/labels.json` | Same recipe. Accept one side, re-run the rebuild script, which uses whichever `labels.json` was kept. |
+| Pulled from remote but graph did not refresh | The post-merge hook only fires if the installer has been run. Run `bash scripts/install-graphify-hook.sh` once per clone — installs both post-commit and post-merge. |
 | Vertical scrolling broken in PowerShell 5.1 | Use Windows Terminal, or uninstall `graspologic`: `pip uninstall graspologic` |
 | Graph shows wrong direction | Inherent to undirected graph; interpret edge bidirectionally or rebuild with `--directed` flag |
 | Want to skip extracting a file | Create `.graphifyignore` in repo root (same syntax as `.gitignore`) |

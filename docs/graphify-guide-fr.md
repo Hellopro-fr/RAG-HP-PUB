@@ -56,7 +56,7 @@ ls .git/hooks/post-commit         # hook présent après install
 
 La commande amont `graphify hook install` installe un hook post-commit qui appelle `_rebuild_code(Path("."))` — rescanne tout le répertoire de travail à chaque commit. Dans ce monorepo de 2129 fichiers, ça aspire `apps-microservices/` dans le graphe, fait exploser `graph.json` de ~20x et dérive silencieusement la portée du graphe à chaque commit. **Ne pas lancer `graphify hook install`.**
 
-`scripts/install-graphify-hook.sh` installe un hook différent (`scripts/graphify-post-commit.sh`) qui délègue à `scripts/graphify_rebuild_scoped.py`. Le hook scoppé :
+`scripts/install-graphify-hook.sh` installe deux hooks (`post-commit` + `post-merge`) qui délèguent à `scripts/graphify_rebuild_scoped.py`. `post-commit` se déclenche après vos propres commits ; `post-merge` se déclenche après `git pull` / `git merge` qui absorbent le travail des autres, donc vous n'avez pas à penser à reconstruire manuellement après un pull. Les deux partagent le même corps de rebuild scoppé :
 
 1. Dérive la portée depuis `graphify-out/graph.json` — l'attribut `source_file` de chaque nœud est collecté en un ensemble de chemins dans le scope. `graph.json` est tracké, donc chaque coéquipier obtient la bonne portée juste après `git pull`. `manifest.json` est gitignoré volontairement (mtime-based, invalide après clone selon la convention amont) et n'est utilisé qu'en fallback.
 2. Intersecte les fichiers modifiés du commit avec cette portée. Hors scope = ignoré silencieusement ; pas de reconstruction.
@@ -74,6 +74,52 @@ Déjà câblé :
 - **`.claude/settings.json`** possède un hook `PreToolUse` sur `Glob|Grep` qui injecte un rappel de consulter le graphe avant toute recherche brute.
 
 Aucune action requise. Chaque session démarre graph-aware.
+
+## Tirer des mises à jour du dépôt
+
+Cas usuel : `git pull` avec vos propres commits graphify non-pushés en avance sur `origin/features/poc` et des commits d'équipiers sur le distant. Deux règles gardent le graphe intact.
+
+### 1. Préférer `--rebase` au merge
+
+Vos commits graphify locaux rejouent par-dessus le travail des équipiers. L'historique reste linéaire, la CI ne produit pas de bruit de merge-commit, et les conflits sur `graph.json` — s'il y en a — apparaissent une fois en haut du rebase plutôt qu'une fois par étape intermédiaire. En faire le défaut dans ce repo :
+
+```bash
+git config pull.rebase true           # par repo
+# ou globalement :
+git config --global pull.rebase true
+```
+
+Un `git pull` simple sans rebase fonctionne aussi ; il crée juste un commit de merge et le hook post-merge reconstruit l'AST pour le diff fusionné. Les deux stratégies sont sûres, le rebase est plus propre.
+
+### 2. Ne jamais fusionner `graph.json` à la main
+
+`graph.json` est une sérialisation NetworkX de ~2 Mo. Les marqueurs de conflit laissent du JSON invalide et tout casse. Idem pour `graph.html`, `GRAPH_REPORT.md` et `labels.json` — tous auto-générés ou maintenus mécaniquement, donc la bonne réponse à un conflit est de régénérer, pas de fusionner à la main.
+
+Recette de récupération quand git signale un conflit sur un fichier `graphify-out/*` :
+
+```bash
+# Accepter le côté distant intégralement (ou --ours si vous préférez le vôtre)
+git checkout --theirs graphify-out/graph.json graphify-out/graph.html \
+                      graphify-out/GRAPH_REPORT.md graphify-out/labels.json
+git add graphify-out/graph.json graphify-out/graph.html \
+        graphify-out/GRAPH_REPORT.md graphify-out/labels.json
+
+# Clôturer l'étape de merge / rebase
+git rebase --continue       # si rebase
+# OU
+git commit                  # si merge
+
+# Régénérer localement pour être cohérent avec le code fusionné
+python scripts/graphify_rebuild_scoped.py $(git diff --name-only HEAD~1 HEAD)
+```
+
+Les labels de communauté survivent car `labels.json` est la version du distant — les équipiers gardent aussi leurs éditions de labels.
+
+### 3. Le hook post-merge absorbe les pulls de routine
+
+Si le hook post-merge installé se déclenche proprement (les commits de l'équipier n'ont pas touché aux fichiers `graphify-out/*`), vous ne faites rien — le hook ré-extrait silencieusement l'AST pour leurs fichiers code modifiés et écrit le `graph.json` mis à jour. Le push inclut le rebuild au prochain commit.
+
+Si le hook n'a rien fait (leurs changements étaient hors du scope du graphe), rien à faire.
 
 ## Interroger le graphe manuellement
 
@@ -262,8 +308,11 @@ graphify-out/                                  # graphe unifié (backbone + serv
 scripts/
 ├── graphify_rebuild_scoped.py                 # rebuild AST scoppé (respect de la portée du graphe)
 ├── test_graphify_rebuild_scoped.py            # tests unitaires du script ci-dessus
+├── graphify_check_service.py                  # classifieur / scanner de couverture (lit services-policy.yml)
+├── test_graphify_check_service.py             # tests unitaires du classifieur
 ├── graphify-post-commit.sh                    # corps du hook post-commit
-└── install-graphify-hook.sh                   # installeur (copie le hook vers .git/hooks/)
+├── graphify-post-merge.sh                     # corps du hook post-merge (après git pull / git merge)
+└── install-graphify-hook.sh                   # installeur (copie les deux hooks vers .git/hooks/)
 
 .github/workflows/
 └── graphify-auto-rebuild.yml                  # rebuild autonome CI sur push
@@ -314,6 +363,9 @@ Expose les outils : `query_graph`, `get_node`, `get_neighbors`, `get_community`,
 | Hook post-commit déclenché mais n'a rien fait | Soit aucun fichier modifié n'est dans la portée du graphe (attendu pour les commits `apps-microservices/` sur services non-graphés), soit graphify n'est pas installé sur votre Python. Vérifier avec `python -c "import graphify"`. |
 | Sortie du hook mentionne `.needs_update` | Un doc/CLAUDE.md du scope a changé. La ré-extraction sémantique a besoin du LLM ; lancer `/graphify --update` dans une session Claude Code quand pratique. |
 | Nouveau service ajouté mais ses nœuds ne sont pas dans le graphe | Vous avez lancé `/graphify <service-path>` sans `--update`. Utiliser le flag update pour qu'il fusionne dans le graphe racine au lieu d'en créer un isolé. |
+| Conflit de merge / rebase sur `graphify-out/graph.json` | Ne pas fusionner à la main. Voir § « Tirer des mises à jour du dépôt » pour la recette accept-theirs + régénération. Toucher au JSON brut le corrompt. |
+| Conflit de merge sur `graphify-out/labels.json` | Même recette. Accepter un côté, relancer le script de rebuild, qui utilise la version de `labels.json` conservée. |
+| Pull depuis le distant mais le graphe ne s'est pas rafraîchi | Le hook post-merge ne se déclenche que si l'installeur a été lancé. Lancer `bash scripts/install-graphify-hook.sh` une fois par clone — installe post-commit et post-merge. |
 | Scroll vertical cassé sur PowerShell 5.1 | Utiliser Windows Terminal, ou désinstaller `graspologic` : `pip uninstall graspologic` |
 | Direction d'arête fausse | Inhérent au graphe non-orienté ; interpréter bidirectionnellement ou reconstruire avec `--directed` |
 | Exclure un fichier de l'extraction | Créer `.graphifyignore` à la racine du repo (même syntaxe que `.gitignore`) |
