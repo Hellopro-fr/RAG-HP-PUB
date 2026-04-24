@@ -17,6 +17,7 @@ import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
+import { CoherencePastille } from '../coherence/components/CoherencePastille';
 
 /**
  * Overview page (`/` and `/jobs/:id`).
@@ -137,7 +138,12 @@ const Overview = ({ token, replicas }) => {
         <StatCard title="Total"    value={globalStats.total}    icon={Server}      variant="default" />
         <StatCard title="Succès"   value={globalStats.finished} icon={CheckCircle} variant="success" />
         <StatCard title="Échecs"   value={globalStats.failed}   icon={XCircle}     variant="destructive" />
-        <StatCard title="En cours" value={globalStats.running}  icon={Zap}         variant="info" />
+        <div className="relative">
+          <StatCard title="En cours" value={globalStats.running} icon={Zap} variant="info" />
+          <div className="absolute right-2 top-2">
+            <CoherencePastille ruleId="running_count_parity" />
+          </div>
+        </div>
         <StatCard title="Archivés" value={globalStats.archived} icon={Archive}     variant="default" />
       </div>
 
