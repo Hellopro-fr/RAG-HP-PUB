@@ -143,3 +143,38 @@ def test_gif_transparency_preserved(transparent_gif_bytes, tmp_path):
         out.load()
         assert "transparency" in out.info, \
             "la transparence GIF doit être préservée au save (info['transparency'])"
+
+
+def test_jpeg_stays_rgb_no_regression(opaque_jpeg_bytes, tmp_path):
+    """Non-régression JPEG — ne doit PAS être aplati sur blanc par erreur.
+
+    Le code de flatten (ligne 99 de image_processor.py) est protégé par
+    `if output_format == 'PNG':`. Ce test vérifie que cette condition
+    filtre bien les JPEG (sinon un JPEG rouge sortirait blanc).
+    """
+    processor = ImageProcessor()
+
+    result = processor.process_image(
+        content=opaque_jpeg_bytes,
+        domain="test.com",
+        product_id="1",
+        product_name="produit-test",
+        base_storage_dir=str(tmp_path),
+        index=1,
+    )
+
+    assert result["main_path"].endswith(".jpg"), \
+        f"extension attendue .jpg, obtenu : {result['main_path']}"
+
+    with Image.open(result["main_path"]) as out:
+        out.load()
+        assert out.mode == "RGB", \
+            f"JPEG attendu en RGB, obtenu : {out.mode}"
+
+        # Vérifie que le pixel reste rouge (pas blanc suite à un flatten erroné).
+        # JPEG est lossy — on tolère ±55 sur chaque canal.
+        r, g, b = out.getpixel((0, 0))
+        assert r >= 200 and g <= 55 and b <= 55, (
+            f"JPEG rouge attendu, obtenu ({r},{g},{b}) — "
+            f"le code aurait-il flatten le JPEG sur fond blanc par erreur ?"
+        )
