@@ -27,6 +27,7 @@ via endpoint : POST /admin/synonyms/auto-generate
 import logging
 import re
 import unicodedata
+from itertools import product
 from typing import Dict, List, Any, Optional, Tuple, Set
 
 from app.core.credentials import settings
@@ -55,57 +56,116 @@ def _normalize(s: str) -> str:
     return "".join(c for c in s if unicodedata.category(c) != "Mn").lower()
 
 
-def _extract_meaningful_tokens(cat_name: str) -> List[str]:
+def _extract_tokens(cat_name: str, keep_stopwords: bool) -> List[str]:
     """
-    Retourne les tokens 'porteurs' d'une categorie, normalises, dans l'ordre.
+    Retourne les tokens d'une categorie normalises, dans l'ordre.
 
-    Ex :
-      "Mini-pelles (moins de 10 tonnes)"
-        -> ["mini", "pelles"]                 (retire 'moins','de','10','tonnes')
-      "Groupe electrogene industriel"
-        -> ["groupe", "electrogene", "industriel"]
-      "Tractopelles"
-        -> ["tractopelles"]
-      "Pelle rail-route"
-        -> ["pelle", "rail", "route"]
+    keep_stopwords = False : ne garde que les tokens porteurs (comme avant).
+      "Mini-pelles (moins de 10 tonnes)" -> ["mini", "pelles"]
+    keep_stopwords = True  : garde tous les tokens (utile pour matcher
+      les concatenations utilisateur type "fauteuildebureau").
+      "Fauteuil de bureau"  -> ["fauteuil", "de", "bureau"]
     """
     norm = _normalize(cat_name)
     # Supprime tout ce qui est entre parentheses (specs techniques).
     norm = re.sub(r"\([^)]*\)", " ", norm)
-    # Tokenise sur [a-z0-9]+ puis garde >=2 chars et pas dans stopwords,
-    # et pas purement numerique.
     raw = re.findall(r"[a-z0-9]+", norm)
+    if keep_stopwords:
+        return [t for t in raw if len(t) >= 1 and not t.isdigit()]
     return [
         t for t in raw
         if len(t) >= 2 and t not in _STOPWORDS_FR and not t.isdigit()
     ]
 
 
+def _sing_plur_forms(token: str) -> List[str]:
+    """
+    Retourne le token + ses variantes singulier/pluriel (heuristique FR).
+    Utilise pour couvrir les cas "minipelle" (singulier) vs "Mini-pelles"
+    (pluriel dans le nom de categorie).
+    """
+    forms = {token}
+    # pluriel -> singulier
+    if token.endswith("aux") and len(token) >= 5:
+        # journaux -> journal, generaux -> general
+        forms.add(token[:-3] + "al")
+    elif token.endswith("eux") and len(token) >= 4:
+        # cheveux -> cheveu
+        forms.add(token[:-1])
+    elif token.endswith("x") and len(token) >= 3:
+        # choux -> chou, bijoux -> bijou
+        forms.add(token[:-1])
+    elif token.endswith("s") and len(token) >= 3 and not token.endswith("ss"):
+        # pelles -> pelle, chaussures -> chaussure
+        forms.add(token[:-1])
+    else:
+        # singulier -> pluriel (simple ajout de 's')
+        forms.add(token + "s")
+    # Garde uniquement ceux de longueur >= 2
+    return [f for f in forms if len(f) >= 2]
+
+
 def _build_variants(tokens: List[str]) -> Set[str]:
     """
-    Genere les variantes orthographiques equivalentes a partir des tokens :
-      - concatenation (sans separateur) : "minipelles"
-      - join par espace                 : "mini pelles"
-      - join par tiret                  : "mini-pelles"
+    Pour des tokens donnes (ex: ["mini","pelles"]), genere toutes les
+    variantes orthographiques utilisateur :
+      - 3 separateurs : concatenation, espace, tiret
+      - toutes les combinaisons singulier/pluriel de chaque token
 
-    Si le nom ne contient qu'UN seul token (ex: "Tractopelles"), il n'y a
-    pas de compound-word possible -> retourne set vide (pas de synonyme
-    utile a creer).
+    Ex "mini pelles" :
+      - ["mini","pelles"]   -> minipelles, mini pelles, mini-pelles
+      - ["minis","pelles"]  -> minispelles, minis pelles, minis-pelles
+      - ["mini","pelle"]    -> minipelle, mini pelle, mini-pelle    <- AJOUTE
+      - ["minis","pelle"]   -> minispelle, minis pelle, minis-pelle
 
-    Si le nom contient plus de 4 tokens, on ne genere pas non plus : au
-    dela c'est un nom long type "Remorques a ridelles basculantes" et
-    l'utilisateur ne les concatene jamais.
+    Pour 1 token seul (ex: "Tractopelles"), on genere juste ses formes
+    singulier/pluriel (utile pour query "tractopelle").
+
+    Cap a 4 tokens porteurs pour eviter l'explosion combinatoire.
     """
-    if len(tokens) < 2 or len(tokens) > 4:
+    if not tokens or len(tokens) > 4:
         return set()
-    variants = {
-        "".join(tokens),
-        " ".join(tokens),
-        "-".join(tokens),
-    }
-    # Filtre : on ne garde que si les variantes sont reellement differentes
-    # et contiennent au moins 4 chars.
+
+    # Pour chaque token, ses formes s/p
+    token_forms = [_sing_plur_forms(t) for t in tokens]
+
+    variants: Set[str] = set()
+    for combo in product(*token_forms):
+        if len(combo) == 1:
+            # 1 mot : pas de separateur, juste la forme
+            variants.add(combo[0])
+        else:
+            variants.add("".join(combo))
+            variants.add(" ".join(combo))
+            variants.add("-".join(combo))
+
+    # Cap de securite : pas plus de 32 variantes par categorie
+    # (4 tokens x 2 formes x 3 separateurs = 48 theorique, mais en pratique
+    # beaucoup sont deja dedupliques).
     return {v for v in variants if len(v) >= 4}
+
+
+def _build_all_variants(cat_name: str) -> Set[str]:
+    """
+    Genere TOUTES les variantes pour une categorie :
+      1. Avec tokens porteurs uniquement (retire stopwords) : "mini pelles"
+      2. Avec TOUS les tokens (stopwords inclus) : "mini pelles moins"
+         -> sert surtout pour la concatenation "fauteuildebureau".
+
+    L'utilisateur peut taper aussi bien "fauteuilbureau" que
+    "fauteuildebureau" -> les deux doivent ramener la categorie.
+    """
+    core_tokens = _extract_tokens(cat_name, keep_stopwords=False)
+    full_tokens = _extract_tokens(cat_name, keep_stopwords=True)
+
+    variants = _build_variants(core_tokens)
+
+    # Ajoute variantes avec stopwords SI le set de tokens est different
+    # (= la categorie contient des stopwords entre les mots porteurs).
+    if full_tokens != core_tokens and len(full_tokens) <= 5:
+        variants |= _build_variants(full_tokens)
+
+    return variants
 
 
 def _slug_id(s: str) -> str:
@@ -172,10 +232,9 @@ def auto_generate_synonyms(
     examples: List[Dict[str, Any]] = []
 
     for cat in cats:
-        tokens = _extract_meaningful_tokens(cat)
-        variants = _build_variants(tokens)
+        variants = _build_all_variants(cat)
         if not variants:
-            continue  # 1 token seul ou trop long -> pas de compound utile
+            continue  # Categorie trop longue ou vide apres normalisation
         nb_generated += 1
 
         syn_id = "auto-" + _slug_id(cat)
