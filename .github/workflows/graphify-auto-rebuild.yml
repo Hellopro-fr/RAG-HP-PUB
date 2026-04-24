@@ -23,11 +23,17 @@ on:
       - 'tools/**'
       - 'model-optimizer/**'
       - 'docs/**'
-      # Merged services (keep this list in sync with graphify-out/graph.json scope)
+      # Graphed services. MUST stay in sync with the `graphed:` list in
+      # graphify-out/services-policy.yml. When a service is promoted from
+      # not_graphed to graphed, add its path here in the same commit.
+      # Forgetting this line is silent: the service's code edits will not
+      # trigger CI rebuilds even though the service IS in graph.json.
       - 'apps-microservices/crawler-service/**'
       - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
       # Scripts that feed the rebuild logic itself
       - 'scripts/graphify_rebuild_scoped.py'
+      # Policy changes that may need a graph refresh
+      - 'graphify-out/services-policy.yml'
 
 concurrency:
   # Serialize rebuilds per branch so two parallel pushes do not race on
