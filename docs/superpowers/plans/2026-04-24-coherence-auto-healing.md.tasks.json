@@ -4,13 +4,13 @@
     {
       "id": 0,
       "subject": "Task 1: Setup test infrastructure (Vitest + RTL)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Add Vitest + RTL + jsdom, replace node:test script.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/package.json\",\"apps-microservices/crawler-monitor-frontend/vitest.config.js\",\"apps-microservices/crawler-monitor-frontend/src/setupTests.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/__fixtures__/smoke.test.js\"],\"verifyCommand\":\"yarn test\",\"acceptanceCriteria\":[\"yarn test uses Vitest\",\"smoke test passes\",\"yarn build still works\"]}\n```"
     },
     {
       "id": 1,
       "subject": "Task 2: Types + rule replicas_vs_max_slots + unit tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Types + first rule + 6 unit tests.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/types.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/index.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/replicas_vs_max_slots.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/replicas_vs_max_slots.test.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/__fixtures__/mocks.js\"],\"verifyCommand\":\"yarn test src/coherence/rules/replicas_vs_max_slots.test.js\",\"acceptanceCriteria\":[\"RULES has 1 rule\",\"6 tests pass\"]}\n```"
     },
@@ -64,5 +64,5 @@
       "description": "**Goal:** AutoRetry opt-in + manual refresh/ignore actions.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.test.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherenceHealthPage.jsx\"],\"verifyCommand\":\"yarn test src/coherence/\",\"acceptanceCriteria\":[\"autoRetry fires\",\"maxAttempts respected\",\"counter resets on heal\",\"manual refresh works\",\"chip shows after exhausted\",\"timer tests pass\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-24T14:50:00Z"
+  "lastUpdated": "2026-04-24T17:25:00Z"
 }
