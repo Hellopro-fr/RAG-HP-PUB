@@ -13,7 +13,13 @@
       >
         <option value="none">Aucune restriction (acc&egrave;s complet)</option>
         <option value="users">Utilisateurs s&eacute;lectionn&eacute;s</option>
+        <!--
+          Teams mode is commented out: Ringover's /users response does not
+          return a team_name, so the picker would only show numeric team IDs.
+          Re-enable once we have a way to resolve team names (e.g. via an
+          ?expand=team query parameter or a dedicated /teams endpoint).
         <option value="teams">&Eacute;quipes s&eacute;lectionn&eacute;es</option>
+        -->
         <option value="creator">Cr&eacute;ateur du jeton uniquement</option>
       </select>
       <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
@@ -63,7 +69,10 @@
       </p>
     </div>
 
-    <!-- Teams picker -->
+    <!--
+      Teams picker — disabled alongside the mode dropdown above. The block is
+      kept (rather than deleted) so it can be re-enabled in one place once we
+      have a reliable source of team names.
     <div v-if="model.mode === 'teams' && !loading && !loadError">
       <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
         &Eacute;quipes autoris&eacute;es
@@ -92,6 +101,7 @@
         Les nouveaux membres ajout&eacute;s aux &eacute;quipes choisies h&eacute;riteront automatiquement de l'acc&egrave;s.
       </p>
     </div>
+    -->
 
     <!-- Creator info -->
     <div
@@ -159,12 +169,14 @@ function toggleUser(id: number, checked: boolean) {
   emit('update:modelValue', { ...model.value, user_ids: Array.from(current) })
 }
 
-function toggleTeam(id: number, checked: boolean) {
-  const current = new Set(model.value.team_ids || [])
-  if (checked) current.add(id)
-  else current.delete(id)
-  emit('update:modelValue', { ...model.value, team_ids: Array.from(current) })
-}
+// Teams mode is disabled in the template (see RingoverFilterPanel.vue above);
+// toggleTeam stays commented-out alongside to keep the diff reversible.
+// function toggleTeam(id: number, checked: boolean) {
+//   const current = new Set(model.value.team_ids || [])
+//   if (checked) current.add(id)
+//   else current.delete(id)
+//   emit('update:modelValue', { ...model.value, team_ids: Array.from(current) })
+// }
 
 function formatUser(u: RingoverUser): string {
   const name = [u.firstname, u.lastname].filter(Boolean).join(' ').trim()
