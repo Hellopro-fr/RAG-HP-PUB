@@ -141,6 +141,12 @@ Dockerfile                   # Multi-stage build
 
 Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
 
+### Ringover proxy (symmetric to Leexi)
+- `GET /api/v1/ringover/users` — List Ringover users (proxied from mcp-ringover-service `/admin/users`)
+- `GET /api/v1/ringover/teams` — List Ringover teams (derived from the user payload; each team is `{id:int, name:string}`)
+
+Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is unset.
+
 ### OAuth2 Authorization Server (public, no admin auth — MCP spec-compliant)
 - `GET /.well-known/oauth-authorization-server` — Server metadata discovery (RFC 8414)
 - `GET/POST /authorize` — Authorization Code flow: login + consent screen
@@ -191,6 +197,8 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `ALLOW_INTERNAL_URLS` | `false` | Set to `true` to allow Docker-internal/private IP ranges (172.x.x.x, 10.x.x.x, etc.) as backend URLs — required when gateway and backends share a Docker network |
 | `LEEXI_INTERNAL_URL` | — | In-cluster URL of mcp-leexi-service (e.g. `http://mcp-leexi-service:8589`). Required for Leexi-scoped tokens. |
 | `LEEXI_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-leexi-service `/admin/*`. Must match `MCP_LEEXI_ADMIN_TOKEN` on the Leexi side. |
+| `RINGOVER_INTERNAL_URL` | — | In-cluster URL of mcp-ringover-service (e.g. `http://mcp-ringover-service:8586`). Required for Ringover-scoped tokens. |
+| `RINGOVER_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-ringover-service `/admin/*`. Must match `MCP_RINGOVER_ADMIN_TOKEN` on the Ringover side. |
 | `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8595`). Required to spawn template instances. |
 | `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the runner admin API (sent as `X-Admin-Token`). The runner uses the SAME value when calling back via `/api/v1/internal/runner/sync`. |
 | `SLACK_WEBHOOK_URL` | — | Slack incoming-webhook URL (`https://hooks.slack.com/services/...`). Empty = notifications disabled. |

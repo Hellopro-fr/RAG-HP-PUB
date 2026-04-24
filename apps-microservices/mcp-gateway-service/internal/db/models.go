@@ -227,6 +227,13 @@ type ScopeToken struct {
 	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
 	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
 
+	// Ringover ownership scope — same semantics as the Leexi filter above, but
+	// Ringover identifies users with numeric integer IDs (not UUIDs), so the
+	// JSON columns hold int arrays instead of UUID strings.
+	RingoverFilterMode     string          `gorm:"type:varchar(16);not null;default:'none'" json:"ringover_filter_mode"`
+	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
+	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
+
 	// Associations
 	Servers      []ScopeTokenServer      `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []ScopeTokenTool        `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
@@ -278,6 +285,11 @@ type OAuth2Client struct {
 	LeexiFilterMode       string          `gorm:"type:varchar(16);not null;default:'none'" json:"leexi_filter_mode"`
 	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
 	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
+
+	// Ringover ownership scope — see ScopeToken for semantics; int arrays.
+	RingoverFilterMode     string          `gorm:"type:varchar(16);not null;default:'none'" json:"ringover_filter_mode"`
+	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
+	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
 
 	// Associations
 	Servers      []OAuth2ClientServer      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`

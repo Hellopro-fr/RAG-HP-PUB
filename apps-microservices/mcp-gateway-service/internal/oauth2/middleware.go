@@ -133,6 +133,15 @@ func CombinedMiddleware(
 						_ = json.Unmarshal(client.LeexiAllowedTeamUUIDs, &cc.LeexiAllowedTeamUUIDs)
 					}
 
+					// Decode persisted Ringover filter (int arrays).
+					cc.RingoverFilterMode = client.RingoverFilterMode
+					if len(client.RingoverAllowedUserIDs) > 0 {
+						_ = json.Unmarshal(client.RingoverAllowedUserIDs, &cc.RingoverAllowedUserIDs)
+					}
+					if len(client.RingoverAllowedTeamIDs) > 0 {
+						_ = json.Unmarshal(client.RingoverAllowedTeamIDs, &cc.RingoverAllowedTeamIDs)
+					}
+
 					oauth2Cache.Set(clientID, cc)
 				}
 
@@ -166,6 +175,13 @@ func CombinedMiddleware(
 						Mode:             cc.LeexiFilterMode,
 						AllowedUserUUIDs: cc.LeexiAllowedUserUUIDs,
 						AllowedTeamUUIDs: cc.LeexiAllowedTeamUUIDs,
+					})
+				}
+				if cc.RingoverFilterMode != "" && cc.RingoverFilterMode != "none" {
+					ctx = context.WithValue(ctx, scopetoken.RingoverFilterContextKey, &scopetoken.RingoverFilterContext{
+						Mode:           cc.RingoverFilterMode,
+						AllowedUserIDs: cc.RingoverAllowedUserIDs,
+						AllowedTeamIDs: cc.RingoverAllowedTeamIDs,
 					})
 				}
 				next.ServeHTTP(w, r.WithContext(ctx))

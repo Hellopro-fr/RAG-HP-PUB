@@ -114,6 +114,18 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 	client.LeexiAllowedUserUUIDs = userUUIDs
 	client.LeexiAllowedTeamUUIDs = teamUUIDs
 
+	// Ringover filter.
+	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, creatorEmail,
+	)
+	if rerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+		return
+	}
+	client.RingoverFilterMode = rMode
+	client.RingoverAllowedUserIDs = rUserIDs
+	client.RingoverAllowedTeamIDs = rTeamIDs
+
 	if len(req.RedirectURIs) > 0 {
 		redirectJSON, _ := json.Marshal(req.RedirectURIs)
 		s := string(redirectJSON)
@@ -228,6 +240,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		GrantTypes:            createGrantTypes,
 		DynamicallyRegistered: client.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&client),
+		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&client),
 	})
 }
 
@@ -291,6 +304,19 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 		updates["leexi_filter_mode"] = mode
 		updates["leexi_allowed_user_uuids"] = userUUIDs
 		updates["leexi_allowed_team_uuids"] = teamUUIDs
+	}
+
+	if req.RingoverFilter != nil {
+		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy,
+		)
+		if rerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+			return
+		}
+		updates["ringover_filter_mode"] = mode
+		updates["ringover_allowed_user_ids"] = userIDs
+		updates["ringover_allowed_team_ids"] = teamIDs
 	}
 
 	if len(updates) > 0 {
@@ -497,5 +523,6 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		GrantTypes:            grantTypes,
 		DynamicallyRegistered: c.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&c),
+		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&c),
 	}
 }

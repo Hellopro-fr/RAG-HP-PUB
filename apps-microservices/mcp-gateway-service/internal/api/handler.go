@@ -137,6 +137,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	apiMux.HandleFunc("/api/v1/leexi/users", h.handleLeexiUsers)
 	apiMux.HandleFunc("/api/v1/leexi/teams", h.handleLeexiTeams)
 
+	// ── Ringover proxy routes (symmetric to Leexi). 503 when
+	//    RINGOVER_INTERNAL_URL / RINGOVER_ADMIN_TOKEN are unset.
+	apiMux.HandleFunc("/api/v1/ringover/users", h.handleRingoverUsers)
+	apiMux.HandleFunc("/api/v1/ringover/teams", h.handleRingoverTeams)
+
 	// ── Slack notifications admin routes ──────────────────────────────────────
 	// Status is always mounted; the handler reports enabled=false when the
 	// webhook URL is unset. Test returns 503 in that case.

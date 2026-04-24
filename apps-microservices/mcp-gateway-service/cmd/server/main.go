@@ -23,11 +23,12 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/health"
+	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/slack"
@@ -171,6 +172,13 @@ func main() {
 		log.Println("[main] Leexi admin client configured for ownership-scoped tokens")
 	}
 
+	// Ringover admin client — symmetric to Leexi. Empty env vars = disabled.
+	ringoverAdminClient := ringoveradmin.NewClient(cfg.RingoverInternalURL, cfg.RingoverAdminToken)
+	if ringoverAdminClient.Enabled() {
+		gw.SetRingoverAdmin(ringoverAdminClient)
+		log.Println("[main] Ringover admin client configured for ownership-scoped tokens")
+	}
+
 	// Instruction repo — shared by the API handler and the scope/oauth2
 	// middleware that resolves per-token/client LLM instructions at cache-miss.
 	// Declared outside the `if repo != nil` block so the scope factory below
@@ -203,6 +211,7 @@ func main() {
 		apiHandler.SetUserRepo(userRepo)
 		apiHandler.SetAuditRepo(auditRepo)
 		apiHandler.SetLeexiAdmin(leexiAdminClient)
+		apiHandler.SetRingoverAdmin(ringoverAdminClient)
 		apiHandler.SetUploadDir(cfg.UploadDir)
 		apiHandler.SetInstallGuideRepo(installGuideRepo)
 		apiHandler.SetSlack(slackClient)
