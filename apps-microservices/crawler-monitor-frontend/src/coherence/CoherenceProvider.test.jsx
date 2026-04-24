@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CoherenceProvider } from './CoherenceProvider';
@@ -83,5 +83,71 @@ describe('CoherenceProvider', () => {
     expect(result.current.byStatus.warning).toBe(1);
     act(() => result.current.setIgnored('replicas_vs_max_slots', true));
     expect(result.current.byStatus.warning).toBe(0);
+  });
+});
+
+describe('CoherenceProvider autoRetry', () => {
+  it('schedules invalidate after delayMs on violation', async () => {
+    vi.useFakeTimers();
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    qc.setQueryData(['capacity'], { running_jobs: 5 });
+    qc.setQueryData(['jobs'], [
+      { id: 'a', status: 'running' },
+      { id: 'b', status: 'running' },
+    ]);
+    // 5 vs 2 → running_count_parity violates (diff=3 > 1 tolerance)
+
+    const Wrapper = ({ children }) => (
+      <QueryClientProvider client={qc}>
+        <CoherenceProvider token="tok" replicas={{}}>
+          {children}
+        </CoherenceProvider>
+      </QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useCoherenceSummary(), { wrapper: Wrapper });
+
+    // At mount: no invalidate yet
+    expect(spy).not.toHaveBeenCalled();
+    // Fast-forward 3000ms (delayMs)
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+    // Should have called invalidate for capacity AND jobs (running_count_parity.autoRetry.invalidate)
+    const calledKeys = spy.mock.calls.map((c) => c[0].queryKey);
+    expect(calledKeys).toContainEqual(['capacity']);
+    expect(calledKeys).toContainEqual(['jobs']);
+    expect(result.current.retryState.running_count_parity?.attempts).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it('stops retrying after maxAttempts', async () => {
+    vi.useFakeTimers();
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    qc.setQueryData(['capacity'], { running_jobs: 5 });
+    qc.setQueryData(['jobs'], [{ id: 'a', status: 'running' }]);
+
+    const Wrapper = ({ children }) => (
+      <QueryClientProvider client={qc}>
+        <CoherenceProvider token="tok" replicas={{}}>
+          {children}
+        </CoherenceProvider>
+      </QueryClientProvider>
+    );
+    const { result } = renderHook(() => useCoherenceSummary(), { wrapper: Wrapper });
+
+    // Advance enough for 3 tick cycles (only 2 should run, maxAttempts=2)
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await act(async () => { vi.advanceTimersByTime(3000); });
+
+    expect(result.current.retryState.running_count_parity?.exhausted).toBe(true);
+    expect(result.current.retryState.running_count_parity?.attempts).toBe(2);
+    vi.useRealTimers();
   });
 });

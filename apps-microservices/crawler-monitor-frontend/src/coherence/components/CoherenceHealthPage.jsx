@@ -21,7 +21,7 @@ const SEVERITY_COLOR = {
 
 export default function CoherenceHealthPage() {
   const { hash } = useLocation();
-  const { verdicts, ignoredRules, setIgnored, byStatus, total, lastEvaluatedAt } =
+  const { verdicts, ignoredRules, setIgnored, byStatus, total, lastEvaluatedAt, retryState, manualRetry } =
     useCoherenceSummary();
   const [showOk, setShowOk] = useState(false);
   const highlightRef = useRef(null);
@@ -97,8 +97,10 @@ export default function CoherenceHealthPage() {
               key={rule.id}
               rule={rule}
               violations={verdicts[rule.id] ?? []}
+              retryState={retryState[rule.id]}
               onCopy={() => copyContext(rule, verdicts[rule.id] ?? [])}
               onIgnore={() => setIgnored(rule.id, true)}
+              onManualRetry={() => manualRetry(rule.id)}
             />
           ))}
         </div>
@@ -158,9 +160,12 @@ function KpiBox({ label, value, cls = 'text-foreground' }) {
   );
 }
 
-function RuleViolationCard({ rule, violations, onCopy, onIgnore }) {
+function RuleViolationCard({ rule, violations, retryState, onCopy, onIgnore, onManualRetry }) {
   const Icon = SEVERITY_ICON[rule.severity] ?? AlertTriangle;
   const color = SEVERITY_COLOR[rule.severity] ?? SEVERITY_COLOR.warning;
+  const rs = retryState ?? { attempts: 0, exhausted: false };
+  const canRefresh = !!rule.autoRetry;
+
   return (
     <Card id={`rule-${rule.id}`} className={cn('p-4 border-2 transition-shadow', color)}>
       <div className="flex items-start gap-3">
@@ -172,6 +177,16 @@ function RuleViolationCard({ rule, violations, onCopy, onIgnore }) {
               <span className="rounded bg-background/50 px-1.5 py-0.5 text-[10px] uppercase">
                 {rule.severity}
               </span>
+              {rs.exhausted && (
+                <span className="rounded bg-background/50 px-1.5 py-0.5 text-[10px] font-mono">
+                  🔁 {rs.attempts}/{rule.autoRetry.maxAttempts} refetch sans effet
+                </span>
+              )}
+              {!rs.exhausted && rs.attempts > 0 && (
+                <span className="rounded bg-background/50 px-1.5 py-0.5 text-[10px] font-mono">
+                  🔁 retry {rs.attempts}/{rule.autoRetry.maxAttempts}
+                </span>
+              )}
             </div>
             <div className="mt-0.5 font-semibold">{rule.label}</div>
             <div className="mt-1 text-xs text-muted-foreground">{rule.description}</div>
@@ -191,6 +206,9 @@ function RuleViolationCard({ rule, violations, onCopy, onIgnore }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
+            {canRefresh && (
+              <Button variant="outline" size="sm" onClick={onManualRetry}>🔄 Rafraîchir</Button>
+            )}
             <Button variant="outline" size="sm" onClick={onCopy}>📋 Copier contexte</Button>
             <Button variant="outline" size="sm" onClick={onIgnore}>🔕 Ignorer session</Button>
             {rule.attachUiHint && (
