@@ -5,8 +5,10 @@ describe('test infra smoke', () => {
     expect(1 + 1).toBe(2);
   });
 
-  it('has jsdom environment', () => {
-    expect(typeof window).toBe('object');
-    expect(typeof document).toBe('object');
+  it('has a functional jsdom environment', () => {
+    const el = document.createElement('div');
+    el.textContent = 'hello';
+    expect(el.tagName).toBe('DIV');
+    expect(el.textContent).toBe('hello');
   });
 });

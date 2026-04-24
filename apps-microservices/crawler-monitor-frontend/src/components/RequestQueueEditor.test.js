@@ -1,10 +1,9 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, expect } from 'vitest';
 
 describe('RequestQueueEditor', () => {
   it('status filter options are the three expected values', () => {
     const options = ['all', 'pending', 'handled'];
-    assert.deepStrictEqual(options, ['all', 'pending', 'handled']);
+    expect(options).toEqual(['all', 'pending', 'handled']);
   });
 
   it('counts bar stays constant — counts come from unfiltered backend field', () => {
@@ -17,11 +16,9 @@ describe('RequestQueueEditor', () => {
       totalPages: 2,
       counts: { total: 523, pending: 336, handled: 187 },
     };
-    assert.ok(mockResponse.counts, 'counts field must be present in backend response');
-    assert.strictEqual(
-      mockResponse.counts.total,
-      mockResponse.counts.pending + mockResponse.counts.handled,
-      'counts.total must equal pending + handled'
+    expect(mockResponse.counts).toBeTruthy();
+    expect(mockResponse.counts.total).toBe(
+      mockResponse.counts.pending + mockResponse.counts.handled
     );
   });
 
@@ -30,6 +27,6 @@ describe('RequestQueueEditor', () => {
     let page = 5;
     const changeStatusFilter = () => { page = 1; };
     changeStatusFilter('pending');
-    assert.strictEqual(page, 1, 'Page must reset to 1 on filter change');
+    expect(page).toBe(1);
   });
 });
