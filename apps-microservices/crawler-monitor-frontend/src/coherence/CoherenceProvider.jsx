@@ -6,6 +6,8 @@ import {
 } from '../hooks/queries';
 import { RULES } from './rules';
 
+const EMPTY_RETRY_STATE = Object.freeze({});
+
 export const CoherenceContext = createContext(null);
 
 /**
@@ -72,10 +74,14 @@ export function CoherenceProvider({ token, replicas, children }) {
   }, [verdicts, ignoredRules]);
 
   const total = RULES.length;
-  const lastEvaluatedAt = Date.now();
+  // Timestamp of last evaluation — recomputed when verdicts change (i.e. sources
+  // changed and rules re-ran). Stable across unrelated re-renders.
+  const lastEvaluatedAt = useMemo(() => Date.now(), [verdicts]);
 
-  // Placeholder — Task 9 replaces with real retry state + manualRetry
-  const retryState = {};
+  // Placeholder — Task 9 replaces with real retry state + manualRetry.
+  // Kept stable via module-level const + useCallback so the context value memo
+  // isn't invalidated on every render.
+  const retryState = EMPTY_RETRY_STATE;
   const manualRetry = useCallback(() => {}, []);
 
   const value = useMemo(
