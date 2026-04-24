@@ -79,3 +79,33 @@ def test_pyvips_path_png_also_flattens(transparent_png_bytes, tmp_path, monkeypa
             f"pixel transparent doit devenir blanc (branche pyvips), "
             f"obtenu : {out.getpixel((0, 0))}"
         )
+
+
+def test_webp_transparent_converted_to_png_on_white(transparent_webp_bytes, tmp_path):
+    """R2 — Un WebP avec alpha doit ressortir en PNG opaque sur fond blanc.
+
+    Garde-fou sur : app/core/image_processor.py:86-93 (conversion WEBP→PNG)
+                  + app/core/image_processor.py:99-104 (flatten blanc)
+
+    Parité PHP : case 18 de creer_image() (WebP → PNG avec imagefill blanc).
+    """
+    processor = ImageProcessor()
+
+    result = processor.process_image(
+        content=transparent_webp_bytes,
+        domain="test.com",
+        product_id="1",
+        product_name="produit-test",
+        base_storage_dir=str(tmp_path),
+        index=1,
+    )
+
+    assert result["main_path"].endswith(".png"), \
+        f"WebP doit être converti en PNG, obtenu : {result['main_path']}"
+
+    with Image.open(result["main_path"]) as out:
+        out.load()
+        assert out.mode == "RGB", \
+            f"attendu mode RGB (flatten fait), obtenu : {out.mode}"
+        assert out.getpixel((0, 0)) == (255, 255, 255), \
+            f"WebP transparent doit être composé sur fond blanc, obtenu : {out.getpixel((0, 0))}"
