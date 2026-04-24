@@ -114,7 +114,7 @@ git rebase --continue       # if rebasing
 git commit                  # if merging
 
 # Regenerate locally to be consistent with the merged code
-python scripts/graphify_rebuild_scoped.py $(git diff --name-only HEAD~1 HEAD)
+python scripts/graphify_rebuild_scoped.py $(git diff --name-only ORIG_HEAD HEAD)
 ```
 
 Community labels survive because `labels.json` is the remote's version — teammates keep their label edits too.
