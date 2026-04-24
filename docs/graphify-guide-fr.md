@@ -93,23 +93,74 @@ Modes :
 
 Les réponses sont persistées dans `graphify-out/memory/` et promues en nœuds au prochain `--update`. Le graphe apprend de vos requêtes.
 
-## Étendre — ajouter un service au graphe unifié
+## Services actuellement dans le graphe
 
-Nous avons choisi de faire grandir **un seul graphe unifié** plutôt qu'un graphe isolé par service. Raisons : les requêtes cross-service (par ex. « comment `<service>` utilise Redis ? ») exigent un graphe où les concepts du service et ceux de `libs/common-utils` sont dans le même espace de noms, liés par des arêtes cross. Des graphes séparés par service ne peuvent pas répondre aux questions cross-service sans couture manuelle.
+La source unique de vérité est `graphify-out/services-policy.yml` (tracké, lisible par machine, lu par le workflow CI coverage-check). Les tableaux ci-dessous sont le résumé pour humain ; les garder en phase avec le YAML lors de l'ajout d'un service.
 
-**Pour ajouter un service** (exemple : `llm-service`) :
+### Dans le graphe (2)
+
+| Service | Ajouté | Pourquoi |
+|---------|--------|----------|
+| `apps-microservices/crawler-service` | 2026-04-24 | Node.js + Python, machine à états complexe, cluster récent de corrections (relance OOM, élection de leader, staging d'archives). |
+| `apps-microservices/graph-rag-api-recherche-rust-service` | 2026-04-24 | Rust (Actix-web / tonic). Récupération centrale. Stack unique ; cross-links vers les clients gRPC de libs/rust-common-utils et vers les providers LLM Python. |
+
+### Hors graphe (89)
+
+Regroupés par raison. Voir `graphify-out/services-policy.yml` pour la liste complète avec détails par service.
+
+| Code raison | Signification | Nombre |
+|-------------|---------------|-------:|
+| `too_small` | < 10 fichiers et pas de CLAUDE.md riche. Un grep brut suffit. | 11 |
+| `frontend` | Frontend Next.js / React, toolchain séparée. | 5 |
+| `debug_variant` | Variante debug ou test d'un autre service. | 1 |
+| `template_scaffold` | Template servant à scaffolder de nouveaux services, pas un service vivant. | 1 |
+| `templated_wrapper` | Wrapper FastAPI / processor suivant un pattern commun ; grapher une référence, ignorer les frères. | 63 |
+| `candidate_deferred` | Service large / unique qui vaudrait la peine d'être graphé, pas prioritaire. Promouvoir quand une requête cross-service fait émerger le besoin. | 8 |
+
+Avant de lancer `/graphify <path> --update`, vérifier que le service n'est pas déjà dans une de ces listes :
 
 ```bash
-# Depuis la racine du repo — le répertoire de travail compte, il pointe vers graphify-out/
-/graphify apps-microservices/llm-service --update
+python scripts/graphify_check_service.py apps-microservices/<name>
 ```
 
-Le chemin `--update` du skill :
+Le script lit la policy et affiche un verdict. Il renvoie non-zéro uniquement quand le chemin est totalement absent de la policy — c'est le signal qu'il faut le classifier.
 
-1. Lit la portée du graphe racine (depuis `graph.json`), remarque que les fichiers du service n'y sont pas.
-2. Re-détecte le sous-répertoire du service (crawler-service à 37 fichiers a pris ~1 min bout à bout).
-3. Dispatche un sous-agent sémantique pour ses docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Peu de tokens LLM — compter moins de 0,10 $ par service.
-4. Fusionne les nouveaux nœuds/arêtes dans `graphify-out/graph.json` et ajoute les fichiers au manifeste.
+## Étendre — ajouter un service au graphe unifié
+
+Nous avons choisi de faire grandir **un seul graphe unifié** plutôt qu'un graphe isolé par service. Les requêtes cross-service (par ex. « comment `<service>` utilise Redis ? ») exigent un graphe où les concepts du service et ceux de `libs/common-utils` vivent dans le même espace de noms, liés par des arêtes cross. Des graphes séparés par service ne peuvent pas répondre aux questions cross-service sans couture manuelle.
+
+### Checklist (faire les quatre étapes dans un seul commit)
+
+1. **Mettre à jour la policy.** Déplacer le service depuis `not_graphed:` (ou l'ajouter) vers `graphed:` dans `graphify-out/services-policy.yml`. Inclure `added_at` et une ligne de justification.
+
+2. **Fusionner le service dans le graphe.** Depuis la racine du repo :
+
+    ```bash
+    /graphify apps-microservices/<service> --update
+    ```
+
+    Le chemin `--update` du skill :
+    1. Lit la portée du graphe racine (depuis `graph.json`), remarque que les fichiers du service n'y sont pas.
+    2. Re-détecte le sous-répertoire du service (crawler-service à 37 fichiers a pris ~1 min bout à bout).
+    3. Dispatche un sous-agent sémantique pour ses docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Peu de tokens LLM — compter moins de 0,10 $ par service.
+    4. Fusionne les nouveaux nœuds/arêtes dans `graphify-out/graph.json` et ajoute les fichiers au manifeste.
+
+    Appliquer ensuite les deux pièges connus après la fin du sous-agent (IDs cross-link inventés + re-labellisation des communautés — recettes dans la section « Pièges lors de la fusion d'un service »).
+
+3. **Mettre à jour le workflow CI de rebuild.** Ajouter le path glob du nouveau service au filtre `paths:` de `.github/workflows/graphify-auto-rebuild.yml`. Oublier cette étape est silencieux : le service est dans `graph.json` mais ses commits ne déclencheront plus de rebuild CI, donc le graphe se périme peu à peu dès que quelqu'un édite ce service sur `main` / `features/poc`.
+
+4. **Mettre à jour le tableau « Dans le graphe » et le tableau de comptage** sous « Hors graphe » de ce guide. Reporter la même mise à jour dans le guide anglais.
+
+### Que se passe-t-il si un dev crée un nouveau service et oublie de le classifier ?
+
+Il ne peut pas merger. Le workflow CI `.github/workflows/graphify-coverage-check.yml` scanne `apps-microservices/*` à chaque PR qui touche cette arborescence ou le fichier de policy, et fait échouer le build si un répertoire est absent de `graphify-out/services-policy.yml`. La PR reste rouge jusqu'à ce que le dev choisisse une des deux voies :
+
+- **Le grapher** → suivre la checklist quatre étapes ci-dessus (policy + `/graphify --update` + paths workflow + tableaux du guide).
+- **L'ignorer** → ajouter une entrée dans `not_graphed:` avec un code raison (`too_small`, `frontend`, `debug_variant`, `template_scaffold`, `templated_wrapper`, ou `candidate_deferred`) et un `details` optionnel.
+
+L'une ou l'autre des voies débloque la PR. Le coverage-check passe à la réexécution.
+
+Si un dev est incertain, le défaut conservateur est `candidate_deferred` avec un court `details` expliquant « en attente de revue ». Le service est sorti du graphe mais signalé pour reconsidération.
 
 Après la fusion, tout nouveau concept du `CLAUDE.md` du service qui référence des modules backbone est extrait automatiquement en cross-link (même mécanisme qui a produit les 10 arêtes crawler → libs/tools existantes).
 

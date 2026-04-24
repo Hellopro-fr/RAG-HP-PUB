@@ -93,23 +93,74 @@ Modes:
 
 Answers are persisted to `graphify-out/memory/` and promoted to graph nodes on next `--update`. The graph learns from your queries.
 
-## Extending — add a service to the unified graph
+## Services currently in the graph
 
-We chose to grow a **single unified graph** instead of one standalone graph per service. Reasons: cross-service queries (e.g. "how does `<service>` use Redis?") require one graph where the service's concepts and `libs/common-utils` concepts are nodes in the same namespace, linked by cross-edges. Separate per-service graphs cannot answer cross-service questions without manual stitching.
+The single source of truth is `graphify-out/services-policy.yml` (tracked, machine-readable, read by the coverage-check CI workflow). The tables below are the human-facing summary; keep them in sync with the YAML when you add a service.
 
-**To add a service** (example: `llm-service`):
+### Graphed (2)
+
+| Service | Added | Why |
+|---------|-------|-----|
+| `apps-microservices/crawler-service` | 2026-04-24 | Node.js + Python, complex state machine, recent bug-fix cluster (OOM relaunch, leader election, archive staging). |
+| `apps-microservices/graph-rag-api-recherche-rust-service` | 2026-04-24 | Rust (Actix-web / tonic). Core retrieval. Unique stack; cross-links to libs/rust-common-utils gRPC clients and to Python LLM providers. |
+
+### Not graphed (89)
+
+Grouped by reason. See `graphify-out/services-policy.yml` for the full list with per-service details.
+
+| Reason code | Meaning | Count |
+|-------------|---------|------:|
+| `too_small` | < 10 files and no rich CLAUDE.md. Raw grep is enough. | 11 |
+| `frontend` | Next.js / React frontend, separate toolchain. | 5 |
+| `debug_variant` | Debug or test variant of another service. | 1 |
+| `template_scaffold` | Template used to scaffold new services, not a live service. | 1 |
+| `templated_wrapper` | FastAPI / processor wrapper following a common pattern; graph one reference and skip siblings. | 63 |
+| `candidate_deferred` | Large / unique service that would be worth graphing, not prioritised yet. Promote when a cross-service query surfaces the need. | 8 |
+
+Before running `/graphify <path> --update`, confirm the service is not already in one of those lists:
 
 ```bash
-# From the repo root — working directory matters, it picks up graphify-out/
-/graphify apps-microservices/llm-service --update
+python scripts/graphify_check_service.py apps-microservices/<name>
 ```
 
-The skill's `--update` path:
+The script reads the policy and prints a verdict. It returns non-zero only when the path is missing from the policy entirely — that is the signal to classify it.
 
-1. Reads the root graph's scope (from `graph.json`), notices the service files aren't in it.
-2. Re-detects the service subdirectory (37-file crawler-service took ~1 min end-to-end).
-3. Dispatches one semantic subagent for its docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Few LLM tokens — expect under $0.10 per service.
-4. Merges new nodes / edges into `graphify-out/graph.json` and adds the files to the manifest.
+## Extending — add a service to the unified graph
+
+We chose to grow a **single unified graph** instead of one standalone graph per service. Cross-service queries (e.g. "how does `<service>` use Redis?") require one graph where the service's concepts and `libs/common-utils` concepts live in the same namespace, linked by cross-edges. Separate per-service graphs cannot answer cross-service questions without manual stitching.
+
+### Checklist (do all four steps in a single commit)
+
+1. **Update the policy.** Move the service from `not_graphed:` (or add it) to `graphed:` in `graphify-out/services-policy.yml`. Include `added_at` and a one-line rationale.
+
+2. **Merge the service into the graph.** From the repo root:
+
+    ```bash
+    /graphify apps-microservices/<service> --update
+    ```
+
+    The skill's `--update` path:
+    1. Reads the root graph's scope (from `graph.json`), notices the service files aren't in it.
+    2. Re-detects the service subdirectory (37-file crawler-service took ~1 min end-to-end).
+    3. Dispatches one semantic subagent for its docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Few LLM tokens — expect under $0.10 per service.
+    4. Merges new nodes / edges into `graphify-out/graph.json` and adds the files to the manifest.
+
+    Remember to apply the two known gotchas after the subagent finishes (invented cross-link IDs + community relabelling — both recipes in the "Gotchas when merging a service" section).
+
+3. **Update the CI rebuild workflow.** Add the new service's path glob to the `paths:` filter in `.github/workflows/graphify-auto-rebuild.yml`. Forgetting this step is silent: the service is in `graph.json` but its commits will no longer trigger CI rebuilds, so the graph slowly goes stale whenever someone edits that service on `main` / `features/poc`.
+
+4. **Update this guide's "Graphed" table and the reason-count table** under "Not graphed". Mirror the French guide.
+
+### What if a dev creates a new service and forgets to classify it?
+
+They cannot merge it. The CI workflow `.github/workflows/graphify-coverage-check.yml` scans `apps-microservices/*` on every PR that touches that tree or the policy file, and fails the build if any directory is missing from `graphify-out/services-policy.yml`. The PR stays red until the dev picks one of two paths:
+
+- **Graph it** → follow the four-step checklist above (policy + `/graphify --update` + workflow paths + guide tables).
+- **Skip it** → add an entry to `not_graphed:` with a reason code (`too_small`, `frontend`, `debug_variant`, `template_scaffold`, `templated_wrapper`, or `candidate_deferred`) and optional `details`.
+
+Either path unblocks the PR. Coverage-check then passes on re-run.
+
+If a dev is unsure, the conservative default is `candidate_deferred` with a short `details` explaining "pending review". The service is skipped from the graph but flagged for later reconsideration.
 
 After the merge, any new concepts in the service's `CLAUDE.md` that reference backbone modules are extracted as cross-links automatically (same mechanism that produced the 10 existing crawler → libs/tools edges).
 
