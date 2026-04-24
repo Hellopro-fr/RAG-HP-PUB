@@ -127,7 +127,45 @@ If the service's CLAUDE.md is sparse, cross-links will be sparse too — invest 
 - < 10 files (raw grep is fine)
 - Deprecated / dead service
 
-After adding a service, review `GRAPH_REPORT.md` — new communities may need labels in `graphify-out/labels.json`. Update and recommit.
+### Gotchas when merging a service (read before adding one)
+
+Both services merged so far (`crawler-service`, `graph-rag-api-recherche-rust-service`) hit the same two snags. Plan for them up front.
+
+**1. Invented cross-link target IDs.** The semantic subagent invents short, intuitive IDs for backbone concepts (e.g. `cache_service_redisclient`, `embedding.rs`, `libs_common_utils`) instead of using the actual node IDs (e.g. `cache_service_py`, `libs_rust_common_utils_src_grpc_clients_embedding_rs`, `common_utils_lib`). Invented IDs produce dangling cross-link edges that quietly fail queries.
+
+Workaround — grep the existing graph for each concept the subagent tried to cross-link, build a remap dict, rewrite the edges before merging:
+
+```python
+import json
+sem = json.loads(open('.graphify_<svc>_semantic.json').read())
+REMAP = {
+    'cache_service_redisclient': 'cache_service_py',
+    'embedding.rs': 'libs_rust_common_utils_src_grpc_clients_embedding_rs',
+    'libs_common_utils': 'common_utils_lib',
+    # ...
+}
+for e in sem['edges']:
+    if e['source'] in REMAP: e['source'] = REMAP[e['source']]
+    if e['target'] in REMAP: e['target'] = REMAP[e['target']]
+```
+
+Keep a running remap list in this document (the `labels.json` update story will let us amortise this over time). Pre-seed the subagent prompt with a list of known backbone node IDs to reduce invention — the prompt we used for `graph-rag-api-recherche-rust-service` lists them explicitly and cut invention rate from 10/10 to 6/16.
+
+**2. Community re-clustering shuffles labels.** Each merge re-runs clustering. Community `c0` may become `c4`, `c7` may become `c1`, etc. The labels in `graphify-out/labels.json` are keyed by community ID — after a merge they point to the *new* community at that ID, which is probably a different topic.
+
+Workaround — after every merge, regenerate the sample per community and re-label:
+
+```bash
+# dump first 4 node labels per community for cross-check
+python -c "import json, os; d=json.loads(open('graphify-out/graph.json').read()); \
+  from collections import defaultdict; c=defaultdict(list); \
+  [c[n.get('community')].append(n['label']) for n in d['nodes'] if n.get('community') is not None]; \
+  [print(f'c{k} ({len(v)}): {v[:4]}') for k,v in sorted(c.items(), key=lambda x:-len(x[1]))[:30]]"
+```
+
+Compare to `labels.json`, rewrite where wrong, commit the label update with the graph update.
+
+Long term, labels should be derived from community content (top-N node labels) rather than human-assigned, so they survive re-clustering for free. Not worth the engineering investment until we hit this a few more times.
 
 ## Updating the graph
 

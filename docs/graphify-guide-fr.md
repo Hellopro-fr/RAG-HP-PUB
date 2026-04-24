@@ -127,7 +127,45 @@ Si le CLAUDE.md du service est maigre, les cross-links le seront aussi — inves
 - < 10 fichiers (un grep brut suffit)
 - Service déprécié / mort
 
-Après ajout d'un service, relire `GRAPH_REPORT.md` — les nouvelles communautés peuvent avoir besoin de noms dans `graphify-out/labels.json`. Mettre à jour et recommiter.
+### Pièges à anticiper lors de la fusion d'un service (à lire avant d'en ajouter un)
+
+Les deux services fusionnés à ce jour (`crawler-service`, `graph-rag-api-recherche-rust-service`) ont tous les deux rencontré les deux mêmes écueils. Les anticiper.
+
+**1. IDs cibles de cross-links inventés.** Le sous-agent sémantique invente des IDs courts et intuitifs pour les concepts backbone (par ex. `cache_service_redisclient`, `embedding.rs`, `libs_common_utils`) au lieu d'utiliser les IDs de nœuds réels (par ex. `cache_service_py`, `libs_rust_common_utils_src_grpc_clients_embedding_rs`, `common_utils_lib`). Les IDs inventés produisent des arêtes cross-links pendantes qui font échouer silencieusement les requêtes.
+
+Contournement — greper le graphe existant pour chaque concept que le sous-agent tente de lier, construire un dict de remap, réécrire les arêtes avant fusion :
+
+```python
+import json
+sem = json.loads(open('.graphify_<svc>_semantic.json').read())
+REMAP = {
+    'cache_service_redisclient': 'cache_service_py',
+    'embedding.rs': 'libs_rust_common_utils_src_grpc_clients_embedding_rs',
+    'libs_common_utils': 'common_utils_lib',
+    # ...
+}
+for e in sem['edges']:
+    if e['source'] in REMAP: e['source'] = REMAP[e['source']]
+    if e['target'] in REMAP: e['target'] = REMAP[e['target']]
+```
+
+Tenir une liste de remap à jour dans ce document. Pré-amorcer le prompt du sous-agent avec une liste d'IDs de nœuds backbone connus pour réduire les inventions — le prompt utilisé pour `graph-rag-api-recherche-rust-service` les liste explicitement et a fait passer le taux d'invention de 10/10 à 6/16.
+
+**2. Le re-clustering mélange les labels.** Chaque fusion relance le clustering. La communauté `c0` peut devenir `c4`, `c7` peut devenir `c1`, etc. Les labels dans `graphify-out/labels.json` sont clés par ID de communauté — après une fusion, ils pointent vers la *nouvelle* communauté à cet ID, qui traite probablement d'un autre sujet.
+
+Contournement — après chaque fusion, régénérer un échantillon par communauté et re-labelliser :
+
+```bash
+# dump les 4 premiers labels de nœud par communauté pour cross-check
+python -c "import json, os; d=json.loads(open('graphify-out/graph.json').read()); \
+  from collections import defaultdict; c=defaultdict(list); \
+  [c[n.get('community')].append(n['label']) for n in d['nodes'] if n.get('community') is not None]; \
+  [print(f'c{k} ({len(v)}): {v[:4]}') for k,v in sorted(c.items(), key=lambda x:-len(x[1]))[:30]]"
+```
+
+Comparer à `labels.json`, réécrire où faux, commiter la mise à jour des labels avec la mise à jour du graphe.
+
+À terme, les labels devraient être dérivés du contenu des communautés (top-N labels de nœuds) plutôt qu'assignés manuellement, pour survivre au re-clustering gratuitement. Pas rentable tant qu'on ne rencontre pas ce problème plusieurs fois de plus.
 
 ## Mettre à jour le graphe
 
