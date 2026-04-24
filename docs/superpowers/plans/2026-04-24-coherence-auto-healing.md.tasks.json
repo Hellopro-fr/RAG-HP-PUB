@@ -1,0 +1,68 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-24-coherence-auto-healing.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Setup test infrastructure (Vitest + RTL)",
+      "status": "pending",
+      "description": "**Goal:** Add Vitest + RTL + jsdom, replace node:test script.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/package.json\",\"apps-microservices/crawler-monitor-frontend/vitest.config.js\",\"apps-microservices/crawler-monitor-frontend/src/setupTests.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/__fixtures__/smoke.test.js\"],\"verifyCommand\":\"yarn test\",\"acceptanceCriteria\":[\"yarn test uses Vitest\",\"smoke test passes\",\"yarn build still works\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Types + rule replicas_vs_max_slots + unit tests",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Types + first rule + 6 unit tests.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/types.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/index.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/replicas_vs_max_slots.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/replicas_vs_max_slots.test.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/__fixtures__/mocks.js\"],\"verifyCommand\":\"yarn test src/coherence/rules/replicas_vs_max_slots.test.js\",\"acceptanceCriteria\":[\"RULES has 1 rule\",\"6 tests pass\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: CoherenceProvider + hooks + mount in App",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Provider + hooks + mount in App.jsx.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/hooks.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.test.jsx\",\"apps-microservices/crawler-monitor-frontend/src/App.jsx\"],\"verifyCommand\":\"yarn test src/coherence/\",\"acceptanceCriteria\":[\"hooks work\",\"rule errors isolated\",\"ignoredRules toggles\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: CoherencePastille component + wire to CapacityBar",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Pastille component + wire first rule.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherencePastille.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherencePastille.test.jsx\",\"apps-microservices/crawler-monitor-frontend/src/components/CapacityBar.jsx\"],\"verifyCommand\":\"yarn test src/coherence/components/CoherencePastille.test.jsx\",\"acceptanceCriteria\":[\"null when OK\",\"icon + link when violated\",\"tooltip\",\"click navigates\",\"itemKey filter\",\"wired to CapacityBar\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 5: Rule replica_job_mapping + per-item pastille in ReplicaMonitor",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Detect ghost crawlers + stale job refs.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/replica_job_mapping.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/replica_job_mapping.test.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/index.js\",\"apps-microservices/crawler-monitor-frontend/src/components/ReplicaMonitor.jsx\"],\"verifyCommand\":\"yarn test src/coherence/rules/replica_job_mapping.test.js\",\"acceptanceCriteria\":[\"ghost crawler flagged\",\"stale jobId flagged\",\"restarting_oom skipped\",\"autoRetry present\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 6: Rule peak_ram_exceeds_allocated + pastille in CapacityPlanning",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Detect backend bug peak > allocated.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/peak_ram_exceeds_allocated.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/peak_ram_exceeds_allocated.test.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/index.js\",\"apps-microservices/crawler-monitor-frontend/src/pages/CapacityPlanningPage.jsx\"],\"verifyCommand\":\"yarn test src/coherence/rules/peak_ram_exceeds_allocated.test.js\",\"acceptanceCriteria\":[\"2% tolerance\",\"flags >tolerance\",\"pastille in Peak cell\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 7: Rule running_count_parity + pastille on Overview StatCard",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Detect REST/WS desync between capacity.running_jobs and list.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/running_count_parity.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/running_count_parity.test.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/rules/index.js\",\"apps-microservices/crawler-monitor-frontend/src/pages/Overview.jsx\"],\"verifyCommand\":\"yarn test src/coherence/rules/running_count_parity.test.js\",\"acceptanceCriteria\":[\"±1 tolerance\",\"flags >tolerance\",\"autoRetry config\",\"pastille on StatCard\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 8: Page /health + sidebar entry",
+      "status": "pending",
+      "blockedBy": [4, 5, 6],
+      "description": "**Goal:** Diagnostic page + sidebar entry + hash-scroll.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherenceHealthPage.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherenceHealthPage.test.jsx\",\"apps-microservices/crawler-monitor-frontend/src/lib/navigation.js\",\"apps-microservices/crawler-monitor-frontend/src/App.jsx\"],\"verifyCommand\":\"yarn test src/coherence/components/CoherenceHealthPage.test.jsx\",\"acceptanceCriteria\":[\"KPI row\",\"violations list\",\"OK collapsed\",\"hash scroll\",\"sidebar entry\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 9: Auto-retry engine + manual actions",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** AutoRetry opt-in + manual refresh/ignore actions.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.test.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherenceHealthPage.jsx\"],\"verifyCommand\":\"yarn test src/coherence/\",\"acceptanceCriteria\":[\"autoRetry fires\",\"maxAttempts respected\",\"counter resets on heal\",\"manual refresh works\",\"chip shows after exhausted\",\"timer tests pass\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-24T14:50:00Z"
+}
