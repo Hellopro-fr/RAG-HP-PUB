@@ -109,3 +109,37 @@ def test_webp_transparent_converted_to_png_on_white(transparent_webp_bytes, tmp_
             f"attendu mode RGB (flatten fait), obtenu : {out.mode}"
         assert out.getpixel((0, 0)) == (255, 255, 255), \
             f"WebP transparent doit être composé sur fond blanc, obtenu : {out.getpixel((0, 0))}"
+
+
+def test_gif_transparency_preserved(transparent_gif_bytes, tmp_path):
+    """R3 — Un GIF avec transparence de palette doit la conserver après process.
+
+    Garde-fou sur : app/core/image_processor.py:125-127
+        save_kwargs["save_all"] = True
+        if gif_transparency is not None:
+            save_kwargs["transparency"] = gif_transparency
+
+    Parité PHP : case 1 de creer_image() (imagecolortransparent + imagepalettecopy).
+
+    Note : si cette assertion échoue malgré un code source correct (piège Pillow
+    version-dépendant), le plan B est d'asserter `out.mode == "P"` et que
+    `out.getpixel((0,0))` vaut l'index transparent du GIF.
+    """
+    processor = ImageProcessor()
+
+    result = processor.process_image(
+        content=transparent_gif_bytes,
+        domain="test.com",
+        product_id="1",
+        product_name="produit-test",
+        base_storage_dir=str(tmp_path),
+        index=1,
+    )
+
+    assert result["main_path"].endswith(".gif"), \
+        f"extension attendue .gif, obtenu : {result['main_path']}"
+
+    with Image.open(result["main_path"]) as out:
+        out.load()
+        assert "transparency" in out.info, \
+            "la transparence GIF doit être préservée au save (info['transparency'])"
