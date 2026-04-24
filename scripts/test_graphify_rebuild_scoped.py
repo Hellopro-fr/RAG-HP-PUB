@@ -73,6 +73,8 @@ def test_load_manifest_paths_handles_flat_dict(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
+    # Graph missing forces the fallback to manifest.
+    monkeypatch.setattr(rebuild, "GRAPH_JSON", tmp_path / "no-graph.json")
     monkeypatch.setattr(rebuild, "MANIFEST_JSON", manifest_path)
     paths = rebuild._load_manifest_paths()
     assert str(Path("/abs/path/a.py").resolve()) in paths
@@ -80,8 +82,74 @@ def test_load_manifest_paths_handles_flat_dict(tmp_path, monkeypatch):
 
 
 def test_load_manifest_paths_empty_when_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(rebuild, "GRAPH_JSON", tmp_path / "no-graph.json")
     monkeypatch.setattr(rebuild, "MANIFEST_JSON", tmp_path / "nope.json")
     assert rebuild._load_manifest_paths() == set()
+
+
+def test_load_scope_paths_prefers_graph_over_manifest(tmp_path, monkeypatch):
+    """graph.json is tracked; manifest.json is local-only. Graph wins."""
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "nodes": [
+                    {"id": "n1", "source_file": "/abs/libs/a.py"},
+                    {"id": "n2", "source_file": "/abs/libs/b.ts"},
+                ],
+                "links": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps({"/abs/tools/should-not-win.py": 999.9}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rebuild, "GRAPH_JSON", graph_path)
+    monkeypatch.setattr(rebuild, "MANIFEST_JSON", manifest_path)
+
+    paths = rebuild._load_scope_paths()
+    assert str(Path("/abs/libs/a.py").resolve()) in paths
+    assert str(Path("/abs/libs/b.ts").resolve()) in paths
+    assert str(Path("/abs/tools/should-not-win.py").resolve()) not in paths
+
+
+def test_load_scope_paths_falls_back_to_manifest_when_graph_missing(tmp_path, monkeypatch):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps({"/abs/tools/daemon.sh": 111.1}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rebuild, "GRAPH_JSON", tmp_path / "no-graph.json")
+    monkeypatch.setattr(rebuild, "MANIFEST_JSON", manifest_path)
+
+    paths = rebuild._load_scope_paths()
+    assert str(Path("/abs/tools/daemon.sh").resolve()) in paths
+
+
+def test_load_scope_paths_skips_nodes_without_source_file(tmp_path, monkeypatch):
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "nodes": [
+                    {"id": "has_src", "source_file": "/abs/real.py"},
+                    {"id": "no_src"},
+                    {"id": "empty_src", "source_file": ""},
+                    {"id": "none_src", "source_file": None},
+                ],
+                "links": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rebuild, "GRAPH_JSON", graph_path)
+    monkeypatch.setattr(rebuild, "MANIFEST_JSON", tmp_path / "nope.json")
+
+    paths = rebuild._load_scope_paths()
+    assert paths == {str(Path("/abs/real.py").resolve())}
 
 
 def test_load_labels_defaults_when_missing(tmp_path, monkeypatch):

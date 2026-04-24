@@ -58,8 +58,8 @@ La commande amont `graphify hook install` installe un hook post-commit qui appel
 
 `scripts/install-graphify-hook.sh` installe un hook différent (`scripts/graphify-post-commit.sh`) qui délègue à `scripts/graphify_rebuild_scoped.py`. Le hook scoppé :
 
-1. Lit `graphify-out/manifest.json` — source unique de vérité pour la portée du graphe.
-2. Intersecte les fichiers modifiés du commit avec le manifeste. Hors scope = ignoré silencieusement ; pas de reconstruction.
+1. Dérive la portée depuis `graphify-out/graph.json` — l'attribut `source_file` de chaque nœud est collecté en un ensemble de chemins dans le scope. `graph.json` est tracké, donc chaque coéquipier obtient la bonne portée juste après `git pull`. `manifest.json` est gitignoré volontairement (mtime-based, invalide après clone selon la convention amont) et n'est utilisé qu'en fallback.
+2. Intersecte les fichiers modifiés du commit avec cette portée. Hors scope = ignoré silencieusement ; pas de reconstruction.
 3. Pour les fichiers code dans le scope : ré-extrait l'AST uniquement sur ces fichiers, fusionne sur place, préserve les arêtes sémantiques + cross-links intactes. Zéro coût LLM.
 4. Pour les fichiers doc/config dans le scope : touche `graphify-out/.needs_update` et rappelle de lancer `/graphify --update` depuis une session Claude Code (la ré-extraction sémantique a besoin du LLM).
 5. Régénère `graph.json`, `graph.html`, `GRAPH_REPORT.md` en réutilisant les noms de communauté depuis `graphify-out/labels.json`.
@@ -106,7 +106,7 @@ Nous avons choisi de faire grandir **un seul graphe unifié** plutôt qu'un grap
 
 Le chemin `--update` du skill :
 
-1. Lit le manifeste racine, remarque que les fichiers du service n'y sont pas.
+1. Lit la portée du graphe racine (depuis `graph.json`), remarque que les fichiers du service n'y sont pas.
 2. Re-détecte le sous-répertoire du service (crawler-service à 37 fichiers a pris ~1 min bout à bout).
 3. Dispatche un sous-agent sémantique pour ses docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Peu de tokens LLM — compter moins de 0,10 $ par service.
 4. Fusionne les nouveaux nœuds/arêtes dans `graphify-out/graph.json` et ajoute les fichiers au manifeste.
@@ -143,7 +143,7 @@ Trois déclencheurs, par ordre de couverture :
 python scripts/graphify_rebuild_scoped.py path/to/file1.py path/to/file2.ts
 ```
 
-Les arguments sont les fichiers modifiés — il respecte le manifeste et ne fait rien pour les chemins hors scope.
+Les arguments sont les fichiers modifiés — il respecte la portée du graphe et ne fait rien pour les chemins hors scope.
 
 Le coût cumulé en tokens par run est tracé dans `graphify-out/cost.json` (gitignoré, local uniquement).
 
@@ -170,7 +170,7 @@ graphify-out/                                  # graphe unifié (backbone + serv
 └── .needs_update                              # flag écrit par le hook sur changements doc (gitignoré)
 
 scripts/
-├── graphify_rebuild_scoped.py                 # rebuild AST scoppé (respect du manifeste)
+├── graphify_rebuild_scoped.py                 # rebuild AST scoppé (respect de la portée du graphe)
 ├── test_graphify_rebuild_scoped.py            # tests unitaires du script ci-dessus
 ├── graphify-post-commit.sh                    # corps du hook post-commit
 └── install-graphify-hook.sh                   # installeur (copie le hook vers .git/hooks/)
@@ -206,7 +206,7 @@ Expose les outils : `query_graph`, `get_node`, `get_neighbors`, `get_community`,
 | `graphify: command not found` | `pip install graphifyy` |
 | `graphify update .` lancé et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé. `git checkout -- graphify-out/` pour restaurer. Utiliser `/graphify --update` depuis une session Claude Code, ou `python scripts/graphify_rebuild_scoped.py <fichiers>` directement. |
 | Équipier a lancé `graphify hook install` par erreur | `graphify hook uninstall` puis réinstaller le nôtre : `bash scripts/install-graphify-hook.sh`. `git checkout -- graphify-out/` si le graphe a été pollué. |
-| Hook post-commit déclenché mais n'a rien fait | Soit aucun fichier modifié n'est dans le manifeste (attendu pour les commits `apps-microservices/`), soit graphify n'est pas installé sur votre Python. Vérifier avec `python -c "import graphify"`. |
+| Hook post-commit déclenché mais n'a rien fait | Soit aucun fichier modifié n'est dans la portée du graphe (attendu pour les commits `apps-microservices/` sur services non-graphés), soit graphify n'est pas installé sur votre Python. Vérifier avec `python -c "import graphify"`. |
 | Sortie du hook mentionne `.needs_update` | Un doc/CLAUDE.md du scope a changé. La ré-extraction sémantique a besoin du LLM ; lancer `/graphify --update` dans une session Claude Code quand pratique. |
 | Nouveau service ajouté mais ses nœuds ne sont pas dans le graphe | Vous avez lancé `/graphify <service-path>` sans `--update`. Utiliser le flag update pour qu'il fusionne dans le graphe racine au lieu d'en créer un isolé. |
 | Scroll vertical cassé sur PowerShell 5.1 | Utiliser Windows Terminal, ou désinstaller `graspologic` : `pip uninstall graspologic` |

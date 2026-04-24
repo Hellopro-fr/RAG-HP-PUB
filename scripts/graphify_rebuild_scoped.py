@@ -7,11 +7,15 @@ pulls the `apps-microservices/` tree into the backbone graph and explodes
 full reasoning.
 
 Behaviour:
-    1. Read the tracked manifest at `graphify-out/manifest.json`. This is the
-       single source of truth for graph scope.
+    1. Derive graph scope from `graphify-out/graph.json` — every node's
+       `source_file` attribute is collected into a set of in-scope paths.
+       `graph.json` is tracked in git, so every teammate has the same scope
+       after `git pull`. `manifest.json` is intentionally gitignored (its
+       mtime values are local-only, see the upstream team-workflow doc) so it
+       cannot be relied on post-clone.
     2. Intersect the list of changed files (argv[1:] or $GRAPHIFY_CHANGED env
-       var) with the manifest. Files outside the manifest are ignored, so AST
-       extraction never expands graph scope.
+       var) with that scope. Files outside it are ignored, so AST extraction
+       never expands graph scope.
     3. For code files in the intersection: run `graphify.extract.extract` on
        that subset only.
     4. Merge into the existing graph without dropping anything:
@@ -85,20 +89,51 @@ def _collect_changed() -> list[str]:
     return [line.strip() for line in env.splitlines() if line.strip()]
 
 
-def _load_manifest_paths() -> set[str]:
-    """Return the set of absolute path strings in the manifest."""
-    if not MANIFEST_JSON.exists():
-        return set()
-    manifest = json.loads(MANIFEST_JSON.read_text(encoding="utf-8"))
-    result: set[str] = set()
-    if isinstance(manifest, dict):
-        for key, value in manifest.items():
-            if isinstance(value, list):
-                for item in value:
-                    result.add(str(Path(item).resolve()))
-            else:
-                result.add(str(Path(key).resolve()))
-    return result
+def _load_scope_paths() -> set[str]:
+    """Return the set of absolute path strings currently in the graph.
+
+    Prefers `graph.json` (tracked, available to every teammate). Falls back
+    to `manifest.json` if graph is unreadable — the fallback path mostly
+    matters during first-time graph seeding when graph.json does not yet
+    exist.
+    """
+    if GRAPH_JSON.exists():
+        try:
+            graph = json.loads(GRAPH_JSON.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            graph = None
+        if graph:
+            result: set[str] = set()
+            for node in graph.get("nodes", []):
+                source_file = node.get("source_file")
+                if not source_file:
+                    continue
+                source_path = Path(source_file)
+                if not source_path.is_absolute():
+                    source_path = REPO_ROOT / source_path
+                try:
+                    result.add(str(source_path.resolve()))
+                except OSError:
+                    continue
+            if result:
+                return result
+
+    if MANIFEST_JSON.exists():
+        manifest = json.loads(MANIFEST_JSON.read_text(encoding="utf-8"))
+        result_mf: set[str] = set()
+        if isinstance(manifest, dict):
+            for key, value in manifest.items():
+                if isinstance(value, list):
+                    for item in value:
+                        result_mf.add(str(Path(item).resolve()))
+                else:
+                    result_mf.add(str(Path(key).resolve()))
+        return result_mf
+    return set()
+
+
+# Backwards-compatible alias for existing tests.
+_load_manifest_paths = _load_scope_paths
 
 
 def _load_graph() -> dict:
@@ -120,15 +155,15 @@ def main() -> int:
         print("[graphify hook] no changed files provided", flush=True)
         return 0
 
-    manifest_paths = _load_manifest_paths()
-    if not manifest_paths:
-        print("[graphify hook] no manifest - skipping rebuild", flush=True)
+    scope_paths = _load_scope_paths()
+    if not scope_paths:
+        print("[graphify hook] no graph or manifest - skipping rebuild", flush=True)
         return 0
 
     in_scope_changed: list[Path] = []
     for raw_path in changed:
         resolved = _resolve(raw_path)
-        if str(resolved) in manifest_paths:
+        if str(resolved) in scope_paths:
             in_scope_changed.append(resolved)
 
     if not in_scope_changed:
@@ -149,7 +184,7 @@ def main() -> int:
         return 0
 
     print(
-        f"[graphify hook] AST-rebuilding {len(code_changed)} code file(s) in manifest scope",
+        f"[graphify hook] AST-rebuilding {len(code_changed)} code file(s) in graph scope",
         flush=True,
     )
 
@@ -203,7 +238,7 @@ def main() -> int:
     questions = suggest_questions(graph, communities, labels)
 
     detection = {
-        "total_files": len(manifest_paths),
+        "total_files": len(scope_paths),
         "total_words": 0,
         "needs_graph": True,
         "warning": None,
@@ -220,7 +255,7 @@ def main() -> int:
         surprises,
         detection,
         tokens,
-        "scoped rebuild (graphify-out/manifest.json)",
+        "scoped rebuild (scope derived from graphify-out/graph.json)",
         suggested_questions=questions,
     )
     REPORT_MD.write_text(report, encoding="utf-8")
