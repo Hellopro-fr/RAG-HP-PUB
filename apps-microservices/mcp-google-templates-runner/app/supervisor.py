@@ -24,6 +24,11 @@ class SpawnSpec:
     env: dict[str, str]
     credentials_json: str
     credentials_hash: str
+    # Optional last-known port the gateway wants us to reuse. When set AND
+    # still free, the pool returns this port. When set but busy, the pool
+    # falls back to the next free port (the gateway will have to reconcile
+    # the URL on the next health check or rediscover).
+    runner_port: Optional[int] = None
 
 
 @dataclasses.dataclass
@@ -70,7 +75,7 @@ class Supervisor:
             if spec.instance_id in self._instances:
                 # Spawn-on-existing = restart-with-possibly-new-spec
                 await self._kill_locked(spec.instance_id, release_port=False)
-            port = self._pool.allocate()
+            port = self._pool.allocate(preferred=spec.runner_port)
             try:
                 cred_path = self._creds.write(spec.instance_id, spec.credentials_json)
             except Exception:

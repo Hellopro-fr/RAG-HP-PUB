@@ -519,6 +519,10 @@ onMounted(async () => {
     } finally {
       loading.value = false
     }
+  } else {
+    // Default icon for a brand-new custom MCP server. Users can change it in
+    // the IconPicker; stays empty on servers that predate this default.
+    form.icon = '/images/servers/hp-logo.svg'
   }
 })
 

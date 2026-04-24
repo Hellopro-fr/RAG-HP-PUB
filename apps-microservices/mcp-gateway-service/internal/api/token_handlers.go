@@ -128,6 +128,18 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	token.LeexiAllowedUserUUIDs = userUUIDs
 	token.LeexiAllowedTeamUUIDs = teamUUIDs
 
+	// Resolve and validate the optional Ringover ownership filter.
+	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, token.CreatedBy,
+	)
+	if rerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+		return
+	}
+	token.RingoverFilterMode = rMode
+	token.RingoverAllowedUserIDs = rUserIDs
+	token.RingoverAllowedTeamIDs = rTeamIDs
+
 	// Build server associations
 	for _, sid := range req.ServerIDs {
 		token.Servers = append(token.Servers, db.ScopeTokenServer{
@@ -166,6 +178,35 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist selected LLM instructions. Server-side validation enforces that
+	// every picked instruction has at least one allowed server in common with
+	// the token — the UI pre-filters, but we must not trust the client.
+	if h.instructionRepo != nil && len(req.InstructionIDs) > 0 {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, req.ServerIDs)
+		if vErr != nil {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the token's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceTokenInstructions(token.ID, req.InstructionIDs); err != nil {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
 	var expiresStr *string
 	if token.ExpiresAt != nil {
 		s := token.ExpiresAt.UTC().Format(time.RFC3339)
@@ -173,20 +214,22 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, CreateTokenResponse{
-		ID:          token.ID,
-		Name:        token.Name,
-		Description: token.Description,
-		Token:       rawToken,
-		TokenPrefix: token.TokenPrefix,
-		ServerIDs:   req.ServerIDs,
-		ServerTools: buildServerToolsResponse(token.Tools),
-		MCPCommand:  token.MCPCommand,
-		ServerName:  token.ServerName,
-		AllowHTTP:   token.AllowHTTP,
-		IsActive:    token.IsActive,
-		CreatedAt:   token.CreatedAt.UTC().Format(time.RFC3339),
-		ExpiresAt:   expiresStr,
-		LeexiFilter: scopeTokenLeexiFilterToDTO(&token),
+		ID:             token.ID,
+		Name:           token.Name,
+		Description:    token.Description,
+		Token:          rawToken,
+		TokenPrefix:    token.TokenPrefix,
+		ServerIDs:      req.ServerIDs,
+		ServerTools:    buildServerToolsResponse(token.Tools),
+		InstructionIDs: req.InstructionIDs,
+		MCPCommand:     token.MCPCommand,
+		ServerName:     token.ServerName,
+		AllowHTTP:      token.AllowHTTP,
+		IsActive:       token.IsActive,
+		CreatedAt:      token.CreatedAt.UTC().Format(time.RFC3339),
+		ExpiresAt:      expiresStr,
+		LeexiFilter:    scopeTokenLeexiFilterToDTO(&token),
+		RingoverFilter: scopeTokenRingoverFilterToDTO(&token),
 	})
 }
 
@@ -253,6 +296,20 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 		updates["leexi_allowed_team_uuids"] = teamUUIDs
 	}
 
+	// Symmetric handling for the Ringover filter.
+	if req.RingoverFilter != nil {
+		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy,
+		)
+		if rerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+			return
+		}
+		updates["ringover_filter_mode"] = mode
+		updates["ringover_allowed_user_ids"] = userIDs
+		updates["ringover_allowed_team_ids"] = teamIDs
+	}
+
 	if len(updates) > 0 {
 		if err := h.tokenRepo.Update(id, updates); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -262,6 +319,38 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 
 	if len(req.ServerIDs) > 0 {
 		if err := h.tokenRepo.UpdateServers(id, req.ServerIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	// Update instruction selections if provided. Re-validate against the
+	// token's effective allowed servers (either the incoming list or, if
+	// unchanged on this request, the existing set on the row).
+	if req.InstructionIDs != nil && h.instructionRepo != nil {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		allowed := req.ServerIDs
+		if len(allowed) == 0 {
+			allowed = make([]string, 0, len(existing.Servers))
+			for _, s := range existing.Servers {
+				allowed = append(allowed, s.ServerID)
+			}
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, allowed)
+		if vErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the token's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceTokenInstructions(id, req.InstructionIDs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -418,6 +507,14 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		serverIDs[i] = s.ServerID
 	}
 
+	var instructionIDs []string
+	if len(t.Instructions) > 0 {
+		instructionIDs = make([]string, 0, len(t.Instructions))
+		for _, i := range t.Instructions {
+			instructionIDs = append(instructionIDs, i.InstructionID)
+		}
+	}
+
 	var expiresStr *string
 	if t.ExpiresAt != nil {
 		s := t.ExpiresAt.UTC().Format(time.RFC3339)
@@ -425,21 +522,23 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 	}
 
 	return TokenResponse{
-		ID:          t.ID,
-		Name:        t.Name,
-		Description: t.Description,
-		Token:       decryptedToken,
-		TokenPrefix: t.TokenPrefix,
-		ServerIDs:   serverIDs,
-		ServerTools: buildServerToolsResponse(t.Tools),
-		MCPCommand:  t.MCPCommand,
-		ServerName:  t.ServerName,
-		AllowHTTP:   t.AllowHTTP,
-		IsActive:    t.IsActive,
-		CreatedBy:   t.CreatedBy,
-		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:   t.UpdatedAt.UTC().Format(time.RFC3339),
-		ExpiresAt:   expiresStr,
-		LeexiFilter: scopeTokenLeexiFilterToDTO(&t),
+		ID:             t.ID,
+		Name:           t.Name,
+		Description:    t.Description,
+		Token:          decryptedToken,
+		TokenPrefix:    t.TokenPrefix,
+		ServerIDs:      serverIDs,
+		ServerTools:    buildServerToolsResponse(t.Tools),
+		InstructionIDs: instructionIDs,
+		MCPCommand:     t.MCPCommand,
+		ServerName:     t.ServerName,
+		AllowHTTP:      t.AllowHTTP,
+		IsActive:       t.IsActive,
+		CreatedBy:      t.CreatedBy,
+		CreatedAt:      t.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:      t.UpdatedAt.UTC().Format(time.RFC3339),
+		ExpiresAt:      expiresStr,
+		LeexiFilter:    scopeTokenLeexiFilterToDTO(&t),
+		RingoverFilter: scopeTokenRingoverFilterToDTO(&t),
 	}
 }

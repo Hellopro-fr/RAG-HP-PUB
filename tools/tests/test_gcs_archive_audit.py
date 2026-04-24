@@ -160,15 +160,17 @@ def _marker() -> bytes:
     return _json.dumps({"final_status": "finished", "exit_code": 0}).encode()
 
 
-def _snapshot(domain: str = "example.com") -> bytes:
+def _snapshot(domain: str = "example.com", urls_crawled: int = 0) -> bytes:
     """Build a _status_snapshot.json that Python's archive_crawl writes.
-    The CrawlStatus model (app/schemas/crawler.py) has `domain` as a required field."""
+    The CrawlStatus model (app/schemas/crawler.py) has `domain` as a required field.
+    `urls_crawled` controls the main-domain count; tests that want the classifier
+    to match expected/actual exactly should pass an explicit value."""
     return _json.dumps({
         "crawl_id": "4365",
         "status": "finished",
         "domain": domain,
         "start_url": f"https://{domain}/",
-        "urls_crawled": 0,
+        "urls_crawled": urls_crawled,
     }).encode()
 
 
@@ -248,7 +250,9 @@ class TestArchiveInspection:
         path = _build_tar(tmp_path, {
             "_callback_payload.json": _payload(success=1),
             "_completion_marker.json": _marker(),
-            "_status_snapshot.json": _snapshot(domain="foo.com"),
+            # urls_crawled=1 matches the single dataset file below — avoids an
+            # incidental FAILED_CRAWL_WITH_RESIDUE tag from the Phase 2.1.5 fix.
+            "_status_snapshot.json": _snapshot(domain="foo.com", urls_crawled=1),
             # Tar has sanitized dir name; snapshot resolves the real domain 'foo.com',
             # which _count_dataset_files matches via its sanitized fallback.
             "storage/datasets/foo-com/only.json": b'{}',
@@ -522,3 +526,247 @@ class TestDomainResolution:
         assert category == ga.OK
         assert "warning" in details
         assert "domain could not be resolved" in details["warning"]
+
+
+class TestIncludeIds:
+    """Tests for the --include-ids flag: targeted audit over a subset of crawl_ids."""
+
+    def test_load_include_ids_from_csv_string(self):
+        result = ga._load_include_ids("1806,2517, 4606 , 5250")
+        assert result == {"1806", "2517", "4606", "5250"}
+
+    def test_load_include_ids_from_file(self, tmp_path):
+        p = tmp_path / "ids.txt"
+        p.write_text("1806\n2517\n\n 4606 \n")
+        result = ga._load_include_ids(str(p))
+        assert result == {"1806", "2517", "4606"}
+
+    def test_load_include_ids_returns_none_when_no_spec(self):
+        assert ga._load_include_ids(None) is None
+        assert ga._load_include_ids("") is None
+
+    def test_audit_skips_non_matching_ids(self, tmp_path, monkeypatch):
+        listing = [
+            (100, "gs://b/crawls/1806.tar.gz"),
+            (200, "gs://b/crawls/9999.tar.gz"),
+        ]
+
+        def fake_ls(uri, long=False):
+            return listing if long else [u for _, u in listing]
+
+        inspected = []
+
+        def fake_inspect_one(obj_uri, size, name_only, **kwargs):
+            inspected.append(obj_uri)
+            return ga.OK, {}
+
+        monkeypatch.setattr(ga, "gcloud_ls", fake_ls)
+        monkeypatch.setattr(ga, "_inspect_one", fake_inspect_one)
+        monkeypatch.setattr(ga, "check_gcloud_auth", lambda: None)
+
+        out_path = tmp_path / "out.json"
+        ga.main(["--bucket", "b", "--include-ids", "1806", "--output", str(out_path)])
+
+        assert inspected == ["gs://b/crawls/1806.tar.gz"]
+
+    def test_include_ids_combined_with_resume(self, tmp_path, monkeypatch):
+        listing = [
+            (100, "gs://b/crawls/1806.tar.gz"),
+            (200, "gs://b/crawls/2517.tar.gz"),
+        ]
+        prior = {"archives": [{"object_name": "crawls/1806.tar.gz"}]}
+        prior_path = tmp_path / "prior.json"
+        prior_path.write_text(_json.dumps(prior))
+
+        def fake_ls(uri, long=False):
+            return listing if long else [u for _, u in listing]
+
+        inspected = []
+
+        def fake_inspect_one(obj_uri, size, name_only, **kwargs):
+            inspected.append(obj_uri)
+            return ga.OK, {}
+
+        monkeypatch.setattr(ga, "gcloud_ls", fake_ls)
+        monkeypatch.setattr(ga, "_inspect_one", fake_inspect_one)
+        monkeypatch.setattr(ga, "check_gcloud_auth", lambda: None)
+
+        out_path = tmp_path / "out.json"
+        ga.main([
+            "--bucket", "b",
+            "--include-ids", "1806,2517",
+            "--resume", str(prior_path),
+            "--output", str(out_path),
+        ])
+        # 1806 skipped by resume; 2517 allowed by include + not in resume
+        assert inspected == ["gs://b/crawls/2517.tar.gz"]
+
+
+class TestClassifierBugFixes:
+    """Tests for the three classifier false-positive fixes (Phase 2.1):
+    EXCESS_FILES, FAILED_CRAWL_WITH_RESIDUE, and COUNT_DRIFT."""
+
+    def _tar_with_files(self, tmp_path, payload_success, file_count, domain="example.com", name=None):
+        name = name or f"s{payload_success}f{file_count}"
+        files = {
+            "_callback_payload.json": _payload(success=payload_success),
+            "_completion_marker.json": _marker(),
+        }
+        files.update({
+            f"storage/datasets/{domain}/url{i}.json": b'{"url": "a"}'
+            for i in range(file_count)
+        })
+        return _build_tar(tmp_path, files, name=name)
+
+    def test_ok_with_excess_files_tag(self, tmp_path):
+        # Real-world: crawl 3487 had success=35 but 1426 files.
+        path = self._tar_with_files(tmp_path, payload_success=10, file_count=20)
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert "EXCESS_FILES" in details.get("secondary_tags", [])
+        assert details["expected_count"] == 10
+        assert details["actual_count"] == 20
+
+    def test_ok_with_failed_crawl_residue_tag(self, tmp_path):
+        # Real-world: crawl 4398 had success=0 but urls_crawled=108.
+        path = self._tar_with_files(tmp_path, payload_success=0, file_count=5)
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert "FAILED_CRAWL_WITH_RESIDUE" in details.get("secondary_tags", [])
+        assert details["expected_count"] == 0
+        assert details["actual_count"] == 5
+
+    def test_ok_with_count_drift_within_tolerance(self, tmp_path):
+        # 20 expected, 19 actual = 5% deficit, exactly at default tolerance.
+        path = self._tar_with_files(tmp_path, payload_success=20, file_count=19)
+        category, details = ga.inspect_archive(path, row_count_tolerance=0.05)
+        assert category == ga.OK
+        assert "COUNT_DRIFT" in details.get("secondary_tags", [])
+        assert details["expected_count"] == 20
+        assert details["actual_count"] == 19
+
+    def test_row_count_mismatch_above_tolerance(self, tmp_path):
+        # 20 expected, 15 actual = 25% deficit, well above 5% tolerance.
+        path = self._tar_with_files(tmp_path, payload_success=20, file_count=15)
+        category, details = ga.inspect_archive(path, row_count_tolerance=0.05)
+        assert category == ga.ROW_COUNT_MISMATCH
+        assert "COUNT_DRIFT" not in details.get("secondary_tags", [])
+
+    def test_row_count_tolerance_cli_override(self):
+        args = ga.parse_args(["--bucket", "b", "--row-count-tolerance", "0.10"])
+        assert args.row_count_tolerance == pytest.approx(0.10)
+
+    def test_row_count_tolerance_cli_default(self):
+        args = ga.parse_args(["--bucket", "b"])
+        assert args.row_count_tolerance == pytest.approx(0.05)
+
+
+class TestSnapshotUrlsCrawled:
+    """Tests for the Phase 2.1.5 fix: prefer _status_snapshot.json.urls_crawled
+    as the expected_count source over payload.success (which conflates main +
+    NFR + error crawl counts and has its own drift). Uses fallback only when
+    the snapshot is absent or the field is missing."""
+
+    def test_prefers_snapshot_urls_crawled_over_payload_success(self, tmp_path):
+        """When snapshot has urls_crawled, use it — even if payload.success
+        disagrees (the common NFR-conflation pattern)."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=250),  # Node-inflated (main + NFR)
+            "_completion_marker.json": _marker(),
+            "_status_snapshot.json": _snapshot(domain="example.com", urls_crawled=50),
+            **{f"storage/datasets/example.com/u{i}.json": b'{}' for i in range(50)},
+            # NFR subdir present — audit counts only the main dir
+            **{f"storage/datasets/nfr-example.com/n{i}.json": b'{}' for i in range(200)},
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == 50
+        assert details["actual_count"] == 50
+        assert details.get("expected_count_source") == "snapshot.urls_crawled"
+        assert "EXCESS_FILES" not in details.get("secondary_tags", [])
+        assert "COUNT_DRIFT" not in details.get("secondary_tags", [])
+
+    def test_falls_back_to_payload_when_snapshot_missing(self, tmp_path):
+        """No snapshot → use payload.success — existing Phase 2.1 logic applies."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=3),
+            "_completion_marker.json": _marker(),
+            # intentionally no _status_snapshot.json
+            "storage/datasets/example.com/a.json": b'{}',
+            "storage/datasets/example.com/b.json": b'{}',
+            "storage/datasets/example.com/c.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == 3
+        assert details.get("expected_count_source") == "payload.success"
+
+    def test_falls_back_to_payload_when_snapshot_lacks_urls_crawled(self, tmp_path):
+        """Snapshot present but no urls_crawled field → fall back to payload."""
+        snapshot_no_urls = _json.dumps({
+            "crawl_id": "4365",
+            "status": "finished",
+            "domain": "example.com",
+            # urls_crawled intentionally missing
+        }).encode()
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=2),
+            "_completion_marker.json": _marker(),
+            "_status_snapshot.json": snapshot_no_urls,
+            "storage/datasets/example.com/a.json": b'{}',
+            "storage/datasets/example.com/b.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == 2
+        assert details.get("expected_count_source") == "payload.success"
+
+    def test_snapshot_urls_crawled_zero_with_files_still_tags_residue(self, tmp_path):
+        """When snapshot.urls_crawled=0 but files exist, the FAILED_CRAWL_WITH_RESIDUE
+        tag still fires (consistent with the 4398 investigation pattern)."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=0),
+            "_completion_marker.json": _marker(),
+            "_status_snapshot.json": _snapshot(domain="example.com", urls_crawled=0),
+            "storage/datasets/example.com/residue.json": b'{}',
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == 0
+        assert details["actual_count"] == 1
+        assert "FAILED_CRAWL_WITH_RESIDUE" in details.get("secondary_tags", [])
+        assert details.get("expected_count_source") == "snapshot.urls_crawled"
+
+    def test_snapshot_small_drift_tags_count_drift(self, tmp_path):
+        """When snapshot.urls_crawled > actual but within tolerance, tag COUNT_DRIFT."""
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=100),
+            "_completion_marker.json": _marker(),
+            "_status_snapshot.json": _snapshot(domain="example.com", urls_crawled=20),
+            **{f"storage/datasets/example.com/u{i}.json": b'{}' for i in range(19)},
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == 20
+        assert details["actual_count"] == 19
+        assert "COUNT_DRIFT" in details.get("secondary_tags", [])
+
+    def test_nfr_conflation_pattern_from_1806(self, tmp_path):
+        """Reproduces the 1806/selux.com live-ops pattern at reduced scale:
+        Node success=main+NFR, snapshot.urls_crawled=main only, actual main files=main.
+        With Phase 2.1.5 preference, OK with no tag."""
+        main_count = 30
+        nfr_count = 100
+        path = _build_tar(tmp_path, {
+            "_callback_payload.json": _payload(success=main_count + nfr_count),
+            "_completion_marker.json": _marker(),
+            "_status_snapshot.json": _snapshot(domain="selux.com", urls_crawled=main_count),
+            **{f"storage/datasets/selux.com/u{i}.json": b'{}' for i in range(main_count)},
+            **{f"storage/datasets/nfr-selux.com/n{i}.json": b'{}' for i in range(nfr_count)},
+        })
+        category, details = ga.inspect_archive(path)
+        assert category == ga.OK
+        assert details["expected_count"] == main_count
+        assert details["actual_count"] == main_count
+        assert details["expected_count_source"] == "snapshot.urls_crawled"
+        assert not details.get("secondary_tags")

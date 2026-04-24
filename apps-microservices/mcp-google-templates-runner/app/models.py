@@ -9,6 +9,9 @@ class SpawnRequest(BaseModel):
     env: dict[str, str] = Field(default_factory=dict, max_length=64)
     credentials_json: str = Field(..., max_length=65536)
     credentials_hash: str = Field(..., min_length=1, max_length=128)
+    # Optional port hint — gateway sends the last-known port on startup sync
+    # so the runner can keep instances on stable ports across restarts.
+    runner_port: int | None = Field(default=None, ge=1024, le=65535)
 
 
 class SpawnResponse(BaseModel):

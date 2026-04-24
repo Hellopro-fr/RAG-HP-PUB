@@ -17,9 +17,11 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
+	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
+	"github.com/hellopro/mcp-gateway/internal/slack"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
@@ -79,6 +81,8 @@ type Handler struct {
 	// per-token Leexi filter UI and the runtime header injection. nil when the
 	// integration is disabled (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
 	leexiAdmin *leexiadmin.Client
+	// ringoverAdmin is the Ringover counterpart of leexiAdmin.
+	ringoverAdmin *ringoveradmin.Client
 	// uploadDir is the base directory for uploaded files (icons, etc.)
 	uploadDir string
 	// installGuideRepo is the repository for install guide CRUD (executors + configs).
@@ -92,6 +96,13 @@ type Handler struct {
 	instanceRepo *repository.InstanceRepo
 	runner       *runnerclient.Client
 	config       *config.Config
+	// slack is the optional Slack notification client. nil disables all
+	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
+	slack *slack.Client
+	// instructionRepo backs the /api/v1/llm-instructions CRUD. The same repo
+	// is shared with scopetoken/oauth2 middleware to resolve per-scope
+	// instructions at cache-miss time.
+	instructionRepo *repository.InstructionRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -150,6 +161,12 @@ func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
 	h.leexiAdmin = client
 }
 
+// SetRingoverAdmin wires the Ringover admin client used by the Ringover-scoped
+// token filter UI and the proxy at /api/v1/ringover/*. Pass nil to disable.
+func (h *Handler) SetRingoverAdmin(client *ringoveradmin.Client) {
+	h.ringoverAdmin = client
+}
+
 // SetUploadDir sets the base directory for uploaded files.
 func (h *Handler) SetUploadDir(dir string) {
 	h.uploadDir = dir
@@ -158,6 +175,16 @@ func (h *Handler) SetUploadDir(dir string) {
 // SetInstallGuideRepo sets the install guide repository.
 func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
 	h.installGuideRepo = repo
+}
+
+// SetSlack wires the Slack notifications client. Pass nil to disable.
+func (h *Handler) SetSlack(client *slack.Client) {
+	h.slack = client
+}
+
+// SetInstructionRepo wires the LLM-instruction repository.
+func (h *Handler) SetInstructionRepo(repo *repository.InstructionRepo) {
+	h.instructionRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -298,25 +325,20 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Opt-in filter used by the docs-admin view: hide servers that are backed
-	// by a template instance. Template catalogs manage their own docs flow, so
-	// exposing template-backed servers in the docs admin would be confusing.
-	if r.URL.Query().Get("exclude_templates") == "true" && h.instanceRepo != nil {
-		if instances, ierr := h.instanceRepo.ListAll(); ierr == nil {
-			templateBacked := make(map[string]struct{}, len(instances))
-			for _, inst := range instances {
-				templateBacked[inst.MCPServerID] = struct{}{}
+	// Opt-in filter used by the docs-admin view: hide servers that originated
+	// from a template (stdio instance OR http_batch sheet import). Template
+	// catalogs manage their own docs flow, so exposing template-origin servers
+	// in the docs admin would be confusing. The filter reads the first-class
+	// template_slug column so both template paths are covered uniformly
+	// without a join against template_instances.
+	if r.URL.Query().Get("exclude_templates") == "true" {
+		filtered := servers[:0]
+		for _, s := range servers {
+			if s.TemplateSlug == "" {
+				filtered = append(filtered, s)
 			}
-			filtered := servers[:0]
-			for _, s := range servers {
-				if _, ok := templateBacked[s.ID]; !ok {
-					filtered = append(filtered, s)
-				}
-			}
-			servers = filtered
-		} else {
-			log.Printf("[api] exclude_templates list instances failed (returning unfiltered): %v", ierr)
 		}
+		servers = filtered
 	}
 
 	resp := ListServersResponse{
@@ -722,9 +744,24 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 		dbSrv.Prompts = append(dbSrv.Prompts, sp)
 	}
 
-	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
+	prevToolCount, err := h.repo.SaveDiscoveredCapabilities(dbSrv)
+	if err != nil {
 		log.Printf("[api] save capabilities error for %s: %v", id, err)
 		return
+	}
+	// Regression: backend used to expose tools and now exposes none. Almost
+	// always a misconfigured backend — alert so an operator can investigate.
+	if prevToolCount > 0 && len(dbSrv.Tools) == 0 {
+		log.Printf("[api] tools regression on server %s: prev=%d, now=0", id, prevToolCount)
+		name := dbSrv.ServerName
+		if name == "" {
+			name = backend.Name
+		}
+		h.slack.Notify(slack.ToolsRegressionEvent{
+			ServerID:   id,
+			ServerName: name,
+			PrevCount:  prevToolCount,
+		})
 	}
 	// Sync tool active states from DB back to registry (SaveDiscoveredCapabilities
 	// preserves is_active for existing tools, but the registry has all tools as active)
@@ -815,6 +852,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		DocSlug:             srv.DocSlug,
 		DocDescription:      srv.DocDescription,
 		DocConfigGuide:      srv.DocConfigGuide,
+		TemplateSlug:        srv.TemplateSlug,
 		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,

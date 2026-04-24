@@ -30,22 +30,26 @@ def search_by_text(req: SearchTextRequest):
     (ex: PHP front www.hellopro.fr).
 
     Pipeline :
-      1. Appel api-embedding-service pour obtenir le vecteur CamemBERT 1024
-      2. Delegue au pipeline /search existant (detection categorie + hybrid + rerank)
+      1. Si `use_vector=True` (defaut) : appelle api-embedding-service pour
+         obtenir le vecteur CamemBERT 1024 et delegue au pipeline hybride.
+      2. Si `use_vector=False` : skip l'embedding, pipeline pur BM25 +
+         name_match + cat_match (plus rapide, utile pour A/B test).
 
     Retourne la meme structure que /search (SearchResponse).
     """
-    # 1. Embed
-    try:
-        vector = embed_text(req.query)
-    except Exception as e:
-        logger.error("Embedding failed for query=%r: %s", req.query, e)
-        raise HTTPException(
-            status_code=503,
-            detail=f"Embedding service unavailable: {e}",
-        )
+    vector = None
+    if req.use_vector:
+        # 1. Embed
+        try:
+            vector = embed_text(req.query)
+        except Exception as e:
+            logger.error("Embedding failed for query=%r: %s", req.query, e)
+            raise HTTPException(
+                status_code=503,
+                detail=f"Embedding service unavailable: {e}",
+            )
 
-    # 2. Search (reutilise le service existant)
+    # 2. Search (reutilise le service existant, vector=None si use_vector=False)
     try:
         return do_search(
             query=req.query,
@@ -53,6 +57,7 @@ def search_by_text(req: SearchTextRequest):
             collection=req.collection,
             top_k=req.top_k,
             candidates=req.candidates,
+            offset=req.offset or 0,
             apply_filter_by_category=req.apply_filter_by_category,
         )
     except Exception as e:

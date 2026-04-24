@@ -57,6 +57,11 @@ type SheetImportRequest struct {
 	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"` // Tool prefix applied to all servers (overrides sheet column)
 	FixedIcon            string `json:"fixed_icon,omitempty"`             // Icon applied to all servers (overrides sheet column)
 	DisableDocumentation bool   `json:"disable_documentation,omitempty"` // When true, imported servers have no documentation page
+	// TemplateSlug is set when the import was launched from the templates
+	// catalog (e.g. custom-http). Empty for regular server imports from
+	// /servers/import-google. Stamped on every created mcp_servers row so the
+	// docs / docs-admin filters can exclude these rows uniformly.
+	TemplateSlug string `json:"template_slug,omitempty"`
 }
 
 // SheetImportResultEntry represents the import status of a single row.
@@ -65,6 +70,29 @@ type SheetImportResultEntry struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"` // "imported", "skipped", "error"
 	Message string `json:"message,omitempty"`
+}
+
+// InstanceSheetImportRequest is the request body for
+// POST /api/v1/google/sheets/import-instances. Mirrors the server-import shape
+// (SheetImportRequest) but scoped to a single template: every row becomes one
+// template instance (with its own credentials + extra_env).
+type InstanceSheetImportRequest struct {
+	SpreadsheetID string `json:"spreadsheet_id"`
+	SheetName     string `json:"sheet_name"`
+	TemplateSlug  string `json:"template_slug"`
+	// Column mapping — all required, all non-empty for the import to proceed.
+	NameColumn        string `json:"name_column"`
+	CredentialsColumn string `json:"credentials_column"`
+	// ExtraEnvColumns maps a template's required_extra_env key to the sheet
+	// column header that holds its value. One entry per schema field; the
+	// handler validates that every required key has a non-empty mapping.
+	ExtraEnvColumns map[string]string `json:"extra_env_columns,omitempty"`
+	// Optional overrides applied to EVERY row (mirror server-import semantics).
+	AutoDiscover    bool   `json:"auto_discover,omitempty"`
+	FixedTags       string `json:"fixed_tags,omitempty"` // comma-separated
+	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"`
+	FixedIcon       string `json:"fixed_icon,omitempty"`
+	NamePrefix      string `json:"name_prefix,omitempty"`
 }
 
 // SheetImportResponse is the response for POST /api/v1/google/sheets/import.

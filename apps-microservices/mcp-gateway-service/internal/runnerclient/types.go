@@ -12,6 +12,11 @@ type SpawnRequest struct {
 	Env             map[string]string `json:"env"`
 	CredentialsJSON string            `json:"credentials_json"` // raw SA JSON
 	CredentialsHash string            `json:"credentials_hash"` // sha256 hex
+	// RunnerPort, when non-nil, is the last-known port the runner used for
+	// this instance. The runner tries to re-allocate the same port so the
+	// gateway's stored mcp_servers.url stays valid across runner restarts.
+	// Nil for fresh POST /admin/instances calls.
+	RunnerPort *int `json:"runner_port,omitempty"`
 }
 
 type SpawnResponse struct {

@@ -91,6 +91,7 @@ func toTemplateResponse(t db.Template, count int) TemplateResponse {
 		RequiredExtraEnv: t.RequiredExtraEnv,
 		ToolPrefix:       t.ToolPrefix,
 		Tags:             t.Tags,
+		Kind:             t.Kind,
 		InstanceCount:    count,
 	}
 }
@@ -210,6 +211,15 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "unknown template: " + slug})
 		return
 	}
+	// Only "stdio" templates create per-instance subprocesses. http_batch rows
+	// are admin shortcuts that bulk-create full HTTP mcp_servers via the
+	// existing server-import flow — they cannot accept SA JSON nor spawn.
+	if tpl.Kind != "" && tpl.Kind != "stdio" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: fmt.Sprintf("template %s does not support instance creation", tpl.Slug),
+		})
+		return
+	}
 
 	// Parse extra_env
 	var extraEnv map[string]string
@@ -263,10 +273,90 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Delegate to the shared spec-based flow.
+	createdBy := auth.UserEmailFromContext(r.Context())
+	freshInst, instanceURL, err := h.createInstanceFromSpec(
+		r.Context(), tpl, name, credBytes, extraEnv, tags, icon, toolPrefixOverride, autoDiscover, createdBy,
+	)
+	if err != nil {
+		status, msg := classifyCreateInstanceError(err)
+		writeJSON(w, status, ErrorResponse{Error: msg})
+		return
+	}
+	writeJSON(w, http.StatusCreated, toInstanceResponse(*freshInst, "", instanceURL))
+}
+
+// createInstanceErrorKind categorizes failures surfaced by createInstanceFromSpec
+// so callers can map them to HTTP status codes (handleCreateInstance) or row
+// statuses (handleImportInstancesFromSheet).
+type createInstanceErrorKind int
+
+const (
+	createInstanceErrDB createInstanceErrorKind = iota
+	createInstanceErrSpawn
+	createInstanceErrUnhealthy
+	createInstanceErrMCPServerInsert
+)
+
+// createInstanceError carries the failure stage + underlying cause so the
+// calling HTTP handler can produce a specific status code and log the root
+// reason. Rollback of template_instances + runner kill is already performed
+// internally before this error is returned.
+type createInstanceError struct {
+	Kind createInstanceErrorKind
+	Err  error
+}
+
+func (e *createInstanceError) Error() string { return e.Err.Error() }
+func (e *createInstanceError) Unwrap() error { return e.Err }
+
+// classifyCreateInstanceError maps a createInstanceError to a (status, message)
+// pair matching the legacy single-instance behaviour. Any non-typed error is
+// treated as a generic 500.
+func classifyCreateInstanceError(err error) (int, string) {
+	var cerr *createInstanceError
+	if errors.As(err, &cerr) {
+		switch cerr.Kind {
+		case createInstanceErrDB:
+			return http.StatusInternalServerError, "create instance failed"
+		case createInstanceErrSpawn:
+			return http.StatusBadGateway, "runner unavailable — see server logs"
+		case createInstanceErrUnhealthy:
+			return http.StatusBadGateway, "instance failed to become healthy"
+		case createInstanceErrMCPServerInsert:
+			return http.StatusInternalServerError, "create mcp_server failed"
+		}
+	}
+	return http.StatusInternalServerError, err.Error()
+}
+
+// createInstanceFromSpec runs the full create flow (DB insert → runner spawn →
+// TCP ready → mcp_servers insert → tags → auto-discover) from a pre-validated
+// spec. Returns the refreshed TemplateInstance and the in-cluster URL, or a
+// *createInstanceError describing where the flow aborted. Rollback of
+// template_instances + runner kill is handled internally before any error
+// returns, so callers do not need to clean up on failure.
+//
+// Preconditions (callers MUST validate): tpl non-nil, name non-empty,
+// credentialsJSON already passed validation.ValidateServiceAccountJSON,
+// extraEnv already passed validateExtraEnv against tpl.RequiredExtraEnv,
+// toolPrefixOverride already alphanumeric-validated.
+func (h *Handler) createInstanceFromSpec(
+	ctx context.Context,
+	tpl *db.Template,
+	name string,
+	credentialsJSON []byte,
+	extraEnv map[string]string,
+	tags []string,
+	icon string,
+	toolPrefixOverride string,
+	autoDiscover bool,
+	createdBy string,
+) (*db.TemplateInstance, string, error) {
 	// IDs and hash
 	instanceID := uuid.New().String()
 	mcpServerID := instanceID // reuse the same UUID per spec
-	hash := sha256.Sum256(credBytes)
+	hash := sha256.Sum256(credentialsJSON)
 	hashHex := hex.EncodeToString(hash[:])
 
 	// Decode stdio_args + compute env. Initialise to an empty slice so a
@@ -290,27 +380,26 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	extraEnvJSON, _ := json.Marshal(extraEnv)
 	inst := db.TemplateInstance{
 		ID:              instanceID,
-		TemplateSlug:    slug,
+		TemplateSlug:    tpl.Slug,
 		Name:            name,
 		CredentialsHash: hashHex,
 		ExtraEnv:        extraEnvJSON,
 		RunnerStatus:    "pending",
 		MCPServerID:     mcpServerID,
-		CreatedBy:       auth.UserEmailFromContext(r.Context()),
+		CreatedBy:       createdBy,
 	}
-	if err := h.instanceRepo.Create(&inst, credBytes); err != nil {
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create instance failed"})
-		return
+	if err := h.instanceRepo.Create(&inst, credentialsJSON); err != nil {
+		return nil, "", &createInstanceError{Kind: createInstanceErrDB, Err: err}
 	}
 
 	// 2) Spawn via the runner.
-	resp, err := h.runner.Spawn(r.Context(), runnerclient.SpawnRequest{
+	resp, err := h.runner.Spawn(ctx, runnerclient.SpawnRequest{
 		InstanceID:      instanceID,
-		TemplateSlug:    slug,
+		TemplateSlug:    tpl.Slug,
 		StdioCommand:    tpl.StdioCommand,
 		StdioArgs:       stdioArgs,
 		Env:             env,
-		CredentialsJSON: string(credBytes),
+		CredentialsJSON: string(credentialsJSON),
 		CredentialsHash: hashHex,
 	})
 	if err != nil {
@@ -318,8 +407,7 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
 			log.Printf("[templates][WARN] could not roll back instance row %s: %v", instanceID, delErr)
 		}
-		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
-		return
+		return nil, "", &createInstanceError{Kind: createInstanceErrSpawn, Err: err}
 	}
 
 	// Compute the in-cluster URL. The gateway and runner share a Docker network.
@@ -332,16 +420,15 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	// Spawn call returns as soon as the supervisor launches the child, but
 	// mcp-proxy needs a beat to bind. Without this, auto-discover and the
 	// first client request both race the startup.
-	if err := waitForTCPReady(r.Context(), hostPort, 15*time.Second); err != nil {
+	if err := waitForTCPReady(ctx, hostPort, 15*time.Second); err != nil {
 		log.Printf("[templates] instance %s never became TCP-ready at %s: %v", instanceID, hostPort, err)
-		if kerr := h.runner.Kill(r.Context(), instanceID); kerr != nil {
+		if kerr := h.runner.Kill(ctx, instanceID); kerr != nil {
 			log.Printf("[templates][WARN] kill after unhealthy startup failed for %s: %v", instanceID, kerr)
 		}
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
 			log.Printf("[templates][WARN] could not roll back unhealthy instance row %s: %v", instanceID, delErr)
 		}
-		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "instance failed to become healthy"})
-		return
+		return nil, "", &createInstanceError{Kind: createInstanceErrUnhealthy, Err: err}
 	}
 
 	// 4) Insert mcp_servers row now that we know the instance is live.
@@ -357,23 +444,26 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		HealthStatus:        "healthy",
 		ToolPrefix:          firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix),
 		Icon:                firstNonEmpty(icon, tpl.Icon),
+		// TemplateSlug flags this row as template-origin so ListWithDocs,
+		// GetByDocSlug and the docs-admin exclude_templates filter can all
+		// skip it via a single column predicate.
+		TemplateSlug: tpl.Slug,
 		// Generate a unique doc_slug so the UNIQUE index on mcp_servers is
 		// satisfied — empty strings would collide on the second row. The
 		// slug is never surfaced: ServerRepo.ListWithDocs, GetByDocSlug and
 		// the docs-admin filter all exclude template-backed servers.
 		DocSlug:   generateDocSlug(tpl.Name+"-"+name, mcpServerID),
-		CreatedBy: auth.UserEmailFromContext(r.Context()),
+		CreatedBy: createdBy,
 	}
 	if err := h.repo.Create(&mcpSrv); err != nil {
 		log.Printf("[templates] create mcp_server failed for %s: %v", mcpServerID, err)
-		if kerr := h.runner.Kill(r.Context(), instanceID); kerr != nil {
+		if kerr := h.runner.Kill(ctx, instanceID); kerr != nil {
 			log.Printf("[templates][WARN] kill after mcp_server insert failure for %s: %v", instanceID, kerr)
 		}
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
 			log.Printf("[templates][WARN] could not roll back instance row %s: %v", instanceID, delErr)
 		}
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create mcp_server failed"})
-		return
+		return nil, "", &createInstanceError{Kind: createInstanceErrMCPServerInsert, Err: err}
 	}
 
 	// Tags (best-effort).
@@ -392,7 +482,7 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	// headers — the runner proxies with the decrypted SA JSON internally.
 	if autoDiscover && h.gw != nil && h.registry != nil {
 		log.Printf("[templates] auto-discover for %s at %s", mcpServerID, instanceURL)
-		if err := h.gw.DiscoverAndRegister(r.Context(), mcpServerID, instanceURL, nil); err != nil {
+		if err := h.gw.DiscoverAndRegister(ctx, mcpServerID, instanceURL, nil); err != nil {
 			log.Printf("[templates] auto-discover failed for %s: %v", mcpServerID, err)
 			_ = h.repo.UpdateHealth(mcpServerID, "unhealthy", err.Error())
 		} else {
@@ -405,14 +495,15 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 7) Return 201 — re-fetch to populate CreatedAt/UpdatedAt.
+	// 7) Re-fetch to populate CreatedAt/UpdatedAt. Fallback to the in-memory
+	// row if the re-fetch fails (unlikely but survivable).
 	freshInst, err := h.instanceRepo.GetByID(instanceID)
 	if err != nil {
 		inst.RunnerPort = &port
 		inst.RunnerStatus = "running"
 		freshInst = &inst
 	}
-	writeJSON(w, http.StatusCreated, toInstanceResponse(*freshInst, "", instanceURL))
+	return freshInst, instanceURL, nil
 }
 
 // waitForTCPReady dials hostPort with an exponential-ish backoff until a
@@ -710,6 +801,7 @@ func toTemplateExportRow(t db.Template) TemplateExportRow {
 		Icon:         t.Icon,
 		StdioCommand: t.StdioCommand,
 		ToolPrefix:   t.ToolPrefix,
+		Kind:         t.Kind,
 		IsActive:     t.IsActive,
 	}
 	if len(t.StdioArgs) > 0 {
@@ -767,9 +859,22 @@ func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) 
 
 	rows := make([]db.Template, 0, len(payload.Templates))
 	for idx, row := range payload.Templates {
-		if strings.TrimSpace(row.Slug) == "" || strings.TrimSpace(row.Name) == "" || strings.TrimSpace(row.StdioCommand) == "" {
+		// slug + name are always required. stdio_command is required for
+		// "stdio" templates (which spawn subprocesses); "http_batch" rows carry
+		// no stdio command.
+		kind := row.Kind
+		if kind == "" {
+			kind = "stdio"
+		}
+		if strings.TrimSpace(row.Slug) == "" || strings.TrimSpace(row.Name) == "" {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{
-				Error: fmt.Sprintf("template at index %d: slug, name, and stdio_command are required", idx),
+				Error: fmt.Sprintf("template at index %d: slug and name are required", idx),
+			})
+			return
+		}
+		if kind == "stdio" && strings.TrimSpace(row.StdioCommand) == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error: fmt.Sprintf("template at index %d: stdio_command is required for stdio templates", idx),
 			})
 			return
 		}
@@ -793,6 +898,12 @@ func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) 
 // json.RawMessage for GORM. Any field that fails to marshal surfaces a
 // per-slug 400 response via a typed error.
 func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
+	// Default unset `kind` to "stdio" for backward compatibility with dumps
+	// created before the column existed.
+	kind := row.Kind
+	if kind == "" {
+		kind = "stdio"
+	}
 	t := db.Template{
 		Slug:         row.Slug,
 		Name:         row.Name,
@@ -800,6 +911,7 @@ func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
 		Icon:         row.Icon,
 		StdioCommand: row.StdioCommand,
 		ToolPrefix:   row.ToolPrefix,
+		Kind:         kind,
 		IsActive:     row.IsActive,
 	}
 	var err error

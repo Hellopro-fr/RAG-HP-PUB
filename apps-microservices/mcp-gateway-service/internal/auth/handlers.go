@@ -11,7 +11,29 @@ import (
 	"time"
 
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/slack"
 )
+
+// notifyLoginFailure surfaces a rejected admin-UI login attempt to Slack.
+// Rate-limited per (client_ip, username) via the shared cooldown limiter so
+// brute-force loops don't flood the channel. Safe to call with a nil client.
+func notifyLoginFailure(slackClient *slack.Client, r *http.Request, username, reason string) {
+	if slackClient == nil {
+		return
+	}
+	ip := slack.ClientIP(r)
+	// Key on (ip, username) rather than (ip, endpoint) so a scanner cycling
+	// through different usernames from the same IP still gets one alert per
+	// username-attempt in the cooldown window.
+	if !slackClient.AllowAuthAlert(ip, "login:"+username) {
+		return
+	}
+	slackClient.Notify(slack.UnauthorizedLoginEvent{
+		Username: username,
+		ClientIP: ip,
+		Reason:   reason,
+	})
+}
 
 // hellopro auth API response
 type HelloProAuthResponse struct {
@@ -23,13 +45,15 @@ type HelloProAuthResponse struct {
 
 // RegisterHandlers mounts /login and /logout on the mux.
 // userRepo is optional: when non-nil, each successful login upserts the user record.
-func RegisterHandlers(mux *http.ServeMux, cfg Config, userRepo *repository.UserRepo) {
+// slackClient is optional: when non-nil, failed login attempts fire an
+// UnauthorizedLoginEvent (rate-limited per (ip, username)).
+func RegisterHandlers(mux *http.ServeMux, cfg Config, userRepo *repository.UserRepo, slackClient *slack.Client) {
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handleLoginPage(w, r, cfg)
 		case http.MethodPost:
-			handleLoginAction(w, r, cfg, userRepo)
+			handleLoginAction(w, r, cfg, userRepo, slackClient)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -57,7 +81,7 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request, cfg Config) {
 	w.Write([]byte(`{"message":"Login page is served by the Vue SPA frontend"}`))
 }
 
-func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userRepo *repository.UserRepo) {
+func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userRepo *repository.UserRepo, slackClient *slack.Client) {
 	// Detect if this is a JSON API request (from Vue frontend) vs form submit (from Go template)
 	isJSON := strings.Contains(r.Header.Get("Content-Type"), "application/json")
 
@@ -114,6 +138,7 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 
 	if err != nil {
 		log.Printf("[auth] hellopro auth failed for %s: %v", username, err)
+		notifyLoginFailure(slackClient, r, username, "hellopro auth error: "+err.Error())
 		if isJSON {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -125,6 +150,7 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 	}
 
 	if !authResp.Success {
+		notifyLoginFailure(slackClient, r, username, "invalid credentials")
 		if isJSON {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -152,6 +178,7 @@ func handleLoginAction(w http.ResponseWriter, r *http.Request, cfg Config, userR
 	// Check if user is allowed to access the UI (from DB is_allowed field)
 	if !isAllowed {
 		log.Printf("[auth] user %s (%s) is not allowed (is_allowed=false)", authResp.DisplayName, authResp.Email)
+		notifyLoginFailure(slackClient, r, authResp.Email, "valid user but not in allowlist (is_allowed=false)")
 		if isJSON {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)

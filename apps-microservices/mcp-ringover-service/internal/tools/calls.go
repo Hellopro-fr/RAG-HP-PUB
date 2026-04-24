@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/hellopro/mcp-ringover/internal/mcp"
+	"github.com/hellopro/mcp-ringover/internal/ringover"
+	"github.com/hellopro/mcp-ringover/internal/transport"
 )
 
 const getCallsDescription = "List recent calls from Ringover with optional limit"
@@ -25,6 +27,21 @@ func handleGetCalls(ctx context.Context, clients *Clients, args map[string]any) 
 		if f, ok := v.(float64); ok {
 			limit = int(f)
 		}
+	}
+
+	if allowed, restricted := transport.AllowedUserIDsFromContext(ctx); restricted {
+		if len(allowed) == 0 {
+			return errorResult("access denied: token scope grants access to no Ringover users"), nil
+		}
+		data, err := clients.Ringover.PostCalls(ctx, ringover.PostCallsRequest{
+			Filter:     "ADVANCED",
+			LimitCount: limit,
+			Advanced:   &ringover.AdvancedCallsFilter{Users: allowed},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("PostCalls: %w", err)
+		}
+		return rawJSONResult(data), nil
 	}
 
 	data, err := clients.Ringover.GetCalls(ctx, limit)
@@ -74,6 +91,25 @@ func handleListCallsByDate(ctx context.Context, clients *Clients, args map[strin
 		}
 	}
 
+	// When the gateway has declared a user scope, use POST /calls with
+	// advanced.users for server-side filtering. GET /calls has no user filter.
+	if allowed, restricted := transport.AllowedUserIDsFromContext(ctx); restricted {
+		if len(allowed) == 0 {
+			return errorResult("access denied: token scope grants access to no Ringover users"), nil
+		}
+		data, err := clients.Ringover.PostCalls(ctx, ringover.PostCallsRequest{
+			Filter:     "ADVANCED",
+			StartDate:  startDate,
+			EndDate:    endDate,
+			LimitCount: limit,
+			Advanced:   &ringover.AdvancedCallsFilter{Users: allowed},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("PostCalls: %w", err)
+		}
+		return rawJSONResult(data), nil
+	}
+
 	data, err := clients.Ringover.ListCallsByDate(ctx, startDate, endDate, limit)
 	if err != nil {
 		return nil, fmt.Errorf("ListCallsByDate: %w", err)
@@ -119,7 +155,33 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 		}
 	}
 
-	data, err := clients.Ringover.SearchCalls(ctx, callType, phoneNumber, userID, limit)
+	// Resolve the effective user-id filter: intersect caller filter with scope.
+	effectiveIDs, err := effectiveUserIDs(ctx, userID)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// Path 1: caller or scope narrows the filter to specific users → POST /calls.
+	// phone_number cannot be combined with POST /calls.advanced.users in the
+	// same request (the advanced sub-object only supports users/groups/etc.),
+	// so we prefer the user-scope filter and drop phone_number when both are
+	// specified. If no user scope, we keep the legacy GET path which accepts
+	// phone_number natively.
+	if len(effectiveIDs) > 0 {
+		data, err := clients.Ringover.PostCalls(ctx, ringover.PostCallsRequest{
+			Filter:     "ADVANCED",
+			CallType:   callTypeForPostCalls(callType),
+			LimitCount: limit,
+			Advanced:   &ringover.AdvancedCallsFilter{Users: effectiveIDs},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("PostCalls: %w", err)
+		}
+		return rawJSONResult(data), nil
+	}
+
+	// Path 2: unrestricted and no caller user_id → preserve the existing GET behaviour.
+	data, err := clients.Ringover.SearchCalls(ctx, callType, phoneNumber, "", limit)
 	if err != nil {
 		return nil, fmt.Errorf("SearchCalls: %w", err)
 	}
@@ -159,7 +221,12 @@ func handleGetCallStatsByUser(ctx context.Context, clients *Clients, args map[st
 	}
 	userID, _ := args["user_id"].(string)
 
-	data, err := clients.Ringover.GetCallStatsByUser(ctx, startDate, endDate, userID)
+	effectiveID, err := effectiveStatsUserID(ctx, userID)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	data, err := clients.Ringover.GetCallStatsByUser(ctx, startDate, endDate, effectiveID)
 	if err != nil {
 		return nil, fmt.Errorf("GetCallStatsByUser: %w", err)
 	}
@@ -189,6 +256,13 @@ func handleGetCallDetails(ctx context.Context, clients *Clients, args map[string
 	data, err := clients.Ringover.GetCallDetails(ctx, callID)
 	if err != nil {
 		return nil, fmt.Errorf("GetCallDetails: %w", err)
+	}
+
+	// Under a gateway-enforced scope, verify that the call belongs to an
+	// allowed user before returning it. /calls/{id} has no filter parameter,
+	// so ownership is checked post-fetch.
+	if err := checkCallOwnedByAllowed(ctx, extractCallUserID(data)); err != nil {
+		return errorResult(err.Error()), nil
 	}
 
 	return rawJSONResult(data), nil
