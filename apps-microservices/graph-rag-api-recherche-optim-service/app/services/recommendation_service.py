@@ -1937,11 +1937,11 @@ class RecommendationService:
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
             
             Cas éliminatoires (directement observables dans la fiche) :
-            - Usage fondamentalement incompatible (voir étape 2)
-            - Valeur numérique critique < 50% ou > 200% de la valeur cible
+            - Usage fondamentalement incompatible (voir étape 2) — ex: pont à vérins/enfoui ≠ pont 2 colonnes sur sol (systèmes d'installation non interchangeables) ; micro-tracteur (≤ 30 ch, usage jardinage/viticulture légère) ≠ tracteur agricole standard (≥ 50 ch, fenaison/labour) — incompatibilité retenue uniquement si directement lisible dans le titre ou descriptif
+            - Valeur numérique critique < 50% ou > 200% de la valeur cible — ex: produit 16 ch face à un besoin 75-100 CV = 21% de la borne basse → score 1 (la règle des 50% s'applique à la borne la plus basse de la plage cible)
             - Valeur textuelle **présente** et incompatible sur un critique (motorisation, interface, alimentation, norme…) — si absente : score 3, pas score 1
             - État neuf/occasion différent de ce que l'acheteur a demandé
-            
+
             **En cas de doute entre score 1 et score 2 → toujours score 2.** Un seul critère éliminatoire suffit pour le score 1, à condition d'être factuel.
             
             ### ÉTAPE 4 — Décisions

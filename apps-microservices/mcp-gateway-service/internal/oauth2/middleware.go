@@ -40,11 +40,15 @@ func notifyUnauthorized(slackClient *slack.Client, r *http.Request, reason strin
 // slackClient is optional; when non-nil it fires an UnauthorizedEvent on every
 // 401/403 this middleware emits (with per-(ip,endpoint) cooldown inside the
 // client so noisy scanners don't flood Slack).
+// instructionRepo is optional — when provided, the Bearer and scope-token
+// branches resolve each credential's LLM instructions on cache-miss so the
+// MCP initialize response can inject them.
 func CombinedMiddleware(
 	oauth2Cache *Cache,
 	oauth2Repo *repository.OAuth2Repo,
 	tokenCache *scopetoken.Cache,
 	tokenRepo *repository.TokenRepo,
+	instructionRepo *repository.InstructionRepo,
 	jwtSecret string,
 	publicURL string,
 	slackClient *slack.Client,
@@ -99,6 +103,27 @@ func CombinedMiddleware(
 						TTL:          client.AccessTokenTTL,
 					}
 
+					// Resolve LLM instruction rows on cache-miss (see
+					// scopetoken middleware for the equivalent on the
+					// X-MCP-Scope-Token path).
+					if instructionRepo != nil && len(client.Instructions) > 0 && len(serverIDs) > 0 {
+						allowedSlice := make([]string, 0, len(serverIDs))
+						for sid := range serverIDs {
+							allowedSlice = append(allowedSlice, sid)
+						}
+						rows, rerr := instructionRepo.ResolveForOAuth2Client(client.ID, allowedSlice)
+						if rerr == nil && len(rows) > 0 {
+							cc.Instructions = make([]CachedInstruction, 0, len(rows))
+							for _, row := range rows {
+								cc.Instructions = append(cc.Instructions, CachedInstruction{
+									ID: row.ID, Title: row.Title, Body: row.Body,
+								})
+							}
+						} else if rerr != nil {
+							log.Printf("[oauth2] resolve instructions for client %s: %v", client.ID, rerr)
+						}
+					}
+
 					// Decode persisted Leexi filter for runtime header injection.
 					cc.LeexiFilterMode = client.LeexiFilterMode
 					if len(client.LeexiAllowedUserUUIDs) > 0 {
@@ -106,6 +131,15 @@ func CombinedMiddleware(
 					}
 					if len(client.LeexiAllowedTeamUUIDs) > 0 {
 						_ = json.Unmarshal(client.LeexiAllowedTeamUUIDs, &cc.LeexiAllowedTeamUUIDs)
+					}
+
+					// Decode persisted Ringover filter (int arrays).
+					cc.RingoverFilterMode = client.RingoverFilterMode
+					if len(client.RingoverAllowedUserIDs) > 0 {
+						_ = json.Unmarshal(client.RingoverAllowedUserIDs, &cc.RingoverAllowedUserIDs)
+					}
+					if len(client.RingoverAllowedTeamIDs) > 0 {
+						_ = json.Unmarshal(client.RingoverAllowedTeamIDs, &cc.RingoverAllowedTeamIDs)
 					}
 
 					oauth2Cache.Set(clientID, cc)
@@ -129,11 +163,25 @@ func CombinedMiddleware(
 				if cc.Name != "" {
 					ctx = context.WithValue(ctx, scopetoken.ScopeNameContextKey, cc.Name)
 				}
+				if len(cc.Instructions) > 0 {
+					resolved := make([]scopetoken.ResolvedInstruction, 0, len(cc.Instructions))
+					for _, ci := range cc.Instructions {
+						resolved = append(resolved, scopetoken.ResolvedInstruction{ID: ci.ID, Title: ci.Title, Body: ci.Body})
+					}
+					ctx = context.WithValue(ctx, scopetoken.AllowedInstructionsContextKey, resolved)
+				}
 				if cc.LeexiFilterMode != "" && cc.LeexiFilterMode != "none" {
 					ctx = context.WithValue(ctx, scopetoken.LeexiFilterContextKey, &scopetoken.LeexiFilterContext{
 						Mode:             cc.LeexiFilterMode,
 						AllowedUserUUIDs: cc.LeexiAllowedUserUUIDs,
 						AllowedTeamUUIDs: cc.LeexiAllowedTeamUUIDs,
+					})
+				}
+				if cc.RingoverFilterMode != "" && cc.RingoverFilterMode != "none" {
+					ctx = context.WithValue(ctx, scopetoken.RingoverFilterContextKey, &scopetoken.RingoverFilterContext{
+						Mode:           cc.RingoverFilterMode,
+						AllowedUserIDs: cc.RingoverAllowedUserIDs,
+						AllowedTeamIDs: cc.RingoverAllowedTeamIDs,
 					})
 				}
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -144,7 +192,7 @@ func CombinedMiddleware(
 			scopeTokenHeader := r.Header.Get("X-MCP-Scope-Token")
 			if scopeTokenHeader != "" {
 				// Delegate to scope token middleware (always required)
-				scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, true, slackClient)
+				scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, instructionRepo, true, slackClient)
 				scopeMW(next).ServeHTTP(w, r)
 				return
 			}

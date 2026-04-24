@@ -8,15 +8,17 @@ import (
 
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
 
 // Gateway routes MCP JSON-RPC requests to the appropriate backend servers.
 type Gateway struct {
-	name       string
-	version    string
-	registry   *Registry
-	leexiAdmin *leexiadmin.Client // optional; nil disables team expansion
+	name          string
+	version       string
+	registry      *Registry
+	leexiAdmin    *leexiadmin.Client    // optional; nil disables Leexi team expansion
+	ringoverAdmin *ringoveradmin.Client // optional; nil disables Ringover team expansion
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -32,6 +34,12 @@ func New(name, version string, registry *Registry) *Gateway {
 // disable team expansion.
 func (g *Gateway) SetLeexiAdmin(c *leexiadmin.Client) {
 	g.leexiAdmin = c
+}
+
+// SetRingoverAdmin attaches the Ringover admin client used by ScopedGateway
+// to resolve "teams" filter mode into user IDs at request time.
+func (g *Gateway) SetRingoverAdmin(c *ringoveradmin.Client) {
+	g.ringoverAdmin = c
 }
 
 // DiscoverAndRegister connects to a backend MCP server, performs the handshake,

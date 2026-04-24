@@ -17,6 +17,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
+	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
@@ -80,6 +81,8 @@ type Handler struct {
 	// per-token Leexi filter UI and the runtime header injection. nil when the
 	// integration is disabled (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
 	leexiAdmin *leexiadmin.Client
+	// ringoverAdmin is the Ringover counterpart of leexiAdmin.
+	ringoverAdmin *ringoveradmin.Client
 	// uploadDir is the base directory for uploaded files (icons, etc.)
 	uploadDir string
 	// installGuideRepo is the repository for install guide CRUD (executors + configs).
@@ -96,6 +99,10 @@ type Handler struct {
 	// slack is the optional Slack notification client. nil disables all
 	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
 	slack *slack.Client
+	// instructionRepo backs the /api/v1/llm-instructions CRUD. The same repo
+	// is shared with scopetoken/oauth2 middleware to resolve per-scope
+	// instructions at cache-miss time.
+	instructionRepo *repository.InstructionRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -154,6 +161,12 @@ func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
 	h.leexiAdmin = client
 }
 
+// SetRingoverAdmin wires the Ringover admin client used by the Ringover-scoped
+// token filter UI and the proxy at /api/v1/ringover/*. Pass nil to disable.
+func (h *Handler) SetRingoverAdmin(client *ringoveradmin.Client) {
+	h.ringoverAdmin = client
+}
+
 // SetUploadDir sets the base directory for uploaded files.
 func (h *Handler) SetUploadDir(dir string) {
 	h.uploadDir = dir
@@ -167,6 +180,11 @@ func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
 // SetSlack wires the Slack notifications client. Pass nil to disable.
 func (h *Handler) SetSlack(client *slack.Client) {
 	h.slack = client
+}
+
+// SetInstructionRepo wires the LLM-instruction repository.
+func (h *Handler) SetInstructionRepo(repo *repository.InstructionRepo) {
+	h.instructionRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────

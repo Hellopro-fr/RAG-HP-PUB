@@ -51,6 +51,10 @@ type Config struct {
 	LeexiInternalURL string // LEEXI_INTERNAL_URL
 	LeexiAdminToken  string // LEEXI_ADMIN_TOKEN
 
+	// Ringover admin integration — symmetric to the Leexi fields above.
+	RingoverInternalURL string // RINGOVER_INTERNAL_URL
+	RingoverAdminToken  string // RINGOVER_ADMIN_TOKEN
+
 	// Google templates runner (mcp-google-templates-runner sidecar).
 	GoogleTemplatesRunnerURL        string // GOOGLE_TEMPLATES_RUNNER_URL
 	GoogleTemplatesRunnerAdminToken string // GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN
@@ -140,6 +144,9 @@ func Load() *Config {
 
 		LeexiInternalURL: os.Getenv("LEEXI_INTERNAL_URL"),
 		LeexiAdminToken:  os.Getenv("LEEXI_ADMIN_TOKEN"),
+
+		RingoverInternalURL: os.Getenv("RINGOVER_INTERNAL_URL"),
+		RingoverAdminToken:  os.Getenv("RINGOVER_ADMIN_TOKEN"),
 
 		GoogleTemplatesRunnerURL:        os.Getenv("GOOGLE_TEMPLATES_RUNNER_URL"),
 		GoogleTemplatesRunnerAdminToken: os.Getenv("GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN"),

@@ -125,11 +125,22 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
 	}
 
+	// ── LLM instruction routes ───────────────────────────────────────────────
+	if h.instructionRepo != nil {
+		apiMux.HandleFunc("/api/v1/llm-instructions", h.handleLLMInstructions)
+		apiMux.HandleFunc("/api/v1/llm-instructions/", h.handleLLMInstructionByID)
+	}
+
 	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
 	//    user/team picker). Always mounted; the handlers themselves return
 	//    503 when LEEXI_INTERNAL_URL / LEEXI_ADMIN_TOKEN are unset.
 	apiMux.HandleFunc("/api/v1/leexi/users", h.handleLeexiUsers)
 	apiMux.HandleFunc("/api/v1/leexi/teams", h.handleLeexiTeams)
+
+	// ── Ringover proxy routes (symmetric to Leexi). 503 when
+	//    RINGOVER_INTERNAL_URL / RINGOVER_ADMIN_TOKEN are unset.
+	apiMux.HandleFunc("/api/v1/ringover/users", h.handleRingoverUsers)
+	apiMux.HandleFunc("/api/v1/ringover/teams", h.handleRingoverTeams)
 
 	// ── Slack notifications admin routes ──────────────────────────────────────
 	// Status is always mounted; the handler reports enabled=false when the

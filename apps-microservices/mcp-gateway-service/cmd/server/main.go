@@ -23,11 +23,12 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/health"
+	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/slack"
@@ -150,7 +151,7 @@ func main() {
 
 	// Mount login/logout routes
 	if authCfg.Enabled {
-		auth.RegisterHandlers(mux, authCfg, userRepo)
+		auth.RegisterHandlers(mux, authCfg, userRepo, slackClient)
 		log.Println("[main] authentication enabled — login at /login")
 	}
 
@@ -169,6 +170,22 @@ func main() {
 	if leexiAdminClient.Enabled() {
 		gw.SetLeexiAdmin(leexiAdminClient)
 		log.Println("[main] Leexi admin client configured for ownership-scoped tokens")
+	}
+
+	// Ringover admin client — symmetric to Leexi. Empty env vars = disabled.
+	ringoverAdminClient := ringoveradmin.NewClient(cfg.RingoverInternalURL, cfg.RingoverAdminToken)
+	if ringoverAdminClient.Enabled() {
+		gw.SetRingoverAdmin(ringoverAdminClient)
+		log.Println("[main] Ringover admin client configured for ownership-scoped tokens")
+	}
+
+	// Instruction repo — shared by the API handler and the scope/oauth2
+	// middleware that resolves per-token/client LLM instructions at cache-miss.
+	// Declared outside the `if repo != nil` block so the scope factory below
+	// can close over it even when REST-API plumbing is skipped.
+	var instructionRepo *repository.InstructionRepo
+	if database != nil {
+		instructionRepo = repository.NewInstructionRepo(database)
 	}
 
 	// Monte les routes REST API si le repository est disponible
@@ -194,9 +211,11 @@ func main() {
 		apiHandler.SetUserRepo(userRepo)
 		apiHandler.SetAuditRepo(auditRepo)
 		apiHandler.SetLeexiAdmin(leexiAdminClient)
+		apiHandler.SetRingoverAdmin(ringoverAdminClient)
 		apiHandler.SetUploadDir(cfg.UploadDir)
 		apiHandler.SetInstallGuideRepo(installGuideRepo)
 		apiHandler.SetSlack(slackClient)
+		apiHandler.SetInstructionRepo(instructionRepo)
 
 		// Google Sheets import (optional — only enabled when GOOGLE_CLIENT_ID is set)
 		if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
@@ -245,9 +264,25 @@ func main() {
 		http.Redirect(w, r, "/", http.StatusMovedPermanently)
 	})
 
-	// Scope handler factory: creates a ScopedGateway for filtered access
-	scopeFactory := func(allowedIDs map[string]bool, allowedTools map[string]map[string]bool) transport.Handler {
-		return gateway.NewScopedGateway(gw, allowedIDs, allowedTools)
+	// Scope handler factory: creates a ScopedGateway for filtered access.
+	// Returns nil when no scope was validated by middleware (caller falls back
+	// to the unscoped gw handler).
+	scopeFactory := func(ctx context.Context) transport.Handler {
+		allowedIDs, ok := transport.AllowedServersFromContext(ctx)
+		if !ok {
+			return nil
+		}
+		allowedTools := transport.AllowedToolsFromContext(ctx)
+		var instructions []gateway.InstructionView
+		if resolved, ok := scopetoken.AllowedInstructionsFromContext(ctx); ok {
+			instructions = make([]gateway.InstructionView, 0, len(resolved))
+			for _, ri := range resolved {
+				instructions = append(instructions, gateway.InstructionView{
+					ID: ri.ID, Title: ri.Title, Body: ri.Body,
+				})
+			}
+		}
+		return gateway.NewScopedGateway(gw, allowedIDs, allowedTools, instructions)
 	}
 
 	// MCP transport mux (SSE + streamable HTTP) with scope filtering
@@ -260,7 +295,7 @@ func main() {
 	streamableServer.Register(mcpMux)
 
 	// Wrap MCP routes with combined OAuth2 + scope token middleware
-	combinedMW := oauth2pkg.CombinedMiddleware(oauth2Cache, oauth2Repo, tokenCache, tokenRepo, cfg.JWTSecret, cfg.GatewayPublicURL, slackClient)
+	combinedMW := oauth2pkg.CombinedMiddleware(oauth2Cache, oauth2Repo, tokenCache, tokenRepo, instructionRepo, cfg.JWTSecret, cfg.GatewayPublicURL, slackClient)
 	mux.Handle("/sse", combinedMW(mcpMux))
 	mux.Handle("/message", combinedMW(mcpMux))
 	mux.Handle("/mcp", combinedMW(mcpMux))

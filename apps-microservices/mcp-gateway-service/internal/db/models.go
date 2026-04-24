@@ -114,6 +114,90 @@ type ServerTag struct {
 
 func (ServerTag) TableName() string { return "server_tags" }
 
+// LLMInstruction is a reusable "page" of instruction content selected into
+// scope tokens or OAuth2 clients. A page contains an ordered list of rows
+// (LLMInstructionRow); each row has its own server scope and is rendered as
+// a `## <title>\n<body>` block in the MCP `initialize` response when any of
+// its linked servers overlap the active token/client's allowed set. The
+// page-level fields (title, description) are admin-only and never sent to
+// the LLM.
+//
+// Body is deprecated — retained as an always-empty column for backward
+// migration compatibility (MySQL AutoMigrate can't drop NOT NULL columns).
+// All instruction content now lives on LLMInstructionRow.
+type LLMInstruction struct {
+	ID          string    `gorm:"type:char(36);primaryKey" json:"id"`
+	Title       string    `gorm:"type:varchar(255);not null" json:"title"`
+	// Body is deprecated: the column is kept NOT NULL for backward-compatibility
+	// with records created before the row model landed. New code writes an
+	// empty string and all content lives on LLMInstructionRow.
+	Body        string    `gorm:"type:text;not null" json:"-"`
+	Description string    `gorm:"type:varchar(512);not null;default:''" json:"description"`
+	CreatedBy   string    `gorm:"type:varchar(255);not null;default:'';index:idx_llm_instruction_created_by" json:"created_by"`
+	CreatedAt   time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Associations
+	Rows []LLMInstructionRow `gorm:"foreignKey:InstructionID;constraint:OnDelete:CASCADE" json:"rows,omitempty"`
+}
+
+func (LLMInstruction) TableName() string { return "llm_instructions" }
+
+// LLM instruction row kinds. "general" rows are injected on every MCP session
+// regardless of server scope — useful for gateway-wide boilerplate (role
+// framing, safety guidance). "per_server" rows are injected only when one of
+// their linked servers is in the active token/client scope.
+const (
+	LLMInstructionRowKindPerServer = "per_server"
+	LLMInstructionRowKindGeneral   = "general"
+)
+
+// LLMInstructionRow is a single block inside an LLMInstruction page. Kind
+// decides whether the row is gated by its linked servers ("per_server") or
+// always rendered ("general"). DisplayOrder drives the builder's drag-and-drop
+// ordering and the composed-output order.
+type LLMInstructionRow struct {
+	ID            string    `gorm:"type:char(36);primaryKey" json:"id"`
+	InstructionID string    `gorm:"type:char(36);not null;index:idx_llm_row_instruction" json:"instruction_id"`
+	Kind          string    `gorm:"type:varchar(32);not null;default:'per_server';index:idx_llm_row_kind" json:"kind"`
+	Title         string    `gorm:"type:varchar(255);not null;default:''" json:"title"`
+	Body          string    `gorm:"type:text;not null" json:"body"`
+	DisplayOrder  int       `gorm:"not null;default:0;index:idx_llm_row_order" json:"display_order"`
+	CreatedAt     time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+
+	// Associations — ignored when Kind == "general".
+	Servers []LLMInstructionRowServer `gorm:"foreignKey:RowID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
+}
+
+func (LLMInstructionRow) TableName() string { return "llm_instruction_rows" }
+
+// LLMInstructionRowServer links a single row to the MCP servers it applies to.
+type LLMInstructionRowServer struct {
+	RowID    string `gorm:"type:char(36);not null;primaryKey" json:"row_id"`
+	ServerID string `gorm:"type:char(36);not null;primaryKey;index:idx_llm_row_server" json:"server_id"`
+}
+
+func (LLMInstructionRowServer) TableName() string { return "llm_instruction_row_servers" }
+
+// ScopeTokenInstruction records which LLM instructions a scope token carries.
+// CASCADE on both ends: token deletion removes the rows; instruction deletion
+// removes the association (the token itself survives).
+type ScopeTokenInstruction struct {
+	TokenID       string `gorm:"type:char(36);not null;primaryKey" json:"token_id"`
+	InstructionID string `gorm:"type:char(36);not null;primaryKey" json:"instruction_id"`
+}
+
+func (ScopeTokenInstruction) TableName() string { return "scope_token_instructions" }
+
+// OAuth2ClientInstruction is the symmetric join for OAuth2 clients.
+type OAuth2ClientInstruction struct {
+	ClientID      string `gorm:"type:char(36);not null;primaryKey" json:"client_id"`
+	InstructionID string `gorm:"type:char(36);not null;primaryKey" json:"instruction_id"`
+}
+
+func (OAuth2ClientInstruction) TableName() string { return "oauth2_client_instructions" }
+
 // ScopeToken is the GORM model for the scope_tokens table.
 type ScopeToken struct {
 	ID          string     `gorm:"type:char(36);primaryKey" json:"id"`
@@ -143,9 +227,17 @@ type ScopeToken struct {
 	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
 	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
 
+	// Ringover ownership scope — same semantics as the Leexi filter above, but
+	// Ringover identifies users with numeric integer IDs (not UUIDs), so the
+	// JSON columns hold int arrays instead of UUID strings.
+	RingoverFilterMode     string          `gorm:"type:varchar(16);not null;default:'none'" json:"ringover_filter_mode"`
+	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
+	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
+
 	// Associations
-	Servers []ScopeTokenServer `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
-	Tools   []ScopeTokenTool   `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+	Servers      []ScopeTokenServer      `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
+	Tools        []ScopeTokenTool        `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+	Instructions []ScopeTokenInstruction `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"instructions,omitempty"`
 }
 
 func (ScopeToken) TableName() string { return "scope_tokens" }
@@ -194,9 +286,15 @@ type OAuth2Client struct {
 	LeexiAllowedUserUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_user_uuids,omitempty"`
 	LeexiAllowedTeamUUIDs json.RawMessage `gorm:"type:json" json:"leexi_allowed_team_uuids,omitempty"`
 
+	// Ringover ownership scope — see ScopeToken for semantics; int arrays.
+	RingoverFilterMode     string          `gorm:"type:varchar(16);not null;default:'none'" json:"ringover_filter_mode"`
+	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
+	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
+
 	// Associations
-	Servers []OAuth2ClientServer `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
-	Tools   []OAuth2ClientTool   `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+	Servers      []OAuth2ClientServer      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
+	Tools        []OAuth2ClientTool        `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
+	Instructions []OAuth2ClientInstruction `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"instructions,omitempty"`
 }
 
 func (OAuth2Client) TableName() string { return "oauth2_clients" }

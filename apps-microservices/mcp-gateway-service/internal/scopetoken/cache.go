@@ -5,12 +5,23 @@ import (
 	"time"
 )
 
+// CachedInstruction is a resolved snapshot of an LLM instruction carried by
+// this token. Bodies are held in-memory so `initialize` never triggers an
+// extra DB round-trip. Cache TTL (60s) bounds staleness; token/client cache
+// is also invalidated explicitly on every instruction edit.
+type CachedInstruction struct {
+	ID    string
+	Title string
+	Body  string
+}
+
 // CachedToken holds the resolved scope for a token hash.
 type CachedToken struct {
 	ID           string
 	Name         string                     // human-readable token name; surfaced as serverInfo.name
 	ServerIDs    map[string]bool            // set of allowed server IDs
 	AllowedTools map[string]map[string]bool // server_id → tool_name → true; nil map for a server = all tools
+	Instructions []CachedInstruction        // filtered + rendered into initialize.instructions
 	ExpiresAt    *time.Time
 	IsActive     bool
 	FetchedAt    time.Time
@@ -21,6 +32,12 @@ type CachedToken struct {
 	LeexiFilterMode       string   // "none" | "users" | "teams" | "creator"
 	LeexiAllowedUserUUIDs []string // for modes "users" and "creator"
 	LeexiAllowedTeamUUIDs []string // for mode "teams"
+
+	// Ringover user scope — same semantics as the Leexi fields above, but
+	// Ringover identifies users with integer IDs, so the slices hold ints.
+	RingoverFilterMode     string // "none" | "users" | "teams" | "creator"
+	RingoverAllowedUserIDs []int  // for modes "users" and "creator"
+	RingoverAllowedTeamIDs []int  // for mode "teams"
 }
 
 // Cache provides an in-memory TTL cache for scope token lookups.

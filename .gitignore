@@ -113,6 +113,8 @@ local/*
 
 # Prendre le fichier de dépendances
 !requirements.txt
+!requirements-test.txt
+!pytest.ini
 
 # Environnement virtuel de python
 .venv
