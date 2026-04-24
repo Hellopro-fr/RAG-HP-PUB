@@ -36,23 +36,23 @@ Each graph directory contains:
 ## One-time setup (per developer)
 
 ```bash
-# 1. Install graphify CLI
 pip install graphifyy
-
-# 2. Install git hooks (auto-rebuild on commits/branch switches, backbone-scoped, zero LLM cost)
-graphify hook install
 ```
 
-Verify:
+That's it. Nothing to install in the repo. Verify:
 
 ```bash
-graphify hook status
-# Expected:
-#   post-commit: installed
-#   post-checkout: installed
+graphify --version   # should print a version string
+which graphify       # should resolve to your pip install path
 ```
 
-The hooks in this repo have a **scope filter**: they rebuild only when the commit/branch-diff touches `libs/`, `protos/`, `tools/`, `model-optimizer/`, or `docs/`. Commits inside `apps-microservices/` trigger no rebuild (avoids scope drift into the 90+ service tree).
+### Why no git hooks?
+
+graphify ships an optional post-commit hook (`graphify hook install`) that auto-rebuilds the graph after every commit. **We do not use it in this monorepo.**
+
+**Reason**: the hook's `_rebuild_code` rescans the entire current working directory. In this 2129-file monorepo, a single backbone commit would extract AST from all 1790 code files (including 90+ services outside the backbone scope), exploding the committed `graph.json` by ~20x and scope-drifting the graph away from its intended boundaries.
+
+**Workaround**: use `/graphify --update` from a Claude Code session instead. That command reads the scoped manifest (`graphify-out/manifest.json`) and re-extracts only the files that changed within the original extraction set — no scope drift, same zero LLM cost for code-only changes. See **Updating the graph** below.
 
 ## Automatic integration with Claude Code
 
@@ -105,11 +105,14 @@ Output lands in `apps-microservices/<service>/graphify-out/`. Commit it.
 
 ## Updating the graph
 
-Three triggers, in order of preference:
+Two triggers, in order of preference:
 
-1. **Git commit touching backbone** → automatic, free, ~5-15s (AST only, no LLM).
-2. **Doc or CLAUDE.md change** → run `/graphify --update` manually. LLM tokens charged only for changed files (cache hits otherwise).
-3. **Full rebuild** → `/graphify .` from scratch. Avoid unless structure changed dramatically.
+1. **Any change within backbone scope** → run `/graphify --update` from any Claude Code session. Uses manifest-based incremental detection:
+   - Code-only changes: AST re-extract on changed files, **zero LLM cost**, ~5-15s.
+   - Doc / CLAUDE.md changes: semantic re-extraction (LLM) on changed docs only. Cache hits for unchanged. Cost proportional to what you edited.
+2. **Full rebuild** → `/graphify .` from scratch. Avoid unless structure changed dramatically — re-extracts every file.
+
+**Do NOT run `graphify update .` as a CLI command** in this repo. The CLI invokes `_rebuild_code` which rescans the whole directory (no manifest). In this monorepo that pulls in `apps-microservices/` and explodes the graph. Always use the slash command `/graphify --update` inside a Claude Code session — it goes through the skill which reads the manifest first.
 
 Cumulative token cost for a run is tracked in `graphify-out/cost.json` (gitignored, local-only).
 
@@ -165,8 +168,8 @@ Exposes tools: `query_graph`, `get_node`, `get_neighbors`, `get_community`, `god
 | Symptom | Fix |
 |---------|-----|
 | `graphify: command not found` | `pip install graphifyy` |
-| Hook not firing after commit | `graphify hook status`; reinstall if missing |
-| Rebuild blocked by pre-commit hook | Hook writes to `graphify-out/` — already gitignored for locals; backbone files committed once |
+| Ran `graphify update .` and graph exploded (10k+ nodes) | You hit the unscoped-rebuild trap. `git checkout -- graphify-out/` to restore. Use `/graphify --update` from a Claude Code session instead. |
+| Team member installed git hooks — graph now full of `apps-microservices/` | `graphify hook uninstall`, `git checkout -- graphify-out/`. Hooks intentionally not used in this repo — see "Why no git hooks?" above. |
 | Vertical scrolling broken in PowerShell 5.1 | Use Windows Terminal, or uninstall `graspologic`: `pip uninstall graspologic` |
 | Graph shows wrong direction | Inherent to undirected graph; interpret edge bidirectionally or rebuild with `--directed` flag |
 | Want to skip extracting a file | Create `.graphifyignore` in repo root (same syntax as `.gitignore`) |

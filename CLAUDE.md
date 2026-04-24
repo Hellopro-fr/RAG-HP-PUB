@@ -179,10 +179,12 @@ Most Python/Rust microservices run on a remote server with GPU and network acces
 
 ## graphify
 
-This project has a graphify knowledge graph at graphify-out/.
+This project has a graphify knowledge graph at `graphify-out/` (backbone: libs + protos + tools + model-optimizer + docs) and per-service graphs under `apps-microservices/<service>/graphify-out/` when present.
 
 Rules:
-- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
-- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
-- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+- Before answering architecture or codebase questions, read `graphify-out/GRAPH_REPORT.md` for god nodes and community structure. Check the relevant per-service `GRAPH_REPORT.md` if one exists.
+- For cross-module "how does X relate to Y" questions, prefer the `/graphify query "<question>"`, `/graphify path "<A>" "<B>"`, or `/graphify explain "<concept>"` slash commands over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files.
+- After modifying code files in this session, run `/graphify --update` (the slash command inside this session, NOT the `graphify update .` CLI). The slash command uses the scoped manifest and re-extracts only changed files; the CLI rescans the whole directory and in this monorepo that pulls in `apps-microservices/` and explodes the graph.
+- Remember edge honesty tags: EXTRACTED (AST-sourced, trust fully), INFERRED (LLM-reasoned, verify before refactoring shared components), AMBIGUOUS (flagged, verify). INFERRED edges may also have flipped direction — the graph is undirected, so interpret bidirectionally.
+- Do NOT run `graphify hook install` in this repo. See `docs/graphify-guide-en.md` § "Why no git hooks?" for the reason.
+- Full team guide: `docs/graphify-guide-en.md` (English) or `docs/graphify-guide-fr.md` (Français).

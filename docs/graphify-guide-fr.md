@@ -36,23 +36,23 @@ Chaque dossier de graphe contient :
 ## Installation initiale (une fois par développeur)
 
 ```bash
-# 1. Installer la CLI graphify
 pip install graphifyy
-
-# 2. Installer les git hooks (reconstruction auto au commit/branch switch, scope backbone, zéro coût LLM)
-graphify hook install
 ```
 
-Vérifier :
+C'est tout. Rien à installer dans le repo. Vérifier :
 
 ```bash
-graphify hook status
-# Attendu :
-#   post-commit: installed
-#   post-checkout: installed
+graphify --version   # doit afficher une version
+which graphify       # doit résoudre vers votre chemin pip install
 ```
 
-Les hooks de ce repo ont un **filtre de portée** : ils reconstruisent uniquement si le commit ou le diff de branche touche `libs/`, `protos/`, `tools/`, `model-optimizer/` ou `docs/`. Les commits dans `apps-microservices/` ne déclenchent aucune reconstruction (évite la dérive de portée vers l'arbre des 90+ services).
+### Pourquoi pas de git hooks ?
+
+graphify propose un hook post-commit optionnel (`graphify hook install`) qui reconstruit le graphe après chaque commit. **Nous ne l'utilisons pas dans ce monorepo.**
+
+**Raison** : le `_rebuild_code` du hook rescanne tout le répertoire de travail. Dans ce monorepo de 2129 fichiers, un seul commit sur la backbone extrait l'AST des 1790 fichiers code (incluant les 90+ services hors du scope backbone), faisant exploser le `graph.json` commité par ~20x et dérivant la portée du graphe hors de ses limites.
+
+**Contournement** : utiliser `/graphify --update` depuis une session Claude Code. Cette commande lit le manifeste scoppé (`graphify-out/manifest.json`) et ré-extrait uniquement les fichiers modifiés dans le jeu d'extraction initial — pas de dérive de portée, même zéro coût LLM pour les changements code-only. Voir **Mettre à jour le graphe** plus bas.
 
 ## Intégration automatique avec Claude Code
 
@@ -105,11 +105,14 @@ La sortie atterrit dans `apps-microservices/<service>/graphify-out/`. À commite
 
 ## Mettre à jour le graphe
 
-Trois déclencheurs, par ordre de préférence :
+Deux déclencheurs, par ordre de préférence :
 
-1. **Commit git touchant la backbone** → automatique, gratuit, ~5-15s (AST seul, pas de LLM).
-2. **Modification de doc ou de CLAUDE.md** → lancer `/graphify --update` manuellement. Tokens LLM facturés uniquement pour les fichiers modifiés (cache hits sinon).
-3. **Reconstruction complète** → `/graphify .` depuis zéro. À éviter sauf changement structurel majeur.
+1. **Toute modification dans le scope backbone** → lancer `/graphify --update` depuis une session Claude Code. Utilise une détection incrémentale basée sur le manifeste :
+   - Changements code-only : ré-extraction AST des fichiers modifiés, **zéro coût LLM**, ~5-15s.
+   - Changements doc / CLAUDE.md : ré-extraction sémantique (LLM) des docs modifiées seulement. Cache hits pour le reste. Coût proportionnel à ce qui a été édité.
+2. **Reconstruction complète** → `/graphify .` depuis zéro. À éviter sauf changement structurel majeur — ré-extrait tout.
+
+**Ne PAS lancer `graphify update .` en CLI** dans ce repo. La CLI invoque `_rebuild_code` qui rescanne tout le répertoire (pas de manifeste). Dans ce monorepo, ça aspire `apps-microservices/` et fait exploser le graphe. Toujours utiliser la slash command `/graphify --update` depuis une session Claude Code — elle passe par le skill qui lit d'abord le manifeste.
 
 Le coût cumulé en tokens par run est tracé dans `graphify-out/cost.json` (gitignoré, local uniquement).
 
@@ -165,8 +168,8 @@ Expose les outils : `query_graph`, `get_node`, `get_neighbors`, `get_community`,
 | Symptôme | Correction |
 |----------|-----------|
 | `graphify: command not found` | `pip install graphifyy` |
-| Hook qui ne se déclenche pas après commit | `graphify hook status` ; réinstaller si absent |
-| Reconstruction bloquée par un pre-commit hook | Les hooks écrivent dans `graphify-out/` — déjà gitignoré pour les locaux ; fichiers backbone commités une fois |
+| `graphify update .` lancé et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé. `git checkout -- graphify-out/` pour restaurer. Utiliser `/graphify --update` depuis une session Claude Code à la place. |
+| Un membre de l'équipe a installé les git hooks — graphe rempli d'`apps-microservices/` | `graphify hook uninstall`, `git checkout -- graphify-out/`. Hooks intentionnellement non utilisés dans ce repo — voir « Pourquoi pas de git hooks ? » ci-dessus. |
 | Scroll vertical cassé sur PowerShell 5.1 | Utiliser Windows Terminal, ou désinstaller `graspologic` : `pip uninstall graspologic` |
 | Direction d'arête fausse | Inhérent au graphe non-orienté ; interpréter bidirectionnellement ou reconstruire avec `--directed` |
 | Exclure un fichier de l'extraction | Créer `.graphifyignore` à la racine du repo (même syntaxe que `.gitignore`) |
