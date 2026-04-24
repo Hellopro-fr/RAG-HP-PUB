@@ -17,14 +17,14 @@
     {
       "id": 2,
       "subject": "Task 3: CoherenceProvider + hooks + mount in App",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Provider + hooks + mount in App.jsx.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/hooks.js\",\"apps-microservices/crawler-monitor-frontend/src/coherence/CoherenceProvider.test.jsx\",\"apps-microservices/crawler-monitor-frontend/src/App.jsx\"],\"verifyCommand\":\"yarn test src/coherence/\",\"acceptanceCriteria\":[\"hooks work\",\"rule errors isolated\",\"ignoredRules toggles\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 4: CoherencePastille component + wire to CapacityBar",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** Pastille component + wire first rule.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherencePastille.jsx\",\"apps-microservices/crawler-monitor-frontend/src/coherence/components/CoherencePastille.test.jsx\",\"apps-microservices/crawler-monitor-frontend/src/components/CapacityBar.jsx\"],\"verifyCommand\":\"yarn test src/coherence/components/CoherencePastille.test.jsx\",\"acceptanceCriteria\":[\"null when OK\",\"icon + link when violated\",\"tooltip\",\"click navigates\",\"itemKey filter\",\"wired to CapacityBar\"]}\n```"
     },
