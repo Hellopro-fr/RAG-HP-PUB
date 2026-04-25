@@ -19,7 +19,7 @@
     {
       "id": 3,
       "subject": "Task 3: Add Prometheus metrics module + /metrics endpoint + scraper instrumentation",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2
       ],
@@ -28,7 +28,7 @@
     {
       "id": 4,
       "subject": "Task 4: Docker resource limits + healthcheck + Uvicorn --limit-concurrency",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         3
       ],
@@ -37,7 +37,7 @@
     {
       "id": 5,
       "subject": "Task 5: AdmissionController class with atomic counter tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4
       ],
@@ -116,5 +116,5 @@
       "description": "**Goal:** Document caller-contract integration in both downstream services' CLAUDE.md.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-gateway/CLAUDE.md\", \"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -E 'DOWNSTREAM_TIMEOUTS_S|DETECTION_MAX_CONCURRENCY' apps-microservices/api-gateway/CLAUDE.md apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"Gateway documents timeout map\", \"Crawler documents env var contract\", \"Both reference spec\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-21T04:48:37Z"
+  "lastUpdated": "2026-04-25T21:50:00Z"
 }
