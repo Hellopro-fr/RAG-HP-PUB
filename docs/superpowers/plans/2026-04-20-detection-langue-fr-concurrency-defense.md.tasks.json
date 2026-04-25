@@ -46,7 +46,7 @@
     {
       "id": 6,
       "subject": "Task 6: Admission middleware with path-scoped controllers + integration tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         5
       ],
@@ -116,5 +116,5 @@
       "description": "**Goal:** Document caller-contract integration in both downstream services' CLAUDE.md.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-gateway/CLAUDE.md\", \"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -E 'DOWNSTREAM_TIMEOUTS_S|DETECTION_MAX_CONCURRENCY' apps-microservices/api-gateway/CLAUDE.md apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"Gateway documents timeout map\", \"Crawler documents env var contract\", \"Both reference spec\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-25T21:50:00Z"
+  "lastUpdated": "2026-04-25T23:55:00Z"
 }
