@@ -571,6 +571,14 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+    mem_limit: 4500m
+    cpus: 4
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8999/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     logging: *logging_defaults
     networks:
       - services-net
