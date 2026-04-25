@@ -1,6 +1,9 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.api.routes import router
+# Import to ensure metric objects are registered with the default registry.
+from app.core import metrics  # noqa: F401
 
 # Configuration du logging — INFO pour voir les logs de stratégie proxy, retry, etc.
 # Sans cette configuration, Python utilise WARNING par défaut et masque les logs INFO.
@@ -31,6 +34,12 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics_endpoint() -> Response:
+    """Prometheus metrics exposition endpoint."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 app.include_router(router, prefix="/api/v1")
 
