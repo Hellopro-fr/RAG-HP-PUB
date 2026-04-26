@@ -73,6 +73,14 @@ class Configuration:
             p.strip().strip("/") for p in route_exclude if p.strip()
         ]
 
+    # ─── Per-service downstream timeouts ───────────────────────────────────
+    # Keys are service names (the <name>-service in /<name>-service path prefixes).
+    # Services NOT listed here use timeout=None (current behavior preserved).
+    # Add a service here only after understanding its request-duration profile.
+    DOWNSTREAM_TIMEOUTS_S: Dict[str, float] = {
+        "api-detection-langue-fr-service": 180.0,
+    }
+
 
 def _create_service_map(config_class: Type[Configuration]) -> Dict[str, str]:
     """
