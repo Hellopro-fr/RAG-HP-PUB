@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Globe, Mail, SlidersHorizontal, FileText,
+  LayoutDashboard, Globe, Mail, SlidersHorizontal, FileText, HeartPulse,
 } from 'lucide-react';
 
 /**
@@ -23,6 +23,7 @@ export const NAV_ITEMS = [
     items: [
       { to: '/capacity-planning', label: 'Capacity planning', icon: SlidersHorizontal, description: 'RAM allouée vs utilisée · dimensionnement' },
       { to: '/audit',             label: 'Journal d\'audit',  icon: FileText,          description: 'Historique des actions sensibles' },
+      { to: '/health',            label: 'Santé système',     icon: HeartPulse,        description: 'Cohérence des données affichées' },
     ],
   },
 ];
@@ -37,6 +38,7 @@ const ROUTE_LABELS = {
   '/callbacks':        'Callbacks',
   '/audit':            'Journal d\'audit',
   '/capacity-planning':'Capacity planning',
+  '/health':           'Santé système',
 };
 
 /**

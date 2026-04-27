@@ -222,6 +222,21 @@ The global capacity counter (Redis key `crawl_jobs:running_count`) is authoritat
 - `_relaunch_oom_crawl` re-reads status at entry (prevents ghost relaunch of failed jobs)
 - `force_finish_crawl` re-reads status before decrement (prevents double-decrement)
 
+## api-detection-langue-fr Caller Contract
+
+`DetectionLangueClient` (`crawler/src/class/DetectionLangueClient.ts`) enforces the shared caller contract for api-detection-langue-fr. Behavior controlled via env vars:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DETECTION_MAX_CONCURRENCY` | `5` | `p-limit` cap on concurrent `/detect` + `/check-url` calls |
+| `DETECTION_REQUEST_TIMEOUT_S` | `180` | Axios timeout (seconds × 1000 ms) |
+| `DETECTION_MAX_RETRIES` | `2` | Retries on HTTP 503 only (non-503 errors raise immediately) |
+| `DETECTION_BACKOFF_BASE_S` | `2` | Exponential backoff base when server omits `Retry-After` |
+
+On HTTP 503, precedence for the retry wait time is **server `Retry-After` header > exponential backoff (`backoffBase * 2**attempt`)**. Matches the Python `common_utils.detection_client.DetectionClient` behavior so both callers hit the detection service with identical semantics.
+
+Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md`.
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.

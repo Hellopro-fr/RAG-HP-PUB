@@ -113,6 +113,62 @@ func TestCheckCallOwnedByAllowed_UnknownUserID(t *testing.T) {
 	}
 }
 
+func TestEffectiveStatsUserID_Unrestricted(t *testing.T) {
+	ctx := context.Background()
+	got, err := effectiveStatsUserID(ctx, "")
+	if err != nil || got != "" {
+		t.Errorf("unrestricted empty: got (%q, %v)", got, err)
+	}
+	got, err = effectiveStatsUserID(ctx, "42")
+	if err != nil || got != "42" {
+		t.Errorf("unrestricted caller: got (%q, %v)", got, err)
+	}
+}
+
+func TestEffectiveStatsUserID_SingleUserScope(t *testing.T) {
+	ctx := scopedCtx(42)
+	got, err := effectiveStatsUserID(ctx, "")
+	if err != nil || got != "42" {
+		t.Errorf("single-user scope no caller: got (%q, %v)", got, err)
+	}
+	got, err = effectiveStatsUserID(ctx, "42")
+	if err != nil || got != "42" {
+		t.Errorf("single-user scope matching caller: got (%q, %v)", got, err)
+	}
+}
+
+func TestEffectiveStatsUserID_MultiUserScopeNoCaller(t *testing.T) {
+	ctx := scopedCtx(10, 20, 30)
+	_, err := effectiveStatsUserID(ctx, "")
+	if err == nil {
+		t.Fatal("expected error — /stats/team cannot express multi-user scope without caller pick")
+	}
+}
+
+func TestEffectiveStatsUserID_MultiUserScopeCallerInSet(t *testing.T) {
+	ctx := scopedCtx(10, 20, 30)
+	got, err := effectiveStatsUserID(ctx, "20")
+	if err != nil || got != "20" {
+		t.Errorf("multi-user scope caller in set: got (%q, %v)", got, err)
+	}
+}
+
+func TestEffectiveStatsUserID_CallerOutsideScope(t *testing.T) {
+	ctx := scopedCtx(10, 20)
+	_, err := effectiveStatsUserID(ctx, "99")
+	if err == nil {
+		t.Fatal("expected access-denied for caller outside scope")
+	}
+}
+
+func TestEffectiveStatsUserID_DenyAll(t *testing.T) {
+	ctx := transport.WithAllowedUserIDsForTest(context.Background(), nil, true)
+	_, err := effectiveStatsUserID(ctx, "")
+	if err == nil {
+		t.Fatal("expected deny-all error")
+	}
+}
+
 func TestExtractCallUserID(t *testing.T) {
 	// Ringover /calls/{id} returns { call_list: [{ user_id: ..., ... }] }.
 	body := json.RawMessage(`{"call_list":[{"cdr_id":"abc","user_id":42}]}`)

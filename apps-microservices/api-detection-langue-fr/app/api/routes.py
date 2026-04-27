@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
 import time
 from typing import Optional
+from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import (
@@ -16,12 +18,31 @@ from app.models.schemas import (
 )
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
+from app.core.inflight_dedup import InflightDedup
+from app.core.metrics import DEDUP_HITS
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+_inflight_dedup = InflightDedup()
+_INFLIGHT_DEDUP_ENABLED = os.getenv("INFLIGHT_DEDUP_ENABLED", "true").lower() == "true"
+
+
+def _normalize_url_for_dedup(url: str) -> str:
+    """Normalize URL for dedup key: scheme + lowercase host + path + query."""
+    try:
+        p = urlparse(url)
+        scheme = (p.scheme or "https").lower()
+        host = (p.hostname or "").lower()
+        path = (p.path or "/").rstrip("/") or "/"
+        q = f"?{p.query}" if p.query else ""
+        return f"{scheme}://{host}{path}{q}"
+    except Exception:
+        return url
 
 
 # =============================================================================
@@ -70,8 +91,18 @@ async def _detect_single_url(
                 logger.info(f"Cache HIT {url}")
                 return DetectionResponse(**cached)
 
-        # Fetch HTML
-        fetch_result = await fetch_html(url, proxy_url)
+        # Fetch HTML (with inflight dedup unless force_refresh)
+        if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
+            dedup_key = _normalize_url_for_dedup(url)
+            prev_hits = _inflight_dedup.hits
+            fetch_result = await _inflight_dedup.coalesce(
+                dedup_key, lambda: fetch_html(url, proxy_url)
+            )
+            if _inflight_dedup.hits > prev_hits:
+                DEDUP_HITS.inc(_inflight_dedup.hits - prev_hits)
+        else:
+            fetch_result = await fetch_html(url, proxy_url)
+
         if not fetch_result:
             return DetectionResponse(
                 ok=False, url=url, method='fetch_failed',

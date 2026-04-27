@@ -221,7 +221,12 @@ func handleGetCallStatsByUser(ctx context.Context, clients *Clients, args map[st
 	}
 	userID, _ := args["user_id"].(string)
 
-	data, err := clients.Ringover.GetCallStatsByUser(ctx, startDate, endDate, userID)
+	effectiveID, err := effectiveStatsUserID(ctx, userID)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	data, err := clients.Ringover.GetCallStatsByUser(ctx, startDate, endDate, effectiveID)
 	if err != nil {
 		return nil, fmt.Errorf("GetCallStatsByUser: %w", err)
 	}

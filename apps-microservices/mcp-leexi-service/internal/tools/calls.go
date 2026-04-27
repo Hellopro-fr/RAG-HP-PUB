@@ -26,6 +26,10 @@ func effectiveParticipantUUIDs(ctx context.Context, requested string) ([]string,
 		}
 		return []string{requested}, nil
 	}
+	// Gateway scope active.
+	if len(allowed) == 0 {
+		return nil, fmt.Errorf("access denied: token scope grants access to no Leexi participants")
+	}
 	if requested == "" {
 		// User did not specify — force the full allowed list.
 		return allowed, nil
@@ -62,6 +66,9 @@ func checkCallParticipantAllowed(ctx context.Context, call map[string]json.RawMe
 	allowed, restricted := transport.AllowedParticipantsFromContext(ctx)
 	if !restricted {
 		return nil
+	}
+	if len(allowed) == 0 {
+		return fmt.Errorf("access denied: token scope grants access to no Leexi participants")
 	}
 
 	allowedSet := make(map[string]struct{}, len(allowed))

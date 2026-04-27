@@ -1,5 +1,6 @@
 {
   "name": "crawler-monitor-frontend",
+  "packageManager": "yarn@4.11.0",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "tw": "tailwindcss",
-    "test": "node --test tests/*.test.js"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
@@ -36,6 +38,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@testing-library/dom": "^10",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
@@ -44,9 +49,11 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jsdom": "^25",
     "postcss": "^8.5.6",
     "tailwindcss": "3",
     "tailwindcss-animate": "^1.0.7",
-    "vite": "^7.2.2"
+    "vite": "^7.2.2",
+    "vitest": "^3"
   }
 }

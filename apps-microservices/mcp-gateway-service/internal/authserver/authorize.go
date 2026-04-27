@@ -34,9 +34,6 @@ type authorizeParams struct {
 }
 
 func (s *AuthServer) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
-
 	params, err := s.parseAuthorizeParams(r)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"invalid_request","error_description":"%s"}`, err.Error()), http.StatusBadRequest)
