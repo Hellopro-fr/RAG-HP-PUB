@@ -517,7 +517,7 @@ func (TemplateInstance) TableName() string { return "template_instances" }
 type BDDUsedTable struct {
 	ID              string         `gorm:"type:char(36);primaryKey"`
 	DatabaseID      int            `gorm:"not null;index;uniqueIndex:uniq_db_table"`
-	TableName       string         `gorm:"type:varchar(128);not null;uniqueIndex:uniq_db_table"`
+	Name            string         `gorm:"column:table_name;type:varchar(128);not null;uniqueIndex:uniq_db_table"`
 	UpstreamTableID int            `gorm:"index"`
 	Description     string         `gorm:"type:text"`
 	CreatedBy       string         `gorm:"type:varchar(255);not null;default:''"`
@@ -525,6 +525,8 @@ type BDDUsedTable struct {
 	UpdatedAt       time.Time      `gorm:"type:datetime(3);autoUpdateTime"`
 	Fields          []BDDUsedField `gorm:"foreignKey:UsedTableID;constraint:OnDelete:CASCADE"`
 }
+
+func (BDDUsedTable) TableName() string { return "bdd_used_tables" }
 
 // BDDUsedField is one row per (used_table, field) pair. Cascading delete
 // from BDDUsedTable keeps the join consistent.
@@ -538,6 +540,8 @@ type BDDUsedField struct {
 	UpdatedAt       time.Time `gorm:"type:datetime(3);autoUpdateTime"`
 }
 
+func (BDDUsedField) TableName() string { return "bdd_used_fields" }
+
 // ScopeTokenBDDTable is the join table between scope_tokens and BDD used
 // tables, mirroring the shape of ScopeTokenServer.
 type ScopeTokenBDDTable struct {
@@ -545,8 +549,12 @@ type ScopeTokenBDDTable struct {
 	UsedTableID string `gorm:"type:char(36);primaryKey"`
 }
 
+func (ScopeTokenBDDTable) TableName() string { return "scope_token_bdd_tables" }
+
 // OAuth2ClientBDDTable is the equivalent join for OAuth2 clients.
 type OAuth2ClientBDDTable struct {
 	ClientID    string `gorm:"type:char(36);primaryKey"`
 	UsedTableID string `gorm:"type:char(36);primaryKey"`
 }
+
+func (OAuth2ClientBDDTable) TableName() string { return "oauth2_client_bdd_tables" }

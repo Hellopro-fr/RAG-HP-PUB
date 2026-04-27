@@ -90,6 +90,10 @@ func (c *Client) ListFields(ctx context.Context, databaseID, tableID int) ([]Fie
 // do issues an authenticated GET to baseURL+path. The query is appended
 // only when non-empty so callers don't accidentally send "?search=".
 func (c *Client) do(ctx context.Context, path string, query url.Values) ([]byte, error) {
+	if !c.Enabled() {
+		return nil, fmt.Errorf("bdd catalog: client not configured (BDD_CATALOG_BASE_URL/BDD_CATALOG_TOKEN unset)")
+	}
+
 	full := c.baseURL + path
 	if len(query) > 0 {
 		full += "?" + query.Encode()
@@ -113,6 +117,7 @@ func (c *Client) do(ctx context.Context, path string, query url.Values) ([]byte,
 		return nil, fmt.Errorf("bdd catalog: read body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// NOTE: upstream body included verbatim — sanitise if upstream ever echoes auth headers in errors
 		return nil, fmt.Errorf("bdd catalog: status %d: %s", resp.StatusCode, truncate(body))
 	}
 	return body, nil
