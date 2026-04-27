@@ -23,10 +23,12 @@ func AllowedToolsFromContext(ctx context.Context) map[string]map[string]bool {
 	return tools
 }
 
-// ScopeHandlerFactory creates a scoped handler for the given allowed server IDs
-// and optional per-server tool whitelist.
-// If allowedTools is nil, all tools from allowed servers are exposed.
-type ScopeHandlerFactory func(allowedIDs map[string]bool, allowedTools map[string]map[string]bool) Handler
+// ScopeHandlerFactory creates a scoped handler from the request context. The
+// factory is responsible for pulling whatever it needs (allowed server IDs,
+// tool whitelist, LLM instructions, etc.) from the ctx values set by the
+// scope/OAuth2 middleware. Returning nil means "no scope was present — use
+// the unscoped handler".
+type ScopeHandlerFactory func(ctx context.Context) Handler
 
 // StreamableHTTPServer exposes a POST /mcp endpoint that handles
 // JSON-RPC requests synchronously (streamable HTTP transport).
@@ -75,12 +77,11 @@ func (s *StreamableHTTPServer) handleMCP(w http.ResponseWriter, r *http.Request)
 
 	log.Printf("[streamable-http] %s id=%s", req.Method, string(req.ID))
 
-	// Use scoped handler if allowed server IDs were injected by scope token middleware
+	// Use scoped handler when the factory finds a scope in context.
 	handler := s.handler
 	if s.scopeFactory != nil {
-		if allowedIDs, ok := AllowedServersFromContext(r.Context()); ok {
-			allowedTools := AllowedToolsFromContext(r.Context())
-			handler = s.scopeFactory(allowedIDs, allowedTools)
+		if scoped := s.scopeFactory(r.Context()); scoped != nil {
+			handler = scoped
 		}
 	}
 

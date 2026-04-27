@@ -155,12 +155,25 @@ def classify_by_name(object_name: str) -> Optional[str]:
     return None
 
 
-def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
+def inspect_archive(
+    local_tar_path: Path,
+    row_count_tolerance: float = 0.05,
+) -> Tuple[str, Dict]:
     """Open a .tar.gz and classify it.
 
     Returns (category, details). `details` always includes the callback-payload
     and marker read state; when row count is checked, it also includes
-    `expected_count` and `actual_count`.
+    `expected_count` and `actual_count`, and may include `secondary_tags` with
+    one of:
+    - `EXCESS_FILES`: actual > expected (Node's 'success' under-reports; archive
+      is valid and contains more files than the counter claimed).
+    - `FAILED_CRAWL_WITH_RESIDUE`: expected == 0 but files exist (crawl errored
+      at the webhook-reporting step; archive still carries real data per
+      Python's status_snapshot).
+    - `COUNT_DRIFT`: deficit within `row_count_tolerance` (crawler-side
+      accounting noise — retries counted twice, flush races, etc.).
+
+    Only deficits above `row_count_tolerance` become `ROW_COUNT_MISMATCH`.
     """
     details: Dict = {}
 
@@ -196,12 +209,28 @@ def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
         # 4. Resolve domain via multi-source lookup (payload, snapshot, tar inference).
         domain = _resolve_domain_name(tar, members, payload)
 
-        # 5. Get expected count. Node.js writes 'success' (the successful URL count);
-        #    'stored_files_count' is added by Python in-memory at webhook-send time
-        #    and NOT persisted to disk, so this is a future-proofing fallback only.
-        expected = payload.get("stored_files_count")
-        if expected is None:
-            expected = payload.get("success")
+        # 5. Get expected count. Prefer _status_snapshot.json.urls_crawled when
+        #    present — it matches the main-domain file count precisely. Node's
+        #    'success' field conflates main + NFR + error counts and drifts by
+        #    various magnitudes (confirmed live against 1806/selux.com:
+        #    success=10054, urls_crawled=1324, main files=1324, nfr=8728).
+        #    Fall back to payload's 'stored_files_count' or 'success' only when
+        #    the snapshot is absent or lacks urls_crawled.
+        snapshot = _read_json_member(tar, "_status_snapshot.json")
+        expected = None
+        if snapshot and isinstance(snapshot.get("urls_crawled"), (int, float)):
+            expected = int(snapshot["urls_crawled"])
+            details["expected_count_source"] = "snapshot.urls_crawled"
+        else:
+            fallback = payload.get("stored_files_count")
+            if fallback is not None:
+                expected = fallback
+                details["expected_count_source"] = "payload.stored_files_count"
+            else:
+                fallback = payload.get("success")
+                if fallback is not None:
+                    expected = fallback
+                    details["expected_count_source"] = "payload.success"
 
         # 6. Row count check — best-effort. Skip (with warning) if we lack either input.
         if domain is None:
@@ -216,11 +245,30 @@ def inspect_archive(local_tar_path: Path) -> Tuple[str, Dict]:
             return OK, details
 
         actual = _count_dataset_files(members, domain)
+        expected_int = int(expected)
         details["domain"] = domain
-        details["expected_count"] = int(expected)
+        details["expected_count"] = expected_int
         details["actual_count"] = actual
 
-        if int(expected) != actual:
+        # Edge case first: expected=0 with files on disk is a failed crawl
+        # whose webhook step zeroed the counter (see `4398` investigation:
+        # exit_code=2, success=0, but urls_crawled=108).
+        if expected_int == 0:
+            if actual > 0:
+                details.setdefault("secondary_tags", []).append("FAILED_CRAWL_WITH_RESIDUE")
+            return OK, details
+        # Node's 'success' under-reports in some crawls (see `3487`: success=35
+        # vs 1426 files). The archive is not corrupt; tag and pass.
+        if actual > expected_int:
+            details.setdefault("secondary_tags", []).append("EXCESS_FILES")
+            return OK, details
+        # Small drift (within tolerance) — crawler-side accounting noise
+        # (see `2754`: success=267 vs 265 files; `5441`: success=21 vs 20).
+        if actual < expected_int:
+            deficit = expected_int - actual
+            if deficit <= expected_int * row_count_tolerance:
+                details.setdefault("secondary_tags", []).append("COUNT_DRIFT")
+                return OK, details
             return ROW_COUNT_MISMATCH, details
 
         return OK, details
@@ -464,6 +512,20 @@ def _load_resume_set(resume_path: Optional[str]) -> set:
         return set()
 
 
+def _load_include_ids(spec: Optional[str]) -> Optional[Set[str]]:
+    """Parse --include-ids input. Returns None when no filter, else Set[str].
+
+    Accepts either a path to a file (one crawl_id per line) or a
+    comma-separated string. Empty tokens and whitespace are stripped.
+    """
+    if not spec:
+        return None
+    p = Path(spec)
+    if p.exists():
+        return {line.strip() for line in p.read_text().splitlines() if line.strip()}
+    return {s.strip() for s in spec.split(",") if s.strip()}
+
+
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Audit GCS archives for corruption, incompleteness, and name issues."
@@ -483,6 +545,16 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="Skip the confirmation prompt for --delete/--quarantine")
     parser.add_argument("--resume", default=None,
                         help="Skip archives already present in the given prior report")
+    parser.add_argument("--include-ids", default=None, metavar="SPEC",
+                        help="Comma-separated list of crawl_ids, or path to a file "
+                             "with one ID per line. Only audit archives whose "
+                             "extracted crawl_id is in this set.")
+    parser.add_argument("--row-count-tolerance", type=float, default=0.05,
+                        metavar="FRACTION",
+                        help="Deficit fraction tolerated before flagging "
+                             "ROW_COUNT_MISMATCH (default 0.05 = 5%%). "
+                             "Archives within tolerance classify OK with "
+                             "secondary tag COUNT_DRIFT.")
     parser.add_argument("--restore-from-quarantine", default=None, metavar="PREFIX",
                         help="Move all objects from gs://<bucket>/<PREFIX>/ back to "
                              "gs://<bucket>/<--prefix>/, then exit. Used to recover from "
@@ -494,7 +566,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return args
 
 
-def _inspect_one(obj_uri: str, size_bytes: int, name_only: bool) -> Tuple[str, Dict]:
+def _inspect_one(
+    obj_uri: str,
+    size_bytes: int,
+    name_only: bool,
+    row_count_tolerance: float = 0.05,
+) -> Tuple[str, Dict]:
     """Inspect a single archive. Returns (category, details)."""
     # Name-based screening first — cheap and catches WRONG_NAME without download.
     name_cat = classify_by_name(obj_uri)
@@ -510,7 +587,7 @@ def _inspect_one(obj_uri: str, size_bytes: int, name_only: bool) -> Tuple[str, D
             gcloud_download(obj_uri, tmp_path)
         except subprocess.CalledProcessError as e:
             return INSPECTION_FAILED, {"error": f"download failed: {e.stderr}"}
-        return inspect_archive(tmp_path)
+        return inspect_archive(tmp_path, row_count_tolerance=row_count_tolerance)
     finally:
         try:
             tmp_path.unlink()
@@ -565,6 +642,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     signal.signal(signal.SIGINT, _on_sigint)
 
     skip_set = _load_resume_set(args.resume)
+    include_ids = _load_include_ids(args.include_ids)
 
     # List
     uri = f"gs://{args.bucket}/{args.prefix}"
@@ -574,8 +652,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     processed = 0
     for size_bytes, obj_uri in listing:
-        if obj_uri in skip_set:
+        # skip_set holds bucket-stripped object_names (same shape as stored in the report).
+        # Normalize obj_uri to match before checking.
+        normalized_name = obj_uri.replace(f"gs://{args.bucket}/", "", 1)
+        if normalized_name in skip_set:
             continue
+        if include_ids is not None:
+            cid = extract_crawl_id(obj_uri)
+            if cid not in include_ids:
+                continue
         if args.limit is not None and processed >= args.limit:
             break
         processed += 1
@@ -589,8 +674,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             "actions_taken": [],
         }
 
-        category, details = _inspect_one(obj_uri, size_bytes, args.name_only)
+        category, details = _inspect_one(
+            obj_uri,
+            size_bytes,
+            args.name_only,
+            row_count_tolerance=args.row_count_tolerance,
+        )
         entry["category"] = category
+        for tag in details.get("secondary_tags", []):
+            if tag not in entry["secondary_tags"]:
+                entry["secondary_tags"].append(tag)
         if details.get("expected_count") is not None:
             entry["expected_count"] = details["expected_count"]
             entry["actual_count"] = details["actual_count"]

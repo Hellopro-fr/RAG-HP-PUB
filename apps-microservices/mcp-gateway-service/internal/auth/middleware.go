@@ -61,6 +61,10 @@ var publicExact = map[string]bool{
 	"/login":  true,
 	"/logout": true,
 	"/health": true,
+	// Internal machine-to-machine endpoint (X-Admin-Token enforced on handler).
+	// Kept as exact match to avoid accidentally exempting any future
+	// /api/v1/internal/* endpoint from JWT auth.
+	"/api/v1/internal/runner/sync": true,
 }
 
 var publicPrefixes = []string{

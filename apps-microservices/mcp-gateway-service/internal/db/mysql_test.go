@@ -22,6 +22,8 @@ func TestTableNames(t *testing.T) {
 		{OAuth2AuthorizationCode{}, "oauth2_authorization_codes"},
 		{OAuth2RefreshToken{}, "oauth2_refresh_tokens"},
 		{OAuth2Consent{}, "oauth2_consents"},
+		{Template{}, "templates"},
+		{TemplateInstance{}, "template_instances"},
 	}
 	for _, tt := range tests {
 		if got := tt.model.TableName(); got != tt.expected {

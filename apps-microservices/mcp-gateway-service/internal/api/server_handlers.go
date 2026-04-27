@@ -12,12 +12,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/config"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
 	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
+	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/runnerclient"
+	"github.com/hellopro/mcp-gateway/internal/slack"
 	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
 )
 
@@ -77,6 +81,8 @@ type Handler struct {
 	// per-token Leexi filter UI and the runtime header injection. nil when the
 	// integration is disabled (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
 	leexiAdmin *leexiadmin.Client
+	// ringoverAdmin is the Ringover counterpart of leexiAdmin.
+	ringoverAdmin *ringoveradmin.Client
 	// uploadDir is the base directory for uploaded files (icons, etc.)
 	uploadDir string
 	// installGuideRepo is the repository for install guide CRUD (executors + configs).
@@ -84,6 +90,19 @@ type Handler struct {
 	// Google Sheets import
 	googleTokenRepo *repository.GoogleTokenRepo
 	googleOAuth     *goGoogle.OAuthClient
+	// Template instances (Google templates dynamic secrets feature).
+	// These stay zero-valued (nil) until Task 13 wires them in main.go.
+	templateRepo *repository.TemplateRepo
+	instanceRepo *repository.InstanceRepo
+	runner       *runnerclient.Client
+	config       *config.Config
+	// slack is the optional Slack notification client. nil disables all
+	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
+	slack *slack.Client
+	// instructionRepo backs the /api/v1/llm-instructions CRUD. The same repo
+	// is shared with scopetoken/oauth2 middleware to resolve per-scope
+	// instructions at cache-miss time.
+	instructionRepo *repository.InstructionRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -92,8 +111,26 @@ type TokenCache interface {
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry, allowInternalURLs bool) *Handler {
-	return &Handler{repo: repo, gw: gw, registry: registry, allowInternalURLs: allowInternalURLs}
+func NewHandler(
+	repo *repository.ServerRepo,
+	gw *gateway.Gateway,
+	registry *gateway.Registry,
+	allowInternalURLs bool,
+	templateRepo *repository.TemplateRepo,
+	instanceRepo *repository.InstanceRepo,
+	runner *runnerclient.Client,
+	cfg *config.Config,
+) *Handler {
+	return &Handler{
+		repo:              repo,
+		gw:                gw,
+		registry:          registry,
+		allowInternalURLs: allowInternalURLs,
+		templateRepo:      templateRepo,
+		instanceRepo:      instanceRepo,
+		runner:            runner,
+		config:            cfg,
+	}
 }
 
 // SetTokenRepo sets the token repository for token CRUD operations.
@@ -124,6 +161,12 @@ func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
 	h.leexiAdmin = client
 }
 
+// SetRingoverAdmin wires the Ringover admin client used by the Ringover-scoped
+// token filter UI and the proxy at /api/v1/ringover/*. Pass nil to disable.
+func (h *Handler) SetRingoverAdmin(client *ringoveradmin.Client) {
+	h.ringoverAdmin = client
+}
+
 // SetUploadDir sets the base directory for uploaded files.
 func (h *Handler) SetUploadDir(dir string) {
 	h.uploadDir = dir
@@ -132,6 +175,16 @@ func (h *Handler) SetUploadDir(dir string) {
 // SetInstallGuideRepo sets the install guide repository.
 func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
 	h.installGuideRepo = repo
+}
+
+// SetSlack wires the Slack notifications client. Pass nil to disable.
+func (h *Handler) SetSlack(client *slack.Client) {
+	h.slack = client
+}
+
+// SetInstructionRepo wires the LLM-instruction repository.
+func (h *Handler) SetInstructionRepo(repo *repository.InstructionRepo) {
+	h.instructionRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -270,6 +323,22 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
 		return
+	}
+
+	// Opt-in filter used by the docs-admin view: hide servers that originated
+	// from a template (stdio instance OR http_batch sheet import). Template
+	// catalogs manage their own docs flow, so exposing template-origin servers
+	// in the docs admin would be confusing. The filter reads the first-class
+	// template_slug column so both template paths are covered uniformly
+	// without a join against template_instances.
+	if r.URL.Query().Get("exclude_templates") == "true" {
+		filtered := servers[:0]
+		for _, s := range servers {
+			if s.TemplateSlug == "" {
+				filtered = append(filtered, s)
+			}
+		}
+		servers = filtered
 	}
 
 	resp := ListServersResponse{
@@ -448,6 +517,30 @@ func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.registry.Unregister(id)
+
+	// If this server is backed by a template instance, route through the
+	// template-aware delete path: kill the runner subprocess + shred credentials
+	// first, then delete both rows in one transaction. Otherwise the runner
+	// would keep the subprocess alive forever and the SA JSON would persist on
+	// tmpfs, while the template_instances row would point at a now-deleted
+	// mcp_server_id.
+	if h.instanceRepo != nil {
+		if inst, ferr := h.instanceRepo.FindByMCPServerID(id); ferr == nil && inst != nil {
+			if h.runner != nil {
+				if kerr := h.runner.Kill(r.Context(), inst.ID); kerr != nil {
+					log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
+				}
+			}
+			if derr := h.instanceRepo.DeleteWithMCPServer(inst.ID); derr != nil {
+				log.Printf("[api] template-aware delete failed for %s: %v", inst.ID, derr)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
 	if err := h.repo.Delete(id); err != nil {
 		log.Printf("[api] delete server error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})
@@ -651,9 +744,24 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 		dbSrv.Prompts = append(dbSrv.Prompts, sp)
 	}
 
-	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
+	prevToolCount, err := h.repo.SaveDiscoveredCapabilities(dbSrv)
+	if err != nil {
 		log.Printf("[api] save capabilities error for %s: %v", id, err)
 		return
+	}
+	// Regression: backend used to expose tools and now exposes none. Almost
+	// always a misconfigured backend — alert so an operator can investigate.
+	if prevToolCount > 0 && len(dbSrv.Tools) == 0 {
+		log.Printf("[api] tools regression on server %s: prev=%d, now=0", id, prevToolCount)
+		name := dbSrv.ServerName
+		if name == "" {
+			name = backend.Name
+		}
+		h.slack.Notify(slack.ToolsRegressionEvent{
+			ServerID:   id,
+			ServerName: name,
+			PrevCount:  prevToolCount,
+		})
 	}
 	// Sync tool active states from DB back to registry (SaveDiscoveredCapabilities
 	// preserves is_active for existing tools, but the registry has all tools as active)
@@ -744,6 +852,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		DocSlug:             srv.DocSlug,
 		DocDescription:      srv.DocDescription,
 		DocConfigGuide:      srv.DocConfigGuide,
+		TemplateSlug:        srv.TemplateSlug,
 		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,

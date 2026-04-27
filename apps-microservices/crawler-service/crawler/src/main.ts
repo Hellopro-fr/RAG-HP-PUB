@@ -35,6 +35,8 @@ import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
+import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
+import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 
 const execAsync = promisify(exec);
@@ -61,7 +63,7 @@ const parseNumericArg = (key: string, npmKey: string, defaultValue: number): num
 export const domain = getArg('domain', 'npm_config_domain');
 export const site = getArg('site', 'npm_config_site') || process.argv[2];
 const id = getArg('id', 'npm_config_id');
-const storagePath = getArg('storagePath', 'npm_config_storagepath');
+export const storagePath = getArg('storagePath', 'npm_config_storagepath');
 const callbackUrl = getArg('callbackUrl', 'npm_config_callbackurl');
 const typeCrawling = getArg('typecrawling', 'npm_config_typecrawling');
 const method = getArg('method', 'npm_config_method');
@@ -144,6 +146,17 @@ if (storagePath) {
         console.error("Failed to change CWD:", err);
     }
 }
+
+// Tier-1 diez auto-decision bootstrap: load persisted decision (OOM_RELAUNCH) or
+// mark as committed if CLI already set skipDiez/bypassDiez (human choice wins, spec §10.1).
+if (storagePath) {
+    const loaded = readPersistedDecision(storagePath);
+    if (!loaded) applyCliFlagGuard();
+}
+
+// Tier-1 observer guard: disable observation if CLI already set skipQuestionMark / bypassQuestionMark.
+// Human choice wins — spec §9.3.
+applyQuestionMarkGuard();
 
 const nameLogs = `${domain}-logs-${now}.log`;
 attachFSLogger(nameLogs);
@@ -916,7 +929,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         storagePath: storagePath,
         message_erreur_crawling: messageErreurCrawling || null,
         robots_txt_bypassed: context.robotsTxtBypassed,
-        camoufox_used: context.camoufoxEnabled
+        camoufox_used: context.camoufoxEnabled,
+        diezDecisionMode: getDiezDecisionMode(isError),
+        questionMarkDecisionMode: getQuestionMarkDecisionMode(isError),
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');

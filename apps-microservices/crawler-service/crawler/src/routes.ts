@@ -5,6 +5,7 @@ import {
     requestQueue,
     robots,
     site,
+    storagePath,
 } from "./main.js";
 import {
     manageFrenchDetectionMethod,
@@ -19,6 +20,8 @@ import {
 } from "./functions.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
+import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 
 export const router = createPlaywrightRouter();
 
@@ -612,8 +615,28 @@ router.addDefaultHandler(
                 }
 
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
-                if (url.includes('?')) context.countQuestionMark++;
-                if (url.includes('#')) context.countDiez++;
+                if (url.includes('?')) {
+                    context.countQuestionMark++;
+                    // Tier-1 observer (spec 2026-04-17). Records domain-specific params that survived Tier-0.
+                    // No-op when observation disabled (human CLI flag set).
+                    recordQuestionMarkObservation(url);
+                }
+                if (url.includes('#')) {
+                    context.countDiez++;
+                    // Tier-1 auto-decision engine (spec 2026-04-17).
+                    // No-op when context.diezDecisionCommitted is true (persisted decision, CLI flag, or prior commit).
+                    recordClassification(url);
+                    const outcome = maybeCommitDecision();
+                    if (outcome === "skipDiez" && storagePath) {
+                        commitSkipDiez(storagePath);
+                    } else if (outcome === "bypassDiez" && storagePath) {
+                        commitBypassDiez(storagePath);
+                    } else if (outcome === "promoteTier2") {
+                        console.log(`[diez] Tier 2 promotion triggered (phase 1 no-op). Escalation will fire at MAX_SAMPLES.`);
+                    } else if (outcome === "escalate") {
+                        console.log(`[diez] Tier 1 inconclusive at ${context.diezClassification.total} samples — existing limitDiez path will fire.`);
+                    }
+                }
 
                 await routerDefaultHandler(
                     request,

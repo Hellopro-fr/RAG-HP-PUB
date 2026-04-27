@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+httpx
+mcp-proxy
+analytics-mcp
+mcp-gsc
+cryptography

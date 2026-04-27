@@ -48,6 +48,13 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&InstallExecutor{},
 		&InstallConfig{},
 		&UserGoogleToken{},
+		&Template{},
+		&TemplateInstance{},
+		&LLMInstruction{},
+		&LLMInstructionRow{},
+		&LLMInstructionRowServer{},
+		&ScopeTokenInstruction{},
+		&OAuth2ClientInstruction{},
 	); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}

@@ -9,10 +9,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
+	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
 	"github.com/hellopro/mcp-gateway/internal/repository"
+	"github.com/hellopro/mcp-gateway/internal/validation"
 	"golang.org/x/oauth2"
 )
 
@@ -348,6 +349,243 @@ func (h *Handler) handleSheetImport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handleImportInstancesFromSheet reads every data row of a Google Sheet and
+// creates one template instance per row. The template is selected once (per
+// request) via TemplateSlug; the column mapping pulls the instance name,
+// credentials JSON (as a single cell), and one cell per required_extra_env key.
+//
+// Rows are processed sequentially — each spawn takes a few seconds and the
+// runner has a finite port pool, so concurrency would complicate error
+// handling without a clear latency win at the target batch size (< 50 rows).
+// If this becomes a bottleneck, a worker pool sized to the runner's free port
+// count can be layered on top without touching the per-row logic.
+func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.Request) {
+	if h.templateRepo == nil || h.instanceRepo == nil || h.repo == nil || h.runner == nil || h.config == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
+		return
+	}
+
+	client, err := h.getGoogleHTTPClient(r)
+	if err != nil {
+		h.writeGoogleError(w, err)
+		return
+	}
+
+	var req InstanceSheetImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	if req.SpreadsheetID == "" || req.SheetName == "" || req.TemplateSlug == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "spreadsheet_id, sheet_name, and template_slug are required"})
+		return
+	}
+	if req.NameColumn == "" || req.CredentialsColumn == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "name_column and credentials_column are required"})
+		return
+	}
+	if req.FixedToolPrefix != "" && !alphanumericRe.MatchString(req.FixedToolPrefix) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "fixed_tool_prefix must contain only alphanumeric characters (a-z, A-Z, 0-9)"})
+		return
+	}
+
+	tpl, err := h.templateRepo.GetBySlug(req.TemplateSlug)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "unknown template: " + req.TemplateSlug})
+		return
+	}
+	// Only "stdio" templates spawn subprocesses — http_batch rows are a UI
+	// shortcut that routes to the generic /servers/import-google flow and must
+	// never be passed here. Fail fast with a descriptive 400 instead of a
+	// confusing runner-side error later.
+	if tpl.Kind != "" && tpl.Kind != "stdio" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: fmt.Sprintf("template %s is not an instance-creating template (kind=%s)", tpl.Slug, tpl.Kind),
+		})
+		return
+	}
+
+	// Every required schema field MUST be mapped before any network work. We
+	// reuse the template_dto schema shape (key + required).
+	schema, err := decodeRequiredExtraEnvSchema(tpl.RequiredExtraEnv)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "template schema is malformed"})
+		return
+	}
+	for _, field := range schema {
+		if !field.Required {
+			continue
+		}
+		col, ok := req.ExtraEnvColumns[field.Key]
+		if !ok || strings.TrimSpace(col) == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("extra_env_columns: mapping for %q is required", field.Key)})
+			return
+		}
+	}
+
+	// Pull sheet data.
+	headers, rows, err := goGoogle.ReadAllRows(r.Context(), client, req.SpreadsheetID, req.SheetName)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "failed to read sheet: " + err.Error()})
+		return
+	}
+	if len(rows) == 0 {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "spreadsheet has no data rows"})
+		return
+	}
+
+	// Build header → column-index map.
+	colIndex := make(map[string]int, len(headers))
+	for i, h := range headers {
+		colIndex[h] = i
+	}
+
+	// Every mapped column must exist in the sheet — surface this up-front
+	// rather than failing N rows in a row with the same error.
+	if _, ok := colIndex[req.NameColumn]; !ok {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("name_column %q not found in sheet headers", req.NameColumn)})
+		return
+	}
+	if _, ok := colIndex[req.CredentialsColumn]; !ok {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("credentials_column %q not found in sheet headers", req.CredentialsColumn)})
+		return
+	}
+	for key, col := range req.ExtraEnvColumns {
+		if col == "" {
+			continue
+		}
+		if _, ok := colIndex[col]; !ok {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("extra_env column %q (for key %q) not found in sheet headers", col, key)})
+			return
+		}
+	}
+
+	// Parse fixed tags once.
+	var fixedTags []string
+	if req.FixedTags != "" {
+		for _, tag := range strings.Split(req.FixedTags, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				fixedTags = append(fixedTags, tag)
+			}
+		}
+	}
+
+	createdBy := auth.UserEmailFromContext(r.Context())
+	resp := SheetImportResponse{
+		Total:   len(rows),
+		Results: make([]SheetImportResultEntry, 0, len(rows)),
+	}
+
+	getVal := func(row []string, header string) string {
+		if header == "" {
+			return ""
+		}
+		idx, ok := colIndex[header]
+		if !ok || idx >= len(row) {
+			return ""
+		}
+		return strings.TrimSpace(row[idx])
+	}
+
+	for rowIdx, row := range rows {
+		rowNum := rowIdx + 2 // 1-based + header row
+		result := SheetImportResultEntry{Row: rowNum}
+
+		rawName := getVal(row, req.NameColumn)
+		if rawName == "" {
+			result.Status = "error"
+			result.Message = "missing required field: name"
+			resp.Results = append(resp.Results, result)
+			resp.Errors++
+			continue
+		}
+		instName := rawName
+		if req.NamePrefix != "" {
+			instName = strings.TrimSpace(req.NamePrefix + " " + rawName)
+		}
+		result.Name = instName
+
+		credsRaw := getVal(row, req.CredentialsColumn)
+		if credsRaw == "" {
+			result.Status = "error"
+			result.Message = "missing required field: credentials"
+			resp.Results = append(resp.Results, result)
+			resp.Errors++
+			continue
+		}
+		credBytes := []byte(credsRaw)
+		if _, err := validation.ValidateServiceAccountJSON(credBytes); err != nil {
+			result.Status = "error"
+			result.Message = "invalid credentials: " + err.Error()
+			resp.Results = append(resp.Results, result)
+			resp.Errors++
+			continue
+		}
+
+		// Build extra_env from the mapped columns.
+		extraEnv := make(map[string]string, len(req.ExtraEnvColumns))
+		for key, col := range req.ExtraEnvColumns {
+			if v := getVal(row, col); v != "" {
+				extraEnv[key] = v
+			}
+		}
+		if err := validateExtraEnv(tpl.RequiredExtraEnv, extraEnv); err != nil {
+			result.Status = "error"
+			result.Message = err.Error()
+			resp.Results = append(resp.Results, result)
+			resp.Errors++
+			continue
+		}
+
+		_, _, cerr := h.createInstanceFromSpec(
+			r.Context(),
+			tpl,
+			instName,
+			credBytes,
+			extraEnv,
+			fixedTags,
+			req.FixedIcon,
+			req.FixedToolPrefix,
+			req.AutoDiscover,
+			createdBy,
+		)
+		if cerr != nil {
+			_, msg := classifyCreateInstanceError(cerr)
+			result.Status = "error"
+			result.Message = msg
+			resp.Results = append(resp.Results, result)
+			resp.Errors++
+			continue
+		}
+
+		result.Status = "imported"
+		resp.Results = append(resp.Results, result)
+		resp.Imported++
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// decodeRequiredExtraEnvSchema parses the template's required_extra_env
+// raw JSON into a typed slice. Empty raw is a valid (no-schema) result.
+func decodeRequiredExtraEnvSchema(raw json.RawMessage) ([]requiredExtraEnvField, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var schema []requiredExtraEnvField
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil, err
+	}
+	return schema, nil
+}
+
+type requiredExtraEnvField struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Required bool   `json:"required"`
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // getGoogleHTTPClient builds an authenticated Google HTTP client for the current user.
@@ -467,6 +705,11 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 		MCPTransport:        "http",
 		DocSlug:             generateDocSlug(name, id),
 		CreatedBy:           userEmail,
+		// TemplateSlug is non-empty only when the caller is the templates
+		// catalog (e.g. custom-http). The regular /servers/import-google
+		// flow leaves this empty so the imported rows show up in the docs
+		// and docs-admin lists as normal servers.
+		TemplateSlug: req.TemplateSlug,
 	}
 
 	// Apply optional mapped fields

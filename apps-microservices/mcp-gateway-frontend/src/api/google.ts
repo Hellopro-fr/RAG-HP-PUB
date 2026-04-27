@@ -5,7 +5,8 @@ import type {
   SheetInfo,
   SheetPreview,
   SheetImportRequest,
-  SheetImportResponse
+  SheetImportResponse,
+  InstanceSheetImportRequest
 } from '@/types/google'
 
 const BASE = '/api/v1'
@@ -41,5 +42,11 @@ export const googleApi = {
 
   importFromSheet(request: SheetImportRequest): Promise<SheetImportResponse> {
     return api.post<SheetImportResponse>(`${BASE}/google/sheets/import`, request)
+  },
+
+  // Batch-creates N template instances from a Google Sheet. One instance per
+  // data row; reuses SheetImportResponse for the per-row result payload.
+  importInstancesFromSheet(request: InstanceSheetImportRequest): Promise<SheetImportResponse> {
+    return api.post<SheetImportResponse>(`${BASE}/google/sheets/import-instances`, request)
   }
 }

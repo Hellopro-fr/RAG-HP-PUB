@@ -167,11 +167,14 @@ def score_constraint(
     """
     blocked_val = scoring_params["blocked_val"]
     different_val = scoring_params["different_val"]
-    # P1 (iter 1) — Pénalité pour caractéristique absente du produit.
-    # Une absence doit être pénalisée (produits avec fiches incomplètes remontaient
-    # indûment). On force la valeur à être au plus -0.5 pour garantir la pénalité
-    # même si le harness envoie 0 (neutre).
-    c_unknown_score = min(scoring_params["c_unknown_score"], -0.5)
+    # P1 (iter 1) — Pénalité pour caractéristique absente : différenciée critique/secondaire.
+    # Critique absent (c_weight >= 5) : cap -1.5 (plus fort que secondaire).
+    # Secondaire absent (c_weight < 5) : cap -0.8 (comportement précédent).
+    _c_w = constraint.get("c_weight", 1)
+    if _c_w >= 5:  # critique
+        c_unknown_score = min(scoring_params["c_unknown_score"], -1.2)
+    else:           # secondaire
+        c_unknown_score = min(scoring_params["c_unknown_score"], -0.8)
 
     target_list = constraint.get("target_list", [])
     blocking_list = constraint.get("blocking_list", [])

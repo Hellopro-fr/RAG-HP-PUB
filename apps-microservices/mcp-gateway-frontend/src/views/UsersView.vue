@@ -7,11 +7,43 @@
       <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
     </div>
 
-    <PageHeaderTabs
-      v-else
-      v-model="activeTab"
-      :tabs="tabs"
-    >
+    <template v-else>
+      <!-- Filters -->
+      <FilterPanel
+        :active-count="activeFilterCount"
+        @reset="resetFilters"
+      >
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Email ou nom</span>
+          <input v-model="filters.search" type="text" placeholder="Rechercher..." class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 placeholder:text-gray-400" />
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Rôle</span>
+          <select v-model="filters.role" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option value="admin">Admin</option>
+            <option value="read-only">Lecture seule</option>
+            <option value="config-only">Config seule</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Accès</span>
+          <select v-model="filters.allowed" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option value="allowed">Autorisé</option>
+            <option value="blocked">Bloqué</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Dernière connexion après</span>
+          <input v-model="filters.lastLoginFrom" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+        </label>
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Dernière connexion avant</span>
+          <input v-model="filters.lastLoginTo" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+        </label>
+      </FilterPanel>
+
       <!-- User cards -->
       <div
         v-if="filteredUsers.length"
@@ -137,9 +169,9 @@
         class="text-center py-12 text-gray-500 dark:text-gray-400"
       >
         <i class="pi pi-users text-4xl mb-3 block" />
-        <p class="font-medium">Aucun utilisateur</p>
+        <p class="font-medium">{{ activeFilterCount > 0 ? 'Aucun utilisateur ne correspond aux filtres' : 'Aucun utilisateur' }}</p>
       </div>
-    </PageHeaderTabs>
+    </template>
 
     <!-- Delete confirm -->
     <ConfirmDialog
@@ -154,13 +186,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { usersApi } from '@/api/users'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
-import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import FilterPanel from '@/components/shared/FilterPanel.vue'
 import type { User } from '@/types/user'
 
 const authStore = useAuthStore()
@@ -168,32 +200,59 @@ const toast = useToast()
 
 const users = ref<User[]>([])
 const loading = ref(false)
-const activeTab = ref('all')
 const deletingUserId = ref<number | undefined>()
 const updatingId = ref<number | undefined>()
 const togglingId = ref<number | undefined>()
 
-const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length)
-const readOnlyCount = computed(() => users.value.filter(u => u.role === 'read-only').length)
-const configOnlyCount = computed(() => users.value.filter(u => u.role === 'config-only').length)
-const allowedCount = computed(() => users.value.filter(u => u.is_allowed).length)
-const blockedCount = computed(() => users.value.filter(u => !u.is_allowed).length)
+const filters = reactive({
+  search: '',
+  role: '' as '' | 'admin' | 'read-only' | 'config-only',
+  allowed: '' as '' | 'allowed' | 'blocked',
+  lastLoginFrom: '',
+  lastLoginTo: '',
+})
 
-const tabs = computed(() => [
-  { label: 'Tous', value: 'all', count: users.value.length },
-  { label: 'Autorisé', value: 'allowed', count: allowedCount.value },
-  { label: 'Bloqué', value: 'blocked', count: blockedCount.value },
-  { label: 'Admin', value: 'admin', count: adminCount.value },
-  { label: 'Lecture seule', value: 'read-only', count: readOnlyCount.value },
-  { label: 'Config seule', value: 'config-only', count: configOnlyCount.value },
-])
+function matchesLastLogin(iso: string | undefined): boolean {
+  if (!filters.lastLoginFrom && !filters.lastLoginTo) return true
+  if (!iso) return false
+  const d = iso.slice(0, 10)
+  if (filters.lastLoginFrom && d < filters.lastLoginFrom) return false
+  if (filters.lastLoginTo && d > filters.lastLoginTo) return false
+  return true
+}
 
 const filteredUsers = computed(() => {
-  if (activeTab.value === 'all') return users.value
-  if (activeTab.value === 'allowed') return users.value.filter(u => u.is_allowed)
-  if (activeTab.value === 'blocked') return users.value.filter(u => !u.is_allowed)
-  return users.value.filter(u => u.role === activeTab.value)
+  const q = filters.search.trim().toLowerCase()
+  return users.value.filter(u => {
+    if (q) {
+      const hay = (u.email + ' ' + (u.display_name || '')).toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    if (filters.role && u.role !== filters.role) return false
+    if (filters.allowed === 'allowed' && !u.is_allowed) return false
+    if (filters.allowed === 'blocked' && u.is_allowed) return false
+    if (!matchesLastLogin(u.last_login_at)) return false
+    return true
+  })
 })
+
+const activeFilterCount = computed(() => {
+  let n = 0
+  if (filters.search.trim()) n++
+  if (filters.role) n++
+  if (filters.allowed) n++
+  if (filters.lastLoginFrom) n++
+  if (filters.lastLoginTo) n++
+  return n
+})
+
+function resetFilters() {
+  filters.search = ''
+  filters.role = ''
+  filters.allowed = ''
+  filters.lastLoginFrom = ''
+  filters.lastLoginTo = ''
+}
 
 onMounted(() => {
   loadUsers()

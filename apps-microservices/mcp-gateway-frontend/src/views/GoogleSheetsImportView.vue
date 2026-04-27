@@ -5,7 +5,7 @@
       <button
         type="button"
         class="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-        @click="router.push('/servers')"
+        @click="goBack"
       >
         <i class="pi pi-arrow-left text-xs" />
         Retour
@@ -201,7 +201,7 @@
             <button
               type="button"
               class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-              @click="router.push('/servers')"
+              @click="goBack"
             >
               {{ currentStep === 2 ? 'Fermer' : 'Annuler' }}
             </button>
@@ -246,7 +246,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { googleApi } from '@/api/google'
 import { useToast } from '@/composables/useToast'
 import StepTabs from '@/components/shared/StepTabs.vue'
@@ -261,7 +261,28 @@ import type {
 } from '@/types/google'
 
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
+
+// goBack preserves the origin of the navigation. The /admin/templates catalog
+// routes http_batch cards here with ?from=templates; any other entry path
+// (ServersView, a direct link) falls back to /servers as before.
+function goBack() {
+  if (route.query.from === 'templates') {
+    router.push({ name: 'templates' })
+    return
+  }
+  router.push('/servers')
+}
+
+// Pulled from the URL when the import was launched from the templates
+// catalog (TemplatesView sets ?template_slug=<slug> on http_batch cards).
+// Passed through verbatim to the backend so every imported mcp_servers row
+// carries its template origin for the docs / docs-admin filters.
+const templateSlug = computed<string>(() => {
+  const raw = route.query.template_slug
+  return typeof raw === 'string' ? raw : ''
+})
 
 const stepLabels = ['Sélection', 'Mapping', 'Résultats']
 const checkingConnection = ref(true)
@@ -408,6 +429,7 @@ async function handleImport() {
       fixed_tool_prefix: fixedToolPrefix.value || undefined,
       fixed_icon: fixedIcon.value || undefined,
       disable_documentation: !enableDocumentation.value || undefined,
+      template_slug: templateSlug.value || undefined,
     })
     currentStep.value = 2
   } catch (err: unknown) {

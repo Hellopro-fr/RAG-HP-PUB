@@ -864,10 +864,11 @@ class RecommendationService:
             score: top_score,
             details: top_details
         }) AS top_p
-        
-        UNWIND all_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
+
+        // Apply deduplication: return only top_p products (one per fournisseur, max 4)
+        UNWIND top_p AS top_product
+        WITH top_product.product_data AS p_node, top_product.details AS details, top_product.score AS global_score
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score
         """
 
         # Determine projection
@@ -1129,8 +1130,6 @@ class RecommendationService:
             if request.scoring.c_unknown_score is not None
             else 0
         )
-        # P1 fix: penalize missing characteristics (cap at -0.5 — aligned with V2)
-        c_unknown_score = min(c_unknown_score, -0.5)
         t_unmatched = (
             request.scoring.t_unmatched
             if request.scoring.t_unmatched is not None
@@ -1739,17 +1738,16 @@ class RecommendationService:
                             carac_entry["unite"] = unite
                         filtered_caracs.append(carac_entry)
 
-            # iter-2 (P3): description placed BEFORE titre so the LLM anchors
-            # on the discriminant technical content instead of a generic label.
+            raw_desc = re.sub(
+                r"\s+",
+                " ",
+                re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                    "\xa0", " "
+                ),
+            ).strip()
             formatted_product = {
                 "id_produit": str(id_produit),
-                "description": re.sub(
-                    r"\s+",
-                    " ",
-                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
-                        "\xa0", " "
-                    ),
-                ).strip(),
+                "description": raw_desc if raw_desc else "[AUCUN DESCRIPTIF DISPONIBLE]",
                 "titre": info.get(
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
@@ -1901,17 +1899,7 @@ class RecommendationService:
             - **[BESOIN_ACHETEUR]** : questions + réponses de l'acheteur
             - **[CARACTERISTIQUES]** : critères du besoin, chacun tagué **critique** ou **secondaire**. Un écart sur un critique est grave. Un écart sur un secondaire n'est pas éliminatoire.
             - **[LISTE_PRODUITS]** : titre, descriptif, caractéristiques de chaque produit
-
-            ## ⚠️ RÈGLE CRITIQUE — Lire la description complète, JAMAIS juger sur le titre seul
-
-            Le titre est souvent générique (ex: "Tracteur"). Seul le descriptif technique révèle le type précis (ex: "tracteur vigneron spécialisé pour vignobles en pente").
-
-            **Tu DOIS obligatoirement :**
-            1. Lire le **descriptif complet** de chaque produit (pas juste le titre)
-            2. Identifier le **type/sous-type précis** dans le descriptif
-            3. Comparer le descriptif technique aux critères du besoin
-            4. Ne JAMAIS conclure à la compatibilité sur la base du titre seul — si le descriptif contredit le titre, c'est le descriptif qui prime
-
+            
             ## TRAITEMENT
             
             ### ÉTAPE 1 — Comprendre le besoin
@@ -1919,12 +1907,11 @@ class RecommendationService:
             
             ### ÉTAPE 2 — Évaluer chaque produit
             Évalue chaque produit **indépendamment**, en le comparant uniquement au besoin reformulé.
-
-            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans la fiche** — pas inféré ou supposé. Si ambigu ou non confirmé : pas de score 1.
+            
+            **1. Usage en premier.** Lis le DESCRIPTIF du produit avant le titre. Le titre seul (ex: "Tracteur", "Mini-pelle") ne suffit JAMAIS pour confirmer ou infirmer la compatibilité d'usage — il faut vérifier le descriptif et/ou les caractéristiques techniques. Si le descriptif est marqué [AUCUN DESCRIPTIF DISPONIBLE], base ton évaluation uniquement sur les caractéristiques techniques. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans le descriptif ou les caractéristiques** — pas inféré du titre seul. Si ambigu ou non confirmé : pas de score 1.
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
-            - **Sous-type explicitement différent du sous-type demandé** (ex: distributeur comptoir vs sur-pied, tracteur vigneron vs standard, pont 2 colonnes vs ciseaux) — si le besoin précise un sous-type et que la fiche produit (titre + description + caractéristiques) indique factuellement un autre sous-type, score 1.
             - Usage fondamentalement incompatible avec le besoin — inclut les cas où le sous-type ou le gabarit implique structurellement un usage différent, à condition que l'incompatibilité soit certaine et directement lisible dans la fiche.
             
             **2. Caractéristiques critiques.** Un critique non renseigné ne pénalise pas mais ne confirme pas la compatibilité.
@@ -1950,11 +1937,11 @@ class RecommendationService:
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
             
             Cas éliminatoires (directement observables dans la fiche) :
-            - Usage fondamentalement incompatible (voir étape 2)
-            - Valeur numérique critique < 50% ou > 200% de la valeur cible
+            - Usage fondamentalement incompatible (voir étape 2) — ex: pont à vérins/enfoui ≠ pont 2 colonnes sur sol (systèmes d'installation non interchangeables) ; micro-tracteur (≤ 30 ch, usage jardinage/viticulture légère) ≠ tracteur agricole standard (≥ 50 ch, fenaison/labour) — incompatibilité retenue uniquement si directement lisible dans le titre ou descriptif
+            - Valeur numérique critique < 50% ou > 200% de la valeur cible — ex: produit 16 ch face à un besoin 75-100 CV = 21% de la borne basse → score 1 (la règle des 50% s'applique à la borne la plus basse de la plage cible)
             - Valeur textuelle **présente** et incompatible sur un critique (motorisation, interface, alimentation, norme…) — si absente : score 3, pas score 1
             - État neuf/occasion différent de ce que l'acheteur a demandé
-            
+
             **En cas de doute entre score 1 et score 2 → toujours score 2.** Un seul critère éliminatoire suffit pour le score 1, à condition d'être factuel.
             
             ### ÉTAPE 4 — Décisions
@@ -1975,39 +1962,31 @@ class RecommendationService:
             
             ## FORMAT DE SORTIE
             Objet JSON valide uniquement, sans texte avant ou après.
-            **Chaque produit DOIT inclure `score` (1 à 4) et `raison` (1 phrase justifiant le score).**
-
+            
             {{
             "top_produits": [
                 {{
                 "rang": 1,
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
-                "score": 4,
-                "raison": "Usage aligné, caractéristiques critiques compatibles"
                 }}
             ],
             "autres_produits": [
                 {{
                 "rang": 3,
                 "id_produit": "XXXXX",
-                "nom": "Nom du produit",
-                "score": 2,
-                "raison": "Bon univers mais écart sur [critère]"
+                "nom": "Nom du produit",     
                 }}
             ],
             "produits_ecartes": [
                 {{
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
-                "score": 1,
-                "raison": "Sous-type incompatible : [type produit] vs [type demandé]"
                 }}
             ]
             }}
             
             ## CHECKLIST AVANT SORTIE
-            - [ ] Descriptif complet de chaque produit lu (pas juste le titre)
             - [ ] Besoin reformulé avant toute évaluation
             - [ ] Usage vérifié en premier, écart éliminatoire uniquement si factuel et lisible dans la fiche
             - [ ] Chaque produit évalué indépendamment

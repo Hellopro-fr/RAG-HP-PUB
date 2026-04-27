@@ -124,6 +124,33 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Documentation', minRole: 'admin' }
     },
     {
+      path: '/admin/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplatesView.vue'),
+      meta: { requiresAuth: true, title: 'Templates', minRole: 'admin' }
+    },
+    {
+      path: '/admin/templates/:slug/new',
+      name: 'template-instance-new',
+      component: () => import('@/views/TemplateInstanceFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle instance', minRole: 'admin' },
+      props: true
+    },
+    {
+      path: '/admin/templates/:slug/import-from-sheet',
+      name: 'template-instance-sheet-import',
+      component: () => import('@/views/TemplateInstanceSheetImportView.vue'),
+      meta: { requiresAuth: true, title: 'Import depuis Sheets', minRole: 'admin' },
+      props: true
+    },
+    {
+      path: '/admin/templates/:slug',
+      name: 'template-detail',
+      component: () => import('@/views/TemplateDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Template', minRole: 'admin' },
+      props: true
+    },
+    {
       path: '/tokens',
       name: 'tokens',
       component: () => import('@/views/TokensView.vue'),
@@ -182,6 +209,30 @@ const router = createRouter({
       name: 'config-edit',
       component: () => import('@/views/ConfigFormView.vue'),
       meta: { requiresAuth: true, title: 'Modifier configuration', minRole: 'admin' }
+    },
+    {
+      path: '/llm-instructions',
+      name: 'llm-instructions',
+      component: () => import('@/views/LLMInstructionsView.vue'),
+      meta: { requiresAuth: true, title: 'Instructions LLM' }
+    },
+    {
+      path: '/llm-instructions/new',
+      name: 'llm-instruction-create',
+      component: () => import('@/views/LLMInstructionFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle instruction' }
+    },
+    {
+      path: '/llm-instructions/:id/edit',
+      name: 'llm-instruction-edit',
+      component: () => import('@/views/LLMInstructionFormView.vue'),
+      meta: { requiresAuth: true, title: 'Modifier instruction' }
+    },
+    {
+      path: '/llm-instructions/:id',
+      name: 'llm-instruction-detail',
+      component: () => import('@/views/LLMInstructionDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Instruction' }
     },
     {
       path: '/users',

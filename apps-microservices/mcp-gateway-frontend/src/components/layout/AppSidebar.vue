@@ -21,7 +21,7 @@
       ]"
     >
       <router-link to="/" class="flex items-center gap-2">
-        <i class="pi pi-box text-xl text-brand-500" />
+        <img src="/images/servers/hp-logo.svg" alt="Hellopro" class="w-6 h-6" />
         <span
           v-if="isExpanded || isHovered || isMobileOpen"
           class="text-lg font-bold tracking-wide text-gray-900 dark:text-white"
@@ -256,11 +256,21 @@ const menuGroups = computed<MenuGroup[]>(() => {
       name: "Guides d'installation",
       path: '/install-guides-admin',
     })
+    gestionItems.push({
+      icon: 'pi pi-clone',
+      name: 'Templates',
+      path: '/admin/templates',
+    })
   }
   gestionItems.push({
     icon: 'pi pi-key',
     name: 'Config MCP',
     path: '/tokens',
+  })
+  gestionItems.push({
+    icon: 'pi pi-comment',
+    name: 'Instructions LLM',
+    path: '/llm-instructions',
   })
   if (gestionItems.length > 0) {
     groups.push({ title: 'Gestion', items: gestionItems })

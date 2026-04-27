@@ -11,7 +11,7 @@ import type {
 const BASE = '/api/v1'
 
 export const serversApi = {
-  list(params?: { is_active?: string; tag?: string; created_by?: string }): Promise<ServerListResponse> {
+  list(params?: { is_active?: string; tag?: string; created_by?: string; exclude_templates?: string }): Promise<ServerListResponse> {
     return api.get<ServerListResponse>(`${BASE}/servers`, params as Record<string, string>)
   },
 

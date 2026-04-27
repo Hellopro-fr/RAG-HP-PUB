@@ -2,51 +2,73 @@
   <div>
     <PageBreadcrumb page-title="Journal d'audit" />
 
-    <!-- Filter bar -->
-    <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] p-4 sm:p-5 mb-4">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <input
-          v-model="filterEmail"
-          type="text"
-          placeholder="Email utilisateur"
-          class="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:text-gray-200"
-        />
-        <input
-          v-model="filterAction"
-          type="text"
-          placeholder="Action"
-          class="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:text-gray-200"
-        />
-        <select
-          v-model="filterResourceType"
-          class="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:text-gray-200"
-        >
-          <option value="">Toutes les ressources</option>
+    <!-- Filters -->
+    <FilterPanel
+      :active-count="activeFilterCount"
+      @reset="handleReset"
+    >
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">Email utilisateur</span>
+        <input v-model="filterEmail" type="text" placeholder="Email" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">Action</span>
+        <input v-model="filterAction" type="text" placeholder="Action" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">Ressource</span>
+        <select v-model="filterResourceType" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+          <option value="">Toutes</option>
           <option value="servers">Serveurs</option>
           <option value="tokens">Jetons</option>
           <option value="oauth2_clients">Clients OAuth2</option>
           <option value="users">Utilisateurs</option>
           <option value="mcp_transport">Transport MCP</option>
         </select>
-        <input
-          v-model="filterDateFrom"
-          type="date"
-          class="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:text-gray-200"
-        />
-        <input
-          v-model="filterDateTo"
-          type="date"
-          class="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-800 dark:text-gray-200"
-        />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">Méthode</span>
+        <select v-model="clientFilters.method" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+          <option value="">Toutes</option>
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="PATCH">PATCH</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">Statut HTTP</span>
+        <select v-model="clientFilters.statusBucket" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+          <option value="">Tous</option>
+          <option value="2xx">2xx Succès</option>
+          <option value="3xx">3xx Redirection</option>
+          <option value="4xx">4xx Client</option>
+          <option value="5xx">5xx Serveur</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">IP</span>
+        <input v-model="clientFilters.ip" type="text" placeholder="Adresse IP" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">Date début</span>
+        <input v-model="filterDateFrom" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-600 dark:text-gray-400">Date fin</span>
+        <input v-model="filterDateTo" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
+      </label>
+      <div class="sm:col-span-2 lg:col-span-3 flex items-end">
         <button
           class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
           @click="applyFilter"
         >
           <i class="pi pi-filter mr-1" />
-          Filtrer
+          Appliquer (serveur)
         </button>
       </div>
-    </div>
+    </FilterPanel>
 
     <!-- Table container -->
     <div class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
@@ -55,7 +77,7 @@
         <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
       </div>
 
-      <template v-else-if="logs.length">
+      <template v-else-if="filteredLogs.length">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
@@ -81,7 +103,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-              <template v-for="log in logs" :key="log.id">
+              <template v-for="log in filteredLogs" :key="log.id">
                 <!-- Main row -->
                 <tr
                   class="hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer"
@@ -177,18 +199,19 @@
       >
         <i class="pi pi-list text-4xl mb-3 block" />
         <p class="font-medium">Aucune entrée dans le journal</p>
-        <p class="text-sm mt-1">Modifiez les filtres ou revenez plus tard.</p>
+        <p class="text-sm mt-1">{{ activeFilterCount > 0 ? 'Aucune entrée ne correspond aux filtres.' : 'Modifiez les filtres ou revenez plus tard.' }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { auditApi } from '@/api/audit'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
+import FilterPanel from '@/components/shared/FilterPanel.vue'
 import type { AuditLog } from '@/types/audit'
 
 const route = useRoute()
@@ -203,12 +226,63 @@ const expandedIds = ref<Set<number>>(new Set())
 
 const PER_PAGE = 50
 
-// Filter state — pre-populate from query params
+// Server-side filter state — pre-populate from query params
 const filterEmail = ref((route.query.user_email as string) || '')
 const filterAction = ref('')
 const filterResourceType = ref('')
 const filterDateFrom = ref('')
 const filterDateTo = ref('')
+
+// Client-side filter state (applied to the already-fetched page)
+const clientFilters = reactive({
+  method: '',
+  statusBucket: '' as '' | '2xx' | '3xx' | '4xx' | '5xx',
+  ip: '',
+})
+
+function matchesStatusBucket(status: number, bucket: string): boolean {
+  if (!bucket) return true
+  if (bucket === '2xx') return status >= 200 && status < 300
+  if (bucket === '3xx') return status >= 300 && status < 400
+  if (bucket === '4xx') return status >= 400 && status < 500
+  if (bucket === '5xx') return status >= 500 && status < 600
+  return true
+}
+
+const filteredLogs = computed(() => {
+  const ip = clientFilters.ip.trim().toLowerCase()
+  return logs.value.filter(log => {
+    if (clientFilters.method && log.request_method !== clientFilters.method) return false
+    if (!matchesStatusBucket(log.response_status, clientFilters.statusBucket)) return false
+    if (ip && !log.ip_address.toLowerCase().includes(ip)) return false
+    return true
+  })
+})
+
+const activeFilterCount = computed(() => {
+  let n = 0
+  if (filterEmail.value) n++
+  if (filterAction.value) n++
+  if (filterResourceType.value) n++
+  if (filterDateFrom.value) n++
+  if (filterDateTo.value) n++
+  if (clientFilters.method) n++
+  if (clientFilters.statusBucket) n++
+  if (clientFilters.ip.trim()) n++
+  return n
+})
+
+function handleReset() {
+  filterEmail.value = ''
+  filterAction.value = ''
+  filterResourceType.value = ''
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
+  clientFilters.method = ''
+  clientFilters.statusBucket = ''
+  clientFilters.ip = ''
+  applyFilter()
+}
 
 onMounted(() => {
   loadLogs()

@@ -75,8 +75,10 @@ When present:
   UUID appears in the call's `speakers[].uuid` (falling back to `owner_uuid`),
   and refuse with an MCP error if no match is found.
 
-When the header is absent (e.g. direct non-gateway callers), the service runs
-unrestricted — preserving its historical behaviour.
+Absent header = unrestricted (preserves behaviour for direct, non-gateway
+callers). A header parsed to zero valid UUIDs is treated as "deny-all", not
+"unrestricted" — the context carries an explicit `restricted` flag so empty
+allow-lists fail closed.
 
 ## Environment Variables
 
