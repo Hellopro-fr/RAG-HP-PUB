@@ -103,7 +103,11 @@ func (r *OAuth2Repo) UpdateServers(clientID string, serverIDs []string) error {
 // An empty slice clears the filter (full access). All passed IDs must already
 // exist in bdd_used_tables — otherwise ErrBDDTableNotFound is returned and no
 // rows are mutated. The whole operation runs in a single transaction.
+//
+// Duplicate IDs in the input are silently deduplicated; see TokenRepo.UpdateBDDTables
+// for the rationale.
 func (r *OAuth2Repo) UpdateBDDTables(ctx context.Context, clientID string, usedTableIDs []string) error {
+	usedTableIDs = dedupeIDs(usedTableIDs)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(usedTableIDs) > 0 {
 			var count int64

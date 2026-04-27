@@ -7,13 +7,23 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 )
+
+// stubTokenCache implements api.TokenCache and records InvalidateAll calls
+// so tests can assert the BDD delete handler triggers cache invalidation.
+type stubTokenCache struct {
+	calls int
+}
+
+func (s *stubTokenCache) InvalidateAll() { s.calls++ }
 
 // setupBDDTestRepo wires an in-memory SQLite-backed BDDUsedRepo. Mirrors
 // the DDL used by repository/bdd_used_repo_test.go because GORM's
@@ -53,6 +63,19 @@ func setupBDDTestRepo(t *testing.T) *repository.BDDUsedRepo {
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (used_table_id, field_name),
             FOREIGN KEY (used_table_id) REFERENCES bdd_used_tables(id) ON DELETE CASCADE
+        )`,
+		// DeleteTable now clears the scope-token / OAuth2-client join tables
+		// in the same transaction (no GORM-level FK cascade is declared on the
+		// models). These tables must exist for the delete path to succeed.
+		`CREATE TABLE scope_token_bdd_tables (
+            token_id TEXT NOT NULL,
+            used_table_id TEXT NOT NULL,
+            PRIMARY KEY (token_id, used_table_id)
+        )`,
+		`CREATE TABLE oauth2_client_bdd_tables (
+            client_id TEXT NOT NULL,
+            used_table_id TEXT NOT NULL,
+            PRIMARY KEY (client_id, used_table_id)
         )`,
 	}
 	for _, s := range stmts {
@@ -573,5 +596,56 @@ func TestBDDUsedTables_GET_FiltersByDatabaseID(t *testing.T) {
 	}
 	if resp.Tables[0].DatabaseID != 1 {
 		t.Errorf("DatabaseID=%d want=1", resp.Tables[0].DatabaseID)
+	}
+}
+
+// ── Cache invalidation on delete ──────────────────────────────────────────
+
+// TestBDDUsedTableByID_DELETE_InvalidatesCaches asserts that deleting a
+// BDD used-table flushes both the scope-token cache and the OAuth2 client
+// cache. Without that, a cached entry referencing the deleted ID could
+// keep emitting it until its TTL expires.
+func TestBDDUsedTableByID_DELETE_InvalidatesCaches(t *testing.T) {
+	h := newBDDTestHandler(t)
+	tokCache := &stubTokenCache{}
+	oauthCache := oauth2pkg.NewCache(time.Minute)
+	h.tokenCache = tokCache
+	h.oauth2Cache = oauthCache
+
+	// Pre-populate the OAuth2 cache so we can observe a flush via Get.
+	oauthCache.Set("client-x", &oauth2pkg.CachedClient{ID: "client-x"})
+	if _, ok := oauthCache.Get("client-x"); !ok {
+		t.Fatalf("seed cache miss")
+	}
+
+	seed := createSampleTable(t, h)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bdd/used/tables/"+seed.ID, nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedTableByID(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status=%d want=204 body=%s", rr.Code, rr.Body.String())
+	}
+
+	if tokCache.calls != 1 {
+		t.Errorf("tokenCache.InvalidateAll calls=%d want=1", tokCache.calls)
+	}
+	if _, ok := oauthCache.Get("client-x"); ok {
+		t.Errorf("expected oauth2 cache to be cleared after delete")
+	}
+}
+
+// TestBDDUsedTableByID_DELETE_NoCacheWired makes sure the delete path
+// still works when the handler was wired without caches (e.g. minimal
+// test rigs and the unconfigured-deps scenarios).
+func TestBDDUsedTableByID_DELETE_NoCacheWired(t *testing.T) {
+	h := newBDDTestHandler(t)
+	seed := createSampleTable(t, h)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bdd/used/tables/"+seed.ID, nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedTableByID(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status=%d want=204 body=%s", rr.Code, rr.Body.String())
 	}
 }

@@ -293,6 +293,17 @@ func (h *Handler) deleteBDDUsedTable(w http.ResponseWriter, r *http.Request, id 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	// Invalidate scope-token and OAuth2-client caches so any live entries
+	// referencing the deleted used-table re-resolve their BDD scope on the
+	// next request. Without this, a cached entry could still emit the
+	// dangling ID until its TTL expires. Mirrors the Leexi-table pattern
+	// used by token / OAuth2 mutation handlers.
+	if h.tokenCache != nil {
+		h.tokenCache.InvalidateAll()
+	}
+	if h.oauth2Cache != nil {
+		h.oauth2Cache.InvalidateAll()
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

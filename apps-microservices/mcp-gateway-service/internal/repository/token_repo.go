@@ -106,7 +106,13 @@ func (r *TokenRepo) UpdateServers(tokenID string, serverIDs []string) error {
 // An empty slice clears the filter (full access). All passed IDs must already
 // exist in bdd_used_tables — otherwise ErrBDDTableNotFound is returned and no
 // rows are mutated. The whole operation runs in a single transaction.
+//
+// Duplicate IDs in the input are silently deduplicated. Without this, a
+// payload like ["a","a"] would pass the count check (DISTINCT count = 1)
+// against len = 2 and trip ErrBDDTableNotFound — a misleading error
+// since the IDs do exist.
 func (r *TokenRepo) UpdateBDDTables(ctx context.Context, tokenID string, usedTableIDs []string) error {
+	usedTableIDs = dedupeIDs(usedTableIDs)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(usedTableIDs) > 0 {
 			var count int64
@@ -130,6 +136,25 @@ func (r *TokenRepo) UpdateBDDTables(ctx context.Context, tokenID string, usedTab
 		}
 		return nil
 	})
+}
+
+// dedupeIDs returns ids with duplicates removed, preserving first-seen
+// order. Returns nil for nil input. Shared by UpdateBDDTables on both
+// the token and OAuth2 repos.
+func dedupeIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return ids
+	}
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // UpdateTools replaces the tool associations for a token.

@@ -161,16 +161,31 @@ func (r *BDDUsedRepo) UpdateTableDescription(ctx context.Context, id, descriptio
 	return nil
 }
 
-// DeleteTable removes a table; the FK cascade also drops its fields.
+// DeleteTable removes a table and its scope-token / OAuth2 join rows.
+//
+// The DB-level FK cascade already drops bdd_used_fields rows, but the
+// gateway models (db.ScopeTokenBDDTable, db.OAuth2ClientBDDTable) do not
+// declare a GORM FK constraint pointing back at bdd_used_tables.id, so
+// MySQL does not enforce a cascade there. We clear those join tables
+// inside a single transaction with the parent delete to keep token /
+// client filter sets honest after a registry row is removed.
 func (r *BDDUsedRepo) DeleteTable(ctx context.Context, id string) error {
-	res := r.db.WithContext(ctx).Delete(&db.BDDUsedTable{}, "id = ?", id)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return ErrBDDNotFound
-	}
-	return nil
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("used_table_id = ?", id).Delete(&db.ScopeTokenBDDTable{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("used_table_id = ?", id).Delete(&db.OAuth2ClientBDDTable{}).Error; err != nil {
+			return err
+		}
+		res := tx.Delete(&db.BDDUsedTable{}, "id = ?", id)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrBDDNotFound
+		}
+		return nil
+	})
 }
 
 // AddField appends a single field to an existing table. ErrBDDNotFound

@@ -14,9 +14,15 @@ import (
 )
 
 // setupBDDTestDB creates an in-memory SQLite DB with a manual DDL that
-// mirrors internal/db/models.go (BDDUsedTable + BDDUsedField). Manual
-// DDL is required because the GORM `datetime(3)` MySQL-only tags are
-// incompatible with SQLite.
+// mirrors internal/db/models.go (BDDUsedTable + BDDUsedField, plus the
+// scope_token_bdd_tables / oauth2_client_bdd_tables join tables that
+// DeleteTable now clears). Manual DDL is required because the GORM
+// `datetime(3)` MySQL-only tags are incompatible with SQLite.
+//
+// The two join tables are intentionally minimal: composite PK only, no
+// FK constraint pointing at bdd_used_tables. This matches production
+// (the GORM models do not declare a back-reference cascade) and is
+// what makes the application-level cascade in DeleteTable necessary.
 //
 // IMPORTANT: when models.go changes column/index/constraint shape,
 // update this DDL in lockstep — there is no AutoMigrate parity check
@@ -67,6 +73,16 @@ func setupBDDTestDB(t *testing.T) *gorm.DB {
 		)`,
 		`CREATE INDEX idx_bdd_used_fields_used_table_id ON bdd_used_fields(used_table_id)`,
 		`CREATE INDEX idx_bdd_used_fields_upstream_field_id ON bdd_used_fields(upstream_field_id)`,
+		`CREATE TABLE scope_token_bdd_tables (
+			token_id TEXT NOT NULL,
+			used_table_id TEXT NOT NULL,
+			PRIMARY KEY (token_id, used_table_id)
+		)`,
+		`CREATE TABLE oauth2_client_bdd_tables (
+			client_id TEXT NOT NULL,
+			used_table_id TEXT NOT NULL,
+			PRIMARY KEY (client_id, used_table_id)
+		)`,
 	}
 	for _, s := range stmts {
 		if err := g.Exec(s).Error; err != nil {
@@ -355,6 +371,71 @@ func TestDeleteTable_NotFound(t *testing.T) {
 	err := repo.DeleteTable(context.Background(), uuid.NewString())
 	if !errors.Is(err, ErrBDDNotFound) {
 		t.Fatalf("expected ErrBDDNotFound, got %v", err)
+	}
+}
+
+// TestDeleteTable_CascadesScopeTokenJoinRows checks that deleting a
+// used-table also drops scope_token_bdd_tables rows that reference it.
+// The GORM model does not declare a FK cascade for that join, so the
+// repository wraps the deletes in a transaction.
+func TestDeleteTable_CascadesScopeTokenJoinRows(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+
+	created, err := repo.CreateTable(context.Background(), newTable(1, "products"), nil)
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+
+	// Seed a join row referencing the used table.
+	tokenID := uuid.NewString()
+	if err := g.Create(&db.ScopeTokenBDDTable{TokenID: tokenID, UsedTableID: created.ID}).Error; err != nil {
+		t.Fatalf("seed join row: %v", err)
+	}
+
+	if err := repo.DeleteTable(context.Background(), created.ID); err != nil {
+		t.Fatalf("DeleteTable: %v", err)
+	}
+
+	var leftover int64
+	if err := g.Model(&db.ScopeTokenBDDTable{}).
+		Where("used_table_id = ?", created.ID).
+		Count(&leftover).Error; err != nil {
+		t.Fatalf("count leftover scope-token join rows: %v", err)
+	}
+	if leftover != 0 {
+		t.Errorf("expected 0 leftover scope_token_bdd_tables rows, got %d", leftover)
+	}
+}
+
+// TestDeleteTable_CascadesOAuth2JoinRows is the OAuth2 client mirror of
+// TestDeleteTable_CascadesScopeTokenJoinRows.
+func TestDeleteTable_CascadesOAuth2JoinRows(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+
+	created, err := repo.CreateTable(context.Background(), newTable(1, "products"), nil)
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+
+	clientID := uuid.NewString()
+	if err := g.Create(&db.OAuth2ClientBDDTable{ClientID: clientID, UsedTableID: created.ID}).Error; err != nil {
+		t.Fatalf("seed join row: %v", err)
+	}
+
+	if err := repo.DeleteTable(context.Background(), created.ID); err != nil {
+		t.Fatalf("DeleteTable: %v", err)
+	}
+
+	var leftover int64
+	if err := g.Model(&db.OAuth2ClientBDDTable{}).
+		Where("used_table_id = ?", created.ID).
+		Count(&leftover).Error; err != nil {
+		t.Fatalf("count leftover oauth2 join rows: %v", err)
+	}
+	if leftover != 0 {
+		t.Errorf("expected 0 leftover oauth2_client_bdd_tables rows, got %d", leftover)
 	}
 }
 

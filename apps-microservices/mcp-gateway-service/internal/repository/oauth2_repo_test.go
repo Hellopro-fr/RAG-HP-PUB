@@ -198,3 +198,33 @@ func TestOAuth2_UpdateBDDTables_UnknownIDRejected(t *testing.T) {
 		t.Errorf("expected no rows persisted on rejection, got %d", len(cl.BDDTables))
 	}
 }
+
+// TestOAuth2_UpdateBDDTables_DedupesDuplicates is the OAuth2 mirror of
+// TestUpdateBDDTables_DedupesDuplicates. See that test for context.
+func TestOAuth2_UpdateBDDTables_DedupesDuplicates(t *testing.T) {
+	g := setupOAuth2BDDTestDB(t)
+	repo := NewOAuth2Repo(g, nil)
+	clientID, tableIDs := seedClientAndTables(t, g, 2)
+
+	dup := []string{tableIDs[0], tableIDs[0], tableIDs[1]}
+	if err := repo.UpdateBDDTables(context.Background(), clientID, dup); err != nil {
+		t.Fatalf("UpdateBDDTables with duplicates: %v", err)
+	}
+
+	cl, err := repo.GetByID(clientID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if len(cl.BDDTables) != 2 {
+		t.Fatalf("expected 2 join rows after dedupe, got %d", len(cl.BDDTables))
+	}
+	got := map[string]int{}
+	for _, b := range cl.BDDTables {
+		got[b.UsedTableID]++
+	}
+	for _, id := range tableIDs {
+		if got[id] != 1 {
+			t.Errorf("expected exactly one join row for id=%q, got %d", id, got[id])
+		}
+	}
+}

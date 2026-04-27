@@ -209,3 +209,34 @@ func TestUpdateBDDTables_UnknownIDRejected(t *testing.T) {
 		t.Errorf("expected no rows persisted on rejection, got %d", len(tk.BDDTables))
 	}
 }
+
+// TestUpdateBDDTables_DedupesDuplicates exercises the dedupe shim: a
+// payload with duplicates ["a","a","b"] (where both ids exist) must
+// succeed and leave exactly one join row per unique id.
+func TestUpdateBDDTables_DedupesDuplicates(t *testing.T) {
+	g := setupTokenBDDTestDB(t)
+	repo := NewTokenRepo(g, nil)
+	tokenID, tableIDs := seedTokenAndTables(t, g, 2)
+
+	dup := []string{tableIDs[0], tableIDs[0], tableIDs[1]}
+	if err := repo.UpdateBDDTables(context.Background(), tokenID, dup); err != nil {
+		t.Fatalf("UpdateBDDTables with duplicates: %v", err)
+	}
+
+	tk, err := repo.GetByID(tokenID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if len(tk.BDDTables) != 2 {
+		t.Fatalf("expected 2 join rows after dedupe, got %d", len(tk.BDDTables))
+	}
+	got := map[string]int{}
+	for _, b := range tk.BDDTables {
+		got[b.UsedTableID]++
+	}
+	for _, id := range tableIDs {
+		if got[id] != 1 {
+			t.Errorf("expected exactly one join row for id=%q, got %d", id, got[id])
+		}
+	}
+}
