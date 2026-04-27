@@ -35,11 +35,17 @@ internal/
     token_handlers.go        # Scope token CRUD endpoints
     oauth2_handlers.go       # OAuth2 client CRUD endpoints
     import_handler.go        # Import servers from .mcp.json
+    bdd_handlers.go          # BDD used-tables registry CRUD endpoints
+    bdd_catalog_proxy.go     # Read-only proxy to upstream Hellopro BDD catalog
+    bdd_dto.go               # BDD request/response models (used tables + fields)
     dto.go                   # Server request/response models
     token_dto.go             # Token request/response models
     oauth2_dto.go            # OAuth2 client request/response models
     middleware.go            # Logging, recovery, JSON content-type middleware
     openapi.go               # OpenAPI 3.0 spec generation
+  bddcatalog/
+    client.go                # Read-only HTTP client for upstream Hellopro BDD catalog
+    types.go                 # Catalog DTOs (databases, tables, fields)
   auth/
     handlers.go              # Login/logout endpoints
     jwt.go                   # JWT signing & validation
@@ -85,6 +91,7 @@ internal/
     authcode_repo.go         # Authorization code CRUD
     consent_repo.go          # Per-client per-user consent CRUD
     refresh_repo.go          # Refresh token CRUD
+    bdd_used_repo.go         # BDD used-tables + fields registry CRUD over GORM
   scopetoken/
     generate.go              # Token generation & SHA-256 hashing
     cache.go                 # In-memory token cache
@@ -147,6 +154,23 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 
 Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is unset.
 
+### BDD Hellopro Registry (admin only, `/api/v1/`)
+```
+GET    /bdd/catalog/databases                              — Read-only proxy: 3 Hellopro DBs
+GET    /bdd/catalog/databases/{db}/tables                  — Read-only proxy: catalog tables
+GET    /bdd/catalog/databases/{db}/tables/{tid}/fields     — Read-only proxy: catalog fields
+GET    /bdd/used/tables                                     — List registered tables (`?database_id=...&search=...`)
+POST   /bdd/used/tables                                     — Register a table + selected fields
+GET    /bdd/used/tables/{id}                                — Get one with fields
+PATCH  /bdd/used/tables/{id}                                — Update curated description
+DELETE /bdd/used/tables/{id}                                — Remove from registry (cascades fields)
+POST   /bdd/used/tables/{id}/fields                         — Add a field
+PATCH  /bdd/used/tables/{id}/fields/{fid}                   — Update curated description
+DELETE /bdd/used/tables/{id}/fields/{fid}                   — Remove a field
+```
+
+Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` are unset. All `/api/v1/bdd/*` routes are admin-gated.
+
 ### OAuth2 Authorization Server (public, no admin auth — MCP spec-compliant)
 - `GET /.well-known/oauth-authorization-server` — Server metadata discovery (RFC 8414)
 - `GET/POST /authorize` — Authorization Code flow: login + consent screen
@@ -199,6 +223,8 @@ Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is
 | `LEEXI_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-leexi-service `/admin/*`. Must match `MCP_LEEXI_ADMIN_TOKEN` on the Leexi side. |
 | `RINGOVER_INTERNAL_URL` | — | In-cluster URL of mcp-ringover-service (e.g. `http://mcp-ringover-service:8586`). Required for Ringover-scoped tokens. |
 | `RINGOVER_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-ringover-service `/admin/*`. Must match `MCP_RINGOVER_ADMIN_TOKEN` on the Ringover side. |
+| `BDD_CATALOG_BASE_URL` | — | Read-only upstream Hellopro BDD catalog URL (e.g. `https://test.hellopro.fr/admin/repertoire_test/moulinettes_interne/api_mcp`). Required for catalog proxy. |
+| `BDD_CATALOG_TOKEN`    | — | Shared secret sent as `X-Admin-Token` to the upstream catalog. Required alongside `BDD_CATALOG_BASE_URL`. |
 | `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8595`). Required to spawn template instances. |
 | `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the runner admin API (sent as `X-Admin-Token`). The runner uses the SAME value when calling back via `/api/v1/internal/runner/sync`. |
 | `SLACK_WEBHOOK_URL` | — | Slack incoming-webhook URL (`https://hooks.slack.com/services/...`). Empty = notifications disabled. |
@@ -207,7 +233,7 @@ Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is
 
 ## Database
 
-**MySQL** with GORM auto-migration. 21 tables:
+**MySQL** with GORM auto-migration. 25 tables:
 
 | Table | Purpose |
 |---|---|
@@ -232,6 +258,10 @@ Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is
 | `llm_instruction_servers` | Many-to-many: which servers an instruction applies to |
 | `scope_token_instructions` | Many-to-many: which instructions a scope token injects |
 | `oauth2_client_instructions` | Many-to-many: which instructions an OAuth2 client injects |
+| `bdd_used_tables` | Gateway-curated registry of MySQL tables exposed to MCP (one per DB) |
+| `bdd_used_fields` | Per-table field selection with curated descriptions |
+| `scope_token_bdd_tables` | Join: scope token ↔ allowed BDD used-tables |
+| `oauth2_client_bdd_tables` | Join: OAuth2 client ↔ allowed BDD used-tables |
 
 Connection pooling: max 25 open, 5 idle connections.
 
@@ -246,6 +276,8 @@ Connection pooling: max 25 open, 5 idle connections.
 - Encryption is optional: runs without `ENCRYPTION_KEY`, but auth headers are stored in plaintext.
 - Tools have an `is_active` flag (default `true`). Inactive tools are excluded from token scope selection in the UI. Tool active state is preserved across server rediscovery.
 - Scope tokens and OAuth2 clients carry an optional **Leexi ownership filter** (`LeexiFilterMode` + `LeexiAllowedUserUUIDs` + `LeexiAllowedTeamUUIDs`). When the filter is set and the request targets the Leexi-tagged backend (`ToolPrefix == "leexi"`), the gateway adds `X-Leexi-Allowed-Participants` to the outbound MCP request. mcp-leexi-service then enforces the scope server-side. See `internal/leexiadmin/` for the user/team resolution and cache (5 min TTL).
+- Scope tokens and OAuth2 clients carry an optional **BDD scope filter** (`bdd_filter.used_table_ids`). When the filter is non-empty and the request targets a backend with `ToolPrefix == "bdd"`, the gateway resolves the IDs against `bdd_used_tables` and adds `X-BDD-Allowed-Tables: [{"database_id":int,"table_name":str}, ...]` to the outbound MCP request. **Fail-closed**: if the filter is set but every referenced row was deleted, the gateway emits `[]` so the upstream BDD MCP backend denies all calls. Empty/absent filter = full access.
+- The catalog (`tbl_sauvegarde_tables` / `tbl_sauvegarde_champs`) is owned by the upstream Hellopro BDD admin API at `BDD_CATALOG_BASE_URL` — gateway is read-only against it. The "used tables" registry (gateway-curated subset + descriptions) lives in the gateway DB.
 - OAuth2 Authorization Server is MCP spec-compliant: OAuth 2.1, RFC 8414 (metadata), RFC 7591 (dynamic registration), PKCE (S256).
 - **LLM instructions** are reusable snippets (title + body) linked to servers. Scope tokens and OAuth2 clients each pick a subset; at MCP `initialize` time, the gateway emits the composed `## <title>\n<body>` blocks (`\n\n`-joined, capped at 8 KiB) into the spec-defined `instructions` field. Picks are validated server-side: every `instruction_id` must share at least one server with the token/client's allowed set. Resolution happens once per scope-cache-miss (60 s TTL); instruction edits additionally invalidate both scope caches for immediate visibility.
 - MCP endpoints return 401 + `WWW-Authenticate` header when no auth is provided, triggering Claude.ai's OAuth2 discovery flow.
