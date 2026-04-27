@@ -1,23 +1,22 @@
-"""Aggregation des stats par domaine pour l'index Albums."""
+"""Aggregation des stats par domaine pour l'index Albums.
+
+Performance : `total_size_bytes` est intentionnellement renvoyé à 0 — calculer
+la taille agrégée ferait `os.walk` récursif sur chaque domaine, ce qui sur le
+volume NFS de prod (1000+ domaines × 10000+ fichiers) dépasse les timeouts
+HTTP raisonnables. La stat "taille" n'est pas critique pour l'usage admin V1
+(le dialog de suppression affiche juste produits/images). Si besoin futur,
+ajouter un endpoint dédié `GET /domains/{domain}/size` calculé à la demande,
+ou maintenir un cache invalidé par le writer du manifest (V2).
+"""
 
 import asyncio
 import json
 import logging
 import os
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
-
-
-def _count_dir_size_bytes(path: str) -> int:
-    total = 0
-    for root, _dirs, files in os.walk(path):
-        for f in files:
-            try:
-                total += os.path.getsize(os.path.join(root, f))
-            except OSError:
-                pass
-    return total
 
 
 def _count_errors(domain_dir: str) -> int:
@@ -50,7 +49,6 @@ def _summarize_domain(domain: str, domain_dir: str) -> dict[str, Any]:
     unsynced_count = product_count - synced_count
     last_update = (manifest or {}).get("last_updated")
     error_count = _count_errors(domain_dir)
-    total_size_bytes = _count_dir_size_bytes(domain_dir)
 
     return {
         "domain": domain,
@@ -60,7 +58,8 @@ def _summarize_domain(domain: str, domain_dir: str) -> dict[str, Any]:
         "synced_count": synced_count,
         "unsynced_count": unsynced_count,
         "last_update": last_update,
-        "total_size_bytes": total_size_bytes,
+        # Toujours 0 en V1 — voir le bandeau du module.
+        "total_size_bytes": 0,
     }
 
 
@@ -70,6 +69,7 @@ async def list_domains_with_stats(storage_base: str) -> dict[str, Any]:
     Retourne {"domains": [...], "total": N}, trié par domain ASC.
     Tolérant aux manifests absents/corrompus → counters à 0.
     """
+    started = time.monotonic()
     images_base = os.path.join(storage_base, "images")
     if not os.path.isdir(images_base):
         return {"domains": [], "total": 0}
@@ -84,4 +84,9 @@ async def list_domains_with_stats(storage_base: str) -> dict[str, Any]:
         return [_summarize_domain(d, os.path.join(images_base, d)) for d in domains]
 
     summaries = await asyncio.to_thread(_build)
+    duration_ms = int((time.monotonic() - started) * 1000)
+    logger.info(
+        "list_domains_with_stats: %d domains in %dms",
+        len(summaries), duration_ms,
+    )
     return {"domains": summaries, "total": len(summaries)}
