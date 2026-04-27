@@ -15,7 +15,6 @@ export interface BDDCatalogTable {
   table_name: string
   description?: string
   field_count?: number
-  [k: string]: unknown
 }
 
 export interface BDDCatalogField {
@@ -25,7 +24,6 @@ export interface BDDCatalogField {
   field_type?: string
   is_nullable?: boolean
   description?: string
-  [k: string]: unknown
 }
 
 export interface BDDUsedField {
