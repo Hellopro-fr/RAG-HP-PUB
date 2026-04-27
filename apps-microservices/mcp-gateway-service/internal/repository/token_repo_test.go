@@ -64,7 +64,10 @@ func setupTokenBDDTestDB(t *testing.T) *gorm.DB {
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			leexi_filter_mode TEXT NOT NULL DEFAULT 'none',
 			leexi_allowed_user_uuids TEXT,
-			leexi_allowed_team_uuids TEXT
+			leexi_allowed_team_uuids TEXT,
+			ringover_filter_mode TEXT NOT NULL DEFAULT 'none',
+			ringover_allowed_user_ids TEXT,
+			ringover_allowed_team_ids TEXT
 		)`,
 		`CREATE TABLE scope_token_servers (
 			token_id TEXT NOT NULL,
@@ -96,6 +99,11 @@ func setupTokenBDDTestDB(t *testing.T) *gorm.DB {
 			PRIMARY KEY (token_id, used_table_id),
 			FOREIGN KEY (token_id) REFERENCES scope_tokens(id) ON DELETE CASCADE,
 			FOREIGN KEY (used_table_id) REFERENCES bdd_used_tables(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE scope_token_instructions (
+			token_id TEXT NOT NULL,
+			instruction_id TEXT NOT NULL,
+			PRIMARY KEY (token_id, instruction_id)
 		)`,
 	}
 	for _, s := range stmts {
