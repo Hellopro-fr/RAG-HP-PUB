@@ -112,6 +112,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Serveurs MCP', minRole: 'read-only' }
     },
     {
+      path: '/bdd-tables',
+      name: 'bdd-tables',
+      component: () => import('@/views/BDDTablesView.vue'),
+      meta: { requiresAuth: true, title: 'Tables BDD', minRole: 'admin' },
+    },
+    {
       path: '/servers/import-google',
       name: 'google-sheets-import',
       component: () => import('@/views/GoogleSheetsImportView.vue'),

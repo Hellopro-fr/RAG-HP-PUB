@@ -261,6 +261,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
       name: 'Templates',
       path: '/admin/templates',
     })
+    gestionItems.push({
+      icon: 'pi pi-database',
+      name: 'Tables BDD',
+      path: '/bdd-tables',
+    })
   }
   gestionItems.push({
     icon: 'pi pi-key',
