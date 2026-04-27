@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"context"
+
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"gorm.io/gorm"
@@ -41,19 +43,19 @@ func (r *OAuth2Repo) DecryptSecret(client *db.OAuth2Client) string {
 	return string(plaintext)
 }
 
-// GetByID returns a client with its server and tool associations.
+// GetByID returns a client with its server, tool, and BDD-table associations.
 func (r *OAuth2Repo) GetByID(id string) (*db.OAuth2Client, error) {
 	var client db.OAuth2Client
-	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("id = ?", id).First(&client).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Preload("BDDTables").Where("id = ?", id).First(&client).Error
 	if err != nil {
 		return nil, err
 	}
 	return &client, nil
 }
 
-// ListAll returns all OAuth2 clients with server and tool associations.
+// ListAll returns all OAuth2 clients with server, tool, and BDD-table associations.
 func (r *OAuth2Repo) ListAll(createdBy string) ([]db.OAuth2Client, error) {
-	q := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Order("created_at DESC")
+	q := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Preload("BDDTables").Order("created_at DESC")
 	if createdBy != "" {
 		q = q.Where("created_by = ? OR created_by = ''", createdBy)
 	}
@@ -65,7 +67,7 @@ func (r *OAuth2Repo) ListAll(createdBy string) ([]db.OAuth2Client, error) {
 // FindBySecretHash looks up a client by its SHA-256 secret hash. This is the hot-path lookup for /oauth/token.
 func (r *OAuth2Repo) FindBySecretHash(hash string) (*db.OAuth2Client, error) {
 	var client db.OAuth2Client
-	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("secret_hash = ?", hash).First(&client).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Preload("BDDTables").Where("secret_hash = ?", hash).First(&client).Error
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +92,36 @@ func (r *OAuth2Repo) UpdateServers(clientID string, serverIDs []string) error {
 		}
 		for _, sid := range serverIDs {
 			if err := tx.Create(&db.OAuth2ClientServer{ClientID: clientID, ServerID: sid}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// UpdateBDDTables replaces the set of BDD used-table IDs allowed for a client.
+// An empty slice clears the filter (full access). All passed IDs must already
+// exist in bdd_used_tables — otherwise ErrBDDTableNotFound is returned and no
+// rows are mutated. The whole operation runs in a single transaction.
+func (r *OAuth2Repo) UpdateBDDTables(ctx context.Context, clientID string, usedTableIDs []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(usedTableIDs) > 0 {
+			var count int64
+			if err := tx.Model(&db.BDDUsedTable{}).
+				Where("id IN ?", usedTableIDs).
+				Count(&count).Error; err != nil {
+				return err
+			}
+			if int(count) != len(usedTableIDs) {
+				return ErrBDDTableNotFound
+			}
+		}
+
+		if err := tx.Where("client_id = ?", clientID).Delete(&db.OAuth2ClientBDDTable{}).Error; err != nil {
+			return err
+		}
+		for _, id := range usedTableIDs {
+			if err := tx.Create(&db.OAuth2ClientBDDTable{ClientID: clientID, UsedTableID: id}).Error; err != nil {
 				return err
 			}
 		}

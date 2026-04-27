@@ -93,14 +93,29 @@ func LeexiFilterFromContext(ctx context.Context) (*LeexiFilterContext, bool) {
 
 // RingoverFilterContext is the runtime view of the persisted Ringover scope.
 type RingoverFilterContext struct {
-	Mode             string
-	AllowedUserIDs   []int
-	AllowedTeamIDs   []int
+	Mode           string
+	AllowedUserIDs []int
+	AllowedTeamIDs []int
 }
 
 // RingoverFilterFromContext returns the typed Ringover filter info if any was set.
 func RingoverFilterFromContext(ctx context.Context) (*RingoverFilterContext, bool) {
 	v, ok := ctx.Value(RingoverFilterContextKey).(*RingoverFilterContext)
+	return v, ok
+}
+
+// BDDFilterContextKey carries a []string of bdd_used_tables.id values that
+// the active scope token / OAuth2 client is restricted to. ScopedGateway
+// reads it and emits X-BDD-Allowed-Tables on outbound MCP requests routed
+// to BDD-tagged backends. Absence of the key = no restriction (full access).
+const BDDFilterContextKey = "scope_bdd_filter"
+
+// BDDFilterFromContext returns the BDD allow-list if any was set, plus a
+// boolean flag distinguishing "no filter" from "filter present but empty".
+// An empty slice with ok=true means deny-all (every referenced row was
+// deleted); callers must NOT confuse it with no restriction.
+func BDDFilterFromContext(ctx context.Context) ([]string, bool) {
+	v, ok := ctx.Value(BDDFilterContextKey).([]string)
 	return v, ok
 }
 
@@ -210,6 +225,16 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					_ = json.Unmarshal(dbToken.RingoverAllowedTeamIDs, &ct.RingoverAllowedTeamIDs)
 				}
 
+				// BDD scope: flatten the join rows into a flat slice of IDs.
+				// Empty slice = no restriction; the runtime injector keys off
+				// the presence of the slice (len > 0), see ScopedGateway.
+				if len(dbToken.BDDTables) > 0 {
+					ct.BDDAllowedTableIDs = make([]string, 0, len(dbToken.BDDTables))
+					for _, b := range dbToken.BDDTables {
+						ct.BDDAllowedTableIDs = append(ct.BDDAllowedTableIDs, b.UsedTableID)
+					}
+				}
+
 				cache.Set(hash, ct)
 			}
 
@@ -253,6 +278,9 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					AllowedUserIDs: ct.RingoverAllowedUserIDs,
 					AllowedTeamIDs: ct.RingoverAllowedTeamIDs,
 				})
+			}
+			if len(ct.BDDAllowedTableIDs) > 0 {
+				ctx = context.WithValue(ctx, BDDFilterContextKey, ct.BDDAllowedTableIDs)
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

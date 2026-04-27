@@ -1,10 +1,18 @@
 package repository
 
 import (
+	"context"
+	"errors"
+
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"gorm.io/gorm"
 )
+
+// ErrBDDTableNotFound is returned when a UpdateBDDTables call references
+// a bdd_used_tables.id that does not exist. Callers should map this to a
+// 400 response.
+var ErrBDDTableNotFound = errors.New("bdd: used-table not found")
 
 // TokenRepo handles CRUD for scope tokens.
 type TokenRepo struct {
@@ -41,19 +49,19 @@ func (r *TokenRepo) DecryptToken(token *db.ScopeToken) string {
 	return string(plaintext)
 }
 
-// GetByID returns a token with its server and tool associations.
+// GetByID returns a token with its server, tool, and BDD-table associations.
 func (r *TokenRepo) GetByID(id string) (*db.ScopeToken, error) {
 	var token db.ScopeToken
-	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("id = ?", id).First(&token).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Preload("BDDTables").Where("id = ?", id).First(&token).Error
 	if err != nil {
 		return nil, err
 	}
 	return &token, nil
 }
 
-// ListAll returns all scope tokens with server and tool associations.
+// ListAll returns all scope tokens with server, tool, and BDD-table associations.
 func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
-	q := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Order("created_at DESC")
+	q := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Preload("BDDTables").Order("created_at DESC")
 	if createdBy != "" {
 		q = q.Where("created_by = ? OR created_by = ''", createdBy)
 	}
@@ -65,7 +73,7 @@ func (r *TokenRepo) ListAll(createdBy string) ([]db.ScopeToken, error) {
 // FindByHash looks up a token by its SHA-256 hash. This is the hot-path lookup.
 func (r *TokenRepo) FindByHash(hash string) (*db.ScopeToken, error) {
 	var token db.ScopeToken
-	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Where("token_hash = ?", hash).First(&token).Error
+	err := r.db.Preload("Servers").Preload("Tools").Preload("Instructions").Preload("BDDTables").Where("token_hash = ?", hash).First(&token).Error
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +95,36 @@ func (r *TokenRepo) UpdateServers(tokenID string, serverIDs []string) error {
 		// Insert new ones
 		for _, sid := range serverIDs {
 			if err := tx.Create(&db.ScopeTokenServer{TokenID: tokenID, ServerID: sid}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// UpdateBDDTables replaces the set of BDD used-table IDs allowed for a token.
+// An empty slice clears the filter (full access). All passed IDs must already
+// exist in bdd_used_tables — otherwise ErrBDDTableNotFound is returned and no
+// rows are mutated. The whole operation runs in a single transaction.
+func (r *TokenRepo) UpdateBDDTables(ctx context.Context, tokenID string, usedTableIDs []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(usedTableIDs) > 0 {
+			var count int64
+			if err := tx.Model(&db.BDDUsedTable{}).
+				Where("id IN ?", usedTableIDs).
+				Count(&count).Error; err != nil {
+				return err
+			}
+			if int(count) != len(usedTableIDs) {
+				return ErrBDDTableNotFound
+			}
+		}
+
+		if err := tx.Where("token_id = ?", tokenID).Delete(&db.ScopeTokenBDDTable{}).Error; err != nil {
+			return err
+		}
+		for _, id := range usedTableIDs {
+			if err := tx.Create(&db.ScopeTokenBDDTable{TokenID: tokenID, UsedTableID: id}).Error; err != nil {
 				return err
 			}
 		}

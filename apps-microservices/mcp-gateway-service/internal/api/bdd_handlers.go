@@ -28,6 +28,33 @@ func (h *Handler) SetBDDUsedRepo(repo *repository.BDDUsedRepo) {
 	h.bddUsedRepo = repo
 }
 
+// scopeTokenBDDFilterToDTO renders a token's persisted BDD scope into the
+// response DTO. Returns nil when the token has no BDD restriction so the
+// JSON omits the field entirely (matches the Leexi filter convention).
+func scopeTokenBDDFilterToDTO(t *db.ScopeToken) *BDDFilterDTO {
+	if len(t.BDDTables) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(t.BDDTables))
+	for _, b := range t.BDDTables {
+		ids = append(ids, b.UsedTableID)
+	}
+	return &BDDFilterDTO{UsedTableIDs: ids}
+}
+
+// oauth2ClientBDDFilterToDTO is the OAuth2 equivalent of
+// scopeTokenBDDFilterToDTO. Same shape, different join row type.
+func oauth2ClientBDDFilterToDTO(c *db.OAuth2Client) *BDDFilterDTO {
+	if len(c.BDDTables) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(c.BDDTables))
+	for _, b := range c.BDDTables {
+		ids = append(ids, b.UsedTableID)
+	}
+	return &BDDFilterDTO{UsedTableIDs: ids}
+}
+
 // handleBDDUsedTables routes /api/v1/bdd/used/tables (no id segment).
 func (h *Handler) handleBDDUsedTables(w http.ResponseWriter, r *http.Request) {
 	if h.bddUsedRepo == nil {

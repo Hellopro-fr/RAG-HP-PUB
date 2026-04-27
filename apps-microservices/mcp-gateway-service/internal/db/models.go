@@ -238,6 +238,7 @@ type ScopeToken struct {
 	Servers      []ScopeTokenServer      `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []ScopeTokenTool        `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
 	Instructions []ScopeTokenInstruction `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"instructions,omitempty"`
+	BDDTables    []ScopeTokenBDDTable    `gorm:"foreignKey:TokenID;references:ID;constraint:OnDelete:CASCADE" json:"bdd_tables,omitempty"`
 }
 
 func (ScopeToken) TableName() string { return "scope_tokens" }
@@ -295,6 +296,7 @@ type OAuth2Client struct {
 	Servers      []OAuth2ClientServer      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []OAuth2ClientTool        `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
 	Instructions []OAuth2ClientInstruction `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"instructions,omitempty"`
+	BDDTables    []OAuth2ClientBDDTable    `gorm:"foreignKey:ClientID;references:ID;constraint:OnDelete:CASCADE" json:"bdd_tables,omitempty"`
 }
 
 func (OAuth2Client) TableName() string { return "oauth2_clients" }

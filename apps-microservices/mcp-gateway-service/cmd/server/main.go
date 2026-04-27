@@ -224,6 +224,10 @@ func main() {
 		bddCatalogClient := bddcatalog.New(cfg.BDDCatalogBaseURL, cfg.BDDCatalogToken)
 		apiHandler.SetBDDUsedRepo(bddUsedRepo)
 		apiHandler.SetBDDCatalog(bddCatalogClient)
+		// Wire the same repo into the gateway so per-request BDD allow-list
+		// resolution (X-BDD-Allowed-Tables) can translate IDs to upstream
+		// (database_id, table_name) pairs. Empty / deleted IDs fail closed.
+		gw.SetBDDResolver(bddUsedRepo)
 		if bddCatalogClient.Enabled() {
 			log.Println("[main] BDD catalog client configured (read-only proxy enabled)")
 		}
