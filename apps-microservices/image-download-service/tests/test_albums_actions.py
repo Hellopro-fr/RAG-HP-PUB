@@ -103,10 +103,13 @@ def test_redownload_product_calls_downloader_for_each_url(tmp_path, monkeypatch)
 
     calls = []
 
-    async def fake_download(url, **kwargs):
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
         calls.append(url)
-        return {"status": "ok", "paths": {"main_path": str(images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / kwargs.get("filename", "x")),
-                                          "thumb_path": "/x", "filename": kwargs.get("filename", "x"),
+        # Mirror real downloader : filename dérivé de l'URL (sha1[:8]).
+        import hashlib
+        fname = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8] + ".jpg"
+        return {"status": "ok", "paths": {"main_path": str(images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / fname),
+                                          "thumb_path": "/x", "filename": fname,
                                           "url_source": url}}
 
     downloader = MagicMock()
@@ -136,11 +139,13 @@ def test_redownload_product_partial_failure_returned_in_errors(tmp_path, monkeyp
     _create_files(images_base / "alpha.com", "a.jpg")
     _create_files(images_base / "alpha.com", "b.jpg")
 
-    async def fake_download(url, **kwargs):
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
         if "b" in url:
             return {"status": "error", "error": "404"}
+        import hashlib
+        fname = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8] + ".jpg"
         return {"status": "ok", "paths": {"main_path": "/x", "thumb_path": "/x",
-                                          "filename": kwargs.get("filename", "x"), "url_source": url}}
+                                          "filename": fname, "url_source": url}}
 
     downloader = MagicMock()
     downloader.download_and_process = fake_download

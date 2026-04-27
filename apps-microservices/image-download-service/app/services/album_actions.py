@@ -160,7 +160,7 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
         try:
             res = await downloader.download_and_process(
                 url, domain=domain, product_id=id_produit,
-                product_name=product.get("nom"), filename=img.get("filename"))
+                product_name=product.get("nom"))
             if (res or {}).get("status") == "ok":
                 downloaded += 1
             else:
@@ -201,7 +201,7 @@ async def redownload_image(storage_base: str, domain: str, id_produit: str, file
     try:
         res = await downloader.download_and_process(
             img.get("url_source"), domain=domain, product_id=id_produit,
-            product_name=product.get("nom"), filename=img.get("filename"))
+            product_name=product.get("nom"))
         ok = (res or {}).get("status") == "ok"
     except Exception as e:
         ok = False
