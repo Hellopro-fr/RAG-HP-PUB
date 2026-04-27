@@ -9,18 +9,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-async def _read_manifest(manifest_path: str) -> dict | None:
-    """Lit un manifest.json. Retourne None en cas d'absence/corruption."""
-    if not os.path.exists(manifest_path):
-        return None
-    try:
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            return json.loads(f.read())
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning(f"Manifest illisible {manifest_path}: {e}")
-        return None
-
-
 def _count_dir_size_bytes(path: str) -> int:
     total = 0
     for root, _dirs, files in os.walk(path):

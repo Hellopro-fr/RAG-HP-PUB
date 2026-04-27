@@ -54,7 +54,12 @@ def test_two_domains_with_manifests(tmp_path, monkeypatch):
     assert domains["alpha.com"]["synced_count"] == 1
     assert domains["alpha.com"]["unsynced_count"] == 1
     assert domains["alpha.com"]["last_update"] == "2026-04-26T10:00:00"
+    assert domains["alpha.com"]["error_count"] == 0
+    # Pas d'images binaires écrites mais manifest.json compte dans total_size_bytes.
+    assert domains["alpha.com"]["total_size_bytes"] == os.path.getsize(images_base / "alpha.com" / "manifest.json")
     assert domains["beta.com"]["product_count"] == 1
+    assert domains["beta.com"]["error_count"] == 0
+    assert domains["beta.com"]["total_size_bytes"] == os.path.getsize(images_base / "beta.com" / "manifest.json")
     # Tri ASC
     assert [d["domain"] for d in result["domains"]] == ["alpha.com", "beta.com"]
 
