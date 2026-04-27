@@ -35,6 +35,24 @@ func (c *Client) Enabled() bool {
 	return c != nil && c.baseURL != "" && c.adminToken != ""
 }
 
+// envelope wraps every upstream payload as {"code": 200, "response": {...}}.
+// Errors are surfaced via the HTTP status, so we ignore Code here and only
+// decode Response.
+type envelope struct {
+	Response json.RawMessage `json:"response"`
+}
+
+// unwrap pulls the inner payload out of the upstream envelope. Falls back to
+// the raw body when the envelope is absent (defensive — keeps tests and any
+// future flat-shape endpoints working).
+func unwrap(body []byte) []byte {
+	var env envelope
+	if err := json.Unmarshal(body, &env); err == nil && len(env.Response) > 0 {
+		return env.Response
+	}
+	return body
+}
+
 // ListDatabases returns the catalog's known databases.
 func (c *Client) ListDatabases(ctx context.Context) ([]Database, error) {
 	body, err := c.do(ctx, "/databases", nil)
@@ -44,8 +62,11 @@ func (c *Client) ListDatabases(ctx context.Context) ([]Database, error) {
 	var payload struct {
 		Databases []Database `json:"databases"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if err := json.Unmarshal(unwrap(body), &payload); err != nil {
 		return nil, fmt.Errorf("bdd catalog: decode databases: %w", err)
+	}
+	if payload.Databases == nil {
+		payload.Databases = []Database{}
 	}
 	return payload.Databases, nil
 }
@@ -65,8 +86,11 @@ func (c *Client) ListTables(ctx context.Context, databaseID int, search string) 
 	var payload struct {
 		Tables []Table `json:"tables"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if err := json.Unmarshal(unwrap(body), &payload); err != nil {
 		return nil, fmt.Errorf("bdd catalog: decode tables: %w", err)
+	}
+	if payload.Tables == nil {
+		payload.Tables = []Table{}
 	}
 	return payload.Tables, nil
 }
@@ -81,8 +105,11 @@ func (c *Client) ListFields(ctx context.Context, databaseID, tableID int) ([]Fie
 	var payload struct {
 		Fields []Field `json:"fields"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if err := json.Unmarshal(unwrap(body), &payload); err != nil {
 		return nil, fmt.Errorf("bdd catalog: decode fields: %w", err)
+	}
+	if payload.Fields == nil {
+		payload.Fields = []Field{}
 	}
 	return payload.Fields, nil
 }

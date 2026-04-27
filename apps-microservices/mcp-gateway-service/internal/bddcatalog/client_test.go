@@ -225,3 +225,72 @@ func TestListDatabases_BaseURLTrimsTrailingSlash(t *testing.T) {
 		t.Errorf("path=%q want=/databases (no double slash)", seenPath)
 	}
 }
+
+// TestList_WrappedEnvelope verifies the production upstream shape
+// {"code":200,"response":{"<key>":[...]}} is unwrapped correctly across all
+// three list methods. Mirrors the api.hellopro.fr/api/mcp response format.
+func TestList_WrappedEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/databases":
+			_, _ = w.Write([]byte(`{"code":200,"response":{"databases":[{"id":1,"name":"Hellopro BO"}]}}`))
+		case "/databases/1/tables":
+			_, _ = w.Write([]byte(`{"code":200,"response":{"tables":[{"id":650,"database_id":1,"table_name":"rubrique_2","field_count":72}]}}`))
+		case "/databases/1/tables/650/fields":
+			_, _ = w.Write([]byte(`{"code":200,"response":{"fields":[{"id":1,"table_id":650,"field_name":"id_rubrique","field_type":"int"}]}}`))
+		default:
+			t.Errorf("unexpected path: %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "tok")
+
+	dbs, err := c.ListDatabases(context.Background())
+	if err != nil {
+		t.Fatalf("ListDatabases: %v", err)
+	}
+	if len(dbs) != 1 || dbs[0].Name != "Hellopro BO" {
+		t.Errorf("databases=%+v", dbs)
+	}
+
+	tables, err := c.ListTables(context.Background(), 1, "")
+	if err != nil {
+		t.Fatalf("ListTables: %v", err)
+	}
+	if len(tables) != 1 || tables[0].TableName != "rubrique_2" || tables[0].FieldCount != 72 {
+		t.Errorf("tables=%+v", tables)
+	}
+
+	fields, err := c.ListFields(context.Background(), 1, 650)
+	if err != nil {
+		t.Fatalf("ListFields: %v", err)
+	}
+	if len(fields) != 1 || fields[0].FieldName != "id_rubrique" || fields[0].FieldType != "int" {
+		t.Errorf("fields=%+v", fields)
+	}
+}
+
+// TestList_NullSliceNormalised verifies that empty/null upstream payloads
+// surface as empty slices rather than nil — keeps the proxy emitting
+// {"tables":[]} instead of {"tables":null} to the frontend.
+func TestList_NullSliceNormalised(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"response":{"tables":null}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "tok")
+	tables, err := c.ListTables(context.Background(), 1, "")
+	if err != nil {
+		t.Fatalf("ListTables: %v", err)
+	}
+	if tables == nil {
+		t.Fatal("ListTables returned nil slice; want empty slice")
+	}
+	if len(tables) != 0 {
+		t.Errorf("len=%d want=0", len(tables))
+	}
+}
