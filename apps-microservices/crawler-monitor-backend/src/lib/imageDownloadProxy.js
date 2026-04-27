@@ -9,6 +9,16 @@
  * - AbortError (timeout) → 504.
  *
  * Le helper n'inclut pas l'audit logging — celui-ci est géré dans `albums.js`.
+ *
+ * Pas de keep-alive sur les connexions sortantes :
+ * image-download-service tourne en multiples replicas (jusqu'à 20+ en prod).
+ * Le keep-alive undici (activé par défaut sur fetch global Node 18+) cache des
+ * sockets TCP vers chaque IP de replica. Quand un replica recycle/scale-down,
+ * sa socket reste dans le pool → la prochaine requête tombe en ECONNREFUSED
+ * même si d'autres replicas sont healthy. On envoie `Connection: close` à
+ * chaque fetch pour forcer une nouvelle connexion par appel et bénéficier du
+ * DNS round-robin Docker. Coût : ~1ms TCP setup par requête, négligeable face
+ * au reste de la latence (FS NFS, etc.).
  */
 
 const DEFAULT_BASE = process.env.IMAGE_DOWNLOAD_SERVICE_URL || 'http://image-download-service:8505';
@@ -30,7 +40,9 @@ export async function proxyToImageDownload(req, res, opts) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 
-  const headers = {};
+  // Connection: close — voir le bandeau du fichier (évite le pool keepalive
+  // stale quand les replicas image-download-service scale up/down).
+  const headers = { connection: 'close' };
   let body;
   if (['POST', 'PUT', 'PATCH'].includes(method) && req.body !== undefined && req.body !== null) {
     headers['content-type'] = 'application/json';
