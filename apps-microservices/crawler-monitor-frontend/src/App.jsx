@@ -21,6 +21,7 @@ const DomainPage    = lazy(() => import('./pages/DomainPage'));
 const ReplayPage    = lazy(() => import('./pages/ReplayPage'));
 const CapacityPlanningPage = lazy(() => import('./pages/CapacityPlanningPage'));
 const CoherenceHealthPage = lazy(() => import('./coherence/components/CoherenceHealthPage'));
+const AlbumsPage    = lazy(() => import('./pages/AlbumsPage'));
 
 const PageFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -191,6 +192,7 @@ const App = () => {
             <Route path="/audit" element={<AuditPage token={token} />} />
             <Route path="/domains" element={<DomainsPage token={token} />} />
             <Route path="/domains/:domain" element={<DomainPage token={token} />} />
+            <Route path="/albums" element={<AlbumsPage token={token} />} />
             <Route path="/capacity-planning" element={<CapacityPlanningPage token={token} />} />
             <Route path="/health" element={<CoherenceHealthPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

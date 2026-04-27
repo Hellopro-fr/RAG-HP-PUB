@@ -1,0 +1,148 @@
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Images, RefreshCw } from 'lucide-react';
+import { useAlbumsQuery, useDeleteAlbumMutation } from '../hooks/queries';
+import { AlbumsToolbar } from '../components/albums/AlbumsToolbar';
+import { AlbumsTable } from '../components/albums/AlbumsTable';
+import { Card } from '../components/ui/card';
+import ConfirmDestructive from '../components/ConfirmDestructive';
+
+/**
+ * Page index `/albums` — listing virtualisé des domaines avec albums photo.
+ *
+ * Comportement :
+ *  - `useAlbumsQuery` charge la liste complète (pas de pagination côté serveur).
+ *  - Filtrage côté client : recherche substring + filtre rapide (errors / unsynced).
+ *  - Tri ASC/DESC togglable sur chaque colonne.
+ *  - Click ligne → /albums/:domain ; Trash → ConfirmDestructive (type-to-confirm).
+ *  - Le polling du job DELETE arrive en Task 14 (ici, fire-and-close).
+ */
+export default function AlbumsPage({ token }) {
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('domain');
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  const { data, isLoading, refetch, isRefetching } = useAlbumsQuery(token);
+  const deleteMutation = useDeleteAlbumMutation(token);
+
+  const rows = useMemo(() => {
+    const all = data?.domains || [];
+    const needle = q.trim().toLowerCase();
+    let r = all.filter(a => !needle || a.domain.toLowerCase().includes(needle));
+    if (filter === 'errors')   r = r.filter(a => (a.error_count ?? 0) > 0);
+    if (filter === 'unsynced') r = r.filter(a => (a.unsynced_count ?? 0) > 0);
+
+    const desc = sort.endsWith('_desc');
+    const key = desc ? sort.slice(0, -5) : sort;
+    const dir = desc ? -1 : 1;
+    return [...r].sort((a, b) => {
+      const va = a[key];
+      const vb = b[key];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (va < vb) return -dir;
+      if (va > vb) return dir;
+      return 0;
+    });
+  }, [data, q, filter, sort]);
+
+  const handleSort = (k) => setSort(prev => (prev === k ? `${k}_desc` : k));
+
+  const handleResetFilters = () => {
+    setQ('');
+    setFilter('all');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const total = data?.total ?? (data?.domains?.length ?? 0);
+
+  return (
+    <div className="space-y-3 p-4">
+      <header className="flex items-center justify-between">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold">
+          <Images className="h-6 w-6" /> Albums
+        </h1>
+        <button
+          type="button"
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+          onClick={() => refetch()}
+          disabled={isRefetching}
+        >
+          <RefreshCw className={`h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} /> Rafraîchir
+        </button>
+      </header>
+
+      <AlbumsToolbar q={q} onQ={setQ} filter={filter} onFilter={setFilter} total={total} />
+
+      {total === 0 ? (
+        <Card className="p-8 text-center text-muted-foreground">Aucun album</Card>
+      ) : rows.length === 0 ? (
+        <Card className="p-8 text-center text-muted-foreground">
+          Aucun résultat pour ces filtres.
+          <button
+            type="button"
+            className="ml-2 underline hover:text-foreground"
+            onClick={handleResetFilters}
+          >
+            Réinitialiser
+          </button>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <AlbumsTable
+            rows={rows}
+            onSelectDomain={(d) => navigate(`/albums/${encodeURIComponent(d)}`)}
+            onRequestDelete={setPendingDelete}
+            sort={sort}
+            onSort={handleSort}
+          />
+        </Card>
+      )}
+
+      {pendingDelete && (
+        <ConfirmDestructive
+          open
+          title={`Supprimer l'album ${pendingDelete.domain}`}
+          shortId={pendingDelete.domain}
+          confirmWord="SUPPRIMER"
+          description={
+            <div className="space-y-2">
+              <p>
+                Cette action supprime <strong>définitivement</strong> :
+              </p>
+              <ul className="list-disc pl-5 text-sm">
+                <li>{pendingDelete.product_count ?? 0} produits</li>
+                <li>{pendingDelete.image_count ?? 0} images</li>
+                <li>
+                  {((pendingDelete.total_size_bytes ?? 0) / (1024 * 1024)).toFixed(1)} MB
+                </li>
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Le job s&apos;exécute en arrière-plan ; tu peux fermer cette page.
+              </p>
+            </div>
+          }
+          busy={deleteMutation.isPending}
+          onConfirm={async () => {
+            try {
+              await deleteMutation.mutateAsync({ domain: pendingDelete.domain });
+            } finally {
+              setPendingDelete(null);
+            }
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+    </div>
+  );
+}
