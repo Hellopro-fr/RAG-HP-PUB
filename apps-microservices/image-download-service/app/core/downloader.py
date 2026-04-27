@@ -1,5 +1,7 @@
 import aiohttp
 import aiofiles
+import hashlib
+import json
 import os
 import logging
 import asyncio
@@ -8,7 +10,6 @@ import unicodedata
 from datetime import datetime
 from urllib.parse import urlparse
 from typing import Optional, List, Dict, Tuple
-from image_download_service.core.image_processor import ImageProcessor
 import random
 
 logger = logging.getLogger(__name__)
@@ -80,8 +81,74 @@ def _classify_network_error(error: Exception) -> Tuple[str, str, str]:
         return (f"Erreur réseau: {error}", "network", "warning")
 
 
+def _url_hash8(url: str) -> str:
+    """
+    Retourne les 8 premiers caractères hex du sha1(url).
+    Utilisé pour dériver un suffixe de filename stable et unique par URL.
+    """
+    return hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
+
+
+def _build_filename(slug: str, product_id: str, url: str, ext: str) -> str:
+    """
+    Construit un filename dérivé de l'URL : {slug}-{product_id}-{hash8}{ext}.
+    ext doit inclure le point initial (ex : ".jpg").
+    """
+    return f"{slug}-{product_id}-{_url_hash8(url)}{ext}"
+
+
+def _load_manifest_entry(manifest_path: str, product_id: str) -> Optional[Dict]:
+    """
+    Lit manifest.json et retourne l'entrée du produit product_id, ou None si
+    le manifest est absent, corrompu, ou si le produit n'est pas présent.
+    """
+    if not os.path.exists(manifest_path):
+        return None
+    try:
+        with open(manifest_path, "r") as f:
+            content = f.read()
+            if not content.strip():
+                return None
+            manifest = json.loads(content)
+    except (json.JSONDecodeError, ValueError, OSError) as e:
+        logger.warning(f"Could not read manifest {manifest_path}: {e}")
+        return None
+    for entry in manifest.get("products", []):
+        if entry.get("id_produit") == product_id:
+            return entry
+    return None
+
+
+def _delete_image_files(image_entry: Dict, storage_base: str = "/app/storage",
+                        domain: Optional[str] = None) -> None:
+    """
+    Supprime les fichiers main et thumb d'une entrée image du manifest.
+    Un fichier manquant loggue un warning mais ne lève jamais d'exception.
+    Supporte les chemins absolus (legacy) et relatifs depuis le manifest.
+    Pour les chemins relatifs, reconstruit : {storage_base}/images/{domain}/{relpath}.
+    """
+    for key in ("main", "thumb"):
+        path = image_entry.get(key, "")
+        if not path:
+            continue
+        if not os.path.isabs(path):
+            if domain:
+                path = os.path.join(storage_base, "images", domain, path)
+            else:
+                logger.warning(f"Cannot resolve relative path '{path}' without domain")
+                continue
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+            else:
+                logger.warning(f"File to delete not found: {path}")
+        except OSError as e:
+            logger.warning(f"Failed to delete {path}: {e}")
+
+
 class Downloader:
     def __init__(self):
+        from image_download_service.core.image_processor import ImageProcessor
         self.image_processor = ImageProcessor()
         
         # Proxy config
