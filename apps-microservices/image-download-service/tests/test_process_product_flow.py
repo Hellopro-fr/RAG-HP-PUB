@@ -98,6 +98,38 @@ def test_j1_new_product_downloads_all(tmp_path, monkeypatch, create_stub_files):
 
 
 # =============================================================================
+# I1 — Le manifest writer pose last_update sur chaque produit
+# =============================================================================
+
+def test_product_entry_has_last_update_after_process(tmp_path, monkeypatch, create_stub_files):
+    """Après process_product réussi, l'entrée produit du manifest doit contenir
+    un champ last_update au format ISO 8601 (corrige tri 'updated' du service
+    album_products quand le produit n'est pas encore synced)."""
+    _patch_package_imports(monkeypatch)
+    _setup_storage(monkeypatch, tmp_path)
+    d = _make_downloader(monkeypatch)
+
+    fake = _fake_dl_factory(str(tmp_path), "fournisseur.com", "proda", "60001", create_stub_files)
+    monkeypatch.setattr(d, "download_and_process", fake)
+
+    asyncio.run(d.process_product({
+        "domaine": "fournisseur.com",
+        "id_produit": "60001",
+        "nom_produit": "prodA",
+        "url_images": ["https://f.com/a.jpg"],
+    }))
+
+    manifest_path = tmp_path / "images/fournisseur.com/manifest.json"
+    data = json.loads(manifest_path.read_text())
+    product = data["products"][0]
+    assert "last_update" in product, "le manifest writer doit poser last_update sur chaque produit"
+    # Format ISO 8601 : datetime.fromisoformat doit accepter la valeur sans lever
+    from datetime import datetime
+    parsed = datetime.fromisoformat(product["last_update"])
+    assert parsed is not None
+
+
+# =============================================================================
 # J2 — Ajout + substitution : [A,B,C] → [A,B',C,D]
 # =============================================================================
 

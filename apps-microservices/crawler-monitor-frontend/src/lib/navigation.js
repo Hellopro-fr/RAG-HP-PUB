@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Globe, Mail, SlidersHorizontal, FileText, HeartPulse,
+  LayoutDashboard, Globe, Mail, SlidersHorizontal, FileText, HeartPulse, Images,
 } from 'lucide-react';
 
 /**
@@ -26,6 +26,12 @@ export const NAV_ITEMS = [
       { to: '/health',            label: 'Santé système',     icon: HeartPulse,        description: 'Cohérence des données affichées' },
     ],
   },
+  {
+    section: 'Médias',
+    items: [
+      { to: '/albums',            label: 'Albums',            icon: Images,            description: 'Galeries d\'images par domaine — admin downloads/CDN' },
+    ],
+  },
 ];
 
 /**
@@ -39,6 +45,7 @@ const ROUTE_LABELS = {
   '/audit':            'Journal d\'audit',
   '/capacity-planning':'Capacity planning',
   '/health':           'Santé système',
+  '/albums':           'Albums',
 };
 
 /**
@@ -70,6 +77,13 @@ export function resolveBreadcrumbs(pathname) {
   // /domains/:domain
   if (parts[0] === 'domains' && parts[1]) {
     crumbs.push({ label: 'Domaines', to: '/domains' });
+    crumbs.push({ label: decodeURIComponent(parts[1]) });
+    return crumbs;
+  }
+
+  // /albums/:domain
+  if (parts[0] === 'albums' && parts[1]) {
+    crumbs.push({ label: 'Albums', to: '/albums' });
     crumbs.push({ label: decodeURIComponent(parts[1]) });
     return crumbs;
   }
