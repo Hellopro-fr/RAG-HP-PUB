@@ -1,5 +1,6 @@
 import type { LeexiFilter } from './leexi'
 import type { RingoverFilter } from './ringover'
+import type { BDDFilter } from './bdd'
 
 export interface ServerToolScope {
   server_id: string
@@ -25,6 +26,7 @@ export interface ScopeToken {
   expires_at?: string
   leexi_filter?: LeexiFilter
   ringover_filter?: RingoverFilter
+  bdd_filter?: BDDFilter
 }
 
 export interface TokenListResponse {
@@ -43,6 +45,7 @@ export interface CreateTokenRequest {
   allow_http?: boolean
   leexi_filter?: LeexiFilter
   ringover_filter?: RingoverFilter
+  bdd_filter?: BDDFilter
 }
 
 export interface UpdateTokenRequest extends Partial<CreateTokenRequest> {}
