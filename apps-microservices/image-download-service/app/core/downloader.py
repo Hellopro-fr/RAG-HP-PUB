@@ -195,7 +195,7 @@ class Downloader:
         domain = re.sub(r'^www\.', '', domain, flags=re.IGNORECASE)
         return domain.lower()
 
-    async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Dict:
+    async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = None, index: int = 0) -> Dict:
         """
         Downloads image bytes and delegates to ImageProcessor.
 
@@ -207,6 +207,10 @@ class Downloader:
                 - {"status": "ok", "paths": {"main_path": ..., "thumb_path": ..., "filename": ..., "url_source": <url>}}
                 - {"status": "error", "reason": "...", "categorie": "...", "severite": "..."}  on failure
         """
+        # I2 : aligner storage_base sur _STORAGE_BASE si non fourni explicitement
+        if storage_base is None:
+            storage_base = _STORAGE_BASE
+
         retries = 3
         timeout = aiohttp.ClientTimeout(total=30)
         last_error_info = None
@@ -311,7 +315,7 @@ class Downloader:
         import tempfile
         from image_download_service.core.nfs_lock import nfs_lock
         
-        errors_dir = f"/app/storage/images/{domain}"
+        errors_dir = f"{_STORAGE_BASE}/images/{domain}"
         errors_path = f"{errors_dir}/errors.json"
         
         os.makedirs(errors_dir, exist_ok=True)
@@ -354,68 +358,147 @@ class Downloader:
 
     async def process_product(self, product_data: dict) -> dict:
         """
-        Downloads and processes images for a product.
-        Checks if individual image already exists before downloading.
+        Synchronisation d'images set-based : la liste url_images reçue fait autorité.
+
+        - URLs déjà dans le manifest (url_source match) ET fichiers présents sur disque → réutilisées (0 DL).
+        - Nouvelles URLs → téléchargées avec un filename dérivé du hash SHA1 de l'URL.
+        - URLs disparues de la liste → fichiers main+thumb supprimés du FS (orphan cleanup).
+        - Manifest v1 legacy (aucune entrée image n'a url_source) → rebuild complet + suppression des fichiers legacy.
+        - Échec de DL partiel : les URLs réussies sont conservées ; si tout échoue, l'ancien manifest est préservé.
         """
-        domain = self._recupere_domaine(product_data.get("domaine_dspi") or product_data.get("domaine", "unknown"))
+        domain = self._recupere_domaine(
+            product_data.get("domaine_dspi") or product_data.get("domaine", "unknown")
+        )
         product_id = product_data.get("id_produit", "unknown")
-        # Try to find product name
-        product_name = product_data.get("nom") or product_data.get("nom_produit") or product_data.get("name") or f"produit-{product_id}"
-        
-        urls = product_data.get("url_images")
-        
-        if not urls:
+        product_name = (
+            product_data.get("nom") or product_data.get("nom_produit")
+            or product_data.get("name") or f"produit-{product_id}"
+        )
+        urls_raw = product_data.get("url_images")
+
+        if not urls_raw:
             await self.save_error(
                 domain, product_id, product_name, "",
                 "Aucune URL d'image fournie dans le message produit",
-                "no_url", "warning"
+                "no_url", "warning",
             )
             return product_data
 
-        if isinstance(urls, str):
-            # Handle comma-separated strings (common issue)
-            if "," in urls:
-                 urls = [u.strip() for u in urls.split(",")]
-            else:
-                 urls = [urls]
-        
-        processed_images = []
-        skipped_count = 0
-        
-        logger.info(f"Downloading {len(urls)} images for product {product_id} ({domain})")
-        
-        for i, url in enumerate(urls):
-            if not url: continue
-            
-            # Index conservé pour compatibilité (Task 2 réécrira process_product)
-            img_index = i + 1
+        # Normaliser urls_raw en liste, supprimer les entrées vides
+        if isinstance(urls_raw, str):
+            urls = [u.strip() for u in urls_raw.split(",")] if "," in urls_raw else [urls_raw]
+        else:
+            urls = list(urls_raw)
+        urls = [u for u in urls if u]
 
-            # Local rate limiting: 2 req/s (sleep 0.5s between requests)
-            if i > 0:
+        # Charger l'entrée manifest précédente pour ce produit
+        manifest_path = f"{_STORAGE_BASE}/images/{domain}/manifest.json"
+        prev_entry = _load_manifest_entry(manifest_path, product_id)
+
+        # Détecter v1 legacy : entrée présente, avec images, mais aucune n'a url_source
+        is_v1_legacy = (
+            prev_entry is not None
+            and prev_entry.get("images")
+            and not any(img.get("url_source") for img in prev_entry["images"])
+        )
+
+        if is_v1_legacy:
+            logger.info(f"🔁 Legacy v1 manifest détecté pour le produit {product_id} — rebuild complet")
+            for legacy_img in prev_entry.get("images", []):
+                _delete_image_files(legacy_img, storage_base=_STORAGE_BASE, domain=domain)
+            prev_by_url = {}
+        else:
+            prev_by_url = {
+                img["url_source"]: img
+                for img in (prev_entry.get("images", []) if prev_entry else [])
+                if img.get("url_source")
+            }
+
+        processed = []
+        download_errors = []
+        reused_count = 0
+        first_download = True
+
+        logger.info(f"🔄 Traitement de {len(urls)} URLs pour le produit {product_id} ({domain})")
+
+        for url in urls:
+            # Tentative de réutilisation si l'URL est déjà dans le manifest
+            if url in prev_by_url:
+                entry = prev_by_url[url]
+                main_rel = entry.get("main", "")
+                thumb_rel = entry.get("thumb", "")
+                main_abs = os.path.join(_STORAGE_BASE, "images", domain, main_rel)
+                thumb_abs = os.path.join(_STORAGE_BASE, "images", domain, thumb_rel)
+                if main_rel and thumb_rel and os.path.exists(main_abs) and os.path.exists(thumb_abs):
+                    logger.info(f"⏭️  URL inchangée, fichiers réutilisés : {url[:80]}")
+                    processed.append({
+                        "url_source": url,
+                        "main_path": main_abs,
+                        "thumb_path": thumb_abs,
+                        "filename": entry.get("filename", ""),
+                    })
+                    reused_count += 1
+                    continue
+                logger.warning(f"⚠️  Entrée manifest trouvée pour {url[:80]} mais fichiers manquants — re-téléchargement")
+
+            # Délai entre téléchargements successifs pour éviter les 429 côté fournisseur
+            # (skippé avant le premier téléchargement ; les réutilisations ne comptent pas)
+            if not first_download:
                 await asyncio.sleep(LOCAL_RATE_DELAY)
+            first_download = False
 
-            result = await self.download_and_process(url, domain, product_id, product_name, index=img_index)
-            
-            if result["status"] == "ok" and result["paths"] is not None:
-                processed_images.append(result["paths"])
+            # Téléchargement (storage_base omis : download_and_process utilisera _STORAGE_BASE)
+            result = await self.download_and_process(
+                url=url, domain=domain, product_id=product_id, product_name=product_name,
+            )
+            if result["status"] == "ok" and result.get("paths"):
+                processed.append(result["paths"])
             else:
-                # Erreur précise remontée par download_and_process
+                download_errors.append(url)
                 await self.save_error(
                     domain, product_id, product_name, url,
-                    result["reason"],
+                    result.get("reason", "Erreur de téléchargement inconnue"),
                     result.get("categorie", "unknown"),
-                    result.get("severite", "error")
+                    result.get("severite", "error"),
                 )
-        
-        # Update product data with new structure
-        product_data["processed_images"] = processed_images
-        product_data["skipped_count"] = skipped_count
+
+        # Échec total : si aucune image n'a été traitée (ni réutilisée, ni téléchargée),
+        # on préserve l'ancien manifest et on ne touche pas aux orphelins.
+        all_failed = len(processed) == 0 and len(download_errors) > 0
+        if all_failed:
+            logger.warning(
+                f"Tous les téléchargements ont échoué pour le produit {product_id} — "
+                f"l'ancien manifest est préservé ({len(urls)} téléchargements échoués)"
+            )
+            product_data["processed_images"] = processed
+            product_data["total_images"] = len(urls)
+            product_data["download_errors_count"] = len(download_errors)
+            return product_data
+
+        # Orphan cleanup : URLs présentes dans l'ancien manifest mais absentes du nouveau message
+        new_urls_set = set(urls)
+        orphans_deleted = 0
+        for old_url, old_entry in prev_by_url.items():
+            if old_url not in new_urls_set:
+                logger.info(f"🗑️  Suppression des fichiers orphelins pour l'URL : {old_url[:80]}")
+                _delete_image_files(old_entry, storage_base=_STORAGE_BASE, domain=domain)
+                orphans_deleted += 1
+
+        # Mettre à jour product_data pour le consumer (I1 : pas de skipped_count)
+        product_data["processed_images"] = processed
         product_data["total_images"] = len(urls)
-        
-        # Save to manifest for archive synchronization
-        if processed_images:
-            await self._save_to_manifest(domain, product_id, product_name, processed_images)
-        
+        product_data["download_errors_count"] = len(download_errors)
+
+        # Écrire le manifest seulement si on a un nouvel état à persister
+        # (le cas all_failed — aucune image traitée ET des erreurs — est traité en early-return plus haut)
+        if processed or orphans_deleted > 0:
+            await self._save_to_manifest(domain, product_id, product_name, processed)
+
+        logger.info(
+            f"📊 Produit {product_id} ({domain}) : {len(urls)} URLs | "
+            f"{reused_count} réutilisées, {len(processed) - reused_count} téléchargées, "
+            f"{orphans_deleted} orphelins supprimés, {len(download_errors)} erreurs"
+        )
         return product_data
 
     async def _save_to_manifest(self, domain: str, product_id: str, product_name: str, processed_images: list):

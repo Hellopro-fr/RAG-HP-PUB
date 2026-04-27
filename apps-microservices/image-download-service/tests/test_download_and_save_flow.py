@@ -2,35 +2,9 @@
 
 import json
 import asyncio
-import sys
-import os
-import types
 import pytest
 
-
-def _patch_package_imports(monkeypatch):
-    """
-    Injecte les modules internes sous les deux alias de chemin d'import :
-      - core.*                          (pythonpath = app, convention des tests)
-      - image_download_service.core.*   (import absolu utilisé par _save_to_manifest
-                                         et save_error en production)
-
-    Cela évite ModuleNotFoundError sans avoir à installer le package.
-    """
-    import core.nfs_lock as real_nfs_lock
-    import core.image_processor as real_image_processor
-
-    # Crée un package virtuel image_download_service si absent
-    if "image_download_service" not in sys.modules:
-        pkg = types.ModuleType("image_download_service")
-        monkeypatch.setitem(sys.modules, "image_download_service", pkg)
-
-    if "image_download_service.core" not in sys.modules:
-        core_pkg = types.ModuleType("image_download_service.core")
-        monkeypatch.setitem(sys.modules, "image_download_service.core", core_pkg)
-
-    monkeypatch.setitem(sys.modules, "image_download_service.core.nfs_lock", real_nfs_lock)
-    monkeypatch.setitem(sys.modules, "image_download_service.core.image_processor", real_image_processor)
+from conftest import _patch_package_imports
 
 
 def test_save_to_manifest_persists_url_source(tmp_path, monkeypatch):
