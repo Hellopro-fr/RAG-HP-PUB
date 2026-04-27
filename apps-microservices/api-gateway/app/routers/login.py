@@ -48,7 +48,9 @@ async def login_page(request: Request):
     username = request.session.pop("username", "")
 
     return templates.TemplateResponse(
-        "login.html", {"request": request, "error": error, "username": username}
+        request,
+        "login.html",
+        {"error": error, "username": username},
     )
 
 
