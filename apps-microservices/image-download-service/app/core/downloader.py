@@ -28,6 +28,9 @@ USER_AGENTS = [
 # Local rate limit: delay between requests (seconds)
 LOCAL_RATE_DELAY = float(os.environ.get("IMAGE_DOWNLOAD_DELAY", 0.5))
 
+# Répertoire de base du stockage des images (surchargeable via variable d'environnement)
+_STORAGE_BASE = os.environ.get("STORAGE_BASE", "/app/storage")
+
 # =============================================================================
 # Catégories et sévérités d'erreurs pour le reporting
 # =============================================================================
@@ -192,73 +195,37 @@ class Downloader:
         domain = re.sub(r'^www\.', '', domain, flags=re.IGNORECASE)
         return domain.lower()
 
-    def _get_expected_paths(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Dict[str, str]:
-        """
-        Calculate expected paths for an image based on product info and index.
-        Returns dict with main_path and thumb_path for each possible extension.
-        """
-        product_id_str = str(product_id)
-        if len(product_id_str) < 3:
-            product_id_str = product_id_str.zfill(3)
-            
-        rep1 = product_id_str[-1]
-        rep2 = product_id_str[-2]
-        rep3 = product_id_str[-3]
-        
-        normalized_name = self._normalize_name(product_name)
-        
-        # Check all possible extensions
-        extensions = ['.jpg', '.png', '.gif', '.webp']
-        paths = {}
-        
-        for ext in extensions:
-            if index > 0:
-                 filename = f"{normalized_name}-{product_id}-{index}{ext}"
-            else:
-                 # Check standard format for index 0 if that's what we decide, but current logic will likely pass index=1, 2, 3..
-                 # If index=1, filename has -1.
-                 if index == 0:
-                      filename = f"{normalized_name}-{product_id}{ext}"
-                 else:
-                      filename = f"{normalized_name}-{product_id}-{index}{ext}"
-
-            main_dir = os.path.join(storage_base, "images", domain, "produit-2", rep1, rep2, rep3)
-            thumb_dir = os.path.join(storage_base, "images", domain, "produit-3", rep1, rep2, rep3)
-            
-            paths[ext] = {
-                "main_path": os.path.join(main_dir, filename),
-                "thumb_path": os.path.join(thumb_dir, filename),
-                "filename": filename
-            }
-        
-        return paths
-
-    def _image_exists(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 1) -> Optional[Dict[str, str]]:
-        """
-        Check if image already exists for this product at specific index.
-        Returns the paths if found, None otherwise.
-        """
-        expected_paths = self._get_expected_paths(domain, product_id, product_name, storage_base, index)
-        
-        for ext, paths in expected_paths.items():
-            if os.path.exists(paths["main_path"]) and os.path.exists(paths["thumb_path"]):
-                return paths
-        
-        return None
-
     async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Dict:
         """
         Downloads image bytes and delegates to ImageProcessor.
-        
+
+        Le filename sur disque est dérivé de l'URL via _build_filename pour garantir
+        l'idempotence : même URL → même filename, indépendamment de l'ordre de traitement.
+
         Returns:
             dict with either:
-                - {"status": "ok", "paths": {...}}     on success
+                - {"status": "ok", "paths": {"main_path": ..., "thumb_path": ..., "filename": ..., "url_source": <url>}}
                 - {"status": "error", "reason": "...", "categorie": "...", "severite": "..."}  on failure
         """
         retries = 3
         timeout = aiohttp.ClientTimeout(total=30)
         last_error_info = None
-        
+
+        # Construire le filename à partir de l'URL (idempotent, dérivé de l'URL)
+        slug = self._normalize_name(product_name)
+        # Détecter l'extension depuis l'URL, sinon fallback .jpg
+        parsed_url = urlparse(url)
+        url_path = parsed_url.path.lower()
+        if url_path.endswith('.png'):
+            ext = '.png'
+        elif url_path.endswith('.gif'):
+            ext = '.gif'
+        elif url_path.endswith('.webp'):
+            ext = '.webp'
+        else:
+            ext = '.jpg'
+        filename = _build_filename(slug, product_id, url, ext)
+
         for attempt in range(retries):
             try:
                 headers = {"User-Agent": random.choice(USER_AGENTS)}
@@ -271,7 +238,7 @@ class Downloader:
                         logger.info(f"Download status for {url}: {response.status}")
                         if response.status == 200:
                             content = await response.read()
-                            
+
                             try:
                                 paths = self.image_processor.process_image(
                                     content=content,
@@ -279,8 +246,9 @@ class Downloader:
                                     product_id=product_id,
                                     product_name=product_name,
                                     base_storage_dir=storage_base,
-                                    index=index 
+                                    filename=filename,
                                 )
+                                paths["url_source"] = url
                                 return {"status": "ok", "paths": paths}
                             except Exception as e:
                                 logger.error(f"Image processing failed for {url}: {e}")
@@ -419,21 +387,13 @@ class Downloader:
         for i, url in enumerate(urls):
             if not url: continue
             
-            # Index for file naming (starts at 1)
+            # Index conservé pour compatibilité (Task 2 réécrira process_product)
             img_index = i + 1
-            
-            # Check if *this specific image* index already exists
-            existing_paths = self._image_exists(domain, product_id, product_name, index=img_index)
-            if existing_paths:
-                logger.info(f"⏭️  Image {img_index} already exists for product {product_id}: {existing_paths['filename']}")
-                processed_images.append(existing_paths)
-                skipped_count += 1
-                continue
 
             # Local rate limiting: 2 req/s (sleep 0.5s between requests)
             if i > 0:
                 await asyncio.sleep(LOCAL_RATE_DELAY)
-                
+
             result = await self.download_and_process(url, domain, product_id, product_name, index=img_index)
             
             if result["status"] == "ok" and result["paths"] is not None:
@@ -470,7 +430,7 @@ class Downloader:
         import tempfile
         from image_download_service.core.nfs_lock import nfs_lock
         
-        manifest_dir = f"/app/storage/images/{domain}"
+        manifest_dir = f"{_STORAGE_BASE}/images/{domain}"
         manifest_path = f"{manifest_dir}/manifest.json"
         
         # Create directory if needed
@@ -500,6 +460,7 @@ class Downloader:
                 thumb_rel = thumb_path
             
             product_entry["images"].append({
+                "url_source": img.get("url_source", ""),
                 "main": main_rel,
                 "thumb": thumb_rel,
                 "filename": img.get("filename", "")
