@@ -332,7 +332,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   <BudgetEstimate
                     priceMin={fmtPrice(fourchette.borne_basse)}
                     priceMax={fmtPrice(fourchette.borne_haute)}
-                    priceMoy={fmtPrice(fourchette.prix_median)}
+                    priceMoy={fmtPrice(fourchette.prix_moyen)}
                     priceCount={priceItems.length}
                     priceItems={priceItems.length > 0 ? priceItems : undefined}
                     detailDescription={phrase_prix}
