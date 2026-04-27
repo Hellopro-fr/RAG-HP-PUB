@@ -21,14 +21,15 @@ def _count_dir_size_bytes(path: str) -> int:
 
 
 def _count_errors(domain_dir: str) -> int:
-    """Compte les lignes dans errors.log si présent."""
-    err_path = os.path.join(domain_dir, "errors.log")
+    """Compte les entrées dans errors.json (tableau JSON) si présent."""
+    err_path = os.path.join(domain_dir, "errors.json")
     if not os.path.exists(err_path):
         return 0
     try:
         with open(err_path, "r", encoding="utf-8") as f:
-            return sum(1 for line in f if line.strip())
-    except OSError:
+            data = json.loads(f.read() or "[]")
+        return len(data) if isinstance(data, list) else 0
+    except (json.JSONDecodeError, OSError):
         return 0
 
 

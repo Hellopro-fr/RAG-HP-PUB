@@ -87,3 +87,24 @@ def test_missing_manifest_yields_zero_counts(tmp_path, monkeypatch):
 
     assert len(result["domains"]) == 1
     assert result["domains"][0]["product_count"] == 0
+
+
+def test_populated_errors_json_counted_correctly(tmp_path, monkeypatch):
+    """error_count reflète la longueur du tableau JSON errors.json si présent."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _write_manifest(images_base / "alpha.com", {
+        "products": [{"id_produit": "1", "synced": True, "images": []}],
+        "last_updated": "2026-04-26T10:00:00",
+    })
+    errors_data = [
+        {"url": "https://x/a.jpg", "reason": "404"},
+        {"url": "https://x/b.jpg", "reason": "timeout"},
+        {"url": "https://x/c.jpg", "reason": "503"},
+    ]
+    (images_base / "alpha.com" / "errors.json").write_text(
+        __import__("json").dumps(errors_data), encoding="utf-8"
+    )
+
+    from services.album_summary import list_domains_with_stats
+    result = asyncio.run(list_domains_with_stats(str(tmp_path)))
+    assert result["domains"][0]["error_count"] == 3
