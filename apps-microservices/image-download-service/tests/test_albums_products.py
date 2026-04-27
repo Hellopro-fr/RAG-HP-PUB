@@ -111,3 +111,63 @@ def test_image_status_orphan_manifest_when_file_missing(tmp_path, monkeypatch):
     from services.album_products import list_products
     r = asyncio.run(list_products(str(tmp_path), "alpha.com"))
     assert r["products"][0]["images"][0]["status"] == "orphan_manifest"
+
+
+def _seed_errors(images_base: Path, domain: str, urls: list[str]):
+    """Écrit un errors.json avec une entrée par url (format réel : voir downloader.save_error)."""
+    d = images_base / domain
+    d.mkdir(parents=True, exist_ok=True)
+    entries = [
+        {
+            "id_produit": "1",
+            "nom": "p",
+            "url": u,
+            "erreur": "HTTP 500",
+            "categorie": "http_server",
+            "severite": "error",
+            "date": "2026-04-27T10:00:00",
+        }
+        for u in urls
+    ]
+    (d / "errors.json").write_text(json.dumps(entries))
+
+
+def test_image_status_error_when_url_in_errors_json(tmp_path, monkeypatch):
+    """Une URL listée dans errors.json doit faire passer l'image au statut 'error'
+    et incrémenter error_count du produit."""
+    images_base = _setup(monkeypatch, tmp_path)
+    bad_url = "https://bad.example.com/img.jpg"
+    # Le fichier main existe sur disque pour montrer que la priorité error > ok n'intervient
+    # pas ici : on positionne juste le fichier ok et on s'attend quand même à "error".
+    (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0").mkdir(parents=True)
+    (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / "img.jpg").write_bytes(b"x")
+
+    _seed_domain(images_base, "alpha.com", [
+        _make_product("1", "p", [_make_image("img.jpg", url=bad_url)]),
+    ])
+    _seed_errors(images_base, "alpha.com", [bad_url])
+
+    from services.album_products import list_products
+    r = asyncio.run(list_products(str(tmp_path), "alpha.com"))
+    img = r["products"][0]["images"][0]
+    assert img["status"] == "error", f"attendu 'error', obtenu {img['status']}"
+    assert r["products"][0]["error_count"] == 1
+
+
+def test_image_status_error_takes_priority_over_orphan_manifest(tmp_path, monkeypatch):
+    """Si l'URL est dans errors.json ET que le fichier main est manquant,
+    le statut doit rester 'error' (et non 'orphan_manifest')."""
+    images_base = _setup(monkeypatch, tmp_path)
+    bad_url = "https://bad.example.com/missing.jpg"
+
+    # PAS de fichier sur disque : sans errors.json on aurait orphan_manifest
+    _seed_domain(images_base, "alpha.com", [
+        _make_product("1", "p", [_make_image("missing.jpg", url=bad_url)]),
+    ])
+    _seed_errors(images_base, "alpha.com", [bad_url])
+
+    from services.album_products import list_products
+    r = asyncio.run(list_products(str(tmp_path), "alpha.com"))
+    img = r["products"][0]["images"][0]
+    assert img["status"] == "error", \
+        f"error doit avoir priorité sur orphan_manifest, obtenu {img['status']}"

@@ -23,15 +23,44 @@ def _load_manifest(domain_dir: str) -> dict | None:
         return None
 
 
-def _detect_image_status(domain_dir: str, img: dict) -> str:
+def _load_error_urls(domain_dir: str) -> set[str]:
+    """Extrait l'ensemble des url_source en erreur depuis errors.json.
+
+    Tolérant aux fichiers absents/corrompus → set() vide. Mêmes garanties
+    que album_summary._count_errors. Format attendu : tableau JSON
+    d'entrées contenant au moins une clé 'url' (cf. downloader.save_error).
+    """
+    p = os.path.join(domain_dir, "errors.json")
+    if not os.path.exists(p):
+        return set()
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.loads(f.read() or "[]")
+    except (json.JSONDecodeError, OSError):
+        return set()
+    if not isinstance(data, list):
+        return set()
+    return {entry.get("url") for entry in data if isinstance(entry, dict) and entry.get("url")}
+
+
+def _detect_image_status(domain_dir: str, img: dict, error_urls: set[str]) -> str:
+    """Détermine le statut d'une image (spec §5.2).
+
+    Priorités :
+      1. url_source listé dans errors.json → "error" (priorité haute)
+      2. fichier main présent sur disque   → "ok"
+      3. sinon                             → "orphan_manifest"
+    """
+    if img.get("url_source") and img["url_source"] in error_urls:
+        return "error"
     main_rel = img.get("main")
     if not main_rel:
-        return "error"
+        return "orphan_manifest"
     main_abs = os.path.join(domain_dir, main_rel)
     return "ok" if os.path.exists(main_abs) else "orphan_manifest"
 
 
-def _enrich_images(domain_dir: str, images: list[dict]) -> list[dict]:
+def _enrich_images(domain_dir: str, images: list[dict], error_urls: set[str]) -> list[dict]:
     out = []
     for img in images:
         out.append({
@@ -39,13 +68,13 @@ def _enrich_images(domain_dir: str, images: list[dict]) -> list[dict]:
             "url_source": img.get("url_source"),
             "main":       img.get("main"),
             "thumb":      img.get("thumb"),
-            "status":     _detect_image_status(domain_dir, img),
+            "status":     _detect_image_status(domain_dir, img, error_urls),
         })
     return out
 
 
-def _enrich_product(domain_dir: str, p: dict) -> dict:
-    enriched_images = _enrich_images(domain_dir, p.get("images") or [])
+def _enrich_product(domain_dir: str, p: dict, error_urls: set[str]) -> dict:
+    enriched_images = _enrich_images(domain_dir, p.get("images") or [], error_urls)
     error_count = sum(1 for i in enriched_images if i["status"] in ("error", "orphan_manifest"))
     if error_count > 0:
         sync_status = "error"
@@ -119,7 +148,10 @@ async def list_products(
     def _compute() -> dict[str, Any]:
         manifest = _load_manifest(domain_dir)
         raw_products = (manifest or {}).get("products") or []
-        enriched = [_enrich_product(domain_dir, p) for p in raw_products]
+        # I2 : on charge errors.json une seule fois par appel pour détecter
+        # le statut "error" au niveau de chaque image (spec §5.2).
+        error_urls = _load_error_urls(domain_dir)
+        enriched = [_enrich_product(domain_dir, p, error_urls) for p in raw_products]
         filtered = _apply_filter(enriched, filter)
         searched = _apply_search(filtered, q)
         sorted_p = _apply_sort(searched, sort)
