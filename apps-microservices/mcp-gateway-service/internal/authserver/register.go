@@ -62,7 +62,7 @@ func (s *AuthServer) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		req.GrantTypes = []string{"authorization_code"}
 	}
 	if req.TokenEndpointAuthMethod == "" {
-		req.TokenEndpointAuthMethod = "client_secret_post"
+		req.TokenEndpointAuthMethod = "client_secret_basic"
 	}
 
 	clientID, clientSecret, secretHash, secretPrefix, err := oauth2pkg.GenerateCredentials()
