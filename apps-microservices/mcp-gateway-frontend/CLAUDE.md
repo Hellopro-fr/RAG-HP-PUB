@@ -58,7 +58,7 @@ backend with the matching `tool_prefix` is selected:
 |---|---|---|
 | `components/tokens/LeexiFilterPanel.vue` | `leexi` | `leexi_filter` (UUID strings) |
 | `components/tokens/RingoverFilterPanel.vue` | `ringover` | `ringover_filter` (integer IDs) |
-| `components/bdd/BDDFilterPanel.vue` | `bdd` | `bdd_filter.used_table_ids` |
+| `components/tokens/BDDFilterPanel.vue` | `bdd` | `bdd_filter.used_table_ids` |
 
 Each panel fetches `GET /api/v1/{provider}/users|teams` (or the BDD
 used-tables registry) from the gateway and gracefully renders a disabled
