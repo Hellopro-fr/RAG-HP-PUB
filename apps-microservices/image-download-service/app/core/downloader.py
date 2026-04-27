@@ -520,9 +520,13 @@ class Downloader:
         os.makedirs(manifest_dir, exist_ok=True)
         
         # Build product entry
+        # I1 : last_update est posé à chaque écriture/réécriture du produit
+        # pour que le tri "updated" du service album_products soit stable
+        # même quand le produit n'a pas encore été marqué "synced".
         product_entry = {
             "id_produit": product_id,
             "nom": product_name,
+            "last_update": datetime.now().isoformat(),
             "images": []
         }
         
