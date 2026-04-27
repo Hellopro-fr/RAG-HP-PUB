@@ -8,6 +8,11 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true
+      },
+      '/cdn-images': {
+        target: 'http://localhost:8580',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/cdn-images/, '/images')
       }
     }
   },
