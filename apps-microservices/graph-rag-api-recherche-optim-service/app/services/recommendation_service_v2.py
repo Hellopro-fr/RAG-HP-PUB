@@ -167,14 +167,14 @@ def score_constraint(
     """
     blocked_val = scoring_params["blocked_val"]
     different_val = scoring_params["different_val"]
-    # P1 (iter 1) — Pénalité pour caractéristique absente : différenciée critique/secondaire.
-    # Critique absent (c_weight >= 5) : cap -1.5 (plus fort que secondaire).
-    # Secondaire absent (c_weight < 5) : cap -0.8 (comportement précédent).
+    # P1 (iter 1 PROD) — Pénalité différenciée : critique absent = -1.2 (cap fort),
+    # secondaire absent = neutre (0). Logique : absent secondaire = données graph
+    # incomplètes, ne doit pas être pire que "présent mais faux" (v_different=-0.3).
     _c_w = constraint.get("c_weight", 1)
     if _c_w >= 5:  # critique
         c_unknown_score = min(scoring_params["c_unknown_score"], -1.2)
-    else:           # secondaire
-        c_unknown_score = min(scoring_params["c_unknown_score"], -0.8)
+    else:           # secondaire absent → neutre
+        c_unknown_score = scoring_params["c_unknown_score"]  # 0 par défaut
 
     target_list = constraint.get("target_list", [])
     blocking_list = constraint.get("blocking_list", [])

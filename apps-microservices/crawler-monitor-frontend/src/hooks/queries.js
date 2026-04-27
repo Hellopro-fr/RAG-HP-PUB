@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
 export const queryKeys = {
@@ -27,6 +27,10 @@ export const queryKeys = {
   jobPerformance:     (id) => ['jobs', id, 'performance'],
   jobReplay:          (id) => ['jobs', id, 'replay'],
   capacityPlanning:   (window) => ['capacity-planning', 'ram', window],
+  albums:             () => ['albums'],
+  albumProducts:      (domain, params) => ['albums', domain, 'products', params],
+  albumErrors:        (domain) => ['albums', domain, 'errors'],
+  albumDeleteJob:     (jobId) => ['albums', 'delete-job', jobId],
 };
 
 /* ---------- Jobs ---------- */
@@ -215,6 +219,135 @@ export function useAlertsQuery(token, options = {}) {
     // to a job event (replica high CPU, capacity saturation).
     refetchInterval: 60 * 1000,
     ...options,
+  });
+}
+
+/* ---------- Albums ---------- */
+
+export function useAlbumsQuery(token, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.albums(),
+    queryFn: () => api.get('/albums', token),
+    enabled: !!token,
+    staleTime: 30 * 1000,
+    ...options,
+  });
+}
+
+export function useAlbumProductsQuery(token, domain, params = {}, options = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.albumProducts(domain, params),
+    queryFn: ({ pageParam = 1 }) => api.get(
+      `/albums/${encodeURIComponent(domain)}/products`,
+      token,
+      { query: { ...params, page: pageParam } },
+    ),
+    enabled: !!token && !!domain,
+    initialPageParam: 1,
+    getNextPageParam: (last) => last?.next_page ?? undefined,
+    staleTime: 15 * 1000,
+    ...options,
+  });
+}
+
+export function useAlbumErrorsQuery(token, domain, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.albumErrors(domain),
+    queryFn: () => api.get(`/albums/${encodeURIComponent(domain)}/errors`, token),
+    enabled: !!token && !!domain,
+    ...options,
+  });
+}
+
+export function useAlbumDeleteJobQuery(token, jobId, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.albumDeleteJob(jobId),
+    queryFn: () => api.get(`/albums/delete-jobs/${jobId}`, token),
+    enabled: !!token && !!jobId,
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      if (status === 'queued' || status === 'running') return 1500;
+      return false;
+    },
+    ...options,
+  });
+}
+
+/* ---------- Albums mutations ---------- */
+
+function useAlbumInvalidator() {
+  const queryClient = useQueryClient();
+  return useCallback((domain) => {
+    queryClient.invalidateQueries({ queryKey: ['albums'] });
+    if (domain) {
+      queryClient.invalidateQueries({ queryKey: ['albums', domain] });
+    }
+  }, [queryClient]);
+}
+
+export function useProductRedownloadMutation(token) {
+  const invalidate = useAlbumInvalidator();
+  return useMutation({
+    mutationFn: ({ domain, productId }) => api.post(
+      `/albums/${encodeURIComponent(domain)}/products/${encodeURIComponent(productId)}/redownload`,
+      token,
+      undefined,
+    ),
+    onSuccess: (_data, vars) => invalidate(vars?.domain),
+  });
+}
+
+export function useImageRedownloadMutation(token) {
+  const invalidate = useAlbumInvalidator();
+  return useMutation({
+    mutationFn: ({ domain, productId, imageId }) => api.post(
+      `/albums/${encodeURIComponent(domain)}/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}/redownload`,
+      token,
+      undefined,
+    ),
+    onSuccess: (_data, vars) => invalidate(vars?.domain),
+  });
+}
+
+export function useDeleteAlbumMutation(token) {
+  const invalidate = useAlbumInvalidator();
+  return useMutation({
+    mutationFn: ({ domain }) => api.delete(`/albums/${encodeURIComponent(domain)}`, token),
+    onSuccess: (_data, vars) => invalidate(vars?.domain),
+  });
+}
+
+export function useDeleteProductMutation(token) {
+  const invalidate = useAlbumInvalidator();
+  return useMutation({
+    mutationFn: ({ domain, productId }) => api.delete(
+      `/albums/${encodeURIComponent(domain)}/products/${encodeURIComponent(productId)}`,
+      token,
+    ),
+    onSuccess: (_data, vars) => invalidate(vars?.domain),
+  });
+}
+
+export function useDeleteImageMutation(token) {
+  const invalidate = useAlbumInvalidator();
+  return useMutation({
+    mutationFn: ({ domain, productId, imageId }) => api.delete(
+      `/albums/${encodeURIComponent(domain)}/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`,
+      token,
+    ),
+    onSuccess: (_data, vars) => invalidate(vars?.domain),
+  });
+}
+
+export function useMarkSyncedMutation(token) {
+  const invalidate = useAlbumInvalidator();
+  return useMutation({
+    mutationFn: ({ domain, productId }) => api.post(
+      `/albums/${encodeURIComponent(domain)}/products/${encodeURIComponent(productId)}/mark-synced`,
+      token,
+      undefined,
+    ),
+    onSuccess: (_data, vars) => invalidate(vars?.domain),
   });
 }
 

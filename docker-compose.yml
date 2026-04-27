@@ -1324,6 +1324,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - IMAGE_DOWNLOAD_SERVICE_URL=http://image-download-service:8505
     networks:
       - services-net
     logging: *logging_defaults

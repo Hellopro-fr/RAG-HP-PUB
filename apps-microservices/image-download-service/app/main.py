@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 # Importer les modules locaux
 from image_download_service.messaging.consumer import Consumer
 from image_download_service.core.archiver import Archiver
+from image_download_service.routers.albums import router as albums_router
 
 # Configuration du logging uniforme
 logging.basicConfig(
@@ -124,6 +125,9 @@ app = FastAPI(
 )
 
 archiver = Archiver()
+
+# Brancher le routeur Albums (visualisation + redownload + delete)
+app.include_router(albums_router)
 
 # =============================================================================
 # HEALTH
