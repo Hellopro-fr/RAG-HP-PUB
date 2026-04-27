@@ -1,12 +1,12 @@
-# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-04-27)
+# Graph Report - unified (post-pull --update)  (2026-04-27)
 
 ## Corpus Check
-- 233 files · ~0 words
+- 235 files · ~252,866 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1921 nodes · 3496 edges · 72 communities detected
-- Extraction: 70% EXTRACTED · 30% INFERRED · 0% AMBIGUOUS · INFERRED: 1062 edges (avg confidence: 0.64)
+- 1961 nodes · 3567 edges · 69 communities detected
+- Extraction: 70% EXTRACTED · 30% INFERRED · 0% AMBIGUOUS · INFERRED: 1078 edges (avg confidence: 0.64)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -79,9 +79,6 @@
 - [[_COMMUNITY_Community 68|Community 68]]
 - [[_COMMUNITY_Community 72|Community 72]]
 - [[_COMMUNITY_Community 83|Community 83]]
-- [[_COMMUNITY_Community 85|Community 85]]
-- [[_COMMUNITY_Community 86|Community 86]]
-- [[_COMMUNITY_Community 87|Community 87]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 93 edges
@@ -124,124 +121,127 @@
 - **RAG + Cypher + Reranking Three-Stage Pipeline** — rust_service_rag_service, rust_service_cypher_builder, rust_service_dep_reranking_grpc, rust_service_dep_embedding_grpc, rust_service_dep_neo4j_bolt [INFERRED 0.85]
 - **Clean Architecture 3-Layer Stack** — rust_service_routers, rust_service_services_layer, rust_service_infrastructure, rust_service_clean_architecture [EXTRACTED 1.00]
 - **Multi-Provider LLM Client Cluster** — rust_service_llm_providers, rust_service_gemini_client, rust_service_llm_service, providers_geminiclient, providers_openaiclient, providers_anthropicclient [INFERRED 0.70]
+- **Detection-Langue-FR Concurrency Defense Pattern** — crawler_detection_langue_fr_client, crawler_admission_control_p_limit, crawler_detection_503_retry_policy, crawler_detection_caller_contract_parity [EXTRACTED 0.95]
+- **Archive Pipeline Safety Pattern** — crawler_archive_disk_preflight, crawler_archive_staging, crawler_archiving_gcs_fallback [EXTRACTED 0.90]
+- **Reconciliation + Idempotency Defense Pattern** — crawler_leader_election, crawler_webhook_idempotency, crawler_capacity_counter [EXTRACTED 0.85]
 
 ## Communities
 
 ### Community 0 - "Milvus CRUD Layer"
 Cohesion: 0.02
-Nodes (58): main(), MilvusProduitsMigration, Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id, Migrer les données par batch          Args:             batch_size: Nombre d'ent, Vérifier que la migration s'est bien passée (+50 more)
+Nodes (141): BaseModel, archive_crawl_to_gcs(), ArchiveResponse, CapacityResponse, clear_pending_callbacks(), CrawlMode, CrawlRequest, CrawlResponse (+133 more)
 
 ### Community 1 - "Node.js Crawler Core"
 Cohesion: 0.02
-Nodes (57): DedupManager, DetectionLangueClient, applyCliFlagGuard(), classifyFragment(), commitBypassDiez(), commitSkipDiez(), getDiezDecisionMode(), readPersistedDecision() (+49 more)
+Nodes (58): main(), MilvusProduitsMigration, Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id, Migrer les données par batch          Args:             batch_size: Nombre d'ent, Vérifier que la migration s'est bien passée (+50 more)
 
 ### Community 2 - "CrawlerManager Python + DLQ"
-Cohesion: 0.03
-Nodes (61): _count_files_in_dir(), CrawlerManager, _map_error_to_message(), create_dlq_headers(), create_dlq_message(), DLQPropertiesAsync, str, Unit tests for crawler_manager.py state-transition guards. (+53 more)
+Cohesion: 0.02
+Nodes (57): DedupManager, DetectionLangueClient, applyCliFlagGuard(), classifyFragment(), commitBypassDiez(), commitSkipDiez(), getDiezDecisionMode(), readPersistedDecision() (+49 more)
 
 ### Community 3 - "Rust Service Clients"
 Cohesion: 0.03
-Nodes (28): execute_cypher(), get_categories_count(), ServiceClients, CypherBuilderService, get_couverture_by_fournisseur(), get_couverture_by_produit(), FournisseurService, GeminiClient (+20 more)
+Nodes (87): check_gcloud_auth(), classify_by_name(), _confirm_or_exit(), _count_dataset_files(), detect_duplicates(), extract_crawl_id(), gcloud_delete(), gcloud_download() (+79 more)
 
 ### Community 4 - "Milvus Concurrency Guard"
+Cohesion: 0.02
+Nodes (121): cache_or_execute(), close_redis_pool(), decrement_key(), delete_if_terminal(), delete_key(), _generate_cache_key(), get_json(), get_key() (+113 more)
+
+### Community 5 - "Redis Cache Rationale"
+Cohesion: 0.03
+Nodes (27): execute_cypher(), get_categories_count(), ServiceClients, CypherBuilderService, get_couverture_by_fournisseur(), get_couverture_by_produit(), FournisseurService, GeminiClient (+19 more)
+
+### Community 6 - "Pydantic Request Schemas"
 Cohesion: 0.04
 Nodes (64): GuardConfig, Configuration for MilvusConcurrencyGuard., GuardMetrics, Prometheus metrics for MilvusConcurrencyGuard.      Uses module-level singleto, Record a successful slot acquisition., Record a slot release., Record an acquire timeout., Set the configuration gauges (typically called once at startup). (+56 more)
 
-### Community 5 - "Redis Cache Rationale"
-Cohesion: 0.02
-Nodes (99): cache_or_execute(), close_redis_pool(), decrement_key(), delete_if_terminal(), delete_key(), _generate_cache_key(), get_json(), get_key() (+91 more)
-
-### Community 6 - "Pydantic Request Schemas"
-Cohesion: 0.07
-Nodes (87): BaseModel, archive_crawl_to_gcs(), ArchiveResponse, CapacityResponse, clear_pending_callbacks(), CrawlRequest, CrawlResponse, CrawlStatus (+79 more)
-
 ### Community 7 - "GCS Archive Classifier"
-Cohesion: 0.06
-Nodes (46): _count_dataset_files(), inspect_archive(), _normalize_member_name(), Open a .tar.gz and classify it.      Returns (category, details). `details` al, Strip leading './' or '.' from tar member names.      shutil.make_archive pass, Read and parse a JSON file from the tar. Handles tars produced by     shutil.ma, Count .json files under storage/datasets/{domain}/ (or sanitized variant)., Resolve the crawl's domain name from multiple possible sources.      Priority: (+38 more)
-
-### Community 8 - "LLM Provider Clients"
 Cohesion: 0.03
 Nodes (70): ABC, common_utils.grpc_clients (client wrappers), graph-rag-api-recherche-rust-service, grpc-stubs Python package, database.proto, embedding.proto (EmbeddingService), llm.proto (LLMService), reranking.proto (RerankingService) (+62 more)
 
-### Community 9 - "LLM gRPC Client"
+### Community 8 - "LLM Provider Clients"
 Cohesion: 0.03
 Nodes (41): main(), ChatRequest, get_elasticsearch_client(), get_rabbitmq_connection(), Shared connection factories for RabbitMQ and Elasticsearch., Fail fast if required environment variables are missing., Connects to RabbitMQ with exponential backoff retries., Connects to Elasticsearch with exponential backoff retries. (+33 more)
 
-### Community 10 - "GCS Audit CLI"
-Cohesion: 0.05
-Nodes (41): check_gcloud_auth(), classify_by_name(), _confirm_or_exit(), detect_duplicates(), extract_crawl_id(), gcloud_delete(), gcloud_download(), gcloud_ls() (+33 more)
-
-### Community 11 - "Document Text Extractor"
+### Community 9 - "LLM gRPC Client"
 Cohesion: 0.08
 Nodes (23): DocumentTextExtractor, Télécharge un fichier depuis une URL                  Args:             url: URL, Résout un chemin ou URL vers un chemin local                  Args:, Convertit une image vers un format supporté par l'OCR                  Args:, Ajoute un fichier à la liste de nettoyage                  Args:             fil, Supprime tous les fichiers marqués pour le nettoyage, Extrait le texte d'une image ou d'un PDF avec OCRExtractor.         - Si un PDF, Vérifie si un document contient des images non extractibles                  Arg (+15 more)
 
-### Community 12 - "Enums and Collection Types"
-Cohesion: 0.1
-Nodes (37): ChatBaseURL, ChatProvider, CollectionName, CollectionNameGraph, Enum for the possible collection names.     The values correspond to the string, Enum for the possible collection names.     The values correspond to the string, # TODO:, CrawlMode (+29 more)
+### Community 10 - "GCS Audit CLI"
+Cohesion: 0.11
+Nodes (35): ChatBaseURL, ChatProvider, CollectionName, CollectionNameGraph, Enum for the possible collection names.     The values correspond to the string, Enum for the possible collection names.     The values correspond to the string, # TODO:, Enum (+27 more)
 
-### Community 13 - "Update-Mode Queue Builder"
+### Community 11 - "Document Text Extractor"
 Cohesion: 0.08
 Nodes (23): build_queue(), classify_entry(), _has_tmp_sibling(), load_exclude_ids(), load_report(), main(), parse_args(), Build the update-mode re-ingestion queue from a gcs_archive_audit report.  Reads (+15 more)
 
-### Community 14 - "Rust Service Request Models"
-Cohesion: 0.06
-Nodes (28): CaracteristiqueMatching, CategorieCountResponse, ComplexFilterRequest, Constraint, CypherQueryRequest, CypherQueryResponse, DepartementCouverture, FilterCaracteristiqueRequest (+20 more)
+### Community 12 - "Enums and Collection Types"
+Cohesion: 0.05
+Nodes (29): CaracteristiqueMatching, CategorieCountResponse, ComplexFilterRequest, Constraint, CypherQueryRequest, CypherQueryResponse, DepartementCouverture, FilterCaracteristiqueRequest (+21 more)
 
-### Community 15 - "Trafilatura HTML Cleaning"
+### Community 13 - "Update-Mode Queue Builder"
 Cohesion: 0.12
 Nodes (19): BaseTrafilatura, BaseTrafilaturaReponse, TrafilaturaReponseHtml, InputJSON, OutputJSON, ApiDoc, extractContent(), main() (+11 more)
 
-### Community 16 - "GCS Quarantine Restore"
+### Community 14 - "Rust Service Request Models"
 Cohesion: 0.11
 Nodes (17): _load_include_ids(), Parse --include-ids input. Returns None when no filter, else Set[str].      Ac, _exists(), gcloud_move(), main(), Move reclassified-OK archives from crawls-quarantine/ back to crawls/.  Reads a, Run a gcloud command. Centralized for test patching., Move a GCS object via `gcloud storage mv`. Raises on failure. (+9 more)
 
-### Community 17 - "Regional Path Exclusion Rationale"
+### Community 15 - "Trafilatura HTML Cleaning"
 Cohesion: 0.07
 Nodes (30): alternative_urls Exclusion List, robots.txt Blanket Block, running_count Drift Bug, Cross-Service Milvus Coordination, Inflight Request Deduplication, Multi-Path robots Probe, Multilingual Regional Path Duplicates, Playwright TargetClosedError flood (+22 more)
 
-### Community 18 - "Qdrant CRUD Layer"
+### Community 16 - "GCS Quarantine Restore"
 Cohesion: 0.14
-Nodes (6): ModelConfig, QdrantDevisCrud, ModelConfig, QdrantEchangeCrud, ModelConfig, QdrantWebsiteCrud
+Nodes (6): ModelConfig, QdrantCategoriesCrud, ModelConfig, QdrantDevisCrud, ModelConfig, QdrantFournisseursCrud
 
-### Community 19 - "Graph Milvus gRPC Client"
+### Community 17 - "Regional Path Exclusion Rationale"
 Cohesion: 0.08
 Nodes (26): check_entities_exist(), check_labels_exist(), Check which entity IDs already exist in Milvus.          Args:         ids: L, Search result from Milvus., Upsert a single canonical label.          Args:         label: The canonical, Upsert multiple labels in a batch.          Args:         labels: List of dic, Search for similar labels.          Args:         embedding: Query vector emb, Check which labels already exist in Milvus.          Args:         labels: Li (+18 more)
 
-### Community 20 - "Embedding gRPC Client"
+### Community 18 - "Qdrant CRUD Layer"
 Cohesion: 0.1
 Nodes (16): _clean_text(), chunk_text(), detokenize(), get_embedding(), get_embeddings(), Appelle le service gRPC pour obtenir les embeddings pour une liste de textes., Obtient l'embedding pour un seul texte.     Wrapper pour la fonction de batchin, Appelle le service gRPC pour tokenizer une liste de textes. (+8 more)
 
-### Community 21 - "DeepSeek OCR Extractor"
+### Community 19 - "Graph Milvus gRPC Client"
 Cohesion: 0.11
 Nodes (12): DeepseekOCRDocExtractor, Télécharge un fichier depuis une URL directement en mémoire (asynchrone), Traite des fichiers à partir d'URLs (asynchrone)         Les fichiers sont télé, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Traite des fichiers déjà téléchargés en mémoire (asynchrone)         Évite le r, Traite un seul fichier à partir d'une URL (asynchrone)                  Args:, Convertit un fichier non-supporté en PDF en utilisant LibreOffice (asynchrone) (+4 more)
 
-### Community 22 - "Header Footer Extractor"
+### Community 20 - "Embedding gRPC Client"
 Cohesion: 0.13
 Nodes (11): HeaderFooterExtractor, Analyzes a BeautifulSoup object to robustly find and extract the text content of, Original signature strategy: Tag + Sorted Class Names., ZONE A Improvement: Structural signature based on DOM path.         Example: bo, Helper to get 'tag:nth-of-type(i)' string., Detects if a text block is likely a cookie/consent banner using robust regex pat, Uses boilerpy3 to strip noisy elements, then performs a structural tree, Extracts and cleans the text from a BeautifulSoup element.         It removes s (+3 more)
 
-### Community 23 - "Graph Database gRPC Client"
+### Community 21 - "DeepSeek OCR Extractor"
 Cohesion: 0.13
 Nodes (20): BatchResult, _dict_to_struct(), execute_batch_cypher(), execute_cypher(), get_graph_schema(), GraphSchema, NodeLabel, PropertyInfo (+12 more)
 
-### Community 24 - "Claude Config Audit"
+### Community 22 - "Header Footer Extractor"
+Cohesion: 0.16
+Nodes (13): DetectionClient, Shared HTTP client enforcing the api-detection-langue-fr call contract.  Contr, HTTP client wrapper for api-detection-langue-fr enforcing the caller contract., _isolate_env(), Tests for common_utils.detection_client.DetectionClient., Reset contract env vars to known defaults so tests are hermetic., With DETECTION_MAX_CONCURRENCY=2, at most 2 requests are in flight at once., test_concurrency_semaphore_caps_inflight() (+5 more)
+
+### Community 23 - "Graph Database gRPC Client"
 Cohesion: 0.16
 Nodes (17): rabbitmq-reviewer agent (proposed), security-auditor agent (proposed), test-writer agent (proposed), /pre-push command (proposed), prix-traitement port discrepancy (8595 vs 8591), 47.5/100 maturity score rationale, Claude Code Audit Report 2026-03-25, security.md rule (proposed) (+9 more)
 
-### Community 25 - "Archive Disk Preflight Rationale"
+### Community 24 - "Claude Config Audit"
 Cohesion: 0.15
 Nodes (16): Audit Classifications (OK/WRONG_NAME/CORRUPTED/...), Missing 'domain' field in callback_payload, --restore-from-quarantine command, ./ Prefix Tar Member Bug, tmp.tar.gz Glob Race with Upload Daemon, Update-Mode Re-ingestion, Rationale: Diagnostic-first defense over silent producer/consumer fix, Rationale: Use gcloud CLI to avoid new PyPI dependency (+8 more)
 
-### Community 26 - "Dead Services Cleanup"
+### Community 25 - "Archive Disk Preflight Rationale"
 Cohesion: 0.17
 Nodes (12): api-classification-v2 (test variant), api-rest-milvus-bkp (superseded), Archive Branch Strategy, Dead Services Cleanup Plan, database-service (superseded), categories-processor-service (dormant), Dormant Services Cleanup Phase 2, fournisseurs-processor-service (dormant) (+4 more)
 
-### Community 27 - "GCS Archive Audit Tool Rationale"
+### Community 26 - "Dead Services Cleanup"
 Cohesion: 0.17
 Nodes (12): GCS Archive Audit Tool Plan, Archive Classifications (OK/CORRUPTED/WRONG_NAME/...), GCS Audit Multi-Source Domain Resolution, gcloud Storage CLI Shell Wrappers (no Python GCS lib), _normalize_member_name (handles ./ prefix), GCS Audit Prefix Fix + Quarantine Restore, _resolve_domain_name Multi-Source Helper, --restore-from-quarantine Flag (+4 more)
 
-### Community 28 - "CleanHTML Module"
+### Community 27 - "GCS Archive Audit Tool Rationale"
 Cohesion: 0.22
 Nodes (5): CleanHTML, Class base to clean data., Convert HTML content to BeautifulSoup object., Steps:         1. Convert HTML to BeautifulSoup object.         2. Keep only tag, Strip HTML tags and return cleaned text.         Remove all tags except tags rel
+
+### Community 28 - "CleanHTML Module"
+Cohesion: 0.24
+Nodes (9): reconcile_jobs(), Global exception handler for Pydantic validation errors.     This intercepts an, Periodically checks the actual number of 'running' jobs in Redis and corrects, Periodically cleans up old archive files to manage disk usage.     Runs every h, reconcile_running_jobs_count(), scheduled_archive_cleanup(), shutdown_event(), startup_event() (+1 more)
 
 ### Community 29 - "Crawler Monitor Rationale"
 Cohesion: 0.2
@@ -249,11 +249,11 @@ Nodes (10): Crawler Monitor Alignment Plan, Monitor/Crawler Data Contract Mismat
 
 ### Community 30 - "Community 30"
 Cohesion: 0.44
-Nodes (2): ModelConfig, QdrantFournisseursCrud
+Nodes (2): ModelConfig, QdrantProduitsCrud
 
 ### Community 31 - "Community 31"
 Cohesion: 0.44
-Nodes (2): ModelConfig, QdrantProduitsCrud
+Nodes (2): ModelConfig, QdrantWebsiteCrud
 
 ### Community 32 - "Community 32"
 Cohesion: 0.28
@@ -403,24 +403,12 @@ Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrige
 Cohesion: 1.0
 Nodes (1): ignoreHTTPSErrors in Camoufox/Chromium
 
-### Community 85 - "Community 85"
-Cohesion: 1.0
-Nodes (1): StatsManager
-
-### Community 86 - "Community 86"
-Cohesion: 1.0
-Nodes (1): DedupManager
-
-### Community 87 - "Community 87"
-Cohesion: 1.0
-Nodes (1): JsonlWriter
-
 ## Knowledge Gaps
-- **400 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+395 more)
+- **410 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+405 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 30`** (9 nodes): `QdrantFournisseursCrud.py`, `ModelConfig`, `QdrantFournisseursCrud`, `.delete_fournisseurs()`, `.get_fournisseurs()`, `._get_or_create_collection()`, `.__init__()`, `.insert_fournisseurs()`, `.update_fournisseurs()`
+- **Thin community `Community 30`** (9 nodes): `QdrantProduitCrud.py`, `ModelConfig`, `QdrantProduitsCrud`, `.delete_produits()`, `._get_or_create_collection()`, `.get_produit()`, `.__init__()`, `.insert_produits()`, `.update_produits()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 31`** (9 nodes): `QdrantProduitCrud.py`, `ModelConfig`, `QdrantProduitsCrud`, `.delete_produits()`, `._get_or_create_collection()`, `.get_produit()`, `.__init__()`, `.insert_produits()`, `.update_produits()`
+- **Thin community `Community 31`** (9 nodes): `QdrantWebsiteCrud.py`, `ModelConfig`, `QdrantWebsiteCrud`, `.delete_website()`, `._get_or_create_collection()`, `.get_website()`, `.__init__()`, `.insert_website()`, `.update_website()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 34`** (9 nodes): `test_lua_scripts.py`, `Tests for Lua script string definitions. Validates that the scripts are well-fo`, `TestLuaScripts`, `.test_acquire_script_contains_expected_commands()`, `.test_acquire_script_is_non_empty_string()`, `.test_correct_counters_script_contains_expected_commands()`, `.test_correct_counters_script_is_non_empty_string()`, `.test_release_script_contains_expected_commands()`, `.test_release_script_is_non_empty_string()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -464,20 +452,14 @@ Nodes (1): JsonlWriter
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 83`** (1 nodes): `ignoreHTTPSErrors in Camoufox/Chromium`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 85`** (1 nodes): `StatsManager`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 86`** (1 nodes): `DedupManager`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 87`** (1 nodes): `JsonlWriter`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `main()` connect `Trafilatura HTML Cleaning` to `Rust Service Clients`?**
+- **Why does `main()` connect `Update-Mode Queue Builder` to `Redis Cache Rationale`?**
   _High betweenness centrality (0.106) - this node is a cross-community bridge._
-- **Why does `common_utils.grpc_clients (client wrappers)` connect `LLM Provider Clients` to `Embedding gRPC Client`, `Redis Cache Rationale`?**
-  _High betweenness centrality (0.066) - this node is a cross-community bridge._
+- **Why does `common_utils.grpc_clients (client wrappers)` connect `GCS Archive Classifier` to `Qdrant CRUD Layer`, `Milvus Concurrency Guard`?**
+  _High betweenness centrality (0.086) - this node is a cross-community bridge._
 - **Are the 57 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 57 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 70 inferred relationships involving `str` (e.g. with `create_dlq_headers()` and `._preprocess_html()`) actually correct?**
