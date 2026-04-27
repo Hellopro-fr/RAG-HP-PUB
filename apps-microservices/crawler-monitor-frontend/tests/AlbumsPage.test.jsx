@@ -14,6 +14,20 @@ vi.mock('../src/lib/api', () => ({
   setOnUnauthorized: vi.fn(),
 }));
 
+// Mock du ToastProvider — la page consomme useToast() pour les toasts du job
+// DELETE (Task 14). Les tests d'index ne couvrent pas le flow de suppression,
+// on retourne donc juste des stubs pour ne pas exiger un <ToastProvider>.
+vi.mock('../src/components/ToastProvider', () => ({
+  useToast: () => ({
+    show: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+
 import { api } from '../src/lib/api';
 import AlbumsPage from '../src/pages/AlbumsPage';
 

@@ -1,11 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Images, RefreshCw } from 'lucide-react';
-import { useAlbumsQuery, useDeleteAlbumMutation } from '../hooks/queries';
+import {
+  useAlbumsQuery,
+  useDeleteAlbumMutation,
+  useAlbumDeleteJobQuery,
+} from '../hooks/queries';
 import { AlbumsToolbar } from '../components/albums/AlbumsToolbar';
 import { AlbumsTable } from '../components/albums/AlbumsTable';
 import { Card } from '../components/ui/card';
 import ConfirmDestructive from '../components/ConfirmDestructive';
+import { useToast } from '../components/ToastProvider';
 
 /**
  * Page index `/albums` — listing virtualisé des domaines avec albums photo.
@@ -15,17 +20,39 @@ import ConfirmDestructive from '../components/ConfirmDestructive';
  *  - Filtrage côté client : recherche substring + filtre rapide (errors / unsynced).
  *  - Tri ASC/DESC togglable sur chaque colonne.
  *  - Click ligne → /albums/:domain ; Trash → ConfirmDestructive (type-to-confirm).
- *  - Le polling du job DELETE arrive en Task 14 (ici, fire-and-close).
+ *  - Confirm → DELETE renvoie {job_id} ; on poll le job via useAlbumDeleteJobQuery
+ *    et on émet des toasts (info au lancement, success/error sur transition).
  */
 export default function AlbumsPage({ token }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('domain');
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [activeJobId, setActiveJobId] = useState(null);
 
   const { data, isLoading, refetch, isRefetching } = useAlbumsQuery(token);
   const deleteMutation = useDeleteAlbumMutation(token);
+  const jobQ = useAlbumDeleteJobQuery(token, activeJobId);
+
+  // Réagit aux transitions du job DELETE en cours : completed → success toast,
+  // failed → error toast. Dans les deux cas on libère activeJobId pour stopper
+  // le polling. La query est déjà invalidée par la mutation, donc la ligne
+  // disparaît d'elle-même quand le job aboutit.
+  useEffect(() => {
+    const status = jobQ.data?.status;
+    if (status === 'completed') {
+      const dom = jobQ.data?.domain ?? '';
+      toast.success(`Album "${dom}" supprimé`);
+      setActiveJobId(null);
+    } else if (status === 'failed') {
+      const dom = jobQ.data?.domain ?? '';
+      const err = jobQ.data?.error || 'erreur inconnue';
+      toast.error(`Échec suppression "${dom}" — ${err}`);
+      setActiveJobId(null);
+    }
+  }, [jobQ.data, toast]);
 
   const rows = useMemo(() => {
     const all = data?.domains || [];
@@ -134,8 +161,21 @@ export default function AlbumsPage({ token }) {
           }
           busy={deleteMutation.isPending}
           onConfirm={async () => {
+            const domain = pendingDelete.domain;
+            const productCount = pendingDelete.product_count ?? 0;
             try {
-              await deleteMutation.mutateAsync({ domain: pendingDelete.domain });
+              const resp = await deleteMutation.mutateAsync({ domain });
+              const jobId = resp?.job_id;
+              if (jobId) {
+                setActiveJobId(jobId);
+                toast.info(
+                  `Suppression de "${domain}" lancée — ${productCount} produits`,
+                );
+              }
+            } catch (err) {
+              toast.error(
+                `Lancement suppression "${domain}" échoué — ${err?.message || 'erreur inconnue'}`,
+              );
             } finally {
               setPendingDelete(null);
             }
