@@ -1898,7 +1898,7 @@ class RecommendationService:
             ## ENTRÉES
             - **[BESOIN_ACHETEUR]** : questions + réponses de l'acheteur
             - **[CARACTERISTIQUES]** : critères du besoin, chacun tagué **critique** ou **secondaire**. Un écart sur un critique est grave. Un écart sur un secondaire n'est pas éliminatoire.
-            - **[LISTE_PRODUITS]** : pour chaque produit — champ `description` = descriptif technique (**source primaire obligatoire**), champ `titre` = nom commercial court (**source secondaire uniquement**), champ `caracteristiques` = attributs techniques
+            - **[LISTE_PRODUITS]** : titre, descriptif, caractéristiques de chaque produit
             
             ## TRAITEMENT
             
@@ -1908,17 +1908,7 @@ class RecommendationService:
             ### ÉTAPE 2 — Évaluer chaque produit
             Évalue chaque produit **indépendamment**, en le comparant uniquement au besoin reformulé.
             
-            **1. 🚫 RÈGLE STRICTE — Ordre de lecture obligatoire pour chaque produit :**
-            Lis les champs dans cet ordre : **(1) `description`** → **(2) `caracteristiques`** → **(3) `titre`** en dernier.
-
-            **Interdictions absolues :**
-            - 🚫 **Score 1 (incompatible)** si l'incompatibilité n'est pas explicitement lisible dans `description` ou `caracteristiques`. Le `titre` seul est **insuffisant** pour Score 1 — une incompatibilité supposée depuis le titre n'est jamais éliminatoire.
-            - 🚫 **Score 4 (correspond bien)** si la compatibilité n'est pas confirmée par `description` ou `caracteristiques`. Le `titre` seul est **insuffisant** pour Score 4.
-            - 🚫 Inférer un type d'usage, un sous-type ou une incompatibilité depuis `titre` uniquement — toujours vérifier dans `description` ou `caracteristiques`.
-
-            **Règle de repli obligatoire :** Si `description` = `[AUCUN DESCRIPTIF DISPONIBLE]` ET les `caracteristiques` ne donnent aucune information sur l'usage ou le sous-type du produit → **Score 3 maximum** (jamais Score 1, jamais Score 4 — information insuffisante).
-
-            Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans `description` ou `caracteristiques`** — pas inféré du `titre` seul. Si ambigu ou non confirmé : Score 2 au pire, jamais Score 1.
+            **1. Usage en premier.** Lis le DESCRIPTIF du produit avant le titre. Le titre seul (ex: "Tracteur", "Mini-pelle") ne suffit JAMAIS pour confirmer ou infirmer la compatibilité d'usage — il faut vérifier le descriptif et/ou les caractéristiques techniques. Si le descriptif est marqué [AUCUN DESCRIPTIF DISPONIBLE], base ton évaluation uniquement sur les caractéristiques techniques. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans le descriptif ou les caractéristiques** — pas inféré du titre seul. Si ambigu ou non confirmé : pas de score 1.
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
@@ -1947,7 +1937,7 @@ class RecommendationService:
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
             
             Cas éliminatoires (directement observables dans la fiche) :
-            - Usage fondamentalement incompatible (voir étape 2) — ex: pont à vérins/enfoui ≠ pont 2 colonnes sur sol (systèmes d'installation non interchangeables) ; micro-tracteur (≤ 30 ch, usage jardinage/viticulture légère) ≠ tracteur agricole standard (≥ 50 ch, fenaison/labour) — incompatibilité retenue uniquement si directement lisible dans `description` ou `caracteristiques` — **le `titre` seul n'est jamais suffisant pour Score 1**
+            - Usage fondamentalement incompatible (voir étape 2) — ex: pont à vérins/enfoui ≠ pont 2 colonnes sur sol (systèmes d'installation non interchangeables) ; micro-tracteur (≤ 30 ch, usage jardinage/viticulture légère) ≠ tracteur agricole standard (≥ 50 ch, fenaison/labour) — incompatibilité retenue uniquement si directement lisible dans le titre ou descriptif
             - Valeur numérique critique < 50% ou > 200% de la valeur cible — ex: produit 16 ch face à un besoin 75-100 CV = 21% de la borne basse → score 1 (la règle des 50% s'applique à la borne la plus basse de la plage cible)
             - Valeur textuelle **présente** et incompatible sur un critique (motorisation, interface, alimentation, norme…) — si absente : score 3, pas score 1
             - État neuf/occasion différent de ce que l'acheteur a demandé
@@ -1998,10 +1988,7 @@ class RecommendationService:
             
             ## CHECKLIST AVANT SORTIE
             - [ ] Besoin reformulé avant toute évaluation
-            - [ ] `description` lu en PREMIER pour chaque produit — `titre` consulté en dernier uniquement
-            - [ ] ⛔ Score 1 : incompatibilité prouvée dans `description` ou `caracteristiques` — `titre` seul interdit
-            - [ ] ⛔ Score 4 : compatibilité confirmée par `description` ou `caracteristiques` — `titre` seul interdit
-            - [ ] ⛔ `description` = [AUCUN DESCRIPTIF DISPONIBLE] + `caracteristiques` muettes sur usage → Score 3 max
+            - [ ] Usage vérifié en premier, écart éliminatoire uniquement si factuel et lisible dans la fiche
             - [ ] Chaque produit évalué indépendamment
             - [ ] Critiques vérifiés avant secondaires — écart critique = impact fort, secondaire = léger
             - [ ] Tolérance numérique 20% appliquée

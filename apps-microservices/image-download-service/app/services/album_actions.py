@@ -67,7 +67,7 @@ def _with_lock(manifest_path: str, timeout: float, fn):
     configure avec le timeout demandé et on convertit l'exception locale
     en `LockTimeoutError` pour exposer une API stable côté service.
     """
-    from core.nfs_lock import nfs_lock, NFSLockError
+    from image_download_service.core.nfs_lock import nfs_lock, NFSLockError
     # max_wait est un entier dans NFSLock — on arrondit au supérieur pour ne pas
     # tomber sous le timeout demandé (3.0 → 3, 0.5 → 1).
     max_wait = max(1, math.ceil(timeout))
