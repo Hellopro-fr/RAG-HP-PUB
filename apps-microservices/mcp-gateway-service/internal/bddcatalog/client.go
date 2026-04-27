@@ -103,7 +103,7 @@ func (c *Client) do(ctx context.Context, path string, query url.Values) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("bdd catalog: build request: %w", err)
 	}
-	req.Header.Set("X-Admin-Token", c.adminToken)
+	req.Header.Set("Authorization", "Bearer "+c.adminToken)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)

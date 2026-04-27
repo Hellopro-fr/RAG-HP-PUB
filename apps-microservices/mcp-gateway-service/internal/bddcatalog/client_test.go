@@ -46,8 +46,8 @@ func TestListDatabases_Success(t *testing.T) {
 		if r.URL.Path != "/databases" {
 			t.Errorf("unexpected path: %q", r.URL.Path)
 		}
-		if got := r.Header.Get("X-Admin-Token"); got != wantToken {
-			t.Errorf("X-Admin-Token=%q want=%q", got, wantToken)
+		if got, want := r.Header.Get("Authorization"), "Bearer "+wantToken; got != want {
+			t.Errorf("Authorization=%q want=%q", got, want)
 		}
 		if got := r.Header.Get("Accept"); got != "application/json" {
 			t.Errorf("Accept=%q want application/json", got)
@@ -84,8 +84,8 @@ func TestListTables_Success(t *testing.T) {
 		if got := r.URL.Query().Get("search"); got != "produit" {
 			t.Errorf("search=%q want=produit", got)
 		}
-		if got := r.Header.Get("X-Admin-Token"); got != wantToken {
-			t.Errorf("X-Admin-Token=%q want=%q", got, wantToken)
+		if got, want := r.Header.Get("Authorization"), "Bearer "+wantToken; got != want {
+			t.Errorf("Authorization=%q want=%q", got, want)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"tables":[{"id":7,"database_id":42,"table_name":"products","description":"main","field_count":12}]}`))
@@ -161,8 +161,8 @@ func TestListFields_Success(t *testing.T) {
 		if r.URL.Path != "/databases/42/tables/7/fields" {
 			t.Errorf("unexpected path: %q", r.URL.Path)
 		}
-		if got := r.Header.Get("X-Admin-Token"); got != wantToken {
-			t.Errorf("X-Admin-Token=%q want=%q", got, wantToken)
+		if got, want := r.Header.Get("Authorization"), "Bearer "+wantToken; got != want {
+			t.Errorf("Authorization=%q want=%q", got, want)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"fields":[
