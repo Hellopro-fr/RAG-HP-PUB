@@ -502,3 +502,51 @@ type TemplateInstance struct {
 }
 
 func (TemplateInstance) TableName() string { return "template_instances" }
+
+// ── Hellopro BDD "Used Tables" Models ──────────────────────────────
+//
+// These models drive the "Hellopro BDD tables" admin onglet. They store
+// the subset of upstream catalog tables/fields that the gateway has been
+// configured to surface to scope tokens and OAuth2 clients. The upstream
+// catalog (see internal/bddcatalog) remains the source of truth for
+// schema metadata; these tables only record what is in scope locally.
+
+// BDDUsedTable is one row per (database, table) pair that has been
+// activated for use through the gateway. UpstreamTableID mirrors the ID
+// returned by the upstream catalog so we can refresh metadata.
+type BDDUsedTable struct {
+	ID              string         `gorm:"type:char(36);primaryKey"`
+	DatabaseID      int            `gorm:"not null;index;uniqueIndex:uniq_db_table"`
+	TableName       string         `gorm:"type:varchar(128);not null;uniqueIndex:uniq_db_table"`
+	UpstreamTableID int            `gorm:"index"`
+	Description     string         `gorm:"type:text"`
+	CreatedBy       string         `gorm:"type:varchar(255);not null;default:''"`
+	CreatedAt       time.Time      `gorm:"type:datetime(3);autoCreateTime"`
+	UpdatedAt       time.Time      `gorm:"type:datetime(3);autoUpdateTime"`
+	Fields          []BDDUsedField `gorm:"foreignKey:UsedTableID;constraint:OnDelete:CASCADE"`
+}
+
+// BDDUsedField is one row per (used_table, field) pair. Cascading delete
+// from BDDUsedTable keeps the join consistent.
+type BDDUsedField struct {
+	ID              string    `gorm:"type:char(36);primaryKey"`
+	UsedTableID     string    `gorm:"type:char(36);not null;uniqueIndex:uniq_table_field;index"`
+	FieldName       string    `gorm:"type:varchar(128);not null;uniqueIndex:uniq_table_field"`
+	UpstreamFieldID int       `gorm:"index"`
+	Description     string    `gorm:"type:text"`
+	CreatedAt       time.Time `gorm:"type:datetime(3);autoCreateTime"`
+	UpdatedAt       time.Time `gorm:"type:datetime(3);autoUpdateTime"`
+}
+
+// ScopeTokenBDDTable is the join table between scope_tokens and BDD used
+// tables, mirroring the shape of ScopeTokenServer.
+type ScopeTokenBDDTable struct {
+	TokenID     string `gorm:"type:char(36);primaryKey"`
+	UsedTableID string `gorm:"type:char(36);primaryKey"`
+}
+
+// OAuth2ClientBDDTable is the equivalent join for OAuth2 clients.
+type OAuth2ClientBDDTable struct {
+	ClientID    string `gorm:"type:char(36);primaryKey"`
+	UsedTableID string `gorm:"type:char(36);primaryKey"`
+}

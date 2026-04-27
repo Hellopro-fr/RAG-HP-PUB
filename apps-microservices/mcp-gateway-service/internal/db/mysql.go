@@ -55,6 +55,10 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&LLMInstructionRowServer{},
 		&ScopeTokenInstruction{},
 		&OAuth2ClientInstruction{},
+		&BDDUsedTable{},
+		&BDDUsedField{},
+		&ScopeTokenBDDTable{},
+		&OAuth2ClientBDDTable{},
 	); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}
