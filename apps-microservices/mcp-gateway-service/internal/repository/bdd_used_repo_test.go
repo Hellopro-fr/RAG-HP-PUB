@@ -13,12 +13,17 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/db"
 )
 
-// setupBDDTestDB returns a fresh in-memory SQLite GORM handle with the
-// BDD schema created manually using SQLite-friendly column types. Each
-// call gets an isolated database via a unique DSN so tests don't share
-// state. The MySQL-targeted GORM tags on the models use datetime(3)
-// which SQLite's mattn driver can't scan into time.Time, so we side-step
-// AutoMigrate and DDL the tables explicitly with TEXT timestamps.
+// setupBDDTestDB creates an in-memory SQLite DB with a manual DDL that
+// mirrors internal/db/models.go (BDDUsedTable + BDDUsedField). Manual
+// DDL is required because the GORM `datetime(3)` MySQL-only tags are
+// incompatible with SQLite.
+//
+// IMPORTANT: when models.go changes column/index/constraint shape,
+// update this DDL in lockstep — there is no AutoMigrate parity check
+// at test boot.
+//
+// Each call gets an isolated database via a unique DSN so tests don't
+// share state.
 func setupBDDTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private&_foreign_keys=on"
@@ -281,6 +286,36 @@ func TestUpdateTableDescription_Success(t *testing.T) {
 	}
 }
 
+// TestUpdateTableDescription_ToEmpty regression-guards against GORM's
+// Update("col", val) silently skipping zero-values. We seed a non-empty
+// description, then call UpdateTableDescription with "", and assert
+// the column is actually cleared.
+func TestUpdateTableDescription_ToEmpty(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+
+	tbl := newTable(1, "products")
+	tbl.Description = "initial description"
+	created, err := repo.CreateTable(context.Background(), tbl, nil)
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+	if created.Description != "initial description" {
+		t.Fatalf("seed description not persisted: %q", created.Description)
+	}
+
+	if err := repo.UpdateTableDescription(context.Background(), created.ID, ""); err != nil {
+		t.Fatalf("UpdateTableDescription to empty: %v", err)
+	}
+	got, err := repo.GetTable(context.Background(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Description != "" {
+		t.Errorf("expected empty description, got %q", got.Description)
+	}
+}
+
 func TestDeleteTable_CascadesFields(t *testing.T) {
 	g := setupBDDTestDB(t)
 	repo := NewBDDUsedRepo(g)
@@ -401,6 +436,38 @@ func TestUpdateFieldDescription_NotFound(t *testing.T) {
 	err := repo.UpdateFieldDescription(context.Background(), uuid.NewString(), "x")
 	if !errors.Is(err, ErrBDDNotFound) {
 		t.Fatalf("expected ErrBDDNotFound, got %v", err)
+	}
+}
+
+// TestUpdateFieldDescription_ToEmpty regression-guards against GORM's
+// Update("col", val) silently skipping zero-values. We seed a non-empty
+// description, then call UpdateFieldDescription with "", and assert
+// the column is actually cleared.
+func TestUpdateFieldDescription_ToEmpty(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+
+	created, err := repo.CreateTable(context.Background(), newTable(1, "products"), []db.BDDUsedField{
+		{FieldName: "sku", Description: "initial"},
+	})
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+	fieldID := created.Fields[0].ID
+	if created.Fields[0].Description != "initial" {
+		t.Fatalf("seed description not persisted: %q", created.Fields[0].Description)
+	}
+
+	if err := repo.UpdateFieldDescription(context.Background(), fieldID, ""); err != nil {
+		t.Fatalf("UpdateFieldDescription to empty: %v", err)
+	}
+
+	var got db.BDDUsedField
+	if err := g.First(&got, "id = ?", fieldID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Description != "" {
+		t.Errorf("expected empty description, got %q", got.Description)
 	}
 }
 

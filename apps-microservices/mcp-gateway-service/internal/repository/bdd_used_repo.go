@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
@@ -34,16 +35,21 @@ func NewBDDUsedRepo(g *gorm.DB) *BDDUsedRepo {
 
 // isDuplicateKeyErr returns true when the underlying driver reports a
 // uniqueness violation. We support the two backends we actually run
-// against — MySQL in production (error 1062) and SQLite in unit tests
-// (error string "UNIQUE constraint failed").
+// against — MySQL in production (error 1062, matched via type assertion
+// on *mysql.MySQLError) and SQLite in unit tests (error string
+// "UNIQUE constraint failed").
 func isDuplicateKeyErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "1062") ||
-		strings.Contains(msg, "Duplicate entry") ||
-		strings.Contains(msg, "UNIQUE constraint failed")
+	var me *mysql.MySQLError
+	if errors.As(err, &me) && me.Number == 1062 {
+		return true
+	}
+	if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		return true
+	}
+	return false
 }
 
 // ListTables returns the catalog of activated tables ordered by
@@ -138,12 +144,14 @@ func (r *BDDUsedRepo) CreateTable(ctx context.Context, table *db.BDDUsedTable, f
 }
 
 // UpdateTableDescription rewrites only the description column. Returns
-// ErrBDDNotFound when no row matches.
+// ErrBDDNotFound when no row matches. Uses Updates(map) instead of
+// Update("col", val) so an empty string actually clears the column —
+// GORM v1's Update skips zero-values silently in some versions.
 func (r *BDDUsedRepo) UpdateTableDescription(ctx context.Context, id, description string) error {
 	res := r.db.WithContext(ctx).
 		Model(&db.BDDUsedTable{}).
 		Where("id = ?", id).
-		Update("description", description)
+		Updates(map[string]interface{}{"description": description})
 	if res.Error != nil {
 		return res.Error
 	}
@@ -200,11 +208,14 @@ func (r *BDDUsedRepo) AddField(ctx context.Context, usedTableID string, field *d
 }
 
 // UpdateFieldDescription rewrites the description for a single field.
+// Uses Updates(map) instead of Update("col", val) so an empty string
+// actually clears the column — GORM v1's Update skips zero-values
+// silently in some versions.
 func (r *BDDUsedRepo) UpdateFieldDescription(ctx context.Context, fieldID, description string) error {
 	res := r.db.WithContext(ctx).
 		Model(&db.BDDUsedField{}).
 		Where("id = ?", fieldID).
-		Update("description", description)
+		Updates(map[string]interface{}{"description": description})
 	if res.Error != nil {
 		return res.Error
 	}
