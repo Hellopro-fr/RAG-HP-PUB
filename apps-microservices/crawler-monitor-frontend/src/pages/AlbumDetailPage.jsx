@@ -10,6 +10,7 @@ import { AlbumHeader } from '../components/albums/AlbumHeader';
 import { AlbumToolbar } from '../components/albums/AlbumToolbar';
 import { AlbumProductList } from '../components/albums/AlbumProductList';
 import { DeleteImageOrProductDialog } from '../components/albums/DeleteImageOrProductDialog';
+import { ImageDetailSheet } from '../components/albums/ImageDetailSheet';
 import { Card } from '../components/ui/card';
 
 /**
@@ -32,7 +33,7 @@ export default function AlbumDetailPage({ token }) {
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('updated');
   const [pendingProductDelete, setPendingProductDelete] = useState(null);
-  const [, setSelected] = useState(null);
+  const [selected, setSelected] = useState(null);
 
   const params = useMemo(() => ({ q, filter, sort }), [q, filter, sort]);
 
@@ -65,10 +66,10 @@ export default function AlbumDetailPage({ token }) {
   const rebuildMutation = useProductRedownloadMutation(token);
   const deleteProductMutation = useDeleteProductMutation(token);
 
-  // Placeholder — Task 13 branche ici l'ouverture du drawer.
+  // Click sur une vignette → ouvre le drawer (Task 13). On stocke à la fois
+  // l'image et son produit parent pour les afficher dans le `ImageDetailSheet`.
   const handleSelectImage = useCallback((img, product) => {
     setSelected({ image: img, product });
-    console.log('[albums] selected image', product.id_produit, img.filename);
   }, []);
 
   const handleRebuild = useCallback(
@@ -144,6 +145,15 @@ export default function AlbumDetailPage({ token }) {
           }
         }}
         onCancel={() => setPendingProductDelete(null)}
+      />
+
+      <ImageDetailSheet
+        open={!!selected}
+        image={selected?.image}
+        product={selected?.product}
+        domain={domain}
+        onClose={() => setSelected(null)}
+        token={token}
       />
     </div>
   );
