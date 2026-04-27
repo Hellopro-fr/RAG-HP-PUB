@@ -13,6 +13,7 @@ import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { auditMiddleware, readAuditEntries, rotateOldLogs, logAuditEntry } from './src/lib/auditLog.js';
 import { replayCallback } from './src/lib/callbacks.js';
+import { mountAlbumsRouter } from './src/lib/albums.js';
 import {
   parseWindow as parseCapacityWindow,
   snapshotCapacity,
@@ -180,6 +181,10 @@ app.post('/api/login', async (req, res) => {
 
 // Protect API routes
 app.use('/api/jobs', authenticateToken);
+
+// Albums (image-download-service proxy) — auth + audit + rate-limit destructif
+// gérés à l'intérieur du routeur via mountAlbumsRouter().
+app.use('/api/albums', authenticateToken, mountAlbumsRouter({ auditMiddleware }));
 
 const clients = new Set();
 wss.on('connection', (ws, req) => {
