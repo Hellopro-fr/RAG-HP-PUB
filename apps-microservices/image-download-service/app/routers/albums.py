@@ -20,9 +20,13 @@ import os
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 
-from services.album_summary import list_domains_with_stats
-from services.album_products import list_products, VALID_FILTERS, VALID_SORTS
-from services.album_actions import (
+from image_download_service.services.album_summary import list_domains_with_stats
+from image_download_service.services.album_products import (
+    list_products,
+    VALID_FILTERS,
+    VALID_SORTS,
+)
+from image_download_service.services.album_actions import (
     delete_image,
     delete_product,
     redownload_image,
@@ -30,7 +34,7 @@ from services.album_actions import (
     LockTimeoutError,
     ManifestEntryMissingError,
 )
-from services.album_jobs import start_delete_album_job, get_job
+from image_download_service.services.album_jobs import start_delete_album_job, get_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Albums"])
@@ -47,7 +51,7 @@ def _storage_base() -> str:
 
 def _get_downloader():
     """Singleton Downloader pour les redownloads. Lazy import pour éviter la circulaire."""
-    from core.downloader import Downloader
+    from image_download_service.core.downloader import Downloader
     if not hasattr(_get_downloader, "_inst"):
         _get_downloader._inst = Downloader()
     return _get_downloader._inst
