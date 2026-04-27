@@ -79,6 +79,30 @@ Déjà câblé :
 
 Aucune action requise. Chaque session démarre graph-aware.
 
+## Détecter un `/graphify --update` en attente
+
+Les hooks locaux (`post-commit`, `post-merge`) et la voie CI auto-rebuild peuvent rafraîchir l'AST code sans LLM. Ils ne peuvent pas rafraîchir les nœuds doc / CLAUDE.md — ça demande une passe sémantique via `/graphify --update`. Quand un changement doc dans le scope est détecté, le script de rebuild touche `graphify-out/.needs_update` (gitignoré, local uniquement) comme drapeau « en attente ».
+
+Trois façons de le remarquer :
+
+1. **Automatique dans les sessions Claude Code.** Un hook `SessionStart` dans `.claude/settings.json` lit le drapeau et injecte un rappel dans le contexte de Claude au début de chaque session ouverte dans ce repo. Si le drapeau est posé, la réponse à votre prochain prompt mentionnera l'update en attente.
+2. **Vérification manuelle d'une ligne en shell.** Utiliser le script helper :
+
+    ```bash
+    bash scripts/graphify-status.sh
+    # Sorties possibles :
+    #   [graphify] fresh — graph.json est à jour relativement aux fichiers dans le scope.
+    #   [graphify] AST drift — au moins un fichier code dans le scope est plus récent que graph.json. ...
+    #   [graphify] PENDING — ré-extraction sémantique nécessaire. Lancer /graphify --update depuis une session Claude Code.
+    #   [graphify] no graph in this repo (graphify-out/graph.json manquant)
+    ```
+
+    Ajouter `--quiet` pour ne renvoyer que le code de sortie (0 fresh, 1 pending, 2 graphe absent) — pratique pour des scripts de status-line ou un hook pre-push.
+
+3. **Inspection directe du fichier.** `test -f graphify-out/.needs_update` suffit quand on ne veut pas de helper. La CLI amont propose `graphify check-update .` si graphify est installé ; ça fait la même chose avec un message plus joli.
+
+Le drapeau est nettoyé automatiquement à la prochaine exécution réussie de `/graphify --update` qui ne trouve plus de fichier doc à rafraîchir.
+
 ## Tirer des mises à jour du dépôt
 
 Cas usuel : `git pull` avec vos propres commits graphify non-pushés en avance sur `origin/features/poc` et des commits d'équipiers sur le distant. Deux règles gardent le graphe intact.
@@ -316,6 +340,7 @@ scripts/
 ├── test_graphify_check_service.py             # tests unitaires du classifieur
 ├── graphify-post-commit.sh                    # corps du hook post-commit
 ├── graphify-post-merge.sh                     # corps du hook post-merge (après git pull / git merge)
+├── graphify-status.sh                         # check une ligne « graphe fresh / pending / qui dérive ? »
 └── install-graphify-hook.sh                   # installeur (copie les deux hooks vers .git/hooks/)
 
 .github/workflows/

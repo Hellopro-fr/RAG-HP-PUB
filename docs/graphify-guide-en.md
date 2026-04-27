@@ -79,6 +79,30 @@ Already wired:
 
 No action needed. Every session starts graph-aware.
 
+## Detecting a pending `/graphify --update`
+
+The local hooks (`post-commit`, `post-merge`) and the CI auto-rebuild path can both refresh code AST without LLM. They cannot refresh doc / CLAUDE.md nodes — that requires a semantic pass via `/graphify --update`. When a doc change in scope is detected, the rebuild script touches `graphify-out/.needs_update` (gitignored, local only) as a "pending" flag.
+
+Three ways to notice it:
+
+1. **Automatic in Claude Code sessions.** A `SessionStart` hook in `.claude/settings.json` reads the flag and injects a reminder into Claude's context at the start of every session opened in this repo. If the flag is set, your next prompt's response will mention the pending update.
+2. **Manual one-line check from a shell.** Use the helper script:
+
+    ```bash
+    bash scripts/graphify-status.sh
+    # Outputs one of:
+    #   [graphify] fresh — graph.json is up to date relative to in-scope files.
+    #   [graphify] AST drift — at least one in-scope code file is newer than graph.json. ...
+    #   [graphify] PENDING — semantic re-extraction needed. Run /graphify --update from a Claude Code session.
+    #   [graphify] no graph in this repo (graphify-out/graph.json missing)
+    ```
+
+    Add `--quiet` for exit-code-only mode (0 fresh, 1 pending, 2 missing graph) — convenient for status-line scripts or pre-push hooks.
+
+3. **Direct file inspection.** `test -f graphify-out/.needs_update` works fine when you do not want any helper. The upstream CLI offers `graphify check-update .` if you have graphify installed; it does the same thing with a fancier message.
+
+The flag is cleared automatically the next time `/graphify --update` runs successfully and the rebuild script sees no doc files to refresh.
+
 ## Pulling updates from the repository
 
 The usual case is `git pull` with your own unpushed graphify commits ahead of `origin/features/poc` and teammates' commits on the remote. Two rules keep the graph intact.
@@ -316,6 +340,7 @@ scripts/
 ├── test_graphify_check_service.py             # unit tests for the classifier
 ├── graphify-post-commit.sh                    # post-commit hook body
 ├── graphify-post-merge.sh                     # post-merge hook body (fires after git pull / git merge)
+├── graphify-status.sh                         # one-line "is the graph fresh / pending / drifting?" check
 └── install-graphify-hook.sh                   # installer (copies both hooks to .git/hooks/)
 
 .github/workflows/
