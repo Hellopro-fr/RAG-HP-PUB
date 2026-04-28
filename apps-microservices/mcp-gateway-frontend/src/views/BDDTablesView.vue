@@ -167,7 +167,12 @@
         </Column>
         <Column header="Base">
           <template #body="{ data }">
-            <span class="text-gray-600 dark:text-gray-300">{{ databaseName(data.database_id) }}</span>
+            <span
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+              :class="databaseBadgeClass(data.database_id)"
+            >
+              {{ databaseShortName(data.database_id) }}
+            </span>
           </template>
         </Column>
         <Column header="Statut">
@@ -565,6 +570,29 @@ function activeDatabaseId(): number | undefined {
 
 function databaseName(id: number): string {
   return HELLOPRO_DATABASES.find((d) => d.id === id)?.name || '—';
+}
+
+// Compact label for the list badge — drops the redundant "Hellopro "
+// prefix shared by every database name. Falls back to the full name
+// when the prefix is missing (defensive for future entries).
+function databaseShortName(id: number): string {
+  const name = databaseName(id);
+  return name.replace(/^Hellopro\s+/i, '');
+}
+
+// Color palette per database. Brand = BO (default), violet = Data,
+// pink = IA. Unknown ids fall back to neutral gray.
+function databaseBadgeClass(id: number): string {
+  switch (id) {
+    case 1:
+      return 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400';
+    case 5:
+      return 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400';
+    case 10:
+      return 'bg-pink-50 text-pink-700 dark:bg-pink-500/15 dark:text-pink-400';
+    default:
+      return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+  }
 }
 
 function formatDate(d?: string): string {
