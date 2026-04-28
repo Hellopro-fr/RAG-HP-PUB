@@ -126,6 +126,12 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 	client.RingoverAllowedUserIDs = rUserIDs
 	client.RingoverAllowedTeamIDs = rTeamIDs
 
+	// Validate BDD scope before persisting to mirror the token-create flow.
+	if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	if len(req.RedirectURIs) > 0 {
 		redirectJSON, _ := json.Marshal(req.RedirectURIs)
 		s := string(redirectJSON)
@@ -208,6 +214,20 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Persist the BDD scope after the client row exists so the FK is satisfied.
+	var bddDTO *BDDFilterDTO
+	if req.BDDFilter != nil {
+		if err := h.oauth2Repo.UpdateBDDTables(r.Context(), client.ID, req.BDDFilter.UsedTableIDs); err != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(req.BDDFilter.UsedTableIDs) > 0 {
+			ids := append([]string(nil), req.BDDFilter.UsedTableIDs...)
+			bddDTO = &BDDFilterDTO{UsedTableIDs: ids}
+		}
+	}
+
 	var expiresStr *string
 	if client.ExpiresAt != nil {
 		s := client.ExpiresAt.UTC().Format(time.RFC3339)
@@ -241,6 +261,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		DynamicallyRegistered: client.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&client),
 		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&client),
+		BDDFilter:             bddDTO,
 	})
 }
 
@@ -357,6 +378,17 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 			return
 		}
 		if err := h.instructionRepo.ReplaceOAuth2ClientInstructions(id, req.InstructionIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if req.BDDFilter != nil {
+		if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := h.oauth2Repo.UpdateBDDTables(r.Context(), id, req.BDDFilter.UsedTableIDs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -524,5 +556,6 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		DynamicallyRegistered: c.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&c),
 		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&c),
+		BDDFilter:             oauth2ClientBDDFilterToDTO(&c),
 	}
 }
