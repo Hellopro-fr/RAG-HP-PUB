@@ -94,6 +94,7 @@ export const bddApi = {
       default_order_by?: string
       relations?: BDDRelations
       notes?: string
+      rows?: number
     },
   ) => api.patch<BDDUsedTable>(`${BASE}/bdd/used/tables/${id}`, body),
   refreshCatalog: (id: string) =>

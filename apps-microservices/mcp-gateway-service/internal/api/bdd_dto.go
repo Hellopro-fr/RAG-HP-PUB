@@ -78,14 +78,19 @@ type CreateBDDUsedFieldInline struct {
 // UpdateBDDUsedTableRequest is the payload for PATCH /api/v1/bdd/used/tables/{id}.
 // All fields are optional pointers — nil means "leave the column alone".
 //
-// Rows and PrimaryKey are intentionally NOT exposed here: both are
-// upstream-derived and refreshed via the dedicated
-// POST /bdd/used/tables/{id}/refresh-catalog endpoint.
+// PrimaryKey is intentionally NOT exposed here — it is upstream-derived
+// and only refreshed via POST /bdd/used/tables/{id}/refresh-catalog.
+//
+// Rows is exposed as an admin override: the refresh-catalog endpoint
+// sets it from the upstream /count, but on multi-million-row tables
+// where the live COUNT(*) times out admins need a manual escape
+// hatch. Pass a non-negative integer to set, omit to leave alone.
 type UpdateBDDUsedTableRequest struct {
 	Description    *string         `json:"description,omitempty"`
 	DefaultOrderBy *string         `json:"default_order_by,omitempty"`
 	Relations      json.RawMessage `json:"relations,omitempty"`
 	Notes          *string         `json:"notes,omitempty"`
+	Rows           *int64          `json:"rows,omitempty"`
 }
 
 // UpdateBDDUsedFieldRequest is the payload for PATCH /api/v1/bdd/used/tables/{id}/fields/{field_id}.
