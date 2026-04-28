@@ -168,7 +168,7 @@ func TestListFields_Success(t *testing.T) {
 		_, _ = w.Write([]byte(`{"fields":[
             {"id":100,"table_id":7,"field_name":"id","field_type":"int","is_nullable":false},
             {"id":101,"table_id":7,"field_name":"name","field_type":"varchar(255)","is_nullable":true,"description":"label"}
-        ]}`))
+        ],"primary":"id"}`))
 	}))
 	defer srv.Close()
 
@@ -177,14 +177,17 @@ func TestListFields_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFields: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("len=%d want=2", len(got))
+	if len(got.Fields) != 2 {
+		t.Fatalf("len=%d want=2", len(got.Fields))
 	}
-	if got[0].FieldName != "id" || got[0].FieldType != "int" || got[0].IsNullable {
-		t.Errorf("got[0]=%+v", got[0])
+	if got.Primary != "id" {
+		t.Errorf("Primary=%q want=id", got.Primary)
 	}
-	if got[1].FieldName != "name" || !got[1].IsNullable || got[1].Description != "label" {
-		t.Errorf("got[1]=%+v", got[1])
+	if got.Fields[0].FieldName != "id" || got.Fields[0].FieldType != "int" || got.Fields[0].IsNullable {
+		t.Errorf("Fields[0]=%+v", got.Fields[0])
+	}
+	if got.Fields[1].FieldName != "name" || !got.Fields[1].IsNullable || got.Fields[1].Description != "label" {
+		t.Errorf("Fields[1]=%+v", got.Fields[1])
 	}
 }
 
@@ -267,8 +270,33 @@ func TestList_WrappedEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFields: %v", err)
 	}
-	if len(fields) != 1 || fields[0].FieldName != "id_rubrique" || fields[0].FieldType != "int" {
+	if len(fields.Fields) != 1 || fields.Fields[0].FieldName != "id_rubrique" || fields.Fields[0].FieldType != "int" {
 		t.Errorf("fields=%+v", fields)
+	}
+}
+
+// TestCountRows_Success verifies the count endpoint shape and decoding.
+func TestCountRows_Success(t *testing.T) {
+	const wantToken = "tok"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/databases/1/tables/650/count" {
+			t.Errorf("unexpected path: %q", r.URL.Path)
+		}
+		if got, want := r.Header.Get("Authorization"), "Bearer "+wantToken; got != want {
+			t.Errorf("Authorization=%q want=%q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"response":{"count":16596}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, wantToken)
+	n, err := c.CountRows(context.Background(), 1, 650)
+	if err != nil {
+		t.Fatalf("CountRows: %v", err)
+	}
+	if n != 16596 {
+		t.Errorf("count=%d want=16596", n)
 	}
 }
 

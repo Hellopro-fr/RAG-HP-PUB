@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/bddcatalog"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 )
@@ -118,7 +119,7 @@ func (h *Handler) handleBDDUsedTableByID(w http.ResponseWriter, r *http.Request)
 	// already routes them away from here because longer-literal match
 	// wins, but if that ever regresses we don't want to parse those
 	// strings as a UUID.
-	if len(parts) == 1 && (id == "bulk" || id == "export" || id == "import") {
+	if len(parts) == 1 && (id == "bulk" || id == "export" || id == "import" || id == "import-doc" || id == "doc") {
 		http.NotFound(w, r)
 		return
 	}
@@ -127,17 +128,24 @@ func (h *Handler) handleBDDUsedTableByID(w http.ResponseWriter, r *http.Request)
 	case 1:
 		h.routeBDDTableByID(w, r, id)
 	case 2:
-		// /{id}/fields — only POST allowed
-		if parts[1] != "fields" {
+		switch parts[1] {
+		case "fields":
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+				return
+			}
+			h.addBDDUsedField(w, r, id)
+		case "refresh-catalog":
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+				return
+			}
+			h.handleBDDUsedRefreshCatalog(w, r, id)
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-			return
-		}
-		h.addBDDUsedField(w, r, id)
 	case 3:
 		// /{id}/fields/{field_id}
 		if parts[1] != "fields" {
@@ -286,6 +294,7 @@ func (h *Handler) createBDDUsedTable(w http.ResponseWriter, r *http.Request) {
 	for _, f := range req.Fields {
 		fields = append(fields, db.BDDUsedField{
 			FieldName:       f.FieldName,
+			FieldType:       f.FieldType,
 			Description:     f.Description,
 			UpstreamFieldID: f.UpstreamFieldID,
 		})
@@ -331,7 +340,23 @@ func (h *Handler) updateBDDUsedTable(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	if err := h.bddUsedRepo.UpdateTableDescription(r.Context(), id, req.Description); err != nil {
+	updates := map[string]interface{}{}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+	if req.DefaultOrderBy != nil {
+		updates["default_order_by"] = *req.DefaultOrderBy
+	}
+	if req.Relations != nil {
+		// Empty array / object both encode "no relations". Persist verbatim
+		// so round-trip with the doc payload stays bit-identical.
+		updates["relations"] = []byte(req.Relations)
+	}
+	if req.Notes != nil {
+		updates["notes"] = *req.Notes
+	}
+
+	if err := h.bddUsedRepo.UpdateTableMetadata(r.Context(), id, updates); err != nil {
 		if errors.Is(err, repository.ErrBDDNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
 			return
@@ -389,6 +414,7 @@ func (h *Handler) addBDDUsedField(w http.ResponseWriter, r *http.Request, tableI
 
 	field := &db.BDDUsedField{
 		FieldName:       req.FieldName,
+		FieldType:       req.FieldType,
 		Description:     req.Description,
 		UpstreamFieldID: req.UpstreamFieldID,
 	}
@@ -587,6 +613,7 @@ func (h *Handler) handleBDDUsedExport(w http.ResponseWriter, r *http.Request) {
 		for _, f := range t.Fields {
 			fields = append(fields, BDDExportedField{
 				FieldName:       f.FieldName,
+				FieldType:       f.FieldType,
 				Description:     f.Description,
 				UpstreamFieldID: f.UpstreamFieldID,
 			})
@@ -596,6 +623,11 @@ func (h *Handler) handleBDDUsedExport(w http.ResponseWriter, r *http.Request) {
 			TableName:       t.Name,
 			Description:     t.Description,
 			UpstreamTableID: t.UpstreamTableID,
+			Rows:            t.Rows,
+			PrimaryKey:      t.PrimaryKey,
+			DefaultOrderBy:  t.DefaultOrderBy,
+			Relations:       t.Relations,
+			Notes:           t.Notes,
 			Fields:          fields,
 		})
 	}
@@ -671,6 +703,11 @@ func (h *Handler) handleBDDUsedImport(w http.ResponseWriter, r *http.Request) {
 			Name:            name,
 			Description:     t.Description,
 			UpstreamTableID: t.UpstreamTableID,
+			Rows:            t.Rows,
+			PrimaryKey:      t.PrimaryKey,
+			DefaultOrderBy:  t.DefaultOrderBy,
+			Relations:       t.Relations,
+			Notes:           t.Notes,
 		}
 		for _, f := range t.Fields {
 			fname := strings.TrimSpace(f.FieldName)
@@ -685,6 +722,7 @@ func (h *Handler) handleBDDUsedImport(w http.ResponseWriter, r *http.Request) {
 			}
 			row.Fields = append(row.Fields, db.BDDUsedField{
 				FieldName:       fname,
+				FieldType:       f.FieldType,
 				Description:     f.Description,
 				UpstreamFieldID: f.UpstreamFieldID,
 			})
@@ -725,4 +763,605 @@ func (h *Handler) handleBDDUsedImport(w http.ResponseWriter, r *http.Request) {
 		Updated:  updated,
 		Errors:   respErrs,
 	})
+}
+
+// ── Meta ─────────────────────────────────────────────────────────────────
+
+// handleBDDUsedMeta routes GET / PUT /api/v1/bdd/used/meta. Used by the
+// admin UI to edit the singleton header that decorates the doc payload's
+// _meta block.
+func (h *Handler) handleBDDUsedMeta(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		row, err := h.bddUsedRepo.GetMeta(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, toBDDMetaDTO(*row))
+	case http.MethodPut:
+		var req UpdateBDDMetaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		updater := auth.UserEmailFromContext(r.Context())
+		row, err := h.bddUsedRepo.UpsertMeta(r.Context(), req.Description, req.Usage, updater)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, toBDDMetaDTO(*row))
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
+// ── Doc ──────────────────────────────────────────────────────────────────
+
+// handleBDDUsedDoc handles GET /api/v1/bdd/used/tables/doc.
+//
+// Emits the documentation payload consumed by the bdd_get_table_doc tool:
+// a top-level _meta header followed by one entry per registered table,
+// keyed by table name. Field types are taken from the gateway's snapshot
+// (bdd_used_fields.field_type) so the call is offline.
+func (h *Handler) handleBDDUsedDoc(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	rows, err := h.bddUsedRepo.ListAll(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	meta, err := h.bddUsedRepo.GetMeta(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	latest, err := h.bddUsedRepo.LatestUpdatedAt(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if latest.IsZero() && !meta.UpdatedAt.IsZero() {
+		latest = meta.UpdatedAt
+	}
+
+	// Use an ordered marshalling pass so _meta lands first and tables
+	// appear in registry order. json.Marshal of a struct keeps field
+	// declaration order; using a struct + a typed map keeps it human-
+	// readable while still matching the target shape.
+	type orderedDoc struct {
+		Meta   BDDDocMeta             `json:"_meta"`
+		Tables map[string]BDDDocTable `json:"-"`
+	}
+
+	doc := orderedDoc{
+		Meta: BDDDocMeta{
+			Description: meta.Description,
+			Usage:       meta.Usage,
+			LastUpdated: formatBDDLastUpdated(latest),
+		},
+		Tables: make(map[string]BDDDocTable, len(rows)),
+	}
+	for _, t := range rows {
+		cols := make(map[string]BDDDocColumn, len(t.Fields))
+		for _, f := range t.Fields {
+			cols[f.FieldName] = BDDDocColumn{
+				Type: f.FieldType,
+				Desc: f.Description,
+			}
+		}
+		var pkPtr *string
+		if t.PrimaryKey != "" {
+			s := t.PrimaryKey
+			pkPtr = &s
+		}
+		var orderPtr *string
+		if t.DefaultOrderBy != "" {
+			s := t.DefaultOrderBy
+			orderPtr = &s
+		}
+		relations := t.Relations
+		if len(relations) == 0 {
+			relations = json.RawMessage(`[]`)
+		}
+		doc.Tables[t.Name] = BDDDocTable{
+			Description:    t.Description,
+			Rows:           t.Rows,
+			PrimaryKey:     pkPtr,
+			DefaultOrderBy: orderPtr,
+			Columns:        cols,
+			Relations:      relations,
+			Notes:          t.Notes,
+		}
+	}
+
+	// Hand-roll the outer object so _meta stays first while preserving the
+	// table iteration order from the SQL query (created_at DESC, name ASC).
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	combined := map[string]interface{}{"_meta": doc.Meta}
+	for _, t := range rows {
+		combined[t.Name] = doc.Tables[t.Name]
+	}
+	_ = enc.Encode(combined)
+}
+
+// formatBDDLastUpdated renders the doc's last_updated timestamp as
+// "YYYY-MM-DD HH:MM:SS" (UTC). Empty input → empty string so the meta
+// block reads cleanly when the registry has never been written.
+func formatBDDLastUpdated(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format("2006-01-02 15:04:05")
+}
+
+// ── Import (doc-format) ──────────────────────────────────────────────────
+
+// handleBDDUsedImportDoc handles POST /api/v1/bdd/used/tables/import-doc.
+//
+// Accepts the doc payload shape (same one emitted by GET .../doc):
+//
+//	{
+//	  "_meta":  { "description": "...", "usage": "..." },
+//	  "<table_name>": { "database_id": <int>, "description": "...", "rows": <int|null>,
+//	                    "primary_key": <str|null>,
+//	                    "default_order_by": <str|null>,
+//	                    "columns": { "<col>": { "type": "...", "desc": "..." } },
+//	                    "relations": [...] | { ... },
+//	                    "notes": "..." },
+//	   ...
+//	}
+//
+// `_meta` (when present) is upserted into the singleton meta row. Each
+// non-meta key is treated as a (database_id, table_name) row. The
+// per-table `database_id` selects the target Hellopro DB; missing values
+// default to 1 (Hellopro BO).
+//
+// Per-row failures are collected; the transaction is NOT aborted on bad
+// rows. Cap: 1 MiB body, same as /import.
+func (h *Handler) handleBDDUsedImportDoc(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, bddImportMaxBody)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "payload too large (max 1 MiB)"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body: " + err.Error()})
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+
+	creator := auth.UserEmailFromContext(r.Context())
+	respErrs := make([]BDDImportError, 0)
+
+	// _meta (optional) → upsert the singleton metadata row.
+	if metaRaw, ok := raw["_meta"]; ok {
+		var meta struct {
+			Description string `json:"description"`
+			Usage       string `json:"usage"`
+		}
+		if err := json.Unmarshal(metaRaw, &meta); err == nil {
+			if _, err := h.bddUsedRepo.UpsertMeta(r.Context(), meta.Description, meta.Usage, creator); err != nil {
+				respErrs = append(respErrs, BDDImportError{
+					TableName: "_meta",
+					Error:     "meta upsert: " + err.Error(),
+				})
+			}
+		}
+	}
+
+	// Each remaining top-level key is a table.
+	type docColumn struct {
+		Type string `json:"type"`
+		Desc string `json:"desc"`
+	}
+	type docTable struct {
+		DatabaseID     int                  `json:"database_id"`
+		Description    string               `json:"description"`
+		Rows           *int64               `json:"rows"`
+		PrimaryKey     *string              `json:"primary_key"`
+		DefaultOrderBy *string              `json:"default_order_by"`
+		Columns        map[string]docColumn `json:"columns"`
+		Relations      json.RawMessage      `json:"relations"`
+		Notes          string               `json:"notes"`
+	}
+
+	// Per-(dbID, table_name) cache of upstream catalog metadata. Filled
+	// lazily so missing catalog data doesn't hammer the upstream API on
+	// every iteration. catalogReady = true means we resolved both the
+	// upstream table_id and its column set; missing tables stay absent.
+	type catalogEntry struct {
+		upstreamID int
+		fieldNames map[string]bool
+	}
+	catalogCache := map[string]catalogEntry{}
+	resolveCatalog := func(dbID int, tableName string) (catalogEntry, bool) {
+		if !h.bddCatalogReady() {
+			return catalogEntry{}, false
+		}
+		key := strconv.Itoa(dbID) + ":" + tableName
+		if e, ok := catalogCache[key]; ok {
+			return e, e.upstreamID != 0
+		}
+		tables, terr := h.bddCatalog.ListTables(r.Context(), dbID, tableName)
+		if terr != nil {
+			catalogCache[key] = catalogEntry{}
+			return catalogEntry{}, false
+		}
+		var match *bddcatalog.Table
+		for i := range tables {
+			if tables[i].TableName == tableName {
+				match = &tables[i]
+				break
+			}
+		}
+		if match == nil {
+			catalogCache[key] = catalogEntry{}
+			return catalogEntry{}, false
+		}
+		fr, ferr := h.bddCatalog.ListFields(r.Context(), dbID, match.ID)
+		if ferr != nil {
+			// Resolved upstream id but couldn't list fields — keep id so
+			// upstream_table_id is still snapshotted on the row.
+			entry := catalogEntry{upstreamID: match.ID, fieldNames: nil}
+			catalogCache[key] = entry
+			return entry, true
+		}
+		fnames := make(map[string]bool, len(fr.Fields))
+		for _, f := range fr.Fields {
+			fnames[f.FieldName] = true
+		}
+		entry := catalogEntry{upstreamID: match.ID, fieldNames: fnames}
+		catalogCache[key] = entry
+		return entry, true
+	}
+
+	rows := make([]db.BDDUsedTable, 0, len(raw))
+	for name, tRaw := range raw {
+		if strings.HasPrefix(name, "_") {
+			continue
+		}
+		if !bddIdentRe.MatchString(name) {
+			respErrs = append(respErrs, BDDImportError{
+				TableName: name,
+				Error:     "table_name invalid",
+			})
+			continue
+		}
+		var t docTable
+		if err := json.Unmarshal(tRaw, &t); err != nil {
+			respErrs = append(respErrs, BDDImportError{
+				TableName: name,
+				Error:     "decode: " + err.Error(),
+			})
+			continue
+		}
+
+		// Default to 1 (Hellopro BO) when the table omits database_id.
+		// Reject any value outside the closed Hellopro DB enum.
+		dbID := t.DatabaseID
+		if dbID == 0 {
+			dbID = 1
+		}
+		if !validBDDDatabaseIDs[dbID] {
+			respErrs = append(respErrs, BDDImportError{
+				DatabaseID: dbID,
+				TableName:  name,
+				Error:      "database_id must be one of 1, 5, 10",
+			})
+			continue
+		}
+
+		row := db.BDDUsedTable{
+			DatabaseID:  dbID,
+			Name:        name,
+			Description: t.Description,
+			Rows:        t.Rows,
+			Notes:       t.Notes,
+		}
+		if t.PrimaryKey != nil {
+			row.PrimaryKey = *t.PrimaryKey
+		}
+		if t.DefaultOrderBy != nil {
+			row.DefaultOrderBy = *t.DefaultOrderBy
+		}
+		if len(t.Relations) > 0 {
+			row.Relations = t.Relations
+		}
+
+		// Resolve the upstream catalog entry once per (dbID, name) to
+		// snapshot upstream_table_id and validate column names. When
+		// catalog is unavailable or the table is unknown upstream, we
+		// import the doc as-is — the admin can still hand-curate later.
+		catEntry, catOK := resolveCatalog(dbID, name)
+		if catOK {
+			row.UpstreamTableID = catEntry.upstreamID
+		}
+
+		for fname, col := range t.Columns {
+			fname = strings.TrimSpace(fname)
+			if !bddIdentRe.MatchString(fname) {
+				respErrs = append(respErrs, BDDImportError{
+					DatabaseID: dbID,
+					TableName:  name,
+					Error:      "field_name " + fname + " is invalid",
+				})
+				continue
+			}
+			// Drop columns that don't exist in the upstream catalog so
+			// we don't seed the registry with hallucinated fields the
+			// LLM would later fail to query.
+			if catOK && catEntry.fieldNames != nil && !catEntry.fieldNames[fname] {
+				respErrs = append(respErrs, BDDImportError{
+					DatabaseID: dbID,
+					TableName:  name,
+					Error:      "field " + fname + " not in upstream catalog (skipped)",
+				})
+				continue
+			}
+			row.Fields = append(row.Fields, db.BDDUsedField{
+				FieldName:   fname,
+				FieldType:   col.Type,
+				Description: col.Desc,
+			})
+		}
+		rows = append(rows, row)
+	}
+
+	inserted, updated, repoErrs, err := h.bddUsedRepo.Import(r.Context(), rows, creator)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, e := range repoErrs {
+		respErrs = append(respErrs, BDDImportError{
+			DatabaseID: e.DatabaseID,
+			TableName:  e.TableName,
+			Error:      e.Err.Error(),
+		})
+	}
+
+	if h.tokenCache != nil {
+		h.tokenCache.InvalidateAll()
+	}
+	if h.oauth2Cache != nil {
+		h.oauth2Cache.InvalidateAll()
+	}
+
+	writeJSON(w, http.StatusOK, BDDImportResponse{
+		Inserted: inserted,
+		Updated:  updated,
+		Errors:   respErrs,
+	})
+}
+
+// ── Bulk update / delete ─────────────────────────────────────────────────
+
+// handleBDDUsedBulkUpdateOrDelete dispatches PATCH / DELETE on
+// /api/v1/bdd/used/tables/bulk. PATCH applies (database_id, is_active)
+// to a list of ids; DELETE removes the listed ids and cascades the
+// scope-token / OAuth2 join rows.
+func (h *Handler) handleBDDUsedBulkUpdateOrDelete(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPatch:
+		h.bulkUpdateBDDUsedTables(w, r)
+	case http.MethodDelete:
+		h.bulkDeleteBDDUsedTables(w, r)
+	default:
+		w.Header().Set("Allow", "PATCH, DELETE")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+	}
+}
+
+func (h *Handler) bulkUpdateBDDUsedTables(w http.ResponseWriter, r *http.Request) {
+	var req BulkUpdateBDDUsedTablesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if len(req.IDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ids must not be empty"})
+		return
+	}
+	if len(req.IDs) > bddBulkMaxItems {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "ids: too many entries (max " + strconv.Itoa(bddBulkMaxItems) + ")",
+		})
+		return
+	}
+	if req.DatabaseID == nil && req.IsActive == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "at least one of database_id or is_active must be provided",
+		})
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if req.DatabaseID != nil {
+		if !validBDDDatabaseIDs[*req.DatabaseID] {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "database_id must be one of 1, 5, 10",
+			})
+			return
+		}
+		updates["database_id"] = *req.DatabaseID
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+
+	affected, err := h.bddUsedRepo.BulkUpdate(r.Context(), req.IDs, updates)
+	if err != nil {
+		// Surface unique-key conflicts as 409 — moving multiple tables to
+		// the same target DB can collide on (database_id, table_name).
+		if isDuplicateKeyErr(err) {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "table name already registered in target database",
+			})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.tokenCache != nil {
+		h.tokenCache.InvalidateAll()
+	}
+	if h.oauth2Cache != nil {
+		h.oauth2Cache.InvalidateAll()
+	}
+
+	writeJSON(w, http.StatusOK, BulkOpResponse{Affected: affected})
+}
+
+// isDuplicateKeyErr is duplicated locally because the repo helper is
+// unexported. Same logic — MySQL 1062 / SQLite "UNIQUE constraint failed".
+func isDuplicateKeyErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		return true
+	}
+	if strings.Contains(err.Error(), "1062") {
+		return true
+	}
+	return false
+}
+
+func (h *Handler) bulkDeleteBDDUsedTables(w http.ResponseWriter, r *http.Request) {
+	var req BulkDeleteBDDUsedTablesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if len(req.IDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ids must not be empty"})
+		return
+	}
+	if len(req.IDs) > bddBulkMaxItems {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "ids: too many entries (max " + strconv.Itoa(bddBulkMaxItems) + ")",
+		})
+		return
+	}
+
+	affected, err := h.bddUsedRepo.BulkDelete(r.Context(), req.IDs)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if h.tokenCache != nil {
+		h.tokenCache.InvalidateAll()
+	}
+	if h.oauth2Cache != nil {
+		h.oauth2Cache.InvalidateAll()
+	}
+
+	writeJSON(w, http.StatusOK, BulkOpResponse{Affected: affected})
+}
+
+// ── Refresh from upstream catalog ────────────────────────────────────────
+
+// handleBDDUsedRefreshCatalog handles
+// POST /api/v1/bdd/used/tables/{id}/refresh-catalog.
+//
+// Pulls the upstream `primary` (from /databases/{db}/tables/{tid}/fields)
+// and `count` (from /databases/{db}/tables/{tid}/count) for the given
+// registered table and persists them to bdd_used_tables. Returns the
+// refreshed row.
+//
+// Returns 503 when the upstream client is unconfigured, 502 when the
+// upstream call fails, 422 when the table has no upstream link
+// (UpstreamTableID == 0).
+func (h *Handler) handleBDDUsedRefreshCatalog(w http.ResponseWriter, r *http.Request, id string) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if !h.bddCatalogReady() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": catalogDisabledMsg})
+		return
+	}
+
+	table, err := h.bddUsedRepo.GetTable(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrBDDNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if table.UpstreamTableID == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+			"error": "table has no upstream catalog link (upstream_table_id missing)",
+		})
+		return
+	}
+
+	fieldsResp, ferr := h.bddCatalog.ListFields(r.Context(), table.DatabaseID, table.UpstreamTableID)
+	if ferr != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": ferr.Error()})
+		return
+	}
+	count, cerr := h.bddCatalog.CountRows(r.Context(), table.DatabaseID, table.UpstreamTableID)
+	if cerr != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": cerr.Error()})
+		return
+	}
+
+	if err := h.bddUsedRepo.UpdateTableMetadata(r.Context(), id, map[string]interface{}{
+		"primary_key": fieldsResp.Primary,
+		"rows":        count,
+	}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	out, err := h.bddUsedRepo.GetTable(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, toBDDUsedTableDTO(*out))
 }

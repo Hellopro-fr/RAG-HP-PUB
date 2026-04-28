@@ -517,15 +517,21 @@ func (TemplateInstance) TableName() string { return "template_instances" }
 // activated for use through the gateway. UpstreamTableID mirrors the ID
 // returned by the upstream catalog so we can refresh metadata.
 type BDDUsedTable struct {
-	ID              string         `gorm:"type:char(36);primaryKey"`
-	DatabaseID      int            `gorm:"not null;index;uniqueIndex:uniq_db_table"`
-	Name            string         `gorm:"column:table_name;type:varchar(128);not null;uniqueIndex:uniq_db_table"`
-	UpstreamTableID int            `gorm:"index"`
-	Description     string         `gorm:"type:text"`
-	CreatedBy       string         `gorm:"type:varchar(255);not null;default:''"`
-	CreatedAt       time.Time      `gorm:"type:datetime(3);autoCreateTime"`
-	UpdatedAt       time.Time      `gorm:"type:datetime(3);autoUpdateTime"`
-	Fields          []BDDUsedField `gorm:"foreignKey:UsedTableID;constraint:OnDelete:CASCADE"`
+	ID              string          `gorm:"type:char(36);primaryKey"`
+	DatabaseID      int             `gorm:"not null;index;uniqueIndex:uniq_db_table"`
+	Name            string          `gorm:"column:table_name;type:varchar(128);not null;uniqueIndex:uniq_db_table"`
+	UpstreamTableID int             `gorm:"index"`
+	Description     string          `gorm:"type:text"`
+	Rows            *int64          `gorm:"type:bigint"`
+	PrimaryKey      string          `gorm:"type:varchar(255);not null;default:''"`
+	DefaultOrderBy  string          `gorm:"type:varchar(255);not null;default:''"`
+	Relations       json.RawMessage `gorm:"type:json"`
+	Notes           string          `gorm:"type:text"`
+	IsActive        bool            `gorm:"not null;default:true;index"`
+	CreatedBy       string          `gorm:"type:varchar(255);not null;default:''"`
+	CreatedAt       time.Time       `gorm:"type:datetime(3);autoCreateTime"`
+	UpdatedAt       time.Time       `gorm:"type:datetime(3);autoUpdateTime"`
+	Fields          []BDDUsedField  `gorm:"foreignKey:UsedTableID;constraint:OnDelete:CASCADE"`
 }
 
 func (BDDUsedTable) TableName() string { return "bdd_used_tables" }
@@ -537,12 +543,25 @@ type BDDUsedField struct {
 	UsedTableID     string    `gorm:"type:char(36);not null;uniqueIndex:uniq_table_field;index"`
 	FieldName       string    `gorm:"type:varchar(128);not null;uniqueIndex:uniq_table_field"`
 	UpstreamFieldID int       `gorm:"index"`
+	FieldType       string    `gorm:"type:varchar(128);not null;default:''"`
 	Description     string    `gorm:"type:text"`
 	CreatedAt       time.Time `gorm:"type:datetime(3);autoCreateTime"`
 	UpdatedAt       time.Time `gorm:"type:datetime(3);autoUpdateTime"`
 }
 
 func (BDDUsedField) TableName() string { return "bdd_used_fields" }
+
+// BDDMeta is the singleton metadata header surfaced through /api/v1/bdd/used/meta
+// and folded into the doc payload's _meta block. Always row id = 1.
+type BDDMeta struct {
+	ID          int       `gorm:"primaryKey;autoIncrement:false"`
+	Description string    `gorm:"type:text"`
+	Usage       string    `gorm:"type:text"`
+	UpdatedAt   time.Time `gorm:"type:datetime(3);autoUpdateTime"`
+	UpdatedBy   string    `gorm:"type:varchar(255);not null;default:''"`
+}
+
+func (BDDMeta) TableName() string { return "bdd_meta" }
 
 // ScopeTokenBDDTable is the join table between scope_tokens and BDD used
 // tables, mirroring the shape of ScopeTokenServer.

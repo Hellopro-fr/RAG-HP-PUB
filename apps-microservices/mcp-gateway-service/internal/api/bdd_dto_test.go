@@ -73,8 +73,8 @@ func TestUpdateBDDUsedTableRequest_JSONShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"description":"new"}`), &req); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if req.Description != "new" {
-		t.Errorf("Description=%q want=new", req.Description)
+	if req.Description == nil || *req.Description != "new" {
+		t.Errorf("Description=%v want=new", req.Description)
 	}
 	out, _ := json.Marshal(req)
 	if !strings.Contains(string(out), `"description"`) {

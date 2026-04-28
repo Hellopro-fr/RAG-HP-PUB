@@ -78,22 +78,32 @@ func (h *Handler) handleBDDCatalogTablesAndFields(w http.ResponseWriter, r *http
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"tables": rows})
 	case 4:
-		// /databases/{db}/tables/{tid}/fields
-		if parts[3] != "fields" {
-			http.NotFound(w, r)
-			return
-		}
 		tableID, err := strconv.Atoi(parts[2])
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "table id must be an integer"})
 			return
 		}
-		rows, err := h.bddCatalog.ListFields(r.Context(), dbID, tableID)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
+		switch parts[3] {
+		case "fields":
+			resp, err := h.bddCatalog.ListFields(r.Context(), dbID, tableID)
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"fields":  resp.Fields,
+				"primary": resp.Primary,
+			})
+		case "count":
+			n, err := h.bddCatalog.CountRows(r.Context(), dbID, tableID)
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{"count": n})
+		default:
+			http.NotFound(w, r)
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{"fields": rows})
 	default:
 		http.NotFound(w, r)
 	}

@@ -57,6 +57,7 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&OAuth2ClientInstruction{},
 		&BDDUsedTable{},
 		&BDDUsedField{},
+		&BDDMeta{},
 		&ScopeTokenBDDTable{},
 		&OAuth2ClientBDDTable{},
 	); err != nil {

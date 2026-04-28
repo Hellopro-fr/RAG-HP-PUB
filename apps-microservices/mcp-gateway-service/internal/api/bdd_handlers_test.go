@@ -48,6 +48,12 @@ func setupBDDTestRepo(t *testing.T) *repository.BDDUsedRepo {
             table_name TEXT NOT NULL,
             upstream_table_id INTEGER,
             description TEXT,
+            rows INTEGER,
+            primary_key TEXT NOT NULL DEFAULT '',
+            default_order_by TEXT NOT NULL DEFAULT '',
+            relations TEXT,
+            notes TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
             created_by TEXT NOT NULL DEFAULT '',
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -58,6 +64,7 @@ func setupBDDTestRepo(t *testing.T) *repository.BDDUsedRepo {
             used_table_id TEXT NOT NULL,
             field_name TEXT NOT NULL,
             upstream_field_id INTEGER,
+            field_type TEXT NOT NULL DEFAULT '',
             description TEXT,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -76,6 +83,13 @@ func setupBDDTestRepo(t *testing.T) *repository.BDDUsedRepo {
             client_id TEXT NOT NULL,
             used_table_id TEXT NOT NULL,
             PRIMARY KEY (client_id, used_table_id)
+        )`,
+		`CREATE TABLE bdd_meta (
+            id INTEGER PRIMARY KEY,
+            description TEXT,
+            usage TEXT,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_by TEXT NOT NULL DEFAULT ''
         )`,
 	}
 	for _, s := range stmts {

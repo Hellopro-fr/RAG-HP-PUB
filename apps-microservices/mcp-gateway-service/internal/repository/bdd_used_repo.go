@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
@@ -243,6 +245,127 @@ func (r *BDDUsedRepo) UpdateTableDescription(ctx context.Context, id, descriptio
 	return nil
 }
 
+// UpdateTableMetadata accepts a sparse column map (description, rows,
+// primary_key, default_order_by, relations, notes) and applies it to the
+// row in one statement. Empty map is a no-op (returns nil). Caller is
+// responsible for whitelisting allowed keys.
+func (r *BDDUsedRepo) UpdateTableMetadata(ctx context.Context, id string, fields map[string]interface{}) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	res := r.db.WithContext(ctx).
+		Model(&db.BDDUsedTable{}).
+		Where("id = ?", id).
+		Updates(fields)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrBDDNotFound
+	}
+	return nil
+}
+
+// BulkUpdate applies the same set of updates to every table whose id is in
+// `ids`. Allowed columns: database_id, is_active. Returns the number of
+// rows that matched (0 when ids is empty or nothing matched).
+func (r *BDDUsedRepo) BulkUpdate(ctx context.Context, ids []string, updates map[string]interface{}) (int64, error) {
+	if len(ids) == 0 || len(updates) == 0 {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).
+		Model(&db.BDDUsedTable{}).
+		Where("id IN ?", ids).
+		Updates(updates)
+	return res.RowsAffected, res.Error
+}
+
+// BulkDelete removes a set of tables and their scope-token / OAuth2-client
+// join rows in one transaction. Mirrors DeleteTable's cascade semantics
+// for batches. Returns the number of registry rows actually deleted.
+func (r *BDDUsedRepo) BulkDelete(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	var deleted int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("used_table_id IN ?", ids).Delete(&db.ScopeTokenBDDTable{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("used_table_id IN ?", ids).Delete(&db.OAuth2ClientBDDTable{}).Error; err != nil {
+			return err
+		}
+		res := tx.Where("id IN ?", ids).Delete(&db.BDDUsedTable{})
+		if res.Error != nil {
+			return res.Error
+		}
+		deleted = res.RowsAffected
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deleted, nil
+}
+
+// LatestUpdatedAt returns the most recent updated_at across the registry
+// (tables OR fields), falling back to zero time when the registry is
+// empty. Used for the doc payload's _meta.last_updated.
+func (r *BDDUsedRepo) LatestUpdatedAt(ctx context.Context) (time.Time, error) {
+	var tableMax, fieldMax sql.NullTime
+	if err := r.db.WithContext(ctx).
+		Model(&db.BDDUsedTable{}).
+		Select("MAX(updated_at)").
+		Scan(&tableMax).Error; err != nil {
+		return time.Time{}, err
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&db.BDDUsedField{}).
+		Select("MAX(updated_at)").
+		Scan(&fieldMax).Error; err != nil {
+		return time.Time{}, err
+	}
+	out := time.Time{}
+	if tableMax.Valid && tableMax.Time.After(out) {
+		out = tableMax.Time
+	}
+	if fieldMax.Valid && fieldMax.Time.After(out) {
+		out = fieldMax.Time
+	}
+	return out, nil
+}
+
+// GetMeta loads the singleton BDDMeta row. Returns a fresh zero-valued
+// row when the table is empty (no error), so the caller never has to
+// special-case "no meta yet".
+func (r *BDDUsedRepo) GetMeta(ctx context.Context) (*db.BDDMeta, error) {
+	var out db.BDDMeta
+	err := r.db.WithContext(ctx).First(&out, "id = ?", 1).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &db.BDDMeta{ID: 1}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpsertMeta writes the singleton BDDMeta row, creating it when missing.
+// updatedBy is stamped onto every write.
+func (r *BDDUsedRepo) UpsertMeta(ctx context.Context, description, usage, updatedBy string) (*db.BDDMeta, error) {
+	row := db.BDDMeta{
+		ID:          1,
+		Description: description,
+		Usage:       usage,
+		UpdatedBy:   updatedBy,
+	}
+	err := r.db.WithContext(ctx).Save(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 // DeleteTable removes a table and its scope-token / OAuth2 join rows.
 //
 // The DB-level FK cascade already drops bdd_used_fields rows, but the
@@ -402,6 +525,11 @@ func (r *BDDUsedRepo) Import(ctx context.Context, payload []db.BDDUsedTable, cre
 						Name:            in.Name,
 						Description:     in.Description,
 						UpstreamTableID: in.UpstreamTableID,
+						Rows:            in.Rows,
+						PrimaryKey:      in.PrimaryKey,
+						DefaultOrderBy:  in.DefaultOrderBy,
+						Relations:       in.Relations,
+						Notes:           in.Notes,
 						CreatedBy:       createdBy,
 					}
 					if cerr := sp.Create(&row).Error; cerr != nil {
@@ -412,6 +540,7 @@ func (r *BDDUsedRepo) Import(ctx context.Context, payload []db.BDDUsedTable, cre
 							ID:              uuid.NewString(),
 							UsedTableID:     row.ID,
 							FieldName:       f.FieldName,
+							FieldType:       f.FieldType,
 							Description:     f.Description,
 							UpstreamFieldID: f.UpstreamFieldID,
 						}
@@ -426,6 +555,11 @@ func (r *BDDUsedRepo) Import(ctx context.Context, payload []db.BDDUsedTable, cre
 					updates := map[string]interface{}{
 						"description":       in.Description,
 						"upstream_table_id": in.UpstreamTableID,
+						"rows":              in.Rows,
+						"primary_key":       in.PrimaryKey,
+						"default_order_by":  in.DefaultOrderBy,
+						"relations":         in.Relations,
+						"notes":             in.Notes,
 					}
 					if uerr := sp.Model(&db.BDDUsedTable{}).
 						Where("id = ?", existing.ID).
@@ -441,6 +575,7 @@ func (r *BDDUsedRepo) Import(ctx context.Context, payload []db.BDDUsedTable, cre
 							ID:              uuid.NewString(),
 							UsedTableID:     existing.ID,
 							FieldName:       f.FieldName,
+							FieldType:       f.FieldType,
 							Description:     f.Description,
 							UpstreamFieldID: f.UpstreamFieldID,
 						}
