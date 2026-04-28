@@ -587,7 +587,10 @@ services:
     mem_limit: 4500m
     cpus: 4
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8999/api/v1/health || exit 1"]
+      # python:3.10-slim base image n'inclut pas curl → healthcheck cassé en boucle
+      # (FailingStreak: 77 observé). Utiliser urllib (déjà dans la stdlib Python)
+      # évite ~10 MB d'image bloat + une nouvelle dépendance apt.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8999/api/v1/health', timeout=5).read()"]
       interval: 30s
       timeout: 10s
       start_period: 30s
