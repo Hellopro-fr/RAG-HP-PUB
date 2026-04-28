@@ -62,6 +62,15 @@ async def lifespan(app: FastAPI):
     app.state.concurrency_guard = MilvusConcurrencyGuard(redis_client, guard_config)
     await app.state.concurrency_guard.start_correction_loop()
 
+    # Expose Redis client for routers that need direct access (e.g. stats cache)
+    app.state.redis_client = redis_client
+
+    # Pre-warm global-stats cache in background so first user after container restart
+    # does not pay the full 180s scan cost
+    if redis_client is not None:
+        from app.router.stats import prewarm_cache
+        asyncio.create_task(prewarm_cache(app.state.concurrency_guard, redis_client))
+
     yield
 
     # --- Shutdown Logic ---

@@ -951,10 +951,12 @@ def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[st
     adjusted = False
 
     if max_ex > borne_haute:
-        new_haute = _math.ceil(max_ex / 10) * 10
+        # ≥ 1000 : arrondi à la dizaine supérieure ; < 1000 : arrondi simple supérieur (ceil)
+        new_haute = _math.ceil(max_ex / 10) * 10 if max_ex >= 1000 else _math.ceil(max_ex)
         adjusted = True
     if min_ex < borne_basse:
-        new_basse = _math.floor(min_ex / 10) * 10
+        # ≥ 1000 : arrondi à la dizaine inférieure ; < 1000 : arrondi simple inférieur (floor)
+        new_basse = _math.floor(min_ex / 10) * 10 if min_ex >= 1000 else _math.floor(min_ex)
         adjusted = True
 
     if not adjusted:
@@ -1047,7 +1049,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     write_log(tracking_file, "=" * 80)
     write_log(tracking_file, f"id_categorie: {id_categorie}")
     write_log(tracking_file, f"nom_categorie: {nom_categorie}")
-    write_log(tracking_file, f"model: {model or settings.CHATGPT_MODEL_NAME}")
+    write_log(tracking_file, f"model: {model or settings.CLAUDE_MODEL_NAME}")
     write_log(tracking_file, "")
     write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
     write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
@@ -1232,10 +1234,13 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
-        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
+        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CLAUDE_MODEL_NAME
         use_gemini = llm_model.startswith("gemini")
         use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
         use_claude = llm_model.startswith("claude")
+
+        # par defaut claude
+        use_claude = True
 
         logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
 

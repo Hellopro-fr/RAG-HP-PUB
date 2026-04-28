@@ -96,6 +96,65 @@ class TypesenseClient:
             "token_separators": ["-", "/"],
         }
 
+    # ---------- Synonymes ----------
+    # Typesense supporte les synonymes one-way ou multi-way. Utiles pour
+    # remonter les variations orthographiques (minipelle = mini pelle,
+    # tractopelle = tracto pelle, etc.) sans avoir a re-indexer.
+    # cf. https://typesense.org/docs/0.25.1/api/synonyms.html
+
+    def upsert_synonym(
+        self,
+        synonym_id: str,
+        synonyms: list,
+        root: Optional[str] = None,
+        collection: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Enregistre un synonyme dans la collection Typesense.
+        - synonyms=["minipelle","mini pelle","mini-pelle"] + root=None
+          -> synonyme multi-way (n'importe quel terme match tous les autres)
+        - root="minipelle" + synonyms=["mini pelle"]
+          -> synonyme one-way (seul "minipelle" s'expand, pas l'inverse)
+        """
+        collection = collection or settings.TYPESENSE_COLLECTION
+        url = f"{self.base_url()}/collections/{collection}/synonyms/{synonym_id}"
+        body = {"synonyms": list(synonyms)}
+        if root:
+            body["root"] = root
+        r = requests.put(
+            url,
+            headers={
+                "X-TYPESENSE-API-KEY": settings.TYPESENSE_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=10,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def list_synonyms(self, collection: Optional[str] = None) -> Dict[str, Any]:
+        collection = collection or settings.TYPESENSE_COLLECTION
+        url = f"{self.base_url()}/collections/{collection}/synonyms"
+        r = requests.get(
+            url,
+            headers={"X-TYPESENSE-API-KEY": settings.TYPESENSE_API_KEY},
+            timeout=10,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def delete_synonym(self, synonym_id: str, collection: Optional[str] = None) -> Dict[str, Any]:
+        collection = collection or settings.TYPESENSE_COLLECTION
+        url = f"{self.base_url()}/collections/{collection}/synonyms/{synonym_id}"
+        r = requests.delete(
+            url,
+            headers={"X-TYPESENSE-API-KEY": settings.TYPESENSE_API_KEY},
+            timeout=10,
+        )
+        r.raise_for_status()
+        return r.json()
+
     def create_collection_if_missing(self, name: Optional[str] = None) -> Dict[str, Any]:
         name = name or settings.TYPESENSE_COLLECTION
         if self.collection_exists(name):

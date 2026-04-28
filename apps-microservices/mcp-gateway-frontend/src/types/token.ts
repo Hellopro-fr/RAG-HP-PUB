@@ -1,4 +1,5 @@
 import type { LeexiFilter } from './leexi'
+import type { RingoverFilter } from './ringover'
 
 export interface ServerToolScope {
   server_id: string
@@ -13,6 +14,7 @@ export interface ScopeToken {
   token_prefix: string
   server_ids: string[]
   server_tools: ServerToolScope[]
+  instruction_ids?: string[]
   mcp_command: string
   server_name?: string
   allow_http?: boolean
@@ -22,6 +24,7 @@ export interface ScopeToken {
   updated_at: string
   expires_at?: string
   leexi_filter?: LeexiFilter
+  ringover_filter?: RingoverFilter
 }
 
 export interface TokenListResponse {
@@ -33,11 +36,13 @@ export interface CreateTokenRequest {
   description?: string
   server_ids: string[]
   server_tools?: ServerToolScope[]
+  instruction_ids?: string[]
   mcp_command?: string
   server_name?: string
   expires_at?: string
   allow_http?: boolean
   leexi_filter?: LeexiFilter
+  ringover_filter?: RingoverFilter
 }
 
 export interface UpdateTokenRequest extends Partial<CreateTokenRequest> {}

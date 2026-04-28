@@ -4,6 +4,7 @@ import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { useJobsQuery, useReplicasHistoryQuery } from '../hooks/queries';
 import { Card } from './ui/card';
 import { cn } from '../lib/utils';
+import { CoherencePastille } from '../coherence/components/CoherencePastille';
 
 /**
  * ReplicaMonitor
@@ -109,6 +110,7 @@ const ReplicaMonitor = ({ replicas, token }) => {
                     <span className="truncate font-mono text-xs font-semibold text-foreground">
                       {String(replica.replicaId || '').substring(0, 12)}
                     </span>
+                    <CoherencePastille ruleId="replica_job_mapping" itemKey={replica.replicaId} />
                   </div>
                   <Cpu className="h-4 w-4 shrink-0 text-primary" />
                 </div>

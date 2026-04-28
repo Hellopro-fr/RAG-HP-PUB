@@ -1738,18 +1738,19 @@ class RecommendationService:
                             carac_entry["unite"] = unite
                         filtered_caracs.append(carac_entry)
 
+            raw_desc = re.sub(
+                r"\s+",
+                " ",
+                re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                    "\xa0", " "
+                ),
+            ).strip()
             formatted_product = {
                 "id_produit": str(id_produit),
+                "description": raw_desc if raw_desc else "[AUCUN DESCRIPTIF DISPONIBLE]",
                 "titre": info.get(
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
-                "description": re.sub(
-                    r"\s+",
-                    " ",
-                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
-                        "\xa0", " "
-                    ),
-                ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "type": etat_societe_label,
@@ -1907,7 +1908,7 @@ class RecommendationService:
             ### ÉTAPE 2 — Évaluer chaque produit
             Évalue chaque produit **indépendamment**, en le comparant uniquement au besoin reformulé.
             
-            **1. Usage en premier.** Vérifie si le produit est fait pour le même usage. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans la fiche** — pas inféré ou supposé. Si ambigu ou non confirmé : pas de score 1.
+            **1. Usage en premier.** Lis le DESCRIPTIF du produit avant le titre. Le titre seul (ex: "Tracteur", "Mini-pelle") ne suffit JAMAIS pour confirmer ou infirmer la compatibilité d'usage — il faut vérifier le descriptif et/ou les caractéristiques techniques. Si le descriptif est marqué [AUCUN DESCRIPTIF DISPONIBLE], base ton évaluation uniquement sur les caractéristiques techniques. Un écart d'usage est éliminatoire uniquement s'il est **explicitement et factuellement lisible dans le descriptif ou les caractéristiques** — pas inféré du titre seul. Si ambigu ou non confirmé : pas de score 1.
             
             Écarts d'usage éliminatoires (si factuellement vérifiables) :
             - Professionnel ≠ résidentiel / Intensif ≠ occasionnel / Neuf ≠ occasion (si précisé)
@@ -1936,11 +1937,11 @@ class RecommendationService:
             Réservé aux incompatibilités **certaines et factuellement vérifiables** dans la fiche. Une incompatibilité supposée ou interprétée n'est jamais score 1.
             
             Cas éliminatoires (directement observables dans la fiche) :
-            - Usage fondamentalement incompatible (voir étape 2)
-            - Valeur numérique critique < 50% ou > 200% de la valeur cible
+            - Usage fondamentalement incompatible (voir étape 2) — ex: pont à vérins/enfoui ≠ pont 2 colonnes sur sol (systèmes d'installation non interchangeables) ; micro-tracteur (≤ 30 ch, usage jardinage/viticulture légère) ≠ tracteur agricole standard (≥ 50 ch, fenaison/labour) — incompatibilité retenue uniquement si directement lisible dans le titre ou descriptif
+            - Valeur numérique critique < 50% ou > 200% de la valeur cible — ex: produit 16 ch face à un besoin 75-100 CV = 21% de la borne basse → score 1 (la règle des 50% s'applique à la borne la plus basse de la plage cible)
             - Valeur textuelle **présente** et incompatible sur un critique (motorisation, interface, alimentation, norme…) — si absente : score 3, pas score 1
             - État neuf/occasion différent de ce que l'acheteur a demandé
-            
+
             **En cas de doute entre score 1 et score 2 → toujours score 2.** Un seul critère éliminatoire suffit pour le score 1, à condition d'être factuel.
             
             ### ÉTAPE 4 — Décisions

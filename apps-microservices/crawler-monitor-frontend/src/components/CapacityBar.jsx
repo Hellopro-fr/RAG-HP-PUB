@@ -4,6 +4,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useCapacityHistoryQuery } from '../hooks/queries';
 import { Card } from './ui/card';
 import { cn } from '../lib/utils';
+import { CoherencePastille } from '../coherence/components/CoherencePastille';
 
 const SATURATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -55,8 +56,9 @@ const CapacityBar = ({ capacity, token }) => {
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Capacité globale
             </span>
-            <span className={cn('font-mono text-sm font-bold', capacity.is_full ? 'text-destructive' : 'text-success')}>
+            <span className={cn('flex items-center gap-1.5 font-mono text-sm font-bold', capacity.is_full ? 'text-destructive' : 'text-success')}>
               {capacity.running_jobs} / {capacity.max_global_jobs} slots
+              <CoherencePastille ruleId="replicas_vs_max_slots" />
             </span>
           </div>
           {historyAvailable && history.length > 1 && (

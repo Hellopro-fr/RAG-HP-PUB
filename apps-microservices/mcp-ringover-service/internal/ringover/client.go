@@ -1,6 +1,7 @@
 package ringover
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -51,16 +52,23 @@ func (c *Client) doGet(ctx context.Context, path string) (json.RawMessage, error
 	return c.doRequest(ctx, http.MethodGet, path, nil)
 }
 
-func (c *Client) doRequest(ctx context.Context, method, path string, _ []byte) (json.RawMessage, error) {
+func (c *Client) doRequest(ctx context.Context, method, path string, body []byte) (json.RawMessage, error) {
 	rawURL := c.baseURL + path
 
-	req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, reader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", c.apiKey)
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -68,16 +76,16 @@ func (c *Client) doRequest(ctx context.Context, method, path string, _ []byte) (
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	return json.RawMessage(body), nil
+	return json.RawMessage(respBody), nil
 }
 
 // GetCalls retrieves a list of calls.
@@ -90,6 +98,43 @@ func (c *Client) GetCalls(ctx context.Context, limitCount int) (json.RawMessage,
 func (c *Client) GetCallDetails(ctx context.Context, callID string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/calls/%s", callID)
 	return c.doGet(ctx, path)
+}
+
+// AdvancedCallsFilter holds the advanced sub-filter accepted by POST /calls.
+// Only the fields we currently use are modelled.
+type AdvancedCallsFilter struct {
+	Users []int `json:"users,omitempty"`
+}
+
+// PostCallsRequest is the JSON body accepted by POST /calls.
+// Ringover's GET /calls has no user-filter parameter; POST /calls with
+// filter="ADVANCED" and advanced.users=[ids] is the only way to scope results
+// to a specific set of agents server-side.
+type PostCallsRequest struct {
+	Filter      string               `json:"filter,omitempty"`
+	StartDate   string               `json:"start_date,omitempty"`
+	EndDate     string               `json:"end_date,omitempty"`
+	CallType    []string             `json:"call_type,omitempty"`
+	LimitCount  int                  `json:"limit_count,omitempty"`
+	LimitOffset int                  `json:"limit_offset,omitempty"`
+	Advanced    *AdvancedCallsFilter `json:"advanced,omitempty"`
+}
+
+// PostCalls retrieves calls using Ringover's advanced-filter endpoint.
+// Dates follow the same ISO 8601 / YYYY-MM-DD tolerance as GetCalls — short
+// dates are normalised to full timestamps.
+func (c *Client) PostCalls(ctx context.Context, body PostCallsRequest) (json.RawMessage, error) {
+	if body.StartDate != "" {
+		body.StartDate = normalizeDate(body.StartDate, false)
+	}
+	if body.EndDate != "" {
+		body.EndDate = normalizeDate(body.EndDate, true)
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal PostCallsRequest: %w", err)
+	}
+	return c.doRequest(ctx, http.MethodPost, "/calls", raw)
 }
 
 // ListCallsByDate retrieves calls within a date range.

@@ -84,6 +84,10 @@ type ServerResponse struct {
 	DocSlug        string          `json:"doc_slug,omitempty"`
 	DocDescription string          `json:"doc_description,omitempty"`
 	DocConfigGuide json.RawMessage `json:"doc_config_guide,omitempty"`
+	// TemplateSlug is non-empty when the server originated from a template
+	// flow (stdio instance or http_batch sheet import). The frontend uses it
+	// to badge template-origin rows or hide them from admin views.
+	TemplateSlug        string            `json:"template_slug,omitempty"`
 	CreatedBy           string            `json:"created_by,omitempty"`
 	CreatedAt           time.Time         `json:"created_at"`
 	UpdatedAt           time.Time         `json:"updated_at"`

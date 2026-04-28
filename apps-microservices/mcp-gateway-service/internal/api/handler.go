@@ -125,11 +125,28 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/tokens/", h.handleTokenByID)
 	}
 
+	// ── LLM instruction routes ───────────────────────────────────────────────
+	if h.instructionRepo != nil {
+		apiMux.HandleFunc("/api/v1/llm-instructions", h.handleLLMInstructions)
+		apiMux.HandleFunc("/api/v1/llm-instructions/", h.handleLLMInstructionByID)
+	}
+
 	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
 	//    user/team picker). Always mounted; the handlers themselves return
 	//    503 when LEEXI_INTERNAL_URL / LEEXI_ADMIN_TOKEN are unset.
 	apiMux.HandleFunc("/api/v1/leexi/users", h.handleLeexiUsers)
 	apiMux.HandleFunc("/api/v1/leexi/teams", h.handleLeexiTeams)
+
+	// ── Ringover proxy routes (symmetric to Leexi). 503 when
+	//    RINGOVER_INTERNAL_URL / RINGOVER_ADMIN_TOKEN are unset.
+	apiMux.HandleFunc("/api/v1/ringover/users", h.handleRingoverUsers)
+	apiMux.HandleFunc("/api/v1/ringover/teams", h.handleRingoverTeams)
+
+	// ── Slack notifications admin routes ──────────────────────────────────────
+	// Status is always mounted; the handler reports enabled=false when the
+	// webhook URL is unset. Test returns 503 in that case.
+	apiMux.HandleFunc("/api/v1/slack/status", h.handleSlackStatus)
+	apiMux.HandleFunc("/api/v1/slack/test", h.handleSlackTest)
 
 	// ── OAuth2 client routes ─────────────────────────────────────────────────
 	if h.oauth2Repo != nil {
@@ -221,7 +238,115 @@ func (h *Handler) Register(mux *http.ServeMux) {
 			}
 			h.handleSheetImport(w, r)
 		})
+		// Template-instance batch import from a Google Sheet. Admin-only via
+		// the /api/v1/google/* prefix match in isAdminOnly; the handler itself
+		// also guards on the templates feature wiring.
+		apiMux.HandleFunc("/api/v1/google/sheets/import-instances", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleImportInstancesFromSheet(w, r)
+		})
 	}
+
+	// ── Templates + template instances ───────────────────────────────────────
+	// GET /api/v1/templates (catalog) and /api/v1/templates/{slug} are open
+	// to all authenticated users. Writes on /api/v1/template-instances are
+	// gated to admin via isAdminOnly (see below). The handlers themselves
+	// return 503 when the templates feature is not wired (Task 13 deps unset).
+	apiMux.HandleFunc("/api/v1/templates", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleListTemplates(w, r)
+	})
+	// /templates/export and /templates/import are registered with exact paths
+	// BEFORE the /templates/ slug catch-all below. net/http's ServeMux prefers
+	// the longer literal match over a prefix pattern, so these never fall into
+	// handleGetTemplate. Extra defence-in-depth: handleGetTemplate explicitly
+	// rejects the slugs "export" and "import" to avoid accidental collisions
+	// if the mux behaviour ever regresses.
+	apiMux.HandleFunc("/api/v1/templates/export", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleExportTemplates(w, r)
+	})
+	apiMux.HandleFunc("/api/v1/templates/import", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleImportTemplates(w, r)
+	})
+	apiMux.HandleFunc("/api/v1/templates/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleGetTemplate(w, r)
+	})
+
+	apiMux.HandleFunc("/api/v1/template-instances", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.handleListInstances(w, r)
+		case http.MethodPost:
+			h.handleCreateInstance(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+	apiMux.HandleFunc("/api/v1/template-instances/", func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/restart"):
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleRestartInstance(w, r)
+		case strings.HasSuffix(r.URL.Path, "/rotate-credentials"):
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			h.handleRotateCredentials(w, r)
+		default:
+			switch r.Method {
+			case http.MethodGet:
+				h.handleGetInstance(w, r)
+			case http.MethodDelete:
+				h.handleDeleteInstance(w, r)
+			default:
+				w.Header().Set("Allow", "GET, DELETE")
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			}
+		}
+	})
+
+	// Runner ↔ gateway sync endpoint. The runner authenticates with
+	// X-Admin-Token; the handler itself enforces that. We add the path to
+	// the auth middleware's public-prefix list so JWT is bypassed, and
+	// isAdminOnly leaves it alone so the role check doesn't block it.
+	apiMux.HandleFunc("/api/v1/internal/runner/sync", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleRunnerSync(w, r)
+	})
 
 	// ── Server icons routes ──────────────────────────────────────────────────
 	apiMux.HandleFunc("/api/v1/server-icons", func(w http.ResponseWriter, r *http.Request) {
@@ -361,13 +486,24 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
-	// User, audit, install guide, and Google management always require admin
-	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") {
+	// User, audit, install guide, Google, and Slack admin endpoints always require admin
+	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") || strings.HasPrefix(path, "/api/v1/slack") {
 		return true
 	}
 	// Server writes require admin
 	if strings.HasPrefix(path, "/api/v1/servers") &&
 		(method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete) {
+		return true
+	}
+	// Template-instance writes (create, delete, restart, rotate-credentials) require admin.
+	// GET routes on /api/v1/templates and /api/v1/template-instances stay open to all authenticated users.
+	if strings.HasPrefix(path, "/api/v1/template-instances") &&
+		(method == http.MethodPost || method == http.MethodDelete) {
+		return true
+	}
+	// Catalog import/export ship the whole seed definition, including inactive
+	// rows and internal config — admin-only even for the GET export.
+	if path == "/api/v1/templates/export" || path == "/api/v1/templates/import" {
 		return true
 	}
 	return false

@@ -102,6 +102,20 @@ func (r *ServerRepo) Update(id string, updates map[string]interface{}) error {
 	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Updates(updates).Error
 }
 
+// UpdateURL sets the URL column (used when the templates feature learns the
+// dynamic port from the runner after initial insert).
+func (r *ServerRepo) UpdateURL(id, url string) error {
+	return r.db.Model(&db.MCPServer{}).Where("id = ?", id).Update("url", url).Error
+}
+
+// GetURL fetches just the URL column — avoids the tools/resources/prompts/tags
+// preload that GetByID triggers when all the caller needs is the address.
+func (r *ServerRepo) GetURL(id string) (string, error) {
+	var url string
+	err := r.db.Model(&db.MCPServer{}).Where("id = ?", id).Select("url").Scan(&url).Error
+	return url, err
+}
+
 // Delete removes a server and all its associations (CASCADE).
 func (r *ServerRepo) Delete(id string) error {
 	return r.db.Delete(&db.MCPServer{}, "id = ?", id).Error
@@ -136,11 +150,15 @@ func (r *ServerRepo) SetToolActive(serverID string, toolName string, active bool
 // SaveDiscoveredCapabilities replaces tools, resources, and prompts for a server.
 // It also updates the server's discovered metadata.
 // Tool is_active status is preserved across rediscovery for tools that already exist.
-func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+// Returns the number of tools that existed BEFORE this call, so the caller can
+// detect regressions (prev > 0 && new == 0) and alert on backends that have
+// lost their toolkit.
+func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) (prevToolCount int, err error) {
+	err = r.db.Transaction(func(tx *gorm.DB) error {
 		// Snapshot existing tool active states before deletion
 		var existingTools []db.ServerTool
 		tx.Where("server_id = ?", srv.ID).Find(&existingTools)
+		prevToolCount = len(existingTools)
 		toolActiveState := make(map[string]bool, len(existingTools))
 		for _, t := range existingTools {
 			toolActiveState[t.Name] = t.IsActive
@@ -211,6 +229,7 @@ func (r *ServerRepo) SaveDiscoveredCapabilities(srv *db.MCPServer) error {
 		}
 		return tx.Model(&db.MCPServer{}).Where("id = ?", srv.ID).Updates(updates).Error
 	})
+	return
 }
 
 // ClearCapabilities removes all tools, resources, and prompts for a server
@@ -268,21 +287,34 @@ func (r *ServerRepo) EncryptAuthHeaders(srv *db.MCPServer) error {
 	return nil
 }
 
-// ListWithDocs returns all active servers that have a doc_slug set.
+// ListWithDocs returns all active servers that have a doc_slug set AND are
+// not backed by a template. Template-backed servers are excluded from the
+// public docs index even if they somehow have a doc_slug (e.g. legacy rows
+// created before docs were off-by-default for templates) — their
+// documentation lives in the template catalog, not the per-instance docs
+// pages. Filtering uses the first-class template_slug column on
+// mcp_servers so both stdio-instance and http_batch-imported rows are
+// covered uniformly.
 func (r *ServerRepo) ListWithDocs() ([]db.MCPServer, error) {
 	var servers []db.MCPServer
 	err := r.db.
 		Where("is_active = ? AND doc_slug != '' AND doc_slug IS NOT NULL", true).
+		Where("template_slug = '' OR template_slug IS NULL").
 		Preload("Tools").
 		Find(&servers).Error
 	return servers, err
 }
 
-// GetByDocSlug returns a server by its documentation slug.
+// GetByDocSlug returns a server by its documentation slug. Template-backed
+// servers are excluded — they always have a slug (required by the UNIQUE
+// index) but they're never meant to surface docs. Returning them here would
+// let /docs/{guessed-slug} bypass the list filters. The filter mirrors
+// ListWithDocs: any row with a non-empty template_slug is template-origin.
 func (r *ServerRepo) GetByDocSlug(slug string) (*db.MCPServer, error) {
 	var srv db.MCPServer
 	err := r.db.
 		Where("doc_slug = ?", slug).
+		Where("template_slug = '' OR template_slug IS NULL").
 		Preload("Tools").
 		First(&srv).Error
 	if err != nil {

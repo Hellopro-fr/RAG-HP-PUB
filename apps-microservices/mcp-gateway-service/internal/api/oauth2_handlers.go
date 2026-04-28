@@ -114,6 +114,18 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 	client.LeexiAllowedUserUUIDs = userUUIDs
 	client.LeexiAllowedTeamUUIDs = teamUUIDs
 
+	// Ringover filter.
+	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, creatorEmail,
+	)
+	if rerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+		return
+	}
+	client.RingoverFilterMode = rMode
+	client.RingoverAllowedUserIDs = rUserIDs
+	client.RingoverAllowedTeamIDs = rTeamIDs
+
 	if len(req.RedirectURIs) > 0 {
 		redirectJSON, _ := json.Marshal(req.RedirectURIs)
 		s := string(redirectJSON)
@@ -170,6 +182,32 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.instructionRepo != nil && len(req.InstructionIDs) > 0 {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, req.ServerIDs)
+		if vErr != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the client's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceOAuth2ClientInstructions(client.ID, req.InstructionIDs); err != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
 	var expiresStr *string
 	if client.ExpiresAt != nil {
 		s := client.ExpiresAt.UTC().Format(time.RFC3339)
@@ -193,6 +231,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		SecretPrefix:          client.SecretPrefix,
 		ServerIDs:             req.ServerIDs,
 		ServerTools:           buildOAuth2ServerToolsResponse(client.Tools),
+		InstructionIDs:        req.InstructionIDs,
 		AccessTokenTTL:        client.AccessTokenTTL,
 		IsActive:              client.IsActive,
 		CreatedAt:             client.CreatedAt.UTC().Format(time.RFC3339),
@@ -201,6 +240,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		GrantTypes:            createGrantTypes,
 		DynamicallyRegistered: client.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&client),
+		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&client),
 	})
 }
 
@@ -266,6 +306,19 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 		updates["leexi_allowed_team_uuids"] = teamUUIDs
 	}
 
+	if req.RingoverFilter != nil {
+		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy,
+		)
+		if rerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+			return
+		}
+		updates["ringover_filter_mode"] = mode
+		updates["ringover_allowed_user_ids"] = userIDs
+		updates["ringover_allowed_team_ids"] = teamIDs
+	}
+
 	if len(updates) > 0 {
 		if err := h.oauth2Repo.Update(id, updates); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -275,6 +328,35 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 	if len(req.ServerIDs) > 0 {
 		if err := h.oauth2Repo.UpdateServers(id, req.ServerIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if req.InstructionIDs != nil && h.instructionRepo != nil {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		allowed := req.ServerIDs
+		if len(allowed) == 0 {
+			allowed = make([]string, 0, len(existing.Servers))
+			for _, s := range existing.Servers {
+				allowed = append(allowed, s.ServerID)
+			}
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, allowed)
+		if vErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the client's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceOAuth2ClientInstructions(id, req.InstructionIDs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -399,6 +481,14 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		serverIDs[i] = s.ServerID
 	}
 
+	var instructionIDs []string
+	if len(c.Instructions) > 0 {
+		instructionIDs = make([]string, 0, len(c.Instructions))
+		for _, i := range c.Instructions {
+			instructionIDs = append(instructionIDs, i.InstructionID)
+		}
+	}
+
 	var expiresStr *string
 	if c.ExpiresAt != nil {
 		s := c.ExpiresAt.UTC().Format(time.RFC3339)
@@ -422,6 +512,7 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		SecretPrefix:          c.SecretPrefix,
 		ServerIDs:             serverIDs,
 		ServerTools:           buildOAuth2ServerToolsResponse(c.Tools),
+		InstructionIDs:        instructionIDs,
 		AccessTokenTTL:        c.AccessTokenTTL,
 		IsActive:              c.IsActive,
 		CreatedBy:             c.CreatedBy,
@@ -432,5 +523,6 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		GrantTypes:            grantTypes,
 		DynamicallyRegistered: c.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&c),
+		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&c),
 	}
 }

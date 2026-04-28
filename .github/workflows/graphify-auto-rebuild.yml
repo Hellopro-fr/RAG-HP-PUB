@@ -1,0 +1,126 @@
+name: graphify auto-rebuild
+
+# Rebuilds the unified knowledge graph in graphify-out/ whenever a commit
+# touches files that are already in the graph's scope. Designed for the
+# "consume-only server" pattern — the server agent commits code but has no
+# graphify install, so CI does the rebuild and commits the updated graph
+# back. See docs/graphify-guide-en.md section "Scoped hook vs. upstream
+# hook" for the scope-drift reasoning and why we do not use the upstream
+# `graphify hook install` path.
+
+on:
+  # ROLLOUT IS STAGED OFF FOR NOW.
+  #
+  # During the initial graphify rollout we do not want the workflow to start
+  # committing "chore(graphify): auto-rebuild" commits to main / features/poc
+  # before the team has been briefed about the tool. Until then, the
+  # workflow only runs on manual trigger (`workflow_dispatch`), so the
+  # infrastructure is present in the repo but nothing fires automatically.
+  #
+  # TO FULLY ACTIVATE after the briefing:
+  #   1. Remove the workflow_dispatch-only block below.
+  #   2. Restore the `push:` trigger (commented out under this block).
+  #      Feature branches under features/** other than features/poc rebuild
+  #      locally via the post-commit hook; CI only kicks in on deployed
+  #      integration branches.
+  #   3. Commit the change on main / features/poc.
+  workflow_dispatch:
+
+  # --- ACTIVATE BY UNCOMMENTING BELOW AFTER THE TEAM BRIEFING ---
+  # push:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     # Backbone
+  #     - 'libs/**'
+  #     - 'protos/**'
+  #     - 'tools/**'
+  #     - 'model-optimizer/**'
+  #     - 'docs/**'
+  #     # Graphed services. MUST stay in sync with the `graphed:` list in
+  #     # graphify-out/services-policy.yml. When a service is promoted from
+  #     # not_graphed to graphed, add its path here in the same commit.
+  #     # Forgetting this line is silent: the service's code edits will not
+  #     # trigger CI rebuilds even though the service IS in graph.json.
+  #     - 'apps-microservices/crawler-service/**'
+  #     - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
+  #     # Scripts that feed the rebuild logic itself
+  #     - 'scripts/graphify_rebuild_scoped.py'
+  #     # Policy changes that may need a graph refresh
+  #     - 'graphify-out/services-policy.yml'
+
+concurrency:
+  # Serialize rebuilds per branch so two parallel pushes do not race on
+  # graphify-out/graph.json. New push cancels the in-flight one.
+  group: graphify-rebuild-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  # Needed so the bot can push the auto-rebuild commit back to the branch.
+  contents: write
+
+jobs:
+  rebuild:
+    # Loop guard: the bot commits with "[skip graphify]" in the message.
+    # GITHUB_TOKEN-authored pushes also cannot re-trigger workflows by
+    # default, but we keep the marker as belt-and-suspenders in case the
+    # token is ever swapped for a PAT.
+    if: "!contains(github.event.head_commit.message, '[skip graphify]')"
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout with history
+        uses: actions/checkout@v4
+        with:
+          # Need HEAD~1 for the diff; fetch-depth: 2 is enough.
+          fetch-depth: 2
+          # Use a token that can push back to the branch.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install graphify
+        run: pip install --quiet graphifyy
+
+      - name: Compute changed files
+        id: diff
+        run: |
+          # Space-separated list; graphify_rebuild_scoped.py accepts argv.
+          changed=$(git diff --name-only HEAD~1 HEAD | tr '\n' ' ')
+          echo "files=${changed}" >> "$GITHUB_OUTPUT"
+          echo "changed files: ${changed}"
+
+      - name: Run scoped rebuild
+        if: steps.diff.outputs.files != ''
+        run: python scripts/graphify_rebuild_scoped.py ${{ steps.diff.outputs.files }}
+
+      - name: Commit rebuilt graph
+        run: |
+          if git diff --quiet graphify-out/; then
+            echo "[graphify-ci] no graph change — nothing to commit"
+            exit 0
+          fi
+
+          # Restrict to the three tracked artifacts. Cache, manifest and
+          # cost.json are gitignored, never committed.
+          git config user.email "graphify-bot@users.noreply.github.com"
+          git config user.name "graphify-bot"
+
+          git add graphify-out/graph.json \
+                  graphify-out/graph.html \
+                  graphify-out/GRAPH_REPORT.md
+
+          trigger_sha="${{ github.sha }}"
+          trigger_short="${trigger_sha:0:7}"
+
+          git commit -m "chore(graphify): auto-rebuild after ${trigger_short} [skip graphify]" \
+                     -m "Triggered by ${trigger_sha}. Scoped rebuild via scripts/graphify_rebuild_scoped.py. AST only — no LLM cost."
+
+          # Branch is the one we were pushed from.
+          git push origin HEAD:${GITHUB_REF#refs/heads/}

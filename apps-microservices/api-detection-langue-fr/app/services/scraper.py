@@ -2,11 +2,13 @@ import asyncio
 import logging
 import os
 import random
+import time
 import uuid
 from typing import Optional
 from urllib.parse import urlparse
 
 from app.core.config import settings
+from app.core.metrics import BROWSER_LAUNCH_DURATION
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +167,7 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
             from camoufox import AsyncNewBrowser
 
             # Camoufox accepts proxy in the same Playwright dict format
+            t0 = time.monotonic()
             browser = await asyncio.wait_for(
                 AsyncNewBrowser(
                     playwright_instance,
@@ -174,6 +177,7 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
                 ),
                 timeout=45,
             )
+            BROWSER_LAUNCH_DURATION.labels(browser="camoufox").observe(time.monotonic() - t0)
             logger.info("Navigateur Camoufox (stealth Firefox) lancé")
             return browser, True
 
@@ -185,6 +189,7 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
             logger.warning(f"Erreur lancement Camoufox: {e}, fallback vers Chromium")
 
     # Fallback: Playwright Chromium
+    t0 = time.monotonic()
     browser = await playwright_instance.chromium.launch(
         headless=True,
         proxy=playwright_proxy,
@@ -196,6 +201,7 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
             '--disable-blink-features=AutomationControlled',
         ],
     )
+    BROWSER_LAUNCH_DURATION.labels(browser="chromium").observe(time.monotonic() - t0)
     logger.info("Navigateur Playwright Chromium lancé (fallback)")
     return browser, False
 

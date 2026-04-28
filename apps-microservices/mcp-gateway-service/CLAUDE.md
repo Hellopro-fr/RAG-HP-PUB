@@ -130,11 +130,22 @@ Dockerfile                   # Multi-stage build
 - `GET/PUT/DELETE /oauth2/clients/{id}` — Get / update / delete client
 - `POST /oauth2/clients/{id}/revoke` — Revoke client
 
+### LLM Instructions (`/api/v1/`)
+- `GET/POST /llm-instructions` — list (optional `?server_ids=csv` filter) / create
+- `GET/PUT/DELETE /llm-instructions/{id}` — detail / update / delete
+- `GET /llm-instructions/{id}/usage` — list tokens + OAuth2 clients that reference this instruction
+
 ### Leexi proxy (used by token / OAuth2 client creation forms)
 - `GET /api/v1/leexi/users` — List Leexi workspace users (proxied from mcp-leexi-service `/admin/users`)
 - `GET /api/v1/leexi/teams` — List Leexi teams (derived from the user payload)
 
 Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
+
+### Ringover proxy (symmetric to Leexi)
+- `GET /api/v1/ringover/users` — List Ringover users (proxied from mcp-ringover-service `/admin/users`)
+- `GET /api/v1/ringover/teams` — List Ringover teams (derived from the user payload; each team is `{id:int, name:string}`)
+
+Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is unset.
 
 ### OAuth2 Authorization Server (public, no admin auth — MCP spec-compliant)
 - `GET /.well-known/oauth-authorization-server` — Server metadata discovery (RFC 8414)
@@ -146,6 +157,19 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 - `GET /sse` — Open SSE stream
 - `POST /message?sessionId={id}` — Send JSON-RPC over SSE
 - `POST /mcp` — Streamable HTTP JSON-RPC
+
+### Template Catalog (`/api/v1/`)
+- `GET /templates` — list available templates (seeded: GA4, GSC) with live instance counts
+- `GET /templates/{slug}` — template detail
+- `GET /templates/export` — download the full catalog as JSON (active + inactive)
+- `POST /templates/import` — upsert templates from JSON (slug-keyed, transactional, no instances)
+- `GET/POST /template-instances` — list / create instance (POST is multipart: template_slug, name, extra_env JSON, credentials file)
+- `GET/DELETE /template-instances/{id}` — detail / remove (DELETE kills runner subprocess + removes mcp_servers row)
+- `POST /template-instances/{id}/restart` — respawn subprocess
+- `POST /template-instances/{id}/rotate-credentials` — upload replacement SA JSON + respawn
+
+### Runner Sync (internal, shared-secret auth via `X-Admin-Token`)
+- `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)
 
 ### Other
 - `GET /health` — Health probe
@@ -173,14 +197,23 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `ALLOW_INTERNAL_URLS` | `false` | Set to `true` to allow Docker-internal/private IP ranges (172.x.x.x, 10.x.x.x, etc.) as backend URLs — required when gateway and backends share a Docker network |
 | `LEEXI_INTERNAL_URL` | — | In-cluster URL of mcp-leexi-service (e.g. `http://mcp-leexi-service:8589`). Required for Leexi-scoped tokens. |
 | `LEEXI_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-leexi-service `/admin/*`. Must match `MCP_LEEXI_ADMIN_TOKEN` on the Leexi side. |
+| `RINGOVER_INTERNAL_URL` | — | In-cluster URL of mcp-ringover-service (e.g. `http://mcp-ringover-service:8586`). Required for Ringover-scoped tokens. |
+| `RINGOVER_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-ringover-service `/admin/*`. Must match `MCP_RINGOVER_ADMIN_TOKEN` on the Ringover side. |
+| `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8595`). Required to spawn template instances. |
+| `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the runner admin API (sent as `X-Admin-Token`). The runner uses the SAME value when calling back via `/api/v1/internal/runner/sync`. |
+| `SLACK_WEBHOOK_URL` | — | Slack incoming-webhook URL (`https://hooks.slack.com/services/...`). Empty = notifications disabled. |
+| `SLACK_ENV_LABEL` | — | Optional prefix shown on every message (e.g. `prod`, `staging`). |
+| `SLACK_AUTH_ALERT_COOLDOWN` | `600` | Seconds between duplicate unauthorized alerts per (ip, endpoint). `0` disables the cooldown. |
 
 ## Database
 
-**MySQL** with GORM auto-migration. 15 tables:
+**MySQL** with GORM auto-migration. 21 tables:
 
 | Table | Purpose |
 |---|---|
 | `mcp_servers` | Backend servers (name, URL, health, capabilities) |
+| `templates` | Template catalog (seed: `ga` GA4, `gsc` GSC) — defines stdio_command, default_env with `{instance_id}` placeholder, and required_extra_env schema |
+| `template_instances` | One row per admin-uploaded SA JSON — encrypted credentials, credentials_hash, runner_port/status, FK to `mcp_servers.id` |
 | `server_tools` | Tools per server (name, description, inputSchema, is_active) |
 | `server_resources` | Resources per server (URI, name, mimeType) |
 | `server_prompts` | Prompts per server |
@@ -195,6 +228,10 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `oauth2_authorization_codes` | Short-lived auth codes (PKCE, 10-min expiry, single-use) |
 | `oauth2_refresh_tokens` | Refresh tokens (SHA-256 hashed, 30-day TTL, rotation) |
 | `oauth2_consents` | Per-client per-user consent decisions |
+| `llm_instructions` | Reusable LLM instruction snippets (title, body, description) rendered into the MCP `initialize` response |
+| `llm_instruction_servers` | Many-to-many: which servers an instruction applies to |
+| `scope_token_instructions` | Many-to-many: which instructions a scope token injects |
+| `oauth2_client_instructions` | Many-to-many: which instructions an OAuth2 client injects |
 
 Connection pooling: max 25 open, 5 idle connections.
 
@@ -210,8 +247,26 @@ Connection pooling: max 25 open, 5 idle connections.
 - Tools have an `is_active` flag (default `true`). Inactive tools are excluded from token scope selection in the UI. Tool active state is preserved across server rediscovery.
 - Scope tokens and OAuth2 clients carry an optional **Leexi ownership filter** (`LeexiFilterMode` + `LeexiAllowedUserUUIDs` + `LeexiAllowedTeamUUIDs`). When the filter is set and the request targets the Leexi-tagged backend (`ToolPrefix == "leexi"`), the gateway adds `X-Leexi-Allowed-Participants` to the outbound MCP request. mcp-leexi-service then enforces the scope server-side. See `internal/leexiadmin/` for the user/team resolution and cache (5 min TTL).
 - OAuth2 Authorization Server is MCP spec-compliant: OAuth 2.1, RFC 8414 (metadata), RFC 7591 (dynamic registration), PKCE (S256).
+- **LLM instructions** are reusable snippets (title + body) linked to servers. Scope tokens and OAuth2 clients each pick a subset; at MCP `initialize` time, the gateway emits the composed `## <title>\n<body>` blocks (`\n\n`-joined, capped at 8 KiB) into the spec-defined `instructions` field. Picks are validated server-side: every `instruction_id` must share at least one server with the token/client's allowed set. Resolution happens once per scope-cache-miss (60 s TTL); instruction edits additionally invalidate both scope caches for immediate visibility.
 - MCP endpoints return 401 + `WWW-Authenticate` header when no auth is provided, triggering Claude.ai's OAuth2 discovery flow.
 - Unit tests in `internal/authserver/*_test.go`, `internal/oauth2/*_test.go`, `internal/repository/*_test.go`, `internal/db/mysql_test.go`.
+
+### Slack notifications (`internal/slack/`)
+
+Posts six event types to a Slack incoming webhook when `SLACK_WEBHOOK_URL` is set. Empty URL = silently disabled (local dev and existing deployments untouched).
+
+| Event | Trigger |
+|---|---|
+| `ServerDown` | Health checker detects a backend transitioning to `unhealthy`. |
+| `ServerUp` | Health checker detects a backend recovering (`unhealthy`/`unknown` → `healthy`), includes downtime duration. |
+| `ToolsRegression` | `SaveDiscoveredCapabilities` sees `prevToolCount > 0 && len(newTools) == 0` for a server — fires from `api.Handler.saveBackendCapabilities`. |
+| `Unauthorized` | OAuth2 or scope-token middleware returns 401/403 on an MCP endpoint (`/sse`, `/mcp`, `/message`). Rate-limited per (ip, endpoint) by `SLACK_AUTH_ALERT_COOLDOWN`. |
+| `GatewayShutdown` | SIGINT/SIGTERM received in `main.go` before drain. |
+| `GatewayPanic` | Best-effort: deferred recover() in the HTTP-server goroutine posts synchronously before exit. |
+
+**Limitation:** The gateway cannot self-report SIGKILL, OOM, or hardware death — the process is already gone. For those, pair with an external watcher (Kubernetes liveness probe + alertmanager, or an uptime monitor polling `/health`).
+
+**Dispatch:** `Notify` is non-blocking (buffered channel, size 64; overflow drops with a log line). `NotifySync` posts inline with a 2 s timeout — used only by panic / shutdown paths where the worker goroutine is about to die.
 
 ## What This Provides to Other Services
 

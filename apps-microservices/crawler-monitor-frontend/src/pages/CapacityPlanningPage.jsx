@@ -13,6 +13,7 @@ import {
   Tooltip, TooltipTrigger, TooltipContent,
 } from '../components/ui/tooltip';
 import { cn } from '../lib/utils';
+import { CoherencePastille } from '../coherence/components/CoherencePastille';
 
 const GB = 1024 * 1024 * 1024;
 
@@ -227,26 +228,32 @@ const CapacityPlanningPage = ({ token }) => {
                         </TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{fmtBytes(r.allocated)}</TableCell>
                         <TableCell className="text-right">
-                          {canTooltip ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="inline-block">{peakNode}</span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <div className="space-y-0.5 text-xs">
-                                  {peakJob?.domain && (
-                                    <div className="font-semibold">{peakJob.domain}</div>
-                                  )}
-                                  {r.peak_ts ? <div>{fmtDate(r.peak_ts)}</div> : null}
-                                  {r.peak_job_id ? (
-                                    <div className="font-mono text-muted-foreground">
-                                      job #{shortJobId(r.peak_job_id)}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : peakNode}
+                          <span className="inline-flex items-center gap-1">
+                            {canTooltip ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-block">{peakNode}</span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="space-y-0.5 text-xs">
+                                    {peakJob?.domain && (
+                                      <div className="font-semibold">{peakJob.domain}</div>
+                                    )}
+                                    {r.peak_ts ? <div>{fmtDate(r.peak_ts)}</div> : null}
+                                    {r.peak_job_id ? (
+                                      <div className="font-mono text-muted-foreground">
+                                        job #{shortJobId(r.peak_job_id)}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : peakNode}
+                            <CoherencePastille
+                              ruleId="peak_ram_exceeds_allocated"
+                              itemKey={r.replicaId}
+                            />
+                          </span>
                         </TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{fmtBytes(r.avg)}</TableCell>
                         <TableCell>

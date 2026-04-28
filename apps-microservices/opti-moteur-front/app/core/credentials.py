@@ -38,7 +38,10 @@ class Settings(BaseSettings):
     RERANK_W_CAT: float = 0.10
 
     # --- Detection categorie ---
-    CAT_FILTER_THRESHOLD: float = 0.80
+    # Threshold bas (0.30) car la validation est deja stricte via le
+    # prefix-match sur les tokens (is_prefix_match dans utils/text.py).
+    # Confidence < 0.30 = query vraiment ambigue, on laisse filter_by=null.
+    CAT_FILTER_THRESHOLD: float = 0.30
     CAT_FILTER_TOP_N: int = 3
     CAT_PREFIX_LOOKAHEAD: int = 2
 

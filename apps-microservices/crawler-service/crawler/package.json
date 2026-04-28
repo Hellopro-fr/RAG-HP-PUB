@@ -7,6 +7,7 @@
         "axios": "^1.7.2",
         "camoufox-js": "^0.9.3",
         "crawlee": "^3.0.0",
+        "p-limit": "^5.0.0",
         "playwright": "1.56.1",
         "redis": "^4.6.10"
     },

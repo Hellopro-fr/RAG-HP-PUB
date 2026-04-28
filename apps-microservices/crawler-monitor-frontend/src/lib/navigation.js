@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Globe, Mail, SlidersHorizontal, FileText,
+  LayoutDashboard, Globe, Mail, SlidersHorizontal, FileText, HeartPulse, Images,
 } from 'lucide-react';
 
 /**
@@ -23,6 +23,13 @@ export const NAV_ITEMS = [
     items: [
       { to: '/capacity-planning', label: 'Capacity planning', icon: SlidersHorizontal, description: 'RAM allouée vs utilisée · dimensionnement' },
       { to: '/audit',             label: 'Journal d\'audit',  icon: FileText,          description: 'Historique des actions sensibles' },
+      { to: '/health',            label: 'Santé système',     icon: HeartPulse,        description: 'Cohérence des données affichées' },
+    ],
+  },
+  {
+    section: 'Médias',
+    items: [
+      { to: '/albums',            label: 'Albums',            icon: Images,            description: 'Galeries d\'images par domaine — admin downloads/CDN' },
     ],
   },
 ];
@@ -37,6 +44,8 @@ const ROUTE_LABELS = {
   '/callbacks':        'Callbacks',
   '/audit':            'Journal d\'audit',
   '/capacity-planning':'Capacity planning',
+  '/health':           'Santé système',
+  '/albums':           'Albums',
 };
 
 /**
@@ -68,6 +77,13 @@ export function resolveBreadcrumbs(pathname) {
   // /domains/:domain
   if (parts[0] === 'domains' && parts[1]) {
     crumbs.push({ label: 'Domaines', to: '/domains' });
+    crumbs.push({ label: decodeURIComponent(parts[1]) });
+    return crumbs;
+  }
+
+  // /albums/:domain
+  if (parts[0] === 'albums' && parts[1]) {
+    crumbs.push({ label: 'Albums', to: '/albums' });
     crumbs.push({ label: decodeURIComponent(parts[1]) });
     return crumbs;
   }

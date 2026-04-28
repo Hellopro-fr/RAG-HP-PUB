@@ -50,6 +50,21 @@ type Config struct {
 	// /api/v1/leexi/* proxy and the Leexi-scoped token filters.
 	LeexiInternalURL string // LEEXI_INTERNAL_URL
 	LeexiAdminToken  string // LEEXI_ADMIN_TOKEN
+
+	// Ringover admin integration — symmetric to the Leexi fields above.
+	RingoverInternalURL string // RINGOVER_INTERNAL_URL
+	RingoverAdminToken  string // RINGOVER_ADMIN_TOKEN
+
+	// Google templates runner (mcp-google-templates-runner sidecar).
+	GoogleTemplatesRunnerURL        string // GOOGLE_TEMPLATES_RUNNER_URL
+	GoogleTemplatesRunnerAdminToken string // GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN
+
+	// Slack notifications. Posts ServerDown/ServerUp/ToolsRegression/Unauthorized/
+	// Shutdown/Panic events to an incoming webhook. Disabled when SlackWebhookURL
+	// is empty — keeps local dev and existing deployments unchanged.
+	SlackWebhookURL        string // SLACK_WEBHOOK_URL — empty disables all notifications
+	SlackEnvLabel          string // SLACK_ENV_LABEL — prefix like "prod" shown in every message
+	SlackAuthAlertCooldown int    // SLACK_AUTH_ALERT_COOLDOWN — seconds between duplicate unauthorized alerts per (ip, endpoint); default 600
 }
 
 func Load() *Config {
@@ -88,6 +103,13 @@ func Load() *Config {
 		}
 	}
 
+	slackAuthCooldown := 600
+	if v := os.Getenv("SLACK_AUTH_ALERT_COOLDOWN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			slackAuthCooldown = n
+		}
+	}
+
 	// Auth is enabled by default — set AUTH_ENABLED=false to disable
 	authEnabled := !strings.EqualFold(os.Getenv("AUTH_ENABLED"), "false")
 
@@ -122,6 +144,16 @@ func Load() *Config {
 
 		LeexiInternalURL: os.Getenv("LEEXI_INTERNAL_URL"),
 		LeexiAdminToken:  os.Getenv("LEEXI_ADMIN_TOKEN"),
+
+		RingoverInternalURL: os.Getenv("RINGOVER_INTERNAL_URL"),
+		RingoverAdminToken:  os.Getenv("RINGOVER_ADMIN_TOKEN"),
+
+		GoogleTemplatesRunnerURL:        os.Getenv("GOOGLE_TEMPLATES_RUNNER_URL"),
+		GoogleTemplatesRunnerAdminToken: os.Getenv("GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN"),
+
+		SlackWebhookURL:        os.Getenv("SLACK_WEBHOOK_URL"),
+		SlackEnvLabel:          os.Getenv("SLACK_ENV_LABEL"),
+		SlackAuthAlertCooldown: slackAuthCooldown,
 	}
 }
 

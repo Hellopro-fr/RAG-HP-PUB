@@ -7,6 +7,7 @@ import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries'
 import LoginPage from './components/LoginPage';
 import Overview from './pages/Overview';
 import { AppShell } from './components/layout/AppShell';
+import { CoherenceProvider } from './coherence/CoherenceProvider';
 
 // Lazy-loaded pages: downloaded only when the user navigates to them.
 // Shrinks the initial bundle (Overview is the main entry; the rest is 50%+ of code
@@ -19,6 +20,9 @@ const DomainsPage   = lazy(() => import('./pages/DomainsPage'));
 const DomainPage    = lazy(() => import('./pages/DomainPage'));
 const ReplayPage    = lazy(() => import('./pages/ReplayPage'));
 const CapacityPlanningPage = lazy(() => import('./pages/CapacityPlanningPage'));
+const CoherenceHealthPage = lazy(() => import('./coherence/components/CoherenceHealthPage'));
+const AlbumsPage    = lazy(() => import('./pages/AlbumsPage'));
+const AlbumDetailPage = lazy(() => import('./pages/AlbumDetailPage'));
 
 const PageFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -170,29 +174,34 @@ const App = () => {
   };
 
   return (
-    <AppShell
-      badges={{ failedCallbacks: failedCallbackCount }}
-      onLogout={handleLogout}
-      onRefresh={handleManualRefresh}
-      isRefreshing={isJobsLoading}
-    >
-      <Suspense fallback={<PageFallback />}>
-        <Routes>
-          <Route path="/" element={<Overview token={token} replicas={replicas} />} />
-          <Route path="/jobs/:id" element={<Overview token={token} replicas={replicas} />}>
-            <Route path="queue" element={<QueuePage token={token} />} />
-            <Route path="dataset" element={<DatasetPage token={token} />} />
-            <Route path="replay" element={<ReplayPage token={token} />} />
-          </Route>
-          <Route path="/callbacks" element={<CallbacksPage token={token} onClose={() => callbacksQuery.refetch()} />} />
-          <Route path="/audit" element={<AuditPage token={token} />} />
-          <Route path="/domains" element={<DomainsPage token={token} />} />
-          <Route path="/domains/:domain" element={<DomainPage token={token} />} />
-          <Route path="/capacity-planning" element={<CapacityPlanningPage token={token} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </AppShell>
+    <CoherenceProvider token={token} replicas={replicas}>
+      <AppShell
+        badges={{ failedCallbacks: failedCallbackCount }}
+        onLogout={handleLogout}
+        onRefresh={handleManualRefresh}
+        isRefreshing={isJobsLoading}
+      >
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<Overview token={token} replicas={replicas} />} />
+            <Route path="/jobs/:id" element={<Overview token={token} replicas={replicas} />}>
+              <Route path="queue" element={<QueuePage token={token} />} />
+              <Route path="dataset" element={<DatasetPage token={token} />} />
+              <Route path="replay" element={<ReplayPage token={token} />} />
+            </Route>
+            <Route path="/callbacks" element={<CallbacksPage token={token} onClose={() => callbacksQuery.refetch()} />} />
+            <Route path="/audit" element={<AuditPage token={token} />} />
+            <Route path="/domains" element={<DomainsPage token={token} />} />
+            <Route path="/domains/:domain" element={<DomainPage token={token} />} />
+            <Route path="/albums" element={<AlbumsPage token={token} />} />
+            <Route path="/albums/:domain" element={<AlbumDetailPage token={token} />} />
+            <Route path="/capacity-planning" element={<CapacityPlanningPage token={token} />} />
+            <Route path="/health" element={<CoherenceHealthPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </AppShell>
+    </CoherenceProvider>
   );
 }
 

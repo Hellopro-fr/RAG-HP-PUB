@@ -1,4 +1,5 @@
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosInstance, AxiosError } from "axios";
+import pLimit from "p-limit";
 
 export interface AlternativeUrl {
     url: string;
@@ -33,6 +34,9 @@ export interface CheckUrlResult {
 
 export class DetectionLangueClient {
     private client: AxiosInstance;
+    private limit: ReturnType<typeof pLimit>;
+    private maxRetries: number;
+    private backoffBaseS: number;
 
     constructor(baseUrl?: string) {
         const url =
@@ -42,10 +46,17 @@ export class DetectionLangueClient {
         if (!baseUrl && !process.env.DETECTION_LANGUE_API_URL) {
             console.warn('DETECTION_LANGUE_API_URL not set, using default: http://api-detection-langue-fr-service:8999');
         }
+
+        const timeoutMs = parseInt(process.env.DETECTION_REQUEST_TIMEOUT_S ?? "180") * 1000;
+        const maxConcurrency = parseInt(process.env.DETECTION_MAX_CONCURRENCY ?? "5");
+        this.maxRetries = parseInt(process.env.DETECTION_MAX_RETRIES ?? "2");
+        this.backoffBaseS = parseFloat(process.env.DETECTION_BACKOFF_BASE_S ?? "2");
+
         this.client = axios.create({
             baseURL: `${url}/api/v1`,
-            timeout: 120000, // 120s — accommode le retry interne de l'API et la navigation Playwright
+            timeout: timeoutMs,
         });
+        this.limit = pLimit(maxConcurrency);
     }
 
     /**
@@ -57,20 +68,48 @@ export class DetectionLangueClient {
         htmlContent?: string,
         options?: DetectOptions
     ): Promise<DetectionResult> {
-        try {
-            const response = await this.client.post<DetectionResult>("/detect", {
-                url,
-                html_content: htmlContent || undefined,
-                mode: options?.mode ?? "complete",
-                forced_method: options?.forcedMethod ?? undefined,
-                use_nlp_detection: options?.useNlpDetection ?? true,
-                proxy_url: options?.proxyUrl ?? undefined,
-            });
-            return response.data;
-        } catch (error: any) {
-            const message = error?.response?.data?.detail || error?.message || String(error);
-            throw new Error(`Detection API error for ${url}: ${message}`);
+        return this.limit(() => this._detectWithRetry(url, htmlContent, options));
+    }
+
+    private async _detectWithRetry(
+        url: string,
+        htmlContent?: string,
+        options?: DetectOptions
+    ): Promise<DetectionResult> {
+        for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+            try {
+                const response = await this.client.post<DetectionResult>("/detect", {
+                    url,
+                    html_content: htmlContent || undefined,
+                    mode: options?.mode ?? "complete",
+                    forced_method: options?.forcedMethod ?? undefined,
+                    use_nlp_detection: options?.useNlpDetection ?? true,
+                    proxy_url: options?.proxyUrl ?? undefined,
+                });
+                return response.data;
+            } catch (error: any) {
+                const axiosErr = error as AxiosError;
+                const status = axiosErr.response?.status;
+
+                if (status === 503 && attempt < this.maxRetries) {
+                    const retryAfterHeader = axiosErr.response?.headers?.["retry-after"];
+                    const waitS = retryAfterHeader
+                        ? parseFloat(String(retryAfterHeader))
+                        : this.backoffBaseS * Math.pow(2, attempt);
+                    console.warn(
+                        `DetectionLangueClient got 503 for ${url} ` +
+                        `(attempt ${attempt + 1}/${this.maxRetries + 1}); ` +
+                        `waiting ${waitS}s before retry`
+                    );
+                    await new Promise((resolve) => setTimeout(resolve, waitS * 1000));
+                    continue;
+                }
+
+                const message = (axiosErr.response?.data as any)?.detail || axiosErr.message || String(error);
+                throw new Error(`Detection API error for ${url}: ${message}`);
+            }
         }
+        throw new Error(`Detection API retry loop exited without result for ${url}`);
     }
 
     /**
@@ -81,15 +120,17 @@ export class DetectionLangueClient {
         url: string,
         trackRedirect: boolean = false
     ): Promise<CheckUrlResult> {
-        try {
-            const response = await this.client.get<CheckUrlResult>("/check-url", {
-                params: { url, track_redirect: trackRedirect },
-            });
-            return response.data;
-        } catch (error: any) {
-            const message = error?.response?.data?.detail || error?.message || String(error);
-            throw new Error(`Detection API check-url error for ${url}: ${message}`);
-        }
+        return this.limit(async () => {
+            try {
+                const response = await this.client.get<CheckUrlResult>("/check-url", {
+                    params: { url, track_redirect: trackRedirect },
+                });
+                return response.data;
+            } catch (error: any) {
+                const message = error?.response?.data?.detail || error?.message || String(error);
+                throw new Error(`Detection API check-url error for ${url}: ${message}`);
+            }
+        });
     }
 
     /**

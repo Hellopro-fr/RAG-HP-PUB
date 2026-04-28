@@ -183,25 +183,37 @@ async def proxy(
     # 3. Lire le corps de la requête
     body = await request.body()
 
-    # 4. Utiliser un client httpx pour faire la requête au service final
+    # 4. Per-service timeout: detection=180s, others=None (existing behavior)
+    service_key = f"{service}-service" if not service.endswith("-service") else service
+    timeout_s = settings.DOWNSTREAM_TIMEOUTS_S.get(service_key)
+    timeout = httpx.Timeout(timeout_s, connect=10.0) if timeout_s else None
+
     start_time = time.monotonic()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.request(
                 request.method,
                 target_url,
                 headers=headers,
                 content=body,
-                # timeout=30.0  # Il est toujours bon de mettre un timeout
-                timeout=None,  # pour la classification des produits
+            )
+        except httpx.TimeoutException as e:
+            logger.warning(f"Timeout calling {service} after {timeout_s}s: {e}")
+            return JSONResponse(
+                status_code=504,
+                content={"detail": f"Le service '{service}' a depasse son timeout ({timeout_s}s)."},
             )
         except httpx.RequestError as e:
-            # Gérer les erreurs de connexion au service (service down, etc.)
             logger.error(f"Impossible de contacter le service {service}: {e}")
             return JSONResponse(
-                status_code=503,  # Service Unavailable
+                status_code=503,
                 content={"detail": f"Le service '{service}' est indisponible."},
             )
+
+    if response.status_code == 503:
+        logger.warning(
+            f"Service {service} returned 503 (retry-after={response.headers.get('retry-after', 'n/a')})"
+        )
 
     duration_ms = int((time.monotonic() - start_time) * 1000)
 
