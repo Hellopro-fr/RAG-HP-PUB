@@ -5,9 +5,17 @@ import type {
   BDDCatalogField,
   BDDUsedTable,
   BDDUsedField,
+  BDDUsedListResponse,
 } from '@/types/bdd'
 
 const BASE = '/api/v1'
+
+export interface BDDUsedListParams {
+  database_id?: number  // omit or 0 = all
+  search?: string
+  page?: number          // default 1
+  limit?: number         // default 20
+}
 
 export const bddApi = {
   // catalog (read-only proxy — gateway -> upstream)
@@ -24,13 +32,23 @@ export const bddApi = {
     ),
 
   // gateway-owned registry (CRUD)
-  listUsed: (database_id?: number, search = '') => {
-    const params: Record<string, string> = {}
-    if (database_id !== undefined) params.database_id = String(database_id)
-    if (search) params.search = search
-    return api.get<{ tables: BDDUsedTable[] }>(
+  listUsed: (params: BDDUsedListParams = {}) => {
+    const query: Record<string, string> = {}
+    if (params.database_id !== undefined && params.database_id !== 0) {
+      query.database_id = String(params.database_id)
+    }
+    if (params.search) {
+      query.search = params.search
+    }
+    if (params.page !== undefined) {
+      query.page = String(params.page)
+    }
+    if (params.limit !== undefined) {
+      query.limit = String(params.limit)
+    }
+    return api.get<BDDUsedListResponse>(
       `${BASE}/bdd/used/tables`,
-      Object.keys(params).length > 0 ? params : undefined,
+      Object.keys(query).length > 0 ? query : undefined,
     )
   },
   getUsed: (id: string) =>

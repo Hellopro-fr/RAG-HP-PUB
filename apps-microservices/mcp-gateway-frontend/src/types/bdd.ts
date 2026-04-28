@@ -49,3 +49,10 @@ export interface BDDUsedTable {
 }
 
 export interface BDDFilter { used_table_ids: string[] }
+
+export interface BDDUsedListResponse {
+  tables: BDDUsedTable[]
+  total: number
+  page: number
+  limit: number
+}
