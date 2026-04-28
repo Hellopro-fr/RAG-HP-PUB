@@ -23,9 +23,11 @@ func notifyUnauthorized(c *slack.Client, r *http.Request, reason string) {
 		return
 	}
 	c.Notify(slack.UnauthorizedEvent{
-		ClientIP: ip,
-		Endpoint: endpoint,
-		Reason:   reason,
+		ClientIP:     ip,
+		Endpoint:     endpoint,
+		Reason:       reason,
+		MCPSessionID: r.Header.Get("Mcp-Session-Id"),
+		UserAgent:    r.Header.Get("User-Agent"),
 	})
 }
 

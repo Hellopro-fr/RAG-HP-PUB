@@ -89,6 +89,30 @@ func TestUnauthorizedPayload(t *testing.T) {
 			t.Errorf("text missing %q: %q", want, text)
 		}
 	}
+	for _, unwanted := range []string{"MCP-Session-Id", "User-Agent"} {
+		if strings.Contains(text, unwanted) {
+			t.Errorf("text should omit %q when unset: %q", unwanted, text)
+		}
+	}
+}
+
+func TestUnauthorizedPayloadWithSessionAndUA(t *testing.T) {
+	m := payloadFor(t,
+		UnauthorizedEvent{
+			ClientIP:     "1.2.3.4",
+			Endpoint:     "/mcp",
+			Reason:       "bad token",
+			MCPSessionID: "sess-abc-123",
+			UserAgent:    "Claude-User/1.0",
+		},
+		"", "",
+	)
+	text := textOf(t, m)
+	for _, want := range []string{"sess-abc-123", "Claude-User/1.0", "MCP-Session-Id", "User-Agent"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text missing %q: %q", want, text)
+		}
+	}
 }
 
 func TestGatewayShutdownPayload(t *testing.T) {
