@@ -269,11 +269,12 @@
           :disabled="!isAdmin"
         >
           <BDDFieldBlock
-            v-for="field in fields"
+            v-for="(field, index) in fields"
             :key="field.id"
             :model-value="field"
             :catalog-field="catalogForField(field)"
             :is-admin="isAdmin"
+            :index="index"
             @update:model-value="onFieldUpdate(field.id, $event)"
             @remove="deletingField = field"
           />
