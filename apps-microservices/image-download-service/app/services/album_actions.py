@@ -151,6 +151,71 @@ def _is_legacy_v1(images: list[dict]) -> bool:
     return all(not img.get("url_source") for img in images)
 
 
+def _clear_errors_for_urls(domain_dir: str, success_urls: set) -> int:
+    """Retire de `errors.json` les entrées dont `url` est dans `success_urls`.
+
+    Sans ce nettoyage, le statut d'une image revient à "error" dans
+    `_detect_image_status` même après un redownload réussi (priorité haute
+    sur les URLs présentes dans errors.json — cf. album_products.py:50).
+
+    Tolérant aux fichiers absents/corrompus → no-op. Idempotent.
+    Lock NFS dédié sur errors.json (séparé du lock manifest.json pour
+    éviter une dépendance circulaire). Si le lock est occupé, on
+    log et on skip — ne pas faire échouer le redownload pour ça.
+
+    Si la liste devient vide, on supprime le fichier (état "no errors").
+    Retourne le nombre d'entrées retirées.
+    """
+    if not success_urls:
+        return 0
+    errors_path = os.path.join(domain_dir, "errors.json")
+    if not os.path.exists(errors_path):
+        return 0
+
+    from image_download_service.core.nfs_lock import nfs_lock, NFSLockError
+
+    try:
+        with nfs_lock(errors_path, max_wait=3):
+            try:
+                with open(errors_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                errors_list = json.loads(content) if content.strip() else []
+            except (json.JSONDecodeError, OSError):
+                return 0
+
+            if not isinstance(errors_list, list):
+                return 0
+
+            new_list = [e for e in errors_list if e.get("url") not in success_urls]
+            removed = len(errors_list) - len(new_list)
+            if removed == 0:
+                return 0
+
+            if not new_list:
+                try:
+                    os.unlink(errors_path)
+                except OSError:
+                    pass
+                return removed
+
+            import tempfile
+            fd, tmp = tempfile.mkstemp(dir=domain_dir, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(json.dumps(new_list, indent=2, ensure_ascii=False))
+                os.replace(tmp, errors_path)
+            except Exception:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+                raise
+            return removed
+    except NFSLockError:
+        logger.warning(
+            "[albums] could not lock %s to clear errors (skipping)", errors_path,
+        )
+        return 0
+
+
 async def redownload_product(storage_base: str, domain: str, id_produit: str, downloader) -> dict[str, Any]:
     """Force-redownload toutes les URLs connues du produit. Supprime les fichiers existants d'abord.
 
@@ -199,6 +264,7 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
     skipped = 0
     failed = 0
     errors: list[dict] = []
+    success_urls: set = set()
     for img in images:
         url = img.get("url_source")
         if not url:
@@ -212,6 +278,7 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
                 product_name=product.get("nom"))
             if (res or {}).get("status") == "ok":
                 downloaded += 1
+                success_urls.add(url)
             else:
                 failed += 1
                 errors.append({"url": url, "reason": (res or {}).get("error", "unknown")})
@@ -219,11 +286,21 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
             failed += 1
             errors.append({"url": url, "reason": str(e)})
 
+    # Étape 4 : nettoyer errors.json pour les URLs qui ont réussi cette fois-ci.
+    # Sans ça, _detect_image_status garde le statut "error" en priorité même si
+    # le fichier est maintenant présent.
+    cleared = await asyncio.to_thread(_clear_errors_for_urls, domain_dir, success_urls)
+    if cleared:
+        logger.info(
+            "[albums] redownload_product: cleared %d errors.json entries for %s/%s",
+            cleared, domain, id_produit,
+        )
+
     duration_ms = int((time.monotonic() - started) * 1000)
     logger.info(
         "[albums] redownload_product done: domain=%s id_produit=%s "
-        "downloaded=%d skipped=%d failed=%d duration_ms=%d",
-        domain, id_produit, downloaded, skipped, failed, duration_ms,
+        "downloaded=%d skipped=%d failed=%d cleared_errors=%d duration_ms=%d",
+        domain, id_produit, downloaded, skipped, failed, cleared, duration_ms,
     )
     return {
         "domain": domain, "id_produit": id_produit,
@@ -274,20 +351,27 @@ async def redownload_image(storage_base: str, domain: str, id_produit: str, file
     await asyncio.to_thread(_with_lock, manifest_path, 3.0, _remove_old_file)
 
     # Étape 3 : redownload.
+    url = img.get("url_source")
     try:
         res = await downloader.download_and_process(
-            img.get("url_source"), domain=domain, product_id=id_produit,
+            url, domain=domain, product_id=id_produit,
             product_name=product.get("nom"))
         ok = (res or {}).get("status") == "ok"
     except Exception as e:
         ok = False
         res = {"status": "error", "error": str(e)}
 
+    # Étape 4 : nettoyer errors.json pour cette URL si succès (sinon on perdrait
+    # l'info d'erreur sur un échec persistant).
+    cleared = 0
+    if ok and url:
+        cleared = await asyncio.to_thread(_clear_errors_for_urls, domain_dir, {url})
+
     duration_ms = int((time.monotonic() - started) * 1000)
     logger.info(
         "[albums] redownload_image done: domain=%s id_produit=%s filename=%s "
-        "ok=%s duration_ms=%d",
-        domain, id_produit, filename, ok, duration_ms,
+        "ok=%s cleared_errors=%d duration_ms=%d",
+        domain, id_produit, filename, ok, cleared, duration_ms,
     )
     return {
         "domain": domain, "id_produit": id_produit, "filename": filename,
