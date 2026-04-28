@@ -72,8 +72,9 @@ async def login_page(request: Request):
     username = request.session.pop("username", "")
 
     return templates.TemplateResponse(
+        request,
         "login.html",
-        {"request": request, "error": error, "username": username}
+        {"error": error, "username": username},
     )
 
 @app.post("/login")
@@ -132,7 +133,7 @@ async def logout(request: Request):
 
 @app.get("/pages/{item_id}", response_class=HTMLResponse)
 async def read_item(request: Request, item_id: str):
-    return templates.TemplateResponse(f"{item_id}.html", {"request": request})
+    return templates.TemplateResponse(request, f"{item_id}.html")
 
 # Route générique à la fin
 @app.get("/{page}", response_class=HTMLResponse)
@@ -143,6 +144,6 @@ async def get_page(request: Request, page: str):
 
     # Vérifie si le template existe
     if not os.path.exists(os.path.join("templates", template_path)):
-        return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
+        return templates.TemplateResponse(request, "404.html", status_code=404)
 
-    return templates.TemplateResponse(template_path, {"request": request, "user": user})
+    return templates.TemplateResponse(request, template_path, {"user": user})
