@@ -245,6 +245,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
       path: '/servers',
     })
   }
+  gestionItems.push({
+    icon: 'pi pi-database',
+    name: 'Tables BDD',
+    path: '/bdd-tables',
+  })
   if (authStore.isAdmin) {
     gestionItems.push({
       icon: 'pi pi-book',
@@ -260,11 +265,6 @@ const menuGroups = computed<MenuGroup[]>(() => {
       icon: 'pi pi-clone',
       name: 'Templates',
       path: '/admin/templates',
-    })
-    gestionItems.push({
-      icon: 'pi pi-database',
-      name: 'Tables BDD',
-      path: '/bdd-tables',
     })
   }
   gestionItems.push({

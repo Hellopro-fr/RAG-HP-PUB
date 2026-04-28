@@ -73,6 +73,12 @@ type Config struct {
 	// the related endpoints return 503.
 	BDDCatalogBaseURL string // BDD_CATALOG_BASE_URL
 	BDDCatalogToken   string // BDD_CATALOG_TOKEN
+
+	// BDDPublicAPIToken is the shared secret required on the public BDD
+	// metadata endpoints (/api/public/bdd/*). External servers (e.g. the
+	// PHP MCP runner that pulls schema_doc.json + config.php) send it as
+	// X-Admin-Token. Empty = endpoints return 503 (disabled).
+	BDDPublicAPIToken string // BDD_PUBLIC_API_TOKEN
 }
 
 func Load() *Config {
@@ -165,6 +171,8 @@ func Load() *Config {
 
 		BDDCatalogBaseURL: os.Getenv("BDD_CATALOG_BASE_URL"),
 		BDDCatalogToken:   os.Getenv("BDD_CATALOG_TOKEN"),
+
+		BDDPublicAPIToken: os.Getenv("BDD_PUBLIC_API_TOKEN"),
 	}
 }
 

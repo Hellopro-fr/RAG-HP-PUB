@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,6 +16,28 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/repository"
 )
+
+// bddPublicMaxRows / bddPublicMySQLTimeoutMs are the defaults emitted by
+// the public config endpoint. They mirror the values used historically
+// in the PHP MCP runner config.php so the runner gets identical limits
+// without any extra wiring on its side.
+const (
+	bddPublicMaxRows         = 500
+	bddPublicMySQLTimeoutMs  = 90000
+	bddPublicDefaultDBKey    = "mysql"
+)
+
+// bddPublicDBKeyByID maps the registered database_id to the connection
+// key the PHP runner expects in `table_database_map`. Tables on the
+// default DB (BO = 1) are omitted from the map (the runner falls back
+// to "mysql"). Unknown IDs default to "mysql" too — the runner cannot
+// route them anyway, so silently grouping them under default is safer
+// than emitting an unknown key.
+var bddPublicDBKeyByID = map[int]string{
+	1:  bddPublicDefaultDBKey,
+	5:  "mysql_hpdata",
+	10: "mysql_hellopro_ia",
+}
 
 // bddIdentRe matches table_name and field_name values: 1-128 chars,
 // alphanumeric + underscore. Mirrors the upstream catalog's identifier
@@ -1364,4 +1387,200 @@ func (h *Handler) handleBDDUsedRefreshCatalog(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, toBDDUsedTableDTO(*out))
+}
+
+// ── Public (shared-secret) read endpoints ───────────────────────────────
+//
+// External servers (e.g. the PHP MCP runner that ships schema_doc.json
+// and config.php) pull the BDD registry over HTTP instead of
+// committing static files. Auth: X-Admin-Token must match the
+// BDD_PUBLIC_API_TOKEN env var. JWT/cookie auth is bypassed via the
+// /api/v1/public/ exemption in auth/middleware.go.
+//
+// Both handlers return 503 when the token is unconfigured (registry
+// disabled), 401 when the header is missing or wrong, and 405 on
+// non-GET methods.
+
+// bddPublicAuth checks the shared-secret header in constant time.
+// Empty configured token = endpoint disabled (503). Matches the
+// X-Admin-Token convention used by the runner-sync route.
+func (h *Handler) bddPublicAuth(w http.ResponseWriter, r *http.Request) bool {
+	if h.config == nil || h.config.BDDPublicAPIToken == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "public BDD API is not configured (BDD_PUBLIC_API_TOKEN unset)",
+		})
+		return false
+	}
+	got := r.Header.Get("X-Admin-Token")
+	if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(h.config.BDDPublicAPIToken)) != 1 {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or missing X-Admin-Token"})
+		return false
+	}
+	return true
+}
+
+// activeBDDTables loads the registry and drops inactive rows. Used by
+// both public endpoints — inactive tables must never leak to external
+// runners or the PHP layer would expose tables the gateway has paused.
+func (h *Handler) activeBDDTables(r *http.Request) ([]db.BDDUsedTable, error) {
+	rows, err := h.bddUsedRepo.ListAll(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	out := rows[:0]
+	for _, t := range rows {
+		if t.IsActive {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
+// handleBDDPublicSchemaDoc handles GET /api/v1/public/bdd/schema-doc.
+// Returns the same shape as /api/v1/bdd/used/tables/doc but only for
+// active tables and behind the shared-secret header.
+func (h *Handler) handleBDDPublicSchemaDoc(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.bddPublicAuth(w, r) {
+		return
+	}
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+
+	rows, err := h.activeBDDTables(r)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	meta, err := h.bddUsedRepo.GetMeta(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	latest, err := h.bddUsedRepo.LatestUpdatedAt(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if latest.IsZero() && !meta.UpdatedAt.IsZero() {
+		latest = meta.UpdatedAt
+	}
+
+	tables := make(map[string]BDDDocTable, len(rows))
+	for _, t := range rows {
+		cols := make(map[string]BDDDocColumn, len(t.Fields))
+		for _, f := range t.Fields {
+			cols[f.FieldName] = BDDDocColumn{Type: f.FieldType, Desc: f.Description}
+		}
+		var pkPtr *string
+		if t.PrimaryKey != "" {
+			s := t.PrimaryKey
+			pkPtr = &s
+		}
+		var orderPtr *string
+		if t.DefaultOrderBy != "" {
+			s := t.DefaultOrderBy
+			orderPtr = &s
+		}
+		relations := t.Relations
+		if len(relations) == 0 {
+			relations = json.RawMessage(`[]`)
+		}
+		tables[t.Name] = BDDDocTable{
+			Description:    t.Description,
+			Rows:           t.Rows,
+			PrimaryKey:     pkPtr,
+			DefaultOrderBy: orderPtr,
+			Columns:        cols,
+			Relations:      relations,
+			Notes:          t.Notes,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	combined := map[string]interface{}{
+		"_meta": BDDDocMeta{
+			Description: meta.Description,
+			Usage:       meta.Usage,
+			LastUpdated: formatBDDLastUpdated(latest),
+		},
+	}
+	for _, t := range rows {
+		combined[t.Name] = tables[t.Name]
+	}
+	_ = enc.Encode(combined)
+}
+
+// BDDPublicConfigResponse is the shape consumed by the PHP MCP runner's
+// config.php. `allowed_tables` matches the runner's per-table
+// whitelist convention (`include` = explicit column list); empty
+// `include` = no columns exposed. `table_database_map` only carries
+// non-default DB tables — the runner falls back to "mysql" for
+// anything missing.
+type BDDPublicConfigResponse struct {
+	AllowedTables    map[string]BDDPublicAllowedTable `json:"allowed_tables"`
+	TableDatabaseMap map[string]string                `json:"table_database_map"`
+	MaxRows          int                              `json:"max_rows"`
+	MySQLTimeoutMs   int                              `json:"mysql_timeout_ms"`
+}
+
+// BDDPublicAllowedTable is one row of the `allowed_tables` map. Only
+// the `include` form is emitted today; `exclude` / `max_rows` are
+// reserved for future per-table overrides.
+type BDDPublicAllowedTable struct {
+	Include []string `json:"include"`
+}
+
+// handleBDDPublicConfig handles GET /api/v1/public/bdd/config.
+// Builds the runtime config block consumed by the PHP MCP runner from
+// the active rows of bdd_used_tables / bdd_used_fields.
+func (h *Handler) handleBDDPublicConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.bddPublicAuth(w, r) {
+		return
+	}
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+
+	rows, err := h.activeBDDTables(r)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	allowed := make(map[string]BDDPublicAllowedTable, len(rows))
+	dbMap := make(map[string]string)
+	for _, t := range rows {
+		cols := make([]string, 0, len(t.Fields))
+		for _, f := range t.Fields {
+			cols = append(cols, f.FieldName)
+		}
+		allowed[t.Name] = BDDPublicAllowedTable{Include: cols}
+
+		if key, ok := bddPublicDBKeyByID[t.DatabaseID]; ok && key != bddPublicDefaultDBKey {
+			dbMap[t.Name] = key
+		}
+	}
+
+	writeJSON(w, http.StatusOK, BDDPublicConfigResponse{
+		AllowedTables:    allowed,
+		TableDatabaseMap: dbMap,
+		MaxRows:          bddPublicMaxRows,
+		MySQLTimeoutMs:   bddPublicMySQLTimeoutMs,
+	})
 }
