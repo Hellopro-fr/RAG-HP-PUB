@@ -63,11 +63,20 @@ def _summarize_domain(domain: str, domain_dir: str) -> dict[str, Any]:
     }
 
 
+_SUMMARY_CONCURRENCY = int(os.environ.get("ALBUMS_SUMMARY_CONCURRENCY", "32"))
+
+
 async def list_domains_with_stats(storage_base: str) -> dict[str, Any]:
     """Liste les domaines présents sous {storage_base}/images/ + stats agrégées.
 
     Retourne {"domains": [...], "total": N}, trié par domain ASC.
     Tolérant aux manifests absents/corrompus → counters à 0.
+
+    Performance : sur NFS de prod (1000+ domaines × ~5 ms/manifest read),
+    une lecture séquentielle dépasse facilement 60 s → 504 côté Express.
+    On lit les manifests en parallèle via `asyncio.gather` + sémaphore
+    (concurrence 32 par défaut, configurable via `ALBUMS_SUMMARY_CONCURRENCY`).
+    Coût mémoire : N tasks asyncio légères, négligeable.
     """
     started = time.monotonic()
     images_base = os.path.join(storage_base, "images")
@@ -79,14 +88,18 @@ async def list_domains_with_stats(storage_base: str) -> dict[str, Any]:
         if os.path.isdir(os.path.join(images_base, d))
     )
 
-    # I/O FS bloquant → on délègue à un thread pour ne pas bloquer l'event loop.
-    def _build():
-        return [_summarize_domain(d, os.path.join(images_base, d)) for d in domains]
+    sem = asyncio.Semaphore(_SUMMARY_CONCURRENCY)
 
-    summaries = await asyncio.to_thread(_build)
+    async def _summarize_one(domain: str) -> dict[str, Any]:
+        async with sem:
+            return await asyncio.to_thread(
+                _summarize_domain, domain, os.path.join(images_base, domain)
+            )
+
+    summaries = await asyncio.gather(*(_summarize_one(d) for d in domains))
     duration_ms = int((time.monotonic() - started) * 1000)
     logger.info(
-        "list_domains_with_stats: %d domains in %dms",
-        len(summaries), duration_ms,
+        "list_domains_with_stats: %d domains in %dms (concurrency=%d)",
+        len(summaries), duration_ms, _SUMMARY_CONCURRENCY,
     )
     return {"domains": summaries, "total": len(summaries)}
