@@ -150,6 +150,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	// ── BDD registry routes (Hellopro BDD tables onglet) ─────────────────────
 	// Gateway-owned CRUD over bdd_used_tables / bdd_used_fields.
+	//
+	// Bulk / export / import are registered with exact paths BEFORE the
+	// trailing-slash catch-all below. net/http's ServeMux prefers the
+	// longer literal match over a prefix pattern, so these never fall into
+	// handleBDDUsedTableByID (which would otherwise try to parse "bulk",
+	// "export", or "import" as a UUID).
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/bulk", h.handleBDDUsedBulkCreate)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/export", h.handleBDDUsedExport)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/import", h.handleBDDUsedImport)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables", h.handleBDDUsedTables)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/", h.handleBDDUsedTableByID)
 

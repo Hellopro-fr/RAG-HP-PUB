@@ -3,10 +3,12 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
@@ -17,6 +19,25 @@ import (
 // alphanumeric + underscore. Mirrors the upstream catalog's identifier
 // shape to avoid round-trip surprises.
 var bddIdentRe = regexp.MustCompile(`^[a-zA-Z0-9_]{1,128}$`)
+
+// bddImportMaxBody caps the registry import JSON at 1 MiB. The same
+// rationale as templates' 256 KB cap (DoS guard) but with more
+// headroom because the registry can grow much larger than the seeded
+// template catalog.
+const bddImportMaxBody = 1 * 1024 * 1024
+
+// bddBulkMaxItems caps the number of rows in a single bulk-create
+// request. Beyond this the client should issue a follow-up batch.
+const bddBulkMaxItems = 50
+
+// defaultBDDListLimit / maxBDDListLimit bound the page size for
+// GET /api/v1/bdd/used/tables. The default keeps payloads small for
+// the common UI grid; the max protects the gateway from clients that
+// try to pull the whole registry at once.
+const (
+	defaultBDDListLimit = 20
+	maxBDDListLimit     = 100
+)
 
 // validBDDDatabaseIDs is the closed set of database IDs the gateway
 // accepts when registering a "used" table. Matches the production
@@ -92,6 +113,15 @@ func (h *Handler) handleBDDUsedTableByID(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+	// Defence-in-depth: "bulk", "export" and "import" are reserved
+	// sub-paths registered with exact handlers in handler.go. net/http
+	// already routes them away from here because longer-literal match
+	// wins, but if that ever regresses we don't want to parse those
+	// strings as a UUID.
+	if len(parts) == 1 && (id == "bulk" || id == "export" || id == "import") {
+		http.NotFound(w, r)
+		return
+	}
 
 	switch len(parts) {
 	case 1:
@@ -163,11 +193,42 @@ func (h *Handler) listBDDUsedTables(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "database_id must be an integer"})
 			return
 		}
-		dbIDPtr = &v
+		// 0 is treated as "no filter" so a stale ?database_id=0 from a
+		// frontend dropdown reset doesn't accidentally hide every row.
+		if v != 0 {
+			dbIDPtr = &v
+		}
 	}
 	search := strings.TrimSpace(q.Get("search"))
 
-	rows, err := h.bddUsedRepo.ListTables(r.Context(), dbIDPtr, search)
+	page := 1
+	if raw := strings.TrimSpace(q.Get("page")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "page must be a positive integer"})
+			return
+		}
+		page = v
+	}
+	limit := defaultBDDListLimit
+	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			return
+		}
+		if v > maxBDDListLimit {
+			v = maxBDDListLimit
+		}
+		limit = v
+	}
+
+	rows, total, err := h.bddUsedRepo.ListTables(r.Context(), repository.ListTablesOptions{
+		DatabaseID: dbIDPtr,
+		Search:     search,
+		Limit:      limit,
+		Offset:     (page - 1) * limit,
+	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -177,7 +238,12 @@ func (h *Handler) listBDDUsedTables(w http.ResponseWriter, r *http.Request) {
 	for _, t := range rows {
 		out = append(out, toBDDUsedTableDTO(t))
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"tables": out})
+	writeJSON(w, http.StatusOK, BDDUsedListResponse{
+		Tables: out,
+		Total:  total,
+		Page:   page,
+		Limit:  limit,
+	})
 }
 
 // ── Create ────────────────────────────────────────────────────────────────
@@ -391,4 +457,272 @@ func (h *Handler) deleteBDDUsedField(w http.ResponseWriter, r *http.Request, fie
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Bulk create ──────────────────────────────────────────────────────────
+
+// handleBDDUsedBulkCreate handles POST /api/v1/bdd/used/tables/bulk.
+// Per-item validation failures are collected into the response's errors
+// array so a single bad row does NOT abort an otherwise-valid batch.
+// Status code semantics: 201 = every row created, 200 = mixed, 400 =
+// every row failed (typically all-duplicate or all-invalid input).
+func (h *Handler) handleBDDUsedBulkCreate(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var req BulkCreateBDDUsedTablesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if !validBDDDatabaseIDs[req.DatabaseID] {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "database_id must be one of 1, 5, 10"})
+		return
+	}
+	if len(req.Items) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "items must not be empty"})
+		return
+	}
+	if len(req.Items) > bddBulkMaxItems {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "items: too many entries (max " + strconv.Itoa(bddBulkMaxItems) + ")",
+		})
+		return
+	}
+
+	// First pass: validate names locally. Bad rows are collected into errors
+	// and never reach the repo. Valid rows are forwarded preserving their
+	// original order so the per-item result mapping is straightforward.
+	errs := make([]BulkCreateBDDUsedTableError, 0)
+	validItems := make([]repository.BulkCreateItem, 0, len(req.Items))
+	for _, it := range req.Items {
+		name := strings.TrimSpace(it.TableName)
+		if !bddIdentRe.MatchString(name) {
+			errs = append(errs, BulkCreateBDDUsedTableError{
+				TableName: it.TableName,
+				Error:     "table_name must match ^[a-zA-Z0-9_]{1,128}$",
+			})
+			continue
+		}
+		validItems = append(validItems, repository.BulkCreateItem{
+			TableName:       name,
+			Description:     it.Description,
+			UpstreamTableID: it.UpstreamTableID,
+		})
+	}
+
+	created := make([]BDDUsedTableDTO, 0, len(validItems))
+	if len(validItems) > 0 {
+		creator := auth.UserEmailFromContext(r.Context())
+		results, err := h.bddUsedRepo.BulkCreate(r.Context(), req.DatabaseID, validItems, creator)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		for _, res := range results {
+			switch {
+			case res.Err == nil && res.Table != nil:
+				created = append(created, toBDDUsedTableDTO(*res.Table))
+			case errors.Is(res.Err, repository.ErrBDDDuplicateTable):
+				errs = append(errs, BulkCreateBDDUsedTableError{
+					TableName: res.TableName,
+					Error:     "table already registered for this database",
+				})
+			default:
+				errs = append(errs, BulkCreateBDDUsedTableError{
+					TableName: res.TableName,
+					Error:     res.Err.Error(),
+				})
+			}
+		}
+	}
+
+	resp := BulkCreateBDDUsedTablesResponse{Created: created, Errors: errs}
+	switch {
+	case len(created) == 0:
+		writeJSON(w, http.StatusBadRequest, resp)
+	case len(errs) == 0:
+		writeJSON(w, http.StatusCreated, resp)
+	default:
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// ── Export ───────────────────────────────────────────────────────────────
+
+// handleBDDUsedExport handles GET /api/v1/bdd/used/tables/export. The
+// response is streamed as a JSON download attachment so admins can save
+// the registry snapshot for replay on another environment.
+func (h *Handler) handleBDDUsedExport(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	rows, err := h.bddUsedRepo.ListAll(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	out := BDDExportPayload{
+		Version:    1,
+		ExportedAt: time.Now().UTC(),
+		Tables:     make([]BDDExportedTable, 0, len(rows)),
+	}
+	for _, t := range rows {
+		fields := make([]BDDExportedField, 0, len(t.Fields))
+		for _, f := range t.Fields {
+			fields = append(fields, BDDExportedField{
+				FieldName:       f.FieldName,
+				Description:     f.Description,
+				UpstreamFieldID: f.UpstreamFieldID,
+			})
+		}
+		out.Tables = append(out.Tables, BDDExportedTable{
+			DatabaseID:      t.DatabaseID,
+			TableName:       t.Name,
+			Description:     t.Description,
+			UpstreamTableID: t.UpstreamTableID,
+			Fields:          fields,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="bdd-tables-export.json"`)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// ── Import ───────────────────────────────────────────────────────────────
+
+// handleBDDUsedImport handles POST /api/v1/bdd/used/tables/import.
+// Behaviour: per-row upsert keyed on (database_id, table_name). Existing
+// rows have their description + upstream_table_id refreshed and their
+// fields atomically replaced. Per-row failures are collected and the
+// transaction is NOT aborted on the first bad row.
+func (h *Handler) handleBDDUsedImport(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, bddImportMaxBody)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "payload too large (max 1 MiB)"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body: " + err.Error()})
+		return
+	}
+
+	var payload BDDExportPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	if payload.Tables == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing tables: []"})
+		return
+	}
+
+	rows := make([]db.BDDUsedTable, 0, len(payload.Tables))
+	respErrs := make([]BDDImportError, 0)
+	for idx, t := range payload.Tables {
+		name := strings.TrimSpace(t.TableName)
+		if !validBDDDatabaseIDs[t.DatabaseID] {
+			respErrs = append(respErrs, BDDImportError{
+				DatabaseID: t.DatabaseID,
+				TableName:  t.TableName,
+				Error:      "database_id must be one of 1, 5, 10",
+			})
+			continue
+		}
+		if !bddIdentRe.MatchString(name) {
+			respErrs = append(respErrs, BDDImportError{
+				DatabaseID: t.DatabaseID,
+				TableName:  t.TableName,
+				Error:      "tables[" + strconv.Itoa(idx) + "].table_name invalid",
+			})
+			continue
+		}
+		row := db.BDDUsedTable{
+			DatabaseID:      t.DatabaseID,
+			Name:            name,
+			Description:     t.Description,
+			UpstreamTableID: t.UpstreamTableID,
+		}
+		for _, f := range t.Fields {
+			fname := strings.TrimSpace(f.FieldName)
+			if !bddIdentRe.MatchString(fname) {
+				respErrs = append(respErrs, BDDImportError{
+					DatabaseID: t.DatabaseID,
+					TableName:  t.TableName,
+					Error:      "field_name " + f.FieldName + " is invalid",
+				})
+				row = db.BDDUsedTable{} // mark skipped
+				break
+			}
+			row.Fields = append(row.Fields, db.BDDUsedField{
+				FieldName:       fname,
+				Description:     f.Description,
+				UpstreamFieldID: f.UpstreamFieldID,
+			})
+		}
+		// row.Name == "" means the inner-field validation flagged it; skip.
+		if row.Name == "" {
+			continue
+		}
+		rows = append(rows, row)
+	}
+
+	creator := auth.UserEmailFromContext(r.Context())
+	inserted, updated, repoErrs, err := h.bddUsedRepo.Import(r.Context(), rows, creator)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, e := range repoErrs {
+		respErrs = append(respErrs, BDDImportError{
+			DatabaseID: e.DatabaseID,
+			TableName:  e.TableName,
+			Error:      e.Err.Error(),
+		})
+	}
+
+	// Cache invalidation mirrors the delete path: any cached scope-token /
+	// OAuth2-client entry that referenced a now-replaced field set must
+	// re-resolve to avoid serving stale data.
+	if h.tokenCache != nil {
+		h.tokenCache.InvalidateAll()
+	}
+	if h.oauth2Cache != nil {
+		h.oauth2Cache.InvalidateAll()
+	}
+
+	writeJSON(w, http.StatusOK, BDDImportResponse{
+		Inserted: inserted,
+		Updated:  updated,
+		Errors:   respErrs,
+	})
 }

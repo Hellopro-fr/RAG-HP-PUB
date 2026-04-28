@@ -649,3 +649,225 @@ func TestBDDUsedTableByID_DELETE_NoCacheWired(t *testing.T) {
 		t.Fatalf("status=%d want=204 body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+// ── Pagination envelope ──────────────────────────────────────────────────
+
+// TestBDDUsedTablesGET_Paginated asserts the new envelope shape carries
+// {tables, total, page, limit} and that defaults (page=1, limit=20)
+// apply when no query params are passed.
+func TestBDDUsedTablesGET_Paginated(t *testing.T) {
+	h := newBDDTestHandler(t)
+	for i := 0; i < 3; i++ {
+		body := jsonBody(t, map[string]interface{}{
+			"database_id": 1,
+			"table_name":  "tbl_" + strings.Repeat("a", i+1),
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bdd/used/tables", body)
+		rr := httptest.NewRecorder()
+		h.handleBDDUsedTables(rr, req)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("seed %d: %d %s", i, rr.Code, rr.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bdd/used/tables", nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedTables(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp BDDUsedListResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, rr.Body.String())
+	}
+	if resp.Total != 3 {
+		t.Errorf("total=%d want=3", resp.Total)
+	}
+	if resp.Page != 1 || resp.Limit != 20 {
+		t.Errorf("page/limit=%d/%d want=1/20", resp.Page, resp.Limit)
+	}
+	if len(resp.Tables) != 3 {
+		t.Errorf("len(tables)=%d want=3", len(resp.Tables))
+	}
+}
+
+// TestBDDUsedTablesGET_DefaultDatabaseIDMissing asserts that omitting
+// ?database_id returns rows from every database (i.e. the filter is
+// inactive when not passed).
+func TestBDDUsedTablesGET_DefaultDatabaseIDMissing(t *testing.T) {
+	h := newBDDTestHandler(t)
+	for _, dbID := range []int{1, 5} {
+		body := jsonBody(t, map[string]interface{}{
+			"database_id": dbID,
+			"table_name":  "tbl_" + strings.Repeat("x", dbID),
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/bdd/used/tables", body)
+		rr := httptest.NewRecorder()
+		h.handleBDDUsedTables(rr, req)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("seed %d: %d %s", dbID, rr.Code, rr.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bdd/used/tables", nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedTables(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp BDDUsedListResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Total != 2 || len(resp.Tables) != 2 {
+		t.Errorf("total=%d len=%d want 2/2", resp.Total, len(resp.Tables))
+	}
+}
+
+// TestBDDUsedTablesGET_BadPage asserts page=0 is rejected with 400.
+func TestBDDUsedTablesGET_BadPage(t *testing.T) {
+	h := newBDDTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bdd/used/tables?page=0", nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedTables(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want=400", rr.Code)
+	}
+}
+
+// ── Bulk create ───────────────────────────────────────────────────────────
+
+// TestBDDUsedBulkCreate_Success: every item is valid and unique →
+// 201 Created with the full Created slice and no errors.
+func TestBDDUsedBulkCreate_Success(t *testing.T) {
+	h := newBDDTestHandler(t)
+	body := jsonBody(t, map[string]interface{}{
+		"database_id": 1,
+		"items": []map[string]interface{}{
+			{"table_name": "products"},
+			{"table_name": "orders"},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bdd/used/tables/bulk", body)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedBulkCreate(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp BulkCreateBDDUsedTablesResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Created) != 2 || len(resp.Errors) != 0 {
+		t.Errorf("created=%d errors=%d want 2/0", len(resp.Created), len(resp.Errors))
+	}
+}
+
+// TestBDDUsedBulkCreate_PartialErrors mixes a bad name and a duplicate
+// against a pre-seeded row. Expected outcome: 200 OK with one created
+// row and two error entries (one for the validation failure, one for
+// the duplicate).
+func TestBDDUsedBulkCreate_PartialErrors(t *testing.T) {
+	h := newBDDTestHandler(t)
+	// Pre-seed a row so we can trigger ErrBDDDuplicateTable.
+	createSampleTable(t, h)
+
+	body := jsonBody(t, map[string]interface{}{
+		"database_id": 1,
+		"items": []map[string]interface{}{
+			{"table_name": "fresh_one"},     // valid + unique → created
+			{"table_name": "with space"},    // bad name → error
+			{"table_name": "products"},      // duplicate of seed → error
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bdd/used/tables/bulk", body)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedBulkCreate(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp BulkCreateBDDUsedTablesResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Created) != 1 || resp.Created[0].TableName != "fresh_one" {
+		t.Errorf("created=%+v want [fresh_one]", resp.Created)
+	}
+	if len(resp.Errors) != 2 {
+		t.Errorf("errors=%d want=2 errs=%+v", len(resp.Errors), resp.Errors)
+	}
+}
+
+// ── Export ────────────────────────────────────────────────────────────────
+
+// TestBDDUsedExport_AttachmentHeader asserts the Content-Disposition
+// header is set for the download flow and the payload carries the
+// expected envelope shape.
+func TestBDDUsedExport_AttachmentHeader(t *testing.T) {
+	h := newBDDTestHandler(t)
+	createSampleTable(t, h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bdd/used/tables/export", nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedExport(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if cd := rr.Header().Get("Content-Disposition"); !strings.Contains(cd, "bdd-tables-export.json") {
+		t.Errorf("Content-Disposition=%q want includes bdd-tables-export.json", cd)
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("Content-Type=%q want application/json", ct)
+	}
+	var payload BDDExportPayload
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, rr.Body.String())
+	}
+	if payload.Version != 1 {
+		t.Errorf("version=%d want=1", payload.Version)
+	}
+	if len(payload.Tables) != 1 {
+		t.Errorf("len(tables)=%d want=1", len(payload.Tables))
+	}
+}
+
+// ── Import ────────────────────────────────────────────────────────────────
+
+// TestBDDUsedImport_Upsert exercises the round-trip: export the seeded
+// row, re-post the export verbatim, and assert the result is 0 inserted
+// and N updated (because the (database_id, table_name) keys already
+// exist in the DB).
+func TestBDDUsedImport_Upsert(t *testing.T) {
+	h := newBDDTestHandler(t)
+	createSampleTable(t, h)
+
+	// 1) Export.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bdd/used/tables/export", nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedExport(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	exportBody := rr.Body.Bytes()
+
+	// 2) Import the same payload back.
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/bdd/used/tables/import", bytes.NewReader(exportBody))
+	rr = httptest.NewRecorder()
+	h.handleBDDUsedImport(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("import status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp BDDImportResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Inserted != 0 {
+		t.Errorf("inserted=%d want=0", resp.Inserted)
+	}
+	if resp.Updated != 1 {
+		t.Errorf("updated=%d want=1", resp.Updated)
+	}
+	if len(resp.Errors) != 0 {
+		t.Errorf("errors=%+v want=[]", resp.Errors)
+	}
+}

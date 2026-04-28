@@ -20,6 +20,45 @@ var (
 	ErrBDDDuplicateField = errors.New("bdd used: duplicate field")
 )
 
+// ListTablesOptions carries the optional filters and the pagination
+// window for ListTables. A nil DatabaseID returns rows across every
+// database. Limit must be positive (callers cap at the API layer);
+// Offset is zero-based.
+type ListTablesOptions struct {
+	DatabaseID *int
+	Search     string
+	Limit      int
+	Offset     int
+}
+
+// BulkCreateItem is a single row submitted to BulkCreate. Empty fields
+// slice = no fields registered for that table. Validation of names is
+// the caller's job — the repo simply persists and surfaces duplicate
+// errors.
+type BulkCreateItem struct {
+	TableName       string
+	Description     string
+	UpstreamTableID int
+}
+
+// BulkCreateResult mirrors a single input row's outcome. When Err is
+// non-nil the row was not persisted; otherwise Table holds the freshly
+// inserted record (with its generated ID and timestamps).
+type BulkCreateResult struct {
+	TableName string
+	Table     *db.BDDUsedTable
+	Err       error
+}
+
+// ImportError is one row's outcome from a failed Import upsert. It is
+// returned alongside aggregate counts so the API layer can report a
+// per-row diagnostic without aborting the whole import.
+type ImportError struct {
+	DatabaseID int
+	TableName  string
+	Err        error
+}
+
 // BDDUsedRepo exposes CRUD over the bdd_used_tables / bdd_used_fields
 // pair plus a resolver used by the scoped gateway. All methods are
 // safe to call concurrently; persistence is delegated to GORM.
@@ -52,27 +91,70 @@ func isDuplicateKeyErr(err error) bool {
 	return false
 }
 
-// ListTables returns the catalog of activated tables ordered by
-// (database_id, table_name). When databaseID is non-nil the result is
-// scoped to that database; when search is non-empty it is matched
-// case-insensitively against table_name OR description.
-func (r *BDDUsedRepo) ListTables(ctx context.Context, databaseID *int, search string) ([]db.BDDUsedTable, error) {
+// applyListTablesFilters appends the WHERE predicates shared by the
+// paginated Find and the matching Count. Centralising the predicate
+// builder keeps the two queries from drifting.
+func applyListTablesFilters(q *gorm.DB, opts ListTablesOptions) *gorm.DB {
+	if opts.DatabaseID != nil {
+		q = q.Where("database_id = ?", *opts.DatabaseID)
+	}
+	if s := strings.TrimSpace(opts.Search); s != "" {
+		needle := "%" + strings.ToLower(s) + "%"
+		q = q.Where("LOWER(table_name) LIKE ? OR LOWER(description) LIKE ?", needle, needle)
+	}
+	return q
+}
+
+// ListTables returns a paginated slice of activated tables alongside the
+// total row count matching the same filters. Ordering is
+// (created_at DESC, table_name ASC) so the most recent registrations
+// surface first while still being deterministic when timestamps tie.
+//
+// A nil opts.DatabaseID returns rows across every database; a non-empty
+// opts.Search is matched case-insensitively against table_name OR
+// description. Limit/Offset come straight from the API layer (already
+// validated and capped there).
+func (r *BDDUsedRepo) ListTables(ctx context.Context, opts ListTablesOptions) ([]db.BDDUsedTable, int64, error) {
+	base := r.db.WithContext(ctx).Model(&db.BDDUsedTable{})
+	base = applyListTablesFilters(base, opts)
+
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
 	q := r.db.WithContext(ctx).
 		Preload("Fields", func(g *gorm.DB) *gorm.DB {
 			return g.Order("field_name ASC")
 		}).
-		Order("database_id ASC, table_name ASC")
-
-	if databaseID != nil {
-		q = q.Where("database_id = ?", *databaseID)
+		Order("created_at DESC, table_name ASC")
+	q = applyListTablesFilters(q, opts)
+	if opts.Limit > 0 {
+		q = q.Limit(opts.Limit)
 	}
-	if s := strings.TrimSpace(search); s != "" {
-		needle := "%" + strings.ToLower(s) + "%"
-		q = q.Where("LOWER(table_name) LIKE ? OR LOWER(description) LIKE ?", needle, needle)
+	if opts.Offset > 0 {
+		q = q.Offset(opts.Offset)
 	}
 
 	var rows []db.BDDUsedTable
 	if err := q.Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// ListAll returns the complete registry (all databases, all rows) with
+// fields preloaded. Used by the export endpoint, which must capture
+// every row regardless of pagination. Ordering matches ListTables.
+func (r *BDDUsedRepo) ListAll(ctx context.Context) ([]db.BDDUsedTable, error) {
+	var rows []db.BDDUsedTable
+	err := r.db.WithContext(ctx).
+		Preload("Fields", func(g *gorm.DB) *gorm.DB {
+			return g.Order("field_name ASC")
+		}).
+		Order("created_at DESC, table_name ASC").
+		Find(&rows).Error
+	if err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -250,6 +332,140 @@ func (r *BDDUsedRepo) DeleteField(ctx context.Context, fieldID string) error {
 		return ErrBDDNotFound
 	}
 	return nil
+}
+
+// BulkCreate inserts every item in a single transaction, returning a
+// per-item result so the caller can build a "created + errors" mixed
+// response. Item-level failures (duplicate name, generic insert error)
+// are recorded into the result slice and do NOT abort the transaction
+// — each row is wrapped in a SAVEPOINT so a single duplicate doesn't
+// poison the rest. createdBy is stamped onto every newly-inserted row.
+func (r *BDDUsedRepo) BulkCreate(ctx context.Context, databaseID int, items []BulkCreateItem, createdBy string) ([]BulkCreateResult, error) {
+	results := make([]BulkCreateResult, len(items))
+	if len(items) == 0 {
+		return results, nil
+	}
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i, it := range items {
+			results[i].TableName = it.TableName
+			row := db.BDDUsedTable{
+				ID:              uuid.NewString(),
+				DatabaseID:      databaseID,
+				Name:            it.TableName,
+				Description:     it.Description,
+				UpstreamTableID: it.UpstreamTableID,
+				CreatedBy:       createdBy,
+			}
+			// Wrap each insert in a SAVEPOINT so a duplicate-key error on one
+			// row leaves the surrounding transaction usable for the rest.
+			cerr := tx.Transaction(func(sp *gorm.DB) error {
+				return sp.Create(&row).Error
+			})
+			if cerr != nil {
+				if isDuplicateKeyErr(cerr) {
+					results[i].Err = ErrBDDDuplicateTable
+				} else {
+					results[i].Err = cerr
+				}
+				continue
+			}
+			fresh := row
+			results[i].Table = &fresh
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// Import upserts every row in payload by (database_id, table_name).
+// Existing rows have their description and upstream_table_id refreshed
+// and their fields atomically replaced (delete-then-insert). Missing
+// rows are inserted with createdBy. Per-row failures are collected into
+// errs and do NOT abort the transaction — each row is wrapped in a
+// SAVEPOINT.
+func (r *BDDUsedRepo) Import(ctx context.Context, payload []db.BDDUsedTable, createdBy string) (inserted, updated int, errs []ImportError, err error) {
+	txErr := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, in := range payload {
+			rowErr := tx.Transaction(func(sp *gorm.DB) error {
+				var existing db.BDDUsedTable
+				lookupErr := sp.Where("database_id = ? AND table_name = ?", in.DatabaseID, in.Name).
+					First(&existing).Error
+				switch {
+				case errors.Is(lookupErr, gorm.ErrRecordNotFound):
+					row := db.BDDUsedTable{
+						ID:              uuid.NewString(),
+						DatabaseID:      in.DatabaseID,
+						Name:            in.Name,
+						Description:     in.Description,
+						UpstreamTableID: in.UpstreamTableID,
+						CreatedBy:       createdBy,
+					}
+					if cerr := sp.Create(&row).Error; cerr != nil {
+						return cerr
+					}
+					for _, f := range in.Fields {
+						field := db.BDDUsedField{
+							ID:              uuid.NewString(),
+							UsedTableID:     row.ID,
+							FieldName:       f.FieldName,
+							Description:     f.Description,
+							UpstreamFieldID: f.UpstreamFieldID,
+						}
+						if cerr := sp.Create(&field).Error; cerr != nil {
+							return cerr
+						}
+					}
+					inserted++
+				case lookupErr != nil:
+					return lookupErr
+				default:
+					updates := map[string]interface{}{
+						"description":       in.Description,
+						"upstream_table_id": in.UpstreamTableID,
+					}
+					if uerr := sp.Model(&db.BDDUsedTable{}).
+						Where("id = ?", existing.ID).
+						Updates(updates).Error; uerr != nil {
+						return uerr
+					}
+					if derr := sp.Where("used_table_id = ?", existing.ID).
+						Delete(&db.BDDUsedField{}).Error; derr != nil {
+						return derr
+					}
+					for _, f := range in.Fields {
+						field := db.BDDUsedField{
+							ID:              uuid.NewString(),
+							UsedTableID:     existing.ID,
+							FieldName:       f.FieldName,
+							Description:     f.Description,
+							UpstreamFieldID: f.UpstreamFieldID,
+						}
+						if cerr := sp.Create(&field).Error; cerr != nil {
+							return cerr
+						}
+					}
+					updated++
+				}
+				return nil
+			})
+			if rowErr != nil {
+				errs = append(errs, ImportError{
+					DatabaseID: in.DatabaseID,
+					TableName:  in.Name,
+					Err:        rowErr,
+				})
+			}
+		}
+		return nil
+	})
+	if txErr != nil {
+		return 0, 0, nil, txErr
+	}
+	return inserted, updated, errs, nil
 }
 
 // ResolveByDBAndName fetches a table by its (database_id, table_name)
