@@ -39,8 +39,26 @@ case "$BASENAME" in
 esac
 
 # Skip known non-testable paths
+#
+# Cross-workspace exemption rationale:
+# When this RAG-HP-PUB session has additional working directories added (e.g.
+# `D:/DevHellopro/Marketplace`), Write/Edit calls into those sibling repos
+# still trigger this hook — `CLAUDE_PROJECT_DIR` is bound to RAG-HP-PUB at
+# session start. To avoid forcing RAG-HP-PUB's TDD policy onto unrelated
+# projects with their own conventions (Marketplace is legacy PHP with no test
+# infra by design), we skip paths anchored on common folder names used in
+# this DevHellopro workspace layout.
+#
+# Patterns are case-sensitive substring globs. Adapt to your own clone:
+#   - `*Marketplace*`  matches any path crossing a folder literally named
+#     `Marketplace` (default repo name in this org).
+#   - `*Hellopro*`     matches any path crossing a folder containing the
+#     literal substring `Hellopro` (covers `DevHellopro/`, `Hellopro-fr/`,
+#     and any repo with that brand prefix).
+# If your clone uses different folder names (e.g. `marketplace-hp/`,
+# `~/repos/hp-bo/`), add a pattern here matching your local layout.
 case "$FILE_PATH" in
-    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*) exit 0 ;;
+    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*|*Marketplace*|*Hellopro*) exit 0 ;;
 esac
 
 # Search for a corresponding test file

@@ -35,6 +35,11 @@ type CachedClient struct {
 	RingoverFilterMode     string
 	RingoverAllowedUserIDs []int
 	RingoverAllowedTeamIDs []int
+
+	// BDDAllowedTableIDs mirrors scopetoken.CachedToken.BDDAllowedTableIDs:
+	// list of bdd_used_tables.id rows the OAuth2 client is restricted to.
+	// Empty slice = no BDD restriction.
+	BDDAllowedTableIDs []string
 }
 
 // Cache provides an in-memory TTL cache for OAuth2 client scope lookups.

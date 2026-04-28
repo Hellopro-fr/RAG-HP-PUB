@@ -38,6 +38,12 @@ type CachedToken struct {
 	RingoverFilterMode     string // "none" | "users" | "teams" | "creator"
 	RingoverAllowedUserIDs []int  // for modes "users" and "creator"
 	RingoverAllowedTeamIDs []int  // for mode "teams"
+
+	// BDDAllowedTableIDs holds the bdd_used_tables.id values this token is
+	// allowed to surface. Empty slice = no BDD restriction (full access).
+	// Resolution to (database_id, table_name) pairs happens at request time
+	// in the gateway header injector so deletions propagate immediately.
+	BDDAllowedTableIDs []string
 }
 
 // Cache provides an in-memory TTL cache for scope token lookups.

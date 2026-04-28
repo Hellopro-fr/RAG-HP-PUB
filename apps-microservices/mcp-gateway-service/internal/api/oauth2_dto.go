@@ -11,8 +11,9 @@ type CreateOAuth2ClientRequest struct {
 	ExpiresAt      *string               `json:"expires_at,omitempty"`       // RFC3339
 	RedirectURIs   []string              `json:"redirect_uris,omitempty"`
 	GrantTypes     []string              `json:"grant_types,omitempty"`
-	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"` // shares semantics with ScopeToken.LeexiFilter
+	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`    // shares semantics with ScopeToken.LeexiFilter
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"` // shares semantics with ScopeToken.RingoverFilter
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`      // nil = unrestricted (full BDD access)
 }
 
 // CreateOAuth2ClientResponse is returned once on creation (includes raw client_secret).
@@ -26,14 +27,15 @@ type CreateOAuth2ClientResponse struct {
 	ServerTools    []ServerToolSelection `json:"server_tools,omitempty"`
 	InstructionIDs []string              `json:"instruction_ids,omitempty"`
 	AccessTokenTTL int                   `json:"access_token_ttl"`
-	IsActive              bool            `json:"is_active"`
-	CreatedAt             string          `json:"created_at"`
-	ExpiresAt             *string         `json:"expires_at,omitempty"`
-	RedirectURIs          []string        `json:"redirect_uris,omitempty"`
-	GrantTypes            []string        `json:"grant_types,omitempty"`
+	IsActive              bool               `json:"is_active"`
+	CreatedAt             string             `json:"created_at"`
+	ExpiresAt             *string            `json:"expires_at,omitempty"`
+	RedirectURIs          []string           `json:"redirect_uris,omitempty"`
+	GrantTypes            []string           `json:"grant_types,omitempty"`
 	DynamicallyRegistered bool               `json:"dynamically_registered"`
 	LeexiFilter           *LeexiFilterDTO    `json:"leexi_filter,omitempty"`
 	RingoverFilter        *RingoverFilterDTO `json:"ringover_filter,omitempty"`
+	BDDFilter             *BDDFilterDTO      `json:"bdd_filter,omitempty"`
 }
 
 // OAuth2ClientResponse is the standard client response (no raw secret).
@@ -49,14 +51,15 @@ type OAuth2ClientResponse struct {
 	AccessTokenTTL int                   `json:"access_token_ttl"`
 	IsActive       bool                  `json:"is_active"`
 	CreatedBy      string                `json:"created_by,omitempty"`
-	CreatedAt             string          `json:"created_at"`
-	UpdatedAt             string          `json:"updated_at"`
-	ExpiresAt             *string         `json:"expires_at,omitempty"`
-	RedirectURIs          []string        `json:"redirect_uris,omitempty"`
-	GrantTypes            []string        `json:"grant_types,omitempty"`
+	CreatedAt             string             `json:"created_at"`
+	UpdatedAt             string             `json:"updated_at"`
+	ExpiresAt             *string            `json:"expires_at,omitempty"`
+	RedirectURIs          []string           `json:"redirect_uris,omitempty"`
+	GrantTypes            []string           `json:"grant_types,omitempty"`
 	DynamicallyRegistered bool               `json:"dynamically_registered"`
 	LeexiFilter           *LeexiFilterDTO    `json:"leexi_filter,omitempty"`
 	RingoverFilter        *RingoverFilterDTO `json:"ringover_filter,omitempty"`
+	BDDFilter             *BDDFilterDTO      `json:"bdd_filter,omitempty"`
 }
 
 // UpdateOAuth2ClientRequest is the body for PUT /api/v1/oauth2/clients/{id}.
@@ -70,4 +73,5 @@ type UpdateOAuth2ClientRequest struct {
 	GrantTypes     []string              `json:"grant_types,omitempty"`
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
 }
