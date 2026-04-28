@@ -179,3 +179,76 @@ def test_lock_timeout_raises(tmp_path, monkeypatch):
     finally:
         holder_done.set()
         t.join()
+
+
+def _legacy_img(filename):
+    """Image entry façon manifest v1 : pas de `url_source`."""
+    return {"filename": filename,
+            "main": f"produit-2/0/0/0/{filename}", "thumb": f"produit-3/0/0/0/{filename}"}
+
+
+def test_redownload_product_legacy_v1_raises_legacy_error(tmp_path, monkeypatch):
+    """Manifest v1 (toutes les images sans url_source) → LegacyManifestError sans rien casser."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{"id_produit": "1", "nom": "p", "synced": True,
+                                       "images": [_legacy_img("a.jpg"), _legacy_img("b.jpg")]}])
+    _create_files(images_base / "alpha.com", "a.jpg")
+    _create_files(images_base / "alpha.com", "b.jpg")
+
+    downloader = MagicMock()
+    downloader.download_and_process = MagicMock(side_effect=AssertionError("ne doit pas être appelé"))
+
+    from services.album_actions import redownload_product, LegacyManifestError
+    with pytest.raises(LegacyManifestError):
+        asyncio.run(redownload_product(str(tmp_path), "alpha.com", "1", downloader))
+
+    # Fichiers existants doivent être préservés (pas de mutation FS sur legacy).
+    assert (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / "a.jpg").exists()
+    assert (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / "b.jpg").exists()
+
+
+def test_redownload_image_legacy_v1_raises_legacy_error(tmp_path, monkeypatch):
+    """Image entry sans url_source → LegacyManifestError, fichier préservé."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{"id_produit": "1", "nom": "p", "synced": True,
+                                       "images": [_legacy_img("a.jpg")]}])
+    _create_files(images_base / "alpha.com", "a.jpg")
+
+    downloader = MagicMock()
+    downloader.download_and_process = MagicMock(side_effect=AssertionError("ne doit pas être appelé"))
+
+    from services.album_actions import redownload_image, LegacyManifestError
+    with pytest.raises(LegacyManifestError):
+        asyncio.run(redownload_image(str(tmp_path), "alpha.com", "1", "a.jpg", downloader))
+
+    assert (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / "a.jpg").exists()
+
+
+def test_redownload_product_mixed_manifest_skips_legacy_entries(tmp_path, monkeypatch):
+    """Manifest mixte (certaines images avec url_source, d'autres sans) → on download
+    celles qui ont url_source, on skip les autres en signalant la raison."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{
+        "id_produit": "1", "nom": "p", "synced": True,
+        "images": [
+            _img("modern.jpg", "https://x/modern.jpg"),
+            _legacy_img("legacy.jpg"),
+        ],
+    }])
+    _create_files(images_base / "alpha.com", "modern.jpg")
+    _create_files(images_base / "alpha.com", "legacy.jpg")
+
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
+        return {"status": "ok", "paths": {"main_path": "/x", "thumb_path": "/x",
+                                          "filename": "x", "url_source": url}}
+
+    downloader = MagicMock()
+    downloader.download_and_process = fake_download
+
+    from services.album_actions import redownload_product
+    result = asyncio.run(redownload_product(str(tmp_path), "alpha.com", "1", downloader))
+
+    assert result["downloaded"] == 1
+    assert result["skipped"] == 1
+    assert result["failed"] == 0
+    assert any("legacy" in (e.get("reason", "")).lower() for e in result["errors"])

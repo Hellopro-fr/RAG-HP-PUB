@@ -33,6 +33,7 @@ from image_download_service.services.album_actions import (
     redownload_product,
     LockTimeoutError,
     ManifestEntryMissingError,
+    LegacyManifestError,
 )
 from image_download_service.services.album_jobs import start_delete_album_job, get_job
 
@@ -98,6 +99,9 @@ async def redownload_product_endpoint(domain: str, id_produit: str):
         return await redownload_product(_storage_base(), domain, id_produit, _get_downloader())
     except FileNotFoundError:
         raise HTTPException(422, "manifest absent ou produit inexistant")
+    except LegacyManifestError as e:
+        # 422 + détail clair pour que le frontend puisse expliquer à l'opérateur.
+        raise HTTPException(422, f"manifest legacy v1 (re-ingérer côté BO) : {e}")
     except LockTimeoutError:
         raise HTTPException(409, "verrou occupé sur ce produit, réessaie")
 
@@ -110,6 +114,8 @@ async def redownload_image_endpoint(domain: str, id_produit: str, filename: str)
         )
     except ManifestEntryMissingError:
         raise HTTPException(422, "image inconnue dans le manifest")
+    except LegacyManifestError as e:
+        raise HTTPException(422, f"manifest legacy v1 (re-ingérer côté BO) : {e}")
     except FileNotFoundError:
         raise HTTPException(404, "produit ou domaine inconnu")
     except LockTimeoutError:

@@ -12,6 +12,7 @@ import { AlbumProductList } from '../components/albums/AlbumProductList';
 import { DeleteImageOrProductDialog } from '../components/albums/DeleteImageOrProductDialog';
 import { ImageDetailSheet } from '../components/albums/ImageDetailSheet';
 import { Card } from '../components/ui/card';
+import { useToast } from '../components/ToastProvider';
 
 /**
  * Page détail `/albums/:domain` — Mix 1 (stacked products).
@@ -28,6 +29,7 @@ import { Card } from '../components/ui/card';
 export default function AlbumDetailPage({ token }) {
   const { domain: rawDomain } = useParams();
   const domain = decodeURIComponent(rawDomain);
+  const toast = useToast();
 
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
@@ -73,10 +75,39 @@ export default function AlbumDetailPage({ token }) {
   }, []);
 
   const handleRebuild = useCallback(
-    (p) => {
-      rebuildMutation.mutate({ domain, productId: p.id_produit });
+    async (p) => {
+      const label = p.nom || `#${p.id_produit}`;
+      try {
+        const res = await rebuildMutation.mutateAsync({
+          domain, productId: p.id_produit,
+        });
+        const dl = res?.downloaded ?? 0;
+        const fl = res?.failed ?? 0;
+        const sk = res?.skipped ?? 0;
+        const total = dl + fl + sk;
+        if (fl === 0 && sk === 0) {
+          toast.success(`${label} : ${dl}/${total} images re-téléchargées`);
+        } else if (dl > 0) {
+          toast.warn(`${label} : ${dl} ok · ${fl} échec · ${sk} skip`);
+        } else {
+          toast.error(`${label} : aucun re-téléchargement (${fl} échec · ${sk} skip)`);
+        }
+      } catch (err) {
+        // Distinction utile : 422 manifest legacy v1 vs autres erreurs
+        const status = err?.status;
+        const body = err?.body;
+        const detail = (typeof body === 'object' && body?.detail) || err?.message || 'erreur inconnue';
+        if (status === 422 && /legacy v1/i.test(String(detail))) {
+          toast.error(
+            `${label} : manifest v1 — re-ingérer côté BO pour migrer en v2`,
+            { durationMs: 8000 },
+          );
+        } else {
+          toast.error(`Rebuild ${label} échoué — ${detail}`);
+        }
+      }
     },
-    [domain, rebuildMutation],
+    [domain, rebuildMutation, toast],
   );
 
   const handleDelete = useCallback((p) => {
