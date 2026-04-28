@@ -1969,22 +1969,19 @@ class RecommendationService:
                 "rang": 1,
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
-                "usage_lu": "Ce que le descriptif ou les caractéristiques révèlent sur l'usage/type du produit (ex: 'descriptif indique tracteur vigneron inter-rangs' ou 'descriptif absent, titre générique Tracteur')"
                 }}
             ],
             "autres_produits": [
                 {{
                 "rang": 3,
                 "id_produit": "XXXXX",
-                "nom": "Nom du produit",
-                "usage_lu": "Ce que le descriptif ou les caractéristiques révèlent sur l'usage/type du produit"
+                "nom": "Nom du produit",     
                 }}
             ],
             "produits_ecartes": [
                 {{
                 "id_produit": "XXXXX",
                 "nom": "Nom du produit",
-                "usage_lu": "Ce que le descriptif indique sur l'usage, et pourquoi c'est incompatible avec le besoin"
                 }}
             ]
             }}
