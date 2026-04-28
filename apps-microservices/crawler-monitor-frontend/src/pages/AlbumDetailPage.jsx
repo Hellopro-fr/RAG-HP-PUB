@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import {
@@ -36,6 +36,24 @@ export default function AlbumDetailPage({ token }) {
   const [sort, setSort] = useState('updated');
   const [pendingProductDelete, setPendingProductDelete] = useState(null);
   const [selected, setSelected] = useState(null);
+
+  // Mode d'affichage des images (stack/coverflow/reel/dial). Persisté en
+  // localStorage pour que l'utilisateur retrouve son mode préféré au refresh.
+  // Default = `coverflow` (cf. handoff design — README §"Default mode").
+  const [imageMode, setImageMode] = useState(() => {
+    try {
+      return localStorage.getItem('albumImageMode') || 'coverflow';
+    } catch {
+      return 'coverflow';
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('albumImageMode', imageMode);
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [imageMode]);
 
   const params = useMemo(() => ({ q, filter, sort }), [q, filter, sort]);
 
@@ -140,6 +158,8 @@ export default function AlbumDetailPage({ token }) {
         onFilter={setFilter}
         sort={sort}
         onSort={setSort}
+        imageMode={imageMode}
+        onImageMode={setImageMode}
       />
 
       {products.length === 0 ? (
@@ -156,6 +176,7 @@ export default function AlbumDetailPage({ token }) {
             onDelete={handleDelete}
             onLoadMore={() => productsQ.fetchNextPage()}
             hasMore={!!productsQ.hasNextPage}
+            imageMode={imageMode}
           />
         </Card>
       )}
