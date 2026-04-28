@@ -486,6 +486,13 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		mux.HandleFunc("/api/v1/public/install-guides/configs/", h.handlePublicConfigBySlug)
 	}
 
+	// Public BDD registry endpoints (shared-secret auth via X-Admin-Token).
+	// Consumed by the external PHP MCP runner that historically read
+	// schema_doc.json + config.php from disk; pulling from the gateway
+	// keeps the runner's whitelist + doc in sync with the admin onglet.
+	mux.HandleFunc("/api/v1/public/bdd/schema-doc", h.handleBDDPublicSchemaDoc)
+	mux.HandleFunc("/api/v1/public/bdd/config", h.handleBDDPublicConfig)
+
 	// Applique les middlewares et monte sur le mux principal
 	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit, roleCheckMiddleware)
 	mux.Handle("/api/", wrapped)
