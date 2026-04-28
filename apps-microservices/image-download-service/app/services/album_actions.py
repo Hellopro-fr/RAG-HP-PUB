@@ -132,31 +132,68 @@ async def delete_product(storage_base: str, domain: str, id_produit: str) -> Non
     await asyncio.to_thread(_with_lock, manifest_path, 3.0, _do)
 
 
+class LegacyManifestError(Exception):
+    """Manifest v1 legacy : aucune entrée image n'a `url_source` (champ ajouté en v2,
+    2026-04-24). Le redownload n'est pas possible depuis l'API Albums — il faut
+    re-ingérer le produit côté BO pour déclencher la migration v1→v2 automatique
+    (cf. CLAUDE.md du service). Mappé en HTTP 422 par le router."""
+
+
+def _is_legacy_v1(images: list[dict]) -> bool:
+    """True si toutes les images ont `url_source` absent/null (manifest v1 pre-2026-04-24)."""
+    if not images:
+        return False
+    return all(not img.get("url_source") for img in images)
+
+
 async def redownload_product(storage_base: str, domain: str, id_produit: str, downloader) -> dict[str, Any]:
-    """Force-redownload toutes les URLs connues du produit. Supprime les fichiers existants d'abord."""
+    """Force-redownload toutes les URLs connues du produit. Supprime les fichiers existants d'abord.
+
+    Lève `LegacyManifestError` si le manifest est en v1 (aucune `url_source`) — dans ce cas
+    le redownload n'est pas possible depuis l'API et on ne touche PAS aux fichiers existants.
+    """
     domain_dir = _domain_dir(storage_base, domain)
     manifest_path = _manifest_path(storage_base, domain)
     if not os.path.exists(manifest_path):
         raise FileNotFoundError(f"manifest {domain}")
     started = time.monotonic()
 
-    # Charger sous lock pour figer la liste d'URLs
-    def _capture_urls():
+    # Étape 1 : capture des URLs sous lock (lecture seule, pas de mutation FS encore).
+    def _peek_images():
         manifest = _load_manifest(manifest_path)
         for p in manifest.get("products") or []:
             if str(p.get("id_produit")) == str(id_produit):
-                for img in p.get("images") or []:
-                    _remove_image_files(domain_dir, img)
                 return p, list(p.get("images") or [])
         raise FileNotFoundError(f"product {id_produit}")
 
-    product, images = await asyncio.to_thread(_with_lock, manifest_path, 3.0, _capture_urls)
+    product, images = await asyncio.to_thread(_with_lock, manifest_path, 3.0, _peek_images)
 
+    # Garde-fou : manifest v1 → on ne supprime rien et on signale au caller.
+    if _is_legacy_v1(images):
+        raise LegacyManifestError(
+            f"product {id_produit} en manifest v1 (aucune url_source) — "
+            f"re-ingérer côté BO pour déclencher la migration v1→v2"
+        )
+
+    # Étape 2 : suppression des fichiers existants (sous nouveau lock pour atomicité).
+    def _remove_old_files():
+        for img in images:
+            _remove_image_files(domain_dir, img)
+
+    await asyncio.to_thread(_with_lock, manifest_path, 3.0, _remove_old_files)
+
+    # Étape 3 : redownload séquentiel (parallélisable en V2).
     downloaded = 0
+    skipped = 0
     failed = 0
     errors: list[dict] = []
     for img in images:
         url = img.get("url_source")
+        if not url:
+            # Image individuelle sans url_source dans un manifest mixte (rare) — on skip.
+            skipped += 1
+            errors.append({"url": None, "reason": "url_source absent (legacy entry)"})
+            continue
         try:
             res = await downloader.download_and_process(
                 url, domain=domain, product_id=id_produit,
@@ -173,7 +210,7 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
     duration_ms = int((time.monotonic() - started) * 1000)
     return {
         "domain": domain, "id_produit": id_produit,
-        "downloaded": downloaded, "skipped": 0, "failed": failed,
+        "downloaded": downloaded, "skipped": skipped, "failed": failed,
         "errors": errors, "duration_ms": duration_ms,
     }
 
@@ -185,19 +222,33 @@ async def redownload_image(storage_base: str, domain: str, id_produit: str, file
         raise FileNotFoundError(f"manifest {domain}")
     started = time.monotonic()
 
-    def _capture():
+    # Étape 1 : capture de l'image sous lock (sans mutation FS).
+    def _peek_image():
         manifest = _load_manifest(manifest_path)
         for p in manifest.get("products") or []:
             if str(p.get("id_produit")) == str(id_produit):
                 for img in p.get("images") or []:
                     if img.get("filename") == filename:
-                        _remove_image_files(domain_dir, img)
                         return p, img
                 raise ManifestEntryMissingError(f"image {filename}")
         raise FileNotFoundError(f"product {id_produit}")
 
-    product, img = await asyncio.to_thread(_with_lock, manifest_path, 3.0, _capture)
+    product, img = await asyncio.to_thread(_with_lock, manifest_path, 3.0, _peek_image)
 
+    # Garde-fou : entrée legacy sans url_source.
+    if not img.get("url_source"):
+        raise LegacyManifestError(
+            f"image {filename} sans url_source (entrée legacy v1) — "
+            f"re-ingérer le produit côté BO pour la migration v1→v2"
+        )
+
+    # Étape 2 : suppression du fichier sous lock.
+    def _remove_old_file():
+        _remove_image_files(domain_dir, img)
+
+    await asyncio.to_thread(_with_lock, manifest_path, 3.0, _remove_old_file)
+
+    # Étape 3 : redownload.
     try:
         res = await downloader.download_and_process(
             img.get("url_source"), domain=domain, product_id=id_produit,
