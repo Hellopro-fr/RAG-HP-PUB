@@ -30,11 +30,18 @@ export interface BDDUsedField {
   id: string
   used_table_id: string
   field_name: string
+  field_type?: string
   description: string
   upstream_field_id?: number
   created_at?: string
   updated_at?: string
 }
+
+// BDDRelations is the persisted shape of the per-table `relations` column.
+// Two flavours come back from the upstream catalog: an empty array (no
+// relations) and an object keyed by target table. We keep the union as-is
+// so round-trips are byte-stable.
+export type BDDRelations = Record<string, string> | unknown[] | null
 
 export interface BDDUsedTable {
   id: string
@@ -42,6 +49,12 @@ export interface BDDUsedTable {
   table_name: string
   description: string
   upstream_table_id?: number
+  rows: number | null
+  primary_key: string
+  default_order_by: string
+  relations: BDDRelations
+  notes: string
+  is_active: boolean
   created_by?: string
   created_at?: string
   updated_at?: string
@@ -56,3 +69,33 @@ export interface BDDUsedListResponse {
   page: number
   limit: number
 }
+
+export interface BDDMeta {
+  description: string
+  usage: string
+  updated_at?: string
+  updated_by?: string
+}
+
+// Per-column shape inside the doc payload.
+export interface BDDDocColumn {
+  type: string
+  desc: string
+}
+
+// Per-table shape inside the doc payload.
+export interface BDDDocTable {
+  description: string
+  rows: number | null
+  primary_key: string | null
+  default_order_by: string | null
+  columns: Record<string, BDDDocColumn>
+  relations: BDDRelations
+  notes: string
+}
+
+// Top-level shape returned by GET /bdd/used/tables/doc — `_meta` plus
+// dynamic table-name keys.
+export type BDDDocPayload = {
+  _meta: { description: string; last_updated: string; usage: string }
+} & Record<string, BDDDocTable>

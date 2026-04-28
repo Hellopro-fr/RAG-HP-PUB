@@ -120,8 +120,8 @@ export const api = {
   patch<T>(path: string, body?: unknown): Promise<T> {
     return request<T>('PATCH', path, body)
   },
-  del<T>(path: string): Promise<T> {
-    return request<T>('DELETE', path)
+  del<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>('DELETE', path, body)
   },
   postMultipart<T>(path: string, formData: FormData): Promise<T> {
     return multipartRequest<T>('POST', path, formData)

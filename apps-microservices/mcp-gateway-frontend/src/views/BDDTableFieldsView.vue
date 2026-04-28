@@ -71,34 +71,19 @@
         Cette table est inactive. Ajoutez au moins un champ pour l'activer.
       </div>
 
-      <!-- Action bar (admin only) -->
-      <div
-        v-if="isAdmin"
-        class="px-6 pt-5 flex flex-wrap items-center gap-2"
-      >
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          @click="triggerImport"
-        >
-          <i class="pi pi-upload text-[10px]" />
-          Importer JSON
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-          @click="exportTable"
-        >
-          <i class="pi pi-download text-[10px]" />
-          Exporter JSON
-        </button>
-        <input
-          ref="importInputRef"
-          type="file"
-          accept="application/json,.json"
-          class="hidden"
-          @change="onImportFile"
+      <!-- Import / export (inline) -->
+      <div v-if="isAdmin" class="px-6 pt-5">
+        <JsonImportExport
+          :busy="importing"
+          @export="exportTable"
+          @import-file="handleImportFile"
         />
+        <p
+          v-if="importError"
+          class="mt-2 text-xs text-error-500"
+        >
+          {{ importError }}
+        </p>
       </div>
 
       <!-- Description section -->
@@ -136,6 +121,179 @@
         />
       </section>
 
+      <!-- Metadata section -->
+      <section class="px-6 pb-2">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+              Metadonnees
+            </h3>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+              Champs structures injectes dans la doc generee par bdd_get_table_doc.
+            </p>
+          </div>
+          <button
+            v-if="isAdmin"
+            type="button"
+            :disabled="!metaDirty || savingMeta"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="saveMetadata"
+          >
+            <i
+              v-if="savingMeta"
+              class="pi pi-spinner pi-spin text-[10px]"
+            />
+            <i v-else class="pi pi-save text-[10px]" />
+            Enregistrer les metadonnees
+          </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label
+              class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+            >
+              Cle primaire
+              <span class="text-[10px] text-gray-400 ml-1">(catalogue)</span>
+            </label>
+            <div
+              class="h-9 w-full flex items-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3 text-sm font-mono text-gray-700 dark:text-gray-300"
+            >
+              <span v-if="table?.primary_key" class="truncate">
+                {{ table.primary_key }}
+              </span>
+              <span v-else class="text-xs text-gray-400 italic">
+                Non defini par le catalogue
+              </span>
+            </div>
+          </div>
+          <div>
+            <label
+              class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+            >
+              ORDER BY par defaut
+            </label>
+            <input
+              v-model="metaDraft.default_order_by"
+              :readonly="!isAdmin"
+              type="text"
+              maxlength="255"
+              placeholder="ex: date_creation_lead DESC"
+              class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-mono dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+            />
+          </div>
+          <div>
+            <label
+              class="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+            >
+              <span>
+                Nombre de lignes
+                <span class="text-[10px] text-gray-400 ml-1">(catalogue)</span>
+              </span>
+              <button
+                v-if="isAdmin"
+                type="button"
+                :disabled="refreshingCatalog || !table?.upstream_table_id"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-brand-400"
+                title="Re-synchroniser depuis le catalogue"
+                @click="refreshFromCatalog"
+              >
+                <i
+                  :class="refreshingCatalog ? 'pi pi-spinner pi-spin' : 'pi pi-refresh'"
+                  class="text-[10px]"
+                />
+                Actualiser
+              </button>
+            </label>
+            <div
+              class="h-9 w-full flex items-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3 text-sm text-gray-700 dark:text-gray-300"
+            >
+              <span v-if="table?.rows != null">
+                {{ table.rows.toLocaleString('fr-FR') }}
+              </span>
+              <span v-else class="text-xs text-gray-400 italic">
+                Non synchronise — cliquer Actualiser
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <label
+            class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+          >
+            Notes
+          </label>
+          <textarea
+            v-model="metaDraft.notes"
+            :readonly="!isAdmin"
+            rows="2"
+            maxlength="4096"
+            placeholder="Remarques operationnelles, contraintes, conseils..."
+            class="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+          />
+        </div>
+        <div class="mt-3">
+          <div class="flex items-center justify-between mb-1">
+            <label
+              class="block text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              Relations
+            </label>
+            <button
+              v-if="isAdmin && hasLinkableTables"
+              type="button"
+              class="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+              @click="addRelationRow"
+            >
+              <i class="pi pi-plus text-[10px]" />
+              Ajouter une relation
+            </button>
+          </div>
+          <div
+            v-if="!hasLinkableTables"
+            class="rounded-md border border-warning-200 dark:border-warning-500/30 bg-warning-50 dark:bg-warning-500/10 px-3 py-2 text-xs text-warning-800 dark:text-warning-300"
+          >
+            <i class="pi pi-info-circle mr-1" />
+            Aucune autre table active disponible. Les relations seront
+            activables des qu'au moins une autre table (avec au moins un champ)
+            sera enregistree.
+          </div>
+          <template v-else>
+          <div
+            v-if="metaDraft.relations.length === 0"
+            class="rounded-md border-2 border-dashed border-gray-200 dark:border-gray-700 px-3 py-3 text-center text-xs text-gray-400"
+          >
+            Aucune relation. Cliquez sur "Ajouter une relation" pour creer un
+            lien vers une autre table active.
+          </div>
+          <div v-else class="space-y-3">
+            <BDDRelationBlock
+              v-for="(row, idx) in metaDraft.relations"
+              :key="idx"
+              :model-value="row"
+              :self-table-name="table?.table_name ?? ''"
+              :fields="fields"
+              :available-target-tables="availableTargetTables"
+              :is-admin="isAdmin"
+              :index="idx"
+              :default-expanded="!row.self_col || !row.target_table || !row.target_col"
+              @update:model-value="(v) => onRelationUpdate(idx, v)"
+              @remove="removeRelationRow(idx)"
+            />
+          </div>
+          <p
+            v-if="relationsParseError"
+            class="text-[11px] text-error-500 mt-1"
+          >
+            {{ relationsParseError }}
+          </p>
+          <p class="text-[11px] text-gray-400 mt-1">
+            Une seule relation par table cible. Les doublons seront ecrases lors
+            de l'enregistrement.
+          </p>
+          </template>
+        </div>
+      </section>
+
       <!-- Fields section -->
       <section class="px-6 pb-6">
         <div class="flex items-center justify-between mb-2">
@@ -166,82 +324,151 @@
           v-if="isAdmin && showAddField"
           class="mb-3 rounded-lg border border-brand-200 dark:border-brand-500/40 bg-brand-50/40 dark:bg-brand-500/5 p-4"
         >
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label
-                class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
-              >
-                Nom du champ
-                <span class="text-error-500">*</span>
-              </label>
-              <select
-                v-if="hasCatalogPicker"
-                v-model="newFieldName"
-                class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-              >
-                <option value="">-- Choisir un champ --</option>
-                <option
-                  v-for="opt in availableCatalogFields"
-                  :key="opt.id"
-                  :value="opt.field_name"
-                >
-                  {{ opt.field_name }}
-                  <template v-if="opt.field_type">
-                    ({{ opt.field_type }})
-                  </template>
-                </option>
-              </select>
+          <!-- Catalog-driven multi-select -->
+          <template v-if="hasCatalogPicker">
+            <div class="flex items-center justify-between gap-2 mb-2">
               <input
-                v-else
-                v-model="newFieldName"
+                v-model="newFieldSearch"
                 type="text"
-                maxlength="128"
-                placeholder="nom_du_champ"
-                class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-mono dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                placeholder="Filtrer par nom de champ"
+                class="h-8 flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
               />
-              <p
-                v-if="newFieldName && !isValidFieldName"
-                class="text-[11px] text-error-500 mt-1"
+              <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                {{ selectedNewFields.size }}/{{ filteredAvailableFields.length }}
+              </span>
+              <button
+                type="button"
+                class="text-xs text-brand-500 hover:text-brand-600 dark:text-brand-400 shrink-0"
+                @click="toggleAllAvailable"
               >
-                Caracteres autorises : a-z, A-Z, 0-9 et _ (1 a 128 caracteres).
+                {{ allFilteredSelected ? 'Tout deselectionner' : 'Tout selectionner' }}
+              </button>
+            </div>
+            <div
+              class="max-h-64 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900"
+            >
+              <label
+                v-for="opt in filteredAvailableFields"
+                :key="opt.id"
+                class="flex items-start gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50"
+              >
+                <input
+                  type="checkbox"
+                  class="mt-0.5 rounded border-gray-300 text-brand-500 dark:border-gray-700"
+                  :checked="selectedNewFields.has(opt.field_name)"
+                  @change="toggleNewField(opt.field_name, ($event.target as HTMLInputElement).checked)"
+                />
+                <span class="flex-1 min-w-0">
+                  <code class="font-mono text-[13px]">{{ opt.field_name }}</code>
+                  <span
+                    v-if="opt.field_type"
+                    class="text-xs text-gray-400 dark:text-gray-500 ml-1"
+                  >
+                    ({{ opt.field_type }}<template v-if="opt.is_nullable">, null</template>)
+                  </span>
+                  <span
+                    v-if="opt.description"
+                    class="block text-xs text-gray-400 dark:text-gray-500 truncate"
+                    :title="opt.description"
+                  >
+                    {{ opt.description }}
+                  </span>
+                </span>
+              </label>
+              <div
+                v-if="filteredAvailableFields.length === 0"
+                class="px-3 py-3 text-sm text-gray-400 dark:text-gray-500 text-center"
+              >
+                Aucun champ disponible.
+              </div>
+            </div>
+            <div class="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                :disabled="selectedNewFields.size === 0 || addingField"
+                class="px-3 py-1.5 text-xs font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                @click="submitNewFields"
+              >
+                <i
+                  v-if="addingField"
+                  class="pi pi-spinner pi-spin text-[10px] mr-1"
+                />
+                Ajouter ({{ selectedNewFields.size }})
+              </button>
+              <button
+                type="button"
+                class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+                @click="resetNewFieldForm"
+              >
+                Reinitialiser
+              </button>
+              <p class="text-[11px] text-gray-400 ml-auto">
+                Les descriptions s'editent apres ajout dans chaque bloc.
               </p>
             </div>
-            <div>
-              <label
-                class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
-              >
-                Description (optionnelle)
-              </label>
-              <input
-                v-model="newFieldDescription"
-                type="text"
-                maxlength="2048"
-                placeholder="Courte description, ajustable apres ajout"
-                class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-              />
+          </template>
+
+          <!-- Manual fallback when catalog unavailable -->
+          <template v-else>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label
+                  class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                >
+                  Nom du champ
+                  <span class="text-error-500">*</span>
+                </label>
+                <input
+                  v-model="newFieldName"
+                  type="text"
+                  maxlength="128"
+                  placeholder="nom_du_champ"
+                  class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-mono dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                />
+                <p
+                  v-if="newFieldName && !isValidFieldName"
+                  class="text-[11px] text-error-500 mt-1"
+                >
+                  Caracteres autorises : a-z, A-Z, 0-9 et _ (1 a 128 caracteres).
+                </p>
+              </div>
+              <div>
+                <label
+                  class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                >
+                  Description (optionnelle)
+                </label>
+                <input
+                  v-model="newFieldDescription"
+                  type="text"
+                  maxlength="2048"
+                  placeholder="Courte description, ajustable apres ajout"
+                  class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                />
+              </div>
             </div>
-          </div>
-          <div class="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              :disabled="!canSubmitNewField || addingField"
-              class="px-3 py-1.5 text-xs font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              @click="submitNewField"
-            >
-              <i
-                v-if="addingField"
-                class="pi pi-spinner pi-spin text-[10px] mr-1"
-              />
-              Ajouter
-            </button>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-              @click="resetNewFieldForm"
-            >
-              Reinitialiser
-            </button>
-          </div>
+            <div class="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                :disabled="!canSubmitNewField || addingField"
+                class="px-3 py-1.5 text-xs font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                @click="submitNewField"
+              >
+                <i
+                  v-if="addingField"
+                  class="pi pi-spinner pi-spin text-[10px] mr-1"
+                />
+                Ajouter
+              </button>
+              <button
+                type="button"
+                class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+                @click="resetNewFieldForm"
+              >
+                Reinitialiser
+              </button>
+            </div>
+          </template>
         </div>
 
         <!-- Empty state -->
@@ -327,6 +554,7 @@
       @update:open="deletingField = null"
       @confirm="confirmDeleteField"
     />
+
   </div>
 </template>
 
@@ -348,6 +576,8 @@ import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue';
 import WysiwygEditor from '@/components/shared/WysiwygEditor.vue';
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue';
 import BDDFieldBlock from '@/components/bdd/BDDFieldBlock.vue';
+import BDDRelationBlock from '@/components/bdd/BDDRelationBlock.vue';
+import JsonImportExport from '@/components/shared/JsonImportExport.vue';
 
 const FIELD_NAME_RE = /^[a-zA-Z0-9_]{1,128}$/;
 
@@ -366,6 +596,30 @@ const loading = ref(true);
 const descriptionDraft = ref('');
 const savingDescription = ref(false);
 
+interface RelationRow {
+  self_col: string;
+  target_table: string;
+  target_col: string;
+}
+
+interface MetaDraft {
+  default_order_by: string;
+  notes: string;
+  relations: RelationRow[];
+}
+
+const emptyMetaDraft = (): MetaDraft => ({
+  default_order_by: '',
+  notes: '',
+  relations: [],
+});
+
+const metaDraft = ref<MetaDraft>(emptyMetaDraft());
+const metaSnapshot = ref<MetaDraft>(emptyMetaDraft());
+const savingMeta = ref(false);
+const refreshingCatalog = ref(false);
+const allRegisteredTables = ref<BDDUsedTable[]>([]);
+
 const catalogByName = ref<Record<string, BDDCatalogField>>({});
 const catalogUnavailable = ref(false);
 
@@ -374,6 +628,10 @@ const newFieldName = ref('');
 const newFieldDescription = ref('');
 const addingField = ref(false);
 
+// Catalog-driven multi-select state.
+const selectedNewFields = ref<Set<string>>(new Set());
+const newFieldSearch = ref('');
+
 const deletingField = ref<BDDUsedField | null>(null);
 
 // Per-field dirty tracking — keyed by field.id, value = pending description.
@@ -381,13 +639,103 @@ const dirtyFields = ref<Set<string>>(new Set());
 const pendingDescriptions = ref<Record<string, string>>({});
 const savingFields = ref(false);
 
-const importInputRef = ref<HTMLInputElement | null>(null);
+const importing = ref(false);
+const importError = ref<string | null>(null);
 
 const hasFields = computed(() => fields.value.length > 0);
 
 const dirtyDescription = computed(
   () => descriptionDraft.value !== (table.value?.description ?? ''),
 );
+
+const metaDirty = computed(() => {
+  const a = metaDraft.value;
+  const b = metaSnapshot.value;
+  return (
+    a.default_order_by !== b.default_order_by ||
+    a.notes !== b.notes ||
+    JSON.stringify(a.relations) !== JSON.stringify(b.relations)
+  );
+});
+
+const relationsParseError = ref<string | null>(null);
+
+const RELATION_RE = /^\s*(\w+)\.(\w+)\s*->\s*(\w+)\.(\w+)\s*$/;
+
+function parseRelationsValue(value: unknown): RelationRow[] {
+  if (!value || Array.isArray(value)) return [];
+  if (typeof value !== 'object') return [];
+  const out: RelationRow[] = [];
+  for (const [target, expr] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof expr !== 'string') continue;
+    const m = expr.match(RELATION_RE);
+    if (m) {
+      out.push({
+        self_col: m[2] ?? '',
+        target_table: m[3] || target,
+        target_col: m[4] ?? '',
+      });
+    } else {
+      out.push({ self_col: '', target_table: target, target_col: '' });
+    }
+  }
+  return out;
+}
+
+function snapshotFromTable(t: BDDUsedTable): MetaDraft {
+  return {
+    default_order_by: t.default_order_by || '',
+    notes: t.notes || '',
+    relations: parseRelationsValue(t.relations),
+  };
+}
+
+const availableTargetTables = computed(() => {
+  const self = table.value?.table_name ?? '';
+  return allRegisteredTables.value
+    .filter((t) => t.table_name !== self && t.fields.length > 0)
+    .slice()
+    .sort((a, b) => a.table_name.localeCompare(b.table_name));
+});
+
+// hasLinkableTables: true when at least one OTHER active (with-fields)
+// table exists. When false, the relations builder is meaningless and
+// gets hidden entirely (admins still see the metadata block — just not
+// the relations sub-section).
+const hasLinkableTables = computed(
+  () => availableTargetTables.value.length > 0,
+);
+
+function addRelationRow() {
+  metaDraft.value.relations = [
+    ...metaDraft.value.relations,
+    { self_col: '', target_table: '', target_col: '' },
+  ];
+}
+
+function removeRelationRow(idx: number) {
+  const next = metaDraft.value.relations.slice();
+  next.splice(idx, 1);
+  metaDraft.value.relations = next;
+}
+
+function onRelationUpdate(
+  idx: number,
+  value: { self_col: string; target_table: string; target_col: string },
+) {
+  const next = metaDraft.value.relations.slice();
+  next[idx] = value;
+  metaDraft.value.relations = next;
+}
+
+async function loadAllRegisteredTables() {
+  try {
+    const res = await bddApi.listUsed({ limit: 100, page: 1 });
+    allRegisteredTables.value = res.tables || [];
+  } catch {
+    allRegisteredTables.value = [];
+  }
+}
 
 const hasCatalogPicker = computed(
   () => !catalogUnavailable.value && Object.keys(catalogByName.value).length > 0,
@@ -398,6 +746,22 @@ const availableCatalogFields = computed<BDDCatalogField[]>(() => {
   return Object.values(catalogByName.value)
     .filter((f) => !taken.has(f.field_name))
     .sort((a, b) => a.field_name.localeCompare(b.field_name));
+});
+
+const filteredAvailableFields = computed<BDDCatalogField[]>(() => {
+  const q = newFieldSearch.value.trim().toLowerCase();
+  if (!q) return availableCatalogFields.value;
+  return availableCatalogFields.value.filter(
+    (f) =>
+      f.field_name.toLowerCase().includes(q) ||
+      (f.field_type ? f.field_type.toLowerCase().includes(q) : false),
+  );
+});
+
+const allFilteredSelected = computed(() => {
+  const list = filteredAvailableFields.value;
+  if (list.length === 0) return false;
+  return list.every((f) => selectedNewFields.value.has(f.field_name));
 });
 
 const isValidFieldName = computed(() => FIELD_NAME_RE.test(newFieldName.value));
@@ -422,6 +786,10 @@ async function loadTable() {
     table.value = res;
     fields.value = [...(res.fields || [])];
     descriptionDraft.value = res.description || '';
+    const snap = snapshotFromTable(res);
+    metaDraft.value = { ...snap };
+    metaSnapshot.value = snap;
+    relationsParseError.value = null;
     dirtyFields.value = new Set();
     pendingDescriptions.value = {};
   } catch (err) {
@@ -463,6 +831,75 @@ async function loadCatalog() {
   }
 }
 
+async function saveMetadata() {
+  if (!table.value || !metaDirty.value || savingMeta.value) return;
+  relationsParseError.value = null;
+
+  // Serialise the row builder into the catalog's
+  // {target_table: "self.col -> target_table.col"} shape. Empty rows
+  // (missing self col, target table, or target col) are dropped silently
+  // — the user can leave a half-filled row without it blocking save.
+  const selfTableName = table.value.table_name;
+  const rows = metaDraft.value.relations.filter(
+    (r) => r.self_col && r.target_table && r.target_col,
+  );
+  let relationsValue: unknown;
+  if (rows.length === 0) {
+    relationsValue = [];
+  } else {
+    const obj: Record<string, string> = {};
+    for (const r of rows) {
+      obj[r.target_table] =
+        selfTableName + '.' + r.self_col + ' -> ' + r.target_table + '.' + r.target_col;
+    }
+    relationsValue = obj;
+  }
+
+  savingMeta.value = true;
+  try {
+    const updated = await bddApi.patchUsed(id.value, {
+      default_order_by: metaDraft.value.default_order_by,
+      notes: metaDraft.value.notes,
+      relations: relationsValue as never,
+    });
+    if (table.value) {
+      table.value.default_order_by = updated.default_order_by;
+      table.value.notes = updated.notes;
+      table.value.relations = updated.relations;
+    }
+    metaSnapshot.value = snapshotFromTable(updated);
+    metaDraft.value = { ...metaSnapshot.value };
+    toast.success('Metadonnees enregistrees');
+  } catch (err) {
+    const body = (err as { body?: { error?: string } })?.body;
+    const msg =
+      body?.error || (err instanceof Error ? err.message : 'Erreur inconnue');
+    toast.error('Echec de l\'enregistrement: ' + msg);
+  } finally {
+    savingMeta.value = false;
+  }
+}
+
+async function refreshFromCatalog() {
+  if (refreshingCatalog.value || !table.value) return;
+  refreshingCatalog.value = true;
+  try {
+    const updated = await bddApi.refreshCatalog(id.value);
+    if (table.value) {
+      table.value.primary_key = updated.primary_key;
+      table.value.rows = updated.rows;
+    }
+    toast.success('Synchronisation catalogue OK');
+  } catch (err) {
+    const body = (err as { body?: { error?: string } })?.body;
+    const msg =
+      body?.error || (err instanceof Error ? err.message : 'Erreur inconnue');
+    toast.error('Echec de la synchronisation: ' + msg);
+  } finally {
+    refreshingCatalog.value = false;
+  }
+}
+
 async function saveDescription() {
   if (!table.value || !dirtyDescription.value) return;
   savingDescription.value = true;
@@ -487,6 +924,27 @@ async function saveDescription() {
 function resetNewFieldForm() {
   newFieldName.value = '';
   newFieldDescription.value = '';
+  selectedNewFields.value = new Set();
+  newFieldSearch.value = '';
+}
+
+function toggleNewField(name: string, checked: boolean) {
+  const next = new Set(selectedNewFields.value);
+  if (checked) next.add(name);
+  else next.delete(name);
+  selectedNewFields.value = next;
+}
+
+function toggleAllAvailable() {
+  const list = filteredAvailableFields.value;
+  if (list.length === 0) return;
+  const next = new Set(selectedNewFields.value);
+  if (allFilteredSelected.value) {
+    list.forEach((f) => next.delete(f.field_name));
+  } else {
+    list.forEach((f) => next.add(f.field_name));
+  }
+  selectedNewFields.value = next;
 }
 
 async function submitNewField() {
@@ -513,6 +971,41 @@ async function submitNewField() {
     toast.error('Echec de l\'ajout: ' + msg);
   } finally {
     addingField.value = false;
+  }
+}
+
+async function submitNewFields() {
+  if (selectedNewFields.value.size === 0 || addingField.value) return;
+  addingField.value = true;
+  const names = Array.from(selectedNewFields.value);
+  let okCount = 0;
+  let errCount = 0;
+  for (const name of names) {
+    const upstream = catalogByName.value[name];
+    try {
+      const created = await bddApi.addField(id.value, {
+        field_name: name,
+        upstream_field_id: upstream?.id,
+      });
+      fields.value = [...fields.value, created];
+      if (table.value) table.value.fields = fields.value;
+      okCount++;
+    } catch {
+      errCount++;
+    }
+  }
+  addingField.value = false;
+  if (errCount === 0) {
+    toast.success(okCount + ' champ(s) ajoute(s)');
+    resetNewFieldForm();
+    showAddField.value = false;
+  } else {
+    toast.error(okCount + ' ajoute(s), ' + errCount + ' erreur(s)');
+    // Drop the ones that succeeded so retries only target failures.
+    const taken = new Set(fields.value.map((f) => f.field_name));
+    selectedNewFields.value = new Set(
+      Array.from(selectedNewFields.value).filter((n) => !taken.has(n)),
+    );
   }
 }
 
@@ -659,29 +1152,43 @@ function exportTable() {
   toast.success('Export genere');
 }
 
-function triggerImport() {
-  importInputRef.value?.click();
-}
+async function handleImportFile(file: File) {
+  importError.value = null;
 
-async function onImportFile(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  // Reset value so the same file can be re-imported later.
-  input.value = '';
-  if (!file) return;
+  if (
+    !file.name.toLowerCase().endsWith('.json') &&
+    file.type &&
+    !file.type.includes('json')
+  ) {
+    importError.value = 'Type de fichier non supporte (JSON requis).';
+    return;
+  }
+
+  importing.value = true;
   let payload: BDDExportEnvelope;
   try {
     const text = await file.text();
     payload = JSON.parse(text) as BDDExportEnvelope;
   } catch {
-    toast.error('Fichier JSON invalide');
+    importError.value = 'Fichier JSON invalide.';
+    importing.value = false;
     return;
   }
   if (!payload || !payload.table || !Array.isArray(payload.table.fields)) {
-    toast.error('Structure JSON inattendue (table.fields manquant)');
+    importError.value = 'Structure JSON inattendue (table.fields manquant).';
+    importing.value = false;
     return;
   }
-  await applyImport(payload.table.fields);
+  try {
+    await applyImport(payload.table.fields);
+    importError.value = null;
+  } catch (err) {
+    importError.value =
+      'Echec de l\'import: ' +
+      (err instanceof Error ? err.message : String(err));
+  } finally {
+    importing.value = false;
+  }
 }
 
 async function applyImport(incoming: BDDExportedField[]) {
@@ -725,7 +1232,7 @@ onMounted(async () => {
     router.replace('/tokens');
     return;
   }
-  await loadTable();
+  await Promise.all([loadTable(), loadAllRegisteredTables()]);
   if (table.value) {
     await loadCatalog();
   }
@@ -736,7 +1243,7 @@ watch(id, async (next, prev) => {
   if (next && next !== prev) {
     catalogByName.value = {};
     catalogUnavailable.value = false;
-    await loadTable();
+    await Promise.all([loadTable(), loadAllRegisteredTables()]);
     if (table.value) {
       await loadCatalog();
     }

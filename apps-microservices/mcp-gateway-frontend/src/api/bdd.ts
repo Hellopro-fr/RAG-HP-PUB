@@ -6,6 +6,9 @@ import type {
   BDDUsedTable,
   BDDUsedField,
   BDDUsedListResponse,
+  BDDMeta,
+  BDDDocPayload,
+  BDDRelations,
 } from '@/types/bdd'
 
 const BASE = '/api/v1'
@@ -27,8 +30,12 @@ export const bddApi = {
       search ? { search } : undefined,
     ),
   catalogFields: (db: number, upstreamTableId: number) =>
-    api.get<{ fields: BDDCatalogField[] }>(
+    api.get<{ fields: BDDCatalogField[]; primary?: string }>(
       `${BASE}/bdd/catalog/databases/${db}/tables/${upstreamTableId}/fields`,
+    ),
+  catalogCount: (db: number, upstreamTableId: number) =>
+    api.get<{ count: number }>(
+      `${BASE}/bdd/catalog/databases/${db}/tables/${upstreamTableId}/count`,
     ),
 
   // gateway-owned registry (CRUD)
@@ -67,8 +74,38 @@ export const bddApi = {
     created: BDDUsedTable[]
     errors?: { table_name: string; error: string }[]
   }>(`${BASE}/bdd/used/tables/bulk`, body),
-  patchUsed: (id: string, body: { description: string }) =>
-    api.patch<BDDUsedTable>(`${BASE}/bdd/used/tables/${id}`, body),
+  exportRegistry: () => api.getBlob(`${BASE}/bdd/used/tables/export`),
+  importRegistry: (payload: unknown) =>
+    api.post<{
+      inserted: number
+      updated: number
+      errors?: { database_id: number; table_name: string; error: string }[]
+    }>(`${BASE}/bdd/used/tables/import`, payload),
+  importDoc: (payload: unknown) =>
+    api.post<{
+      inserted: number
+      updated: number
+      errors?: { database_id: number; table_name: string; error: string }[]
+    }>(`${BASE}/bdd/used/tables/import-doc`, payload),
+  patchUsed: (
+    id: string,
+    body: {
+      description?: string
+      default_order_by?: string
+      relations?: BDDRelations
+      notes?: string
+    },
+  ) => api.patch<BDDUsedTable>(`${BASE}/bdd/used/tables/${id}`, body),
+  refreshCatalog: (id: string) =>
+    api.post<BDDUsedTable>(`${BASE}/bdd/used/tables/${id}/refresh-catalog`, {}),
+  bulkUpdate: (body: { ids: string[]; database_id?: number; is_active?: boolean }) =>
+    api.patch<{ affected: number }>(`${BASE}/bdd/used/tables/bulk`, body),
+  bulkDelete: (body: { ids: string[] }) =>
+    api.del<{ affected: number }>(`${BASE}/bdd/used/tables/bulk`, body),
+  getMeta: () => api.get<BDDMeta>(`${BASE}/bdd/used/meta`),
+  putMeta: (body: { description: string; usage: string }) =>
+    api.put<BDDMeta>(`${BASE}/bdd/used/meta`, body),
+  getDoc: () => api.get<BDDDocPayload>(`${BASE}/bdd/used/tables/doc`),
   deleteUsed: (id: string) =>
     api.del<void>(`${BASE}/bdd/used/tables/${id}`),
   addField: (id: string, body: { field_name: string; description?: string; upstream_field_id?: number }) =>

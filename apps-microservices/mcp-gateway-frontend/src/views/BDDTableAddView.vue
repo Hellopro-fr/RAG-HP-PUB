@@ -436,6 +436,13 @@ async function submit() {
       toast.success(
         `${res.created.length} table(s) ajoutee(s) - configurez les champs pour les activer`,
       );
+      // Best-effort: pull primary key + row count from the upstream
+      // catalog for each newly inserted table. Failures are silent (log
+      // only) — the admin can still trigger a manual refresh from the
+      // fields-edit page.
+      await Promise.allSettled(
+        res.created.map((t) => bddApi.refreshCatalog(t.id)),
+      );
     }
     const slug = HELLOPRO_DATABASES.find(
       (d) => d.id === selectedDatabaseId.value,
