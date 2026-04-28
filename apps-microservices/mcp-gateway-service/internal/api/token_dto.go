@@ -47,6 +47,17 @@ type RingoverFilterDTO struct {
 	CreatorUserID int `json:"creator_user_id,omitempty"`
 }
 
+// BDDFilterDTO carries the per-token / per-client BDD used-table scope. An
+// empty UsedTableIDs slice means "no filter" (full BDD access). When the
+// slice is non-empty, only rows whose ID is in the set are surfaced through
+// the gateway, and the X-BDD-Allowed-Tables header is injected on every
+// outbound MCP request to BDD-tagged backends. The DTO intentionally omits
+// hydrated table metadata for v1 — callers needing names/database IDs can
+// resolve them via /api/v1/bdd/used/tables.
+type BDDFilterDTO struct {
+	UsedTableIDs []string `json:"used_table_ids"`
+}
+
 // CreateTokenRequest is the body for POST /api/v1/tokens.
 type CreateTokenRequest struct {
 	Name           string                `json:"name"`
@@ -60,6 +71,7 @@ type CreateTokenRequest struct {
 	ExpiresAt      *string               `json:"expires_at,omitempty"`      // RFC3339
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`    // nil = unrestricted (mode=none)
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"` // nil = unrestricted (mode=none)
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`      // nil = unrestricted (full BDD access)
 }
 
 // CreateTokenResponse is returned once on creation (includes raw token).
@@ -80,6 +92,7 @@ type CreateTokenResponse struct {
 	ExpiresAt      *string               `json:"expires_at,omitempty"`
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
 }
 
 // TokenResponse is the standard token response (no raw token).
@@ -102,6 +115,7 @@ type TokenResponse struct {
 	ExpiresAt      *string               `json:"expires_at,omitempty"`
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
 }
 
 // UpdateTokenRequest is the body for PUT /api/v1/tokens/{id}.
@@ -116,6 +130,7 @@ type UpdateTokenRequest struct {
 	AllowHTTP      *bool                 `json:"allow_http,omitempty"`
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
 }
 
 // CreateTokenResponse already declared above is extended via leexi_filter in

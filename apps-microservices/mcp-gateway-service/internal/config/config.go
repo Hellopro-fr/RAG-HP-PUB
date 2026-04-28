@@ -65,6 +65,14 @@ type Config struct {
 	SlackWebhookURL        string // SLACK_WEBHOOK_URL — empty disables all notifications
 	SlackEnvLabel          string // SLACK_ENV_LABEL — prefix like "prod" shown in every message
 	SlackAuthAlertCooldown int    // SLACK_AUTH_ALERT_COOLDOWN — seconds between duplicate unauthorized alerts per (ip, endpoint); default 600
+
+	// Hellopro BDD catalog integration. BDDCatalogBaseURL points to the
+	// upstream catalog HTTP API. BDDCatalogToken is the shared secret sent
+	// as X-Admin-Token. Both must be set to enable the "Hellopro BDD
+	// tables" admin onglet — otherwise the catalog client is disabled and
+	// the related endpoints return 503.
+	BDDCatalogBaseURL string // BDD_CATALOG_BASE_URL
+	BDDCatalogToken   string // BDD_CATALOG_TOKEN
 }
 
 func Load() *Config {
@@ -154,6 +162,9 @@ func Load() *Config {
 		SlackWebhookURL:        os.Getenv("SLACK_WEBHOOK_URL"),
 		SlackEnvLabel:          os.Getenv("SLACK_ENV_LABEL"),
 		SlackAuthAlertCooldown: slackAuthCooldown,
+
+		BDDCatalogBaseURL: os.Getenv("BDD_CATALOG_BASE_URL"),
+		BDDCatalogToken:   os.Getenv("BDD_CATALOG_TOKEN"),
 	}
 }
 

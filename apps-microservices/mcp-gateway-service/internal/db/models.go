@@ -238,6 +238,7 @@ type ScopeToken struct {
 	Servers      []ScopeTokenServer      `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []ScopeTokenTool        `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
 	Instructions []ScopeTokenInstruction `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"instructions,omitempty"`
+	BDDTables    []ScopeTokenBDDTable    `gorm:"foreignKey:TokenID;references:ID;constraint:OnDelete:CASCADE" json:"bdd_tables,omitempty"`
 }
 
 func (ScopeToken) TableName() string { return "scope_tokens" }
@@ -295,6 +296,7 @@ type OAuth2Client struct {
 	Servers      []OAuth2ClientServer      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []OAuth2ClientTool        `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
 	Instructions []OAuth2ClientInstruction `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"instructions,omitempty"`
+	BDDTables    []OAuth2ClientBDDTable    `gorm:"foreignKey:ClientID;references:ID;constraint:OnDelete:CASCADE" json:"bdd_tables,omitempty"`
 }
 
 func (OAuth2Client) TableName() string { return "oauth2_clients" }
@@ -502,3 +504,78 @@ type TemplateInstance struct {
 }
 
 func (TemplateInstance) TableName() string { return "template_instances" }
+
+// ── Hellopro BDD "Used Tables" Models ──────────────────────────────
+//
+// These models drive the "Hellopro BDD tables" admin onglet. They store
+// the subset of upstream catalog tables/fields that the gateway has been
+// configured to surface to scope tokens and OAuth2 clients. The upstream
+// catalog (see internal/bddcatalog) remains the source of truth for
+// schema metadata; these tables only record what is in scope locally.
+
+// BDDUsedTable is one row per (database, table) pair that has been
+// activated for use through the gateway. UpstreamTableID mirrors the ID
+// returned by the upstream catalog so we can refresh metadata.
+type BDDUsedTable struct {
+	ID              string          `gorm:"type:char(36);primaryKey"`
+	DatabaseID      int             `gorm:"not null;index;uniqueIndex:uniq_db_table"`
+	Name            string          `gorm:"column:table_name;type:varchar(128);not null;uniqueIndex:uniq_db_table"`
+	UpstreamTableID int             `gorm:"index"`
+	Description     string          `gorm:"type:text"`
+	Rows            *int64          `gorm:"type:bigint"`
+	PrimaryKey      string          `gorm:"type:varchar(255);not null;default:''"`
+	DefaultOrderBy  string          `gorm:"type:varchar(255);not null;default:''"`
+	Relations       json.RawMessage `gorm:"type:json"`
+	Notes           string          `gorm:"type:text"`
+	IsActive        bool            `gorm:"not null;default:true;index"`
+	CreatedBy       string          `gorm:"type:varchar(255);not null;default:''"`
+	CreatedAt       time.Time       `gorm:"type:datetime(3);autoCreateTime"`
+	UpdatedAt       time.Time       `gorm:"type:datetime(3);autoUpdateTime"`
+	Fields          []BDDUsedField  `gorm:"foreignKey:UsedTableID;constraint:OnDelete:CASCADE"`
+}
+
+func (BDDUsedTable) TableName() string { return "bdd_used_tables" }
+
+// BDDUsedField is one row per (used_table, field) pair. Cascading delete
+// from BDDUsedTable keeps the join consistent.
+type BDDUsedField struct {
+	ID              string    `gorm:"type:char(36);primaryKey"`
+	UsedTableID     string    `gorm:"type:char(36);not null;uniqueIndex:uniq_table_field;index"`
+	FieldName       string    `gorm:"type:varchar(128);not null;uniqueIndex:uniq_table_field"`
+	UpstreamFieldID int       `gorm:"index"`
+	FieldType       string    `gorm:"type:varchar(128);not null;default:''"`
+	Description     string    `gorm:"type:text"`
+	CreatedAt       time.Time `gorm:"type:datetime(3);autoCreateTime"`
+	UpdatedAt       time.Time `gorm:"type:datetime(3);autoUpdateTime"`
+}
+
+func (BDDUsedField) TableName() string { return "bdd_used_fields" }
+
+// BDDMeta is the singleton metadata header surfaced through /api/v1/bdd/used/meta
+// and folded into the doc payload's _meta block. Always row id = 1.
+type BDDMeta struct {
+	ID          int       `gorm:"primaryKey;autoIncrement:false"`
+	Description string    `gorm:"type:text"`
+	Usage       string    `gorm:"type:text"`
+	UpdatedAt   time.Time `gorm:"type:datetime(3);autoUpdateTime"`
+	UpdatedBy   string    `gorm:"type:varchar(255);not null;default:''"`
+}
+
+func (BDDMeta) TableName() string { return "bdd_meta" }
+
+// ScopeTokenBDDTable is the join table between scope_tokens and BDD used
+// tables, mirroring the shape of ScopeTokenServer.
+type ScopeTokenBDDTable struct {
+	TokenID     string `gorm:"type:char(36);primaryKey"`
+	UsedTableID string `gorm:"type:char(36);primaryKey"`
+}
+
+func (ScopeTokenBDDTable) TableName() string { return "scope_token_bdd_tables" }
+
+// OAuth2ClientBDDTable is the equivalent join for OAuth2 clients.
+type OAuth2ClientBDDTable struct {
+	ClientID    string `gorm:"type:char(36);primaryKey"`
+	UsedTableID string `gorm:"type:char(36);primaryKey"`
+}
+
+func (OAuth2ClientBDDTable) TableName() string { return "oauth2_client_bdd_tables" }

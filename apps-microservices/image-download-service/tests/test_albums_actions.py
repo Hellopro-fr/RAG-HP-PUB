@@ -179,3 +179,205 @@ def test_lock_timeout_raises(tmp_path, monkeypatch):
     finally:
         holder_done.set()
         t.join()
+
+
+def _legacy_img(filename):
+    """Image entry façon manifest v1 : pas de `url_source`."""
+    return {"filename": filename,
+            "main": f"produit-2/0/0/0/{filename}", "thumb": f"produit-3/0/0/0/{filename}"}
+
+
+def test_redownload_product_legacy_v1_raises_legacy_error(tmp_path, monkeypatch):
+    """Manifest v1 (toutes les images sans url_source) → LegacyManifestError sans rien casser."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{"id_produit": "1", "nom": "p", "synced": True,
+                                       "images": [_legacy_img("a.jpg"), _legacy_img("b.jpg")]}])
+    _create_files(images_base / "alpha.com", "a.jpg")
+    _create_files(images_base / "alpha.com", "b.jpg")
+
+    downloader = MagicMock()
+    downloader.download_and_process = MagicMock(side_effect=AssertionError("ne doit pas être appelé"))
+
+    from services.album_actions import redownload_product, LegacyManifestError
+    with pytest.raises(LegacyManifestError):
+        asyncio.run(redownload_product(str(tmp_path), "alpha.com", "1", downloader))
+
+    # Fichiers existants doivent être préservés (pas de mutation FS sur legacy).
+    assert (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / "a.jpg").exists()
+    assert (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / "b.jpg").exists()
+
+
+def test_redownload_image_legacy_v1_raises_legacy_error(tmp_path, monkeypatch):
+    """Image entry sans url_source → LegacyManifestError, fichier préservé."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{"id_produit": "1", "nom": "p", "synced": True,
+                                       "images": [_legacy_img("a.jpg")]}])
+    _create_files(images_base / "alpha.com", "a.jpg")
+
+    downloader = MagicMock()
+    downloader.download_and_process = MagicMock(side_effect=AssertionError("ne doit pas être appelé"))
+
+    from services.album_actions import redownload_image, LegacyManifestError
+    with pytest.raises(LegacyManifestError):
+        asyncio.run(redownload_image(str(tmp_path), "alpha.com", "1", "a.jpg", downloader))
+
+    assert (images_base / "alpha.com" / "produit-2" / "0" / "0" / "0" / "a.jpg").exists()
+
+
+def test_redownload_product_mixed_manifest_skips_legacy_entries(tmp_path, monkeypatch):
+    """Manifest mixte (certaines images avec url_source, d'autres sans) → on download
+    celles qui ont url_source, on skip les autres en signalant la raison."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{
+        "id_produit": "1", "nom": "p", "synced": True,
+        "images": [
+            _img("modern.jpg", "https://x/modern.jpg"),
+            _legacy_img("legacy.jpg"),
+        ],
+    }])
+    _create_files(images_base / "alpha.com", "modern.jpg")
+    _create_files(images_base / "alpha.com", "legacy.jpg")
+
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
+        return {"status": "ok", "paths": {"main_path": "/x", "thumb_path": "/x",
+                                          "filename": "x", "url_source": url}}
+
+    downloader = MagicMock()
+    downloader.download_and_process = fake_download
+
+    from services.album_actions import redownload_product
+    result = asyncio.run(redownload_product(str(tmp_path), "alpha.com", "1", downloader))
+
+    assert result["downloaded"] == 1
+    assert result["skipped"] == 1
+    assert result["failed"] == 0
+    assert any("legacy" in (e.get("reason", "")).lower() for e in result["errors"])
+
+
+def _seed_errors_json(images_base: Path, domain: str, entries: list):
+    """Helper : crée errors.json (format identique à downloader.save_error)."""
+    p = images_base / domain / "errors.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(entries))
+
+
+def test_redownload_product_success_clears_errors_json_entries(tmp_path, monkeypatch):
+    """Après un redownload réussi, les entrées de errors.json correspondant aux URLs
+    téléchargées doivent être retirées. Sans ça, _detect_image_status garderait le
+    statut 'error' en priorité.
+    """
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{
+        "id_produit": "1", "nom": "p", "synced": True,
+        "images": [_img("a.jpg", "https://x/a.jpg"), _img("b.jpg", "https://x/b.jpg")],
+    }])
+    _create_files(images_base / "alpha.com", "a.jpg")
+    _create_files(images_base / "alpha.com", "b.jpg")
+    _seed_errors_json(images_base, "alpha.com", [
+        {"id_produit": "1", "url": "https://x/a.jpg", "erreur": "old 404"},
+        {"id_produit": "1", "url": "https://x/b.jpg", "erreur": "old timeout"},
+        {"id_produit": "2", "url": "https://other/c.jpg", "erreur": "unrelated"},
+    ])
+
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
+        return {"status": "ok", "paths": {"main_path": "/x", "thumb_path": "/x",
+                                          "filename": "x", "url_source": url}}
+
+    downloader = MagicMock()
+    downloader.download_and_process = fake_download
+
+    from services.album_actions import redownload_product
+    asyncio.run(redownload_product(str(tmp_path), "alpha.com", "1", downloader))
+
+    # errors.json doit conserver UNIQUEMENT l'entrée pour l'autre produit (id 2)
+    err_path = images_base / "alpha.com" / "errors.json"
+    assert err_path.exists()
+    remaining = json.loads(err_path.read_text())
+    assert len(remaining) == 1
+    assert remaining[0]["url"] == "https://other/c.jpg"
+
+
+def test_redownload_product_clears_file_when_all_errors_resolved(tmp_path, monkeypatch):
+    """Si après nettoyage la liste devient vide, errors.json est supprimé."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{
+        "id_produit": "1", "nom": "p", "synced": True,
+        "images": [_img("a.jpg", "https://x/a.jpg")],
+    }])
+    _create_files(images_base / "alpha.com", "a.jpg")
+    _seed_errors_json(images_base, "alpha.com", [
+        {"id_produit": "1", "url": "https://x/a.jpg", "erreur": "old"},
+    ])
+
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
+        return {"status": "ok", "paths": {"main_path": "/x", "thumb_path": "/x",
+                                          "filename": "x", "url_source": url}}
+
+    downloader = MagicMock()
+    downloader.download_and_process = fake_download
+
+    from services.album_actions import redownload_product
+    asyncio.run(redownload_product(str(tmp_path), "alpha.com", "1", downloader))
+
+    err_path = images_base / "alpha.com" / "errors.json"
+    assert not err_path.exists(), "errors.json should be deleted when empty"
+
+
+def test_redownload_product_failure_does_not_clear_errors(tmp_path, monkeypatch):
+    """Si le download échoue, l'entrée d'erreur doit rester (sinon on perdrait
+    la trace d'un échec persistant)."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{
+        "id_produit": "1", "nom": "p", "synced": True,
+        "images": [_img("a.jpg", "https://x/a.jpg")],
+    }])
+    _create_files(images_base / "alpha.com", "a.jpg")
+    _seed_errors_json(images_base, "alpha.com", [
+        {"id_produit": "1", "url": "https://x/a.jpg", "erreur": "still 404"},
+    ])
+
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
+        return {"status": "error", "error": "still 404"}
+
+    downloader = MagicMock()
+    downloader.download_and_process = fake_download
+
+    from services.album_actions import redownload_product
+    asyncio.run(redownload_product(str(tmp_path), "alpha.com", "1", downloader))
+
+    err_path = images_base / "alpha.com" / "errors.json"
+    assert err_path.exists()
+    remaining = json.loads(err_path.read_text())
+    assert len(remaining) == 1
+    assert remaining[0]["url"] == "https://x/a.jpg"
+
+
+def test_redownload_image_success_clears_errors_json_entry(tmp_path, monkeypatch):
+    """redownload_image qui réussit nettoie son URL spécifiquement."""
+    images_base = _setup(monkeypatch, tmp_path)
+    _seed(images_base, "alpha.com", [{
+        "id_produit": "1", "nom": "p", "synced": True,
+        "images": [_img("a.jpg", "https://x/a.jpg"), _img("b.jpg", "https://x/b.jpg")],
+    }])
+    _create_files(images_base / "alpha.com", "a.jpg")
+    _create_files(images_base / "alpha.com", "b.jpg")
+    _seed_errors_json(images_base, "alpha.com", [
+        {"id_produit": "1", "url": "https://x/a.jpg", "erreur": "old"},
+        {"id_produit": "1", "url": "https://x/b.jpg", "erreur": "old"},
+    ])
+
+    async def fake_download(url, domain, product_id, product_name, storage_base=None, index=0):
+        return {"status": "ok", "paths": {"main_path": "/x", "thumb_path": "/x",
+                                          "filename": "x", "url_source": url}}
+
+    downloader = MagicMock()
+    downloader.download_and_process = fake_download
+
+    from services.album_actions import redownload_image
+    asyncio.run(redownload_image(str(tmp_path), "alpha.com", "1", "a.jpg", downloader))
+
+    err_path = images_base / "alpha.com" / "errors.json"
+    assert err_path.exists()
+    remaining = json.loads(err_path.read_text())
+    assert len(remaining) == 1
+    assert remaining[0]["url"] == "https://x/b.jpg"

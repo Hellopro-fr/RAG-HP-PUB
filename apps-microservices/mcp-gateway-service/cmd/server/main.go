@@ -18,6 +18,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/api"
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/authserver"
+	"github.com/hellopro/mcp-gateway/internal/bddcatalog"
 	"github.com/hellopro/mcp-gateway/internal/config"
 	"github.com/hellopro/mcp-gateway/internal/crypto"
 	"github.com/hellopro/mcp-gateway/internal/db"
@@ -216,6 +217,20 @@ func main() {
 		apiHandler.SetInstallGuideRepo(installGuideRepo)
 		apiHandler.SetSlack(slackClient)
 		apiHandler.SetInstructionRepo(instructionRepo)
+
+		// BDD registry + upstream catalog (Hellopro BDD tables onglet).
+		// Repo writes to gateway-owned tables; catalog client is read-only.
+		bddUsedRepo := repository.NewBDDUsedRepo(database)
+		bddCatalogClient := bddcatalog.New(cfg.BDDCatalogBaseURL, cfg.BDDCatalogToken)
+		apiHandler.SetBDDUsedRepo(bddUsedRepo)
+		apiHandler.SetBDDCatalog(bddCatalogClient)
+		// Wire the same repo into the gateway so per-request BDD allow-list
+		// resolution (X-BDD-Allowed-Tables) can translate IDs to upstream
+		// (database_id, table_name) pairs. Empty / deleted IDs fail closed.
+		gw.SetBDDResolver(bddUsedRepo)
+		if bddCatalogClient.Enabled() {
+			log.Println("[main] BDD catalog client configured (read-only proxy enabled)")
+		}
 
 		// Google Sheets import (optional — only enabled when GOOGLE_CLIENT_ID is set)
 		if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {

@@ -150,9 +150,11 @@ export default function AlbumsPage({ token }) {
               <ul className="list-disc pl-5 text-sm">
                 <li>{pendingDelete.product_count ?? 0} produits</li>
                 <li>{pendingDelete.image_count ?? 0} images</li>
-                <li>
-                  {((pendingDelete.total_size_bytes ?? 0) / (1024 * 1024)).toFixed(1)} MB
-                </li>
+                {(pendingDelete.total_size_bytes ?? 0) > 0 && (
+                  <li>
+                    {((pendingDelete.total_size_bytes ?? 0) / (1024 * 1024)).toFixed(1)} MB
+                  </li>
+                )}
               </ul>
               <p className="text-xs text-muted-foreground">
                 Le job s&apos;exécute en arrière-plan ; tu peux fermer cette page.

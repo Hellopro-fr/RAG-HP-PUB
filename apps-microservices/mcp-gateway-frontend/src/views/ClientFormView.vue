@@ -216,6 +216,20 @@
           <RingoverFilterPanel v-model="form.ringover_filter" />
         </div>
 
+        <!-- Section 3c: Accès BDD (only when a BDD server is selected) -->
+        <div
+          v-if="hasBddServer"
+          v-show="isEdit || currentStep === bddStepIndex"
+          :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
+        >
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s BDD</h3>
+          <BDDFilterPanel
+            v-model="form.bdd_filter"
+            :server-ids="bddDragDropServerIds"
+            :servers="serversStore.servers"
+          />
+        </div>
+
         <!-- Section 4: TTL, expiration et vérification -->
         <div v-show="isEdit || currentStep === expirationStepIndex" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">TTL et expiration</h3>
@@ -308,6 +322,10 @@
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Ringover</dt>
                 <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ ringoverFilterSummary }}</dd>
               </div>
+              <div v-if="hasBddServer" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s BDD</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ bddFilterSummary }}</dd>
+              </div>
             </dl>
           </div>
         </div>
@@ -352,10 +370,12 @@ import StepTabs from '@/components/shared/StepTabs.vue'
 import DragDropPanel from '@/components/shared/DragDropPanel.vue'
 import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
 import RingoverFilterPanel from '@/components/tokens/RingoverFilterPanel.vue'
+import BDDFilterPanel from '@/components/tokens/BDDFilterPanel.vue'
 import InstructionsPicker from '@/components/llm-instructions/InstructionsPicker.vue'
 import type { OAuth2Client, CreateOAuth2ClientRequest } from '@/types/oauth2'
 import type { LeexiFilter } from '@/types/leexi'
 import type { RingoverFilter } from '@/types/ringover'
+import type { BDDFilter } from '@/types/bdd'
 
 const route = useRoute()
 const router = useRouter()
@@ -371,6 +391,7 @@ const stepLabels = computed(() => {
   const labels = ['Informations de base', 'Serveurs et outils', 'Instructions LLM']
   if (hasLeexiServer.value) labels.push('Acc\u00e8s Leexi')
   if (hasRingoverServer.value) labels.push('Acc\u00e8s Ringover')
+  if (hasBddServer.value) labels.push('Acc\u00e8s BDD')
   labels.push('TTL, expiration et vérification')
   return labels
 })
@@ -380,10 +401,18 @@ const ringoverStepIndex = computed(() => {
   if (!hasRingoverServer.value) return -1
   return hasLeexiServer.value ? 4 : 3
 })
+const bddStepIndex = computed(() => {
+  if (!hasBddServer.value) return -1
+  let idx = 3
+  if (hasLeexiServer.value) idx++
+  if (hasRingoverServer.value) idx++
+  return idx
+})
 const expirationStepIndex = computed(() => {
   let idx = 3
   if (hasLeexiServer.value) idx++
   if (hasRingoverServer.value) idx++
+  if (hasBddServer.value) idx++
   return idx
 })
 const lastStepIndex = computed(() => stepLabels.value.length - 1)
@@ -411,6 +440,19 @@ const hasRingoverServer = computed(() => {
   })
 })
 
+// hasBddServer mirrors hasLeexiServer for the BDD backend (tool_prefix === 'bdd').
+const hasBddServer = computed(() => {
+  return dragDrop.selected.value.some(s => {
+    const srv = serversStore.servers.find(x => x.id === s.id)
+    return srv?.tool_prefix === 'bdd'
+  })
+})
+
+// Reactive list of currently-picked server ids — passed to BDDFilterPanel so
+// it can decide whether to render and which servers count as BDD backends.
+const bddDragDropServerIds = computed(() => dragDrop.selected.value.map(s => s.id))
+
+
 const form = reactive({
   name: '',
   description: '',
@@ -419,6 +461,7 @@ const form = reactive({
   expires_at: '',
   leexi_filter: { mode: 'none' } as LeexiFilter,
   ringover_filter: { mode: 'none' } as RingoverFilter,
+  bdd_filter: { used_table_ids: [] } as BDDFilter,
   instruction_ids: [] as string[]
 })
 
@@ -477,12 +520,19 @@ const canGoNext = computed(() => {
   return currentStep.value < lastStepIndex.value
 })
 
-// Snap back if the user removes the Leexi server while sitting on the
-// (now-gone) Leexi step.
-watch(hasLeexiServer, (has) => {
-  if (!has && currentStep.value > lastStepIndex.value) {
+// Snap back if the user removes the Leexi/Ringover/BDD server while sitting on a
+// (now-gone) optional step.
+watch([hasLeexiServer, hasRingoverServer, hasBddServer], () => {
+  if (currentStep.value > lastStepIndex.value) {
     currentStep.value = lastStepIndex.value
   }
+})
+
+const bddFilterSummary = computed(() => {
+  const ids = form.bdd_filter.used_table_ids || []
+  return ids.length === 0
+    ? 'Accès complet (aucune restriction)'
+    : `${ids.length} table(s) autorisée(s)`
 })
 
 onMounted(async () => {
@@ -509,6 +559,11 @@ onMounted(async () => {
       }
       if (client.ringover_filter) {
         form.ringover_filter = { ...client.ringover_filter }
+      }
+      if (client.bdd_filter) {
+        form.bdd_filter = {
+          used_table_ids: [...(client.bdd_filter.used_table_ids || [])],
+        }
       }
       if (client.instruction_ids) {
         form.instruction_ids = [...client.instruction_ids]
@@ -572,7 +627,13 @@ async function handleSubmit() {
         : { mode: 'none' },
       ringover_filter: hasRingoverServer.value
         ? (form.ringover_filter.mode === 'none' ? { mode: 'none' } : form.ringover_filter)
-        : { mode: 'none' }
+        : { mode: 'none' },
+      // Only attach the BDD filter when a BDD server is in scope. An empty
+      // used_table_ids array means full access — included so the backend can
+      // distinguish "explicitly cleared" from "never set".
+      bdd_filter: hasBddServer.value
+        ? { used_table_ids: form.bdd_filter.used_table_ids || [] }
+        : undefined,
     }
 
     if (isEdit.value) {
