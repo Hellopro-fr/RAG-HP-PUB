@@ -1232,6 +1232,9 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
         use_claude = llm_model.startswith("claude")
 
+        # par defaut claude
+        use_claude = True
+
         logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
 
         if use_gemini:
