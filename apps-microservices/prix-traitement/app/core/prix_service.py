@@ -1042,6 +1042,19 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     api_client = HelloProAPIClient()
     ID_PROCESS = "37"
 
+    # =========================================================================
+    # Choix du modèle LLM par défaut : "claude" | "chatgpt" | "gemini"
+    # Si `model` n'est pas fourni, on utilise le provider défini ici.
+    # =========================================================================
+    model_pardefaut = "claude"  # ← changer ici : "claude" | "chatgpt" | "gemini"
+
+    default_model_by_provider = {
+        "claude": settings.CLAUDE_MODEL_NAME,
+        "chatgpt": settings.CHATGPT_MODEL_NAME,
+        "gemini": settings.GEMINI_MODEL_NAME,
+    }
+    default_model_name = default_model_by_provider.get(model_pardefaut, settings.CLAUDE_MODEL_NAME)
+
     # Tracking file (visualisé dans QC-tracking-service)
     tracking_file = get_tracking_filepath(id_categorie, prefix="prix-traitement-v2")
     write_log(tracking_file, "=" * 80)
@@ -1049,7 +1062,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     write_log(tracking_file, "=" * 80)
     write_log(tracking_file, f"id_categorie: {id_categorie}")
     write_log(tracking_file, f"nom_categorie: {nom_categorie}")
-    write_log(tracking_file, f"model: {model or settings.CLAUDE_MODEL_NAME}")
+    write_log(tracking_file, f"model: {model or default_model_name} (model_pardefaut={model_pardefaut})")
     write_log(tracking_file, "")
     write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
     write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
@@ -1234,13 +1247,11 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
-        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CLAUDE_MODEL_NAME
+        # `model_pardefaut` / `default_model_name` définis en tête de fonction
+        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else default_model_name
         use_gemini = llm_model.startswith("gemini")
         use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
         use_claude = llm_model.startswith("claude")
-
-        # par defaut claude
-        use_claude = True
 
         logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
 
@@ -1270,7 +1281,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             claude = ClaudeProvider(model=actual_model, effort=effort, budget_tokens=budget_tokens)
             llm_result = await claude.chat(final_prompt)
 
-        else:
+        elif use_chatgpt:
             actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
             type_ia = 1
             effort = None
