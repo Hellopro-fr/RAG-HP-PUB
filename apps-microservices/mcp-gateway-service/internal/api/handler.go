@@ -523,8 +523,22 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
-	// User, audit, install guide, Google, Slack, and BDD admin endpoints always require admin
-	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") || strings.HasPrefix(path, "/api/v1/slack") || strings.HasPrefix(path, "/api/v1/bdd/") {
+	// User, audit, install guide, Google, Slack endpoints always require admin
+	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") || strings.HasPrefix(path, "/api/v1/slack") {
+		return true
+	}
+	// BDD: read-only role can GET the gateway-curated registry (list /
+	// detail / fields / meta / doc) so non-admins can browse table info.
+	// Catalog browsing (used only by the admin Add wizard) and every write
+	// stay admin-only.
+	if strings.HasPrefix(path, "/api/v1/bdd/") {
+		if method == http.MethodGet && strings.HasPrefix(path, "/api/v1/bdd/used/") {
+			// Export ships the full registry payload — keep admin-only.
+			if path == "/api/v1/bdd/used/tables/export" {
+				return true
+			}
+			return false
+		}
 		return true
 	}
 	// Server writes require admin
