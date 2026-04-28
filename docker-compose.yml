@@ -577,6 +577,13 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      # Capacity tuning — see docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md § B.1
+      # Reduced from defaults (10/12) after observed OOM kill loop under real load:
+      # 10 Camoufox × ~600 MB > 4500m cgroup limit → restarts=9, dmesg WebExtensions OOM kills.
+      # New peak: 6 × ~600 MB ≈ 3.6 GB browsers + ~500 MB Python heap = fits with headroom.
+      # Trade: ~40% throughput reduction; BO + crawler-service handle 503 backpressure cleanly.
+      - BROWSER_SEMAPHORE_SIZE=6
+      - ADMISSION_MAX_SLOTS=8
     mem_limit: 4500m
     cpus: 4
     healthcheck:
