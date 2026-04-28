@@ -2277,6 +2277,7 @@ services:
       # Empty = picker disabled (503); gateway-owned registry CRUD still works.
       - BDD_CATALOG_BASE_URL=${BDD_CATALOG_BASE_URL}
       - BDD_CATALOG_TOKEN=${BDD_CATALOG_TOKEN}
+      - BDD_PUBLIC_API_TOKEN=${BDD_PUBLIC_API_TOKEN}
       - ALLOWED_EMAILS=${MCP_ALLOWED_EMAILS}
       # Google Sheets import (OAuth2)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
