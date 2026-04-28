@@ -1247,11 +1247,18 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
-        # `model_pardefaut` / `default_model_name` définis en tête de fonction
-        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else default_model_name
-        use_gemini = llm_model.startswith("gemini")
-        use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
-        use_claude = llm_model.startswith("claude")
+        # `model_pardefaut` / `default_model_name` définis en tête de fonction.
+        # Routage : si `model` fourni → détection par préfixe ; sinon → `model_pardefaut`.
+        if isinstance(model, str) and len(model.strip()) > 0:
+            llm_model = model
+            use_gemini = llm_model.startswith("gemini")
+            use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
+            use_claude = llm_model.startswith("claude")
+        else:
+            llm_model = default_model_name
+            use_gemini = model_pardefaut == "gemini"
+            use_chatgpt = model_pardefaut == "chatgpt"
+            use_claude = model_pardefaut == "claude"
 
         logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
 
