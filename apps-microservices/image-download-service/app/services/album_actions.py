@@ -79,6 +79,10 @@ def _with_lock(manifest_path: str, timeout: float, fn):
 
 
 async def delete_image(storage_base: str, domain: str, id_produit: str, filename: str) -> None:
+    logger.info(
+        "[albums] delete_image: domain=%s id_produit=%s filename=%s",
+        domain, id_produit, filename,
+    )
     domain_dir = _domain_dir(storage_base, domain)
     if not os.path.isdir(domain_dir):
         raise FileNotFoundError(f"domain {domain}")
@@ -108,6 +112,7 @@ async def delete_image(storage_base: str, domain: str, id_produit: str, filename
 
 
 async def delete_product(storage_base: str, domain: str, id_produit: str) -> None:
+    logger.info("[albums] delete_product: domain=%s id_produit=%s", domain, id_produit)
     domain_dir = _domain_dir(storage_base, domain)
     if not os.path.isdir(domain_dir):
         raise FileNotFoundError(f"domain {domain}")
@@ -152,9 +157,11 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
     Lève `LegacyManifestError` si le manifest est en v1 (aucune `url_source`) — dans ce cas
     le redownload n'est pas possible depuis l'API et on ne touche PAS aux fichiers existants.
     """
+    logger.info("[albums] redownload_product start: domain=%s id_produit=%s", domain, id_produit)
     domain_dir = _domain_dir(storage_base, domain)
     manifest_path = _manifest_path(storage_base, domain)
     if not os.path.exists(manifest_path):
+        logger.warning("[albums] redownload_product: manifest absent for %s", domain)
         raise FileNotFoundError(f"manifest {domain}")
     started = time.monotonic()
 
@@ -170,6 +177,11 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
 
     # Garde-fou : manifest v1 → on ne supprime rien et on signale au caller.
     if _is_legacy_v1(images):
+        logger.warning(
+            "[albums] redownload_product: legacy v1 manifest for %s/%s "
+            "(%d images sans url_source) — skip, re-ingest required",
+            domain, id_produit, len(images),
+        )
         raise LegacyManifestError(
             f"product {id_produit} en manifest v1 (aucune url_source) — "
             f"re-ingérer côté BO pour déclencher la migration v1→v2"
@@ -208,6 +220,11 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
             errors.append({"url": url, "reason": str(e)})
 
     duration_ms = int((time.monotonic() - started) * 1000)
+    logger.info(
+        "[albums] redownload_product done: domain=%s id_produit=%s "
+        "downloaded=%d skipped=%d failed=%d duration_ms=%d",
+        domain, id_produit, downloaded, skipped, failed, duration_ms,
+    )
     return {
         "domain": domain, "id_produit": id_produit,
         "downloaded": downloaded, "skipped": skipped, "failed": failed,
@@ -216,6 +233,10 @@ async def redownload_product(storage_base: str, domain: str, id_produit: str, do
 
 
 async def redownload_image(storage_base: str, domain: str, id_produit: str, filename: str, downloader) -> dict[str, Any]:
+    logger.info(
+        "[albums] redownload_image start: domain=%s id_produit=%s filename=%s",
+        domain, id_produit, filename,
+    )
     domain_dir = _domain_dir(storage_base, domain)
     manifest_path = _manifest_path(storage_base, domain)
     if not os.path.exists(manifest_path):
@@ -237,6 +258,10 @@ async def redownload_image(storage_base: str, domain: str, id_produit: str, file
 
     # Garde-fou : entrée legacy sans url_source.
     if not img.get("url_source"):
+        logger.warning(
+            "[albums] redownload_image: legacy v1 entry %s/%s/%s — skip, re-ingest required",
+            domain, id_produit, filename,
+        )
         raise LegacyManifestError(
             f"image {filename} sans url_source (entrée legacy v1) — "
             f"re-ingérer le produit côté BO pour la migration v1→v2"
@@ -259,6 +284,11 @@ async def redownload_image(storage_base: str, domain: str, id_produit: str, file
         res = {"status": "error", "error": str(e)}
 
     duration_ms = int((time.monotonic() - started) * 1000)
+    logger.info(
+        "[albums] redownload_image done: domain=%s id_produit=%s filename=%s "
+        "ok=%s duration_ms=%d",
+        domain, id_produit, filename, ok, duration_ms,
+    )
     return {
         "domain": domain, "id_produit": id_produit, "filename": filename,
         "downloaded": 1 if ok else 0,
