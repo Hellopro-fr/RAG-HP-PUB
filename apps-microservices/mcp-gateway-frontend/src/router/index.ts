@@ -115,13 +115,19 @@ const router = createRouter({
       path: '/bdd-tables',
       name: 'bdd-tables',
       component: () => import('@/views/BDDTablesView.vue'),
-      meta: { requiresAuth: true, title: 'Tables BDD', minRole: 'admin' },
+      meta: { requiresAuth: true, title: 'Tables BDD', minRole: 'config-only' },
     },
     {
       path: '/bdd-tables/new',
       name: 'bdd-table-add',
       component: () => import('@/views/BDDTableAddView.vue'),
       meta: { requiresAuth: true, title: 'Ajouter une table BDD', minRole: 'admin' },
+    },
+    {
+      path: '/bdd-tables/:id',
+      name: 'bdd-table-detail',
+      component: () => import('@/views/BDDTableDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Detail de la table', minRole: 'config-only' },
     },
     {
       path: '/bdd-tables/:id/fields',

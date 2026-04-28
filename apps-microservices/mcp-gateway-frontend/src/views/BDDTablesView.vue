@@ -164,7 +164,7 @@
               v-for="table in tables"
               :key="table.id"
               class="hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
-              @click="goToFields(table)"
+              @click="goToDetail(table)"
             >
               <td v-if="authStore.isAdmin" class="px-3 py-2 w-8" @click.stop>
                 <input
@@ -215,15 +215,34 @@
                 {{ formatDate(table.created_at) }}
               </td>
               <td class="px-3 py-2 text-right" @click.stop>
-                <button
-                  v-if="authStore.isAdmin"
-                  type="button"
-                  class="p-1.5 rounded text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-500/10"
-                  title="Supprimer"
-                  @click="deletingTable = table"
-                >
-                  <i class="pi pi-trash" />
-                </button>
+                <div class="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="p-1.5 rounded text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10"
+                    title="Voir la table"
+                    @click="goToDetail(table)"
+                  >
+                    <i class="pi pi-eye" />
+                  </button>
+                  <button
+                    v-if="authStore.isAdmin"
+                    type="button"
+                    class="p-1.5 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5"
+                    title="Editer"
+                    @click="goToFields(table)"
+                  >
+                    <i class="pi pi-pencil" />
+                  </button>
+                  <button
+                    v-if="authStore.isAdmin"
+                    type="button"
+                    class="p-1.5 rounded text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-500/10"
+                    title="Supprimer"
+                    @click="deletingTable = table"
+                  >
+                    <i class="pi pi-trash" />
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -667,6 +686,10 @@ function goToCreate() {
 
 function goToFields(table: BDDUsedTable) {
   router.push('/bdd-tables/' + table.id + '/fields');
+}
+
+function goToDetail(table: BDDUsedTable) {
+  router.push('/bdd-tables/' + table.id);
 }
 
 async function openMetaModal() {
