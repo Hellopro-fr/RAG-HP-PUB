@@ -88,11 +88,26 @@
       <!-- Stat strip -->
       <section class="grid grid-cols-2 gap-px bg-gray-100 dark:bg-gray-800 sm:grid-cols-4">
         <div class="bg-white dark:bg-transparent px-4 py-3">
-          <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            Lignes
-          </p>
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Lignes
+            </p>
+            <button
+              v-if="authStore.isAdmin"
+              type="button"
+              :disabled="refreshingRows"
+              class="p-1 rounded text-gray-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-500/10 disabled:opacity-50"
+              :title="refreshError || 'Rafraichir le compte depuis le catalogue'"
+              @click="refreshRows"
+            >
+              <i :class="refreshingRows ? 'pi pi-spinner pi-spin' : 'pi pi-refresh'" class="text-xs" />
+            </button>
+          </div>
           <p class="mt-1 text-sm font-mono text-gray-900 dark:text-white">
             {{ table.rows !== null && table.rows !== undefined ? formatRows(table.rows) : '—' }}
+          </p>
+          <p v-if="refreshError" class="mt-1 text-xs text-error-500 truncate" :title="refreshError">
+            {{ refreshError }}
           </p>
         </div>
         <div class="bg-white dark:bg-transparent px-4 py-3">
@@ -254,8 +269,25 @@ const authStore = useAuthStore();
 const id = computed(() => String(route.params.id || ''));
 const table = ref<BDDUsedTable | null>(null);
 const loading = ref(false);
+const refreshingRows = ref(false);
+const refreshError = ref<string | null>(null);
 
 const hasFields = computed(() => (table.value?.fields.length ?? 0) > 0);
+
+async function refreshRows() {
+  if (!table.value) return;
+  refreshingRows.value = true;
+  refreshError.value = null;
+  try {
+    const updated = await bddApi.refreshCatalog(table.value.id);
+    table.value = updated;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Erreur inconnue';
+    refreshError.value = msg;
+  } finally {
+    refreshingRows.value = false;
+  }
+}
 
 const RELATION_RE = /^\s*(\w+)\.(\w+)\s*->\s*(\w+)\.(\w+)\s*$/;
 

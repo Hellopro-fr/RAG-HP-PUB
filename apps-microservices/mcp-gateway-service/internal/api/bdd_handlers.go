@@ -378,6 +378,13 @@ func (h *Handler) updateBDDUsedTable(w http.ResponseWriter, r *http.Request, id 
 	if req.Notes != nil {
 		updates["notes"] = *req.Notes
 	}
+	if req.Rows != nil {
+		if *req.Rows < 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "rows must be >= 0"})
+			return
+		}
+		updates["rows"] = *req.Rows
+	}
 
 	if err := h.bddUsedRepo.UpdateTableMetadata(r.Context(), id, updates); err != nil {
 		if errors.Is(err, repository.ErrBDDNotFound) {

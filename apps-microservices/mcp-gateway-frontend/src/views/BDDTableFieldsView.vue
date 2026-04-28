@@ -189,31 +189,61 @@
                 Nombre de lignes
                 <span class="text-[10px] text-gray-400 ml-1">(catalogue)</span>
               </span>
-              <button
-                v-if="isAdmin"
-                type="button"
-                :disabled="refreshingCatalog || !table?.upstream_table_id"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-brand-400"
-                title="Re-synchroniser depuis le catalogue"
-                @click="refreshFromCatalog"
-              >
-                <i
-                  :class="refreshingCatalog ? 'pi pi-spinner pi-spin' : 'pi pi-refresh'"
-                  class="text-[10px]"
-                />
-                Actualiser
-              </button>
+              <span v-if="isAdmin" class="inline-flex items-center gap-2">
+                <button
+                  type="button"
+                  :disabled="savingRows || !rowsDirty || rowsDraft === ''"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-success-700 hover:text-success-800 disabled:opacity-50 disabled:cursor-not-allowed dark:text-success-400"
+                  title="Sauvegarder le compte saisi en base"
+                  @click="saveRowsManual"
+                >
+                  <i
+                    :class="savingRows ? 'pi pi-spinner pi-spin' : 'pi pi-save'"
+                    class="text-[10px]"
+                  />
+                  Enregistrer
+                </button>
+                <button
+                  type="button"
+                  :disabled="refreshingCatalog || !table?.upstream_table_id"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-brand-400"
+                  title="Re-synchroniser depuis le catalogue"
+                  @click="refreshFromCatalog"
+                >
+                  <i
+                    :class="refreshingCatalog ? 'pi pi-spinner pi-spin' : 'pi pi-refresh'"
+                    class="text-[10px]"
+                  />
+                  Actualiser
+                </button>
+              </span>
             </label>
+            <input
+              v-if="isAdmin"
+              v-model.number="rowsDraft"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Saisir le nombre de lignes"
+              class="h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-mono dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+            />
             <div
+              v-else
               class="h-9 w-full flex items-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3 text-sm text-gray-700 dark:text-gray-300"
             >
               <span v-if="table?.rows != null">
                 {{ table.rows.toLocaleString('fr-FR') }}
               </span>
               <span v-else class="text-xs text-gray-400 italic">
-                Non synchronise — cliquer Actualiser
+                Non synchronise
               </span>
             </div>
+            <p
+              v-if="isAdmin && rowsError"
+              class="mt-1 text-[11px] text-error-500"
+            >
+              {{ rowsError }}
+            </p>
           </div>
         </div>
         <div class="mt-3">
@@ -618,6 +648,18 @@ const metaDraft = ref<MetaDraft>(emptyMetaDraft());
 const metaSnapshot = ref<MetaDraft>(emptyMetaDraft());
 const savingMeta = ref(false);
 const refreshingCatalog = ref(false);
+
+// Manual rows override — admin can enter a row count and persist it
+// without firing the upstream /count (which times out on huge tables).
+const rowsDraft = ref<number | string>('');
+const savingRows = ref(false);
+const rowsError = ref<string | null>(null);
+const rowsDirty = computed(() => {
+  if (rowsDraft.value === '' || rowsDraft.value === null) return false;
+  const n = Number(rowsDraft.value);
+  if (!Number.isFinite(n) || n < 0) return false;
+  return n !== (table.value?.rows ?? null);
+});
 const allRegisteredTables = ref<BDDUsedTable[]>([]);
 
 const catalogByName = ref<Record<string, BDDCatalogField>>({});
@@ -792,6 +834,8 @@ async function loadTable() {
     relationsParseError.value = null;
     dirtyFields.value = new Set();
     pendingDescriptions.value = {};
+    rowsDraft.value = res.rows ?? '';
+    rowsError.value = null;
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       table.value = null;
@@ -889,6 +933,8 @@ async function refreshFromCatalog() {
       table.value.primary_key = updated.primary_key;
       table.value.rows = updated.rows;
     }
+    rowsDraft.value = updated.rows ?? '';
+    rowsError.value = null;
     toast.success('Synchronisation catalogue OK');
   } catch (err) {
     const body = (err as { body?: { error?: string } })?.body;
@@ -897,6 +943,36 @@ async function refreshFromCatalog() {
     toast.error('Echec de la synchronisation: ' + msg);
   } finally {
     refreshingCatalog.value = false;
+  }
+}
+
+// Manual rows override: persists the integer typed in the input via
+// PATCH (no upstream call). Useful when refresh-catalog times out on
+// huge tables but the admin already knows the count.
+async function saveRowsManual() {
+  if (!table.value || savingRows.value) return;
+  const n = Number(rowsDraft.value);
+  if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+    rowsError.value = 'Saisir un entier positif (>= 0).';
+    return;
+  }
+  savingRows.value = true;
+  rowsError.value = null;
+  try {
+    const updated = await bddApi.patchUsed(id.value, { rows: n });
+    if (table.value) {
+      table.value.rows = updated.rows;
+    }
+    rowsDraft.value = updated.rows ?? '';
+    toast.success('Nombre de lignes enregistre');
+  } catch (err) {
+    const body = (err as { body?: { error?: string } })?.body;
+    const msg =
+      body?.error || (err instanceof Error ? err.message : 'Erreur inconnue');
+    rowsError.value = msg;
+    toast.error('Echec de la sauvegarde: ' + msg);
+  } finally {
+    savingRows.value = false;
   }
 }
 
