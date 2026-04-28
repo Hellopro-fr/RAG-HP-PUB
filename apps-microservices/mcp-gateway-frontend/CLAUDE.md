@@ -33,10 +33,14 @@ src/
   api/          # Typed fetch wrapper + per-resource API modules
   composables/  # useClipboard, useToast, useDragDrop
   components/   # layout/, servers/, tokens/, oauth2/, bdd/, shared/
+    bdd/BDDFieldBlock.vue         # single-field block (mirrors InstructionRow pattern)
+    common/Paginator.vue          # generic page <-> page navigator
   router/       # Vue Router with auth guard
   stores/       # Pinia stores (auth, servers)
   types/        # TypeScript interfaces matching Go backend
   views/        # LoginView, ServersView, TokensView, OAuth2View, AuthorizeView, BDDTablesView
+    BDDTableAddView.vue           # 3-step add wizard
+    BDDTableFieldsView.vue        # fields-edit page (WYSIWYG + import/export + block builder)
 nginx.conf      # Production reverse proxy config
 Dockerfile      # Multi-stage: node build → nginx serve
 ```
@@ -48,6 +52,24 @@ Dockerfile      # Multi-stage: node build → nginx serve
 - Components follow `{domain}/{ComponentName}.vue` structure
 - Global state (auth, servers) in Pinia; local state in composables
 - French UI labels, English code identifiers
+
+## BDD admin onglet (v2)
+
+The "Tables BDD" admin section is split into a 3-tier flow:
+
+1. **List view** at `/bdd-tables` — paginated, server-side, with an "All" tab
+   plus per-database tabs. Uses the `bddApi.listUsed({ database_id, search,
+   page, limit })` endpoint and renders status badges per row.
+2. **Add wizard** at `/bdd-tables/new` — three steps: pick a database, then
+   multi-select catalog tables, then preview a recap before firing
+   `POST /bdd/used/tables/bulk` (atomic, cap 50 items).
+3. **Fields-edit** at `/bdd-tables/:id/fields` — Tiptap WYSIWYG description
+   editor + per-field block-builder (`BDDFieldBlock.vue`) + per-table
+   import/export (JSON via `GET /bdd/used/tables/export` and `POST
+   /bdd/used/tables/import`, capped at 1 MiB).
+
+Both `/bdd-tables/new` and `/bdd-tables/:id/fields` are admin-gated through
+the global `router.beforeEach` guard (`meta.minRole = 'admin'`).
 
 ## Provider-scope filter panels
 

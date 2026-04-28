@@ -118,6 +118,18 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Tables BDD', minRole: 'admin' },
     },
     {
+      path: '/bdd-tables/new',
+      name: 'bdd-table-add',
+      component: () => import('@/views/BDDTableAddView.vue'),
+      meta: { requiresAuth: true, title: 'Ajouter une table BDD', minRole: 'admin' },
+    },
+    {
+      path: '/bdd-tables/:id/fields',
+      name: 'bdd-table-fields',
+      component: () => import('@/views/BDDTableFieldsView.vue'),
+      meta: { requiresAuth: true, title: 'Configurer les champs', minRole: 'admin' },
+    },
+    {
       path: '/servers/import-google',
       name: 'google-sheets-import',
       component: () => import('@/views/GoogleSheetsImportView.vue'),

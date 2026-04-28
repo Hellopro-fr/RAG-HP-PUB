@@ -63,7 +63,7 @@ describe('bddApi', () => {
 
   describe('listUsed', () => {
     it('passes both database_id and search when provided', () => {
-      bddApi.listUsed(5, 'foo')
+      bddApi.listUsed({ database_id: 5, search: 'foo' })
       expect(mockedApi.get).toHaveBeenCalledWith(
         '/api/v1/bdd/used/tables',
         { database_id: '5', search: 'foo' },
@@ -71,7 +71,7 @@ describe('bddApi', () => {
     })
 
     it('passes only database_id when search is empty', () => {
-      bddApi.listUsed(10)
+      bddApi.listUsed({ database_id: 10 })
       expect(mockedApi.get).toHaveBeenCalledWith(
         '/api/v1/bdd/used/tables',
         { database_id: '10' },

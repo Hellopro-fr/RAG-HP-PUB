@@ -159,8 +159,11 @@ Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is
 GET    /bdd/catalog/databases                              — Read-only proxy: 3 Hellopro DBs
 GET    /bdd/catalog/databases/{db}/tables                  — Read-only proxy: catalog tables
 GET    /bdd/catalog/databases/{db}/tables/{tid}/fields     — Read-only proxy: catalog fields
-GET    /bdd/used/tables                                     — List registered tables (`?database_id=...&search=...`)
+GET    /bdd/used/tables                                     — List registered tables (`?database_id=...&search=...&page=N&limit=M`, default page=1, limit=20, cap 100). Response: `{tables, total, page, limit}`. Ordering: `created_at DESC, table_name ASC`.
 POST   /bdd/used/tables                                     — Register a table + selected fields
+POST   /bdd/used/tables/bulk                                — Atomic multi-create (cap 50 items)
+GET    /bdd/used/tables/export                              — JSON download of full registry
+POST   /bdd/used/tables/import                              — Upsert from JSON (cap 1 MiB)
 GET    /bdd/used/tables/{id}                                — Get one with fields
 PATCH  /bdd/used/tables/{id}                                — Update curated description
 DELETE /bdd/used/tables/{id}                                — Remove from registry (cascades fields)

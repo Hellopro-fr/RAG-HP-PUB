@@ -20,4 +20,18 @@ describe('router', () => {
     expect(route?.meta.minRole).toBe('admin')
     expect(route?.meta.title).toBe('Tables BDD')
   })
+
+  it('registers bdd-table-add route with admin role', () => {
+    const route = router.getRoutes().find((r) => r.name === 'bdd-table-add')
+    expect(route).toBeDefined()
+    expect(route?.path).toBe('/bdd-tables/new')
+    expect(route?.meta.minRole).toBe('admin')
+  })
+
+  it('registers bdd-table-fields route with admin role', () => {
+    const route = router.getRoutes().find((r) => r.name === 'bdd-table-fields')
+    expect(route).toBeDefined()
+    expect(route?.path).toBe('/bdd-tables/:id/fields')
+    expect(route?.meta.minRole).toBe('admin')
+  })
 })
