@@ -60,6 +60,13 @@ export const bddApi = {
     upstream_table_id?: number
     fields: { field_name: string; description?: string; upstream_field_id?: number }[]
   }) => api.post<BDDUsedTable>(`${BASE}/bdd/used/tables`, body),
+  bulkCreateUsed: (body: {
+    database_id: number
+    items: { table_name: string; description?: string; upstream_table_id?: number }[]
+  }) => api.post<{
+    created: BDDUsedTable[]
+    errors?: { table_name: string; error: string }[]
+  }>(`${BASE}/bdd/used/tables/bulk`, body),
   patchUsed: (id: string, body: { description: string }) =>
     api.patch<BDDUsedTable>(`${BASE}/bdd/used/tables/${id}`, body),
   deleteUsed: (id: string) =>
