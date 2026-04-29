@@ -6,11 +6,20 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
 	"github.com/hellopro/mcp-gateway/internal/mcp"
 	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
+
+// BDDTableResolver resolves a bdd_used_tables.id to its (database_id,
+// table_name) tuple. The interface keeps the gateway free of any direct
+// repository dependency — main.go injects a *repository.BDDUsedRepo (which
+// satisfies it) at startup.
+type BDDTableResolver interface {
+	GetTable(ctx context.Context, id string) (*db.BDDUsedTable, error)
+}
 
 // Gateway routes MCP JSON-RPC requests to the appropriate backend servers.
 type Gateway struct {
@@ -19,6 +28,7 @@ type Gateway struct {
 	registry      *Registry
 	leexiAdmin    *leexiadmin.Client    // optional; nil disables Leexi team expansion
 	ringoverAdmin *ringoveradmin.Client // optional; nil disables Ringover team expansion
+	bddResolver   BDDTableResolver      // optional; nil disables BDD header injection
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -40,6 +50,14 @@ func (g *Gateway) SetLeexiAdmin(c *leexiadmin.Client) {
 // to resolve "teams" filter mode into user IDs at request time.
 func (g *Gateway) SetRingoverAdmin(c *ringoveradmin.Client) {
 	g.ringoverAdmin = c
+}
+
+// SetBDDResolver attaches the BDD used-table resolver consumed by
+// ScopedGateway when injecting X-BDD-Allowed-Tables. Pass nil to disable
+// the integration; the scoped gateway then sends an empty allow-list when
+// a token has a BDD scope (fail-closed).
+func (g *Gateway) SetBDDResolver(r BDDTableResolver) {
+	g.bddResolver = r
 }
 
 // DiscoverAndRegister connects to a backend MCP server, performs the handshake,

@@ -27,9 +27,11 @@ func notifyUnauthorized(slackClient *slack.Client, r *http.Request, reason strin
 		return
 	}
 	slackClient.Notify(slack.UnauthorizedEvent{
-		ClientIP: ip,
-		Endpoint: endpoint,
-		Reason:   reason,
+		ClientIP:     ip,
+		Endpoint:     endpoint,
+		Reason:       reason,
+		MCPSessionID: r.Header.Get("Mcp-Session-Id"),
+		UserAgent:    r.Header.Get("User-Agent"),
 	})
 }
 
@@ -142,6 +144,14 @@ func CombinedMiddleware(
 						_ = json.Unmarshal(client.RingoverAllowedTeamIDs, &cc.RingoverAllowedTeamIDs)
 					}
 
+					// BDD scope (mirrors scope-token middleware).
+					if len(client.BDDTables) > 0 {
+						cc.BDDAllowedTableIDs = make([]string, 0, len(client.BDDTables))
+						for _, b := range client.BDDTables {
+							cc.BDDAllowedTableIDs = append(cc.BDDAllowedTableIDs, b.UsedTableID)
+						}
+					}
+
 					oauth2Cache.Set(clientID, cc)
 				}
 
@@ -184,6 +194,9 @@ func CombinedMiddleware(
 						AllowedTeamIDs: cc.RingoverAllowedTeamIDs,
 					})
 				}
+				if len(cc.BDDAllowedTableIDs) > 0 {
+					ctx = context.WithValue(ctx, scopetoken.BDDFilterContextKey, cc.BDDAllowedTableIDs)
+				}
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -198,6 +211,19 @@ func CombinedMiddleware(
 			}
 
 			// 3. Neither present — return 401 with discovery URL per MCP spec
+			log.Printf("[oauth2] 401 unauthorized: method=%s path=%s remote=%s peer=%s xff=%q xri=%q cf_ip=%q user_agent=%q mcp_session=%q origin=%q referer=%q",
+				r.Method,
+				r.URL.Path,
+				slack.ClientIP(r),
+				r.RemoteAddr,
+				r.Header.Get("X-Forwarded-For"),
+				r.Header.Get("X-Real-IP"),
+				r.Header.Get("Cf-Connecting-IP"),
+				r.Header.Get("User-Agent"),
+				r.Header.Get("Mcp-Session-Id"),
+				r.Header.Get("Origin"),
+				r.Header.Get("Referer"),
+			)
 			metadataURL := publicURL + "/.well-known/oauth-authorization-server"
 			if publicURL == "" {
 				metadataURL = "/.well-known/oauth-authorization-server"

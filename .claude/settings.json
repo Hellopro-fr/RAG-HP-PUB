@@ -85,6 +85,16 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR\"/graphify-out/.needs_update ] && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"graphify: a doc/config change in graph scope is pending semantic re-extraction (graphify-out/.needs_update flag is set). When convenient, run /graphify --update from this session to refresh the doc nodes.\"}}' || true"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {}

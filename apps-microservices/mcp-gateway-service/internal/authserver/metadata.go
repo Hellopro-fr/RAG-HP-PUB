@@ -40,7 +40,7 @@ func (s *AuthServer) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 		AuthorizationEndpoint:             issuer + "/authorize",
 		TokenEndpoint:                     issuer + "/token",
 		RegistrationEndpoint:              issuer + "/register",
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
 		GrantTypesSupported:               []string{"authorization_code", "client_credentials"},
 		ResponseTypesSupported:            []string{"code"},
 		CodeChallengeMethodsSupported:     []string{"S256"},

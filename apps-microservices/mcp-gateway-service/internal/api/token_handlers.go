@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
 	"github.com/hellopro/mcp-gateway/internal/db"
+	"github.com/hellopro/mcp-gateway/internal/repository"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 )
 
@@ -140,6 +143,13 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	token.RingoverAllowedUserIDs = rUserIDs
 	token.RingoverAllowedTeamIDs = rTeamIDs
 
+	// Validate the optional BDD scope BEFORE we persist the token row, so a
+	// bad payload doesn't leave a half-written token behind.
+	if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	// Build server associations
 	for _, sid := range req.ServerIDs {
 		token.Servers = append(token.Servers, db.ScopeTokenServer{
@@ -207,6 +217,22 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Persist the BDD scope after the token row exists so the FK on
+	// scope_token_bdd_tables.token_id is satisfied. Validation already
+	// happened above, so we only need to surface storage errors here.
+	var bddDTO *BDDFilterDTO
+	if req.BDDFilter != nil {
+		if err := h.tokenRepo.UpdateBDDTables(r.Context(), token.ID, req.BDDFilter.UsedTableIDs); err != nil {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(req.BDDFilter.UsedTableIDs) > 0 {
+			ids := append([]string(nil), req.BDDFilter.UsedTableIDs...)
+			bddDTO = &BDDFilterDTO{UsedTableIDs: ids}
+		}
+	}
+
 	var expiresStr *string
 	if token.ExpiresAt != nil {
 		s := token.ExpiresAt.UTC().Format(time.RFC3339)
@@ -230,6 +256,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:      expiresStr,
 		LeexiFilter:    scopeTokenLeexiFilterToDTO(&token),
 		RingoverFilter: scopeTokenRingoverFilterToDTO(&token),
+		BDDFilter:      bddDTO,
 	})
 }
 
@@ -351,6 +378,19 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 			return
 		}
 		if err := h.instructionRepo.ReplaceTokenInstructions(id, req.InstructionIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	// Update BDD scope if the caller provided one. Same fail-fast contract
+	// as create: validate ID existence first, then persist.
+	if req.BDDFilter != nil {
+		if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := h.tokenRepo.UpdateBDDTables(r.Context(), id, req.BDDFilter.UsedTableIDs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -540,5 +580,36 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		ExpiresAt:      expiresStr,
 		LeexiFilter:    scopeTokenLeexiFilterToDTO(&t),
 		RingoverFilter: scopeTokenRingoverFilterToDTO(&t),
+		BDDFilter:      scopeTokenBDDFilterToDTO(&t),
 	}
+}
+
+// validateBDDFilter verifies that every used-table ID referenced by a BDD
+// scope payload exists in the registry. Returns a 400-grade error message
+// for the caller to surface verbatim. Returns nil when the filter is empty
+// (no restriction).
+func (h *Handler) validateBDDFilter(ctx context.Context, filter *BDDFilterDTO) error {
+	if filter == nil {
+		return nil
+	}
+	if len(filter.UsedTableIDs) == 0 {
+		return nil
+	}
+	if h.bddUsedRepo == nil {
+		return errors.New("bdd registry not configured")
+	}
+	missing := make([]string, 0)
+	for _, id := range filter.UsedTableIDs {
+		if _, err := h.bddUsedRepo.GetTable(ctx, id); err != nil {
+			if errors.Is(err, repository.ErrBDDNotFound) {
+				missing = append(missing, id)
+				continue
+			}
+			return err
+		}
+	}
+	if len(missing) > 0 {
+		return errors.New("bdd_filter.used_table_ids: unknown id(s): " + strings.Join(missing, ", "))
+	}
+	return nil
 }

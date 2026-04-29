@@ -5,6 +5,13 @@ du fix de parité avec le PHP creer_image() (commit 582fdc6c).
 from PIL import Image
 
 from core.image_processor import ImageProcessor
+from core.downloader import _build_filename
+
+
+# Slug et product_id communs à tous les tests
+_SLUG = "produit-test"
+_PID = "1"
+_STUB_URL = "https://stub.com/fake.jpg"
 
 
 def test_png_transparent_flattened_on_white(transparent_png_bytes, tmp_path):
@@ -21,14 +28,15 @@ def test_png_transparent_flattened_on_white(transparent_png_bytes, tmp_path):
     Parité PHP : case 3 de creer_image() (imagecreatetruecolor + imagefill(blanc)).
     """
     processor = ImageProcessor()
+    filename = _build_filename(_SLUG, _PID, _STUB_URL, ".png")
 
     result = processor.process_image(
         content=transparent_png_bytes,
         domain="test.com",
-        product_id="1",
-        product_name="produit-test",
+        product_id=_PID,
+        product_name=_SLUG,
         base_storage_dir=str(tmp_path),
-        index=1,
+        filename=filename,
     )
 
     assert result["main_path"].endswith(".png"), \
@@ -58,14 +66,15 @@ def test_pyvips_path_png_also_flattens(transparent_png_bytes, tmp_path, monkeypa
     monkeypatch.setattr(image_processor, "LARGE_IMAGE_THRESHOLD", 10)
 
     processor = image_processor.ImageProcessor()
+    filename = _build_filename(_SLUG, _PID, _STUB_URL, ".png")
 
     result = processor.process_image(
         content=transparent_png_bytes,
         domain="test.com",
-        product_id="1",
-        product_name="produit-test",
+        product_id=_PID,
+        product_name=_SLUG,
         base_storage_dir=str(tmp_path),
-        index=1,
+        filename=filename,
     )
 
     assert result["main_path"].endswith(".png"), \
@@ -88,16 +97,23 @@ def test_webp_transparent_converted_to_png_on_white(transparent_webp_bytes, tmp_
                   + app/core/image_processor.py:99-104 (flatten blanc)
 
     Parité PHP : case 18 de creer_image() (WebP → PNG avec imagefill blanc).
+
+    Note : le filename est pré-construit avec .png car WebP est converti en PNG par
+    le processeur ; l'appelant (download_and_process) détecte .webp dans l'URL et
+    construit le filename avec .webp, mais ici on teste l'ImageProcessor directement
+    avec le bon format de sortie pour valider l'assertion d'extension.
     """
     processor = ImageProcessor()
+    # WebP → converti en PNG par process_image, donc on pré-build avec .png
+    filename = _build_filename(_SLUG, _PID, _STUB_URL, ".png")
 
     result = processor.process_image(
         content=transparent_webp_bytes,
         domain="test.com",
-        product_id="1",
-        product_name="produit-test",
+        product_id=_PID,
+        product_name=_SLUG,
         base_storage_dir=str(tmp_path),
-        index=1,
+        filename=filename,
     )
 
     assert result["main_path"].endswith(".png"), \
@@ -126,14 +142,15 @@ def test_gif_transparency_preserved(transparent_gif_bytes, tmp_path):
     `out.getpixel((0,0))` vaut l'index transparent du GIF.
     """
     processor = ImageProcessor()
+    filename = _build_filename(_SLUG, _PID, _STUB_URL, ".gif")
 
     result = processor.process_image(
         content=transparent_gif_bytes,
         domain="test.com",
-        product_id="1",
-        product_name="produit-test",
+        product_id=_PID,
+        product_name=_SLUG,
         base_storage_dir=str(tmp_path),
-        index=1,
+        filename=filename,
     )
 
     assert result["main_path"].endswith(".gif"), \
@@ -145,6 +162,47 @@ def test_gif_transparency_preserved(transparent_gif_bytes, tmp_path):
             "la transparence GIF doit être préservée au save (info['transparency'])"
 
 
+def test_webp_url_filename_extension_corrected_to_png(transparent_webp_bytes, tmp_path):
+    """Bug R2b — URL WebP produit un filename .webp, mais le contenu est PNG.
+
+    Scénario réel : download_and_process() détecte '.webp' dans l'URL et passe
+    filename='produit-test-1-<hash>.webp' à process_image().
+    Après conversion WEBP→PNG, _build_paths doit corriger l'extension en .png
+    pour que le fichier sur disque porte l'extension cohérente avec son contenu.
+
+    Garde-fou sur : app/core/image_processor.py – _build_paths()
+        if filename:
+            base, _ = os.path.splitext(filename)
+            filename = base + extension   # enforce actual output extension
+    """
+    processor = ImageProcessor()
+    # Simule le filename URL-dérivé avec extension .webp (le bug réel)
+    filename_with_wrong_ext = _build_filename(_SLUG, _PID, _STUB_URL, ".webp")
+
+    result = processor.process_image(
+        content=transparent_webp_bytes,
+        domain="test.com",
+        product_id=_PID,
+        product_name=_SLUG,
+        base_storage_dir=str(tmp_path),
+        filename=filename_with_wrong_ext,
+    )
+
+    assert result["main_path"].endswith(".png"), (
+        f"WebP converti en PNG : le fichier doit porter l'extension .png, "
+        f"obtenu : {result['main_path']}"
+    )
+    assert result["filename"].endswith(".png"), (
+        f"filename retourné doit finir en .png (pas .webp), "
+        f"obtenu : {result['filename']}"
+    )
+
+    # Vérifie que le fichier est bien lisible en tant que PNG
+    with Image.open(result["main_path"]) as out:
+        out.load()
+        assert out.format == "PNG", f"contenu attendu PNG, détecté : {out.format}"
+
+
 def test_jpeg_stays_rgb_no_regression(opaque_jpeg_bytes, tmp_path):
     """Non-régression JPEG — ne doit PAS être aplati sur blanc par erreur.
 
@@ -153,14 +211,15 @@ def test_jpeg_stays_rgb_no_regression(opaque_jpeg_bytes, tmp_path):
     filtre bien les JPEG (sinon un JPEG rouge sortirait blanc).
     """
     processor = ImageProcessor()
+    filename = _build_filename(_SLUG, _PID, _STUB_URL, ".jpg")
 
     result = processor.process_image(
         content=opaque_jpeg_bytes,
         domain="test.com",
-        product_id="1",
-        product_name="produit-test",
+        product_id=_PID,
+        product_name=_SLUG,
         base_storage_dir=str(tmp_path),
-        index=1,
+        filename=filename,
     )
 
     assert result["main_path"].endswith(".jpg"), \

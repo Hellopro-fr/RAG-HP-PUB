@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const URL_API_PRIX = 'https://api.hellopro.eu/prix_traitement-service/prix/questionnaire';
+const URL_API_PRIX = 'https://api.hellopro.eu/prix_traitement-service/prix/questionnaire-v2';
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,6 +37,15 @@ export async function POST(request: NextRequest) {
       }
 
       const data = await response.json();
+
+      // Strip matching.results (~400 KB de debug backend) avant retour au navigateur
+      if (data?.matching?.results) {
+        const { results, ...matchingMeta } = data.matching;
+        data.matching = {
+          ...matchingMeta,
+          results_count_retenues: Array.isArray(results) ? results.length : 0,
+        };
+      }
 
       return NextResponse.json(data, { status: 200 });
     } catch (fetchError: any) {

@@ -13,7 +13,7 @@ export interface CritereNonMatch {
 export interface PrixExempleProduit {
   nom: string;
   fournisseur: string;
-  date: string;             // Format ISO "2025-08-31"
+  date?: string;            // Format ISO "2025-08-31" — optionnel : la v2 ne le renvoie pas
   prix: number;
   tva: string;              // "HT" ou "TTC"
   criteres_non_matches?: CritereNonMatch[];
@@ -24,12 +24,23 @@ export interface PrixExempleProduit {
 export interface PrixFourchette {
   borne_basse: number;
   borne_haute: number;
+  prix_moyen: number;       // Moyenne arithmétique (nouveau v2)
   prix_median: number;
   devise: string;           // "EUR"
   tva: string;              // "HT"
   niveau_confiance: 'fort' | 'moyen' | 'faible';
   nb_references_retenues: number;
   nb_references_ignorees: number;
+}
+
+/** Stats de matching renvoyées par l'API v2 (debug/tracking — `results` est strippé côté proxy) */
+export interface PrixMatchingInfo {
+  erreur: boolean;
+  message?: string;
+  id_categorie?: string;
+  nb_equivalences: number;
+  nb_results: number;
+  results_count_retenues?: number;
 }
 
 /** Contenu de la réponse prix */
@@ -42,7 +53,8 @@ export interface PrixReponse {
 /** Réponse complète de l'API prix */
 export interface PrixApiResponse {
   success: boolean;
-  reponse: PrixReponse;
+  reponse: PrixReponse | null;   // null quand le backend ne trouve pas de prix (v2)
+  matching?: PrixMatchingInfo;   // stats de matching (v2)
   api_response?: any;      // Debug Gemini — ignoré côté frontend
   time_elapsed?: number;   // secondes (ex: 6.101902)
   message?: string;        // ex: "50 chunks traités en 6.1s"

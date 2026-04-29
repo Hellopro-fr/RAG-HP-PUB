@@ -32,6 +32,14 @@ func TestHandleMetadata(t *testing.T) {
 	if meta["registration_endpoint"] != "https://mcp.example.com/register" {
 		t.Fatalf("unexpected registration_endpoint: %v", meta["registration_endpoint"])
 	}
+
+	methods, ok := meta["token_endpoint_auth_methods_supported"].([]interface{})
+	if !ok {
+		t.Fatalf("token_endpoint_auth_methods_supported missing or wrong type: %T", meta["token_endpoint_auth_methods_supported"])
+	}
+	if len(methods) != 1 || methods[0] != "client_secret_basic" {
+		t.Fatalf("expected only [\"client_secret_basic\"] advertised, got %v", methods)
+	}
 }
 
 func TestHandleMetadata_MethodNotAllowed(t *testing.T) {
