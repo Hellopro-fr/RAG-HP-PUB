@@ -5,6 +5,9 @@ import StatTile from '../src/components/ui/StatTile';
 import Sparkline from '../src/components/ui/Sparkline';
 import Timeline from '../src/components/ui/Timeline';
 import CapacityRing from '../src/components/ui/CapacityRing';
+import AreaChart from '../src/components/ui/AreaChart';
+import LogLine from '../src/components/ui/LogLine';
+import KV from '../src/components/ui/KV';
 
 describe('Pill', () => {
   it('rend le texte enfant', () => {
@@ -86,5 +89,55 @@ describe('CapacityRing', () => {
   it('rend le label', () => {
     render(<CapacityRing used={5} total={10} label="RAM" />);
     expect(screen.getByText('RAM')).toBeTruthy();
+  });
+});
+
+describe('AreaChart', () => {
+  it('renders SVG with axes', () => {
+    const { container } = render(<AreaChart data={[10, 20, 30]} />);
+    expect(container.querySelector('svg')).toBeTruthy();
+    const lines = container.querySelectorAll('line');
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+  });
+  it('renders empty state without crash', () => {
+    const { container } = render(<AreaChart data={[]} />);
+    expect(container.querySelector('svg')).toBeTruthy();
+  });
+  it('renders refLine when provided', () => {
+    const { container } = render(<AreaChart data={[10, 20]} refLine={50} />);
+    const lines = Array.from(container.querySelectorAll('line'));
+    const dashed = lines.find(l => l.getAttribute('stroke-dasharray') || l.getAttribute('strokeDasharray'));
+    expect(dashed).toBeTruthy();
+  });
+});
+
+describe('LogLine', () => {
+  it('renders message text', () => {
+    render(<LogLine t="12:00" lvl="info" msg="test message" />);
+    expect(screen.getByText('test message')).toBeTruthy();
+  });
+  it('applies err color for err level', () => {
+    const { container } = render(<LogLine t="12:00" lvl="err" msg="oops" />);
+    expect(container.querySelector('.text-err')).toBeTruthy();
+  });
+  it('renders meta when provided', () => {
+    render(<LogLine t="12:00" lvl="warn" msg="warn msg" meta="req_id=abc" />);
+    expect(screen.getByText('req_id=abc')).toBeTruthy();
+  });
+});
+
+describe('KV', () => {
+  it('renders key and value', () => {
+    render(<KV k="Status" v="running" />);
+    expect(screen.getByText('Status')).toBeTruthy();
+    expect(screen.getByText('running')).toBeTruthy();
+  });
+  it('renders em dash for null value', () => {
+    render(<KV k="RAM" v={null} />);
+    expect(screen.getByText('—')).toBeTruthy();
+  });
+  it('applies mono class when mono=true', () => {
+    const { container } = render(<KV k="ID" v="abc-123" mono />);
+    expect(container.querySelector('.font-mono')).toBeTruthy();
   });
 });
