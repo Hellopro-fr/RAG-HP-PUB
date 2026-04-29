@@ -511,7 +511,9 @@ export const useFlowStore = create<FlowState>()(
       truncateAnswersAfterIndex: (currentIndex) =>
         set((state) => {
           // questionCode "Qn" est 1-based ; on garde Q1..Q(currentIndex+1).
-          const keep = (code: string) => {
+          // Si code est absent ou non conforme : on garde par sécurité.
+          const keep = (code: string | undefined) => {
+            if (!code) return true;
             const m = code.match(/^Q(\d+)$/);
             return m ? parseInt(m[1], 10) <= currentIndex + 1 : true;
           };
