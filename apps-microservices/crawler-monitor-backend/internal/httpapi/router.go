@@ -63,6 +63,9 @@ func NewRouter(d Deps) http.Handler {
 					rt.Get("/{id}/dataset/counts", datasetCountsHandler(d.FileStore))
 					rt.Get("/{id}/dataset/urls", datasetURLsHandler(d.FileStore))
 					rt.Get("/{id}/request-queues", queuesListHandler(d.FileStore))
+					rt.Post("/{id}/request-queues/clean-patterns", queuesCleanPatternsHandler(d.FileStore))
+					rt.Post("/{id}/request-queues/repair", queuesRepairHandler(d.FileStore))
+					rt.Post("/{id}/request-queues/drop", queuesDropHandler(d.FileStore))
 					rt.Get("/{id}/request-queues/{domain}/{filename}", queuesReadFileHandler(d.FileStore))
 					rt.Post("/{id}/request-queues/{domain}/{filename}", queuesWriteFileHandler(d.FileStore))
 				}
