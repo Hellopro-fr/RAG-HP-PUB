@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type RawJob map[string]any
@@ -28,20 +26,22 @@ func (c *Client) ListJobs(ctx context.Context) ([]RawJob, error) {
 		return []RawJob{}, nil
 	}
 	out := make([]RawJob, 0, len(keys))
-	for _, k := range keys {
-		raw, err := c.rdb.Get(ctx, k).Result()
-		if err == redis.Nil {
+	// MGET fetches all values in a single round trip instead of N individual GETs.
+	vals, err := c.rdb.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	for i, v := range vals {
+		s, ok := v.(string)
+		if !ok || s == "" {
 			continue
-		}
-		if err != nil {
-			return nil, err
 		}
 		var j RawJob
-		if err := json.Unmarshal([]byte(raw), &j); err != nil {
+		if err := json.Unmarshal([]byte(s), &j); err != nil {
 			continue
 		}
-		j["_redisKey"] = k
-		j["id"] = strings.TrimPrefix(k, JobPrefix)
+		j["_redisKey"] = keys[i]
+		j["id"] = strings.TrimPrefix(keys[i], JobPrefix)
 		out = append(out, j)
 	}
 	return out, nil
