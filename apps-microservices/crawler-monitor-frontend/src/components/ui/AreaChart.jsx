@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 const PAD = { top: 12, right: 12, bottom: 28, left: 36 };
 
 function getValues(data, valueKey) {
@@ -38,13 +40,15 @@ export default function AreaChart({
 
   // Y-axis ticks (4 ticks)
   const tickCount = 4;
+  const divisor = tickCount > 1 ? tickCount - 1 : 1;
   const yTicks = Array.from({ length: tickCount }, (_, i) => {
-    const val = min + (range / (tickCount - 1)) * i;
+    const val = min + (range / divisor) * i;
     const y = toY(val);
     return { val, y };
   });
 
-  const gradId = `ac-grad-${color.replace(/[^a-z0-9]/gi, '')}`;
+  const uid = useId().replace(/:/g, '');
+  const gradId = `ac-grad-${uid}`;
 
   // refLine Y position
   const refY = refLine != null ? toY(refLine) : null;
@@ -79,8 +83,6 @@ export default function AreaChart({
           y={y + 3}
           textAnchor="end"
           className="font-mono text-[10px] fill-current text-ink-3"
-          fontSize={10}
-          fill="var(--ink-3)"
         >
           {Number.isInteger(val) ? val : val.toFixed(1)}
         </text>
