@@ -62,6 +62,9 @@ func NewRouter(d Deps) http.Handler {
 
 			rt.Get("/api/capacity", capacityGetHandler(d.RedisStore))
 
+			rt.Get("/api/replicas/history", replicasHistoryHandler(d.RedisStore))
+			rt.Get("/api/replicas/{id}/history", replicaHistoryByIDHandler(d.RedisStore))
+
 			if d.AuditStore != nil {
 				if adapted, ok := d.AuditStore.(*auditStoreAdapter); ok {
 					rt.Get("/api/audit", auditListHandler(adapted.s))
