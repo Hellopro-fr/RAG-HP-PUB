@@ -5,13 +5,15 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ScrollToTop } from './ScrollToTop';
 
-const COLLAPSED_KEY = 'sidebar:collapsed';
-
 /**
- * AppShell — persistent sidebar (desktop) + slide-in drawer (mobile) + topbar.
+ * AppShell — layout global : sidebar 232px fixe (desktop) + sheet mobile + topbar 52px.
  *
- * Kept as a layout wrapper (not a router layout route) to preserve App.jsx's
- * existing auth gate and top-level state (token, replicas, WebSocket).
+ * Structure CSS :
+ *   flex h-screen overflow-hidden
+ *   ├── <Sidebar> 232px (desktop uniquement)
+ *   └── flex flex-col flex-1 min-w-0 overflow-hidden
+ *       ├── <Topbar> h-[52px]
+ *       └── <main> flex-1 overflow-y-auto p-5
  */
 export function AppShell({
   children,
@@ -20,25 +22,10 @@ export function AppShell({
   onRefresh,
   isRefreshing = false,
 }) {
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(COLLAPSED_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const toggleCollapsed = () => {
-    setCollapsed((c) => {
-      const next = !c;
-      try { localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0'); } catch { /* noop */ }
-      return next;
-    });
-  };
-
-  // Close mobile drawer on resize to desktop breakpoint (Tailwind lg = 1024px).
+  // Fermer le drawer mobile au passage au breakpoint lg (1024px).
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
     const handler = (e) => { if (e.matches) setMobileOpen(false); };
@@ -47,44 +34,41 @@ export function AppShell({
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="flex h-screen overflow-hidden bg-bg-1 text-ink-0">
       <ScrollToTop />
-      <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
-        <aside className="hidden lg:block sticky top-0 h-screen shrink-0">
+
+      {/* Sidebar desktop — 232px fixe, masquée sur mobile */}
+      <aside className="hidden lg:block flex-shrink-0">
+        <Sidebar
+          onLogout={onLogout}
+          badges={badges}
+        />
+      </aside>
+
+      {/* Sidebar mobile — Sheet slide-in */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-[232px] p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
           <Sidebar
-            collapsed={collapsed}
-            onToggleCollapsed={toggleCollapsed}
-            onLogout={onLogout}
+            mobile
+            onLogout={() => { setMobileOpen(false); onLogout?.(); }}
+            onItemSelect={() => setMobileOpen(false)}
             badges={badges}
           />
-        </aside>
+        </SheetContent>
+      </Sheet>
 
-        {/* Mobile sidebar (Sheet) */}
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="w-64 p-0">
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
-            <Sidebar
-              mobile
-              onLogout={() => { setMobileOpen(false); onLogout?.(); }}
-              onItemSelect={() => setMobileOpen(false)}
-              badges={badges}
-            />
-          </SheetContent>
-        </Sheet>
-
-        {/* Main column */}
-        <div className="flex flex-1 min-w-0 flex-col">
-          <Topbar
-            onOpenMobileSidebar={() => setMobileOpen(true)}
-            onOpenCommandPalette={() => setPaletteOpen(true)}
-            onRefresh={onRefresh}
-            isRefreshing={isRefreshing}
-          />
-          <main className="flex-1 min-w-0">
-            {children}
-          </main>
-        </div>
+      {/* Colonne principale */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <Topbar
+          onOpenMobileSidebar={() => setMobileOpen(true)}
+          onOpenCommandPalette={() => setPaletteOpen(true)}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
+        />
+        <main className="flex-1 overflow-y-auto p-5">
+          {children}
+        </main>
       </div>
 
       <CommandPalette
