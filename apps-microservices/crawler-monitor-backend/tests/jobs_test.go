@@ -44,8 +44,8 @@ func TestJobs_ListSorted(t *testing.T) {
 		t.Fatalf("len=%d", len(jobs))
 	}
 	// def has later start_time so should be first after sort
-	if jobs[0]["_id"] != "def" {
-		t.Errorf("first = %v want def", jobs[0]["_id"])
+	if jobs[0]["id"] != "def" {
+		t.Errorf("first = %v want def", jobs[0]["id"])
 	}
 }
 

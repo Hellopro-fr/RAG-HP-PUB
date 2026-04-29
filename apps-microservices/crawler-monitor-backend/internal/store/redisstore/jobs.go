@@ -41,7 +41,7 @@ func (c *Client) ListJobs(ctx context.Context) ([]RawJob, error) {
 			continue
 		}
 		j["_redisKey"] = k
-		j["_id"] = strings.TrimPrefix(k, JobPrefix)
+		j["id"] = strings.TrimPrefix(k, JobPrefix)
 		out = append(out, j)
 	}
 	return out, nil
@@ -56,6 +56,6 @@ func (c *Client) GetJob(ctx context.Context, id string) (RawJob, error) {
 	if err := json.Unmarshal([]byte(raw), &j); err != nil {
 		return nil, err
 	}
-	j["_id"] = id
+	j["id"] = id
 	return j, nil
 }
