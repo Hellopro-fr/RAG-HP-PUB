@@ -1,44 +1,32 @@
-// Tests for the regional-exclusion gate used in routes.ts default handler.
-// The handler itself is tightly coupled to Crawlee + Playwright contexts, so we
-// reproduce the exact filter/dedup logic here against the same DetectionLangueClient
-// helpers it calls. This locks the gate behavior (jaunin.com belt-and-braces):
-//   - Only locale-shaped prefixes survive into context.excludedRegionalPaths.
-//   - Content prefixes (e.g. /nos-realisations) returned by a malformed hreflang
-//     declaration are rejected and never blanket-block a content section.
+// Tests for the post-detect decision rule used in routes.ts default handler.
+//
+// Note (C-3): the regional-exclusion gate cases that previously lived here have moved
+// to `test_DetectionLangueClient.ts`. They now exercise the production helper
+// `DetectionLangueClient.computeExcludedRegionalPaths` directly, eliminating the
+// hand-mirrored loop that used to drift from routes.ts.
+//
+// Internal-page validation (Task 4): the internal-page branch in routes.ts reads
+// only `detectResult.ok` to set `isEnqueuingLinks`. The URL fallback (`checkUrl`)
+// that previously ran on a clean rejection has been removed — it let .fr-TLD pages
+// with non-FR HTML lang (aera-sa.fr/de/...) leak into the main dataset. Forced HTML
+// detect is authoritative; URL TLD signals cannot override it.
+//
+// The handler is coupled to Crawlee + Playwright contexts, so we mirror the minimal
+// post-detect decision rule here. The rule is a single-line ternary, too trivial to
+// extract to production. If routes.ts diverges from this rule, update the helper
+// alongside.
 
-import { DetectionLangueClient } from "../class/DetectionLangueClient.js";
-
-interface AlternativeUrl {
-    url: string;
+interface DetectVerdict {
+    ok: boolean;
 }
 
-// Mirrors the loop body inside routes.ts (lines ~418-440) post-Task-3.
-// Kept in sync with the production code path; if routes.ts diverges, update here too.
-function computeExcludedRegionalPaths(
-    winnerUrl: string,
-    seedUrl: string,
-    alternatives: AlternativeUrl[],
-): { excluded: string[]; rejectedNonLocale: string[] } {
-    const winnerPrefix = DetectionLangueClient.extractPathPrefix(winnerUrl);
-    const seedPrefix = DetectionLangueClient.extractPathPrefix(seedUrl);
-
-    const excluded: string[] = [];
-    const rejectedNonLocale: string[] = [];
-
-    for (const alt of alternatives) {
-        const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
-        if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
-            if (!DetectionLangueClient.isFrenchRegionalPathPrefix(altPrefix)) {
-                rejectedNonLocale.push(altPrefix);
-                continue;
-            }
-            if (!excluded.includes(altPrefix)) {
-                excluded.push(altPrefix);
-            }
-        }
+function decideEnqueuingLinks(detectResult: DetectVerdict): boolean {
+    let isEnqueuingLinks = false;
+    if (detectResult.ok) {
+        isEnqueuingLinks = true;
     }
-
-    return { excluded, rejectedNonLocale };
+    // No URL fallback. Removed in Task 4.
+    return isEnqueuingLinks;
 }
 
 let passed = 0;
@@ -55,89 +43,18 @@ function assertEqual<T>(actual: T, expected: T, label: string) {
     }
 }
 
-// Case 1: typical clean hreflang — locale-shaped alts pass the gate.
-{
-    const result = computeExcludedRegionalPaths(
-        "https://www.manitou.com/fr-FR",
-        "https://www.manitou.com/fr-FR",
-        [
-            { url: "https://www.manitou.com/fr-BE/" },
-            { url: "https://www.manitou.com/fr-CA" },
-            { url: "https://www.manitou.com/en-GB/" },
-        ],
-    );
-    assertEqual(result.excluded.sort(), ["/en-GB", "/fr-BE", "/fr-CA"], "clean hreflang excludes all locale alts");
-    assertEqual(result.rejectedNonLocale, [], "clean hreflang rejects nothing");
-}
-
-// Case 2: jaunin.com-style malformed hreflang — content prefix must NOT enter excluded set.
-{
-    const result = computeExcludedRegionalPaths(
-        "https://www.jaunin.com/",
-        "https://www.jaunin.com/",
-        [
-            { url: "https://www.jaunin.com/nos-realisations" },
-            { url: "https://www.jaunin.com/produits/" },
-            { url: "https://www.jaunin.com/fr-CH/" },
-        ],
-    );
-    assertEqual(result.excluded, ["/fr-CH"], "only locale alt enters excluded list");
-    assertEqual(
-        result.rejectedNonLocale.sort(),
-        ["/nos-realisations", "/produits"],
-        "content prefixes rejected by gate",
-    );
-}
-
-// Case 3: winner and seed prefixes are skipped before the gate is consulted.
-{
-    const result = computeExcludedRegionalPaths(
-        "https://www.manitou.com/fr-FR",
-        "https://www.manitou.com/fr-FR",
-        [
-            { url: "https://www.manitou.com/fr-FR/" },
-            { url: "https://www.manitou.com/fr-BE" },
-        ],
-    );
-    assertEqual(result.excluded, ["/fr-BE"], "winner prefix is filtered out before gate");
-}
-
-// --- Internal-page validation: trust forced HTML detect verdicts (Task 4) ---
-// The internal-page branch in routes.ts now reads only `detectResult.ok` to set
-// `isEnqueuingLinks`. The URL fallback (`checkUrl`) that previously ran on a
-// clean rejection has been removed — it let .fr-TLD pages with non-FR HTML lang
-// (aera-sa.fr/de/...) leak into the main dataset. Forced HTML detect is
-// authoritative; URL TLD signals cannot override it.
-//
-// The handler is coupled to Crawlee + Playwright contexts, so we mirror the
-// minimal post-detect decision rule here. If routes.ts diverges from this
-// rule, update the helper alongside.
-
-interface DetectVerdict {
-    ok: boolean;
-}
-
-function decideEnqueuingLinks(detectResult: DetectVerdict): boolean {
-    let isEnqueuingLinks = false;
-    if (detectResult.ok) {
-        isEnqueuingLinks = true;
-    }
-    // No URL fallback. Removed in Task 4.
-    return isEnqueuingLinks;
-}
-
-// Case 4: clean acceptance enqueues links.
+// Case 1: clean acceptance enqueues links.
 {
     const decision = decideEnqueuingLinks({ ok: true });
     assertEqual(decision, true, "ok=true → isEnqueuingLinks=true");
 }
 
-// Case 5: clean rejection (e.g. aera-sa.fr/de/... HTML lang=\"de-DE\") does NOT enqueue.
+// Case 2: clean rejection (e.g. aera-sa.fr/de/... HTML lang=\"de-DE\") does NOT enqueue.
 // Pre-Task-4 the URL fallback would have flipped this to true via .fr TLD direct_match.
 {
     const decision = decideEnqueuingLinks({ ok: false });
     assertEqual(decision, false, "ok=false → no URL fallback override (aera-sa.fr leak fix)");
 }
 
-console.log(`\ntest_routes (regional-exclusion gate + post-detect rule): ${passed} passed, ${failed} failed`);
+console.log(`\ntest_routes (post-detect rule): ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

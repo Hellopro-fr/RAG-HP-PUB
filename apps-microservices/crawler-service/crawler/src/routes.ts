@@ -417,26 +417,22 @@ router.addDefaultHandler(
 
                             // Regional path exclusion: extract alternative paths to exclude
                             if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                                // Belt-and-braces gate inside computeExcludedRegionalPaths: only
+                                // accept locale-shaped prefixes (e.g. /fr-FR, /en, /de-DE). Rejects
+                                // content paths like /nos-realisations that a malformed hreflang
+                                // could surface, which would otherwise blanket-block a content
+                                // section. Complements the API-side gate in alternative_urls
+                                // assembly.
                                 const winnerPrefix = DetectionLangueClient.extractPathPrefix(detectResult.url || url);
                                 const seedPrefix = DetectionLangueClient.extractPathPrefix(site);
+                                const { excluded, rejected } = DetectionLangueClient.computeExcludedRegionalPaths(
+                                    detectResult.alternative_urls,
+                                    winnerPrefix,
+                                    seedPrefix,
+                                );
 
-                                const excluded: string[] = [];
-                                for (const alt of detectResult.alternative_urls) {
-                                    const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
-                                    if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
-                                        // Belt-and-braces gate: only accept locale-shaped prefixes
-                                        // (e.g. /fr-FR, /en, /de-DE). Rejects content paths like
-                                        // /nos-realisations that a malformed hreflang could surface,
-                                        // which would otherwise blanket-block a content section.
-                                        // Complements the API-side gate in alternative_urls assembly.
-                                        if (!DetectionLangueClient.isFrenchRegionalPathPrefix(altPrefix)) {
-                                            log.info(`[REGIONAL_EXCLUSION] Rejected non-locale alt prefix: ${altPrefix} (from ${alt.url})`);
-                                            continue;
-                                        }
-                                        if (!excluded.includes(altPrefix)) {
-                                            excluded.push(altPrefix);
-                                        }
-                                    }
+                                for (const r of rejected) {
+                                    log.info(`[REGIONAL_EXCLUSION] Rejected non-locale alt prefix: ${r.prefix} (from ${r.sourceUrl})`);
                                 }
 
                                 if (excluded.length > 0) {
