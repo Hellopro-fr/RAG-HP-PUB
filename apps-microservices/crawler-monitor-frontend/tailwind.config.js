@@ -59,6 +59,7 @@ export default {
         },
         info: {
           DEFAULT:    'var(--info)',
+          soft:       'var(--info-soft)',
           foreground: 'var(--info-foreground)',
         },
         // Design system tokens oklch
