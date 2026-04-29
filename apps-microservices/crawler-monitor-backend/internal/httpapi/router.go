@@ -59,6 +59,13 @@ func NewRouter(d Deps) http.Handler {
 				rt.Get("/", jobsListHandler(d.RedisStore))
 				rt.Get("/{id}/details", jobsDetailsHandler(d.RedisStore))
 				rt.Get("/{id}/performance", jobsPerformanceHandler(d.RedisStore))
+				if d.FileStore != nil {
+					rt.Get("/{id}/dataset/counts", datasetCountsHandler(d.FileStore))
+					rt.Get("/{id}/dataset/urls", datasetURLsHandler(d.FileStore))
+					rt.Get("/{id}/request-queues", queuesListHandler(d.FileStore))
+					rt.Get("/{id}/request-queues/{domain}/{filename}", queuesReadFileHandler(d.FileStore))
+					rt.Post("/{id}/request-queues/{domain}/{filename}", queuesWriteFileHandler(d.FileStore))
+				}
 			})
 
 			rt.Get("/api/capacity", capacityGetHandler(d.RedisStore))
