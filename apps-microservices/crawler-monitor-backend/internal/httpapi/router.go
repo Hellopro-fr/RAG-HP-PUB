@@ -87,6 +87,11 @@ func NewRouter(d Deps) http.Handler {
 			rt.Get("/api/timeline", timelineHandler(d.RedisStore))
 			rt.Get("/api/alerts", alertsHandler(d.RedisStore))
 
+			rt.Get("/api/callbacks", callbacksListHandler(d.RedisStore))
+			rt.Post("/api/callbacks/clear", callbacksClearHandler(d.RedisStore, d.AuditStore))
+			rt.Post("/api/callbacks/{idx}/retry", callbacksRetryHandler(d.RedisStore, d.AuditStore))
+			rt.Delete("/api/callbacks/{idx}", callbacksDeleteHandler(d.RedisStore, d.AuditStore))
+
 			if d.AuditStore != nil {
 				if adapted, ok := d.AuditStore.(*auditStoreAdapter); ok {
 					rt.Get("/api/audit", auditListHandler(adapted.s))
