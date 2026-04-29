@@ -1,17 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  RefreshCw, AlertCircle, FileText, Filter, Calendar,
+  RefreshCw, AlertCircle, FileText, Filter, Search, Download,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Button } from '../components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
 import {
   Tooltip, TooltipTrigger, TooltipContent,
 } from '../components/ui/tooltip';
+import Pill from '../components/ui/Pill';
 import { cn } from '../lib/utils';
 
 /**
@@ -29,22 +27,22 @@ const ACTION_OPTIONS = [
   'callback_retry', 'callback_delete', 'callback_clear_all',
 ];
 
-// Fix 4a : libellés des colonnes
+// Libellés des colonnes
 const HEAD_TOOLTIPS = {
-  when:     'Date et heure de l\u2019événement (timezone locale)',
-  user:     'Utilisateur authentifié qui a déclenché l\u2019action (anonymous si non loggué)',
-  action:   'Nom de l\u2019action : login, queue_drop, callback_retry, dataset_deduplicate\u2026',
-  status:   'Résultat de l\u2019action : ok (succès) ou error (échec)',
+  when:     'Date et heure de l’événement (timezone locale)',
+  user:     'Utilisateur authentifié qui a déclenché l’action (anonymous si non loggué)',
+  action:   'Nom de l’action : login, queue_drop, callback_retry, dataset_deduplicate…',
+  status:   'Résultat de l’action : ok (succès) ou error (échec)',
   target:   'Cible concernée : id de queue, url, job, etc.',
   metadata: 'Détails additionnels structurés (clé=valeur · clé=valeur)',
   ip:       'Adresse IP source de la requête',
 };
 
 const HeadWithTip = ({ tip, children }) => (
-  <TableHead>
+  <TableHead className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3 h-8 border-b border-hairline">
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+        <span className="cursor-help border-b border-dotted border-ink-3/40">
           {children}
         </span>
       </TooltipTrigger>
@@ -53,17 +51,12 @@ const HeadWithTip = ({ tip, children }) => (
   </TableHead>
 );
 
-const statusClass = (status) =>
-  status === 'ok'
-    ? 'bg-success/15 text-success'
-    : 'bg-destructive/15 text-destructive';
-
-const actionClass = (action) => {
-  if (!action) return 'bg-muted text-muted-foreground';
-  if (action.startsWith('login_')) return 'bg-info/15 text-info';
-  if (action.startsWith('callback_')) return 'bg-primary/15 text-primary';
-  if (action.startsWith('queue_drop') || action.startsWith('dataset_dedup')) return 'bg-destructive/15 text-destructive';
-  return 'bg-warning/15 text-warning';
+const actionTone = (action) => {
+  if (!action) return 'neutral';
+  if (action.startsWith('login_')) return 'info';
+  if (action.startsWith('callback_')) return 'accent';
+  if (action.startsWith('queue_drop') || action.startsWith('dataset_dedup')) return 'err';
+  return 'warn';
 };
 
 const fmtMetadata = (m) => {
@@ -73,9 +66,6 @@ const fmtMetadata = (m) => {
 
 const truncate = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : (s || ''));
 
-const SELECT_CLS =
-  'h-8 appearance-none rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
-
 const AuditPage = ({ token }) => {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -84,7 +74,7 @@ const AuditPage = ({ token }) => {
 
   const [actionFilter, setActionFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
-  // Fix 4a : debounce 300ms du userFilter pour éviter un fetch à chaque frappe
+  // Debounce 300ms du userFilter pour éviter un fetch à chaque frappe
   const [debouncedUser, setDebouncedUser] = useState('');
   const [days, setDays] = useState(1);
   const [limit] = useState(100);
@@ -130,77 +120,109 @@ const AuditPage = ({ token }) => {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const currentPage = Math.floor(offset / limit) + 1;
 
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-4">
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border p-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold">
-            <FileText className="h-4 w-4 text-primary" />
-            Audit log
-            <span className="font-mono text-xs font-normal text-muted-foreground">
-              ({total} entrées)
-            </span>
-          </h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={fetchEntries}
-            disabled={loading}
-            title="Rafraîchir"
-          >
-            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          </Button>
+      {/* Hero */}
+      <div className="flex items-center gap-3 mb-5">
+        <FileText className="h-5 w-5 text-ink-2" />
+        <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Audit log</h1>
+        {/* Live dot */}
+        <span className="flex items-center gap-1.5 font-mono text-[11px] text-ok">
+          <span className="h-2 w-2 rounded-full bg-ok animate-pulse-dot" />
+          live
+        </span>
+        <span className="ml-auto font-mono text-[12px] text-ink-3">{total} entrées</span>
+        {/* Refresh button */}
+        <button
+          onClick={fetchEntries}
+          disabled={loading}
+          aria-label="Rafraîchir"
+          className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
+        >
+          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+        </button>
+        {/* Export button */}
+        <button
+          onClick={handleExport}
+          className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
+          aria-label="Exporter"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Period toggle */}
+        <div className="flex gap-0.5 rounded-md border border-hairline bg-bg-2 p-0.5">
+          {[{ value: 1, label: '24h' }, { value: 7, label: '7j' }, { value: 30, label: '30j' }].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => { setDays(opt.value); setOffset(0); }}
+              className={cn(
+                'rounded px-2.5 py-1 text-[11px] font-medium transition-colors',
+                days === opt.value ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 border-b border-border p-3 text-sm">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <select
-              value={days}
-              onChange={e => { setDays(Number(e.target.value)); setOffset(0); }}
-              className={SELECT_CLS}
-            >
-              <option value={1}>24h</option>
-              <option value={7}>7 jours</option>
-              <option value={30}>30 jours (max)</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <select
-              value={actionFilter}
-              onChange={e => { setActionFilter(e.target.value); setOffset(0); }}
-              className={SELECT_CLS}
-            >
-              {ACTION_OPTIONS.map(a => (
-                <option key={a} value={a}>{a || 'Toutes actions'}</option>
-              ))}
-            </select>
-          </div>
-          <Input
+        {/* Action filter select */}
+        <div className="relative">
+          <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-3" />
+          <select
+            value={actionFilter}
+            onChange={e => { setActionFilter(e.target.value); setOffset(0); }}
+            className="h-8 pl-8 pr-3 appearance-none rounded-md border border-hairline bg-bg-1 text-[12px] text-ink-0 focus:outline-none focus:border-accent"
+          >
+            {ACTION_OPTIONS.map(a => (
+              <option key={a} value={a}>{a || 'Toutes actions'}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Search input */}
+        <div className="relative flex-1 max-w-[260px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-3" />
+          <input
             type="text"
-            placeholder="Filtrer par user (admin, anonymous, …)"
+            placeholder="Filtrer par user…"
             value={userFilter}
             onChange={e => setUserFilter(e.target.value)}
-            className="h-8 min-w-[200px] flex-1"
+            className="w-full h-8 pl-8 pr-3 rounded-md border border-hairline bg-bg-1 text-[12px] text-ink-0 placeholder:text-ink-3 focus:outline-none focus:border-accent"
           />
         </div>
+      </div>
 
+      {/* Table container */}
+      <div className="bg-surface rounded-lg border border-hairline overflow-hidden">
         {error && (
-          <div className="flex items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4" /> {error}
+          <div className="px-4 py-2 text-[12px] text-err border-b border-err/20 bg-err-soft flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" /> {error}
           </div>
         )}
 
         <div className="max-h-[70vh] overflow-auto">
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center py-16">
-              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+              <RefreshCw className="h-6 w-6 animate-spin text-ink-3" />
             </div>
           ) : items.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">
-              <FileText className="mx-auto mb-3 h-10 w-10 opacity-40" />
-              <p className="text-sm">Aucune entrée pour ces filtres.</p>
+            <div className="py-16 text-center">
+              <FileText className="mx-auto mb-3 h-10 w-10 opacity-30 text-ink-3" />
+              <p className="text-[13px] text-ink-2">Aucune entrée pour ces filtres.</p>
             </div>
           ) : (
             <Table>
@@ -217,28 +239,26 @@ const AuditPage = ({ token }) => {
               </TableHeader>
               <TableBody>
                 {items.map((e, idx) => (
-                  <TableRow key={`${e.ts}-${idx}`}>
-                    <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+                  <TableRow key={`${e.ts}-${idx}`} className="hover:bg-bg-2">
+                    <TableCell className="font-mono text-[11px] text-ink-3 whitespace-nowrap">
                       {new Date(e.ts).toLocaleString('fr-FR')}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{truncate(e.user, 16)}</TableCell>
-                    <TableCell>
-                      <span className={cn('rounded px-1.5 py-0.5 text-[10px]', actionClass(e.action))}>
-                        {e.action}
-                      </span>
+                    <TableCell className="font-mono text-[11px] text-ink-1">
+                      {truncate(e.user, 16)}
                     </TableCell>
                     <TableCell>
-                      <span className={cn('rounded px-1.5 py-0.5 text-[10px]', statusClass(e.status))}>
-                        {e.status || '?'}
-                      </span>
+                      <Pill tone={actionTone(e.action)}>{e.action}</Pill>
                     </TableCell>
-                    <TableCell className="font-mono text-xs" title={e.target || ''}>
+                    <TableCell>
+                      <Pill tone={e.status === 'ok' ? 'ok' : 'err'}>{e.status || '?'}</Pill>
+                    </TableCell>
+                    <TableCell className="font-mono text-[11px] text-ink-1" title={e.target || ''}>
                       {truncate(e.target, 24)}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="font-mono text-[11px] text-ink-3">
                       {fmtMetadata(e.metadata)}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
+                    <TableCell className="font-mono text-[11px] text-ink-3">
                       {e.ip || ''}
                     </TableCell>
                   </TableRow>
@@ -248,30 +268,27 @@ const AuditPage = ({ token }) => {
           )}
         </div>
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border p-3 text-sm text-muted-foreground">
-            <span className="font-mono">Page {currentPage} / {totalPages}</span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setOffset(o => Math.max(0, o - limit))}
-                disabled={offset === 0 || loading}
-              >
-                Précédent
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setOffset(o => o + limit)}
-                disabled={currentPage >= totalPages || loading}
-              >
-                Suivant
-              </Button>
-            </div>
+        {/* Pagination footer */}
+        <div className="flex items-center justify-between border-t border-hairline px-4 py-2.5">
+          <span className="font-mono text-[11px] text-ink-3">Page {currentPage} / {totalPages}</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setOffset(o => Math.max(0, o - limit))}
+              disabled={offset === 0 || loading}
+              className="px-3 py-1 text-[11px] rounded-md border border-hairline text-ink-2 hover:bg-bg-2 disabled:opacity-40"
+            >
+              Précédent
+            </button>
+            <button
+              onClick={() => setOffset(o => o + limit)}
+              disabled={currentPage >= totalPages || loading}
+              className="px-3 py-1 text-[11px] rounded-md border border-hairline text-ink-2 hover:bg-bg-2 disabled:opacity-40"
+            >
+              Suivant
+            </button>
           </div>
-        )}
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };
