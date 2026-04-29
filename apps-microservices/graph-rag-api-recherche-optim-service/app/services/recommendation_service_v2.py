@@ -925,6 +925,18 @@ class RecommendationServiceV2:
             logging.warning("[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)", score_time, len(raw_results), len(scored))
             fetch_time = parallel_time
 
+            # P5 fallback: si < 2 produits après threshold principal (0.3),
+            # re-scorer avec threshold=0.0 pour débloquer les candidats borderline
+            if len(scored) < 2 and raw_results:
+                fallback_params = dict(scoring_params, absolute_threshold=0.0)
+                scored_fallback = self._score_raw_results(
+                    raw_results, flat_filters, fallback_params,
+                    user_id_pays, user_dept, user_typologie, id_categorie,
+                )
+                if len(scored_fallback) > len(scored):
+                    logging.warning("[V2-P5-FALLBACK] thin results (%d), threshold=0.0 → %d candidates", len(scored), len(scored_fallback))
+                    scored = scored_fallback
+
             if not scored:
                 return MatchingResponse(top_produit=[], liste_produit=[], temps_de_traitement=time.perf_counter() - start_time)
 
