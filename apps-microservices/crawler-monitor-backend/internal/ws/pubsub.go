@@ -4,16 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-// jobKeyPrefix mirrors redisstore.JobPrefix — kept local to avoid import cycle.
+// jobKeyPrefix mirrors redisstore.JobPrefix — local to avoid import cycle.
 const jobKeyPrefix = "crawl_job:"
 
-// jobTTL: jobs expire after 48h of inactivity (auto-cleanup for stale entries).
+// jobTTL: jobs expire after 48h of inactivity.
 const jobTTL = 48 * time.Hour
+
+// replicaHistoryPrefix and knownReplicasKey mirror redisstore constants.
+const replicaHistoryPrefix = "replica:history:"
+const knownReplicasKey = "replica:known"
+
+// retentionMs: 1h replica history retention (matches redisstore.RetentionReplicaHistoryMs).
+const retentionMs = int64(60 * 60 * 1000)
 
 type PubSub struct {
 	rdb      *redis.Client
@@ -68,32 +76,35 @@ func (p *PubSub) runOnce(ctx context.Context) error {
 			func() {
 				defer func() { _ = recover() }()
 				p.hub.Broadcast([]byte(msg.Payload))
-				p.persistJob(ctx, msg.Payload)
+				p.persist(ctx, msg.Payload)
 			}()
 		}
 	}
 }
 
-// persistJob upserts crawl_job:<jobId> in Redis from any pub/sub message that carries a jobId.
-// Preserves start_time on existing entries; sets it from timestamp on first sight.
-func (p *PubSub) persistJob(ctx context.Context, payload string) {
+// persist upserts crawl_job:<jobId> and replica:history:<replicaId> from pub/sub messages.
+func (p *PubSub) persist(ctx context.Context, payload string) {
 	var msg map[string]any
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
 		return
 	}
+	p.persistJob(ctx, msg)
+	p.persistReplica(ctx, msg)
+}
+
+// persistJob upserts crawl_job:<jobId> preserving start_time on existing entries.
+func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 	jobID, _ := msg["jobId"].(string)
 	if jobID == "" {
 		return
 	}
 	key := jobKeyPrefix + jobID
 
-	// Load existing entry to preserve immutable fields (start_time, crawl_mode…).
 	existing := map[string]any{}
 	if raw, err := p.rdb.Get(ctx, key).Result(); err == nil {
 		_ = json.Unmarshal([]byte(raw), &existing)
 	}
 
-	// Preserve or initialise start_time.
 	if _, hasStart := existing["start_time"]; !hasStart {
 		if ts, ok := msg["timestamp"].(float64); ok {
 			existing["start_time"] = time.UnixMilli(int64(ts)).UTC().Format(time.RFC3339Nano)
@@ -102,7 +113,6 @@ func (p *PubSub) persistJob(ctx context.Context, payload string) {
 		}
 	}
 
-	// Mutable fields — always update from incoming message.
 	existing["id"] = jobID
 	existing["_id"] = jobID
 	if v, ok := msg["domain"].(string); ok && v != "" {
@@ -110,9 +120,7 @@ func (p *PubSub) persistJob(ctx context.Context, payload string) {
 	}
 	if v, ok := msg["status"].(string); ok && v != "" {
 		existing["status"] = v
-		// Record end_time when job transitions to a terminal state.
-		terminal := v == "finished" || v == "failed" || v == "archived"
-		if terminal {
+		if v == "finished" || v == "failed" || v == "archived" {
 			if _, hasEnd := existing["end_time"]; !hasEnd {
 				existing["end_time"] = time.Now().UTC().Format(time.RFC3339Nano)
 			}
@@ -142,4 +150,39 @@ func (p *PubSub) persistJob(ctx context.Context, payload string) {
 		return
 	}
 	_ = p.rdb.Set(ctx, key, string(out), jobTTL).Err()
+}
+
+// persistReplica appends a heartbeat sample to replica:history:<replicaId> (ZSet, TTL 1h).
+func (p *PubSub) persistReplica(ctx context.Context, msg map[string]any) {
+	replicaID, _ := msg["replicaId"].(string)
+	if replicaID == "" {
+		return
+	}
+	ts := time.Now().UnixMilli()
+	if v, ok := msg["timestamp"].(float64); ok {
+		ts = int64(v)
+	}
+	cpu, _ := msg["cpu"].(float64)
+	ram, _ := msg["ram"].(float64)
+	totalRAM, _ := msg["totalRam"].(float64)
+	jobID, _ := msg["jobId"].(string)
+
+	sample := map[string]any{
+		"ts":       ts,
+		"cpu":      cpu,
+		"ram":      ram,
+		"totalRam": totalRAM,
+	}
+	if jobID != "" {
+		sample["jobId"] = jobID
+	}
+	raw, err := json.Marshal(sample)
+	if err != nil {
+		return
+	}
+	key := replicaHistoryPrefix + replicaID
+	minScore := strconv.FormatInt(ts-retentionMs, 10)
+	_ = p.rdb.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)}).Err()
+	_ = p.rdb.ZRemRangeByScore(ctx, key, "0", minScore).Err()
+	_ = p.rdb.SAdd(ctx, knownReplicasKey, replicaID).Err()
 }
