@@ -117,6 +117,22 @@ func queuesDropHandler(storage *filestore.Storage) http.HandlerFunc {
 	}
 }
 
+// queuesAnalyzeHandler handles GET /api/jobs/{id}/request-queues/analyze.
+// Parcourt tous les fichiers de la request queue, applique les BlockedPatterns
+// et retourne les statistiques agrégées.
+// Mirrors server.js:863-964.
+func queuesAnalyzeHandler(storage *filestore.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		result, err := queue.Analyze(r.Context(), storage, id)
+		if err != nil {
+			WriteError(w, 500, "Failed to analyze request queues")
+			return
+		}
+		WriteJSON(w, 200, result)
+	}
+}
+
 // queuesWriteFileHandler handles POST /api/jobs/{id}/request-queues/{domain}/{filename}.
 // Accepts up to 50MB body; writes JSON content to the queue file.
 // Mirrors server.js:745.

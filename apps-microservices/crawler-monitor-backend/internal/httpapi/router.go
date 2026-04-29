@@ -75,6 +75,8 @@ func NewRouter(d Deps) http.Handler {
 					rt.Get("/{id}/dataset/analyze", datasetAnalyzeHandler(d.FileStore))
 					rt.Post("/{id}/dataset/deduplicate", datasetDeduplicateHandler(d.FileStore))
 					rt.Get("/{id}/request-queues", queuesListHandler(d.FileStore))
+					// Statiques avant les routes paramétrées pour que chi route correctement
+					rt.Get("/{id}/request-queues/analyze", queuesAnalyzeHandler(d.FileStore))
 					rt.Post("/{id}/request-queues/clean-patterns", queuesCleanPatternsHandler(d.FileStore))
 					rt.Post("/{id}/request-queues/repair", queuesRepairHandler(d.FileStore))
 					rt.Post("/{id}/request-queues/drop", queuesDropHandler(d.FileStore))
