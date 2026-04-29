@@ -11,9 +11,21 @@ import (
 type RawJob map[string]any
 
 func (c *Client) ListJobs(ctx context.Context) ([]RawJob, error) {
-	keys, err := c.rdb.Keys(ctx, JobPrefix+"*").Result()
-	if err != nil {
-		return nil, err
+	var keys []string
+	var cursor uint64
+	for {
+		batch, next, err := c.rdb.Scan(ctx, cursor, JobPrefix+"*", 100).Result()
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, batch...)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	if len(keys) == 0 {
+		return []RawJob{}, nil
 	}
 	out := make([]RawJob, 0, len(keys))
 	for _, k := range keys {
