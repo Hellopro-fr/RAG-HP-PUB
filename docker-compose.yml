@@ -1320,6 +1320,33 @@ services:
       - services-net
     logging: *logging_defaults
 
+  crawler-monitor-backend-go:
+    profiles: ["app"]
+    build:
+      context: ./apps-microservices/crawler-monitor-backend
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3001"
+    environment:
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - CRAWLER_STORAGE_PATH=/app/storage
+      - PORT=3001
+      - LOG_LEVEL=info
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
+    volumes:
+      - crawler_data:/app/storage:rw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/server", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   crawler-monitor-frontend:
     build:
       context: ./apps-microservices/crawler-monitor-frontend
