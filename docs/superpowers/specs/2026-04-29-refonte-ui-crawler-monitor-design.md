@@ -230,7 +230,7 @@ Refondre le layout global. Toutes les pages bénéficient immédiatement du nouv
 - Simulateur : slider + 3 ProjCards (accent/ok/warn) + note warning
 
 ### Étape 7 — Health (`/health`)
-**Fichiers :** `src/pages/` + `src/coherence/components/CoherenceHealthPage.jsx`  
+**Fichiers :** `src/coherence/components/CoherenceHealthPage.jsx`, `src/coherence/components/CoherencePastille.jsx`  
 - Hero + Pill "tout vert" ou err
 - KPI 4 colonnes : Total / Warnings / Critique / OK
 - Liste verticale de règles : icône check/warn/err + ID mono + description + valeur mesurée mono + timestamp
