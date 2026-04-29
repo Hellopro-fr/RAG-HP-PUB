@@ -56,6 +56,7 @@
     --info-alias: var(--info);
     --info-foreground: #fff;
     --radius: 8px;
+    --ring-offset-background: var(--bg-1);
     --accent-foreground: #fff;
   }
 
@@ -92,6 +93,7 @@
     --primary: var(--accent);
     --secondary: var(--bg-2);
     --secondary-foreground: var(--ink-1);
+    --ring-offset-background: var(--bg-1);
   }
 
   * {
@@ -108,15 +110,6 @@
 @layer utilities {
   .font-display { font-family: 'Inter Tight', Inter, sans-serif; }
   .tabular-nums { font-variant-numeric: tabular-nums; }
-
-  @keyframes pulse-dot {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.4; transform: scale(0.75); }
-  }
-  @keyframes shimmer {
-    from { background-position: -200% 0; }
-    to   { background-position: 200% 0; }
-  }
   .animate-pulse-dot {
     animation: pulse-dot 1.5s ease-in-out infinite;
   }
@@ -125,4 +118,14 @@
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
   }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
 }
