@@ -60,8 +60,10 @@ const actionTone = (action) => {
 };
 
 const fmtMetadata = (m) => {
-  if (!m || typeof m !== 'object') return '';
-  return Object.entries(m).map(([k, v]) => `${k}=${v}`).join(' · ');
+  if (!m) return '';
+  const obj = typeof m === 'string' ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m;
+  if (!obj || typeof obj !== 'object') return typeof m === 'string' ? m : '';
+  return Object.entries(obj).map(([k, v]) => `${k}=${v}`).join(' · ');
 };
 
 const truncate = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : (s || ''));
@@ -126,7 +128,9 @@ const AuditPage = ({ token }) => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `audit-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -155,7 +159,8 @@ const AuditPage = ({ token }) => {
         <button
           onClick={handleExport}
           className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
-          aria-label="Exporter"
+          aria-label="Exporter cette page (JSON)"
+          title="Exporter cette page (JSON)"
         >
           <Download className="h-4 w-4" />
         </button>
@@ -169,6 +174,7 @@ const AuditPage = ({ token }) => {
             <button
               key={opt.value}
               onClick={() => { setDays(opt.value); setOffset(0); }}
+              aria-pressed={days === opt.value}
               className={cn(
                 'rounded px-2.5 py-1 text-[11px] font-medium transition-colors',
                 days === opt.value ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
@@ -185,6 +191,7 @@ const AuditPage = ({ token }) => {
           <select
             value={actionFilter}
             onChange={e => { setActionFilter(e.target.value); setOffset(0); }}
+            aria-label="Filtrer par action"
             className="h-8 pl-8 pr-3 appearance-none rounded-md border border-hairline bg-bg-1 text-[12px] text-ink-0 focus:outline-none focus:border-accent"
           >
             {ACTION_OPTIONS.map(a => (
@@ -239,9 +246,9 @@ const AuditPage = ({ token }) => {
               </TableHeader>
               <TableBody>
                 {items.map((e, idx) => (
-                  <TableRow key={`${e.ts}-${idx}`} className="hover:bg-bg-2">
+                  <TableRow key={e.id ?? `row-${idx}`} className="hover:bg-bg-2">
                     <TableCell className="font-mono text-[11px] text-ink-3 whitespace-nowrap">
-                      {new Date(e.ts).toLocaleString('fr-FR')}
+                      {e.ts ? new Date(e.ts).toLocaleString('fr-FR') : '—'}
                     </TableCell>
                     <TableCell className="font-mono text-[11px] text-ink-1">
                       {truncate(e.user, 16)}
