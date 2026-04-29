@@ -1014,6 +1014,81 @@ def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[st
     return details
 
 
+# ---------------------------------------------------------------------------
+# Helpers : estimation de tokens et trim des chunks au budget LLM
+# ---------------------------------------------------------------------------
+
+# Limites tokens par provider : `max_input` = fenêtre totale du context window
+# (input + output partagent la même fenêtre), `reserve_output` = budget gardé
+# pour la réponse du LLM. Valeurs vérifiées via la doc officielle des providers.
+TOKEN_LIMITS_BY_PROVIDER: Dict[str, Dict[str, int]] = {
+    # Claude 4.x (haiku-4-5, sonnet-4-6, opus-4-7) : 200k context window
+    "claude": {"max_input": 200_000, "reserve_output": 16_000},
+    # Gemini 3.x Pro/Flash : 1 048 576 context window, 65 536 max output
+    "gemini": {"max_input": 1_048_576, "reserve_output": 65_536},
+    # GPT-5.x (mini/standard) : 400k context window, 128k max output
+    "gpt":    {"max_input": 400_000, "reserve_output": 32_000},
+}
+
+# Ratios chars/token par provider, calibrés sur contenu FR + descriptions multilingues.
+# Sources :
+#   - Claude  : Anthropic publie ~3.5 chars/tk ; mesuré sur ce service à 3.50 exact
+#               (750 756 chars ↔ 214 286 tokens claude-haiku-4-5).
+#   - GPT     : OpenAI o200k_base (GPT-4o/GPT-5) ≈ 4.0 chars/tk en EN, ~3.8 en FR.
+#   - Gemini  : Tokenizer SentencePiece, ratio voisin d'OpenAI sur multilingue.
+CHARS_PER_TOKEN_BY_PROVIDER: Dict[str, float] = {
+    "claude": 3.5,
+    "gpt":    3.8,
+    "gemini": 3.7,
+}
+
+def _estimate_tokens(text: str, provider: str = "claude") -> int:
+    """
+    Estimation token-count pure (sans dépendance externe), calibrée par provider.
+
+    Algorithme hybride : prend `max(chars / ratio, mots × 1.3)` — la borne
+    supérieure évite la sous-estimation (technique standard pour rester safe
+    face à la limite du context window).
+
+      - chars / ratio : précis sur du texte continu
+      - mots × 1.3    : précis quand beaucoup de mots courts (les mots courts
+                        coûtent souvent ≥1 token chacun même si peu de chars)
+    """
+    if not text:
+        return 0
+
+    ratio = CHARS_PER_TOKEN_BY_PROVIDER.get(provider, 3.5)
+    by_chars = len(text) / ratio
+    by_words = len(text.split()) * 1.3  # ~1.3 tk/mot en FR/multilingue
+    return int(max(by_chars, by_words))
+
+
+def _trim_chunks_to_token_budget(
+    chunks: List[str],
+    budget_tokens: int,
+    provider: str = "claude",
+    sep: str = "\n\n---\n\n",
+) -> Tuple[List[str], int]:
+    """
+    Garde les premiers chunks tant que leur jointure tient dans `budget_tokens`.
+    Les chunks en entrée sont supposés ordonnés par pertinence (les premiers gagnent).
+    Retourne (chunks_gardes, nb_retires).
+    """
+    if budget_tokens <= 0 or not chunks:
+        return [], len(chunks)
+
+    sep_tokens = _estimate_tokens(sep, provider=provider)
+    cumulative = 0
+    kept = 0
+    for i, c in enumerate(chunks):
+        added = _estimate_tokens(c, provider=provider) + (sep_tokens if i > 0 else 0)
+        if cumulative + added > budget_tokens:
+            break
+        cumulative += added
+        kept += 1
+    return chunks[:kept], len(chunks) - kept
+
+
 async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
@@ -1091,7 +1166,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": {},
                 "time_elapsed": elapsed,
                 "message": err_msg
@@ -1104,7 +1179,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": {},
                 "time_elapsed": elapsed,
                 "message": f"Aucun prix correspondant trouvé pour la catégorie {id_categorie}"
@@ -1116,7 +1191,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": {},
                 "time_elapsed": elapsed,
                 "message": f"Impossible de récupérer le prompt id={prompt_id}"
@@ -1163,7 +1238,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                 return {
                     "success": False,
                     "reponse": None,
-                    "matching": matching_response,
+                    # "matching": matching_response,  # désactivé temporairement
                     "api_response": {},
                     "time_elapsed": elapsed,
                     "message": "Tous les prix matchés ont été éliminés comme aberrants"
@@ -1253,6 +1328,52 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             use_chatgpt = model_pardefaut == "chatgpt"
             use_claude = model_pardefaut == "claude"
 
+        # =====================================================================
+        # Vérification budget tokens du final_prompt — trim si dépassement
+        # =====================================================================
+        provider_key = "gemini" if use_gemini else ("claude" if use_claude else "gpt")
+        limits = TOKEN_LIMITS_BY_PROVIDER[provider_key]
+        budget_max = limits["max_input"] - limits["reserve_output"]
+        final_prompt_tokens = _estimate_tokens(final_prompt, provider=provider_key)
+
+        if final_prompt_tokens > budget_max:
+            # Tokens fixes du template (final_prompt sans la partie chunks)
+            template_tokens = final_prompt_tokens - _estimate_tokens(all_chunks_text, provider=provider_key)
+            budget_chunks_tokens = budget_max - template_tokens
+
+            nb_chunks_avant = len(formatted_chunks)
+            formatted_chunks, nb_retires = _trim_chunks_to_token_budget(
+                formatted_chunks, budget_chunks_tokens, provider=provider_key
+            )
+            all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
+
+            # Reconstruire final_prompt avec les chunks réduits
+            final_prompt = prompt_text
+            final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
+            final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
+            final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+            final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
+
+            logger.warning(
+                f"[{id_categorie}] V2 — Budget tokens {provider_key} dépassé : "
+                f"{nb_retires}/{nb_chunks_avant} chunks retirés "
+                f"(prompt avant={final_prompt_tokens} tk > budget={budget_max} tk, "
+                f"après={_estimate_tokens(final_prompt)} tk)"
+            )
+            write_log(tracking_file, "--- BUDGET TOKENS DÉPASSÉ → TRIM ---")
+            write_log(tracking_file, json.dumps({
+                "provider": provider_key,
+                "max_input": limits["max_input"],
+                "reserve_output": limits["reserve_output"],
+                "budget_max": budget_max,
+                "final_prompt_tokens_avant": final_prompt_tokens,
+                "final_prompt_tokens_apres": _estimate_tokens(final_prompt),
+                "chunks_avant": nb_chunks_avant,
+                "chunks_apres": len(formatted_chunks),
+                "chunks_retires": nb_retires,
+            }, ensure_ascii=False, indent=2))
+            write_log(tracking_file, "")
+
         logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
 
         if use_gemini:
@@ -1320,7 +1441,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": llm_result.get("api_response", {}),
                 "time_elapsed": elapsed,
                 "message": error_msg
@@ -1340,7 +1461,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": llm_result.get("api_response", {}),
                 "time_elapsed": elapsed,
                 "message": error_msg
@@ -1371,7 +1492,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         return {
             "success": True,
             "reponse": parsed,
-            "matching": matching_response,
+            # "matching": matching_response,  # désactivé temporairement
             "api_response": llm_result.get("api_response", {}),
             "time_elapsed": elapsed,
             "message": f"{len(results)} prix matchés traités en {elapsed:.1f}s"
@@ -1383,7 +1504,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         return {
             "success": False,
             "reponse": None,
-            "matching": None,
+            # "matching": None,  # désactivé temporairement
             "api_response": {},
             "time_elapsed": elapsed,
             "message": f"Erreur inattendue: {str(e)}"
