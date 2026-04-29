@@ -91,9 +91,53 @@ func (p *PubSub) runOnce(ctx context.Context) error {
 			}
 			func() {
 				defer func() { _ = recover() }()
-				p.hub.Broadcast([]byte(msg.Payload))
+				p.broadcastTransformed(msg.Payload)
 				p.persist(ctx, msg.Payload)
 			}()
+		}
+	}
+}
+
+// broadcastTransformed converts a raw Redis pub/sub heartbeat into the
+// envelope format the React frontend expects:
+//
+//	{ type: "replica_heartbeat", data: { replicaId, cpu, ram, … } }
+//	{ type: "job_update",       crawl_id: "<jobId>" }
+//
+// The old Node/Express backend did this transformation; without it the
+// frontend silently ignores the raw { type: "heartbeat", … } payloads.
+func (p *PubSub) broadcastTransformed(payload string) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+		// Not valid JSON — forward as-is.
+		p.hub.Broadcast([]byte(payload))
+		return
+	}
+
+	msgType, _ := raw["type"].(string)
+	if msgType != "heartbeat" {
+		// Unknown type — forward unchanged.
+		p.hub.Broadcast([]byte(payload))
+		return
+	}
+
+	// 1. replica_heartbeat envelope
+	replicaEnvelope := map[string]any{
+		"type": "replica_heartbeat",
+		"data": raw,
+	}
+	if b, err := json.Marshal(replicaEnvelope); err == nil {
+		p.hub.Broadcast(b)
+	}
+
+	// 2. job_update envelope (only if the heartbeat carries a jobId)
+	if jobID := stringOrNum(raw["jobId"]); jobID != "" {
+		jobEnvelope := map[string]any{
+			"type":     "job_update",
+			"crawl_id": jobID,
+		}
+		if b, err := json.Marshal(jobEnvelope); err == nil {
+			p.hub.Broadcast(b)
 		}
 	}
 }
