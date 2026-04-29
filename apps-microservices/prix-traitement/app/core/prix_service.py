@@ -1030,36 +1030,59 @@ TOKEN_LIMITS_BY_PROVIDER: Dict[str, Dict[str, int]] = {
     "gpt":    {"max_input": 400_000, "reserve_output": 32_000},
 }
 
-# Ratios chars/token par provider, calibrés sur contenu FR + données structurées
-# (titre/prix/fournisseur/caractéristiques) — beaucoup de ponctuation et abréviations
-# qui font baisser le ratio par rapport à du texte naturel.
-# Mesuré sur ce service : 643 116 chars ↔ 214 279 tokens claude-haiku-4-5 → 3.00.
-# Pour rester safe face à la limite hard du provider, on prend une borne basse.
+# Ratios chars/token par provider :
+#   - Claude : heuristique safe utilisée DANS la boucle de trim uniquement (rapide,
+#     pas d'appel réseau). Le check du final_prompt passe par l'API Anthropic exacte
+#     via `_count_tokens_claude_api` ci-dessous.
+#   - GPT / Gemini : heuristiques calibrées FR + données structurées.
 CHARS_PER_TOKEN_BY_PROVIDER: Dict[str, float] = {
-    "claude": 3.0,   # mesuré 3.00 sur ce contenu ; texte naturel pur ≈ 3.5
-    "gpt":    3.3,   # o200k_base : ≈ 4.0 EN naturel, baisse à 3.3 sur FR structuré
-    "gemini": 3.3,   # SentencePiece : voisin d'OpenAI, idem
+    "claude": 2.5,   # heuristique conservatrice (réel mesuré ~2.58)
+    "gpt":    3.01,
+    "gemini": 3.16,
 }
+
+# Modèle Claude par défaut pour le comptage exact (la famille Claude 4.x partage
+# le même tokenizer, donc le choix précis du modèle a peu d'impact).
+_CLAUDE_DEFAULT_MODEL_FOR_COUNT = "claude-haiku-4-5"
+
+# Client Anthropic en cache (singleton) pour éviter de recréer un client par appel.
+_anthropic_count_client = None
+
+
+async def _count_tokens_claude_api(
+    text: str,
+    model: str = _CLAUDE_DEFAULT_MODEL_FOR_COUNT,
+) -> int:
+    """
+    Comptage tokens exact via l'endpoint officiel Anthropic `messages.count_tokens`.
+    Précis 100 %, ~100-300 ms par appel — réservé aux vérifications ponctuelles
+    (avant / après trim), pas à la boucle de trim qui passe par l'heuristique.
+    """
+    global _anthropic_count_client
+    if _anthropic_count_client is None:
+        from anthropic import AsyncAnthropic
+        _anthropic_count_client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    response = await _anthropic_count_client.messages.count_tokens(
+        model=model,
+        messages=[{"role": "user", "content": text}],
+    )
+    return response.input_tokens
+
 
 def _estimate_tokens(text: str, provider: str = "claude") -> int:
     """
-    Estimation token-count pure (sans dépendance externe), calibrée par provider.
+    Estimation token-count par heuristique chars/token (sync, sans réseau).
 
-    Algorithme hybride : prend `max(chars / ratio, mots × 1.3)` — la borne
-    supérieure évite la sous-estimation (technique standard pour rester safe
-    face à la limite du context window).
-
-      - chars / ratio : précis sur du texte continu
-      - mots × 1.3    : précis quand beaucoup de mots courts (les mots courts
-                        coûtent souvent ≥1 token chacun même si peu de chars)
+    Pour Claude, préférer `_count_tokens_claude_api` quand la précision compte
+    (vérification du final_prompt). L'heuristique reste utile dans la boucle de
+    trim où on ne peut pas se permettre N appels API.
     """
     if not text:
         return 0
 
-    ratio = CHARS_PER_TOKEN_BY_PROVIDER.get(provider, 3.5)
-    by_chars = len(text) / ratio
-    by_words = len(text.split()) * 1.3  # ~1.3 tk/mot en FR/multilingue
-    return int(max(by_chars, by_words))
+    ratio = CHARS_PER_TOKEN_BY_PROVIDER.get(provider, 3.0)
+    n = len(text)
+    return int(n / ratio) + (1 if n % ratio else 0)
 
 
 def _trim_chunks_to_token_budget(
@@ -1336,15 +1359,28 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         # =====================================================================
         # Vérification budget tokens du final_prompt — trim si dépassement
+        # Pour Claude : comptage exact via API ; sinon : heuristique chars/token.
         # =====================================================================
         provider_key = "gemini" if use_gemini else ("claude" if use_claude else "gpt")
         limits = TOKEN_LIMITS_BY_PROVIDER[provider_key]
         budget_max = limits["max_input"] - limits["reserve_output"]
-        final_prompt_tokens = _estimate_tokens(final_prompt, provider=provider_key)
+
+        async def _count_tokens(t: str) -> int:
+            if provider_key == "claude":
+                try:
+                    return await _count_tokens_claude_api(t)
+                except Exception as exc:
+                    logger.warning(
+                        f"[{id_categorie}] V2 — count_tokens API échoué, fallback heuristique: {exc}"
+                    )
+            return _estimate_tokens(t, provider=provider_key)
+
+        final_prompt_tokens = await _count_tokens(final_prompt)
 
         if final_prompt_tokens > budget_max:
             # Tokens fixes du template (final_prompt sans la partie chunks)
-            template_tokens = final_prompt_tokens - _estimate_tokens(all_chunks_text, provider=provider_key)
+            chunks_tokens = await _count_tokens(all_chunks_text)
+            template_tokens = final_prompt_tokens - chunks_tokens
             budget_chunks_tokens = budget_max - template_tokens
 
             nb_chunks_avant = len(formatted_chunks)
@@ -1360,11 +1396,11 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
             final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
+
             logger.warning(
                 f"[{id_categorie}] V2 — Budget tokens {provider_key} dépassé : "
                 f"{nb_retires}/{nb_chunks_avant} chunks retirés "
                 f"(prompt avant={final_prompt_tokens} tk > budget={budget_max} tk, "
-                f"après={_estimate_tokens(final_prompt)} tk)"
             )
             write_log(tracking_file, "--- BUDGET TOKENS DÉPASSÉ → TRIM ---")
             write_log(tracking_file, json.dumps({
@@ -1373,7 +1409,6 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                 "reserve_output": limits["reserve_output"],
                 "budget_max": budget_max,
                 "final_prompt_tokens_avant": final_prompt_tokens,
-                "final_prompt_tokens_apres": _estimate_tokens(final_prompt),
                 "chunks_avant": nb_chunks_avant,
                 "chunks_apres": len(formatted_chunks),
                 "chunks_retires": nb_retires,
