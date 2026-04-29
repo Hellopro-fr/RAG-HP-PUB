@@ -1,106 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@600&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Design tokens — enterprise ops / Grafana-inspired.
- * All color values are HSL triplets (no `hsl(...)` wrapper) so tailwind can
- * compose opacity (`bg-primary/20`).
- *
- * Light defaults are clean + professional. Dark is the operator-oriented
- * mode with neutral slate background that doesn't wash out chart colors.
- */
-
 @layer base {
   :root {
-    /* base surface */
-    --background:     0 0% 100%;
-    --foreground:     222 47% 11%;
+    /* Design system oklch */
+    --bg-0: oklch(0.985 0.002 250);
+    --bg-1: oklch(0.975 0.003 250);
+    --bg-2: oklch(0.96 0.004 250);
+    --surface: #ffffff;
+    --ink-0: oklch(0.18 0.012 255);
+    --ink-1: oklch(0.32 0.010 255);
+    --ink-2: oklch(0.52 0.008 255);
+    --ink-3: oklch(0.68 0.006 255);
+    --hairline: oklch(0.92 0.004 255);
+    --hairline-strong: oklch(0.86 0.005 255);
+    --accent: oklch(0.55 0.20 268);
+    --accent-soft: oklch(0.96 0.025 268);
+    --accent-ink: oklch(0.42 0.18 268);
+    --ok: oklch(0.58 0.13 155);
+    --ok-soft: oklch(0.96 0.04 155);
+    --warn: oklch(0.72 0.15 75);
+    --warn-soft: oklch(0.97 0.04 75);
+    --err: oklch(0.58 0.18 25);
+    --err-soft: oklch(0.96 0.04 25);
+    --info: oklch(0.62 0.13 230);
+    --info-soft: oklch(0.96 0.04 230);
+    --shadow-sm: 0 1px 0 rgba(20,24,40,.04);
+    --shadow-md: 0 1px 2px rgba(20,24,40,.04), 0 4px 12px -4px rgba(20,24,40,.06);
 
-    /* cards / popovers */
-    --card:           0 0% 100%;
-    --card-foreground:222 47% 11%;
-    --popover:        0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-
-    /* primary action (blue) */
-    --primary:            221 83% 53%;
-    --primary-foreground: 210 40% 98%;
-
-    /* muted / secondary / accent surfaces */
-    --secondary:            210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted:                210 40% 96%;
-    --muted-foreground:     215 16% 47%;
-    --accent:               210 40% 96%;
-    --accent-foreground:    222 47% 11%;
-
-    /* destructive (red) */
-    --destructive:            0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-
-    /* semantic severity */
-    --success:               142 76% 36%;
-    --success-foreground:    210 40% 98%;
-    --warning:               38 92% 50%;
-    --warning-foreground:    222 47% 11%;
-    --info:                  199 89% 48%;
-    --info-foreground:       210 40% 98%;
-
-    /* borders / inputs / focus ring */
-    --border: 214 32% 91%;
-    --input:  214 32% 91%;
-    --ring:   221 83% 53%;
-
-    --radius: 0.5rem;
+    /* shadcn compatibility aliases — NE PAS SUPPRIMER, utilisés par les composants shadcn existants */
+    --background: var(--bg-1);
+    --foreground: var(--ink-0);
+    --border: var(--hairline);
+    --input: var(--hairline);
+    --ring: var(--accent);
+    --primary: var(--accent);
+    --primary-foreground: #fff;
+    --secondary: var(--bg-2);
+    --secondary-foreground: var(--ink-1);
+    --muted: var(--bg-2);
+    --muted-foreground: var(--ink-2);
+    --card: var(--surface);
+    --card-foreground: var(--ink-0);
+    --popover: var(--surface);
+    --popover-foreground: var(--ink-0);
+    --destructive: var(--err);
+    --destructive-foreground: #fff;
+    --success: var(--ok);
+    --success-foreground: #fff;
+    --warning: var(--warn);
+    --warning-foreground: #fff;
+    --info-alias: var(--info);
+    --info-foreground: #fff;
+    --radius: 8px;
+    --accent-foreground: #fff;
   }
 
   .dark {
-    /* base surface: deep neutral slate (not pure black — easier on eyes) */
-    --background:     222 47% 8%;
-    --foreground:     210 40% 96%;
+    --bg-0: oklch(0.14 0.008 255);
+    --bg-1: oklch(0.16 0.008 255);
+    --bg-2: oklch(0.20 0.008 255);
+    --surface: oklch(0.18 0.008 255);
+    --ink-0: oklch(0.92 0.006 255);
+    --ink-1: oklch(0.75 0.006 255);
+    --ink-2: oklch(0.58 0.005 255);
+    --ink-3: oklch(0.42 0.004 255);
+    --hairline: oklch(0.26 0.006 255);
+    --hairline-strong: oklch(0.32 0.006 255);
+    --ok: oklch(0.72 0.13 155);
+    --ok-soft: oklch(0.22 0.04 155);
+    --warn: oklch(0.78 0.13 75);
+    --warn-soft: oklch(0.22 0.04 75);
+    --err: oklch(0.72 0.16 25);
+    --err-soft: oklch(0.22 0.04 25);
+    --info: oklch(0.74 0.12 230);
+    --info-soft: oklch(0.22 0.04 230);
 
-    --card:           222 47% 10%;
-    --card-foreground:210 40% 96%;
-    --popover:        222 47% 10%;
-    --popover-foreground: 210 40% 96%;
+    /* shadcn dark aliases */
+    --background: var(--bg-1);
+    --foreground: var(--ink-0);
+    --border: var(--hairline);
+    --card: var(--surface);
+    --card-foreground: var(--ink-0);
+    --popover: var(--surface);
+    --popover-foreground: var(--ink-0);
+    --muted: var(--bg-2);
+    --muted-foreground: var(--ink-2);
+    --primary: var(--accent);
+    --secondary: var(--bg-2);
+    --secondary-foreground: var(--ink-1);
+  }
 
-    --primary:            217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+  * {
+    border-color: var(--hairline);
+  }
 
-    --secondary:            217 33% 17%;
-    --secondary-foreground: 210 40% 96%;
-    --muted:                217 33% 17%;
-    --muted-foreground:     215 20% 65%;
-    --accent:               217 33% 17%;
-    --accent-foreground:    210 40% 96%;
-
-    --destructive:            0 63% 50%;
-    --destructive-foreground: 210 40% 98%;
-
-    --success:               142 71% 45%;
-    --success-foreground:    144 70% 10%;
-    --warning:               35 92% 55%;
-    --warning-foreground:    26 83% 14%;
-    --info:                  199 89% 56%;
-    --info-foreground:       204 80% 16%;
-
-    --border: 217 33% 20%;
-    --input:  217 33% 17%;
-    --ring:   217 91% 60%;
+  body {
+    background: var(--bg-1);
+    color: var(--ink-0);
+    font-family: Inter, system-ui, sans-serif;
   }
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: 'rlig' 1, 'calt' 1;
-  }
-  /* Dense operator feel — tighter default line-height on data */
-  .font-mono {
-    font-variant-numeric: tabular-nums;
-  }
+@layer utilities {
+  .font-display { font-family: 'Inter Tight', Inter, sans-serif; }
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-0) 50%, var(--bg-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
