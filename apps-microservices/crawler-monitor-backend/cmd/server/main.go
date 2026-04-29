@@ -10,7 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/config"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/httpapi"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/auditstore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/filestore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 )
 
 var version = "dev"
@@ -19,19 +23,35 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheck())
 	}
-
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3001"
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("config.load", "err", err)
+		os.Exit(1)
 	}
 
-	r := httpapi.NewRouter(httpapi.Deps{Version: version})
+	rs, err := redisstore.New(cfg.RedisURL)
+	if err != nil {
+		slog.Error("redis.connect", "err", err)
+		os.Exit(1)
+	}
+	defer rs.Close()
+
+	fs := filestore.New(cfg.CrawlerStoragePath)
+	as := auditstore.New(cfg.AuditLogDir)
+
+	r := httpapi.NewRouter(httpapi.Deps{
+		Version:    version,
+		Config:     cfg,
+		RedisStore: rs,
+		FileStore:  fs,
+		AuditStore: httpapi.WrapAuditStore(as),
+	})
 
 	srv := &http.Server{
-		Addr:              ":" + port,
+		Addr:              ":" + cfg.Port,
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -46,15 +66,10 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-
 	<-ctx.Done()
 	slog.Info("server.shutdown.start")
-
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("server.shutdown", "err", err)
-		os.Exit(1)
-	}
+	_ = srv.Shutdown(shutdownCtx)
 	slog.Info("server.shutdown.done")
 }
