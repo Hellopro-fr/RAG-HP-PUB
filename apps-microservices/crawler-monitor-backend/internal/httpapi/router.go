@@ -71,6 +71,8 @@ func NewRouter(d Deps) http.Handler {
 			rt.Get("/api/domains", domainsListHandler(d.RedisStore))
 			rt.Get("/api/domains/{domain}", domainsGetHandler(d.RedisStore))
 
+			rt.Get("/api/timeline", timelineHandler(d.RedisStore))
+
 			if d.AuditStore != nil {
 				if adapted, ok := d.AuditStore.(*auditStoreAdapter); ok {
 					rt.Get("/api/audit", auditListHandler(adapted.s))
