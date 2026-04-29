@@ -115,6 +115,15 @@ func NewRouter(d Deps) http.Handler {
 					rt.Get("/api/audit", auditListHandler(adapted.s))
 				}
 			}
+
+			rt.Route("/api/albums", func(rt chi.Router) {
+				baseURL := ""
+				if d.Config != nil {
+					// imageproxy will fall back to env IMAGE_DOWNLOAD_SERVICE_URL or default
+					baseURL = ""
+				}
+				MountAlbums(rt, d.AuditStore, baseURL, 10)
+			})
 		})
 	}
 
