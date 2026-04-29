@@ -233,6 +233,7 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     setCategoryStats,
     setCategoryVignette,
     setCaracteristiquesPrix,
+    truncateAnswersAfterIndex,
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
@@ -419,6 +420,9 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     // Extraire les équivalences de manière robuste
     const selectedEquivalences = matchedAnswers
       .flatMap((a) => Array.isArray(a.equivalence) ? a.equivalence : []);
+
+    // Purger les réponses des questions postérieures (cas retour-arrière + changement)
+    truncateAnswersAfterIndex(currentIndex);
 
     setDynamicAnswer(questionCode, answerCodes, selectedEquivalences);
 

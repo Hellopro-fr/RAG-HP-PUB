@@ -285,6 +285,7 @@ export interface FlowState {
   addUserQuestionAnswer: (answer: UserQuestionAnswer) => void;
   updateUserQuestionAnswer: (questionCode: string, updates: Partial<UserQuestionAnswer>) => void;
   clearUserQuestionAnswers: () => void;
+  truncateAnswersAfterIndex: (currentIndex: number) => void;
 
   setRemovedCritiqueCriteriaIds: (ids: number[]) => void;
   setRemovedSecondaireCriteriaIds: (ids: number[]) => void;
@@ -479,10 +480,21 @@ export const useFlowStore = create<FlowState>()(
 
       setUserQuestionAnswers: (answers) => set({ userQuestionAnswers: answers }),
 
+      // Upsert par questionCode : remplace l'entrée existante si elle existe,
+      // sinon ajoute. Aligne la sémantique sur dynamicAnswers/dynamicEquivalences
+      // (qui sont des Records indexés par questionCode).
       addUserQuestionAnswer: (answer) =>
-        set((state) => ({
-          userQuestionAnswers: [...state.userQuestionAnswers, answer],
-        })),
+        set((state) => {
+          const existing = state.userQuestionAnswers.findIndex(
+            (qa) => qa.questionCode === answer.questionCode
+          );
+          if (existing >= 0) {
+            const next = [...state.userQuestionAnswers];
+            next[existing] = answer;
+            return { userQuestionAnswers: next };
+          }
+          return { userQuestionAnswers: [...state.userQuestionAnswers, answer] };
+        }),
 
       updateUserQuestionAnswer: (questionCode, updates) =>
         set((state) => ({
@@ -492,6 +504,29 @@ export const useFlowStore = create<FlowState>()(
         })),
 
       clearUserQuestionAnswers: () => set({ userQuestionAnswers: [] }),
+
+      // Purge les réponses des questions postérieures à currentIndex (0-based).
+      // Appelé avant submitAnswer pour éviter les entrées orphelines après
+      // un retour-arrière + changement de réponse (ex: si Q1 change, le parcours Qn change).
+      truncateAnswersAfterIndex: (currentIndex) =>
+        set((state) => {
+          // questionCode "Qn" est 1-based ; on garde Q1..Q(currentIndex+1).
+          const keep = (code: string) => {
+            const m = code.match(/^Q(\d+)$/);
+            return m ? parseInt(m[1], 10) <= currentIndex + 1 : true;
+          };
+          return {
+            userQuestionAnswers: state.userQuestionAnswers.filter((qa) =>
+              keep(qa.questionCode)
+            ),
+            dynamicAnswers: Object.fromEntries(
+              Object.entries(state.dynamicAnswers).filter(([code]) => keep(code))
+            ),
+            dynamicEquivalences: Object.fromEntries(
+              Object.entries(state.dynamicEquivalences).filter(([code]) => keep(code))
+            ),
+          };
+        }),
 
       setRemovedCritiqueCriteriaIds: (ids: number[]) => set({ removedCritiqueCriteriaIds: ids }),
 
