@@ -231,4 +231,25 @@ export class DetectionLangueClient {
             return false;
         }
     }
+
+    /**
+     * Returns true only for path prefixes shaped like a French/locale regional variant.
+     *
+     * Accepted shapes (case-insensitive):
+     *   /fr, /fr/, /fr-FR, /fr-FR/, /fr_FR, /fr_FR/, /fr-be, /en, /en-GB, /de-DE, /es, /es-ES, etc.
+     *
+     * Rejected shapes:
+     *   /nos-realisations, /produits, /a-propos, "", "/"
+     *
+     * Pattern: starts with "/", followed by 2-letter language code, optionally followed by
+     *   ("-" or "_") + 2-4 letter region code. Optional trailing slash. No further path content.
+     *
+     * Despite the name, accepts all language codes — guards SHAPE, not language. Used as a
+     * belt-and-braces gate before adding alt URL prefixes returned by the detection API to
+     * `excludedRegionalPaths`, so a malformed hreflang declaration cannot drop content sections.
+     */
+    static isFrenchRegionalPathPrefix(prefix: string): boolean {
+        if (!prefix) return false;
+        return /^\/[a-z]{2}([-_][a-z]{2,4})?\/?$/i.test(prefix);
+    }
 }

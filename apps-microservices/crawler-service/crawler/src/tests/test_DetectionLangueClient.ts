@@ -75,5 +75,55 @@ function testIsExcludedRegionalPath() {
     if (failed > 0) process.exit(1);
 }
 
+// --- isFrenchRegionalPathPrefix tests ---
+
+function testIsFrenchRegionalPathPrefix() {
+    const cases: [string, boolean, string][] = [
+        // Accepted shapes
+        ["/fr", true, "generic /fr"],
+        ["/fr/", true, "/fr with trailing slash"],
+        ["/fr-FR", true, "regional /fr-FR"],
+        ["/fr-FR/", true, "/fr-FR with trailing slash"],
+        ["/fr_FR", true, "/fr_FR underscore"],
+        ["/fr_FR/", true, "/fr_FR underscore with trailing slash"],
+        ["/fr-be", true, "/fr-be lowercase region"],
+        ["/FR-FR", true, "/FR-FR uppercase"],
+        ["/en", true, "/en non-FR language"],
+        ["/en-GB", true, "/en-GB"],
+        ["/de-DE", true, "/de-DE"],
+        ["/es", true, "/es"],
+        ["/es-ES", true, "/es-ES"],
+        // Rejected shapes
+        ["/nos-realisations", false, "content path"],
+        ["/produits", false, "content path"],
+        ["/a-propos", false, "content path with hyphen"],
+        ["/l-entreprise", false, "content path with hyphen"],
+        ["/", false, "root only"],
+        ["", false, "empty string"],
+        ["/fr/extra", false, "/fr with extra segment"],
+        ["/fr-FR/extra", false, "/fr-FR with extra segment"],
+        ["fr-FR", false, "missing leading slash"],
+        ["/123", false, "digits not letters"],
+        ["/f", false, "single-letter language code"],
+    ];
+
+    let passed = 0;
+    let failed = 0;
+
+    for (const [prefix, expected, label] of cases) {
+        const result = DetectionLangueClient.isFrenchRegionalPathPrefix(prefix);
+        if (result === expected) {
+            passed++;
+        } else {
+            console.error(`FAIL [${label}]: isFrenchRegionalPathPrefix("${prefix}") = ${result}, expected ${expected}`);
+            failed++;
+        }
+    }
+
+    console.log(`isFrenchRegionalPathPrefix: ${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exit(1);
+}
+
 testExtractPathPrefix();
 testIsExcludedRegionalPath();
+testIsFrenchRegionalPathPrefix();
