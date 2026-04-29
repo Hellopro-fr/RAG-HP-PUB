@@ -1832,6 +1832,14 @@ class RecommendationService:
                         readable = valeur_id_to_name.get(str(v), str(v))
                         text_values.append(readable)
                     valeur_parts.append(", ".join(text_values))
+                    # P2 (iter 3) — expose blocking values so LLM can assign Score 1
+                    if isinstance(carac.valeurs_bloquantes, list) and carac.valeurs_bloquantes:
+                        blocking_names = [
+                            valeur_id_to_name.get(str(v), str(v))
+                            for v in carac.valeurs_bloquantes
+                        ]
+                        if blocking_names:
+                            valeur_parts.append(f"❌ incompatibles: {', '.join(blocking_names)}")
 
                 valeur_str = ", ".join(valeur_parts) if valeur_parts else "Non spécifié"
                 line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str}"
