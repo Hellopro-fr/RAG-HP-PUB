@@ -17,9 +17,9 @@ export function AlbumsToolbar({ q, onQ, filter, onFilter, total }) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <div className="relative min-w-[200px] flex-1">
-        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
         <Input
-          className="pl-8"
+          className="pl-8 bg-bg-1 border-hairline text-ink-0 placeholder:text-ink-3"
           placeholder="Rechercher un domaine"
           value={q}
           onChange={(e) => onQ(e.target.value)}
@@ -37,7 +37,7 @@ export function AlbumsToolbar({ q, onQ, filter, onFilter, total }) {
           </Button>
         ))}
       </div>
-      <span className="ml-auto text-xs text-muted-foreground">{total} albums</span>
+      <span className="ml-auto text-xs text-ink-3">{total} albums</span>
     </div>
   );
 }
