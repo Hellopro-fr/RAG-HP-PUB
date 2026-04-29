@@ -41,6 +41,7 @@ export function AppShell({
       <aside className="hidden lg:block flex-shrink-0">
         <Sidebar
           onLogout={onLogout}
+          onSearch={() => setPaletteOpen(true)}
           badges={badges}
         />
       </aside>
@@ -53,6 +54,7 @@ export function AppShell({
             mobile
             onLogout={() => { setMobileOpen(false); onLogout?.(); }}
             onItemSelect={() => setMobileOpen(false)}
+            onSearch={() => { setMobileOpen(false); setPaletteOpen(true); }}
             badges={badges}
           />
         </SheetContent>

@@ -2,6 +2,8 @@ import { NavLink } from 'react-router-dom';
 import { Activity, LogOut, Search } from 'lucide-react';
 import { NAV_ITEMS } from '../../lib/navigation';
 import { cn } from '../../lib/utils';
+// sync with SIDEBAR_WIDTH in src/lib/layout.js
+// Les classes Tailwind w-[232px] sont conservées statiquement pour le JIT.
 
 /**
  * Sidebar — navigation verticale.
@@ -14,14 +16,16 @@ import { cn } from '../../lib/utils';
  *   - mobile       : boolean — mode mobile (toujours étendu)
  *   - onItemSelect : callback à appeler lors du clic sur un item (ferme le drawer mobile)
  *   - onLogout     : callback déconnexion
+ *   - onSearch     : callback — ouvre la command palette (déclenché par le bouton search)
  *   - badges       : { [badgeKey]: number } — badges numériques sur les items
  */
 export function Sidebar({
   onItemSelect,
   onLogout,
+  onSearch,
   badges = {},
   mobile = false,
-  // Props conservées pour compatibilité ascendante (Task 12 : responsive)
+  // Intentionally unused — placeholders for Task 12 (mobile responsive)
   collapsed = false,
   onToggleCollapsed,
 }) {
@@ -44,6 +48,7 @@ export function Sidebar({
       <div className="px-3 mt-3 flex-shrink-0">
         <button
           type="button"
+          onClick={onSearch}
           className="w-full flex items-center gap-2 px-3 h-8 rounded-md border border-hairline text-[12px] text-ink-3 hover:bg-bg-2 transition-colors"
           aria-label="Rechercher"
         >
