@@ -615,6 +615,30 @@ class TestIsValidLanguageAlternative:
             "example.com", ""
         ) is False
 
+    def test_www_homepage_vs_bare_candidate_same_host(self):
+        """Homepage www.example.com vs candidate example.com → same-host (www. normalized)."""
+        assert DomainFR._is_valid_language_alternative(
+            "www.example.com", "https://example.com/nos-realisations"
+        ) is False
+
+    def test_bare_homepage_vs_www_candidate_same_host(self):
+        """Homepage example.com vs candidate www.example.com → same-host (www. normalized)."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://www.example.com/nos-realisations"
+        ) is False
+
+    def test_www_both_sides_language_path_accepted(self):
+        """Same-host on both sides with language-shaped path is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "www.example.com", "https://www.example.com/fr-FR/page"
+        ) is True
+
+    def test_subdomain_other_than_www_still_cross_host(self):
+        """Non-www subdomain (cdn.) is still treated as cross-host and trusted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://cdn.example.com/anything"
+        ) is True
+
 
 class TestHreflangValidation:
     """Integration tests: invalid hreflang/data-lang targets must NOT land in alternative_urls."""

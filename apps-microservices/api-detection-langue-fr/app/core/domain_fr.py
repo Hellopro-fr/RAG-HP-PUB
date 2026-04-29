@@ -365,8 +365,11 @@ class DomainFR:
         if not parsed.scheme or not parsed.hostname:
             return False
 
-        candidate_host = parsed.hostname.lower()
-        if candidate_host != (homepage_host or '').lower():
+        def _strip_www(h: str) -> str:
+            return h.removeprefix('www.')
+
+        candidate_host = _strip_www(parsed.hostname.lower())
+        if candidate_host != _strip_www((homepage_host or '').lower()):
             # Cross-host: trusted (explicit webmaster declaration).
             return True
 
