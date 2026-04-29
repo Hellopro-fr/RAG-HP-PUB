@@ -1030,16 +1030,15 @@ TOKEN_LIMITS_BY_PROVIDER: Dict[str, Dict[str, int]] = {
     "gpt":    {"max_input": 400_000, "reserve_output": 32_000},
 }
 
-# Ratios chars/token par provider, calibrés sur contenu FR + descriptions multilingues.
-# Sources :
-#   - Claude  : Anthropic publie ~3.5 chars/tk ; mesuré sur ce service à 3.50 exact
-#               (750 756 chars ↔ 214 286 tokens claude-haiku-4-5).
-#   - GPT     : OpenAI o200k_base (GPT-4o/GPT-5) ≈ 4.0 chars/tk en EN, ~3.8 en FR.
-#   - Gemini  : Tokenizer SentencePiece, ratio voisin d'OpenAI sur multilingue.
+# Ratios chars/token par provider, calibrés sur contenu FR + données structurées
+# (titre/prix/fournisseur/caractéristiques) — beaucoup de ponctuation et abréviations
+# qui font baisser le ratio par rapport à du texte naturel.
+# Mesuré sur ce service : 643 116 chars ↔ 214 279 tokens claude-haiku-4-5 → 3.00.
+# Pour rester safe face à la limite hard du provider, on prend une borne basse.
 CHARS_PER_TOKEN_BY_PROVIDER: Dict[str, float] = {
-    "claude": 3.5,
-    "gpt":    3.8,
-    "gemini": 3.7,
+    "claude": 3.0,   # mesuré 3.00 sur ce contenu ; texte naturel pur ≈ 3.5
+    "gpt":    3.3,   # o200k_base : ≈ 4.0 EN naturel, baisse à 3.3 sur FR structuré
+    "gemini": 3.3,   # SentencePiece : voisin d'OpenAI, idem
 }
 
 def _estimate_tokens(text: str, provider: str = "claude") -> int:
