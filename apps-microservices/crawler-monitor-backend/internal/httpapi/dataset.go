@@ -46,3 +46,33 @@ func datasetURLsHandler(fs *filestore.Storage) http.HandlerFunc {
 		WriteJSON(w, 200, result)
 	}
 }
+
+// datasetAnalyzeHandler handles GET /api/jobs/{id}/dataset/analyze.
+// Retourne le nombre total, unique et en doublon, ainsi que la liste des groupes de doublons.
+// Traduit server.js:1139-1212.
+func datasetAnalyzeHandler(storage *filestore.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		result, err := queue.AnalyzeDuplicates(r.Context(), storage, id)
+		if err != nil {
+			WriteError(w, 500, "Failed to analyze dataset")
+			return
+		}
+		WriteJSON(w, 200, result)
+	}
+}
+
+// datasetDeduplicateHandler handles POST /api/jobs/{id}/dataset/deduplicate.
+// Supprime les doublons dans le dataset principal du job, en gardant le fichier le plus récent.
+// Retourne {"deleted": N}. Traduit server.js:1214-1297.
+func datasetDeduplicateHandler(storage *filestore.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		deleted, err := queue.DeduplicateDataset(r.Context(), storage, id)
+		if err != nil {
+			WriteError(w, 500, "Failed to deduplicate dataset")
+			return
+		}
+		WriteJSON(w, 200, map[string]int{"deleted": deleted})
+	}
+}
