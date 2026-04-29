@@ -289,12 +289,11 @@
     {
       "id": 30,
       "subject": "Task 4.9: /api/albums (mountAlbumsRouter port)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         15
       ],
-      "description": "**Goal:** Port src/lib/albums.js + tests/albums.test.js. **Verify:** go test -run TestAlbums.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-backend/internal/httpapi/albums.go\",\"apps-microservices/crawler-monitor-backend/tests/albums_test.go\"],\"verifyCommand\":\"cd apps-microservices/crawler-monitor-backend && go test ./tests/ -run TestAlbums -v\",\"acceptanceCriteria\":[\"Toutes routes /api/albums/*\",\"albums.test.js cas portes 1:1\"]}\n```",
-      "_deferred": "albums.js absent on features/poc baseline. Rebase on main when albums merged."
+      "description": "**Goal:** Port src/lib/albums.js + tests/albums.test.js. **Verify:** go test -run TestAlbums.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-monitor-backend/internal/httpapi/albums.go\",\"apps-microservices/crawler-monitor-backend/tests/albums_test.go\"],\"verifyCommand\":\"cd apps-microservices/crawler-monitor-backend && go test ./tests/ -run TestAlbums -v\",\"acceptanceCriteria\":[\"Toutes routes /api/albums/*\",\"albums.test.js cas portes 1:1\"]}\n```"
     },
     {
       "id": 31,
