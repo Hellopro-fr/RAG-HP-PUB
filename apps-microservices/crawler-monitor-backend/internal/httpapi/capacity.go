@@ -20,3 +20,17 @@ func capacityGetHandler(rs *redisstore.Client) http.HandlerFunc {
 		})
 	}
 }
+
+// capacityHistoryHandler retourne un tableau vide (historique capacity pas encore implémenté).
+func capacityHistoryHandler(rs *redisstore.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		WriteJSON(w, http.StatusOK, []any{})
+	}
+}
+
+// capacityPlanningRAMHandler retourne un objet vide (planning RAM pas encore implémenté).
+func capacityPlanningRAMHandler(rs *redisstore.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		WriteJSON(w, http.StatusOK, map[string]any{"data": []any{}, "window": r.URL.Query().Get("window")})
+	}
+}
