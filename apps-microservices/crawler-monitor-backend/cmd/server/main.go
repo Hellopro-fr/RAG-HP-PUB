@@ -15,6 +15,7 @@ import (
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/auditstore"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/filestore"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/ws"
 )
 
 var version = "dev"
@@ -42,12 +43,21 @@ func main() {
 	fs := filestore.New(cfg.CrawlerStoragePath)
 	as := auditstore.New(cfg.AuditLogDir)
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	hub := ws.NewHub()
+	defer hub.Close()
+	ps := ws.NewPubSub(rs.Raw(), hub, redisstore.UpdatesChannel, redisstore.HeartbeatChannel)
+	go ps.Run(ctx)
+
 	r := httpapi.NewRouter(httpapi.Deps{
 		Version:    version,
 		Config:     cfg,
 		RedisStore: rs,
 		FileStore:  fs,
 		AuditStore: httpapi.WrapAuditStore(as),
+		Hub:        hub,
 	})
 
 	srv := &http.Server{
@@ -55,9 +65,6 @@ func main() {
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	go func() {
 		slog.Info("server.start", "addr", srv.Addr, "version", version)

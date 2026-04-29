@@ -6,6 +6,7 @@ import (
 
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/systemstats"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/ws"
 )
 
 // systemStatsHandler handles GET /api/system/stats?window=1h|24h|7d
@@ -68,17 +69,21 @@ func systemStatsHandler(rs *redisstore.Client) http.HandlerFunc {
 }
 
 // systemHealthHandler handles GET /api/system/health
-// Returns Redis connectivity, ws_clients_count (0 for now), and overall status.
-func systemHealthHandler(rs *redisstore.Client) http.HandlerFunc {
+// Returns Redis connectivity, ws_clients_count from the hub, and overall status.
+func systemHealthHandler(rs *redisstore.Client, hub ...*ws.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		redisConnected := rs.Raw().Ping(r.Context()).Err() == nil
 		status := "ok"
 		if !redisConnected {
 			status = "degraded"
 		}
+		var wsCount int64
+		if len(hub) > 0 && hub[0] != nil {
+			wsCount = hub[0].Count()
+		}
 		WriteJSON(w, 200, map[string]any{
 			"redis_connected":  redisConnected,
-			"ws_clients_count": 0, // Phase 5 will add WebSocket hub
+			"ws_clients_count": wsCount,
 			"status":           status,
 		})
 	}

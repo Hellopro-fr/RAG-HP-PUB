@@ -10,6 +10,7 @@ import (
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/auditstore"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/filestore"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/ws"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -19,6 +20,7 @@ type Deps struct {
 	RedisStore *redisstore.Client
 	FileStore  *filestore.Storage
 	AuditStore AuditAppender
+	Hub        *ws.Hub
 }
 
 // auditStoreAdapter adapts *auditstore.Local to AuditAppender.
@@ -46,6 +48,10 @@ func NewRouter(d Deps) http.Handler {
 	}
 
 	r.Get("/health", healthHandler(d.Version))
+
+	if d.Hub != nil && d.Config != nil {
+		r.Get("/", ws.UpgradeHandler(d.Hub, d.Config.JWTSecret))
+	}
 
 	if d.Config != nil {
 		r.Post("/api/login", loginHandler(d.Config.AdminPasswordHash, d.Config.JWTSecret, d.AuditStore))
@@ -91,7 +97,7 @@ func NewRouter(d Deps) http.Handler {
 			rt.Get("/api/replicas/{id}/history", replicaHistoryByIDHandler(d.RedisStore))
 
 			rt.Get("/api/system/stats", systemStatsHandler(d.RedisStore))
-			rt.Get("/api/system/health", systemHealthHandler(d.RedisStore))
+			rt.Get("/api/system/health", systemHealthHandler(d.RedisStore, d.Hub))
 
 			rt.Get("/api/domains", domainsListHandler(d.RedisStore))
 			rt.Get("/api/domains/{domain}", domainsGetHandler(d.RedisStore))
