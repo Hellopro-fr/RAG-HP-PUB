@@ -579,15 +579,11 @@ router.addDefaultHandler(
 
                         if (detectResult.ok) {
                             isEnqueuingLinks = true;
-                        } else if (!needsNlp) {
-                            // Fallback: URL-only check (no method match required).
-                            // The stored method describes how the *homepage* was detected,
-                            // not which URL patterns are valid for internal pages.
-                            const checkUrlResult = await detectionClient.checkUrl(url);
-                            if (checkUrlResult.ok) {
-                                isEnqueuingLinks = true;
-                            }
                         }
+                        // No URL fallback after a clean rejection. The forced HTML detect
+                        // already analyzed the lang attribute; URL TLD/path signals cannot
+                        // override that verdict (aera-sa.fr/de/... leak case). API technical
+                        // failures are handled by the surrounding try/catch.
                     } catch (apiError: any) {
                         log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
                     }
