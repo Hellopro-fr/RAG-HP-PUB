@@ -130,7 +130,6 @@ func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 	}
 
 	existing["id"] = jobID
-	existing["_id"] = jobID
 	if v := stringOrNum(msg["domain"]); v != "" {
 		existing["domain"] = v
 	}

@@ -38,6 +38,6 @@ func jobsDetailsHandler(rs *redisstore.Client) http.HandlerFunc {
 			WriteError(w, 500, "Failed to read job")
 			return
 		}
-		WriteJSON(w, 200, map[string]any{"job": job})
+		WriteJSON(w, 200, job)
 	}
 }
