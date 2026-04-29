@@ -43,6 +43,12 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/conventional-commits.py"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/nextjs-formulaire-prepush-build.sh",
+            "timeout": 180
           }
         ]
       },
