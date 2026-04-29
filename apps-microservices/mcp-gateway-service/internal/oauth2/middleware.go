@@ -211,9 +211,10 @@ func CombinedMiddleware(
 			}
 
 			// 3. Neither present — return 401 with discovery URL per MCP spec
-			log.Printf("[oauth2] 401 unauthorized: method=%s path=%s remote=%s xff=%q xri=%q cf_ip=%q user_agent=%q mcp_session=%q origin=%q referer=%q",
+			log.Printf("[oauth2] 401 unauthorized: method=%s path=%s remote=%s peer=%s xff=%q xri=%q cf_ip=%q user_agent=%q mcp_session=%q origin=%q referer=%q",
 				r.Method,
 				r.URL.Path,
+				slack.ClientIP(r),
 				r.RemoteAddr,
 				r.Header.Get("X-Forwarded-For"),
 				r.Header.Get("X-Real-IP"),

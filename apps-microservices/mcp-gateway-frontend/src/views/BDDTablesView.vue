@@ -136,127 +136,122 @@
         </button>
       </div>
 
-      <!-- Table -->
-      <div v-if="!loading && total > 0" class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800/60">
-            <tr class="text-left text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">
-              <th v-if="authStore.isAdmin" class="px-3 py-2 w-8">
-                <input
-                  type="checkbox"
-                  class="rounded border-gray-300 text-brand-500"
-                  :checked="allOnPageSelected"
-                  :indeterminate.prop="someOnPageSelected"
-                  @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
-                />
-              </th>
-              <th class="px-3 py-2">Nom de la table</th>
-              <th class="px-3 py-2">Base</th>
-              <th class="px-3 py-2">Statut</th>
-              <th class="px-3 py-2">Champs</th>
-              <th class="px-3 py-2">Description</th>
-              <th class="px-3 py-2">Ajoutee le</th>
-              <th class="px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-            <tr
-              v-for="table in tables"
-              :key="table.id"
-              class="hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
-              @click="goToDetail(table)"
+      <!-- DataTable -->
+      <DataTable
+        v-if="!loading && total > 0"
+        :value="tables"
+        v-model:selection="selectedTables"
+        data-key="id"
+        :selection-mode="authStore.isAdmin ? 'multiple' : undefined"
+        :lazy="true"
+        :paginator="true"
+        :rows="limit"
+        :total-records="total"
+        :first="(page - 1) * limit"
+        :rows-per-page-options="[20, 50, 100]"
+        responsive-layout="scroll"
+        striped-rows
+        class="text-sm"
+        @page="onDtPage"
+        @row-click="onDtRowClick"
+      >
+        <Column
+          v-if="authStore.isAdmin"
+          selection-mode="multiple"
+          header-style="width: 2.5rem"
+        />
+        <Column field="table_name" header="Nom de la table">
+          <template #body="{ data }">
+            <span class="font-mono text-gray-900 dark:text-white">{{ data.table_name }}</span>
+          </template>
+        </Column>
+        <Column header="Base">
+          <template #body="{ data }">
+            <span
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+              :class="databaseBadgeClass(data.database_id)"
             >
-              <td v-if="authStore.isAdmin" class="px-3 py-2 w-8" @click.stop>
-                <input
-                  type="checkbox"
-                  class="rounded border-gray-300 text-brand-500"
-                  :checked="selectedIds.has(table.id)"
-                  @change="toggleRow(table.id, ($event.target as HTMLInputElement).checked)"
-                />
-              </td>
-              <td class="px-3 py-2 font-mono text-gray-900 dark:text-white">
-                {{ table.table_name }}
-              </td>
-              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
-                {{ databaseName(table.database_id) }}
-              </td>
-              <td class="px-3 py-2">
-                <span
-                  v-if="!table.is_active"
-                  class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300"
-                >
-                  Inactive
-                </span>
-                <span
-                  v-else-if="table.fields.length > 0"
-                  class="inline-flex items-center rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-400"
-                >
-                  Active
-                </span>
-                <div v-else>
-                  <span
-                    class="inline-flex items-center rounded-full bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400"
-                  >
-                    Brouillon
-                  </span>
-                  <p class="text-xs text-gray-500 mt-1">
-                    Ajouter des champs pour activer la table.
-                  </p>
-                </div>
-              </td>
-              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
-                {{ table.fields.length }}
-              </td>
-              <td class="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-sm truncate">
-                <span v-if="table.description">{{ table.description }}</span>
-                <span v-else class="text-gray-400">—</span>
-              </td>
-              <td class="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                {{ formatDate(table.created_at) }}
-              </td>
-              <td class="px-3 py-2 text-right" @click.stop>
-                <div class="inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    class="p-1.5 rounded text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10"
-                    title="Voir la table"
-                    @click="goToDetail(table)"
-                  >
-                    <i class="pi pi-eye" />
-                  </button>
-                  <button
-                    v-if="authStore.isAdmin"
-                    type="button"
-                    class="p-1.5 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5"
-                    title="Editer"
-                    @click="goToFields(table)"
-                  >
-                    <i class="pi pi-pencil" />
-                  </button>
-                  <button
-                    v-if="authStore.isAdmin"
-                    type="button"
-                    class="p-1.5 rounded text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-500/10"
-                    title="Supprimer"
-                    @click="deletingTable = table"
-                  >
-                    <i class="pi pi-trash" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Pagination -->
-      <Paginator
-        v-if="!loading && total > limit"
-        :page="page"
-        :limit="limit"
-        :total="total"
-        @update:page="page = $event"
-      />
+              {{ databaseShortName(data.database_id) }}
+            </span>
+          </template>
+        </Column>
+        <Column header="Statut">
+          <template #body="{ data }">
+            <span
+              v-if="!data.is_active"
+              class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300"
+            >
+              Inactive
+            </span>
+            <span
+              v-else-if="data.fields.length > 0"
+              class="inline-flex items-center rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-400"
+            >
+              Active
+            </span>
+            <div v-else>
+              <span
+                class="inline-flex items-center rounded-full bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400"
+              >
+                Brouillon
+              </span>
+              <p class="text-xs text-gray-500 mt-1">
+                Ajouter des champs pour activer la table.
+              </p>
+            </div>
+          </template>
+        </Column>
+        <Column header="Champs" header-style="width: 5rem">
+          <template #body="{ data }">
+            <span class="text-gray-600 dark:text-gray-300">{{ data.fields.length }}</span>
+          </template>
+        </Column>
+        <Column header="Description">
+          <template #body="{ data }">
+            <span v-if="data.description" class="text-gray-700 dark:text-gray-300 line-clamp-1">
+              {{ data.description }}
+            </span>
+            <span v-else class="text-gray-400">—</span>
+          </template>
+        </Column>
+        <Column field="created_at" header="Ajoutee le">
+          <template #body="{ data }">
+            <span class="text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ formatDate(data.created_at) }}</span>
+          </template>
+        </Column>
+        <Column header="Actions" header-style="width: 8rem; text-align:right">
+          <template #body="{ data }">
+            <div class="inline-flex items-center gap-1 justify-end w-full" @click.stop>
+              <button
+                type="button"
+                class="p-1.5 rounded text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10"
+                title="Voir la table"
+                @click="goToDetail(data)"
+              >
+                <i class="pi pi-eye" />
+              </button>
+              <button
+                v-if="authStore.isAdmin"
+                type="button"
+                class="p-1.5 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5"
+                title="Editer"
+                @click="goToFields(data)"
+              >
+                <i class="pi pi-pencil" />
+              </button>
+              <button
+                v-if="authStore.isAdmin"
+                type="button"
+                class="p-1.5 rounded text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-500/10"
+                title="Supprimer"
+                @click="deletingTable = data"
+              >
+                <i class="pi pi-trash" />
+              </button>
+            </div>
+          </template>
+        </Column>
+      </DataTable>
     </PageHeaderTabs>
 
     <!-- Delete table confirm -->
@@ -479,8 +474,9 @@ import { useToast } from '@/composables/useToast';
 import { ApiError } from '@/types/api';
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue';
 import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue';
-import Paginator from '@/components/common/Paginator.vue';
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue';
+import DataTable from 'primevue/datatable';
+import Column from 'primevue/column';
 
 const ALL_TAB = 'all';
 const PAGE_LIMIT = 20;
@@ -503,41 +499,19 @@ const counts = ref<Record<string, number>>({ [ALL_TAB]: 0 });
 
 const deletingTable = ref<BDDUsedTable | undefined>();
 
-const selectedIds = ref<Set<string>>(new Set());
+// PrimeVue DataTable owns selection — `selectedTables` is the v-model;
+// `selectedIds` is a derived Set kept for the existing bulk-handler call
+// sites (still expecting `.size` / `Array.from`).
+const selectedTables = ref<BDDUsedTable[]>([]);
+const selectedIds = computed(
+  () => new Set(selectedTables.value.map((t) => t.id)),
+);
 const bulkTargetDb = ref<number | null>(null);
 const bulkBusy = ref(false);
 const bulkDeleteOpen = ref(false);
 
-const allOnPageSelected = computed(() => {
-  if (tables.value.length === 0) return false;
-  return tables.value.every((t) => selectedIds.value.has(t.id));
-});
-
-const someOnPageSelected = computed(() => {
-  if (tables.value.length === 0) return false;
-  const has = tables.value.some((t) => selectedIds.value.has(t.id));
-  return has && !allOnPageSelected.value;
-});
-
-function toggleRow(id: string, checked: boolean) {
-  const next = new Set(selectedIds.value);
-  if (checked) next.add(id);
-  else next.delete(id);
-  selectedIds.value = next;
-}
-
-function toggleSelectAll(checked: boolean) {
-  const next = new Set(selectedIds.value);
-  if (checked) {
-    tables.value.forEach((t) => next.add(t.id));
-  } else {
-    tables.value.forEach((t) => next.delete(t.id));
-  }
-  selectedIds.value = next;
-}
-
 function clearSelection() {
-  selectedIds.value = new Set();
+  selectedTables.value = [];
   bulkTargetDb.value = null;
 }
 
@@ -596,6 +570,29 @@ function activeDatabaseId(): number | undefined {
 
 function databaseName(id: number): string {
   return HELLOPRO_DATABASES.find((d) => d.id === id)?.name || '—';
+}
+
+// Compact label for the list badge — drops the redundant "Hellopro "
+// prefix shared by every database name. Falls back to the full name
+// when the prefix is missing (defensive for future entries).
+function databaseShortName(id: number): string {
+  const name = databaseName(id);
+  return name.replace(/^Hellopro\s+/i, '');
+}
+
+// Color palette per database. Brand = BO (default), violet = Data,
+// pink = IA. Unknown ids fall back to neutral gray.
+function databaseBadgeClass(id: number): string {
+  switch (id) {
+    case 1:
+      return 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400';
+    case 5:
+      return 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400';
+    case 10:
+      return 'bg-pink-50 text-pink-700 dark:bg-pink-500/15 dark:text-pink-400';
+    default:
+      return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+  }
 }
 
 function formatDate(d?: string): string {
@@ -690,6 +687,27 @@ function goToFields(table: BDDUsedTable) {
 
 function goToDetail(table: BDDUsedTable) {
   router.push('/bdd-tables/' + table.id);
+}
+
+// PrimeVue DataTable bridges:
+// - onDtPage maps the 0-indexed page event to our 1-indexed `page` ref
+//   and updates `limit` when the user picks a new rows-per-page.
+// - onDtRowClick navigates to detail unless the click landed on the
+//   selection checkbox column or the actions cell (those handle their
+//   own clicks via @click.stop).
+function onDtPage(e: { page: number; rows: number }) {
+  if (e.rows && e.rows !== limit.value) {
+    limit.value = e.rows;
+  }
+  page.value = (e.page ?? 0) + 1;
+}
+
+function onDtRowClick(e: { originalEvent: Event; data: BDDUsedTable }) {
+  const target = e.originalEvent.target as HTMLElement | null;
+  // Skip when click originates inside an action button or the
+  // selection checkbox cell — they have their own handlers.
+  if (target?.closest('button, .p-checkbox')) return;
+  goToDetail(e.data);
 }
 
 async function openMetaModal() {
