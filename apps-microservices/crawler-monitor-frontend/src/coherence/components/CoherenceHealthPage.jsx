@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { HeartPulse, AlertTriangle, AlertCircle, Info, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui/button';
@@ -42,7 +42,6 @@ export default function CoherenceHealthPage() {
   const { verdicts, ignoredRules, setIgnored, byStatus, total, lastEvaluatedAt, retryState, manualRetry } =
     useCoherenceSummary();
   const [showOk, setShowOk] = useState(false);
-  const highlightRef = useRef(null);
 
   // Hash scroll + 2s highlight ring
   useEffect(() => {
@@ -86,18 +85,20 @@ export default function CoherenceHealthPage() {
   };
 
   return (
-    <div ref={highlightRef} className="p-4 space-y-4">
+    <div className="p-4 space-y-4">
       <div className="flex items-center gap-3 mb-5">
         <HeartPulse className="h-5 w-5 text-ink-2" />
         <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">
           Cohérence des données
         </h1>
         {violated.length === 0
-          ? <Pill tone="ok">tout vert</Pill>
-          : <Pill tone="err" dot>{violated.length} violation{violated.length > 1 ? 's' : ''}</Pill>
+          ? <span aria-label="Aucune violation détectée"><Pill tone="ok">tout vert</Pill></span>
+          : <span aria-label={`${violated.length} violation${violated.length > 1 ? 's' : ''} détectée${violated.length > 1 ? 's' : ''}`}><Pill tone="err" dot>{violated.length} violation{violated.length > 1 ? 's' : ''}</Pill></span>
         }
         <span className="ml-auto font-mono text-[11px] text-ink-3">
-          {total} règles · évalué il y a {Math.max(0, Math.round((Date.now() - lastEvaluatedAt) / 1000))}s
+          {total} règles · évalué il y a {lastEvaluatedAt > 0
+            ? `${Math.max(0, Math.round((Date.now() - lastEvaluatedAt) / 1000))}s`
+            : '—'}
         </span>
       </div>
 
@@ -131,13 +132,15 @@ export default function CoherenceHealthPage() {
         <button
           type="button"
           onClick={() => setShowOk((s) => !s)}
+          aria-expanded={showOk}
+          aria-controls="ok-rules-list"
           className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 hover:text-ink-1"
         >
           {showOk ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           OK ({ok.length})
         </button>
         {showOk && (
-          <ul className="space-y-1 text-sm">
+          <ul id="ok-rules-list" className="space-y-1 text-sm">
             {ok.map((rule) => (
               <li key={rule.id} className="flex items-center gap-2 text-ink-3">
                 <CheckCircle className="h-3.5 w-3.5 text-ok" />
@@ -206,7 +209,7 @@ function RuleViolationCard({ rule, violations, retryState, onCopy, onIgnore, onM
 
           <div className="space-y-1">
             {violations.map((v, i) => (
-              <div key={i} className="rounded bg-surface p-2 text-sm">
+              <div key={`${v.itemKey ?? 'global'}-${v.message ?? i}`} className="rounded bg-surface p-2 text-sm">
                 {v.itemKey && <span className="font-mono text-xs text-ink-3">[{v.itemKey}] </span>}
                 {v.message}
               </div>
@@ -214,7 +217,7 @@ function RuleViolationCard({ rule, violations, retryState, onCopy, onIgnore, onM
           </div>
 
           <div className="text-[11px] text-ink-3">
-            Sources : {rule.sources.join(', ')}
+            Sources : {(rule.sources ?? []).join(', ')}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
