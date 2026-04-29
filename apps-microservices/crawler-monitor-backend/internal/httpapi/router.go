@@ -58,6 +58,7 @@ func NewRouter(d Deps) http.Handler {
 			rt.Route("/api/jobs", func(rt chi.Router) {
 				rt.Get("/", jobsListHandler(d.RedisStore))
 				rt.Get("/{id}/details", jobsDetailsHandler(d.RedisStore))
+				rt.Get("/{id}/performance", jobsPerformanceHandler(d.RedisStore))
 			})
 
 			rt.Get("/api/capacity", capacityGetHandler(d.RedisStore))
