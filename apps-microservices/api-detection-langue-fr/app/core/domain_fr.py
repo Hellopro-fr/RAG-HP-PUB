@@ -337,7 +337,46 @@ class DomainFR:
         actual_norm = actual_domain.lower().replace('-', '').replace('_', '')
 
         return base_norm in actual_norm or actual_norm in base_norm
-    
+
+    @staticmethod
+    def _is_valid_language_alternative(homepage_host: str, candidate_url: str) -> bool:
+        """Return True only if candidate_url is plausibly a language variant of homepage.
+
+        Cross-host candidates (different hostname): trusted unconditionally — webmasters
+        legitimately declare external alternates via hreflang.
+
+        Same-host candidates: must have a language-shaped first path segment matching
+        ^[a-z]{2}([-_][a-z]{2,4})?$ (case-insensitive). Examples accepted:
+          /fr, /fr/page, /fr-FR, /fr_FR/page, /en, /en-GB, /de, /de-DE, /pt-BR
+
+        Same-host content paths (/, /nos-realisations, /produits, /a-propos,
+        /l-entreprise, etc.) are rejected — these are jaunin.com-style webmaster
+        errors where hreflang points at a content section instead of a language root.
+
+        Malformed URLs return False.
+        """
+        if not candidate_url:
+            return False
+        try:
+            parsed = urlparse(candidate_url)
+        except Exception:
+            return False
+
+        if not parsed.scheme or not parsed.hostname:
+            return False
+
+        candidate_host = parsed.hostname.lower()
+        if candidate_host != (homepage_host or '').lower():
+            # Cross-host: trusted (explicit webmaster declaration).
+            return True
+
+        segments = [s for s in (parsed.path or '').split('/') if s]
+        if not segments:
+            return False
+
+        first_segment = segments[0]
+        return bool(re.match(r'^[a-z]{2}([-_][a-z]{2,4})?$', first_segment, re.IGNORECASE))
+
     async def _validate_single_url(self, url: str) -> bool:
         """
         Validates that a URL is reachable and serves HTML content.
@@ -682,6 +721,11 @@ class DomainFR:
                     if href and href != '#':
                         resolved = self.resolve_url(self.homepage, href)
                         if resolved and not self._is_self_url(resolved):
+                            if not self._is_valid_language_alternative(homepage_host, resolved):
+                                logger.debug(
+                                    f"hreflang rejected (non-language-shaped target): {resolved}"
+                                )
+                                continue
                             _add_trusted(resolved, 'hreflang', hreflang_value=hreflang_val)
 
             # 2. data-lang et data-gt-lang (need validation, medium reliability)
@@ -694,6 +738,11 @@ class DomainFR:
                         if href and href != '#':
                             resolved = _resolve_and_check(href)
                             if resolved:
+                                if not self._is_valid_language_alternative(homepage_host, resolved):
+                                    logger.debug(
+                                        f"{attr_name} rejected (non-language-shaped target): {resolved}"
+                                    )
+                                    continue
                                 _queue_candidate(resolved, href, method_name, hreflang_value=lang_val)
 
             # 3. Liens <a> avec /fr/ ou lang=fr (need validation, medium reliability)
