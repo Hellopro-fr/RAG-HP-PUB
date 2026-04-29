@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/scrypt"
 )
 
@@ -21,6 +22,7 @@ const (
 	saltLen  = 16
 )
 
+// Hash produces a scrypt hash for new passwords.
 func Hash(plain string) (string, error) {
 	if plain == "" {
 		return "", errors.New("password must be non-empty string")
@@ -38,10 +40,20 @@ func Hash(plain string) (string, error) {
 		hex.EncodeToString(salt), hex.EncodeToString(derived)), nil
 }
 
+// Verify checks plain against hash. Supports both scrypt (new) and bcrypt (legacy Node.js) formats.
 func Verify(plain, hash string) (bool, error) {
 	if plain == "" || hash == "" {
 		return false, nil
 	}
+	// bcrypt hashes start with $2b$ or $2a$ or $2y$ (Node.js bcrypt format)
+	if strings.HasPrefix(hash, "$2") {
+		err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain))
+		if err == bcrypt.ErrMismatchedHashAndPassword {
+			return false, nil
+		}
+		return err == nil, err
+	}
+	// scrypt format: scrypt$N$r$p$saltHex$derivedHex
 	parts := strings.Split(hash, "$")
 	if len(parts) != 6 || parts[0] != prefix {
 		return false, nil
@@ -67,6 +79,7 @@ func Verify(plain, hash string) (bool, error) {
 	return subtle.ConstantTimeCompare(candidate, expected) == 1, nil
 }
 
+// LooksLikeScryptHash returns true if the hash is in scrypt format.
 func LooksLikeScryptHash(s string) bool {
 	if !strings.HasPrefix(s, prefix+"$") {
 		return false
