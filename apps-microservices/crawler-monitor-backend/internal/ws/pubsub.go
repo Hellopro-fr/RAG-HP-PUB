@@ -13,6 +13,22 @@ import (
 // jobKeyPrefix mirrors redisstore.JobPrefix — local to avoid import cycle.
 const jobKeyPrefix = "crawl_job:"
 
+// stringOrNum extracts a string from a map value that may be a string or a number.
+func stringOrNum(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		if val == float64(int64(val)) {
+			return strconv.FormatInt(int64(val), 10)
+		}
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case int64:
+		return strconv.FormatInt(val, 10)
+	}
+	return ""
+}
+
 // jobTTL: jobs expire after 48h of inactivity.
 const jobTTL = 48 * time.Hour
 
@@ -94,7 +110,7 @@ func (p *PubSub) persist(ctx context.Context, payload string) {
 
 // persistJob upserts crawl_job:<jobId> preserving start_time on existing entries.
 func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
-	jobID, _ := msg["jobId"].(string)
+	jobID := stringOrNum(msg["jobId"])
 	if jobID == "" {
 		return
 	}
@@ -115,10 +131,10 @@ func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 
 	existing["id"] = jobID
 	existing["_id"] = jobID
-	if v, ok := msg["domain"].(string); ok && v != "" {
+	if v := stringOrNum(msg["domain"]); v != "" {
 		existing["domain"] = v
 	}
-	if v, ok := msg["status"].(string); ok && v != "" {
+	if v := stringOrNum(msg["status"]); v != "" {
 		existing["status"] = v
 		if v == "finished" || v == "failed" || v == "archived" {
 			if _, hasEnd := existing["end_time"]; !hasEnd {
@@ -126,7 +142,7 @@ func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 			}
 		}
 	}
-	if v, ok := msg["replicaId"].(string); ok && v != "" {
+	if v := stringOrNum(msg["replicaId"]); v != "" {
 		existing["replica_id"] = v
 	}
 	if v, ok := msg["cpu"].(float64); ok {
@@ -138,7 +154,7 @@ func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 	if v, ok := msg["totalRam"].(float64); ok {
 		existing["total_ram"] = v
 	}
-	if v, ok := msg["crawlMode"].(string); ok && v != "" {
+	if v := stringOrNum(msg["crawlMode"]); v != "" {
 		existing["crawl_mode"] = v
 	}
 	if v, ok := msg["oomRestartCount"].(float64); ok {
@@ -154,7 +170,7 @@ func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 
 // persistReplica appends a heartbeat sample to replica:history:<replicaId> (ZSet, TTL 1h).
 func (p *PubSub) persistReplica(ctx context.Context, msg map[string]any) {
-	replicaID, _ := msg["replicaId"].(string)
+	replicaID := stringOrNum(msg["replicaId"])
 	if replicaID == "" {
 		return
 	}
@@ -165,7 +181,7 @@ func (p *PubSub) persistReplica(ctx context.Context, msg map[string]any) {
 	cpu, _ := msg["cpu"].(float64)
 	ram, _ := msg["ram"].(float64)
 	totalRAM, _ := msg["totalRam"].(float64)
-	jobID, _ := msg["jobId"].(string)
+	jobID := stringOrNum(msg["jobId"])
 
 	sample := map[string]any{
 		"ts":       ts,
