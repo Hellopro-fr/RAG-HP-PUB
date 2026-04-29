@@ -1352,7 +1352,7 @@ services:
       context: ./apps-microservices/crawler-monitor-frontend
       dockerfile: Dockerfile
     container_name: crawler-monitor-frontend
-    profiles: ["disabled"]
+    profiles: ["app"]
     restart: unless-stopped
     ports:
       - "3002:8099" # Exposé sur le port 3002
