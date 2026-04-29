@@ -1,23 +1,28 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Outlet } from 'react-router-dom';
 import {
-  RefreshCw, Server, CheckCircle, XCircle, Zap, Archive,
-  Search, Filter, Calendar, ChevronLeft, ChevronRight, TrendingUp, X,
+  RefreshCw, Server, TrendingUp,
+  Search, Filter, Calendar, ChevronLeft, ChevronRight, X,
 } from 'lucide-react';
 import { JOBS_PER_PAGE } from '../lib/constants';
 import { useJobsQuery, useCapacityQuery, useJobDetailsQuery } from '../hooks/queries';
-import StatCard from '../components/StatCard';
-import ReplicaMonitor from '../components/ReplicaMonitor';
-import JobCard from '../components/JobCard';
 import JobDetails from '../components/JobDetails';
-import CapacityBar from '../components/CapacityBar';
-import Timeline from '../components/Timeline';
 import AlertsBanner from '../components/AlertsBanner';
-import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
 import { CoherencePastille } from '../coherence/components/CoherencePastille';
+import Pill from '../components/ui/Pill';
+import StatTile from '../components/ui/StatTile';
+import UiTimeline from '../components/ui/Timeline';
+import CapacityRing from '../components/ui/CapacityRing';
+
+const JOB_TONE = {
+  running:  'accent',
+  finished: 'ok',
+  failed:   'err',
+  archived: 'neutral',
+};
 
 /**
  * Overview page (`/` and `/jobs/:id`).
@@ -91,179 +96,233 @@ const Overview = ({ token, replicas }) => {
     return { finished, failed, running, archived, total: filteredJobs.length };
   }, [filteredJobs]);
 
+  // Build timeline data: aggregate jobs by hour (last 24 buckets)
+  const timelineData = useMemo(() => {
+    if (!allJobs.length) return [];
+    const now = Date.now();
+    const buckets = Array.from({ length: 24 }, (_, i) => {
+      const from = now - (23 - i) * 3600 * 1000;
+      const to = from + 3600 * 1000;
+      const hour = new Date(from).getHours();
+      return { label: `${String(hour).padStart(2, '0')}h`, from, to, ok: 0, run: 0, fail: 0 };
+    });
+    allJobs.forEach(job => {
+      const t = new Date(job.start_time).getTime();
+      const bucket = buckets.find(b => t >= b.from && t < b.to);
+      if (!bucket) return;
+      if (job.status === 'finished' || job.status === 'archived') bucket.ok++;
+      else if (job.status === 'running') bucket.run++;
+      else if (job.status === 'failed') bucket.fail++;
+    });
+    return buckets.map(({ label, ok, run, fail }) => ({ label, ok, run, fail }));
+  }, [allJobs]);
+
   const detailsPanelRef = useRef(null);
   const jobsListRef = useRef(null);
 
-  // Stable callbacks — important for React.memo on Timeline / CapacityBar /
-  // JobCard list. A new function identity each render would defeat memo and
-  // force downstream Recharts re-renders.
+  // Stable callbacks — important for React.memo on child components.
+  // A new function identity each render would defeat memo.
   const handleSelectJob = useCallback((id) => {
     if (!id || id === 'undefined' || id === 'null') return;
     navigate(`/jobs/${id}`);
   }, [navigate]);
 
   // Auto-scroll to the details panel when a job is selected.
-  // `block: 'start'` aligne le haut du panneau avec le top du viewport — sur
-  // mobile où la liste et le détail sont empilés, `nearest` pouvait laisser
-  // l'utilisateur regarder une zone vide. On force un scroll utile.
   useEffect(() => {
     if (routeJobId && detailsPanelRef.current) {
       detailsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [routeJobId]);
 
-  // Click sur un bucket Timeline : filtre par date ET scroll vers la liste
-  // jobs filtrée — sinon l'utilisateur voit que la Timeline et doit scroller
-  // pour voir le résultat du filtrage.
-  const handleTimelineBucketClick = useCallback(({ from, to }) => {
-    const fromDate = new Date(from);
-    const toDate = new Date(to - 1);
-    const yyyymmdd = (d) => `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
-    setStartDate(yyyymmdd(fromDate));
-    setEndDate(yyyymmdd(toDate));
-    setCurrentPage(1);
-    // Defer le scroll au prochain tick pour que la liste filtrée soit rendue
-    setTimeout(() => {
-      jobsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 0);
-  }, []);
-
   const hasDateFilter = !!(startDate || endDate);
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 flex flex-col gap-6 max-w-[1400px]">
       <AlertsBanner token={token} />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <StatCard title="Total"    value={globalStats.total}    icon={Server}      variant="default" />
-        <StatCard title="Succès"   value={globalStats.finished} icon={CheckCircle} variant="success" />
-        <StatCard title="Échecs"   value={globalStats.failed}   icon={XCircle}     variant="destructive" />
+      {/* Hero */}
+      <div>
+        <h1 className="font-display text-[26px] font-semibold text-ink-0 tracking-[-0.025em]">Vue d&apos;ensemble</h1>
+      </div>
+
+      {/* 5 StatTiles */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        <StatTile label="Total"    value={loading ? null : String(globalStats.total)} />
+        <StatTile label="Succès"   value={loading ? null : String(globalStats.finished)} deltaTone="ok" />
+        <StatTile
+          label="Échecs"
+          value={loading ? null : String(globalStats.failed)}
+          deltaTone={globalStats.failed > 0 ? 'err' : 'ok'}
+        />
         <div className="relative">
-          <StatCard title="En cours" value={globalStats.running} icon={Zap} variant="info" />
+          <StatTile label="En cours" value={loading ? null : String(globalStats.running)} />
           <div className="absolute right-2 top-2">
             <CoherencePastille ruleId="running_count_parity" />
           </div>
         </div>
-        <StatCard title="Archivés" value={globalStats.archived} icon={Archive}     variant="default" />
+        <StatTile label="Archivés" value={loading ? null : String(globalStats.archived)} />
       </div>
 
-      <Timeline token={token} onBucketClick={handleTimelineBucketClick} />
+      {/* Timeline + Capacity */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_200px]">
+        <div className="bg-surface rounded-lg border border-hairline p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-2 mb-4">Activité</p>
+          <UiTimeline data={timelineData} />
+        </div>
+        <div className="bg-surface rounded-lg border border-hairline p-5 shadow-sm flex flex-col items-center gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-2">Capacité</p>
+          <CapacityRing
+            used={capacity?.ram_used ?? capacity?.used ?? 0}
+            total={capacity?.ram_total ?? capacity?.total ?? 1}
+            label="RAM"
+          />
+        </div>
+      </div>
 
-      <CapacityBar capacity={capacity} token={token} />
-
-      <ReplicaMonitor replicas={replicas} token={token} />
-
-      {/* Filters + pagination */}
-      <Card className="p-3 space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-grow min-w-[200px]">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Filtrer par ID ou domaine…"
-              value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="pl-8"
-            />
-          </div>
-
-          <div className="relative">
-            <Filter className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <select
-              value={statusFilter}
-              onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-              className="h-9 appearance-none rounded-md border border-input bg-background pl-8 pr-8 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="all">Tous les statuts</option>
-              <option value="finished">Succès</option>
-              <option value="failed">Échec</option>
-              <option value="running">En cours</option>
-              <option value="stopping">Arrêt…</option>
-              <option value="archived">Archivé</option>
-              <option value="restarting_oom">Restart OOM</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <Input
-              type="date"
-              value={startDate}
-              onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-              className="w-[150px]"
-            />
-            <span className="text-muted-foreground text-sm">→</span>
-            <Input
-              type="date"
-              value={endDate}
-              onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-              className="w-[150px]"
-            />
-            {hasDateFilter && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
-                aria-label="Effacer les dates"
-                title="Effacer les dates"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
+      {/* Replicas grid */}
+      {replicas?.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-2 mb-3">
+            Réplicas ({replicas.length})
+          </p>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {replicas.map(r => (
+              <div key={r.id ?? r.name} className="bg-surface rounded-lg border border-hairline p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[12px] font-medium text-ink-0 font-mono truncate">{r.name ?? r.id}</span>
+                  <Pill
+                    tone={
+                      r.status === 'idle' ? 'neutral'
+                      : r.status === 'busy' || r.status === 'running' ? 'accent'
+                      : r.status === 'error' ? 'err'
+                      : 'ok'
+                    }
+                    dot
+                  >
+                    {r.status}
+                  </Pill>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
+      )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border pt-2 text-sm text-muted-foreground">
-            <span className="font-mono">{filteredJobs.length} jobs</span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                aria-label="Page précédente"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-1.5">
-                <span className="hidden sm:inline text-xs">Page</span>
-                <Input
-                  type="number"
-                  min="1"
-                  max={totalPages}
-                  value={currentPage}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (!isNaN(val) && val >= 1 && val <= totalPages) {
-                      setCurrentPage(val);
-                    }
-                  }}
-                  className="h-8 w-14 px-2 text-center font-mono"
-                />
-                <span className="text-xs text-muted-foreground">/ {totalPages}</span>
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                aria-label="Page suivante"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Jobs list + details */}
+      {/* Jobs list + filters */}
       {/* scroll-mt-16 = marge de 64px pour que scrollIntoView ne cache pas
           le haut du bloc sous la Topbar sticky (h-14 = 56px). */}
-      <div ref={jobsListRef} className="grid gap-4 scroll-mt-16 lg:grid-cols-[minmax(280px,1fr)_2fr]">
-        <Card className="p-2 space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto">
+      <div ref={jobsListRef} className="bg-surface rounded-lg border border-hairline shadow-sm overflow-hidden scroll-mt-16">
+        {/* Toolbar */}
+        <div className="px-5 py-4 border-b border-hairline space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] font-semibold text-ink-0">Jobs ({filteredJobs.length})</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-grow min-w-[200px]">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Filtrer par ID ou domaine…"
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                className="pl-8"
+              />
+            </div>
+
+            <div className="relative">
+              <Filter className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <select
+                value={statusFilter}
+                onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                className="h-9 appearance-none rounded-md border border-input bg-background pl-8 pr-8 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="all">Tous les statuts</option>
+                <option value="finished">Succès</option>
+                <option value="failed">Échec</option>
+                <option value="running">En cours</option>
+                <option value="stopping">Arrêt…</option>
+                <option value="archived">Archivé</option>
+                <option value="restarting_oom">Restart OOM</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Input
+                type="date"
+                value={startDate}
+                onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+                className="w-[150px]"
+              />
+              <span className="text-muted-foreground text-sm">→</span>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+                className="w-[150px]"
+              />
+              {hasDateFilter && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
+                  aria-label="Effacer les dates"
+                  title="Effacer les dates"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-hairline pt-2 text-sm text-muted-foreground">
+              <span className="font-mono">{filteredJobs.length} jobs</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  aria-label="Page précédente"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-1.5">
+                  <span className="hidden sm:inline text-xs">Page</span>
+                  <Input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={currentPage}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                        setCurrentPage(val);
+                      }
+                    }}
+                    className="h-8 w-14 px-2 text-center font-mono"
+                  />
+                  <span className="text-xs text-muted-foreground">/ {totalPages}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  aria-label="Page suivante"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Jobs rows */}
+        <div className="divide-y divide-hairline">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <RefreshCw className="h-6 w-6 animate-spin text-primary" />
@@ -275,17 +334,36 @@ const Overview = ({ token, replicas }) => {
             </div>
           ) : (
             paginatedJobs.map(job => (
-              <JobCard
+              <div
                 key={job.id}
-                job={job}
                 onClick={() => handleSelectJob(job.id)}
-                isSelected={routeJobId === job.id}
-              />
+                className={cn(
+                  'flex items-center gap-4 px-5 py-3 hover:bg-bg-2 transition-colors cursor-pointer',
+                  routeJobId === job.id && 'bg-bg-2'
+                )}
+              >
+                <Pill tone={JOB_TONE[job.status] ?? 'neutral'}>{job.status}</Pill>
+                <span className="flex-1 text-[13px] text-ink-0 truncate font-mono">{job.domain}</span>
+                <span className="text-[11px] text-ink-3 tabular-nums font-mono">
+                  {job.start_time
+                    ? new Date(job.start_time).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+                    : '—'}
+                </span>
+              </div>
             ))
           )}
-        </Card>
+        </div>
+      </div>
 
-        <Card ref={detailsPanelRef} className={cn('p-5 scroll-mt-16', !selectedJob && !loadingDetails && 'flex items-center justify-center')}>
+      {/* Job detail panel — s'ouvre quand un job est sélectionné */}
+      {routeJobId && (
+        <div
+          ref={detailsPanelRef}
+          className={cn(
+            'bg-surface rounded-lg border border-hairline shadow-sm p-5 scroll-mt-16',
+            !selectedJob && !loadingDetails && 'flex items-center justify-center'
+          )}
+        >
           {loadingDetails ? (
             <div className="flex items-center justify-center py-20">
               <RefreshCw className="h-10 w-10 animate-spin text-primary" />
@@ -305,8 +383,8 @@ const Overview = ({ token, replicas }) => {
               <p className="text-xs mt-1.5">Cliquez sur un job dans la liste</p>
             </div>
           )}
-        </Card>
-      </div>
+        </div>
+      )}
 
       <Outlet />
     </div>
