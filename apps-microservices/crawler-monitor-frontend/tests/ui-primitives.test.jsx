@@ -38,6 +38,10 @@ describe('StatTile', () => {
     render(<StatTile label="Succès" value="42" />);
     expect(screen.getByText('Succès')).toBeTruthy();
   });
+  it('applique text-warn quand deltaTone="warn"', () => {
+    const { container } = render(<StatTile label="KO" value="5" delta="+2" deltaTone="warn" />);
+    expect(container.querySelector('.text-warn')).toBeTruthy();
+  });
 });
 
 describe('Sparkline', () => {
@@ -48,6 +52,12 @@ describe('Sparkline', () => {
   it('rend une polyline avec des données', () => {
     const { container } = render(<Sparkline data={[1, 2, 3, 2, 1]} />);
     expect(container.querySelector('polyline')).toBeTruthy();
+  });
+  it('rend une polyline sans NaN avec un seul point', () => {
+    const { container } = render(<Sparkline data={[5]} />);
+    const poly = container.querySelector('polyline');
+    expect(poly).toBeTruthy();
+    expect(poly.getAttribute('points')).not.toContain('NaN');
   });
 });
 

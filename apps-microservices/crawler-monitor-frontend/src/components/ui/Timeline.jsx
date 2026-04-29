@@ -12,7 +12,7 @@ export default function Timeline({ data = [] }) {
         const height = Math.round((total / maxTotal) * BAR_H);
         const okH   = Math.round((d.ok  / total) * height);
         const runH  = Math.round((d.run / total) * height);
-        const failH = height - okH - runH;
+        const failH = Math.max(0, height - okH - runH);
         return (
           <div key={i} className="flex-1 flex flex-col-reverse rounded-sm overflow-hidden" style={{ height }}>
             {d.fail > 0 && <div style={{ height: failH }} className="bg-err" />}

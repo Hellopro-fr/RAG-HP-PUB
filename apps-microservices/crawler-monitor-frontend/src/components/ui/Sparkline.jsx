@@ -10,7 +10,7 @@ export default function Sparkline({ data = [], w = 64, h = 24, color = 'var(--ac
   const max = Math.max(...data);
   const range = max - min || 1;
   const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w;
+    const x = data.length > 1 ? (i / (data.length - 1)) * w : w / 2;
     const y = h - ((v - min) / range) * (h - 4) - 2;
     return `${x},${y}`;
   });

@@ -18,7 +18,7 @@ export default function StatTile({ label, value, delta, deltaTone, spark, sub, a
       <div className="flex items-center gap-2 min-h-[16px]">
         {delta != null && !isLoading && (
           <span className={`text-[11px] font-medium tabular-nums ${
-            deltaTone === 'ok' ? 'text-ok' : deltaTone === 'err' ? 'text-err' : 'text-ink-2'
+            deltaTone === 'ok' ? 'text-ok' : deltaTone === 'warn' ? 'text-warn' : deltaTone === 'err' ? 'text-err' : 'text-ink-2'
           }`}>
             {delta}
           </span>
