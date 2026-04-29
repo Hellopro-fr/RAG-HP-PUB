@@ -92,36 +92,34 @@ func (p *PubSub) runOnce(ctx context.Context) error {
 			func() {
 				defer func() { _ = recover() }()
 				p.broadcastTransformed(msg.Payload)
-				p.persist(ctx, msg.Payload)
+				p.persistAndNotify(ctx, msg.Payload)
 			}()
 		}
 	}
 }
 
 // broadcastTransformed converts a raw Redis pub/sub heartbeat into the
-// envelope format the React frontend expects:
+// replica_heartbeat envelope the React frontend expects:
 //
 //	{ type: "replica_heartbeat", data: { replicaId, cpu, ram, … } }
-//	{ type: "job_update",       crawl_id: "<jobId>" }
 //
-// The old Node/Express backend did this transformation; without it the
-// frontend silently ignores the raw { type: "heartbeat", … } payloads.
+// job_update events are NOT sent here — they are emitted by persistAndNotify
+// only when a job's status actually changes. Sending job_update on every
+// heartbeat caused a request storm (React Query invalidated 6+ endpoints
+// every 2s per replica).
 func (p *PubSub) broadcastTransformed(payload string) {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
-		// Not valid JSON — forward as-is.
 		p.hub.Broadcast([]byte(payload))
 		return
 	}
 
 	msgType, _ := raw["type"].(string)
 	if msgType != "heartbeat" {
-		// Unknown type — forward unchanged.
 		p.hub.Broadcast([]byte(payload))
 		return
 	}
 
-	// 1. replica_heartbeat envelope
 	replicaEnvelope := map[string]any{
 		"type": "replica_heartbeat",
 		"data": raw,
@@ -129,21 +127,22 @@ func (p *PubSub) broadcastTransformed(payload string) {
 	if b, err := json.Marshal(replicaEnvelope); err == nil {
 		p.hub.Broadcast(b)
 	}
+}
 
-	// 2. job_update envelope (only if the heartbeat carries a jobId)
-	if jobID := stringOrNum(raw["jobId"]); jobID != "" {
-		jobEnvelope := map[string]any{
-			"type":     "job_update",
-			"crawl_id": jobID,
-		}
-		if b, err := json.Marshal(jobEnvelope); err == nil {
-			p.hub.Broadcast(b)
-		}
+// emitJobUpdate sends a { type: "job_update", crawl_id } event to all
+// connected WebSocket clients, triggering React Query cache invalidation.
+func (p *PubSub) emitJobUpdate(jobID string) {
+	envelope := map[string]any{
+		"type":     "job_update",
+		"crawl_id": jobID,
+	}
+	if b, err := json.Marshal(envelope); err == nil {
+		p.hub.Broadcast(b)
 	}
 }
 
-// persist upserts crawl_job:<jobId> and replica:history:<replicaId> from pub/sub messages.
-func (p *PubSub) persist(ctx context.Context, payload string) {
+// persistAndNotify upserts job + replica data and emits job_update only on real changes.
+func (p *PubSub) persistAndNotify(ctx context.Context, payload string) {
 	var msg map[string]any
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
 		return
@@ -153,6 +152,7 @@ func (p *PubSub) persist(ctx context.Context, payload string) {
 }
 
 // persistJob upserts crawl_job:<jobId> preserving start_time on existing entries.
+// Emits a job_update WS event when a new job appears or a job's status changes.
 func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 	jobID := stringOrNum(msg["jobId"])
 	if jobID == "" {
@@ -161,9 +161,13 @@ func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 	key := jobKeyPrefix + jobID
 
 	existing := map[string]any{}
+	isNewJob := true
 	if raw, err := p.rdb.Get(ctx, key).Result(); err == nil {
 		_ = json.Unmarshal([]byte(raw), &existing)
+		isNewJob = false
 	}
+
+	oldStatus, _ := existing["status"].(string)
 
 	if _, hasStart := existing["start_time"]; !hasStart {
 		if ts, ok := msg["timestamp"].(float64); ok {
@@ -209,6 +213,12 @@ func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
 		return
 	}
 	_ = p.rdb.Set(ctx, key, string(out), jobTTL).Err()
+
+	// Emit job_update only when the job is new or its status changed.
+	newStatus, _ := existing["status"].(string)
+	if isNewJob || (newStatus != "" && newStatus != oldStatus) {
+		p.emitJobUpdate(jobID)
+	}
 }
 
 // persistReplica appends a heartbeat sample to replica:history:<replicaId> (ZSet, TTL 1h).
