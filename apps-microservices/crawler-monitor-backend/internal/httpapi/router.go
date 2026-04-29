@@ -51,6 +51,7 @@ func NewRouter(d Deps) http.Handler {
 
 	if d.Hub != nil && d.Config != nil {
 		r.Get("/", ws.UpgradeHandler(d.Hub, d.Config.JWTSecret))
+		r.Get("/api", ws.UpgradeHandler(d.Hub, d.Config.JWTSecret))
 	}
 
 	if d.Config != nil {
@@ -92,6 +93,10 @@ func NewRouter(d Deps) http.Handler {
 			})
 
 			rt.Get("/api/capacity", capacityGetHandler(d.RedisStore))
+			rt.Get("/api/capacity/history", capacityHistoryHandler(d.RedisStore))
+			rt.Route("/api/capacity-planning", func(rt chi.Router) {
+				rt.Get("/ram", capacityPlanningRAMHandler(d.RedisStore))
+			})
 
 			rt.Get("/api/replicas/history", replicasHistoryHandler(d.RedisStore))
 			rt.Get("/api/replicas/{id}/history", replicaHistoryByIDHandler(d.RedisStore))
