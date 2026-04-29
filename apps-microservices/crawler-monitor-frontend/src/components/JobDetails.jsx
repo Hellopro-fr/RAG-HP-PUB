@@ -51,6 +51,8 @@ function KpiCell({ label, value }) {
 function TabBtn({ label, active, onClick }) {
   return (
     <button
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={
         'px-3 py-2 text-[13px] cursor-pointer -mb-px ' +
@@ -113,9 +115,10 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
       {/* HERO */}
       <div className="flex items-center gap-3 mb-5">
         <button
-          onClick={() => onSelectJob(null)}
+          onClick={() => onSelectJob?.(null)}
           className="flex items-center justify-center w-8 h-8 rounded-md border border-hairline text-ink-2 hover:text-ink-0 hover:bg-bg-2 transition-colors"
           title="Retour"
+          aria-label="Retour"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -150,10 +153,10 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
       </div>
 
       {/* TABS + SIDEBAR */}
-      <div className="grid gap-5" style={{ gridTemplateColumns: '1fr 360px' }}>
+      <div className="grid gap-5 grid-cols-[1fr_360px]">
         {/* Left: tabs */}
         <div>
-          <div className="flex border-b border-hairline mb-4 gap-0">
+          <div role="tablist" className="flex border-b border-hairline mb-4 gap-0">
             {TABS.map((tab) => (
               <TabBtn
                 key={tab}
@@ -164,14 +167,14 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
             ))}
           </div>
 
-          <div className="min-h-[300px]">
+          <div role="tabpanel" className="min-h-[300px]">
             {/* Logs */}
             {activeTab === 'Logs' && (
               showRaw ? (
                 <AdvancedLogViewer content={job.rawContent || 'Contenu brut non disponible.'} jobId={job.id} />
               ) : !job.hasStats && !job.stats ? (
                 <div className="py-12 text-center text-ink-2">
-                  <Clock className="mx-auto mb-3 h-10 w-10 animate-spin" />
+                  <Clock className={`mx-auto mb-3 h-10 w-10 ${isRunning ? 'animate-spin' : 'text-ink-3'}`} />
                   <p className="mb-1 text-[13px]">Les statistiques ne sont pas encore disponibles.</p>
                 </div>
               ) : job.errors?.length > 0 ? (
@@ -221,16 +224,22 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
 
             {/* Metrics */}
             {activeTab === 'Metrics' && (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-2">RAM (MB)</div>
-                  <AreaChart data={ramData} color="var(--accent)" refLine={maxRamMb} h={100} />
+              perfQuery.isLoading ? (
+                <div className="py-12 text-center text-ink-2 text-[13px]">Chargement des métriques…</div>
+              ) : perfQuery.isError ? (
+                <div className="py-12 text-center text-err text-[13px]">Impossible de charger les métriques.</div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-2">RAM (MB)</div>
+                    <AreaChart data={ramData} color="var(--accent)" refLine={maxRamMb} h={100} />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-2">CPU (%)</div>
+                    <AreaChart data={cpuData} color="var(--info)" h={100} />
+                  </div>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-2">CPU (%)</div>
-                  <AreaChart data={cpuData} color="var(--info)" h={100} />
-                </div>
-              </div>
+              )
             )}
 
             {/* Callbacks */}
@@ -243,7 +252,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
         </div>
 
         {/* Right: sidebar KV */}
-        <div className="w-[360px]">
+        <div>
           <div className="bg-surface rounded-lg border border-hairline p-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-3">Détails</div>
             <div>
@@ -260,7 +269,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
             </div>
 
             <button
-              onClick={onToggleRaw}
+              onClick={() => onToggleRaw?.()}
               className="mt-4 w-full text-[12px] text-ink-2 hover:text-ink-0 border border-hairline rounded-md px-3 py-2"
             >
               {showRaw ? 'Vue Avancée' : 'Logs Bruts'}
