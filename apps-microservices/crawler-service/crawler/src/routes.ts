@@ -424,6 +424,15 @@ router.addDefaultHandler(
                                 for (const alt of detectResult.alternative_urls) {
                                     const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
                                     if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
+                                        // Belt-and-braces gate: only accept locale-shaped prefixes
+                                        // (e.g. /fr-FR, /en, /de-DE). Rejects content paths like
+                                        // /nos-realisations that a malformed hreflang could surface,
+                                        // which would otherwise blanket-block a content section.
+                                        // Complements the API-side gate in alternative_urls assembly.
+                                        if (!DetectionLangueClient.isFrenchRegionalPathPrefix(altPrefix)) {
+                                            log.info(`[REGIONAL_EXCLUSION] Rejected non-locale alt prefix: ${altPrefix} (from ${alt.url})`);
+                                            continue;
+                                        }
                                         if (!excluded.includes(altPrefix)) {
                                             excluded.push(altPrefix);
                                         }
