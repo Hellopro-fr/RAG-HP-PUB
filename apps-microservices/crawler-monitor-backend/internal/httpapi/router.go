@@ -59,6 +59,16 @@ func NewRouter(d Deps) http.Handler {
 				rt.Get("/", jobsListHandler(d.RedisStore))
 				rt.Get("/{id}/details", jobsDetailsHandler(d.RedisStore))
 				rt.Get("/{id}/performance", jobsPerformanceHandler(d.RedisStore))
+				// Replay : best-effort audit (nil auditstore is tolerated)
+				var replayCPU float64 = 0.85
+				if d.Config != nil {
+					replayCPU = d.Config.ReplayHighCPU
+				}
+				if adapted, ok := d.AuditStore.(*auditStoreAdapter); ok {
+					rt.Get("/{id}/replay", jobsReplayHandler(d.RedisStore, adapted.s, replayCPU))
+				} else {
+					rt.Get("/{id}/replay", jobsReplayHandler(d.RedisStore, nil, replayCPU))
+				}
 				if d.FileStore != nil {
 					rt.Get("/{id}/dataset/counts", datasetCountsHandler(d.FileStore))
 					rt.Get("/{id}/dataset/urls", datasetURLsHandler(d.FileStore))
