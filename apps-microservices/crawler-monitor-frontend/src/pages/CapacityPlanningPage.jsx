@@ -25,7 +25,7 @@ const fmtBytes = (b) => {
   return `${b} B`;
 };
 
-const fmtPct = (v) => `${(v * 100).toFixed(1)}%`;
+const fmtPct = (v) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
 const fmtDate = (ts) => ts ? new Date(ts).toLocaleString('fr-FR') : '—';
 
 const shortJobId = (id) => {
@@ -158,7 +158,7 @@ const CapacityPlanningPage = ({ token }) => {
           {/* KPI Strip */}
           <div className="grid grid-cols-4 border border-hairline rounded-lg mb-5 overflow-hidden">
             <KpiCell label="Alloué" value={fmtBytes(totals.total_allocated)} valueClass="text-ink-0"
-              sub={`${replicas.length} × ${fmtBytes(totals.total_allocated / replicas.length)}`} />
+              sub={`${replicas.length} × ${totals.total_allocated > 0 ? fmtBytes(totals.total_allocated / replicas.length) : '—'}`} />
             <KpiCell label="Peak réel" value={fmtBytes(totals.total_peak_worst)} valueClass="text-info"
               sub={`Moy: ${fmtBytes(totals.total_avg)}`} />
             <KpiCell label="Gaspillage" value={fmtBytes(totals.waste)} valueClass="text-warn"
@@ -172,6 +172,9 @@ const CapacityPlanningPage = ({ token }) => {
             <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-3">
               RAM utilisée (MB) — {windowKey}
             </div>
+            {historyQuery.isError && (
+              <p className="text-[11px] italic text-ink-3 mb-2">Historique indisponible.</p>
+            )}
             <AreaChart
               data={ramMbData}
               w={900}
@@ -197,7 +200,7 @@ const CapacityPlanningPage = ({ token }) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {replicas.map(r => {
+                  {replicas.map((r, idx) => {
                     const peakJob = r.peak_job_id ? jobsById.get(r.peak_job_id) : null;
                     const canLink = Boolean(r.peak_job_id);
                     const peakLabel = fmtBytes(r.peak);
@@ -213,9 +216,9 @@ const CapacityPlanningPage = ({ token }) => {
                     );
                     const canTooltip = canLink || !!r.peak_ts;
                     return (
-                      <TableRow key={r.replicaId}>
+                      <TableRow key={r.replicaId ?? idx}>
                         <TableCell className="max-w-[200px] truncate font-mono text-xs text-ink-0" title={r.replicaId}>
-                          {r.replicaId.slice(0, 20)}
+                          {(r.replicaId ?? '').slice(0, 20)}
                         </TableCell>
                         <TableCell className="text-right font-mono text-ink-3">{fmtBytes(r.allocated)}</TableCell>
                         <TableCell className="text-right">
@@ -304,7 +307,7 @@ const CapacityPlanningPage = ({ token }) => {
                 <ProjCard
                   tone="warn"
                   label="Économie (même nb replicas)"
-                  value={`${simulatedSavingsGB > 0 ? '-' : '+'}${Math.abs(simulatedSavingsGB).toFixed(1)} GB`}
+                  value={`${simulatedSavingsGB >= 0 ? '-' : '+'}${Math.abs(simulatedSavingsGB).toFixed(1)} GB`}
                   sub={`nouveau total : ${simulatedTotalGB.toFixed(1)} GB · ${fmtPct(Math.abs(simulatedSavingsPct))}`}
                 />
               </div>
@@ -317,8 +320,8 @@ const CapacityPlanningPage = ({ token }) => {
                     {atRiskReplicas.length} replica{atRiskReplicas.length > 1 ? 's' : ''} proche{atRiskReplicas.length > 1 ? 's' : ''} de la limite
                   </div>
                   <ul className="font-mono text-[11px] text-warn space-y-0.5">
-                    {atRiskReplicas.slice(0, 5).map(r => (
-                      <li key={r.replicaId}>· {r.replicaId.slice(0, 24)} → {fmtPct(r.efficiency)} de {fmtBytes(r.allocated)}</li>
+                    {atRiskReplicas.slice(0, 5).map((r, idx) => (
+                      <li key={r.replicaId ?? idx}>· {(r.replicaId ?? '').slice(0, 24)} → {fmtPct(r.efficiency)} de {fmtBytes(r.allocated)}</li>
                     ))}
                     {atRiskReplicas.length > 5 && <li className="italic text-warn/70">… et {atRiskReplicas.length - 5} autre{atRiskReplicas.length - 5 > 1 ? 's' : ''}</li>}
                   </ul>
