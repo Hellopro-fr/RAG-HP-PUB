@@ -91,7 +91,7 @@ const ChainNode = ({ entry, isFirst }) => {
         <Icon className={cn('h-5 w-5', iconClass)} />
       </div>
       <div className="max-w-[110px] truncate font-mono text-xs text-ink-0">
-        #{String(entry.id || '').slice(0, 10)}
+        <span title={String(entry.id || '')}>#{String(entry.id || '').slice(0, 10)}</span>
       </div>
       <div className="text-[10px] text-ink-3">
         {String(fmtDate(entry.start_time) || '').slice(0, 16)}
@@ -111,8 +111,8 @@ const ChainNode = ({ entry, isFirst }) => {
 const DomainPage = ({ token }) => {
   const { domain } = useParams();
   const navigate = useNavigate();
-  const [window, setWindow] = useState('7d');
-  const query = useDomainDetailQuery(token, domain, window);
+  const [period, setPeriod] = useState('7d');
+  const query = useDomainDetailQuery(token, domain, period);
   const data = query.data;
 
   const chain = data?.chain || [];
@@ -172,10 +172,10 @@ const DomainPage = ({ token }) => {
                 {WINDOW_OPTIONS.map(w => (
                   <button
                     key={w}
-                    onClick={() => setWindow(w)}
+                    onClick={() => setPeriod(w)}
                     className={cn(
                       'rounded px-2.5 py-1 text-[11px] font-medium transition-colors',
-                      w === window ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
+                      w === period ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
                     )}
                   >
                     {w}
@@ -187,6 +187,7 @@ const DomainPage = ({ token }) => {
                 disabled={query.isFetching}
                 className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
                 title="Rafraichir"
+                aria-label="Rafraîchir"
               >
                 <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
               </button>
@@ -271,7 +272,7 @@ const DomainPage = ({ token }) => {
                         {fmtDate(j.start_time)}
                       </TableCell>
                       <TableCell className="text-[12px] py-2 font-mono text-ink-0">
-                        {String(j.id || '').slice(0, 12)}
+                        <span title={j.id}>{String(j.id || '').slice(0, 12)}</span>
                       </TableCell>
                       <TableCell className="text-[12px] py-2">
                         <Pill tone={meta.tone} dot={!!meta.dot} pulse={!!meta.pulse}>{meta.text}</Pill>

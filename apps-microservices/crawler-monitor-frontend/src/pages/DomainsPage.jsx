@@ -47,9 +47,9 @@ const KpiCell = ({ label, value, valueClass = 'text-ink-0' }) => (
 
 const DomainsPage = ({ token }) => {
   const navigate = useNavigate();
-  const [window, setWindow] = useState('7d');
+  const [period, setPeriod] = useState('7d');
   const [search, setSearch] = useState('');
-  const query = useDomainsQuery(token, window);
+  const query = useDomainsQuery(token, period);
 
   const all = query.data?.domains || [];
   const filtered = search
@@ -99,6 +99,7 @@ const DomainsPage = ({ token }) => {
                 disabled={query.isFetching}
                 className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
                 title="Rafraichir"
+                aria-label="Rafraîchir"
               >
                 <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
               </button>
@@ -129,10 +130,10 @@ const DomainsPage = ({ token }) => {
               {WINDOW_OPTIONS.map(w => (
                 <button
                   key={w}
-                  onClick={() => setWindow(w)}
+                  onClick={() => setPeriod(w)}
                   className={cn(
                     'rounded px-2.5 py-1 text-[11px] font-medium transition-colors',
-                    w === window ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
+                    w === period ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
                   )}
                 >
                   {w}
@@ -187,7 +188,7 @@ const DomainsPage = ({ token }) => {
                     className="hover:bg-bg-2 cursor-pointer border-b border-hairline focus:outline-none focus-visible:bg-bg-2"
                   >
                     <TableCell className="text-[12px] py-2 font-mono text-ink-0">{d.domain}</TableCell>
-                    <TableCell className="text-[12px] py-2 text-right font-mono text-ink-2">{d.total_jobs}</TableCell>
+                    <TableCell className="text-[12px] py-2 text-right font-mono text-ink-2">{d.total_jobs ?? '—'}</TableCell>
                     <TableCell className="text-[12px] py-2">
                       <Sparkline data={[]} w={80} h={24} color="var(--ink-3)" />
                     </TableCell>
