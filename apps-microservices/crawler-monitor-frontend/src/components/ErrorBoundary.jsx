@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { tryAutoReloadOnStaleChunk, hasAlreadyTriedReload } from '../lib/staleChunk';
 
 /**
  * Top-level error boundary.
@@ -7,8 +8,12 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
  * a blank page. Does NOT catch async errors (use try/catch + toast for those).
  *
  * Kept as a plain class component (not shadcn primitives) because it runs
- * BEFORE ThemeProvider mounts — reads theme variables directly via CSS vars,
+ * BEFORE ThemeProvider mounts -- reads theme variables directly via CSS vars,
  * so both light and dark render correctly as long as :root tokens are defined.
+ *
+ * Stale-chunk recovery: si l'erreur correspond a un import() de chunk echoue
+ * apres un redeploiement, la page est rechargee automatiquement une fois pour
+ * recuperer le nouvel index.html. Un flag sessionStorage evite la boucle infinie.
  */
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -21,6 +26,12 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
+    // Tenter un rechargement automatique si c'est un chunk perime apres deploiement.
+    // tryAutoReloadOnStaleChunk() ne recharge que si le flag n'est pas deja pose.
+    if (tryAutoReloadOnStaleChunk(error)) {
+      // Le rechargement est en cours (setTimeout 100ms) -- ne pas loguer d'erreur
+      return;
+    }
     console.error('[ErrorBoundary] Caught render error:', error, info);
     this.setState({ info });
   }
@@ -36,15 +47,32 @@ class ErrorBoundary extends React.Component {
   render() {
     if (!this.state.error) return this.props.children;
 
+    // Detecter si on a deja tente un rechargement automatique dans cette session.
+    // Si oui, afficher un message plus explicite invitant au rechargement force.
+    const alreadyTried = hasAlreadyTriedReload();
+
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg-1 p-4 text-ink-0">
         <div className="w-full max-w-2xl space-y-4 rounded-lg border border-err/40 bg-surface p-6 shadow-xl">
           <div className="flex items-center gap-3">
             <AlertTriangle className="h-7 w-7 text-err" />
-            <h2 className="text-xl font-bold">Une erreur est survenue</h2>
+            <h2 className="text-xl font-bold">
+              {alreadyTried
+                ? "Mise à jour de l'application requise"
+                : 'Une erreur est survenue'}
+            </h2>
           </div>
           <p className="text-sm text-ink-3">
-            Une erreur d&apos;affichage a été interceptée. La vue actuelle ne peut pas être rendue.
+            {alreadyTried ? (
+              <>
+                L&apos;application n&apos;a pas pu se mettre à jour automatiquement après un
+                déploiement récent. Recharge manuellement avec{' '}
+                <strong>Ctrl+Shift+R</strong> (ou <strong>⌘+Shift+R</strong> sur Mac), ou
+                contacte le support si le problème persiste.
+              </>
+            ) : (
+              "Une erreur d'affichage a été interceptée. La vue actuelle ne peut pas être rendue."
+            )}
           </p>
           <div className="max-h-40 overflow-auto rounded-md border border-err/30 bg-err-soft p-3 font-mono text-xs text-err">
             {this.state.error.message || String(this.state.error)}
@@ -58,12 +86,14 @@ class ErrorBoundary extends React.Component {
             </details>
           )}
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              onClick={this.handleReset}
-              className="inline-flex h-9 items-center rounded-md border border-hairline bg-bg-1 px-4 text-sm hover:bg-bg-2 hover:text-ink-0"
-            >
-              Réessayer
-            </button>
+            {!alreadyTried && (
+              <button
+                onClick={this.handleReset}
+                className="inline-flex h-9 items-center rounded-md border border-hairline bg-bg-1 px-4 text-sm hover:bg-bg-2 hover:text-ink-0"
+              >
+                Réessayer
+              </button>
+            )}
             <button
               onClick={this.handleReload}
               className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground hover:bg-accent/90"
