@@ -266,6 +266,13 @@ export class DetectionLangueClient {
      * URL so the caller can log them. Caller handles all logging — this helper is pure.
      *
      * Result `excluded` is deduped (each prefix appears at most once).
+     *
+     * **Implicit winner branch:** when both `winnerPrefix` and `seedPrefix` are
+     * null (homepage at site root), the FR-shaped alt with the lowest
+     * `region_priority` (undefined treated as worst) is treated as an implicit
+     * winner and skipped. This prevents excluding the canonical /fr/ content
+     * tree when the site exposes it via hreflang on a root-served homepage.
+     * Other-locale alts (e.g., /de, /en) are still excluded.
      */
     static computeExcludedRegionalPaths(
         alternativeUrls: AlternativeUrl[],
@@ -275,9 +282,38 @@ export class DetectionLangueClient {
         const excluded: string[] = [];
         const rejected: { prefix: string; sourceUrl: string }[] = [];
 
+        // When the homepage is at the site root, the canonical FR content tree
+        // (e.g., /fr/) is exposed via hreflang as an alternative URL. Treating it
+        // as a non-winning alternate (and therefore excluding it) drops every
+        // /fr/* link from the crawl. Detect this case by picking the FR-shaped
+        // alt with the lowest region_priority as the implicit winner.
+        let implicitWinnerPrefix: string | null = null;
+        if (winnerPrefix === null && seedPrefix === null) {
+            const FR_PREFIX_PATTERN = /^\/fr([-_][a-z]{2,4})?\/?$/i;
+            const candidates: { prefix: string; priority: number }[] = [];
+            for (const alt of alternativeUrls) {
+                const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
+                if (!altPrefix) continue;
+                if (!FR_PREFIX_PATTERN.test(altPrefix)) continue;
+                // undefined region_priority sorts last (treated as worst)
+                const priority = alt.region_priority ?? Number.MAX_SAFE_INTEGER;
+                candidates.push({ prefix: altPrefix, priority });
+            }
+            if (candidates.length > 0) {
+                // Stable sort: lowest priority first, ties keep original order.
+                candidates.sort((a, b) => a.priority - b.priority);
+                implicitWinnerPrefix = candidates[0].prefix;
+            }
+        }
+
         for (const alt of alternativeUrls) {
             const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
-            if (!altPrefix || altPrefix === winnerPrefix || altPrefix === seedPrefix) {
+            if (
+                !altPrefix ||
+                altPrefix === winnerPrefix ||
+                altPrefix === seedPrefix ||
+                altPrefix === implicitWinnerPrefix
+            ) {
                 continue;
             }
             if (!DetectionLangueClient.isLocalePathPrefix(altPrefix)) {
