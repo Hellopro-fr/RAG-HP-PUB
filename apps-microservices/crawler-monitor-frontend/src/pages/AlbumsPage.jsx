@@ -156,7 +156,7 @@ export default function AlbumsPage({ token }) {
                   </li>
                 )}
               </ul>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ink-3">
                 Le job s&apos;exécute en arrière-plan ; tu peux fermer cette page.
               </p>
             </div>
