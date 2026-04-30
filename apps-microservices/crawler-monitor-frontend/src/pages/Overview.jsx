@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Outlet } from 'react-router-dom';
+import { useParams, Outlet } from 'react-router-dom';
 import {
-  RefreshCw, Server, TrendingUp,
+  RefreshCw, Server,
   Search, Filter, Calendar, ChevronLeft, ChevronRight, X,
   Download, RefreshCcw, Plus, Activity, Cpu,
 } from 'lucide-react';
@@ -95,8 +95,6 @@ const LegendItem = ({ color, label, count }) => (
  */
 const Overview = ({ token, replicas }) => {
   const { id: routeJobId } = useParams();
-  const navigate = useNavigate();
-
   // Local UI state
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -105,6 +103,8 @@ const Overview = ({ token, replicas }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showRaw, setShowRaw] = useState(false);
   const [timelinePeriod, setTimelinePeriod] = useState('24h');
+  // Panneau inline : job sélectionné (état local, pas piloté par l'URL)
+  const [selectedJobId, setSelectedJobId] = useState(routeJobId ?? null);
 
   // Data layer
   const jobsQuery = useJobsQuery(token);
@@ -119,11 +119,11 @@ const Overview = ({ token, replicas }) => {
   const nbActiveAlerts = activeAlerts.length;
   const hasCritical = activeAlerts.some(a => a.severity === 'critical');
 
-  const detailsQuery = useJobDetailsQuery(token, routeJobId);
-  const selectedJob = routeJobId
-    ? (detailsQuery.data ?? (detailsQuery.error ? { id: routeJobId, error: detailsQuery.error.message } : null))
+  const detailsQuery = useJobDetailsQuery(token, selectedJobId);
+  const selectedJob = selectedJobId
+    ? (detailsQuery.data ?? (detailsQuery.error ? { id: selectedJobId, error: detailsQuery.error.message } : null))
     : null;
-  const loadingDetails = !!routeJobId && detailsQuery.isLoading;
+  const loadingDetails = !!selectedJobId && detailsQuery.isLoading;
 
   // Relative time since last data update
   const dataUpdatedAt = jobsQuery.dataUpdatedAt;
@@ -197,19 +197,31 @@ const Overview = ({ token, replicas }) => {
     return buckets.map(({ label, ok, run, fail }) => ({ label, ok, run, fail }));
   }, [allJobs]);
 
-  const detailsPanelRef = useRef(null);
   const jobsListRef = useRef(null);
 
+  // Sélectionner un job dans le panneau inline (pas de navigation URL)
   const handleSelectJob = useCallback((id) => {
     if (!id || id === 'undefined' || id === 'null') return;
-    navigate(`/jobs/${id}`);
-  }, [navigate]);
+    setSelectedJobId(id);
+  }, []);
 
+  // Synchroniser selectedJobId avec routeJobId (navigation directe via URL)
   useEffect(() => {
-    if (routeJobId && detailsPanelRef.current) {
-      detailsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    if (routeJobId) setSelectedJobId(routeJobId);
   }, [routeJobId]);
+
+  // Auto-sélectionner le premier job quand la liste se charge (si pas de sélection)
+  useEffect(() => {
+    if (!selectedJobId && filteredJobs.length > 0) {
+      setSelectedJobId(filteredJobs[0].id);
+    }
+    // Si le job sélectionné n'existe plus dans la liste filtrée, passer au premier
+    if (selectedJobId && filteredJobs.length > 0) {
+      const stillExists = filteredJobs.some(j => j.id === selectedJobId);
+      if (!stillExists) setSelectedJobId(filteredJobs[0].id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredJobs]);
 
   const hasDateFilter = !!(startDate || endDate);
 
@@ -472,181 +484,184 @@ const Overview = ({ token, replicas }) => {
         </SectionCard>
       )}
 
-      {/* Jobs list + filters */}
-      <div ref={jobsListRef} className="bg-surface rounded-lg border border-hairline shadow-sm overflow-hidden scroll-mt-16">
-        {/* Toolbar */}
-        <div className="px-5 py-4 border-b border-hairline space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[13px] font-semibold text-ink-0">Jobs ({filteredJobs.length})</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-grow min-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
-              <Input
-                type="text"
-                placeholder="Filtrer par ID ou domaine…"
-                value={searchTerm}
-                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                className="pl-8"
-              />
+      {/* Jobs list + detail panel split (440px / 1fr) */}
+      <div ref={jobsListRef} className="grid grid-cols-1 md:grid-cols-[440px_1fr] gap-4 scroll-mt-16">
+        {/* ── Jobs list panel (440px) ── */}
+        <div className="bg-surface rounded-lg border border-hairline shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="px-5 py-4 border-b border-hairline space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-ink-0">Jobs ({filteredJobs.length})</p>
             </div>
-
-            <div className="relative">
-              <Filter className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3 pointer-events-none" />
-              <select
-                value={statusFilter}
-                onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                className="h-9 appearance-none rounded-md border border-hairline bg-bg-1 pl-8 pr-8 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-              >
-                <option value="all">Tous les statuts</option>
-                <option value="finished">Succès</option>
-                <option value="failed">Échec</option>
-                <option value="running">En cours</option>
-                <option value="stopping">Arrêt…</option>
-                <option value="archived">Archivé</option>
-                <option value="restarting_oom">Restart OOM</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-ink-3" />
-              <Input
-                type="date"
-                value={startDate}
-                onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-                className="w-[150px]"
-              />
-              <span className="text-ink-3 text-sm">→</span>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-                className="w-[150px]"
-              />
-              {hasDateFilter && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
-                  aria-label="Effacer les dates"
-                  title="Effacer les dates"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-hairline pt-2 text-sm text-ink-3">
-              <span className="font-mono">{filteredJobs.length} jobs</span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  aria-label="Page précédente"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <div className="flex items-center gap-1.5">
-                  <span className="hidden sm:inline text-xs">Page</span>
-                  <Input
-                    type="number"
-                    min="1"
-                    max={totalPages}
-                    value={currentPage}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      if (!isNaN(val) && val >= 1 && val <= totalPages) {
-                        setCurrentPage(val);
-                      }
-                    }}
-                    className="h-8 w-14 px-2 text-center font-mono"
-                  />
-                  <span className="text-xs text-ink-3">/ {totalPages}</span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  aria-label="Page suivante"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-grow min-w-[160px]">
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
+                <Input
+                  type="text"
+                  placeholder="Filtrer par ID ou domaine…"
+                  value={searchTerm}
+                  onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                  className="pl-8"
+                />
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* Jobs rows */}
-        <div className="divide-y divide-hairline">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw className="h-6 w-6 animate-spin text-accent" />
-            </div>
-          ) : paginatedJobs.length === 0 ? (
-            <div className="py-12 text-center text-ink-3">
-              <Server className="mx-auto mb-3 h-10 w-10 opacity-50" />
-              <p className="text-sm">Aucun job trouvé</p>
-            </div>
-          ) : (
-            paginatedJobs.map(job => (
-              <div
-                key={job.id}
-                onClick={() => handleSelectJob(job.id)}
-                className={cn(
-                  'flex items-center gap-4 px-5 py-3 hover:bg-bg-2 transition-colors cursor-pointer',
-                  routeJobId === job.id && 'bg-bg-2'
+              <div className="relative">
+                <Filter className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3 pointer-events-none" />
+                <select
+                  value={statusFilter}
+                  onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                  className="h-9 appearance-none rounded-md border border-hairline bg-bg-1 pl-8 pr-8 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                >
+                  <option value="all">Tous les statuts</option>
+                  <option value="finished">Succès</option>
+                  <option value="failed">Échec</option>
+                  <option value="running">En cours</option>
+                  <option value="stopping">Arrêt…</option>
+                  <option value="archived">Archivé</option>
+                  <option value="restarting_oom">Restart OOM</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-ink-3" />
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+                  className="w-[130px]"
+                />
+                <span className="text-ink-3 text-sm">→</span>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+                  className="w-[130px]"
+                />
+                {hasDateFilter && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
+                    aria-label="Effacer les dates"
+                    title="Effacer les dates"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 )}
-              >
-                <Pill tone={JOB_TONE[job.status] ?? 'neutral'}>{job.status}</Pill>
-                <span className="flex-1 text-[13px] text-ink-0 truncate font-mono">{job.domain}</span>
-                <span className="text-[11px] text-ink-3 tabular-nums font-mono">
-                  {job.start_time
-                    ? new Date(job.start_time).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
-                    : '—'}
-                </span>
               </div>
-            ))
-          )}
-        </div>
-      </div>
+            </div>
 
-      {/* Job detail panel */}
-      {routeJobId && (
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-hairline pt-2 text-sm text-ink-3">
+                <span className="font-mono">{filteredJobs.length} jobs</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    aria-label="Page précédente"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <span className="hidden sm:inline text-xs">Page</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      max={totalPages}
+                      value={currentPage}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                          setCurrentPage(val);
+                        }
+                      }}
+                      className="h-8 w-14 px-2 text-center font-mono"
+                    />
+                    <span className="text-xs text-ink-3">/ {totalPages}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    aria-label="Page suivante"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Jobs rows */}
+          <div className="divide-y divide-hairline max-h-[600px] overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-6 w-6 animate-spin text-accent" />
+              </div>
+            ) : paginatedJobs.length === 0 ? (
+              <div className="p-8 text-center text-ink-2 text-sm">
+                Aucun job à afficher.
+              </div>
+            ) : (
+              paginatedJobs.map(job => (
+                <div
+                  key={job.id}
+                  onClick={() => handleSelectJob(job.id)}
+                  className={cn(
+                    'flex items-center gap-4 px-5 py-3 hover:bg-bg-2 transition-colors cursor-pointer border-l-2',
+                    selectedJobId === job.id
+                      ? 'bg-accent-soft border-accent'
+                      : 'border-transparent'
+                  )}
+                >
+                  <Pill tone={JOB_TONE[job.status] ?? 'neutral'}>{job.status}</Pill>
+                  <span className="flex-1 text-[13px] text-ink-0 truncate font-mono">{job.domain}</span>
+                  <span className="text-[11px] text-ink-3 tabular-nums font-mono">
+                    {job.start_time
+                      ? new Date(job.start_time).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+                      : '—'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* ── Job detail panel (1fr) ── */}
         <div
-          ref={detailsPanelRef}
           className={cn(
-            'bg-surface rounded-lg border border-hairline shadow-sm p-5 scroll-mt-16',
-            !selectedJob && !loadingDetails && 'flex items-center justify-center'
+            'bg-surface rounded-lg border border-hairline shadow-sm',
+            paginatedJobs.length === 0 && 'hidden md:hidden',
+            !selectedJob && !loadingDetails && paginatedJobs.length > 0 && 'flex items-center justify-center'
           )}
         >
           {loadingDetails ? (
-            <div className="flex items-center justify-center py-20">
+            <div className="flex items-center justify-center py-20 p-5">
               <RefreshCw className="h-10 w-10 animate-spin text-accent" />
             </div>
-          ) : selectedJob ? (
-            <JobDetails
-              job={selectedJob}
-              onToggleRaw={() => setShowRaw(!showRaw)}
-              showRaw={showRaw}
-              token={token}
-              onSelectJob={handleSelectJob}
-            />
+          ) : paginatedJobs.length === 0 ? null : selectedJob ? (
+            <div className="p-5 overflow-y-auto">
+              <JobDetails
+                job={selectedJob}
+                onToggleRaw={() => setShowRaw(!showRaw)}
+                showRaw={showRaw}
+                token={token}
+                onSelectJob={handleSelectJob}
+                inline
+              />
+            </div>
           ) : (
-            <div className="text-center text-ink-3 py-16">
-              <TrendingUp className="mx-auto mb-3 h-12 w-12 opacity-50" />
-              <p className="text-base">Sélectionnez un job pour voir les détails</p>
-              <p className="text-xs mt-1.5">Cliquez sur un job dans la liste</p>
+            <div className="flex items-center justify-center h-full p-8 text-ink-2 text-sm">
+              Sélectionnez un job pour voir les détails
             </div>
           )}
         </div>
-      )}
+      </div>
 
       <Outlet />
     </div>

@@ -173,7 +173,7 @@ function GhostBtn({ icon: Icon, children, onClick, disabled }) {
 
 const TABS = ['Logs', 'Queue', 'Dataset', 'Replay', 'Metrics', 'Callbacks'];
 
-const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
+const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = false }) => {
   const [activeTab, setActiveTab] = useState('Logs');
 
   /* Performance data — always call hook (Rules of Hooks) */
@@ -280,14 +280,16 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
       <div className="mb-5">
         {/* Row 1: back button + status pills */}
         <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={() => onSelectJob?.(null)}
-            className="flex items-center justify-center w-8 h-8 rounded-md border border-hairline text-ink-2 hover:text-ink-0 hover:bg-bg-2 transition-colors flex-shrink-0"
-            title="Retour"
-            aria-label="Retour"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
+          {!inline && (
+            <button
+              onClick={() => onSelectJob?.(null)}
+              className="flex items-center justify-center w-8 h-8 rounded-md border border-hairline text-ink-2 hover:text-ink-0 hover:bg-bg-2 transition-colors flex-shrink-0"
+              title="Retour"
+              aria-label="Retour"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
 
           <Pill tone={tone} dot={isRunning} pulse={isRunning}>
             {job.status}
@@ -320,6 +322,15 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
 
           {/* Fix 4: action buttons */}
           <div className="flex items-center gap-1.5 flex-shrink-0 mt-1">
+            {inline && (
+              <Link
+                to={`/jobs/${job.id}`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-ink-2 hover:text-ink-0 hover:bg-bg-2 border border-hairline transition-colors"
+              >
+                <ExternalLink size={12} />
+                Détail complet
+              </Link>
+            )}
             <GhostBtn icon={Play} onClick={() => console.log('Replay', job.id)}>
               Replay
             </GhostBtn>
