@@ -39,6 +39,10 @@ const knownReplicasKey = "replica:known"
 // retentionMs: 1h replica history retention (matches redisstore.RetentionReplicaHistoryMs).
 const retentionMs = int64(60 * 60 * 1000)
 
+// jobPerfPrefix and jobPerfRetentionMs mirror redisstore constants.
+const jobPerfPrefix = "job:perf:"
+const jobPerfRetentionMs = int64(7 * 24 * 60 * 60 * 1000) // 7 days
+
 type PubSub struct {
 	rdb      *redis.Client
 	hub      *Hub
@@ -149,6 +153,7 @@ func (p *PubSub) persistAndNotify(ctx context.Context, payload string) {
 	}
 	p.persistJob(ctx, msg)
 	p.persistReplica(ctx, msg)
+	p.persistJobPerf(ctx, msg)
 }
 
 // persistJob upserts crawl_job:<jobId> preserving start_time on existing entries.
@@ -254,4 +259,42 @@ func (p *PubSub) persistReplica(ctx context.Context, msg map[string]any) {
 	_ = p.rdb.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)}).Err()
 	_ = p.rdb.ZRemRangeByScore(ctx, key, "0", minScore).Err()
 	_ = p.rdb.SAdd(ctx, knownReplicasKey, replicaID).Err()
+}
+
+// persistJobPerf appends a perf sample to job:perf:<jobId> (ZSet, score=ts, 7d TTL).
+// Member shape: {ts, cpu, ram, totalRam, replicaId, jobId} — matches Express persistJobPerf
+// so the existing computeCapacityPlanning loader can decode it without changes.
+func (p *PubSub) persistJobPerf(ctx context.Context, msg map[string]any) {
+	jobID := stringOrNum(msg["jobId"])
+	if jobID == "" {
+		return
+	}
+	replicaID := stringOrNum(msg["replicaId"])
+	ts := time.Now().UnixMilli()
+	if v, ok := msg["timestamp"].(float64); ok {
+		ts = int64(v)
+	}
+	cpu, _ := msg["cpu"].(float64)
+	ram, _ := msg["ram"].(float64)
+	totalRAM, _ := msg["totalRam"].(float64)
+
+	sample := map[string]any{
+		"ts":       ts,
+		"cpu":      cpu,
+		"ram":      ram,
+		"totalRam": totalRAM,
+		"jobId":    jobID,
+	}
+	if replicaID != "" {
+		sample["replicaId"] = replicaID
+	}
+	raw, err := json.Marshal(sample)
+	if err != nil {
+		return
+	}
+	key := jobPerfPrefix + jobID
+	minScore := strconv.FormatInt(ts-jobPerfRetentionMs, 10)
+	_ = p.rdb.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)}).Err()
+	_ = p.rdb.ZRemRangeByScore(ctx, key, "0", minScore).Err()
+	_ = p.rdb.Expire(ctx, key, time.Duration(jobPerfRetentionMs)*time.Millisecond).Err()
 }

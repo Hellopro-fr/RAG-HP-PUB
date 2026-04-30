@@ -82,7 +82,10 @@ func TestCapacity_Ok(t *testing.T) {
 	}
 	var body map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&body)
-	if body["running"].(float64) != 5 || body["max"].(float64) != 10 {
+	if body["running_jobs"].(float64) != 5 || body["max_global_jobs"].(float64) != 10 {
 		t.Errorf("body=%v", body)
+	}
+	if body["is_full"] != false {
+		t.Errorf("is_full=%v", body["is_full"])
 	}
 }

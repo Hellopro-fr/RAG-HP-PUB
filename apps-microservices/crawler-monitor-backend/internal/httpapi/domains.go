@@ -63,7 +63,14 @@ func domainsListHandler(rs *redisstore.Client) http.HandlerFunc {
 		jobs := rawJobsToDomain(rawJobs)
 		now := time.Now().UnixMilli()
 		result := domains.AggregateDomains(jobs, now, windowMs)
-		WriteJSON(w, 200, result)
+		if result == nil {
+			result = []domains.DomainSummary{}
+		}
+		WriteJSON(w, 200, map[string]any{
+			"window":  windowStr,
+			"count":   len(result),
+			"domains": result,
+		})
 	}
 }
 

@@ -51,6 +51,24 @@ func main() {
 	ps := ws.NewPubSub(rs.Raw(), hub, redisstore.UpdatesChannel, redisstore.HeartbeatChannel)
 	go ps.Run(ctx)
 
+	// Capacity snapshot ticker (60s) — feeds capacity:history:zset.
+	go func() {
+		// Initial snapshot so the chart isn't empty on first load.
+		_ = rs.SnapshotCapacity(ctx)
+		t := time.NewTicker(60 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := rs.SnapshotCapacity(ctx); err != nil {
+					slog.Warn("capacity.snapshot", "err", err)
+				}
+			}
+		}
+	}()
+
 	r := httpapi.NewRouter(httpapi.Deps{
 		Version:    version,
 		Config:     cfg,

@@ -26,7 +26,13 @@ func replicasHistoryHandler(rs *redisstore.Client) http.HandlerFunc {
 			WriteError(w, 500, "Failed to read replicas history")
 			return
 		}
-		WriteJSON(w, 200, all)
+		if all == nil {
+			all = map[string][]replicahistory.HeartbeatSample{}
+		}
+		WriteJSON(w, 200, map[string]any{
+			"window":   windowStr,
+			"replicas": all,
+		})
 	}
 }
 
