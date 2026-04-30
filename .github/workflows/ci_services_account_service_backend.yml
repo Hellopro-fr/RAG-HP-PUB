@@ -1,0 +1,26 @@
+name: CI account-service-backend
+on:
+  pull_request:
+    paths:
+      - 'apps-microservices/account-service-backend/**'
+      - 'libs/common-utils/**'
+      - '.github/workflows/ci_services_account_service_backend.yml'
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps-microservices/account-service-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Install
+        run: |
+          pip install --no-cache-dir -r requirements.txt
+          pip install --no-cache-dir ruff
+      - name: Ruff
+        run: ruff check .
+      - name: Pytest
+        run: pytest -v
