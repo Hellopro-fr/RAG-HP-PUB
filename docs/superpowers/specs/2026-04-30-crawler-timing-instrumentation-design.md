@@ -172,7 +172,41 @@ recorder.finalize() → JSONL flush + summary write + console block
 
 - `TIMING_ENABLED=true` — opt-in, default off. When false, no hooks registered, no sampler started, no recorder constructed.
 - `TIMING_SAMPLE_INTERVAL_MS=5000` — pool sampler interval. Override only for very short test crawls.
+- `TIMING_SUMMARY_FLUSH_MS=30000` — periodic in-process summary flush interval. Each tick rebuilds the summary from accumulators and overwrites `timing-summary.json` so a crash leaves the latest snapshot on disk.
 - Output directory: `storage/{crawl_id}/` (already a per-crawl directory).
+
+## Durability and crash resilience
+
+The crawler can crash mid-run (OOM, force-stop, container kill). Timing data must survive partial runs, otherwise the instrumentation is worthless on the very runs that need investigation.
+
+**JSONL stream.** `fs.createWriteStream(path, { flags: 'a' })` with explicit `stream.write(line + '\n')` per `recordPage` call. Stream is flushed (`stream.cork`/`uncork` not used; default behavior writes immediately to the kernel buffer). For per-line OS durability under crash, the recorder calls `fs.fsyncSync(fd)` once per N lines (N=50, configurable via `TIMING_FSYNC_EVERY_N`). Exit handlers (`process.on('beforeExit')`, `process.on('SIGTERM')`, `process.on('SIGINT')`) call `recorder.finalize()` to flush remaining bytes and write the final summary.
+
+**Summary file.**
+- Written periodically every `TIMING_SUMMARY_FLUSH_MS` (default 30s) by an in-process timer. Each tick rebuilds the summary from current accumulators and atomically overwrites `timing-summary.json` (write to `.tmp` then `rename`).
+- Written one final time at `finalize()`.
+- Reconstructible post-hoc from the JSONL via a small standalone tool (next subsection) when the in-process summary is missing or corrupt.
+
+**Post-hoc reconstruction tool.** A standalone Node script at `apps-microservices/crawler-service/crawler/src/tools/timing-summary.ts` reads any `timing.jsonl` and emits the same `timing-summary.json` shape. Invocation: `npx tsx src/tools/timing-summary.ts /path/to/timing.jsonl`. The script reuses the same aggregator logic as `TimingRecorder.finalize()` (extract aggregator into a shared module so both the in-process recorder and the post-hoc tool consume it identically).
+
+**Auto-regeneration on Node.js startup.** When `TIMING_ENABLED=true` and the recorder constructor finds an existing `timing.jsonl` for a crawl that is being resumed (e.g., update mode, OOM relaunch), it offers two policies:
+- `TIMING_RESUME_POLICY=replay` (default) — read the existing JSONL into the aggregator before opening for append. The summary picks up where the previous run left off.
+- `TIMING_RESUME_POLICY=overwrite` — truncate the JSONL and start fresh.
+
+For the first iteration, default to `replay`. The behavior is documented in the JSDoc on the recorder constructor.
+
+## Local retention after archive cleanup
+
+`apps-microservices/crawler-service/app/core/crawler_manager.py` line 1690 maintains the `files_to_keep` whitelist used by `_cleanup_local_data()` after a successful archive. Both timing files are added to that set:
+
+```python
+files_to_keep = {'crawler.log', '_callback_payload.json',
+                 '_completion_marker.json', '_status_snapshot.json',
+                 '_exit_reason.json', '_update_report.json',
+                 'update_stats.json',
+                 'timing.jsonl', 'timing-summary.json'}
+```
+
+The .tar.gz archive already contains both files (it is built from the full storage directory before cleanup); the keep-list change preserves them on local disk too, so an operator can `cat` or `jq` them without unpacking the archive.
 
 ## Testing
 
@@ -180,7 +214,13 @@ recorder.finalize() → JSONL flush + summary write + console block
   - JSONL line per call to `recordPage`.
   - Aggregate summary computes correct median/p95/p99 from a known input set.
   - `detect_saturated_pct` and `crawlee_throttle_pct` math.
+  - Periodic summary flush rewrites the file at the configured interval (use a fake clock).
+  - `replay` resume policy reads an existing JSONL into the aggregator before further appends.
+- Unit tests for the post-hoc `timing-summary.ts` tool:
+  - Given a known JSONL fixture, output equals the in-process aggregator's output for the same input.
+  - Handles empty JSONL (zero pages) without crashing.
 - Integration: a 10-page test crawl with `TIMING_ENABLED=true` produces one `timing.jsonl` and one `timing-summary.json`. Assert files exist, JSONL has 10 lines, summary has all expected keys.
+- Crash-resilience integration: kill the crawler mid-run (SIGKILL the worker after ~5 pages). Verify `timing.jsonl` contains the partial trace. Run the post-hoc tool against it and assert the regenerated `timing-summary.json` is well-formed and reflects the partial pages.
 - Negative: with `TIMING_ENABLED=false`, no files are produced and crawl behavior is unchanged.
 
 ## Out of scope
@@ -199,5 +239,8 @@ recorder.finalize() → JSONL flush + summary write + console block
 - Console summary block prints at crawl end and identifies the dominant phase by percentage.
 - Per-phase median/p95/p99 are mathematically correct (verified by unit tests).
 - Pool sampler captures both Crawlee autoscaler state and detect-API queue state simultaneously.
+- `timing.jsonl` and `timing-summary.json` survive `_cleanup_local_data()` (added to `files_to_keep` in `crawler_manager.py`).
+- A SIGKILL mid-run leaves a partial `timing.jsonl` whose contents the post-hoc `timing-summary.ts` tool can convert to a well-formed summary.
+- The periodic summary flush (default 30s) overwrites `timing-summary.json` so a crash leaves a recent in-process snapshot on disk.
 - All existing crawler tests still pass.
 - `npm run build` clean.
