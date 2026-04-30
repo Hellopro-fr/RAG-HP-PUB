@@ -9,3 +9,7 @@ aerich>=0.7
 slowapi>=0.1.9
 python-dotenv
 uvloop
+pytest>=8
+pytest-asyncio>=0.23
+respx>=0.21
+aiosqlite>=0.20
