@@ -700,6 +700,61 @@ services:
       - services-net
     logging: *logging_defaults
 
+  account-service-backend:
+    build:
+      context: .
+      dockerfile: apps-microservices/account-service-backend/Dockerfile
+    container_name: account-service-backend
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${ACCOUNT_MYSQL_USER}
+      - MYSQL_PASS=${ACCOUNT_MYSQL_PASS}
+      - MYSQL_DB=account_db
+      - HELLOPRO_AUTH_URL=${HELLOPRO_AUTH_URL}
+      - HELLOPRO_AUTH_TIMEOUT_SECONDS=5
+      - JWT_KEY_ENCRYPTION_KEY=${JWT_KEY_ENCRYPTION_KEY}
+      - JWT_ISSUER=https://account.hellopro.eu
+      - ACCESS_TOKEN_EXPIRE_MINUTES=15
+      - REFRESH_TOKEN_EXPIRE_DAYS=30
+      - GATEWAY_ADMIN_KEY=${GATEWAY_ADMIN_KEY}
+      - OAUTH_CLIENTS_SEED_JSON=${OAUTH_CLIENTS_SEED_JSON-}
+      - LOG_LEVEL=INFO
+    expose: ["8000"]
+    depends_on: [mysql]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  account-service-frontend:
+    build:
+      context: .
+      dockerfile: apps-microservices/account-service-frontend/Dockerfile
+    container_name: account-service-frontend
+    expose: ["80"]
+    depends_on:
+      account-service-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
   devis-processor-service:
     build:
       context: .
