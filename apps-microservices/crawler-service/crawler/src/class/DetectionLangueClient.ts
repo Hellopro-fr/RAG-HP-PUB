@@ -1,6 +1,13 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import pLimit from "p-limit";
 
+// Local alias for the p-limit instance type. The installed p-limit version
+// exports its types via the `pLimit.Limit` namespace (CommonJS `export =`),
+// so `LimitFunction` is not directly importable. `ReturnType<typeof pLimit>`
+// resolves to the same `Limit` interface and stays in sync if the dep is
+// upgraded to the named-export variant.
+type PLimitInstance = ReturnType<typeof pLimit>;
+
 export interface AlternativeUrl {
     url: string;
     method: string;
@@ -34,9 +41,15 @@ export interface CheckUrlResult {
 
 export class DetectionLangueClient {
     private client: AxiosInstance;
-    private limit: ReturnType<typeof pLimit>;
+    private limit: PLimitInstance;
     private maxRetries: number;
     private backoffBaseS: number;
+    /**
+     * Configured detect-API concurrency cap. Cached at construction time so
+     * `pLimit(maxConcurrency)` and the public `maxConcurrency` accessor stay
+     * in sync even if the env var mutates at runtime.
+     */
+    public readonly maxConcurrency: number;
 
     constructor(baseUrl?: string) {
         const url =
@@ -48,7 +61,7 @@ export class DetectionLangueClient {
         }
 
         const timeoutMs = parseInt(process.env.DETECTION_REQUEST_TIMEOUT_S ?? "180") * 1000;
-        const maxConcurrency = parseInt(process.env.DETECTION_MAX_CONCURRENCY ?? "5");
+        this.maxConcurrency = parseInt(process.env.DETECTION_MAX_CONCURRENCY ?? "5");
         this.maxRetries = parseInt(process.env.DETECTION_MAX_RETRIES ?? "2");
         this.backoffBaseS = parseFloat(process.env.DETECTION_BACKOFF_BASE_S ?? "2");
 
@@ -56,23 +69,15 @@ export class DetectionLangueClient {
             baseURL: `${url}/api/v1`,
             timeout: timeoutMs,
         });
-        this.limit = pLimit(maxConcurrency);
+        this.limit = pLimit(this.maxConcurrency);
     }
 
     /**
-     * Returns the underlying p-limit instance for observability (pendingCount,
-     * activeCount). Do not use this to manipulate the queue — the p-limit
-     * instance is owned by this class.
+     * Returns the underlying p-limit instance for observability
+     * (pendingCount, activeCount). Read-only — do not call it.
      */
-    get limiter(): { pendingCount: number; activeCount: number } {
-        return this.limit as unknown as { pendingCount: number; activeCount: number };
-    }
-
-    /**
-     * Returns the configured detect-API concurrency cap.
-     */
-    get maxConcurrency(): number {
-        return parseInt(process.env.DETECTION_MAX_CONCURRENCY ?? "5");
+    get limiter(): Pick<PLimitInstance, "pendingCount" | "activeCount"> {
+        return this.limit;
     }
 
     /**

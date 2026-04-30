@@ -891,13 +891,23 @@ const mapStopReasonToMessage = (errorCode: string): string => {
  * Handles persistence and cleanup on both Success and Signals (SIGTERM/SIGINT)
  */
 let isShuttingDown = false;
+// Hoisted to module scope so gracefulShutdown can flush timing before any
+// payload write / Redis cleanup / process.exit. Assigned only inside the
+// TIMING_ENABLED block below; remains null when timing is disabled.
+let finalizeTimingOnce: (() => Promise<void>) | null = null;
 const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    
+
+    // Timing instrumentation: stop sampler + flush JSONL/summary before exit.
+    // Synchronous-ish: finalize() is fast and fire-and-await before any exit.
+    if (typeof finalizeTimingOnce === 'function') {
+        await finalizeTimingOnce();
+    }
+
     // Stop periodic task
     if (persistenceInterval) clearInterval(persistenceInterval);
-    
+
     console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
     // 1. Stop Crawler if running
@@ -1158,7 +1168,6 @@ if (typeCrawling == "sitemap") {
     const TIMING_SAMPLE_INTERVAL_MS = parseInt(process.env.TIMING_SAMPLE_INTERVAL_MS ?? "5000");
 
     let timingSampler: NodeJS.Timeout | null = null;
-    let finalizeTimingOnce: (() => Promise<void>) | null = null;
 
     if (TIMING_ENABLED) {
         // Dedicated DetectionLangueClient instance used solely as an
@@ -1228,8 +1237,12 @@ if (typeCrawling == "sitemap") {
             };
         })();
 
-        process.on("SIGINT", () => { void finalizeTimingOnce!(); });
-        process.on("SIGTERM", () => { void finalizeTimingOnce!(); });
+        // SIGINT/SIGTERM are handled exclusively by gracefulShutdown (declared
+        // at module scope above), which now invokes finalizeTimingOnce as its
+        // first step. Registering duplicate listeners here would race with
+        // process.exit and lose the JSONL flush. Keep beforeExit for natural
+        // exit (loop empty → no signal fires → gracefulShutdown still runs
+        // via the COMPLETED path, but beforeExit acts as belt-and-braces).
         process.on("beforeExit", () => { void finalizeTimingOnce!(); });
     }
     // --- END TIMING INSTRUMENTATION ---
@@ -1249,10 +1262,6 @@ if (typeCrawling == "sitemap") {
         containerMemoryMb,
         camoufoxEnabled
     );
-
-    if (TIMING_ENABLED && finalizeTimingOnce) {
-        await finalizeTimingOnce();
-    }
 
     process.on('SIGTERM', async () => {
         await gracefulShutdown('SIGTERM', 0);
