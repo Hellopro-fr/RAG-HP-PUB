@@ -3,6 +3,7 @@ import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
+import { TimingRecorder } from "./class/TimingRecorder.js";
 import { PlaywrightCrawler } from "crawlee";
 
 export const context = {
@@ -12,6 +13,7 @@ export const context = {
     updateChecker: null as UpdateChecker | null,
     jsonlWriter: null as JsonlWriter | null,
     crawlerInstance: null as PlaywrightCrawler | null,
+    timingRecorder: undefined as TimingRecorder | undefined,
     // Store detected method in memory to avoid race conditions/disk IO
     frenchDetectionMethod: null as string | null,
     config: {

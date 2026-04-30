@@ -60,6 +60,22 @@ export class DetectionLangueClient {
     }
 
     /**
+     * Returns the underlying p-limit instance for observability (pendingCount,
+     * activeCount). Do not use this to manipulate the queue — the p-limit
+     * instance is owned by this class.
+     */
+    get limiter(): { pendingCount: number; activeCount: number } {
+        return this.limit as unknown as { pendingCount: number; activeCount: number };
+    }
+
+    /**
+     * Returns the configured detect-API concurrency cap.
+     */
+    get maxConcurrency(): number {
+        return parseInt(process.env.DETECTION_MAX_CONCURRENCY ?? "5");
+    }
+
+    /**
      * Full detection: URL patterns + HTML content + NLP (optional).
      * Pass the HTML already fetched by the crawler to avoid double-fetch.
      */

@@ -698,6 +698,13 @@ export const startCrawler = async (
                     // Ignore cookie injection errors
                 }
             },
+            // Timing instrumentation hook. No-op when context.timingRecorder is
+            // undefined (TIMING_ENABLED=false).
+            async (crawlingContext: PlaywrightCrawlingContext) => {
+                if (context.timingRecorder) {
+                    crawlingContext.request.userData._timing = { dequeueAt: Date.now() };
+                }
+            },
         ],
 
         postNavigationHooks: [
@@ -713,6 +720,13 @@ export const startCrawler = async (
                 if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
                     context.stopReason = "limitDiez";
                     await stopCrawler(crawler, "Limit of 100 hashes reached.");
+                }
+            },
+            // Timing instrumentation hook. No-op when context.timingRecorder is
+            // undefined (TIMING_ENABLED=false).
+            async (crawlingContext: PlaywrightCrawlingContext) => {
+                if (context.timingRecorder && crawlingContext.request.userData._timing) {
+                    crawlingContext.request.userData._timing.postNavAt = Date.now();
                 }
             },
         ],

@@ -34,6 +34,8 @@ import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
+import { TimingRecorder } from "./class/TimingRecorder.js";
+import type { PoolSample, TimingSummary } from "./timing/types.js";
 import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
@@ -823,6 +825,40 @@ if (queueInfo) {
 // --------------------------
 
 /**
+ * Formats a TimingSummary snapshot as a human-readable console block.
+ * Phases are sorted by share-of-total descending so the dominant phase is first.
+ */
+function formatTimingSummary(s: TimingSummary): string {
+    const lines: string[] = [];
+    lines.push("=== Timing summary ===");
+    lines.push(`Pages: ${s.pages_total} in ${s.duration_s}s ` +
+        `(avg ${s.pages_per_min_avg} pages/min, max ${s.pages_per_min_max_sustained} sustained)`);
+    lines.push("Phase share of total handler time:");
+    const phases: Array<[string, keyof TimingSummary["phases"]]> = [
+        ["wait_ms", "wait_ms"],
+        ["nav_ms", "nav_ms"],
+        ["pre_detect_ms", "pre_detect_ms"],
+        ["detect_ms", "detect_ms"],
+        ["post_ms", "post_ms"],
+    ];
+    const sorted = phases.slice().sort((a: [string, keyof TimingSummary["phases"]], b: [string, keyof TimingSummary["phases"]]) =>
+        s.phases[b[1]].share_of_total_pct - s.phases[a[1]].share_of_total_pct);
+    for (const [label, key] of sorted) {
+        const ph = s.phases[key];
+        lines.push(`  ${label.padEnd(14)}${ph.share_of_total_pct.toFixed(1)}%  ` +
+            `(median ${ph.median}ms, p95 ${ph.p95}ms)`);
+    }
+    lines.push("Pool:");
+    lines.push(`  Crawlee avg concurrency: ${s.pool.crawlee_avg_concurrency} ` +
+        `/ max reached: ${s.pool.crawlee_max_concurrency_reached} ` +
+        `/ throttled ${s.pool.crawlee_throttle_pct}% of time`);
+    lines.push(`  Detect API saturated ${s.pool.detect_saturated_pct}% of time ` +
+        `(pending queue non-empty at concurrency cap)`);
+    lines.push(`  Memory: avg ratio ${s.pool.memory_avg_ratio}, max ${s.pool.memory_max_ratio}`);
+    return lines.join("\n");
+}
+
+/**
  * Maps internal stopReason/isError codes to human-readable French messages
  * for storage in the database column `message_erreur_crawling` (VARCHAR 250).
  */
@@ -1113,6 +1149,91 @@ if (typeCrawling == "sitemap") {
         }, 5 * 60 * 1000);
     }
 
+    // --- TIMING INSTRUMENTATION ---
+    // When TIMING_ENABLED=false (the default), this entire block is a no-op:
+    // no recorder is constructed, no sampler is started, and no signal
+    // listeners are registered. Routes/hooks observe `context.timingRecorder`
+    // and short-circuit when it is undefined.
+    const TIMING_ENABLED = (process.env.TIMING_ENABLED ?? "false").toLowerCase() === "true";
+    const TIMING_SAMPLE_INTERVAL_MS = parseInt(process.env.TIMING_SAMPLE_INTERVAL_MS ?? "5000");
+
+    let timingSampler: NodeJS.Timeout | null = null;
+    let finalizeTimingOnce: (() => Promise<void>) | null = null;
+
+    if (TIMING_ENABLED) {
+        // Dedicated DetectionLangueClient instance used solely as an
+        // observability handle for the sampler. Routes.ts owns its own
+        // instance today (Task 4 of the timing plan migrates routes.ts to a
+        // shared instance via context). Until then, limiter counts read here
+        // reflect only this observer instance, not the live request queue.
+        const detectionClient = new DetectionLangueClient();
+
+        const recorder = new TimingRecorder({
+            crawlId: String(id),
+            outputDir: storagePath,
+            detectMaxConcurrency: detectionClient.maxConcurrency,
+        });
+        context.timingRecorder = recorder;
+
+        let lastSampleAt = Date.now();
+        let pagesAtLastSample = 0;
+
+        timingSampler = setInterval(() => {
+            try {
+                const crawlerInstance = context.crawlerInstance;
+                const pool = (crawlerInstance as any)?.autoscaledPool;
+                const memUsedBytes = process.memoryUsage().rss;
+                const budgetBytes = ((crawlerInstance as any)?.config?.memoryMbytes ?? 0) * 1024 * 1024;
+                const handled = (crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0;
+                const elapsedMs = Date.now() - lastSampleAt;
+                const ppm = elapsedMs > 0 ? Math.round(((handled - pagesAtLastSample) / elapsedMs) * 60000) : 0;
+                lastSampleAt = Date.now();
+                pagesAtLastSample = handled;
+
+                const sample: PoolSample = {
+                    t: Date.now(),
+                    crawlee: {
+                        currentConcurrency: pool?.currentConcurrency ?? 0,
+                        desiredConcurrency: pool?.desiredConcurrency ?? 0,
+                        maxConcurrency: pool?.maxConcurrency ?? 0,
+                    },
+                    detect: {
+                        pendingCount: detectionClient.limiter.pendingCount,
+                        activeCount: detectionClient.limiter.activeCount,
+                    },
+                    memory: {
+                        used_mb: Math.round(memUsedBytes / (1024 * 1024)),
+                        budget_mb: Math.round(budgetBytes / (1024 * 1024)),
+                        ratio: budgetBytes > 0 ? memUsedBytes / budgetBytes : 0,
+                    },
+                    rolling: { pages_per_min: ppm },
+                };
+                recorder.recordPoolSample(sample);
+            } catch (err) {
+                console.error(`[TIMING] sampler error: ${(err as Error).message}`);
+            }
+        }, TIMING_SAMPLE_INTERVAL_MS);
+
+        finalizeTimingOnce = (() => {
+            let done = false;
+            return async () => {
+                if (done) return;
+                done = true;
+                if (timingSampler) {
+                    clearInterval(timingSampler);
+                    timingSampler = null;
+                }
+                await recorder.finalize();
+                console.log(formatTimingSummary(recorder.snapshot()));
+            };
+        })();
+
+        process.on("SIGINT", () => { void finalizeTimingOnce!(); });
+        process.on("SIGTERM", () => { void finalizeTimingOnce!(); });
+        process.on("beforeExit", () => { void finalizeTimingOnce!(); });
+    }
+    // --- END TIMING INSTRUMENTATION ---
+
     // Launch
     const crawler = await startCrawler(
         router,
@@ -1128,6 +1249,10 @@ if (typeCrawling == "sitemap") {
         containerMemoryMb,
         camoufoxEnabled
     );
+
+    if (TIMING_ENABLED && finalizeTimingOnce) {
+        await finalizeTimingOnce();
+    }
 
     process.on('SIGTERM', async () => {
         await gracefulShutdown('SIGTERM', 0);
