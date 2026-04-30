@@ -1,0 +1,34 @@
+# =============================================================================
+# ⚠️  RÉFÉRENCE DOCUMENTAIRE — NE PAS APPLIQUER VIA `kubectl apply -f`
+# =============================================================================
+#
+# Le PVC est créé AUTOMATIQUEMENT par le `volumeClaimTemplates` du StatefulSet
+# (voir 12-typesense-statefulset.yaml). Ce fichier est conservé pour référence
+# (audit, doc, debug).
+#
+# Le nom auto-généré sera : typesense-data-typesense-0
+#   format = <volumeClaimTemplate.name>-<statefulset.name>-<ordinal>
+#
+# StorageClass : premium-rwo (SSD CSI, WaitForFirstConsumer, expansion=true)
+# ReclaimPolicy : Delete (cf. DT007 — interdiction de `kubectl delete pvc`)
+#
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: typesense-data-typesense-0
+  namespace: moteur-recherche
+  labels:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/managed-by: manifest
+    environment: prod
+    owner: devsecops
+    cost-center: ia-rag
+    app: opti-moteur-recherche
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: premium-rwo
+  resources:
+    requests:
+      storage: 100Gi

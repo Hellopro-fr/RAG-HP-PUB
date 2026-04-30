@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: typesense
+  namespace: moteur-recherche
+  labels:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/managed-by: manifest
+    environment: prod
+    owner: devsecops
+    cost-center: ia-rag
+    app: opti-moteur-recherche
+spec:
+  serviceName: typesense
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: typesense
+      app: opti-moteur-recherche
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: typesense
+        app: opti-moteur-recherche
+        environment: prod
+    spec:
+      serviceAccountName: opti-moteur-sa
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 2000   # accessibilite /data pour groupe non-root (test post-apply au S2 §6.3)
+      containers:
+        - name: typesense
+          image: typesense/typesense:27.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--data-dir=/data"
+            - "--api-key=$(TYPESENSE_API_KEY)"
+            - "--listen-port=8108"
+            # NB : pas de --enable-cors en prod (cf. DT006). CORS gere par opti-moteur-front (S3).
+          env:
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: typesense-api-key
+                  key: api-key
+          ports:
+            - containerPort: 8108
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "1"
+              memory: "8Gi"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+          volumeMounts:
+            - name: typesense-data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8108
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8108
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: typesense-data
+        labels:
+          app.kubernetes.io/name: typesense
+          app.kubernetes.io/managed-by: manifest
+          environment: prod
+          owner: devsecops
+          cost-center: ia-rag
+          app: opti-moteur-recherche
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: premium-rwo
+        resources:
+          requests:
+            storage: 100Gi
