@@ -3,13 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.responses import JSONResponse
+from tortoise.contrib.fastapi import register_tortoise
 
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.jwt_keys import ensure_signing_key
 from app.core.settings import get_settings
-from app.db.database import close_db, init_db
+from app.db.database import build_tortoise_config
 from app.middleware import RequestIdMiddleware
 from app.rate_limit import limiter
 from app.routers import (
@@ -27,14 +28,21 @@ from app.routers import (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # register_tortoise creates the TortoiseContext for every request below.
+    # This lifespan runs inside that context (per register_tortoise docs),
+    # so we can ensure the signing key here.
     settings = get_settings()
-    await init_db(settings.database_url)
     await ensure_signing_key(encryption_key=settings.JWT_KEY_ENCRYPTION_KEY)
     yield
-    await close_db()
 
 
 app = FastAPI(title="account-service-backend", lifespan=lifespan)
+register_tortoise(
+    app,
+    config=build_tortoise_config(get_settings().database_url),
+    generate_schemas=True,
+    add_exception_handlers=True,
+)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(RequestIdMiddleware)
