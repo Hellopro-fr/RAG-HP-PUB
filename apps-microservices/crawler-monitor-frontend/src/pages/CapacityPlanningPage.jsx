@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  SlidersHorizontal, RefreshCw, AlertCircle, TrendingDown,
+  SlidersHorizontal, RefreshCw, AlertCircle, TrendingDown, Cpu,
 } from 'lucide-react';
 import { useCapacityPlanningQuery, useJobsQuery, useCapacityHistoryQuery } from '../hooks/queries';
 import {
@@ -13,6 +13,7 @@ import {
 import { cn } from '../lib/utils';
 import { CoherencePastille } from '../coherence/components/CoherencePastille';
 import Pill from '../components/ui/Pill';
+import StatTile from '../components/ui/StatTile';
 import AreaChart from '../components/ui/AreaChart';
 import ProjCard from '../components/ui/ProjCard';
 
@@ -107,7 +108,7 @@ const CapacityPlanningPage = ({ token }) => {
       <div className="flex items-center gap-3 mb-5">
         <SlidersHorizontal className="h-5 w-5 text-ink-2" />
         <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Capacity Planning</h1>
-        <Pill tone="accent">simulation</Pill>
+        <Pill tone="info" dot>simulation prête</Pill>
         <div className="ml-auto flex items-center gap-3">
           <div className="flex gap-0.5 rounded-md border border-hairline bg-bg-2 p-0.5">
             {['1h', '24h', '7d'].map(w => (
@@ -155,33 +156,72 @@ const CapacityPlanningPage = ({ token }) => {
         </div>
       ) : (
         <>
-          {/* KPI Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 border border-hairline rounded-lg mb-5 overflow-hidden">
-            <KpiCell label="Alloué" value={fmtBytes(totals.total_allocated)} valueClass="text-ink-0"
-              sub={`${replicas.length} × ${totals.total_allocated > 0 ? fmtBytes(totals.total_allocated / replicas.length) : '—'}`} />
-            <KpiCell label="Peak réel" value={fmtBytes(totals.total_peak_worst)} valueClass="text-info"
-              sub={`Moy: ${fmtBytes(totals.total_avg)}`} />
-            <KpiCell label="Gaspillage" value={fmtBytes(totals.waste)} valueClass="text-warn"
-              sub={`${fmtPct(totals.waste_pct)} du total`} />
-            <KpiCell label="Efficience" value={fmtPct(totals.efficiency)} valueClass={efficiencyColor(totals.efficiency)}
-              sub="peak / alloué" last />
+          {/* KPI Strip — StatTile */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <StatTile
+              label="Alloué total"
+              value={fmtBytes(totals.total_allocated)}
+              sub="GB"
+              accent="var(--ink-1)"
+            />
+            <StatTile
+              label="Peak réel"
+              value={fmtBytes(totals.total_peak_worst)}
+              sub="GB"
+              accent="var(--ok)"
+            />
+            <StatTile
+              label="Gaspillage"
+              value={fmtBytes(totals.waste)}
+              sub={`${fmtPct(totals.waste_pct)}`}
+              accent="var(--err)"
+            />
+            <StatTile
+              label="Efficience"
+              value={fmtPct(totals.efficiency)}
+              accent="var(--accent)"
+            />
           </div>
 
-          {/* AreaChart RAM */}
-          <div className="mb-5 rounded-lg border border-hairline bg-surface p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-3">
-              RAM utilisée (MB) — {windowKey}
+          {/* AreaChart RAM — wrapped in card */}
+          <div className="mb-5 rounded-lg border border-hairline bg-surface overflow-hidden">
+            {/* Card header */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-hairline">
+              <Cpu className="h-4 w-4 text-ink-3 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-ink-0">RAM usage — 1h</div>
+                <div className="text-[11px] text-ink-3">fenêtre {windowKey}</div>
+              </div>
+              {/* Legend */}
+              <div className="flex items-center gap-4 text-[11px]">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
+                  <span className="text-ink-2">Utilisation</span>
+                  {allocatedMb != null && (
+                    <span className="font-mono text-ink-1">{(allocatedMb > 1024 ? (allocatedMb / 1024).toFixed(2) + 'G' : Math.round(allocatedMb) + 'M')}</span>
+                  )}
+                </span>
+                {allocatedMb != null && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-[2px] flex-shrink-0 border-t-2 border-dashed" style={{ borderColor: 'var(--err)' }} />
+                    <span className="text-ink-2">Capacité</span>
+                    <span className="font-mono text-ink-1">{(allocatedMb > 1024 ? (allocatedMb / 1024).toFixed(2) + 'G' : Math.round(allocatedMb) + 'M')}</span>
+                  </span>
+                )}
+              </div>
             </div>
-            {historyQuery.isError && (
-              <p className="text-[11px] italic text-ink-3 mb-2">Historique indisponible.</p>
-            )}
-            <AreaChart
-              data={ramMbData}
-              w={900}
-              h={120}
-              color="var(--accent)"
-              refLine={allocatedMb}
-            />
+            <div className="p-4">
+              {historyQuery.isError && (
+                <p className="text-[11px] italic text-ink-3 mb-2">Historique indisponible.</p>
+              )}
+              <AreaChart
+                data={ramMbData}
+                w={900}
+                h={120}
+                color="var(--accent)"
+                refLine={allocatedMb}
+              />
+            </div>
           </div>
 
           {/* Per-replica table */}
@@ -338,13 +378,5 @@ const CapacityPlanningPage = ({ token }) => {
     </div>
   );
 };
-
-const KpiCell = ({ label, value, valueClass = 'text-ink-0', sub, last = false }) => (
-  <div className={cn('px-5 py-4', !last && 'border-r border-hairline')}>
-    <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-1">{label}</div>
-    <div className={cn('text-[20px] font-semibold tracking-[-0.025em] tabular-nums font-display', valueClass)}>{value}</div>
-    {sub && <div className="mt-0.5 text-[11px] text-ink-3">{sub}</div>}
-  </div>
-);
 
 export default CapacityPlanningPage;

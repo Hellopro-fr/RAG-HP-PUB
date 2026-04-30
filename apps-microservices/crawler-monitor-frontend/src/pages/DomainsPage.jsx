@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Globe, RefreshCw, AlertCircle, Search,
+  Globe, RefreshCw, AlertCircle, Search, Filter, Download, Plus,
 } from 'lucide-react';
 import { useDomainsQuery } from '../hooks/queries';
 import {
@@ -11,6 +11,8 @@ import {
   Tooltip, TooltipTrigger, TooltipContent,
 } from '../components/ui/tooltip';
 import Sparkline from '../components/ui/Sparkline';
+import StatTile from '../components/ui/StatTile';
+import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
 
 const WINDOW_OPTIONS = ['24h', '7d', '30d'];
@@ -38,23 +40,25 @@ const HeadWithTip = ({ tip, className, children }) => (
   </TableHead>
 );
 
-const KpiCell = ({ label, value, valueClass = 'text-ink-0' }) => (
-  <div className="flex flex-col items-center justify-center py-4 gap-1 border-r border-hairline last:border-r-0">
-    <div className="text-[10px] uppercase tracking-[0.06em] text-ink-3">{label}</div>
-    <div className={cn('font-mono text-[22px] font-semibold leading-none', valueClass)}>{value}</div>
-  </div>
-);
+const PAGE_SIZE = 50;
 
 const DomainsPage = ({ token }) => {
   const navigate = useNavigate();
   const [period, setPeriod] = useState('7d');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
   const query = useDomainsQuery(token, period);
 
   const all = query.data?.domains || [];
   const filtered = search
     ? all.filter(d => d.domain.toLowerCase().includes(search.toLowerCase()))
     : all;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageStart = currentPage * PAGE_SIZE;
+  const pageEnd = pageStart + PAGE_SIZE;
+  const paginated = filtered.slice(pageStart, pageEnd);
 
   const fmtPct = (v) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
   const fmtDate = (s) => s ? new Date(s).toLocaleString('fr-FR') : '—';
@@ -68,7 +72,17 @@ const DomainsPage = ({ token }) => {
 
   const totalSuccess = all.reduce((s, d) => s + (d.success || 0), 0);
   const totalFailed  = all.reduce((s, d) => s + (d.failure || 0), 0);
-  const totalRunning = all.reduce((s, d) => s + (d.running || 0), 0);
+  const totalJobs    = all.reduce((s, d) => s + (d.total_jobs || 0), 0);
+  const totalOom     = all.reduce((s, d) => s + (d.oom_total || 0), 0);
+
+  const totalFinished = totalSuccess + totalFailed;
+  const aggSuccessRate = totalFinished > 0 ? totalSuccess / totalFinished : null;
+  const aggErrorRate = totalFinished > 0 ? totalFailed / totalFinished : null;
+  const errorRateDisplay = aggErrorRate != null ? `${(aggErrorRate * 100).toFixed(1)}%` : '—';
+
+  const heroSub = aggSuccessRate != null
+    ? `${all.length} domaine${all.length !== 1 ? 's' : ''} actif${all.length !== 1 ? 's' : ''} · taux de succès agrégé ${(aggSuccessRate * 100).toFixed(1)}%`
+    : `${all.length} domaine${all.length !== 1 ? 's' : ''} actif${all.length !== 1 ? 's' : ''}`;
 
   const goToDomain = useCallback((d) => {
     navigate(`/domains/${encodeURIComponent(d.domain)}`);
@@ -87,13 +101,44 @@ const DomainsPage = ({ token }) => {
 
         {/* Hero */}
         <div className="px-5 pt-5 pb-0">
-          <div className="flex items-center gap-3 mb-5">
-            <Globe className="h-5 w-5 text-ink-2" />
-            <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Domains</h1>
-            <span className="font-mono text-[12px] text-ink-3">
-              ({filtered.length}{filtered.length !== all.length ? ` / ${all.length}` : ''})
-            </span>
-            <div className="ml-auto">
+          <div className="flex items-start gap-3 mb-5">
+            <Globe className="h-5 w-5 text-ink-2 mt-1 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3">
+                <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Domains</h1>
+                <span className="font-mono text-[12px] text-ink-3">
+                  ({filtered.length}{filtered.length !== all.length ? ` / ${all.length}` : ''})
+                </span>
+              </div>
+              <p className="text-[13px] text-ink-2 mt-1">{heroSub}</p>
+            </div>
+            <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => console.log('Filtres clicked')}
+              >
+                <Filter className="h-3.5 w-3.5" />
+                Filtres
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => console.log('Export CSV clicked')}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </Button>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => console.log('Ajouter domaine clicked')}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Ajouter domaine
+              </Button>
               <button
                 onClick={() => query.refetch()}
                 disabled={query.isFetching}
@@ -106,12 +151,28 @@ const DomainsPage = ({ token }) => {
             </div>
           </div>
 
-          {/* KPI Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 border border-hairline rounded-lg mb-5">
-            <KpiCell label="Total"   value={all.length}   valueClass="text-ink-0" />
-            <KpiCell label="Success" value={totalSuccess} valueClass="text-ok" />
-            <KpiCell label="Failed"  value={totalFailed}  valueClass="text-err" />
-            <KpiCell label="Running" value={totalRunning} valueClass="text-info" />
+          {/* KPI Strip — StatTile */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <StatTile
+              label="Domaines suivis"
+              value={all.length}
+              accent="var(--ink-1)"
+            />
+            <StatTile
+              label="Jobs cumulés"
+              value={totalJobs || '—'}
+              accent="var(--accent)"
+            />
+            <StatTile
+              label="Taux d'erreur"
+              value={errorRateDisplay}
+              accent="var(--err)"
+            />
+            <StatTile
+              label="OOM events"
+              value={totalOom || '—'}
+              accent="var(--warn)"
+            />
           </div>
 
           {/* Toolbar */}
@@ -122,7 +183,7 @@ const DomainsPage = ({ token }) => {
                 type="text"
                 placeholder="Filtrer domaines..."
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => { setSearch(e.target.value); setPage(0); }}
                 className="w-full h-8 pl-8 pr-3 rounded-md border border-hairline bg-bg-1 text-[12px] text-ink-0 placeholder:text-ink-3 focus:outline-none focus:border-accent"
               />
             </div>
@@ -178,7 +239,7 @@ const DomainsPage = ({ token }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(d => (
+                {paginated.map(d => (
                   <TableRow
                     key={d.domain}
                     onClick={() => goToDomain(d)}
@@ -190,6 +251,7 @@ const DomainsPage = ({ token }) => {
                     <TableCell className="text-[12px] py-2 font-mono text-ink-0">{d.domain}</TableCell>
                     <TableCell className="text-[12px] py-2 text-right font-mono text-ink-2">{d.total_jobs ?? '—'}</TableCell>
                     <TableCell className="text-[12px] py-2">
+                      {/* Sparkline: no per-domain time-series from backend — renders flat until API exposes daily counts */}
                       <Sparkline data={[]} w={80} h={24} color="var(--ink-3)" />
                     </TableCell>
                     <TableCell className="text-[12px] py-2 text-right font-mono text-ok">{d.success || ''}</TableCell>
@@ -208,12 +270,32 @@ const DomainsPage = ({ token }) => {
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer with pagination */}
         <div className="border-t border-hairline px-4 py-2.5 flex items-center justify-between">
           <span className="font-mono text-[11px] text-ink-3">
-            {filtered.length} domaine{filtered.length > 1 ? 's' : ''}
-            {filtered.length !== all.length ? ` sur ${all.length}` : ''}
+            {filtered.length > PAGE_SIZE
+              ? `${pageStart + 1}–${Math.min(pageEnd, filtered.length)} sur ${filtered.length} domaine${filtered.length !== 1 ? 's' : ''}`
+              : `${filtered.length} domaine${filtered.length !== 1 ? 's' : ''}${filtered.length !== all.length ? ` sur ${all.length}` : ''}`
+            }
           </span>
+          {totalPages > 1 && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={currentPage === 0}
+                className="px-3 py-1 text-[11px] rounded-md border border-hairline text-ink-2 hover:bg-bg-2 disabled:opacity-40"
+              >
+                Précédent
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={currentPage >= totalPages - 1}
+                className="px-3 py-1 text-[11px] rounded-md border border-hairline text-ink-2 hover:bg-bg-2 disabled:opacity-40"
+              >
+                Suivant
+              </button>
+            </div>
+          )}
         </div>
 
       </div>

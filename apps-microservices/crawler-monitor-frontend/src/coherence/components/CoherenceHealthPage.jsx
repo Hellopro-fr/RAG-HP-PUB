@@ -4,6 +4,7 @@ import { HeartPulse, AlertTriangle, AlertCircle, Info, CheckCircle, ChevronDown,
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import Pill from '../../components/ui/Pill';
+import StatTile from '../../components/ui/StatTile';
 import { useCoherenceSummary } from '../hooks';
 import { RULES } from '../rules';
 
@@ -18,24 +19,6 @@ const SEVERITY_COLOR = {
   warning:  'text-warn border-warn/20 bg-warn-soft',
   critical: 'text-err border-err/20 bg-err-soft',
 };
-
-const KPICELL_TONES = {
-  neutral: 'text-ink-0',
-  ok: 'text-ok',
-  warn: 'text-warn',
-  err: 'text-err',
-};
-
-function KpiCell({ label, value, tone = 'neutral' }) {
-  return (
-    <div className="px-4 py-3 border-r border-hairline last:border-r-0">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-1">{label}</div>
-      <div className={`text-[22px] font-semibold tracking-[-0.025em] tabular-nums font-display ${KPICELL_TONES[tone] ?? 'text-ink-0'}`}>
-        {value ?? '—'}
-      </div>
-    </div>
-  );
-}
 
 export default function CoherenceHealthPage() {
   const { hash } = useLocation();
@@ -86,27 +69,52 @@ export default function CoherenceHealthPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center gap-3 mb-5">
-        <HeartPulse className="h-5 w-5 text-ink-2" />
-        <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">
-          Cohérence des données
-        </h1>
-        {violated.length === 0
-          ? <span aria-label="Aucune violation détectée"><Pill tone="ok">tout vert</Pill></span>
-          : <span aria-label={`${violated.length} violation${violated.length > 1 ? 's' : ''} détectée${violated.length > 1 ? 's' : ''}`}><Pill tone="err" dot>{violated.length} violation{violated.length > 1 ? 's' : ''}</Pill></span>
-        }
-        <span className="ml-auto font-mono text-[11px] text-ink-3">
+      <div className="flex items-start gap-3 mb-5">
+        <HeartPulse className="h-5 w-5 text-ink-2 mt-1 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">
+              Cohérence des données
+            </h1>
+            {violated.length === 0
+              ? <span aria-label="Aucune violation détectée"><Pill tone="ok">tout vert</Pill></span>
+              : <span aria-label={`${violated.length} violation${violated.length > 1 ? 's' : ''} détectée${violated.length > 1 ? 's' : ''}`}><Pill tone="err" dot>{violated.length} violation{violated.length > 1 ? 's' : ''}</Pill></span>
+            }
+          </div>
+          <p className="text-[13px] text-ink-2 mt-1">Cohérence des données affichées · invariants applicatifs</p>
+        </div>
+        <span className="font-mono text-[11px] text-ink-3 whitespace-nowrap mt-1">
           {total} règles · évalué il y a {lastEvaluatedAt > 0
             ? `${Math.max(0, Math.round((Date.now() - lastEvaluatedAt) / 1000))}s`
             : '—'}
         </span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 border border-hairline rounded-lg mb-5">
-        <KpiCell label="Total" value={total} tone="neutral" />
-        <KpiCell label="Warnings" value={byStatus.warning} tone={byStatus.warning > 0 ? 'warn' : 'neutral'} />
-        <KpiCell label="Critique" value={byStatus.critical} tone={byStatus.critical > 0 ? 'err' : 'neutral'} />
-        <KpiCell label="OK" value={ok.length} tone="ok" />
+      {/* KPI Strip — StatTile */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <StatTile
+          label="Total règles"
+          value={total}
+          accent="var(--ink-1)"
+        />
+        <StatTile
+          label="Warnings"
+          value={byStatus.warning}
+          sub={total > 0 ? `${Math.round(byStatus.warning / total * 100)}%` : '0%'}
+          accent="var(--warn)"
+        />
+        <StatTile
+          label="Critique"
+          value={byStatus.critical}
+          sub={total > 0 ? `${Math.round(byStatus.critical / total * 100)}%` : '0%'}
+          accent="var(--err)"
+        />
+        <StatTile
+          label="OK"
+          value={ok.length}
+          sub={total > 0 ? `${Math.round(ok.length / total * 100)}%` : '0%'}
+          accent="var(--ok)"
+        />
       </div>
 
       {violated.length > 0 && (
@@ -141,13 +149,22 @@ export default function CoherenceHealthPage() {
         </button>
         {showOk && (
           <ul id="ok-rules-list" className="space-y-1 text-sm">
-            {ok.map((rule) => (
-              <li key={rule.id} className="flex items-center gap-2 text-ink-3">
-                <CheckCircle className="h-3.5 w-3.5 text-ok" />
-                <span className="font-mono">{rule.id}</span>
-                <span>— {rule.label}</span>
-              </li>
-            ))}
+            {ok.map((rule) => {
+              const relTime = rule.lastEvaluatedAt
+                ? `il y a ${Math.max(0, Math.round((Date.now() - rule.lastEvaluatedAt) / 1000))}s`
+                : null;
+              return (
+                <li key={rule.id} className="flex items-center gap-2 text-ink-3">
+                  <CheckCircle className="h-3.5 w-3.5 text-ok flex-shrink-0" />
+                  <span className="font-mono">{rule.id}</span>
+                  <span>— {rule.label}</span>
+                  <span className="ml-auto flex items-center gap-3 flex-shrink-0">
+                    <span className="font-mono text-[11px] text-ink-1">{rule.value ?? '—'}</span>
+                    {relTime && <span className="font-mono text-[10px] text-ink-3">{relTime}</span>}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -180,6 +197,9 @@ function RuleViolationCard({ rule, violations, retryState, onCopy, onIgnore, onM
   const color = SEVERITY_COLOR[rule.severity] ?? SEVERITY_COLOR.warning;
   const rs = retryState ?? { attempts: 0, exhausted: false };
   const canRefresh = !!rule.autoRetry;
+  const relTime = rule.lastEvaluatedAt
+    ? `il y a ${Math.max(0, Math.round((Date.now() - rule.lastEvaluatedAt) / 1000))}s`
+    : null;
 
   return (
     <div id={`rule-${rule.id}`} className={cn('p-4 border-2 transition-shadow rounded-lg', color)}>
@@ -192,6 +212,12 @@ function RuleViolationCard({ rule, violations, retryState, onCopy, onIgnore, onM
               <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase">
                 {rule.severity}
               </span>
+              {rule.value != null && (
+                <span className="font-mono text-[11px] text-ink-1 ml-auto">{rule.value}</span>
+              )}
+              {relTime && (
+                <span className="font-mono text-[10px] text-ink-3">{relTime}</span>
+              )}
               {rs.exhausted && (
                 <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-mono">
                   🔁 {rs.attempts}/{rule.autoRetry.maxAttempts} refetch sans effet
