@@ -1945,6 +1945,39 @@ class CrawlerManager:
                 status = job_data.get("status")
 
                 if status in ("running", "restarting_oom", "stopping"):
+                    # Marker check (NEW): Redis may show non-terminal status
+                    # while the on-disk completion marker indicates the crawl
+                    # already ended (state drift from missed write or replica
+                    # race — observed on crawl 6244 where success path wrote
+                    # marker + status='finished' but Redis status remained
+                    # 'running' 6 minutes later when reconciler fired).
+                    #
+                    # Trust marker as ground truth; skip the failure webhook
+                    # (already sent at original finalize) and reconcile Redis
+                    # state. Counter decrement + lock release still required —
+                    # those resources were held by the stale running entry.
+                    storage_path = job_data.get("storage_path", "")
+                    marker = await self._load_completion_marker_or_none(storage_path)
+                    if marker:
+                        marker_status = marker["final_status"]
+                        logger.info(
+                            f"Job '{crawl_id}' has completion marker "
+                            f"(final_status='{marker_status}') but Redis status "
+                            f"is '{status}'. Reconciling from marker; webhook skipped."
+                        )
+                        # Release global slot (was held by stale running entry).
+                        await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                        # Release distributed lock if still held.
+                        await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+                        # Reconcile Redis state from marker.
+                        job_data["status"] = marker_status
+                        if "last_heartbeat" in job_data:
+                            del job_data["last_heartbeat"]
+                        await cache_service.set_json(all_job_keys[i], job_data)
+                        await self._publish_update(crawl_id, marker_status)
+                        # Skip remaining stale-detection logic for this job.
+                        continue
+
                     # Check for staleness — applies to both running and restarting_oom jobs.
                     # A restarting_oom job holds a concurrency slot but may be orphaned
                     # if the replica that owned it crashed without cleanup.

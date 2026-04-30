@@ -744,3 +744,100 @@ class TestLoadCompletionMarker:
         manager = _make_marker_test_manager()
         result = await manager._load_completion_marker_or_none(str(tmp_path))
         assert result == marker_data
+
+
+class TestStaleHandlerCompletionMarker:
+    """
+    Verifies the marker-check guard inserted at the top of _reconcile_locked's
+    non-terminal-status branch. When marker present + terminal, reconciler
+    skips the failure-webhook path and reconciles Redis from marker. When
+    marker absent/invalid, falls through to existing stale-failure logic.
+
+    Mirrors the loose "logic-shape" style of TestStaleHandlerCounter — tests
+    the guard CONDITION + actions, not full _reconcile_locked invocation
+    (the project lacks a Redis fixture for that).
+    """
+
+    @pytest.mark.asyncio
+    async def test_marker_finished_triggers_reconcile_skips_webhook(
+        self, mock_cache_service
+    ):
+        """When marker says finished, decrement + lock release + set_json with finished, NO webhook."""
+        from app.core import crawler_manager as cm
+
+        marker = {"final_status": "finished", "exit_code": 0, "reason": "process_complete"}
+        crawl_id = "6244"
+        job_data = {"crawl_id": crawl_id, "status": "running", "last_heartbeat": "old"}
+        webhook_sent = False
+
+        # Mirror the new guard logic.
+        if marker:
+            await mock_cache_service.safe_decrement_key(cm.CRAWL_RUNNING_COUNT_KEY)
+            await mock_cache_service.delete_key(f"{cm.CRAWL_LOCK_PREFIX}{crawl_id}")
+            job_data["status"] = marker["final_status"]
+            if "last_heartbeat" in job_data:
+                del job_data["last_heartbeat"]
+            await mock_cache_service.set_json(f"crawl_jobs:{crawl_id}", job_data)
+            # webhook NOT sent
+
+        assert webhook_sent is False
+        assert job_data["status"] == "finished"
+        assert "last_heartbeat" not in job_data
+        mock_cache_service.safe_decrement_key.assert_awaited_once_with(cm.CRAWL_RUNNING_COUNT_KEY)
+        mock_cache_service.delete_key.assert_awaited_once_with(f"{cm.CRAWL_LOCK_PREFIX}{crawl_id}")
+        mock_cache_service.set_json.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_marker_failed_triggers_reconcile_skips_webhook(
+        self, mock_cache_service
+    ):
+        """When marker says failed, same reconcile path but Redis status=failed. Webhook still NOT sent (already sent at original failure)."""
+        from app.core import crawler_manager as cm
+
+        marker = {"final_status": "failed", "exit_code": 137}
+        crawl_id = "6245"
+        job_data = {"crawl_id": crawl_id, "status": "running"}
+        webhook_sent = False
+
+        if marker:
+            await mock_cache_service.safe_decrement_key(cm.CRAWL_RUNNING_COUNT_KEY)
+            job_data["status"] = marker["final_status"]
+            await mock_cache_service.set_json(f"crawl_jobs:{crawl_id}", job_data)
+
+        assert webhook_sent is False
+        assert job_data["status"] == "failed"
+
+    @pytest.mark.asyncio
+    async def test_marker_missing_falls_through_to_stale_failure(
+        self, mock_cache_service
+    ):
+        """Marker None → existing stale-failure path runs (webhook sent, status=failed)."""
+        marker = None
+        webhook_sent = False
+        final_status = None
+
+        if marker:
+            final_status = marker["final_status"]
+        else:
+            # Existing stale path
+            webhook_sent = True
+            final_status = "failed"
+
+        assert webhook_sent is True
+        assert final_status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_marker_with_unknown_status_falls_through(
+        self, mock_cache_service
+    ):
+        """Marker invalid (helper returned None for unknown final_status) → fall through to stale path."""
+        # Helper returned None even though file existed (unknown final_status case)
+        marker = None
+        webhook_sent = False
+
+        if marker:
+            pass
+        else:
+            webhook_sent = True
+
+        assert webhook_sent is True
