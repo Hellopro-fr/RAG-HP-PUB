@@ -1862,6 +1862,53 @@ class CrawlerManager:
             except Exception as release_err:
                 logger.warning(f"Could not release reconciliation leader lock: {release_err}")
 
+    async def _load_completion_marker_or_none(self, storage_path: str) -> Optional[dict]:
+        """
+        Reads {storage_path}/_completion_marker.json and returns parsed dict if
+        valid + has a recognized terminal final_status. Returns None otherwise.
+
+        Used by _reconcile_locked to detect Redis state drift: a crawl may have
+        completed (marker on disk) but Redis still shows status="running" due to
+        a missed write, replica race, or aborted set_json. Trusting the marker
+        avoids firing a spurious failure webhook.
+
+        Pattern matches the read in app/router/crawler.py status endpoint.
+
+        Suppresses all IO + JSON errors — failure to read = "no marker", which
+        falls through to the existing stale-failure path (safest default).
+
+        Args:
+            storage_path: absolute path to the crawl's storage directory.
+
+        Returns:
+            Parsed marker dict (with final_status in {"finished","failed","stopped"})
+            on success. None if the marker is missing, malformed, or has an
+            unrecognized final_status.
+        """
+        if not storage_path:
+            return None
+        marker_path = os.path.join(storage_path, '_completion_marker.json')
+        if not os.path.isfile(marker_path):
+            return None
+        try:
+            async with aiofiles.open(marker_path, 'r') as f:
+                content = await f.read()
+            marker = json.loads(content)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(
+                f"_load_completion_marker_or_none: failed to read {marker_path}: {e}"
+            )
+            return None
+
+        final_status = marker.get("final_status")
+        if final_status not in ("finished", "failed", "stopped"):
+            logger.warning(
+                f"_load_completion_marker_or_none: unknown final_status "
+                f"'{final_status}' in {marker_path}"
+            )
+            return None
+        return marker
+
     async def _reconcile_locked(self):
         """
         Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),

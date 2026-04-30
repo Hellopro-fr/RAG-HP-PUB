@@ -1,4 +1,5 @@
 """Unit tests for crawler_manager.py state-transition guards."""
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -668,3 +669,78 @@ class TestWebhookIdempotency:
             "_cleanup_running_job (shutdown path) must pass shutdown=True to route "
             "through the bounded single-attempt webhook send"
         )
+
+
+def _make_marker_test_manager():
+    """
+    Builds a minimal CrawlerManager instance for testing _load_completion_marker_or_none.
+
+    The helper under test only reads from disk + uses logger — it does NOT
+    touch cache_service. Bare CrawlerManager() works.
+    """
+    from app.core.crawler_manager import CrawlerManager
+    return CrawlerManager()
+
+
+class TestLoadCompletionMarker:
+    """
+    Unit tests for CrawlerManager._load_completion_marker_or_none.
+
+    Verifies the helper correctly distinguishes valid terminal markers
+    from missing / malformed / unknown-status cases. Used by the
+    reconciler stale-detection path to avoid spurious failure webhooks
+    when Redis state has drifted from the on-disk completion marker.
+    """
+
+    @pytest.mark.asyncio
+    async def test_empty_storage_path_returns_none(self):
+        manager = _make_marker_test_manager()
+        result = await manager._load_completion_marker_or_none("")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_missing_marker_file_returns_none(self, tmp_path):
+        manager = _make_marker_test_manager()
+        result = await manager._load_completion_marker_or_none(str(tmp_path))
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_returns_none_and_logs_warning(
+        self, tmp_path, caplog
+    ):
+        marker = tmp_path / "_completion_marker.json"
+        marker.write_text("{ not valid json")
+        manager = _make_marker_test_manager()
+        with caplog.at_level("WARNING"):
+            result = await manager._load_completion_marker_or_none(str(tmp_path))
+        assert result is None
+        assert any("failed to read" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_unknown_final_status_returns_none_and_logs_warning(
+        self, tmp_path, caplog
+    ):
+        marker = tmp_path / "_completion_marker.json"
+        marker.write_text(json.dumps({"final_status": "weird_state", "exit_code": 0}))
+        manager = _make_marker_test_manager()
+        with caplog.at_level("WARNING"):
+            result = await manager._load_completion_marker_or_none(str(tmp_path))
+        assert result is None
+        assert any("unknown final_status" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("final_status", ["finished", "failed", "stopped"])
+    async def test_valid_terminal_marker_returns_parsed_dict(
+        self, tmp_path, final_status
+    ):
+        marker_data = {
+            "final_status": final_status,
+            "exit_code": 0,
+            "end_timestamp": "2026-04-30T15:01:05.000000",
+            "reason": "test",
+        }
+        marker = tmp_path / "_completion_marker.json"
+        marker.write_text(json.dumps(marker_data))
+        manager = _make_marker_test_manager()
+        result = await manager._load_completion_marker_or_none(str(tmp_path))
+        assert result == marker_data
