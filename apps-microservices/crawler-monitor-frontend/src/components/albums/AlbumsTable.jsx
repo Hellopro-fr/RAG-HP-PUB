@@ -90,7 +90,8 @@ export function AlbumsTable({ rows, onSelectDomain, onRequestDelete, sort, onSor
   const listHeight = Math.min(MAX_LIST_HEIGHT, Math.max(ROW_HEIGHT, rows.length * ROW_HEIGHT));
 
   return (
-    <div>
+    <div className="overflow-x-auto">
+      <div className="min-w-[600px]">
       <div className={`grid ${GRID_COLS} border-b border-hairline bg-bg-2 px-3`}>
         <HeadCell k="domain"        label="Domaine" />
         <HeadCell k="product_count" label="Produits" />
@@ -108,6 +109,7 @@ export function AlbumsTable({ rows, onSelectDomain, onRequestDelete, sort, onSor
         style={{ height: listHeight }}
         overscanCount={6}
       />
+      </div>
     </div>
   );
 }

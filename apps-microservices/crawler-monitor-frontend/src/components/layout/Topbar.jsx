@@ -28,7 +28,7 @@ export function Topbar({
       <Button
         variant="ghost"
         size="icon"
-        className="lg:hidden shrink-0 hover:bg-bg-2 hover:text-ink-0"
+        className="sm:hidden shrink-0 hover:bg-bg-2 hover:text-ink-0"
         aria-label="Ouvrir la navigation"
         onClick={onOpenMobileSidebar}
       >

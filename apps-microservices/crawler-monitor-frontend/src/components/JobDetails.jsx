@@ -143,7 +143,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
       </div>
 
       {/* KPI STRIP */}
-      <div className="grid grid-cols-6 border border-hairline rounded-lg mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 border border-hairline rounded-lg mb-5">
         <KpiCell label="URLs"       value={stats?.requestsTotal ?? null} />
         <KpiCell label="Items"      value={stats?.requestsFinished ?? null} />
         <KpiCell label="Errors"     value={stats?.requestsFailed ?? null} />
@@ -153,7 +153,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token }) => {
       </div>
 
       {/* TABS + SIDEBAR */}
-      <div className="grid gap-5 grid-cols-[1fr_360px]">
+      <div className="grid gap-5 grid-cols-1 md:grid-cols-[1fr_360px]">
         {/* Left: tabs */}
         <div>
           <div role="tablist" className="flex border-b border-hairline mb-4 gap-0">

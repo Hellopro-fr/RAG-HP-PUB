@@ -156,7 +156,7 @@ const CapacityPlanningPage = ({ token }) => {
       ) : (
         <>
           {/* KPI Strip */}
-          <div className="grid grid-cols-4 border border-hairline rounded-lg mb-5 overflow-hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-4 border border-hairline rounded-lg mb-5 overflow-hidden">
             <KpiCell label="Alloué" value={fmtBytes(totals.total_allocated)} valueClass="text-ink-0"
               sub={`${replicas.length} × ${totals.total_allocated > 0 ? fmtBytes(totals.total_allocated / replicas.length) : '—'}`} />
             <KpiCell label="Peak réel" value={fmtBytes(totals.total_peak_worst)} valueClass="text-info"

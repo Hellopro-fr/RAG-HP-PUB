@@ -102,7 +102,7 @@ export default function CoherenceHealthPage() {
         </span>
       </div>
 
-      <div className="grid grid-cols-4 border border-hairline rounded-lg mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 border border-hairline rounded-lg mb-5">
         <KpiCell label="Total" value={total} tone="neutral" />
         <KpiCell label="Warnings" value={byStatus.warning} tone={byStatus.warning > 0 ? 'warn' : 'neutral'} />
         <KpiCell label="Critique" value={byStatus.critical} tone={byStatus.critical > 0 ? 'err' : 'neutral'} />
