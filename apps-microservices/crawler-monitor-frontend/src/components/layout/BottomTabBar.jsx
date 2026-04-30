@@ -35,7 +35,7 @@ export function BottomTabBar({ alertCount = 0 }) {
           }
         >
           <span className="relative">
-            <Icon className="h-5 w-5" />
+            <Icon className="h-5 w-5" aria-hidden="true" />
             {label === 'Alertes' && alertCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-err text-[8px] font-bold text-white leading-none">
                 {alertCount > 9 ? '9+' : alertCount}

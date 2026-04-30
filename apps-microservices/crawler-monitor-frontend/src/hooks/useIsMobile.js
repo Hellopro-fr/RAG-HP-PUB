@@ -10,6 +10,7 @@ export function useIsMobile() {
   );
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(max-width: 639px)');
     const fn = (e) => setIs(e.matches);
     mq.addEventListener('change', fn);
