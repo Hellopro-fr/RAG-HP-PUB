@@ -226,12 +226,19 @@ func TestDomainsHTTP_List(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var body []domains.DomainSummary
+	var body struct {
+		Window  string                  `json:"window"`
+		Count   int                     `json:"count"`
+		Domains []domains.DomainSummary `json:"domains"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body) != 2 {
-		t.Errorf("len(body) = %d, want 2", len(body))
+	if len(body.Domains) != 2 {
+		t.Errorf("len(body.Domains) = %d, want 2", len(body.Domains))
+	}
+	if body.Count != 2 {
+		t.Errorf("body.Count = %d, want 2", body.Count)
 	}
 }
 

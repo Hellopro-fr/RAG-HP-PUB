@@ -287,11 +287,17 @@ func TestAlerts_Endpoint_ReturnsArray(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status=%d body=%s", resp.StatusCode, b)
 	}
-	var body []any
+	var body struct {
+		Alerts []any `json:"alerts"`
+		Count  int   `json:"count"`
+	}
 	decodeJSON(t, resp.Body, &body)
 	// Empty system → no alerts (but must be an array, not null).
-	if body == nil {
-		t.Error("expected non-nil array")
+	if body.Alerts == nil {
+		t.Error("expected non-nil alerts array")
+	}
+	if body.Count != len(body.Alerts) {
+		t.Errorf("count=%d len=%d", body.Count, len(body.Alerts))
 	}
 }
 
@@ -327,10 +333,12 @@ func TestAlerts_Endpoint_WithFailedCallbacks(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("status=%d", resp.StatusCode)
 	}
-	var body []map[string]any
+	var body struct {
+		Alerts []map[string]any `json:"alerts"`
+	}
 	decodeJSON(t, resp.Body, &body)
 	found := false
-	for _, a := range body {
+	for _, a := range body.Alerts {
 		if a["id"] == "callbacks_failing" {
 			found = true
 		}

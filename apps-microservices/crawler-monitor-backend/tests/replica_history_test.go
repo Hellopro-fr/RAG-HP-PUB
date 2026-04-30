@@ -254,10 +254,13 @@ func TestReplicaHTTP_AllHistory(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var body map[string]any
+	var body struct {
+		Window   string                   `json:"window"`
+		Replicas map[string][]any         `json:"replicas"`
+	}
 	decodeJSON(t, resp.Body, &body)
-	if _, ok := body["r1"]; !ok {
-		t.Error("r1 missing from response")
+	if _, ok := body.Replicas["r1"]; !ok {
+		t.Errorf("r1 missing from response: %+v", body)
 	}
 }
 

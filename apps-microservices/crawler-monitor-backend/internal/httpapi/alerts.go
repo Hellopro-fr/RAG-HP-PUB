@@ -57,8 +57,18 @@ func alertsHandler(rs *redisstore.Client) http.HandlerFunc {
 			FailedCallbackCount: failedCount,
 		}
 
-		result := alerts.Evaluate(inputs, time.Now().UnixMilli(), alerts.DefaultThresholds())
-		WriteJSON(w, 200, result)
+		nowMs := time.Now().UnixMilli()
+		thresholds := alerts.DefaultThresholds()
+		result := alerts.Evaluate(inputs, nowMs, thresholds)
+		if result == nil {
+			result = []alerts.Alert{}
+		}
+		WriteJSON(w, 200, map[string]any{
+			"generated_at": time.UnixMilli(nowMs).UTC().Format(time.RFC3339Nano),
+			"thresholds":   thresholds,
+			"count":        len(result),
+			"alerts":       result,
+		})
 	}
 }
 
