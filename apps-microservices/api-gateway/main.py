@@ -26,6 +26,7 @@ from app.core.settings import settings, SERVICE_MAP
 from app.core.auth import DocsAuthMiddleware, verify_api_token
 from app.db.database import TORTOISE_ORM, bootstrap_refresh_tokens
 from app.db.models import ApiCallHistory
+from app.routers.auth_account import router as auth_account_router
 from app.routers.login import router as login_router
 from app.routers.tokens import router as tokens_router
 from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
@@ -79,6 +80,7 @@ register_tortoise(
 # ─── Include routers ───────────────────────────────────────────────────────────
 app.include_router(login_router)
 app.include_router(tokens_router)
+app.include_router(auth_account_router)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
