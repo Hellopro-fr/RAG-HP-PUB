@@ -26,7 +26,7 @@ const ErrorVisualization = ({ errors }) => {
 
   return (
     <Card className="p-4">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-ink-3">
         Distribution des Erreurs
       </h3>
       <ResponsiveContainer width="100%" height={chartHeight}>

@@ -23,10 +23,10 @@ const PerfTooltip = ({ active, payload }) => {
   const d = payload[0]?.payload;
   if (!d) return null;
   return (
-    <div className="rounded border border-border bg-popover p-2 text-xs text-popover-foreground shadow-md">
+    <div className="rounded border border-hairline bg-surface p-2 text-xs text-ink-0 shadow-md">
       <div className="mb-1 font-semibold">{fmtTime(d.ts)}</div>
       <div className="text-info">CPU: {((d.cpu || 0) * 100).toFixed(1)}%</div>
-      <div className="text-primary">RAM: {fmtBytes(d.ram)}</div>
+      <div className="text-accent">RAM: {fmtBytes(d.ram)}</div>
     </div>
   );
 };
@@ -55,7 +55,7 @@ const JobPerformance = ({ token, jobId, isRunning = true }) => {
     return (
       <Card className="p-4">
         <div className="flex items-center justify-center py-8">
-          <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+          <RefreshCw className="h-5 w-5 animate-spin text-ink-3" />
         </div>
       </Card>
     );
@@ -64,7 +64,7 @@ const JobPerformance = ({ token, jobId, isRunning = true }) => {
   if (!hasData) {
     return (
       <Card className="p-4">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-ink-3">
           <Cpu className="h-4 w-4" />
           Pas encore de données de performance (disponible pendant le crawl).
           {query.isFetching && <RefreshCw className="h-3 w-3 animate-spin" />}
@@ -80,13 +80,13 @@ const JobPerformance = ({ token, jobId, isRunning = true }) => {
   return (
     <Card className="p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-3">
           <Cpu className="h-4 w-4 text-info" />
           Performance
-          {query.isFetching && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
+          {query.isFetching && <RefreshCw className="h-3 w-3 animate-spin text-ink-3" />}
         </h3>
         {summary && (
-          <div className="flex flex-wrap gap-4 font-mono text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap gap-4 font-mono text-[11px] text-ink-3">
             <span>Durée: {durationMin} min</span>
             <span>
               Peak CPU:{' '}
@@ -95,7 +95,7 @@ const JobPerformance = ({ token, jobId, isRunning = true }) => {
             </span>
             <span>
               Peak RAM:{' '}
-              <span className="font-semibold text-primary">{fmtBytes(summary.peak_ram)}</span>
+              <span className="font-semibold text-accent">{fmtBytes(summary.peak_ram)}</span>
               {' '}à {fmtTime(summary.peak_ram_at)}
             </span>
             <span>Avg CPU: {(summary.avg_cpu * 100).toFixed(1)}%</span>

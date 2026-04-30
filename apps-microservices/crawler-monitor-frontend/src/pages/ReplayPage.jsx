@@ -47,8 +47,8 @@ function pointAt(points, ts) {
 
 const EVENT_STYLES = {
   info:     { surface: 'bg-info/10 border-info/30 text-info',               Icon: Activity },
-  warn:     { surface: 'bg-warning/10 border-warning/30 text-warning',      Icon: AlertTriangle },
-  critical: { surface: 'bg-destructive/10 border-destructive/30 text-destructive', Icon: AlertCircle },
+  warn:     { surface: 'bg-warn-soft border-warn/30 text-warn',      Icon: AlertTriangle },
+  critical: { surface: 'bg-err-soft border-err/30 text-err', Icon: AlertCircle },
 };
 
 const ReplayPage = ({ token }) => {
@@ -186,7 +186,7 @@ const ReplayPage = ({ token }) => {
   // Contenu réutilisable de la liste d'événements (sidebar desktop + sheet mobile)
   const renderEventsList = () => (
     events.length === 0 ? (
-      <div className="p-4 text-center text-xs text-muted-foreground">
+      <div className="p-4 text-center text-xs text-ink-3">
         Aucun événement notable.
       </div>
     ) : (
@@ -222,26 +222,26 @@ const ReplayPage = ({ token }) => {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
+      <div className="flex items-center justify-between border-b border-hairline bg-surface px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           {/* Fix 1a : bouton retour visible (mobile friendly) */}
           <Button variant="ghost" size="sm" onClick={close} className="h-8 gap-1 px-2">
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Retour</span>
           </Button>
-          <Activity className="h-5 w-5 shrink-0 text-primary" />
+          <Activity className="h-5 w-5 shrink-0 text-accent" />
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-foreground">
+            <h2 className="truncate text-sm font-semibold text-ink-0">
               Replay · <span className="font-mono">#{id}</span>
-              {job?.domain && <span className="font-normal text-muted-foreground"> · {job.domain}</span>}
+              {job?.domain && <span className="font-normal text-ink-3"> · {job.domain}</span>}
             </h2>
-            <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+            <div className="flex flex-wrap gap-3 text-[11px] text-ink-3">
               {job?.start_time && <span>Démarré {fmtDate(job.start_time)}</span>}
               {hasPoints && <span>Durée capturée: {durationMin} min</span>}
-              {job?.crawl_mode === 'update' && <span className="text-primary">↻ update mode</span>}
-              {job?.oom_restart_count > 0 && <span className="text-warning">{job.oom_restart_count} OOM</span>}
+              {job?.crawl_mode === 'update' && <span className="text-accent">↻ update mode</span>}
+              {job?.oom_restart_count > 0 && <span className="text-warn">{job.oom_restart_count} OOM</span>}
             </div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-ink-3">
               Esc pour fermer · Espace play/pause · ←→ frame par frame
             </div>
           </div>
@@ -249,7 +249,7 @@ const ReplayPage = ({ token }) => {
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-3 border-b border-hairline bg-bg-2/30 px-4 py-2">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={jumpStart} disabled={!hasPoints} title="Début">
           <SkipBack className="h-4 w-4" />
         </Button>
@@ -265,7 +265,7 @@ const ReplayPage = ({ token }) => {
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={jumpEnd} disabled={!hasPoints} title="Fin">
           <SkipForward className="h-4 w-4" />
         </Button>
-        <div className="ml-2 flex gap-0.5 rounded-md border border-border bg-background p-0.5">
+        <div className="ml-2 flex gap-0.5 rounded-md border border-hairline bg-bg-1 p-0.5">
           {SPEED_OPTIONS.map(s => (
             <button
               key={s}
@@ -273,8 +273,8 @@ const ReplayPage = ({ token }) => {
               className={cn(
                 'rounded px-2 py-0.5 text-xs transition-colors',
                 s === speed
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-ink-3 hover:bg-accent hover:text-ink-0'
               )}
             >
               {s}×
@@ -291,9 +291,9 @@ const ReplayPage = ({ token }) => {
             disabled={!hasPoints}
             className="flex-1 accent-primary"
           />
-          <div className="whitespace-nowrap font-mono text-xs text-foreground">
+          <div className="whitespace-nowrap font-mono text-xs text-ink-0">
             {fmtTime(currentTs || tsStart)}
-            <span className="ml-1 text-muted-foreground">/ {fmtTime(tsEnd)}</span>
+            <span className="ml-1 text-ink-3">/ {fmtTime(tsEnd)}</span>
           </div>
         </div>
         {/* Fix 1c : bouton mobile pour accéder aux événements via Sheet */}
@@ -304,7 +304,7 @@ const ReplayPage = ({ token }) => {
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-[85vw] overflow-y-auto p-0 sm:max-w-md">
-            <SheetHeader className="border-b border-border p-3">
+            <SheetHeader className="border-b border-hairline p-3">
               <SheetTitle className="text-sm">Événements ({events.length})</SheetTitle>
             </SheetHeader>
             {renderEventsList()}
@@ -317,10 +317,10 @@ const ReplayPage = ({ token }) => {
         <div className="flex flex-1 flex-col gap-4 overflow-auto p-4">
           {query.isLoading ? (
             <div className="flex flex-1 items-center justify-center">
-              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              <RefreshCw className="h-6 w-6 animate-spin text-ink-3" />
             </div>
           ) : !hasPoints ? (
-            <div className="flex flex-1 items-center justify-center text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center text-ink-3">
               <div className="text-center">
                 <Cpu className="mx-auto mb-3 h-10 w-10 opacity-40" />
                 <p className="text-sm">Aucune donnée de performance disponible pour ce job.</p>
@@ -330,7 +330,7 @@ const ReplayPage = ({ token }) => {
           ) : (
             <>
               <Card className="p-3">
-                <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="mb-2 flex items-center gap-2 text-xs text-ink-3">
                   <Cpu className="h-3 w-3" /> CPU % et RAM dans le temps (ligne verticale = position du scrubber)
                 </div>
                 <div className="h-72">
@@ -384,18 +384,18 @@ const ReplayPage = ({ token }) => {
 
               {currentPoint && (
                 <Card className="p-4">
-                  <div className="mb-2 text-xs text-muted-foreground">À {fmtDate(currentTs)}</div>
+                  <div className="mb-2 text-xs text-ink-3">À {fmtDate(currentTs)}</div>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <MomentTile label="CPU" value={`${((currentPoint.cpu || 0) * 100).toFixed(1)}%`} valueClass="text-info"
                       sub={`Peak global: ${((data?.summary?.peak_cpu || 0) * 100).toFixed(1)}%`} />
-                    <MomentTile label="RAM" value={fmtBytes(currentPoint.ram)} valueClass="text-primary"
+                    <MomentTile label="RAM" value={fmtBytes(currentPoint.ram)} valueClass="text-accent"
                       sub={totalRamBytes ? `/ ${fmtBytes(totalRamBytes)} (${((currentPoint.ram / totalRamBytes) * 100).toFixed(0)}%)` : ''} />
                     <MomentTile label="Replica" value={(currentPoint.replicaId || '—').slice(0, 20)} valueClass="font-mono text-sm truncate" />
-                    <div className="rounded-md border border-border bg-background p-3">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Progression</div>
-                      <div className="font-mono text-lg font-bold text-foreground">{scrubPct.toFixed(0)}%</div>
-                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full bg-primary" style={{ width: `${scrubPct}%` }} />
+                    <div className="rounded-md border border-hairline bg-bg-1 p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-ink-3">Progression</div>
+                      <div className="font-mono text-lg font-bold text-ink-0">{scrubPct.toFixed(0)}%</div>
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-bg-2">
+                        <div className="h-full bg-accent" style={{ width: `${scrubPct}%` }} />
                       </div>
                     </div>
                   </div>
@@ -406,12 +406,12 @@ const ReplayPage = ({ token }) => {
         </div>
 
         {/* Events sidebar — hidden en mobile (fallback Sheet ci-dessus) */}
-        <div className="hidden w-80 overflow-y-auto border-l border-border bg-muted/20 md:block">
-          <div className="border-b border-border p-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="hidden w-80 overflow-y-auto border-l border-hairline bg-bg-2/20 md:block">
+          <div className="border-b border-hairline p-3">
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">
               Événements ({events.length})
             </div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground/70">
+            <div className="mt-0.5 text-[10px] text-ink-3/70">
               Mis en surbrillance près du scrubber
             </div>
           </div>
@@ -422,11 +422,11 @@ const ReplayPage = ({ token }) => {
   );
 };
 
-const MomentTile = ({ label, value, valueClass = 'text-foreground', sub }) => (
-  <div className="rounded-md border border-border bg-background p-3">
-    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+const MomentTile = ({ label, value, valueClass = 'text-ink-0', sub }) => (
+  <div className="rounded-md border border-hairline bg-bg-1 p-3">
+    <div className="text-[10px] uppercase tracking-wider text-ink-3">{label}</div>
     <div className={cn('font-mono text-2xl font-bold', valueClass)}>{value}</div>
-    {sub && <div className="text-[10px] text-muted-foreground">{sub}</div>}
+    {sub && <div className="text-[10px] text-ink-3">{sub}</div>}
   </div>
 );
 

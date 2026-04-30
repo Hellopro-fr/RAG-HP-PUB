@@ -36,11 +36,11 @@ const LoginPage = ({ onLogin }) => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen items-center justify-center bg-bg-1 p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="items-center text-center">
           <div className="flex items-center justify-center gap-2">
-            <Activity className="h-7 w-7 text-primary" />
+            <Activity className="h-7 w-7 text-accent" />
             <CardTitle className="text-xl">Crawler Monitor</CardTitle>
           </div>
         </CardHeader>
@@ -58,7 +58,7 @@ const LoginPage = ({ onLogin }) => {
               />
             </div>
             {error && (
-              <p className="text-center text-sm text-destructive">{error}</p>
+              <p className="text-center text-sm text-err">{error}</p>
             )}
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? 'Logging in…' : 'Login'}

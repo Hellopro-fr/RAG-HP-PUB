@@ -23,15 +23,15 @@ function DeckImage({ img, domain }) {
   const src = `/cdn-images/${encodeURIComponent(domain)}/${img.thumb}`;
   if (isError) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <AlertCircle className="h-5 w-5 text-destructive" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <AlertCircle className="h-5 w-5 text-err" />
       </div>
     );
   }
   if (isDownloading) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <Loader2 className="h-5 w-5 animate-spin text-ink-3" />
       </div>
     );
   }
@@ -105,7 +105,7 @@ export default function ProductImageStripDeck({ images, domain, onSelectImage })
             return (
               <div
                 key={img.filename}
-                className="absolute left-0 top-0 h-[200px] w-[300px] origin-bottom-left rounded-md border border-border shadow-[0_8px_24px_-6px_rgba(0,0,0,0.6)] overflow-hidden"
+                className="absolute left-0 top-0 h-[200px] w-[300px] origin-bottom-left rounded-md border border-hairline shadow-[0_8px_24px_-6px_rgba(0,0,0,0.6)] overflow-hidden"
                 style={{
                   zIndex: z,
                   opacity: isPulled ? 0 : opacity,
@@ -141,10 +141,10 @@ export default function ProductImageStripDeck({ images, domain, onSelectImage })
 
       <div className="flex w-[140px] flex-col justify-between">
         <div>
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Stack</div>
-          <div className="font-mono text-2xl tabular-nums text-foreground">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-ink-3">Stack</div>
+          <div className="font-mono text-2xl tabular-nums text-ink-0">
             {String(order[0] + 1).padStart(2, '0')}
-            <span className="text-sm text-muted-foreground">/{images.length}</span>
+            <span className="text-sm text-ink-3">/{images.length}</span>
           </div>
         </div>
 
@@ -170,7 +170,7 @@ export default function ProductImageStripDeck({ images, domain, onSelectImage })
             type="button"
             onClick={prev}
             disabled={images.length <= 1}
-            className="flex-1 rounded border border-border py-1.5 text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 rounded border border-hairline py-1.5 text-ink-3 hover:text-ink-0 disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Image précédente"
           >
             <ChevronLeft className="mx-auto h-3.5 w-3.5" />
@@ -179,7 +179,7 @@ export default function ProductImageStripDeck({ images, domain, onSelectImage })
             type="button"
             onClick={next}
             disabled={images.length <= 1}
-            className="flex-[2] rounded bg-primary py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-[2] rounded bg-accent py-1.5 text-xs font-medium text-accent-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Suivante →
           </button>

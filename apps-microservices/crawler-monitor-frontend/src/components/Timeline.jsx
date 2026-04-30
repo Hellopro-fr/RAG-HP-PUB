@@ -27,14 +27,14 @@ const TooltipBox = ({ active, payload, label }) => {
   if (!data) return null;
   const total = (data.success || 0) + (data.failure || 0) + (data.running || 0) + (data.other || 0);
   return (
-    <div className="rounded border border-border bg-popover p-2 text-xs text-popover-foreground shadow-md">
+    <div className="rounded border border-hairline bg-surface p-2 text-xs text-ink-0 shadow-md">
       <div className="mb-1 font-semibold">{label}</div>
-      <div className="text-muted-foreground">Total: {total}</div>
-      {data.success > 0 && <div className="text-success">✓ Success: {data.success}</div>}
-      {data.failure > 0 && <div className="text-destructive">✗ Failure: {data.failure}</div>}
+      <div className="text-ink-3">Total: {total}</div>
+      {data.success > 0 && <div className="text-ok">✓ Success: {data.success}</div>}
+      {data.failure > 0 && <div className="text-err">✗ Failure: {data.failure}</div>}
       {data.running > 0 && <div className="text-info">▶ Running: {data.running}</div>}
       {data.other   > 0 && <div>· Autres: {data.other}</div>}
-      {data.oom_events > 0 && <div className="text-warning">⚠ OOM events: {data.oom_events}</div>}
+      {data.oom_events > 0 && <div className="text-warn">⚠ OOM events: {data.oom_events}</div>}
     </div>
   );
 };
@@ -82,16 +82,16 @@ const Timeline = ({ token, onBucketClick }) => {
   return (
     <Card className="p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <Clock className="h-4 w-4 text-primary" />
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-3">
+          <Clock className="h-4 w-4 text-accent" />
           Timeline jobs
-          <span className="font-mono text-xs normal-case text-muted-foreground tracking-normal">
+          <span className="font-mono text-xs normal-case text-ink-3 tracking-normal">
             ({totalEvents} démarrés)
           </span>
-          {query.isFetching && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
+          {query.isFetching && <RefreshCw className="h-3 w-3 animate-spin text-ink-3" />}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-0.5 rounded-md border border-border bg-muted p-0.5">
+          <div className="flex gap-0.5 rounded-md border border-hairline bg-bg-2 p-0.5">
             {WINDOW_OPTIONS.map(w => (
               <button
                 key={w}
@@ -99,8 +99,8 @@ const Timeline = ({ token, onBucketClick }) => {
                 className={cn(
                   'rounded px-2 py-0.5 text-xs transition-colors',
                   w === windowMode
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    ? 'bg-accent text-accent-foreground'
+                    : 'text-ink-3 hover:bg-bg-2 hover:text-ink-0'
                 )}
               >
                 {w === 'custom' ? <Calendar className="inline h-3 w-3" /> : w}
@@ -115,7 +115,7 @@ const Timeline = ({ token, onBucketClick }) => {
                 onChange={e => setCustomFrom(e.target.value)}
                 className="h-7 w-[140px] text-xs"
               />
-              <span className="text-muted-foreground">→</span>
+              <span className="text-ink-3">→</span>
               <Input
                 type="date"
                 value={customTo}
@@ -128,10 +128,10 @@ const Timeline = ({ token, onBucketClick }) => {
       </div>
       {query.isLoading && !data ? (
         <div className="flex h-32 items-center justify-center">
-          <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+          <RefreshCw className="h-6 w-6 animate-spin text-ink-3" />
         </div>
       ) : query.isError ? (
-        <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
+        <div className="flex h-32 items-center justify-center text-sm text-ink-3">
           Timeline indisponible
         </div>
       ) : (

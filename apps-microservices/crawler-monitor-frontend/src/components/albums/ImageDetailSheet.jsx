@@ -70,9 +70,9 @@ export function ImageDetailSheet({ open, image, product, domain, onClose, token 
           </SheetHeader>
 
           <div className="mt-4 flex-1 space-y-4 overflow-y-auto">
-            <div className="flex aspect-square items-center justify-center overflow-hidden rounded border bg-muted">
+            <div className="flex aspect-square items-center justify-center overflow-hidden rounded border bg-bg-2">
               {isMissing ? (
-                <AlertCircle className="h-10 w-10 text-destructive" />
+                <AlertCircle className="h-10 w-10 text-err" />
               ) : (
                 <img src={previewSrc} alt="" className="h-full w-full object-contain" />
               )}
@@ -80,13 +80,13 @@ export function ImageDetailSheet({ open, image, product, domain, onClose, token 
 
             <dl className="space-y-2 text-sm">
               <div>
-                <dt className="text-xs text-muted-foreground">Statut</dt>
+                <dt className="text-xs text-ink-3">Statut</dt>
                 <dd>
                   <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">URL source</dt>
+                <dt className="text-xs text-ink-3">URL source</dt>
                 <dd className="break-all font-mono text-xs">
                   {image.url_source ? (
                     <a
@@ -99,12 +99,12 @@ export function ImageDetailSheet({ open, image, product, domain, onClose, token 
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-ink-3">—</span>
                   )}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Chemin (main)</dt>
+                <dt className="text-xs text-ink-3">Chemin (main)</dt>
                 <dd className="break-all font-mono text-xs">{image.main}</dd>
               </div>
             </dl>

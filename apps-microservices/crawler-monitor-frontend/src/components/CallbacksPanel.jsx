@@ -13,10 +13,10 @@ import { cn } from '../lib/utils';
 
 const typeBadgeClass = (type) => {
   switch (type) {
-    case 'success': return 'bg-success/15 text-success';
-    case 'failure': return 'bg-destructive/15 text-destructive';
-    case 'stop':    return 'bg-warning/15 text-warning';
-    default:        return 'bg-muted text-muted-foreground';
+    case 'success': return 'bg-ok-soft text-ok';
+    case 'failure': return 'bg-err-soft text-err';
+    case 'stop':    return 'bg-warn-soft text-warn';
+    default:        return 'bg-bg-2 text-ink-3';
   }
 };
 
@@ -122,11 +122,11 @@ const CallbacksPanel = ({ token, onClose }) => {
       />
 
       <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border p-4">
+        <div className="flex items-center justify-between border-b border-hairline p-4">
           <h3 className="flex items-center gap-2 text-base font-semibold">
-            <Mail className="h-4 w-4 text-destructive" />
+            <Mail className="h-4 w-4 text-err" />
             Callbacks en échec
-            <span className="font-mono text-xs font-normal text-muted-foreground">
+            <span className="font-mono text-xs font-normal text-ink-3">
               ({items.length})
             </span>
           </h3>
@@ -154,12 +154,12 @@ const CallbacksPanel = ({ token, onClose }) => {
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+          <div className="flex items-center gap-2 border-b border-err/40 bg-err-soft px-4 py-2 text-sm text-err">
             <AlertCircle className="h-4 w-4" /> {error}
           </div>
         )}
         {success && (
-          <div className="flex items-center gap-2 border-b border-success/40 bg-success/10 px-4 py-2 text-sm text-success">
+          <div className="flex items-center gap-2 border-b border-ok/40 bg-ok-soft px-4 py-2 text-sm text-ok">
             <CheckCircle className="h-4 w-4" /> {success}
           </div>
         )}
@@ -167,11 +167,11 @@ const CallbacksPanel = ({ token, onClose }) => {
         <div className="max-h-[75vh] overflow-auto">
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center py-20">
-              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+              <RefreshCw className="h-6 w-6 animate-spin text-accent" />
             </div>
           ) : items.length === 0 ? (
-            <div className="py-20 text-center text-muted-foreground">
-              <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success/60" />
+            <div className="py-20 text-center text-ink-3">
+              <CheckCircle className="mx-auto mb-3 h-12 w-12 text-ok/60" />
               <p className="text-base">Aucun callback en échec — tout est OK ✓</p>
             </div>
           ) : (
@@ -194,7 +194,7 @@ const CallbacksPanel = ({ token, onClose }) => {
                   const ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString('fr-FR') : '—';
                   return (
                     <TableRow key={idx}>
-                      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{ts}</TableCell>
+                      <TableCell className="whitespace-nowrap font-mono text-xs text-ink-3">{ts}</TableCell>
                       <TableCell>
                         <span className={cn('rounded px-1.5 py-0.5 text-[10px]', typeBadgeClass(entry.webhook_type))}>
                           {entry.webhook_type || 'unknown'}
@@ -205,12 +205,12 @@ const CallbacksPanel = ({ token, onClose }) => {
                         {truncate(entry.url, 50)}
                       </TableCell>
                       <TableCell
-                        className="text-xs text-destructive/90"
+                        className="text-xs text-err/90"
                         title={entry.error || entry.last_manual_retry_error || ''}
                       >
                         {truncate(entry.last_manual_retry_error || entry.error, 40)}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground">
+                      <TableCell className="text-right font-mono text-ink-3">
                         {entry.manual_retry_attempts || 0}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right">
@@ -229,7 +229,7 @@ const CallbacksPanel = ({ token, onClose }) => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 hover:bg-destructive hover:text-destructive-foreground"
+                          className="h-7 w-7 hover:bg-err hover:text-err-foreground"
                           onClick={() => deleteItem(idx)}
                           disabled={busyIndex !== null}
                           title="Supprimer cette entrée"
@@ -247,7 +247,7 @@ const CallbacksPanel = ({ token, onClose }) => {
           )}
         </div>
 
-        <div className="border-t border-border p-3 text-[11px] text-muted-foreground">
+        <div className="border-t border-hairline p-3 text-[11px] text-ink-3">
           Les actions Retry / Delete / Clear sont tracées dans l&apos;audit log.
         </div>
       </Card>

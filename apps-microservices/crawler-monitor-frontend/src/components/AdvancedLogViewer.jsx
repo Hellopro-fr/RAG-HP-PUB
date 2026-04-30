@@ -19,14 +19,14 @@ const LIST_HEIGHT_PX = 480;
 
 const levelRowClass = (level) => {
   switch (level) {
-    case 'error': return 'text-destructive bg-destructive/10';
-    case 'warn':  return 'text-warning bg-warning/10';
-    default:      return 'text-foreground/80';
+    case 'error': return 'text-err bg-err-soft';
+    case 'warn':  return 'text-warn bg-warn-soft';
+    default:      return 'text-ink-0/80';
   }
 };
 
 const SELECT_CLS =
-  'h-9 appearance-none rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+  'h-9 appearance-none rounded-md border border-hairline bg-bg-1 px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent';
 
 const LogRow = ({ index, style, lines, searchTerm }) => {
   const item = lines[index];
@@ -42,7 +42,7 @@ const LogRow = ({ index, style, lines, searchTerm }) => {
     const parts = line.split(new RegExp(`(${escaped})`, 'gi'));
     content = parts.map((part, i) =>
       part.toLowerCase() === searchTerm.toLowerCase()
-        ? <span key={i} className="bg-warning font-bold text-warning-foreground">{part}</span>
+        ? <span key={i} className="bg-warn font-bold text-warn-foreground">{part}</span>
         : part
     );
   }
@@ -55,14 +55,14 @@ const LogRow = ({ index, style, lines, searchTerm }) => {
         levelRowClass(level)
       )}
     >
-      <span className="w-12 shrink-0 select-none text-right text-muted-foreground">{index + 1}</span>
+      <span className="w-12 shrink-0 select-none text-right text-ink-3">{index + 1}</span>
       <span className="flex-1 truncate whitespace-pre">{content}</span>
       {url && (
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 text-primary hover:text-primary/80"
+          className="shrink-0 text-accent hover:text-accent/80"
           title={url}
         >
           <ExternalLink className="h-3.5 w-3.5" />
@@ -138,25 +138,25 @@ const AdvancedLogViewer = ({ content, jobId }) => {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        <Card className="flex items-center gap-3 border-destructive/30 bg-destructive/5 p-3">
-          <XCircle className="h-7 w-7 text-destructive" />
+        <Card className="flex items-center gap-3 border-err/30 bg-err-soft p-3">
+          <XCircle className="h-7 w-7 text-err" />
           <div>
-            <p className="font-mono text-2xl font-bold text-destructive">{levelStats.error}</p>
-            <p className="text-xs text-muted-foreground">Erreurs</p>
+            <p className="font-mono text-2xl font-bold text-err">{levelStats.error}</p>
+            <p className="text-xs text-ink-3">Erreurs</p>
           </div>
         </Card>
-        <Card className="flex items-center gap-3 border-warning/30 bg-warning/5 p-3">
-          <AlertTriangle className="h-7 w-7 text-warning" />
+        <Card className="flex items-center gap-3 border-warn/30 bg-warn/5 p-3">
+          <AlertTriangle className="h-7 w-7 text-warn" />
           <div>
-            <p className="font-mono text-2xl font-bold text-warning">{levelStats.warn}</p>
-            <p className="text-xs text-muted-foreground">Avertissements</p>
+            <p className="font-mono text-2xl font-bold text-warn">{levelStats.warn}</p>
+            <p className="text-xs text-ink-3">Avertissements</p>
           </div>
         </Card>
         <Card className="flex items-center gap-3 border-info/30 bg-info/5 p-3">
           <Info className="h-7 w-7 text-info" />
           <div>
             <p className="font-mono text-2xl font-bold text-info">{levelStats.info}</p>
-            <p className="text-xs text-muted-foreground">Info</p>
+            <p className="text-xs text-ink-3">Info</p>
           </div>
         </Card>
       </div>
@@ -164,7 +164,7 @@ const AdvancedLogViewer = ({ content, jobId }) => {
       <Card className="space-y-3 p-3">
         <div className="flex flex-wrap gap-3">
           <div className="relative min-w-[200px] flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
             <Input
               type="text"
               placeholder="Rechercher dans les logs…"
@@ -198,7 +198,7 @@ const AdvancedLogViewer = ({ content, jobId }) => {
           </div>
         </div>
 
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-ink-3">
           <span className="font-mono">{filteredLines.length}</span> lignes
           {filteredLines.length !== parsedLines.length && (
             <> (sur <span className="font-mono">{parsedLines.length}</span> au total)</>
@@ -206,9 +206,9 @@ const AdvancedLogViewer = ({ content, jobId }) => {
         </div>
       </Card>
 
-      <Card className="overflow-hidden bg-background p-0">
+      <Card className="overflow-hidden bg-bg-1 p-0">
         {filteredLines.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
+          <div className="py-12 text-center text-sm text-ink-3">
             Aucune ligne ne correspond.
           </div>
         ) : (

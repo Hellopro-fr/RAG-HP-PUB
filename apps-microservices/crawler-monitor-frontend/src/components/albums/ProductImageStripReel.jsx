@@ -10,15 +10,15 @@ function ReelImage({ img, domain }) {
   const src = `/cdn-images/${encodeURIComponent(domain)}/${img.thumb}`;
   if (isError) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <AlertCircle className="h-5 w-5 text-destructive" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <AlertCircle className="h-5 w-5 text-err" />
       </div>
     );
   }
   if (isDownloading) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <Loader2 className="h-5 w-5 animate-spin text-ink-3" />
       </div>
     );
   }
@@ -80,7 +80,7 @@ export default function ProductImageStripReel({ images, domain, onSelectImage })
         <button
           type="button"
           onClick={() => onSelectImage(img)}
-          className="relative block aspect-[4/3] w-full overflow-hidden rounded border border-border"
+          className="relative block aspect-[4/3] w-full overflow-hidden rounded border border-hairline"
           aria-label={`Voir ${img.filename}`}
         >
           <ReelImage img={img} domain={domain} />
@@ -116,7 +116,7 @@ export default function ProductImageStripReel({ images, domain, onSelectImage })
           <button
             type="button"
             onClick={() => setPlaying((p) => !p)}
-            className="rounded border border-border bg-card p-1 text-muted-foreground hover:text-foreground"
+            className="rounded border border-hairline bg-surface p-1 text-ink-3 hover:text-ink-0"
             aria-label={playing ? 'Pause' : 'Play'}
           >
             {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
@@ -124,7 +124,7 @@ export default function ProductImageStripReel({ images, domain, onSelectImage })
           <button
             type="button"
             onClick={() => setActive((a) => (a - 1 + total) % total)}
-            className="rounded border border-border bg-card p-1 text-muted-foreground hover:text-foreground"
+            className="rounded border border-hairline bg-surface p-1 text-ink-3 hover:text-ink-0"
             aria-label="Image précédente"
           >
             <SkipBack className="h-3 w-3" />
@@ -132,12 +132,12 @@ export default function ProductImageStripReel({ images, domain, onSelectImage })
           <button
             type="button"
             onClick={() => setActive((a) => (a + 1) % total)}
-            className="rounded border border-border bg-card p-1 text-muted-foreground hover:text-foreground"
+            className="rounded border border-hairline bg-surface p-1 text-ink-3 hover:text-ink-0"
             aria-label="Image suivante"
           >
             <SkipForward className="h-3 w-3" />
           </button>
-          <div className="ml-1 truncate font-mono text-[10px] text-muted-foreground">
+          <div className="ml-1 truncate font-mono text-[10px] text-ink-3">
             {img.filename} · {img.status}
           </div>
         </div>

@@ -28,13 +28,13 @@ export function DeleteImageOrProductDialog({ open, kind, label, busy, onConfirm,
           <DialogDescription>
             {kind === 'image' ? (
               <>
-                Cette action supprime <code className="rounded bg-muted px-1 py-0.5">{label}</code> du
+                Cette action supprime <code className="rounded bg-bg-2 px-1 py-0.5">{label}</code> du
                 disque. Action irréversible.
               </>
             ) : (
               <>
                 Cette action supprime le produit{' '}
-                <code className="rounded bg-muted px-1 py-0.5">{label}</code> et toutes ses images.
+                <code className="rounded bg-bg-2 px-1 py-0.5">{label}</code> et toutes ses images.
                 Action irréversible.
               </>
             )}

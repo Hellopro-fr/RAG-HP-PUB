@@ -219,7 +219,7 @@ const Overview = ({ token, replicas }) => {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-grow min-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
               <Input
                 type="text"
                 placeholder="Filtrer par ID ou domaine…"
@@ -230,11 +230,11 @@ const Overview = ({ token, replicas }) => {
             </div>
 
             <div className="relative">
-              <Filter className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Filter className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3 pointer-events-none" />
               <select
                 value={statusFilter}
                 onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                className="h-9 appearance-none rounded-md border border-input bg-background pl-8 pr-8 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="h-9 appearance-none rounded-md border border-hairline bg-bg-1 pl-8 pr-8 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 <option value="all">Tous les statuts</option>
                 <option value="finished">Succès</option>
@@ -247,14 +247,14 @@ const Overview = ({ token, replicas }) => {
             </div>
 
             <div className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Calendar className="h-4 w-4 text-ink-3" />
               <Input
                 type="date"
                 value={startDate}
                 onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
                 className="w-[150px]"
               />
-              <span className="text-muted-foreground text-sm">→</span>
+              <span className="text-ink-3 text-sm">→</span>
               <Input
                 type="date"
                 value={endDate}
@@ -276,7 +276,7 @@ const Overview = ({ token, replicas }) => {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-hairline pt-2 text-sm text-muted-foreground">
+            <div className="flex items-center justify-between border-t border-hairline pt-2 text-sm text-ink-3">
               <span className="font-mono">{filteredJobs.length} jobs</span>
               <div className="flex items-center gap-2">
                 <Button
@@ -304,7 +304,7 @@ const Overview = ({ token, replicas }) => {
                     }}
                     className="h-8 w-14 px-2 text-center font-mono"
                   />
-                  <span className="text-xs text-muted-foreground">/ {totalPages}</span>
+                  <span className="text-xs text-ink-3">/ {totalPages}</span>
                 </div>
                 <Button
                   variant="outline"
@@ -325,10 +325,10 @@ const Overview = ({ token, replicas }) => {
         <div className="divide-y divide-hairline">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+              <RefreshCw className="h-6 w-6 animate-spin text-accent" />
             </div>
           ) : paginatedJobs.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">
+            <div className="py-12 text-center text-ink-3">
               <Server className="mx-auto mb-3 h-10 w-10 opacity-50" />
               <p className="text-sm">Aucun job trouvé</p>
             </div>
@@ -366,7 +366,7 @@ const Overview = ({ token, replicas }) => {
         >
           {loadingDetails ? (
             <div className="flex items-center justify-center py-20">
-              <RefreshCw className="h-10 w-10 animate-spin text-primary" />
+              <RefreshCw className="h-10 w-10 animate-spin text-accent" />
             </div>
           ) : selectedJob ? (
             <JobDetails
@@ -377,7 +377,7 @@ const Overview = ({ token, replicas }) => {
               onSelectJob={handleSelectJob}
             />
           ) : (
-            <div className="text-center text-muted-foreground py-16">
+            <div className="text-center text-ink-3 py-16">
               <TrendingUp className="mx-auto mb-3 h-12 w-12 opacity-50" />
               <p className="text-base">Sélectionnez un job pour voir les détails</p>
               <p className="text-xs mt-1.5">Cliquez sur un job dans la liste</p>

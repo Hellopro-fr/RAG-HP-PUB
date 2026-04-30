@@ -122,7 +122,7 @@ function SidebarItem({ to, label, icon: Icon, badge, onSelect }) {
         <Icon className="h-4 w-4 shrink-0" />
         <span className="truncate flex-1">{label}</span>
         {badge != null && badge > 0 && (
-          <span className="ml-auto inline-flex items-center justify-center text-[10px] font-semibold tabular-nums bg-err text-white px-1.5 py-0.5 rounded-full leading-none">
+          <span className="ml-auto inline-flex items-center justify-center text-[10px] font-semibold tabular-nums bg-err text-accent-foreground px-1.5 py-0.5 rounded-full leading-none">
             {badge > 99 ? '99+' : badge}
           </span>
         )}
