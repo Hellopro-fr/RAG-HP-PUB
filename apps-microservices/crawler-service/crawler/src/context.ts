@@ -4,6 +4,7 @@ import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { TimingRecorder } from "./class/TimingRecorder.js";
+import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { PlaywrightCrawler } from "crawlee";
 
 export const context = {
@@ -14,6 +15,11 @@ export const context = {
     jsonlWriter: null as JsonlWriter | null,
     crawlerInstance: null as PlaywrightCrawler | null,
     timingRecorder: undefined as TimingRecorder | undefined,
+    // Shared DetectionLangueClient instance. Constructed once in main.ts so
+    // routes.ts and the timing sampler observe the SAME p-limit queue (live
+    // pendingCount/activeCount). Module-level instantiation in routes.ts
+    // would have given the sampler a separate, idle queue.
+    detectionClient: null as DetectionLangueClient | null,
     // Store detected method in memory to avoid race conditions/disk IO
     frenchDetectionMethod: null as string | null,
     config: {

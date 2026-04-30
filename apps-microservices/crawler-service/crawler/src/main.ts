@@ -1159,6 +1159,14 @@ if (typeCrawling == "sitemap") {
         }, 5 * 60 * 1000);
     }
 
+    // --- SHARED DETECTION CLIENT ---
+    // Constructed unconditionally so routes.ts and the (optional) timing
+    // sampler share the SAME p-limit queue. With a per-module instance in
+    // routes.ts, the sampler's `limiter.pendingCount/activeCount` would have
+    // observed an empty queue while the real workload ran on the routes
+    // instance — masking detect-API saturation.
+    context.detectionClient = new DetectionLangueClient();
+
     // --- TIMING INSTRUMENTATION ---
     // When TIMING_ENABLED=false (the default), this entire block is a no-op:
     // no recorder is constructed, no sampler is started, and no signal
@@ -1170,12 +1178,7 @@ if (typeCrawling == "sitemap") {
     let timingSampler: NodeJS.Timeout | null = null;
 
     if (TIMING_ENABLED) {
-        // Dedicated DetectionLangueClient instance used solely as an
-        // observability handle for the sampler. Routes.ts owns its own
-        // instance today (Task 4 of the timing plan migrates routes.ts to a
-        // shared instance via context). Until then, limiter counts read here
-        // reflect only this observer instance, not the live request queue.
-        const detectionClient = new DetectionLangueClient();
+        const detectionClient = context.detectionClient;
 
         const recorder = new TimingRecorder({
             crawlId: String(id),
