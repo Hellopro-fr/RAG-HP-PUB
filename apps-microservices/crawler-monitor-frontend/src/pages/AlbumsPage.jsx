@@ -86,7 +86,7 @@ export default function AlbumsPage({ token }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+        <RefreshCw className="h-8 w-8 animate-spin text-ink-3" />
       </div>
     );
   }
@@ -96,12 +96,12 @@ export default function AlbumsPage({ token }) {
   return (
     <div className="space-y-3 p-4">
       <header className="flex items-center justify-between">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold">
-          <Images className="h-6 w-6" /> Albums
+        <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.025em] font-display text-ink-0">
+          <Images className="h-5 w-5 text-ink-2" /> Albums
         </h1>
         <button
           type="button"
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+          className="flex items-center gap-1 text-xs text-ink-3 hover:text-ink-0 disabled:opacity-50"
           onClick={() => refetch()}
           disabled={isRefetching}
         >
@@ -112,13 +112,13 @@ export default function AlbumsPage({ token }) {
       <AlbumsToolbar q={q} onQ={setQ} filter={filter} onFilter={setFilter} total={total} />
 
       {total === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">Aucun album</Card>
+        <Card className="p-8 text-center text-ink-3">Aucun album</Card>
       ) : rows.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">
+        <Card className="p-8 text-center text-ink-3">
           Aucun résultat pour ces filtres.
           <button
             type="button"
-            className="ml-2 underline hover:text-foreground"
+            className="ml-2 underline hover:text-ink-0"
             onClick={handleResetFilters}
           >
             Réinitialiser
@@ -156,7 +156,7 @@ export default function AlbumsPage({ token }) {
                   </li>
                 )}
               </ul>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ink-3">
                 Le job s&apos;exécute en arrière-plan ; tu peux fermer cette page.
               </p>
             </div>

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/timeline"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 )
@@ -53,8 +54,9 @@ func timelineHandler(rs *redisstore.Client) http.HandlerFunc {
 }
 
 // rawJobToTimelineJob converts a Redis raw job map to a timeline.Job.
+// start_time may be stored as ISO string or Unix-ms number (Python crawler).
 func rawJobToTimelineJob(rj redisstore.RawJob) timeline.Job {
-	startTime, _ := rj["start_time"].(string)
+	startTime := datetime.AnyToISO(rj["start_time"])
 	status, _ := rj["status"].(string)
 	oom := 0
 	switch v := rj["oom_restart_count"].(type) {

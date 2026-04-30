@@ -5,9 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/alerts"
-	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/systemstats"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/replicahistory"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/systemstats"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 )
 
@@ -57,14 +58,25 @@ func alertsHandler(rs *redisstore.Client) http.HandlerFunc {
 			FailedCallbackCount: failedCount,
 		}
 
-		result := alerts.Evaluate(inputs, time.Now().UnixMilli(), alerts.DefaultThresholds())
-		WriteJSON(w, 200, result)
+		nowMs := time.Now().UnixMilli()
+		thresholds := alerts.DefaultThresholds()
+		result := alerts.Evaluate(inputs, nowMs, thresholds)
+		if result == nil {
+			result = []alerts.Alert{}
+		}
+		WriteJSON(w, 200, map[string]any{
+			"generated_at": time.UnixMilli(nowMs).UTC().Format(time.RFC3339Nano),
+			"thresholds":   thresholds,
+			"count":        len(result),
+			"alerts":       result,
+		})
 	}
 }
 
 // rawJobToAlertJob converts a Redis raw job map to an alerts.Job.
+// start_time may be stored as ISO string or Unix-ms number (Python crawler).
 func rawJobToAlertJob(rj redisstore.RawJob) alerts.Job {
-	startTime, _ := rj["start_time"].(string)
+	startTime := datetime.AnyToISO(rj["start_time"])
 	status, _ := rj["status"].(string)
 	_ = strings.ToLower // ensure import used
 	oom := 0

@@ -16,16 +16,16 @@ export function ImageThumb({ image, domain, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded border bg-muted hover:ring-2 hover:ring-primary ${
-        isError ? 'border-dashed border-destructive' : 'border-border'
+      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded border bg-bg-2 hover:ring-2 hover:ring-accent ${
+        isError ? 'border-dashed border-err' : 'border-hairline'
       }`}
       title={image.url_source || image.filename}
       aria-label={`Image ${image.filename}${isError ? ' (en erreur)' : ''}`}
     >
       {isError ? (
-        <AlertCircle className="absolute inset-0 m-auto h-5 w-5 text-destructive" />
+        <AlertCircle className="absolute inset-0 m-auto h-5 w-5 text-err" />
       ) : isDownloading ? (
-        <Loader2 className="absolute inset-0 m-auto h-5 w-5 animate-spin text-muted-foreground" />
+        <Loader2 className="absolute inset-0 m-auto h-5 w-5 animate-spin text-ink-3" />
       ) : (
         <img
           src={src}

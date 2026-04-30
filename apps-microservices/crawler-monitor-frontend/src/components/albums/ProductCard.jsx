@@ -63,10 +63,10 @@ function ProductCardImpl({ product, domain, onSelectImage, onRebuild, onDelete, 
   );
 
   return (
-    <div className="space-y-2 rounded-md border border-border bg-card p-3">
+    <div className="space-y-2 rounded-md border border-hairline bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="font-mono text-xs text-muted-foreground">#{product.id_produit}</span>
+          <span className="font-mono text-xs text-ink-3">#{product.id_produit}</span>
           <span className="truncate font-medium">{product.nom}</span>
           <Badge variant={variant}>{product.sync_status}</Badge>
           {product.error_count > 0 && (
@@ -89,7 +89,7 @@ function ProductCardImpl({ product, domain, onSelectImage, onRebuild, onDelete, 
               <RefreshCw className="mr-2 h-4 w-4" /> Rebuild (force redownload)
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
+              className="text-err focus:text-err"
               onClick={() => onDelete(product)}
             >
               <Trash2 className="mr-2 h-4 w-4" /> Supprimer le produit
@@ -99,12 +99,12 @@ function ProductCardImpl({ product, domain, onSelectImage, onRebuild, onDelete, 
       </div>
 
       {!hasImages ? (
-        <div className="text-xs italic text-muted-foreground">Aucune image</div>
+        <div className="text-xs italic text-ink-3">Aucune image</div>
       ) : isLegacy ? (
         // Mode legacy : pas de Suspense (composant chargé statiquement, pas de coût).
         strip
       ) : (
-        <Suspense fallback={<div className="h-[200px] animate-pulse rounded bg-muted" />}>
+        <Suspense fallback={<div className="h-[200px] animate-pulse rounded bg-bg-2" />}>
           {strip}
         </Suspense>
       )}

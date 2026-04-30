@@ -28,7 +28,8 @@ const renderPage = ({ replicas = {}, capacity = null } = {}) => {
 describe('CoherenceHealthPage', () => {
   it('renders header and KPI row', () => {
     renderPage();
-    expect(screen.getByText(/Cohérence des données/i)).toBeInTheDocument();
+    // h1 — use heading role to disambiguate from the subtitle paragraph
+    expect(screen.getByRole('heading', { name: /Cohérence des données/i })).toBeInTheDocument();
     expect(screen.getByText(/règles ·/i)).toBeInTheDocument();
   });
 

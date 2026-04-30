@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/domains"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 	"github.com/go-chi/chi/v5"
@@ -22,9 +23,7 @@ func rawJobsToDomain(rawJobs []redisstore.RawJob) []domains.RawJob {
 		if v, ok := rj["domain"].(string); ok {
 			j.Domain = v
 		}
-		if v, ok := rj["start_time"].(string); ok {
-			j.StartTime = v
-		}
+		j.StartTime = datetime.AnyToISO(rj["start_time"])
 		if v, ok := rj["status"].(string); ok {
 			j.Status = v
 		}
@@ -63,7 +62,14 @@ func domainsListHandler(rs *redisstore.Client) http.HandlerFunc {
 		jobs := rawJobsToDomain(rawJobs)
 		now := time.Now().UnixMilli()
 		result := domains.AggregateDomains(jobs, now, windowMs)
-		WriteJSON(w, 200, result)
+		if result == nil {
+			result = []domains.DomainSummary{}
+		}
+		WriteJSON(w, 200, map[string]any{
+			"window":  windowStr,
+			"count":   len(result),
+			"domains": result,
+		})
 	}
 }
 

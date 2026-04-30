@@ -13,8 +13,8 @@ const ICON_BY_SEVERITY = {
 
 const COLOR_BY_SEVERITY = {
   info: 'text-info',
-  warning: 'text-warning',
-  critical: 'text-destructive',
+  warning: 'text-warn',
+  critical: 'text-err',
 };
 
 /**
@@ -31,7 +31,7 @@ export function CoherencePastille({ ruleId, itemKey, className }) {
   if (!rule) return null;
 
   const Icon = ICON_BY_SEVERITY[rule.severity] ?? AlertTriangle;
-  const color = COLOR_BY_SEVERITY[rule.severity] ?? 'text-warning';
+  const color = COLOR_BY_SEVERITY[rule.severity] ?? 'text-warn';
   const message = violations[0].message;
 
   return (
@@ -48,7 +48,7 @@ export function CoherencePastille({ ruleId, itemKey, className }) {
       <TooltipContent side="top" className="max-w-xs">
         <div className="font-medium">{rule.label}</div>
         <div className="mt-0.5 text-xs">{message}</div>
-        <div className="mt-1 text-[10px] text-muted-foreground">
+        <div className="mt-1 text-[10px] text-ink-3">
           Cliquer pour diagnostic
         </div>
       </TooltipContent>

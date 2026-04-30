@@ -12,6 +12,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 )
 
 // windowDef holds the presets for each named window.
@@ -184,15 +186,5 @@ func ComputeTimeline(jobs []Job, windowKey string, opts ComputeOptions) (*Result
 
 // parseTimeMs parses an ISO timestamp string and returns UnixMilli, or -1 on error.
 func parseTimeMs(s string) int64 {
-	if s == "" {
-		return -1
-	}
-	// Try multiple formats matching JS Date.parse behaviour.
-	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05Z"} {
-		t, err := time.Parse(layout, s)
-		if err == nil {
-			return t.UnixMilli()
-		}
-	}
-	return -1
+	return datetime.ParseStringMs(s)
 }

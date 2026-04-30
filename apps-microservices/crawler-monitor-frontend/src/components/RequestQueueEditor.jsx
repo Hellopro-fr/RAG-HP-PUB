@@ -243,7 +243,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
         description={
           <>
             Cela va supprimer <strong>{totalItems}</strong> requête{totalItems > 1 ? 's' : ''} en attente
-            pour le job <code className="rounded bg-muted px-1 py-0.5 text-warning">{jobId}</code>.
+            pour le job <code className="rounded bg-bg-2 px-1 py-0.5 text-warn">{jobId}</code>.
             <br /><br />
             Le crawler repartira de zéro (l&apos;historique des URLs déjà visitées est conservé).
             Cette action est <strong>irréversible</strong> pour la queue actuelle.
@@ -256,11 +256,11 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
       />
 
       <Card className="flex h-[calc(100vh-6rem)] flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border p-4">
+        <div className="flex items-center justify-between border-b border-hairline p-4">
           <h3 className="flex items-center gap-2 text-base font-semibold">
-            <Code className="h-4 w-4 text-primary" />
+            <Code className="h-4 w-4 text-accent" />
             Éditeur Request Queue
-            <span className="font-mono text-xs font-normal text-muted-foreground">
+            <span className="font-mono text-xs font-normal text-ink-3">
               #{String(jobId).slice(0, 10)}
             </span>
           </h3>
@@ -274,22 +274,22 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
         <div className="flex flex-1 overflow-hidden">
           {/* Left panel */}
-          <div className="flex w-1/3 flex-col border-r border-border bg-card">
-            <div className="space-y-3 border-b border-border bg-muted/30 p-3">
+          <div className="flex w-1/3 flex-col border-r border-hairline bg-surface">
+            <div className="space-y-3 border-b border-hairline bg-bg-2/30 p-3">
               {counts && (
-                <div className="flex items-center gap-3 rounded-md border border-border bg-background px-3 py-2 text-xs">
-                  <span className="text-muted-foreground">Total</span>
-                  <span className="font-mono font-semibold text-foreground">{counts.total.toLocaleString('fr-FR')}</span>
-                  <span className="text-muted-foreground/50">·</span>
-                  <span className="text-muted-foreground">✓ Traités</span>
-                  <span className="font-mono font-semibold text-success">{counts.handled.toLocaleString('fr-FR')}</span>
-                  <span className="text-muted-foreground/50">·</span>
-                  <span className="text-muted-foreground">○ En attente</span>
-                  <span className="font-mono font-semibold text-warning">{counts.pending.toLocaleString('fr-FR')}</span>
+                <div className="flex items-center gap-3 rounded-md border border-hairline bg-bg-1 px-3 py-2 text-xs">
+                  <span className="text-ink-3">Total</span>
+                  <span className="font-mono font-semibold text-ink-0">{counts.total.toLocaleString('fr-FR')}</span>
+                  <span className="text-ink-3/50">·</span>
+                  <span className="text-ink-3">✓ Traités</span>
+                  <span className="font-mono font-semibold text-ok">{counts.handled.toLocaleString('fr-FR')}</span>
+                  <span className="text-ink-3/50">·</span>
+                  <span className="text-ink-3">○ En attente</span>
+                  <span className="font-mono font-semibold text-warn">{counts.pending.toLocaleString('fr-FR')}</span>
                 </div>
               )}
 
-              <div className="flex gap-0.5 rounded-md border border-border bg-background p-0.5">
+              <div className="flex gap-0.5 rounded-md border border-hairline bg-bg-1 p-0.5">
                 {STATUS_OPTIONS.map(opt => (
                   <button
                     key={opt.id}
@@ -298,8 +298,8 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                     className={cn(
                       'flex-1 rounded px-3 py-1 text-xs transition-colors',
                       statusFilter === opt.id
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-ink-3 hover:bg-bg-2 hover:text-ink-0'
                     )}
                   >
                     {opt.label}
@@ -308,7 +308,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
               </div>
 
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
                   Queue ({totalItems})
                 </h4>
                 <div className="flex gap-2">
@@ -328,12 +328,12 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
               </div>
 
               {queueAnalysis && (
-                <div className="space-y-2 rounded-md border border-border bg-background p-3 text-xs animate-in fade-in slide-in-from-top-2">
-                  <div className="mb-1 flex items-center justify-between font-semibold text-foreground">
+                <div className="space-y-2 rounded-md border border-hairline bg-bg-1 p-3 text-xs animate-in fade-in slide-in-from-top-2">
+                  <div className="mb-1 flex items-center justify-between font-semibold text-ink-0">
                     <span>Résultat Analyse</span>
                     <button
                       onClick={() => setQueueAnalysis(null)}
-                      className="text-muted-foreground hover:text-foreground"
+                      className="text-ink-3 hover:text-ink-0"
                       title="Fermer"
                     >
                       <X className="h-3 w-3" />
@@ -341,19 +341,19 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded border border-destructive/30 bg-destructive/10 p-1.5">
-                      <span className="block text-destructive">Bloquées</span>
-                      <span className="font-mono font-bold text-foreground">{queueAnalysis.blocked}</span>
+                    <div className="rounded border border-err/30 bg-err-soft p-1.5">
+                      <span className="block text-err">Bloquées</span>
+                      <span className="font-mono font-bold text-ink-0">{queueAnalysis.blocked}</span>
                     </div>
-                    <div className="rounded border border-success/30 bg-success/10 p-1.5">
-                      <span className="block text-success">Valides</span>
-                      <span className="font-mono font-bold text-foreground">{queueAnalysis.valid}</span>
+                    <div className="rounded border border-ok/30 bg-ok-soft p-1.5">
+                      <span className="block text-ok">Valides</span>
+                      <span className="font-mono font-bold text-ink-0">{queueAnalysis.valid}</span>
                     </div>
                   </div>
 
-                  <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div style={{ width: `${queueAnalysis.blockedPercent}%` }} className="h-full bg-destructive" />
-                    <div style={{ width: `${queueAnalysis.validPercent}%` }}   className="h-full bg-success" />
+                  <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-bg-2">
+                    <div style={{ width: `${queueAnalysis.blockedPercent}%` }} className="h-full bg-err" />
+                    <div style={{ width: `${queueAnalysis.validPercent}%` }}   className="h-full bg-ok" />
                   </div>
 
                   <div className="flex gap-2 pt-1">
@@ -370,7 +370,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                     {queueAnalysis.blocked > 0 && (
                       <Button
                         size="sm"
-                        className="h-8 flex-1 bg-warning text-warning-foreground hover:bg-warning/90"
+                        className="h-8 flex-1 bg-warn text-warn-foreground hover:bg-warn/90"
                         onClick={cleanPatterns}
                         title="Supprimer uniquement les URLs bloquées"
                       >
@@ -393,11 +393,11 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
             <div ref={listRef} className="flex-1 space-y-1 overflow-y-auto p-2">
               {loading && !selectedFile && (
                 <div className="p-4 text-center">
-                  <RefreshCw className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
+                  <RefreshCw className="mx-auto h-5 w-5 animate-spin text-ink-3" />
                 </div>
               )}
               {files.length === 0 && !loading && (
-                <div className="p-4 text-center text-xs text-muted-foreground">Aucune requête trouvée</div>
+                <div className="p-4 text-center text-xs text-ink-3">Aucune requête trouvée</div>
               )}
               {files.map(file => (
                 <button
@@ -406,8 +406,8 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                   className={cn(
                     'group w-full truncate rounded-md px-3 py-2 text-left text-sm transition-colors',
                     selectedFile?.path === file.path
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-foreground hover:bg-accent'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-ink-0 hover:bg-bg-2'
                   )}
                 >
                   <div className="flex items-center gap-2 truncate font-medium" title={file.url || file.name}>
@@ -415,8 +415,8 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                       className={cn(
                         'shrink-0',
                         file.isHandled
-                          ? 'text-success'
-                          : selectedFile?.path === file.path ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                          ? 'text-ok'
+                          : selectedFile?.path === file.path ? 'text-accent-foreground/60' : 'text-ink-3'
                       )}
                       title={file.isHandled ? 'Traité' : 'En attente'}
                       aria-label={file.isHandled ? 'Traité' : 'En attente'}
@@ -428,7 +428,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                   <div className="mt-1 flex items-center justify-between">
                     <span className={cn(
                       'rounded px-1.5 py-0.5 text-[10px]',
-                      file.method === 'GET' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'
+                      file.method === 'GET' ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'
                     )}>
                       {file.method || 'UNK'}
                     </span>
@@ -438,7 +438,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
               ))}
             </div>
 
-            <div className="flex items-center justify-between border-t border-border bg-muted/30 p-2">
+            <div className="flex items-center justify-between border-t border-hairline bg-bg-2/30 p-2">
               <Button
                 variant="ghost"
                 size="icon"
@@ -448,7 +448,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="font-mono text-xs text-muted-foreground">
+              <span className="font-mono text-xs text-ink-3">
                 {page} / {totalPages}
               </span>
               <Button
@@ -464,13 +464,13 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
           </div>
 
           {/* Editor area */}
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-1">
             {selectedFile ? (
               <>
-                <div className="flex items-center justify-between gap-2 border-b border-border bg-card p-2">
+                <div className="flex items-center justify-between gap-2 border-b border-hairline bg-surface p-2">
                   <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                    <span className="truncate font-mono text-xs text-muted-foreground">{selectedFile.path}</span>
-                    <span className="truncate text-sm font-semibold text-foreground" title={selectedFile.url}>
+                    <span className="truncate font-mono text-xs text-ink-3">{selectedFile.path}</span>
+                    <span className="truncate text-sm font-semibold text-ink-0" title={selectedFile.url}>
                       {selectedFile.url}
                     </span>
                   </div>
@@ -483,7 +483,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                       size="sm"
                       onClick={saveFile}
                       disabled={saving}
-                      className="bg-success text-success-foreground hover:bg-success/90"
+                      className="bg-ok text-ok-foreground hover:bg-ok/90"
                     >
                       {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
                       Sauvegarder
@@ -492,17 +492,17 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                 </div>
 
                 {error && (
-                  <div className="flex items-center gap-2 border-b border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
+                  <div className="flex items-center gap-2 border-b border-err/40 bg-err-soft p-2 text-sm text-err">
                     <AlertCircle className="h-4 w-4" /> {error}
                   </div>
                 )}
                 {successMsg && (
-                  <div className="flex items-center gap-2 border-b border-success/40 bg-success/10 p-2 text-sm text-success">
+                  <div className="flex items-center gap-2 border-b border-ok/40 bg-ok-soft p-2 text-sm text-ok">
                     <CheckCircle className="h-4 w-4" /> {successMsg}
                   </div>
                 )}
 
-                <div className="queue-json-editor flex-1 overflow-auto bg-background">
+                <div className="queue-json-editor flex-1 overflow-auto bg-bg-1">
                   <Editor
                     value={content}
                     onValueChange={setContent}
@@ -519,7 +519,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                 </div>
               </>
             ) : (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+              <div className="flex flex-1 items-center justify-center text-sm text-ink-3">
                 Sélectionnez une requête pour l&apos;éditer
               </div>
             )}

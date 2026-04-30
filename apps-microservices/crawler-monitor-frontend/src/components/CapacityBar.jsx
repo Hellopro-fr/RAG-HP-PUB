@@ -36,16 +36,16 @@ const CapacityBar = ({ capacity, token }) => {
 
   const pct = (capacity.running_jobs / capacity.max_global_jobs) * 100;
   const fillClass = capacity.is_full
-    ? 'bg-destructive'
-    : pct > 80 ? 'bg-warning'
-      : 'bg-success';
+    ? 'bg-err'
+    : pct > 80 ? 'bg-warn'
+      : 'bg-ok';
   // Recharts strokes need raw color values — read the CSS var via computed style.
   const lineColor = capacity.is_full ? 'hsl(var(--destructive))' : 'hsl(var(--success))';
 
   return (
     <div className="space-y-2">
       {showSaturationBanner && (
-        <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs text-warning">
+        <div className="flex items-center gap-2 rounded-md border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs text-warn">
           <AlertTriangle className="h-4 w-4" />
           <span>Capacité saturée depuis {Math.floor(saturationMs / 60000)} min</span>
         </div>
@@ -53,10 +53,10 @@ const CapacityBar = ({ capacity, token }) => {
       <Card className="p-3">
         <div className="mb-2 flex items-center justify-between gap-4">
           <div className="flex flex-1 items-baseline gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-3">
               Capacité globale
             </span>
-            <span className={cn('flex items-center gap-1.5 font-mono text-sm font-bold', capacity.is_full ? 'text-destructive' : 'text-success')}>
+            <span className={cn('flex items-center gap-1.5 font-mono text-sm font-bold', capacity.is_full ? 'text-err' : 'text-ok')}>
               {capacity.running_jobs} / {capacity.max_global_jobs} slots
               <CoherencePastille ruleId="replicas_vs_max_slots" />
             </span>
@@ -91,7 +91,7 @@ const CapacityBar = ({ capacity, token }) => {
             </div>
           )}
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-2 overflow-hidden rounded-full bg-bg-2">
           <div
             className={cn('h-full rounded-full transition-all duration-500', fillClass)}
             style={{ width: `${Math.min(pct, 100)}%` }}

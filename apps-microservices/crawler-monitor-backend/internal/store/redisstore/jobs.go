@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type RawJob map[string]any
@@ -13,8 +11,10 @@ type RawJob map[string]any
 func (c *Client) ListJobs(ctx context.Context) ([]RawJob, error) {
 	var keys []string
 	var cursor uint64
+	// COUNT=10000 keeps SCAN non-blocking on large keyspaces while avoiding
+	// excessive round-trips for typical (~few thousand) job populations.
 	for {
-		batch, next, err := c.rdb.Scan(ctx, cursor, JobPrefix+"*", 100).Result()
+		batch, next, err := c.rdb.Scan(ctx, cursor, JobPrefix+"*", 10000).Result()
 		if err != nil {
 			return nil, err
 		}
@@ -28,20 +28,22 @@ func (c *Client) ListJobs(ctx context.Context) ([]RawJob, error) {
 		return []RawJob{}, nil
 	}
 	out := make([]RawJob, 0, len(keys))
-	for _, k := range keys {
-		raw, err := c.rdb.Get(ctx, k).Result()
-		if err == redis.Nil {
+	// MGET fetches all values in a single round trip instead of N individual GETs.
+	vals, err := c.rdb.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	for i, v := range vals {
+		s, ok := v.(string)
+		if !ok || s == "" {
 			continue
-		}
-		if err != nil {
-			return nil, err
 		}
 		var j RawJob
-		if err := json.Unmarshal([]byte(raw), &j); err != nil {
+		if err := json.Unmarshal([]byte(s), &j); err != nil {
 			continue
 		}
-		j["_redisKey"] = k
-		j["_id"] = strings.TrimPrefix(k, JobPrefix)
+		j["_redisKey"] = keys[i]
+		j["id"] = strings.TrimPrefix(keys[i], JobPrefix)
 		out = append(out, j)
 	}
 	return out, nil
@@ -56,6 +58,6 @@ func (c *Client) GetJob(ctx context.Context, id string) (RawJob, error) {
 	if err := json.Unmarshal([]byte(raw), &j); err != nil {
 		return nil, err
 	}
-	j["_id"] = id
+	j["id"] = id
 	return j, nil
 }

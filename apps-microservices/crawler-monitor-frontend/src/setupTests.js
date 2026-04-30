@@ -10,3 +10,18 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   };
 }
 
+// jsdom n'implémente pas window.matchMedia — polyfill no-op utilisé par useIsMobile.
+// Toujours retourner matches=false (desktop par défaut) dans les tests.
+if (typeof globalThis.window !== 'undefined' && typeof globalThis.window.matchMedia === 'undefined') {
+  globalThis.window.matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+}
+

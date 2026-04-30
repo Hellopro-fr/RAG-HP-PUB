@@ -20,15 +20,15 @@ function DialImage({ img, domain }) {
   const src = `/cdn-images/${encodeURIComponent(domain)}/${img.thumb}`;
   if (isError) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <AlertCircle className="h-5 w-5 text-destructive" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <AlertCircle className="h-5 w-5 text-err" />
       </div>
     );
   }
   if (isDownloading) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <Loader2 className="h-5 w-5 animate-spin text-ink-3" />
       </div>
     );
   }
@@ -136,7 +136,7 @@ export default function ProductImageStripDial({ images, domain, onSelectImage })
       <button
         type="button"
         onClick={() => onSelectImage(focused)}
-        className="relative h-[200px] w-full overflow-hidden rounded border border-border text-left"
+        className="relative h-[200px] w-full overflow-hidden rounded border border-hairline text-left"
         aria-label={`Voir ${focused.filename}`}
       >
         <DialImage img={focused} domain={domain} />
@@ -152,14 +152,14 @@ export default function ProductImageStripDial({ images, domain, onSelectImage })
           )}
         </div>
         <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2">
-          <div className="h-2 w-8 rounded-b bg-primary" />
+          <div className="h-2 w-8 rounded-b bg-accent" />
         </div>
       </button>
 
       <div className="relative h-[210px]">
         <div
           ref={wrapRef}
-          className="absolute left-1/2 top-1/2 h-[200px] w-[200px] -translate-x-1/2 -translate-y-1/2 select-none rounded-full border border-border"
+          className="absolute left-1/2 top-1/2 h-[200px] w-[200px] -translate-x-1/2 -translate-y-1/2 select-none rounded-full border border-hairline"
           style={{
             background: 'radial-gradient(circle at center, hsla(217,33%,17%,0.6) 0%, hsla(222,47%,8%,0.9) 80%)',
             cursor: 'grab',
@@ -212,12 +212,12 @@ export default function ProductImageStripDial({ images, domain, onSelectImage })
             })}
           </div>
           {/* Hub central */}
-          <div className="absolute left-1/2 top-1/2 grid h-12 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-center">
+          <div className="absolute left-1/2 top-1/2 grid h-12 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-hairline bg-surface text-center">
             <div className="font-mono text-[10px] leading-tight">
-              <div className="text-foreground tabular-nums">
+              <div className="text-ink-0 tabular-nums">
                 {String(safeActive + 1).padStart(2, '0')}
               </div>
-              <div className="text-muted-foreground text-[8px]">/ {String(total).padStart(2, '0')}</div>
+              <div className="text-ink-3 text-[8px]">/ {String(total).padStart(2, '0')}</div>
             </div>
           </div>
         </div>
@@ -226,18 +226,18 @@ export default function ProductImageStripDial({ images, domain, onSelectImage })
           <button
             type="button"
             onClick={() => snap((safeActive - 1 + total) % total)}
-            className="rounded border border-border bg-card p-1 text-muted-foreground hover:text-foreground"
+            className="rounded border border-hairline bg-surface p-1 text-ink-3 hover:text-ink-0"
             aria-label="Image précédente"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">
+          <div className="rounded border border-hairline bg-surface px-2 py-0.5 font-mono text-[10px] uppercase text-ink-3">
             drag · spin
           </div>
           <button
             type="button"
             onClick={() => snap((safeActive + 1) % total)}
-            className="rounded border border-border bg-card p-1 text-muted-foreground hover:text-foreground"
+            className="rounded border border-hairline bg-surface p-1 text-ink-3 hover:text-ink-0"
             aria-label="Image suivante"
           >
             <RotateCw className="h-3.5 w-3.5" />
