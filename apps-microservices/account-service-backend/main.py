@@ -7,6 +7,9 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from app.core.jwt_keys import ensure_signing_key
+from app.core.settings import get_settings
+from app.db.database import close_db, init_db
 from app.middleware import RequestIdMiddleware
 from app.rate_limit import limiter
 from app.routers import (
@@ -24,7 +27,11 @@ from app.routers import (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    settings = get_settings()
+    await init_db(settings.database_url)
+    await ensure_signing_key(encryption_key=settings.JWT_KEY_ENCRYPTION_KEY)
     yield
+    await close_db()
 
 
 app = FastAPI(title="account-service-backend", lifespan=lifespan)
