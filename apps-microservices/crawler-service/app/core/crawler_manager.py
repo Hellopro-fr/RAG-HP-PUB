@@ -1690,7 +1690,8 @@ class CrawlerManager:
                     files_to_keep = {'crawler.log', '_callback_payload.json',
                                      '_completion_marker.json', '_status_snapshot.json',
                                      '_exit_reason.json', '_update_report.json',
-                                     'update_stats.json'}
+                                     'update_stats.json',
+                                     'timing.jsonl', 'timing-summary.json'}
                     for root, dirs, files in os.walk(job_storage_path, topdown=False):
                         for name in files:
                             if name not in files_to_keep:
