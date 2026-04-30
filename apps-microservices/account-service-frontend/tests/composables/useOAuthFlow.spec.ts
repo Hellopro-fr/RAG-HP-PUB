@@ -7,11 +7,10 @@ import { useOAuthFlow } from '../../src/composables/useOAuthFlow'
 
 const Probe = defineComponent({
   setup() {
-    const flow = useOAuthFlow()
-    return { flow }
+    return useOAuthFlow()
   },
   render() {
-    return h('div', { 'data-params': JSON.stringify(this.flow.params) })
+    return h('div', { 'data-params': JSON.stringify(this.params) })
   },
 })
 

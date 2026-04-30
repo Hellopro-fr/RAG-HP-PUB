@@ -1,8 +1,8 @@
 # Build stage
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY apps-microservices/account-service-frontend/package*.json ./
-RUN npm ci --no-audit --no-fund
+COPY apps-microservices/account-service-frontend/package.json ./
+RUN npm install --no-audit --no-fund
 COPY apps-microservices/account-service-frontend .
 RUN npm run build
 
