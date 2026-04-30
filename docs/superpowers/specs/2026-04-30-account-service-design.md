@@ -22,7 +22,7 @@ Introduce a centralized authentication service (`account_service`) that issues l
 | # | Decision | Rationale |
 |---|----------|-----------|
 | 1 | Delegate credential validation to HelloPro upstream (no local user DB). | Matches current api-gateway behavior; avoids duplicating identity store. |
-| 2 | Different domains per consumer service; cookie scoped per consumer. | Realistic deployment model (`gateway.hellopro.fr`, `mcp.hellopro.fr`, `account.hellopro.fr`). No cross-domain cookie sharing required. |
+| 2 | Different domains per consumer service; cookie scoped per consumer. | Realistic deployment model (`gateway.hellopro.eu`, `mcp.hellopro.eu`, `account.hellopro.eu`). No cross-domain cookie sharing required. |
 | 3 | OAuth2 Authorization Code flow with PKCE. | Industry standard; refresh-token-friendly; resists code interception. |
 | 4 | DB-backed OAuth client registration (Tortoise model + admin endpoints). | Audit trail; dynamic add/revoke without redeploy; matches api-gateway DB pattern. |
 | 5 | Stack: FastAPI + Tortoise ORM + MySQL (separate `account_db` schema, same MySQL instance as api-gateway). | Project convention. |
@@ -69,7 +69,7 @@ Introduce a centralized authentication service (`account_service`) that issues l
 2. Consumer detects no/expired session → 302:
      GET account-frontend/signin
        ?client_id=api-gateway
-       &redirect_uri=https://gateway.hellopro.fr/auth/callback
+       &redirect_uri=https://gateway.hellopro.eu/auth/callback
        &state=<CSRF-random>
        &code_challenge=<sha256(verifier) base64url>
        &code_challenge_method=S256
@@ -348,7 +348,7 @@ account-service-frontend:
     retries: 3
 ```
 
-External reverse proxy (existing nginx/traefik) routes `account.hellopro.fr` → `account-service-frontend` → `account-service-backend` for `/auth/*`.
+External reverse proxy (existing nginx/traefik) routes `account.hellopro.eu` → `account-service-frontend` → `account-service-backend` for `/auth/*`. All consumer services are hosted under `*.hellopro.eu`. The upstream HelloPro credential validation endpoint (`HELLOPRO_AUTH_URL`) is on a different parent domain (`hellopro.fr`) — this is purely a backend-to-backend call from `account-service-backend` and is not exposed to browsers or consumers.
 
 ### Migrations
 

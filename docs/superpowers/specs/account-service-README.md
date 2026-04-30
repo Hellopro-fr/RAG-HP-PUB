@@ -6,6 +6,12 @@
 
 ---
 
+## Domain Note
+
+- All consumer services and `account_service` itself are hosted under **`*.hellopro.eu`** (e.g. `account.hellopro.eu`, `gateway.hellopro.eu`, `my-service.hellopro.eu`).
+- The **upstream HelloPro credential validation endpoint** (`HELLOPRO_AUTH_URL`, used internally by `account-service-backend` via `httpx`) lives on **`hellopro.fr`**. This is a backend-to-backend call only — it is never exposed to browsers, consumer services, or end users.
+- Consumers only ever talk to `*.hellopro.eu` endpoints.
+
 ## TL;DR
 
 `account_service` is an OAuth2 Authorization Code + PKCE provider. Your service:
@@ -25,14 +31,14 @@
 Ask the account_service admin (or use the admin endpoint with `X-Admin-Key`) to create an `OAuthClient` row:
 
 ```bash
-curl -X POST https://account.hellopro.fr/admin/clients \
+curl -X POST https://account.hellopro.eu/admin/clients \
   -H "X-Admin-Key: $GATEWAY_ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "client_id": "my-service",
     "name": "My Service",
-    "redirect_uris": ["https://my-service.hellopro.fr/auth/callback"],
-    "post_logout_redirect_uris": ["https://my-service.hellopro.fr/"],
+    "redirect_uris": ["https://my-service.hellopro.eu/auth/callback"],
+    "post_logout_redirect_uris": ["https://my-service.hellopro.eu/"],
     "skip_consent": true
   }'
 ```
@@ -51,12 +57,12 @@ Add these to your service's `app/core/settings.py` (Pydantic `BaseSettings`):
 class Settings(BaseSettings):
     OAUTH_CLIENT_ID: str
     OAUTH_CLIENT_SECRET: str
-    OAUTH_AUTHORIZE_URL: str          # e.g. https://account.hellopro.fr/signin
-    OAUTH_TOKEN_URL: str              # e.g. https://account.hellopro.fr/token
-    OAUTH_JWKS_URL: str               # e.g. https://account.hellopro.fr/.well-known/jwks.json
-    OAUTH_REVOKE_URL: str             # e.g. https://account.hellopro.fr/revoke
-    OAUTH_LOGOUT_URL: str             # e.g. https://account.hellopro.fr/logout
-    OAUTH_REDIRECT_URI: str           # e.g. https://my-service.hellopro.fr/auth/callback
+    OAUTH_AUTHORIZE_URL: str          # e.g. https://account.hellopro.eu/signin
+    OAUTH_TOKEN_URL: str              # e.g. https://account.hellopro.eu/token
+    OAUTH_JWKS_URL: str               # e.g. https://account.hellopro.eu/.well-known/jwks.json
+    OAUTH_REVOKE_URL: str             # e.g. https://account.hellopro.eu/revoke
+    OAUTH_LOGOUT_URL: str             # e.g. https://account.hellopro.eu/logout
+    OAUTH_REDIRECT_URI: str           # e.g. https://my-service.hellopro.eu/auth/callback
     SESSION_SECRET: str               # cookie signing key
 ```
 
@@ -279,7 +285,7 @@ async def auth_logout(request: Request):
             )
 
     response = RedirectResponse(
-        f"{settings.OAUTH_LOGOUT_URL}?post_logout_redirect_uri=https://my-service.hellopro.fr/",
+        f"{settings.OAUTH_LOGOUT_URL}?post_logout_redirect_uri=https://my-service.hellopro.eu/",
         status_code=303,
     )
     response.delete_cookie("access_token", path="/")
