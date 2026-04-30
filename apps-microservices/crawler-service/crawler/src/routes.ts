@@ -196,9 +196,12 @@ router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         // Shared detect client (Part B). Constructed once in main.ts so the
         // timing sampler observes the SAME p-limit queue (live pendingCount /
-        // activeCount). Falls back to a fresh instance only if main.ts has
-        // not initialised it yet — defensive guard for tests/imports.
-        const detectionClient = context.detectionClient ?? new DetectionLangueClient();
+        // activeCount). Fail fast if main.ts has not initialised it — a silent
+        // fallback would re-introduce the dual-client p-limit split that T4 fixes.
+        const detectionClient = context.detectionClient;
+        if (!detectionClient) {
+            throw new Error("context.detectionClient not initialised — main.ts must construct it before the router runs");
+        }
 
         // Per-request timing markers. dequeueAt and postNavAt may already be
         // present on request.userData when TIMING_ENABLED=true (written by the
@@ -239,8 +242,6 @@ router.addDefaultHandler(
             }
             return route.continue();
         });
-
-        url = request.loadedUrl;
 
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
