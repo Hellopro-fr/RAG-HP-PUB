@@ -1,9 +1,10 @@
 import logging
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.core.settings import get_settings
+from app.rate_limit import limiter
 from app.schemas import (
     AuthorizeConsentResponse,
     AuthorizeRedirectResponse,
@@ -42,7 +43,8 @@ def _err(status: int, code: str, desc: str | None = None):
     tags=["oauth"],
     response_model=AuthorizeRedirectResponse | AuthorizeConsentResponse,
 )
-async def authorize(req: AuthorizeRequest):
+@limiter.limit("10/minute")
+async def authorize(request: Request, req: AuthorizeRequest):
     settings = get_settings()
     try:
         client = await get_client_by_id(req.client_id)

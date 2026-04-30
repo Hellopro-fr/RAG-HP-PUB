@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 
 from app.core.security import verify_pkce
 from app.core.settings import get_settings
+from app.rate_limit import limiter
 from app.schemas import ErrorResponse, TokenResponse
 from app.services.client_service import (
     ClientInactive,
@@ -45,7 +46,9 @@ async def _authn_client(client_id: str, client_secret: str):
 
 
 @router.post("/token", tags=["oauth"], response_model=TokenResponse)
+@limiter.limit("60/minute")
 async def token(
+    request: Request,
     grant_type: str = Form(...),
     client_id: str = Form(...),
     client_secret: str = Form(...),
