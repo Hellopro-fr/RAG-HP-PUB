@@ -68,6 +68,22 @@ const fmtMetadata = (m) => {
 
 const truncate = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : (s || ''));
 
+const UserDot = ({ name }) => {
+  const initial = (name?.[0] ?? '?').toUpperCase();
+  const tone = name === 'admin' || name?.startsWith('admin')
+    ? 'bg-accent text-white'
+    : name === 'system' || !name
+    ? 'bg-ink-1 text-white'
+    : name === 'anonymous'
+    ? 'bg-err text-white'
+    : 'bg-ink-2 text-white';
+  return (
+    <span className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ${tone} text-[9px] font-semibold mr-2 flex-shrink-0`}>
+      {initial}
+    </span>
+  );
+};
+
 const AuditPage = ({ token }) => {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -137,28 +153,33 @@ const AuditPage = ({ token }) => {
   return (
     <div className="p-4">
       {/* Hero */}
-      <div className="flex items-center gap-3 mb-5">
-        <FileText className="h-5 w-5 text-ink-2" />
-        <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Audit log</h1>
-        {/* Live dot */}
-        <span className="flex items-center gap-1.5 font-mono text-[11px] text-ok">
-          <span className="h-2 w-2 rounded-full bg-ok animate-pulse-dot" />
-          live
-        </span>
-        <span className="ml-auto font-mono text-[12px] text-ink-3">{total} entrées</span>
+      <div className="flex items-start gap-3 mb-5">
+        <FileText className="h-5 w-5 text-ink-2 mt-1 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Audit log</h1>
+            {/* Live dot */}
+            <span className="flex items-center gap-1.5 font-mono text-[11px] text-ok">
+              <span className="h-2 w-2 rounded-full bg-ok animate-pulse-dot" />
+              live
+            </span>
+          </div>
+          <p className="text-[13px] text-ink-2 mt-1">Historique des actions sensibles · rétention 90 jours</p>
+        </div>
+        <span className="font-mono text-[12px] text-ink-3 mt-1">{total} entrées</span>
         {/* Refresh button */}
         <button
           onClick={fetchEntries}
           disabled={loading}
           aria-label="Rafraîchir"
-          className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
+          className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2 flex-shrink-0"
         >
           <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
         </button>
         {/* Export button */}
         <button
           onClick={handleExport}
-          className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
+          className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2 flex-shrink-0"
           aria-label="Exporter cette page (JSON)"
           title="Exporter cette page (JSON)"
         >
@@ -251,10 +272,13 @@ const AuditPage = ({ token }) => {
                       {e.ts ? new Date(e.ts).toLocaleString('fr-FR') : '—'}
                     </TableCell>
                     <TableCell className="font-mono text-[11px] text-ink-1">
-                      {truncate(e.user, 16)}
+                      <span className="inline-flex items-center">
+                        <UserDot name={e.user} />
+                        {truncate(e.user, 16)}
+                      </span>
                     </TableCell>
                     <TableCell>
-                      <Pill tone={actionTone(e.action)}>{e.action}</Pill>
+                      <span className="font-mono text-[11px] bg-bg-2 px-1.5 py-0.5 rounded text-ink-1">{e.action}</span>
                     </TableCell>
                     <TableCell>
                       <Pill tone={e.status === 'ok' ? 'ok' : 'err'}>{e.status || '?'}</Pill>
