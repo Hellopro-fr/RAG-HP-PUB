@@ -39,3 +39,9 @@ async def init_db(database_url: str | None = None) -> None:
 
 async def close_db() -> None:
     await Tortoise.close_connections()
+
+
+import os  # noqa: E402
+
+if os.environ.get("MYSQL_HOST"):
+    TORTOISE_ORM = build_tortoise_config(get_settings().database_url)
