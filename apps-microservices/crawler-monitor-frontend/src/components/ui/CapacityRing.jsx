@@ -3,7 +3,15 @@ const STROKE = 10;
 const R = (SIZE - STROKE) / 2;
 const CIRC = 2 * Math.PI * R;
 
-export default function CapacityRing({ used = 0, total = 1, label = 'Utilisé' }) {
+/**
+ * CapacityRing
+ *
+ * @param {number} used    Slots currently in use
+ * @param {number} total   Total slots
+ * @param {string} label   Fallback label (only used in percent format)
+ * @param {'count'|'percent'} format  'count' shows "used / total slots" label; 'percent' shows percentage (default legacy)
+ */
+export default function CapacityRing({ used = 0, total = 1, label = 'Utilisé', format = 'percent' }) {
   const pct = Math.min(1, used / total);
   const offset = CIRC * (1 - pct);
   const tone = pct > 0.9 ? 'var(--err)' : pct > 0.7 ? 'var(--warn)' : 'var(--ok)';
@@ -20,10 +28,23 @@ export default function CapacityRing({ used = 0, total = 1, label = 'Utilisé' }
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="font-display text-[28px] font-semibold tabular-nums text-ink-0 leading-none">
-          {Math.round(pct * 100)}%
-        </span>
-        <span className="text-[11px] text-ink-2 mt-1">{label}</span>
+        {format === 'count' ? (
+          <>
+            <span className="font-display text-[32px] font-semibold tabular-nums text-ink-0 leading-none">
+              {used}
+            </span>
+            <span className="text-[11px] text-ink-2 mt-1 font-mono">
+              / {total} slots
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="font-display text-[28px] font-semibold tabular-nums text-ink-0 leading-none">
+              {Math.round(pct * 100)}%
+            </span>
+            <span className="text-[11px] text-ink-2 mt-1">{label}</span>
+          </>
+        )}
       </div>
     </div>
   );
