@@ -30,7 +30,9 @@ async def _setup(monkeypatch):
 async def test_authorize_happy_path_returns_redirect(client, monkeypatch):
     await _setup(monkeypatch)
     respx.post("https://auth.hellopro.fr/api/login").mock(
-        return_value=httpx.Response(200, json={"email": "u@x", "display_name": "U"})
+        return_value=httpx.Response(
+            200, json={"success": True, "email": "u@x", "display_name": "U"}
+        )
     )
     r = await client.post("/authorize", json={
         "username": "u@x", "password": "p",

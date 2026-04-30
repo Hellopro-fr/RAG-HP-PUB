@@ -34,7 +34,8 @@ async def test_full_oauth_flow(client, monkeypatch):
     )
     respx.post("https://auth.hellopro.fr/api/login").mock(
         return_value=httpx.Response(
-            200, json={"email": "u@hellopro.fr", "display_name": "U"}
+            200,
+            json={"success": True, "email": "u@hellopro.fr", "display_name": "U"},
         )
     )
 

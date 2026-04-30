@@ -16,18 +16,30 @@ class HelloProUnavailable(Exception):
 async def validate_credentials(
     username: str, password: str, url: str, *, timeout: float
 ) -> dict:
+    """
+    Call the HELLOPRO PHP auth endpoint.
+
+    The endpoint accepts form-encoded `login` + `password` and replies 200
+    with JSON `{success: bool, email, display_name, token, ...}`. Auth
+    failures are signalled via `success=false`, NOT via a 4xx status.
+    """
     last_exc: Exception | None = None
     async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt in range(2):
+        for _attempt in range(2):
             try:
                 r = await client.post(
-                    url, json={"username": username, "password": password}
+                    url, data={"login": username, "password": password}
                 )
             except (httpx.TransportError, httpx.TimeoutException) as e:
                 last_exc = e
                 continue
             if r.status_code == 200:
-                data = r.json()
+                try:
+                    data = r.json()
+                except ValueError:
+                    raise HelloProUnavailable("non-json response from upstream")
+                if not data.get("success"):
+                    raise HelloProAuthError("invalid credentials")
                 return {
                     "sub": data.get("sub") or data.get("email") or username,
                     "email": data.get("email", username),

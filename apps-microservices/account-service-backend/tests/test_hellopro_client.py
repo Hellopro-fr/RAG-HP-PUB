@@ -17,6 +17,7 @@ async def test_validate_credentials_ok():
         return_value=httpx.Response(
             200,
             json={
+                "success": True,
                 "token": "upstream-token",
                 "email": "u@hellopro.fr",
                 "display_name": "U",
@@ -26,6 +27,15 @@ async def test_validate_credentials_ok():
     info = await validate_credentials("u@hellopro.fr", "p", URL, timeout=2.0)
     assert info["email"] == "u@hellopro.fr"
     assert info["display_name"] == "U"
+
+
+@respx.mock
+async def test_validate_credentials_success_false_raises_auth_error():
+    respx.post(URL).mock(
+        return_value=httpx.Response(200, json={"success": False})
+    )
+    with pytest.raises(HelloProAuthError):
+        await validate_credentials("u", "p", URL, timeout=2.0)
 
 
 @respx.mock
