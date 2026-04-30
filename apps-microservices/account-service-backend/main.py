@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.responses import JSONResponse
 
-from app.routers import authorize, health, introspect, jwks, revoke, token
+from app.routers import authorize, health, introspect, jwks, revoke, token, userinfo
 
 
 @asynccontextmanager
@@ -19,6 +19,7 @@ app.include_router(authorize.router)
 app.include_router(token.router)
 app.include_router(revoke.router)
 app.include_router(introspect.router)
+app.include_router(userinfo.router)
 
 
 @app.exception_handler(FastAPIHTTPException)
