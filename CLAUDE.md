@@ -11,6 +11,7 @@ RAG (Retrieval-Augmented Generation) platform for HelloPro — 90+ microservices
 | Qdrant Databases | `*-database-qdrant-service` (7) | Python / FastAPI / Qdrant | Remote |
 | Qdrant Processors | `*-processor-service` (6) | Python / FastAPI / RabbitMQ | Remote |
 | API Services | `api-*`, `content-extractor-api-service` (17) | Python / FastAPI | Remote |
+| Authentication | `account-service-backend`, `account-service-frontend` | Python / FastAPI / Tortoise / Vue 3 | Local OK |
 | QC Services | `QC-*` (8 services) | Python / FastAPI | Remote |
 | Prix Services | `prix-*` (6 services) | Python / FastAPI | Remote |
 | ML/LLM Services | `llm-service`, `embedding-*`, `reranking-*` | Python / FastAPI / Triton | Remote (GPU) |
