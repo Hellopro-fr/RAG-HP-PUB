@@ -1,12 +1,12 @@
-# Graph Report - unified (post-pull --update)  (2026-04-27)
+# Graph Report - unified (post-pull --update v2)  (2026-04-29)
 
 ## Corpus Check
-- 235 files · ~252,866 words
+- 250 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1961 nodes · 3567 edges · 69 communities detected
-- Extraction: 70% EXTRACTED · 30% INFERRED · 0% AMBIGUOUS · INFERRED: 1078 edges (avg confidence: 0.64)
+- 2015 nodes · 3648 edges · 72 communities detected
+- Extraction: 70% EXTRACTED · 30% INFERRED · 0% AMBIGUOUS · INFERRED: 1091 edges (avg confidence: 0.64)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -72,13 +72,16 @@
 - [[_COMMUNITY_Community 59|Community 59]]
 - [[_COMMUNITY_Community 60|Community 60]]
 - [[_COMMUNITY_Community 61|Community 61]]
+- [[_COMMUNITY_Community 62|Community 62]]
+- [[_COMMUNITY_Community 63|Community 63]]
 - [[_COMMUNITY_Community 64|Community 64]]
-- [[_COMMUNITY_Community 65|Community 65]]
-- [[_COMMUNITY_Community 66|Community 66]]
 - [[_COMMUNITY_Community 67|Community 67]]
 - [[_COMMUNITY_Community 68|Community 68]]
-- [[_COMMUNITY_Community 72|Community 72]]
-- [[_COMMUNITY_Community 83|Community 83]]
+- [[_COMMUNITY_Community 69|Community 69]]
+- [[_COMMUNITY_Community 70|Community 70]]
+- [[_COMMUNITY_Community 71|Community 71]]
+- [[_COMMUNITY_Community 75|Community 75]]
+- [[_COMMUNITY_Community 86|Community 86]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 93 edges
@@ -101,8 +104,8 @@
   D:\DevHellopro\Workspaces\RAG-HP-PUB\libs\common-utils\src\common_utils\database\config\settings.py → apps-microservices/graph-rag-api-recherche-rust-service/CLAUDE.md
 - `DLQProperties / DLQPropertiesAsync` --semantically_similar_to--> `dlq_archiver.py`  [INFERRED] [semantically similar]
   libs/common-utils/CLAUDE.md → tools/CLAUDE.md
-- `OpenAIClient` --conceptually_related_to--> `LLM Providers (Gemini / OpenAI / Anthropic)`  [INFERRED]
-  D:\DevHellopro\Workspaces\RAG-HP-PUB\libs\common-utils\src\common_utils\llm\providers.py → apps-microservices/graph-rag-api-recherche-rust-service/CLAUDE.md
+- `BO detection contract constants (180s/10s/2 retries/2s base)` --semantically_similar_to--> `Axios Request Timeout (180s default)`  [INFERRED] [semantically similar]
+  docs/superpowers/specs/2026-04-27-detection-langue-fr-bo-caller-contract-design.md → apps-microservices/crawler-service/CLAUDE.md
 
 ## Hyperedges (group relationships)
 - **Shared proto compilation across Python + Rust + service protos** — protos_pkg, grpc_stubs_lib, rust_grpc_clients [EXTRACTED 0.95]
@@ -124,20 +127,23 @@
 - **Detection-Langue-FR Concurrency Defense Pattern** — crawler_detection_langue_fr_client, crawler_admission_control_p_limit, crawler_detection_503_retry_policy, crawler_detection_caller_contract_parity [EXTRACTED 0.95]
 - **Archive Pipeline Safety Pattern** — crawler_archive_disk_preflight, crawler_archive_staging, crawler_archiving_gcs_fallback [EXTRACTED 0.90]
 - **Reconciliation + Idempotency Defense Pattern** — crawler_leader_election, crawler_webhook_idempotency, crawler_capacity_counter [EXTRACTED 0.85]
+- **BO caller contract: extension + retry-loop + exception hierarchy** — bo_call_api_hellopro_extension, bo_detect_batch_urls_retry, bo_detection_exception_hierarchy [EXTRACTED 0.95]
+- **FR validation hardening: drop URL fallback + API gate + crawler gate** — crawler_drop_url_fallback, api_hreflang_gate, crawler_excluded_regional_paths_gate [EXTRACTED 0.95]
+- **Go migration: chi router + ws hub + safeJoin store** — monitor_go_chi_router, monitor_go_ws_hub, monitor_go_safe_join [EXTRACTED 0.90]
 
 ## Communities
 
 ### Community 0 - "Milvus CRUD Layer"
 Cohesion: 0.02
-Nodes (141): BaseModel, archive_crawl_to_gcs(), ArchiveResponse, CapacityResponse, clear_pending_callbacks(), CrawlMode, CrawlRequest, CrawlResponse (+133 more)
+Nodes (138): BaseModel, archive_crawl_to_gcs(), ArchiveResponse, CapacityResponse, clear_pending_callbacks(), CrawlMode, CrawlRequest, CrawlResponse (+130 more)
 
 ### Community 1 - "Node.js Crawler Core"
 Cohesion: 0.02
-Nodes (58): main(), MilvusProduitsMigration, Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id, Migrer les données par batch          Args:             batch_size: Nombre d'ent, Vérifier que la migration s'est bien passée (+50 more)
+Nodes (62): main(), MilvusProduitsMigration, Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id, Migrer les données par batch          Args:             batch_size: Nombre d'ent, Vérifier que la migration s'est bien passée (+54 more)
 
 ### Community 2 - "CrawlerManager Python + DLQ"
 Cohesion: 0.02
-Nodes (57): DedupManager, DetectionLangueClient, applyCliFlagGuard(), classifyFragment(), commitBypassDiez(), commitSkipDiez(), getDiezDecisionMode(), readPersistedDecision() (+49 more)
+Nodes (62): DedupManager, DetectionLangueClient, applyCliFlagGuard(), classifyFragment(), commitBypassDiez(), commitSkipDiez(), getDiezDecisionMode(), readPersistedDecision() (+54 more)
 
 ### Community 3 - "Rust Service Clients"
 Cohesion: 0.03
@@ -145,7 +151,7 @@ Nodes (87): check_gcloud_auth(), classify_by_name(), _confirm_or_exit(), _count_
 
 ### Community 4 - "Milvus Concurrency Guard"
 Cohesion: 0.02
-Nodes (121): cache_or_execute(), close_redis_pool(), decrement_key(), delete_if_terminal(), delete_key(), _generate_cache_key(), get_json(), get_key() (+113 more)
+Nodes (127): Go vs Express benchmark — crawler-monitor-backend (2026-04), queue.Analyze CPU + JSON parsing benchmark (Go), RAM idle / under-load benchmark (distroless static), WebSocket broadcast p99 benchmark (gorilla/ws hub), cache_or_execute(), close_redis_pool(), decrement_key(), delete_if_terminal() (+119 more)
 
 ### Community 5 - "Redis Cache Rationale"
 Cohesion: 0.03
@@ -192,8 +198,8 @@ Cohesion: 0.07
 Nodes (30): alternative_urls Exclusion List, robots.txt Blanket Block, running_count Drift Bug, Cross-Service Milvus Coordination, Inflight Request Deduplication, Multi-Path robots Probe, Multilingual Regional Path Duplicates, Playwright TargetClosedError flood (+22 more)
 
 ### Community 16 - "GCS Quarantine Restore"
-Cohesion: 0.14
-Nodes (6): ModelConfig, QdrantCategoriesCrud, ModelConfig, QdrantDevisCrud, ModelConfig, QdrantFournisseursCrud
+Cohesion: 0.1
+Nodes (30): api-gateway per-service downstream timeout map (detection=180s), API hreflang/data-lang same-host validation gate, DomainFR._is_valid_language_alternative static helper (Python), call_api_hellopro additive extension (&$responseHeaders + ?$connectTimeout), BO Marketplace api-detection-langue-fr Caller Contract — Plan, BO Marketplace api-detection-langue-fr Caller Contract — Spec, detectBatchUrls() retry-loop (503 + Retry-After + exp backoff), BO detection contract constants (180s/10s/2 retries/2s base) (+22 more)
 
 ### Community 17 - "Regional Path Exclusion Rationale"
 Cohesion: 0.08
@@ -249,217 +255,231 @@ Nodes (10): Crawler Monitor Alignment Plan, Monitor/Crawler Data Contract Mismat
 
 ### Community 30 - "Community 30"
 Cohesion: 0.44
-Nodes (2): ModelConfig, QdrantProduitsCrud
+Nodes (2): ModelConfig, QdrantFournisseursCrud
 
 ### Community 31 - "Community 31"
 Cohesion: 0.44
-Nodes (2): ModelConfig, QdrantWebsiteCrud
+Nodes (2): ModelConfig, QdrantCategoriesCrud
 
 ### Community 32 - "Community 32"
-Cohesion: 0.28
-Nodes (8): normalize_quantity(), normalize_range(), NormalizedQuantity, NormalizedRange, Result of quantity normalization., Result of range normalization., Normalize a single quantity (value + unit).          Args:         label: The, Normalize a numeric range (min/max + unit).          Args:         label: The
+Cohesion: 0.44
+Nodes (2): ModelConfig, QdrantEchangeCrud
 
 ### Community 33 - "Community 33"
 Cohesion: 0.28
-Nodes (8): Entity, extract_entities(), lemmatize(), Token with lemmatization information., Named entity extracted from text., Call the gRPC service to lemmatize text.          Args:         text: The tex, Call the gRPC service to extract named entities from text.          Args:, Token
+Nodes (8): normalize_quantity(), normalize_range(), NormalizedQuantity, NormalizedRange, Result of quantity normalization., Result of range normalization., Normalize a single quantity (value + unit).          Args:         label: The, Normalize a numeric range (min/max + unit).          Args:         label: The
 
 ### Community 34 - "Community 34"
-Cohesion: 0.22
-Nodes (2): Tests for Lua script string definitions. Validates that the scripts are well-fo, TestLuaScripts
+Cohesion: 0.28
+Nodes (8): Entity, extract_entities(), lemmatize(), Token with lemmatization information., Named entity extracted from text., Call the gRPC service to lemmatize text.          Args:         text: The tex, Call the gRPC service to extract named entities from text.          Args:, Token
 
 ### Community 35 - "Community 35"
 Cohesion: 0.22
-Nodes (9): Crawler Capacity Counter & OOM Fixes, Ghost OOM Relaunch Prevention (Fix 4), Redis Capacity Counter Drift (5 Fixes), Fresh last_heartbeat in start_crawl, Reconciliation Leader Election + Heartbeat Guard, Redis SET NX EX reconcile_leader_lock, Webhook Idempotency Client-Side Plan, Stable request_id UUID (Persisted in job_data) (+1 more)
+Nodes (2): Tests for Lua script string definitions. Validates that the scripts are well-fo, TestLuaScripts
 
 ### Community 36 - "Community 36"
-Cohesion: 0.25
-Nodes (6): classic_search_vector(), get_collection_schema(), hybrid_search_vector(), Appelle le service gRPC pour effectuer une recherche hybride     combinant rech, Appelle le service gRPC pour obtenir le schéma d'une collection avec un cache d', Appelle le service gRPC pour effectuer une recherche classique par filtre.
+Cohesion: 0.22
+Nodes (9): Crawler Capacity Counter & OOM Fixes, Ghost OOM Relaunch Prevention (Fix 4), Redis Capacity Counter Drift (5 Fixes), Fresh last_heartbeat in start_crawl, Reconciliation Leader Election + Heartbeat Guard, Redis SET NX EX reconcile_leader_lock, Webhook Idempotency Client-Side Plan, Stable request_id UUID (Persisted in job_data) (+1 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.25
-Nodes (8): api-detection-langue-fr Concurrency Defense, TargetClosedError Flood Fix (unroute_all + try/finally), Three-Layer Defense (admission + container + contract), Milvus Global Concurrency Guard Plan, Prevent RAM Overload on Milvus VM, Redis Lua ACQUIRE/RELEASE/CORRECT Scripts, Three-Tier Slot Pool (Search > High-write > Low-write), TTL-Based Crash-Safe Leases
+Nodes (6): classic_search_vector(), get_collection_schema(), hybrid_search_vector(), Appelle le service gRPC pour effectuer une recherche hybride     combinant rech, Appelle le service gRPC pour obtenir le schéma d'une collection avec un cache d', Appelle le service gRPC pour effectuer une recherche classique par filtre.
 
 ### Community 38 - "Community 38"
-Cohesion: 0.29
-Nodes (4): PDFProcessor, A class to extract text from a PDF file's binary content., Initializes the PDFProcessor with the binary content of the file.         :param, Executes the full workflow: opens the file from memory and extracts text.
+Cohesion: 0.25
+Nodes (8): api-detection-langue-fr Concurrency Defense, TargetClosedError Flood Fix (unroute_all + try/finally), Three-Layer Defense (admission + container + contract), Milvus Global Concurrency Guard Plan, Prevent RAM Overload on Milvus VM, Redis Lua ACQUIRE/RELEASE/CORRECT Scripts, Three-Tier Slot Pool (Search > High-write > Low-write), TTL-Based Crash-Safe Leases
 
 ### Community 39 - "Community 39"
 Cohesion: 0.29
-Nodes (6): get_metrics_app(), measure_processing_time(), Starts a Prometheus metrics HTTP server in a separate thread.     This is essent, Returns a WSGI app for serving Prometheus metrics.     Useful for embedding into, A decorator that measures the execution time of a function (sync or async)     a, start_metrics_server_in_thread()
+Nodes (4): PDFProcessor, A class to extract text from a PDF file's binary content., Initializes the PDFProcessor with the binary content of the file.         :param, Executes the full workflow: opens the file from memory and extracts text.
 
 ### Community 40 - "Community 40"
 Cohesion: 0.29
-Nodes (7): BAAI/bge-reranker-v2-m3, dangvantuan/sentence-camembert-large, export_embedding_to_onnx.py, model-optimizer (ONNX export), model-optimizer/requirements.txt, export_reranker_to_onnx.py, NVIDIA Triton Inference Server
+Nodes (6): get_metrics_app(), measure_processing_time(), Starts a Prometheus metrics HTTP server in a separate thread.     This is essent, Returns a WSGI app for serving Prometheus metrics.     Useful for embedding into, A decorator that measures the execution time of a function (sync or async)     a, start_metrics_server_in_thread()
 
 ### Community 41 - "Community 41"
+Cohesion: 0.29
+Nodes (7): BAAI/bge-reranker-v2-m3, dangvantuan/sentence-camembert-large, export_embedding_to_onnx.py, model-optimizer (ONNX export), model-optimizer/requirements.txt, export_reranker_to_onnx.py, NVIDIA Triton Inference Server
+
+### Community 42 - "Community 42"
 Cohesion: 0.38
 Nodes (4): BaseSettings, env_or(), env_or_opt(), Settings
 
-### Community 42 - "Community 42"
+### Community 43 - "Community 43"
 Cohesion: 0.47
 Nodes (2): AnonymizeText, gen_email_uuid()
 
-### Community 43 - "Community 43"
+### Community 44 - "Community 44"
 Cohesion: 0.4
 Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param
 
-### Community 44 - "Community 44"
+### Community 45 - "Community 45"
 Cohesion: 0.4
 Nodes (5): 503 Rejection + Fail-Open Diagnostics, Archive Disk Space Pre-flight Check, Atomic os.rename from .staging/ to archives/, Archive Staging Subdirectory Plan, Eliminate Upload Daemon FileNotFoundError Race
 
-### Community 45 - "Community 45"
-Cohesion: 0.67
-Nodes (3): create_dlq_headers(), create_dlq_properties(), DLQProperties
-
 ### Community 46 - "Community 46"
 Cohesion: 0.5
-Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint, HeaderFooterExtractor /extract Endpoint, Thin Wrapper Over libs/common-utils
+Nodes (5): graphify CI workflows (auto-rebuild + coverage-check), graphify Team Guide (English), graphify Guide d'équipe (Français), graphify scoped post-commit/post-merge hook, graphify services-policy.yml (graphed/not_graphed registry)
 
 ### Community 47 - "Community 47"
 Cohesion: 0.67
-Nodes (4): Timestamped Archive Branch Approach, Dead Services Cleanup Phase 1 (2026-04-09), Dormant Services Cleanup Phase 2 (2026-04-09), Remaining Services Cleanup Phase 3 (2026-04-10)
+Nodes (3): create_dlq_headers(), create_dlq_properties(), DLQProperties
 
 ### Community 48 - "Community 48"
-Cohesion: 0.67
-Nodes (2): Configure root logger with a stdout handler.      Safe to call multiple times, setup_logging()
+Cohesion: 0.5
+Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint, HeaderFooterExtractor /extract Endpoint, Thin Wrapper Over libs/common-utils
 
 ### Community 49 - "Community 49"
 Cohesion: 0.67
-Nodes (1): Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te
+Nodes (4): Timestamped Archive Branch Approach, Dead Services Cleanup Phase 1 (2026-04-09), Dormant Services Cleanup Phase 2 (2026-04-09), Remaining Services Cleanup Phase 3 (2026-04-10)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.67
-Nodes (2): export_embedding_model(), Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,
+Nodes (3): create_dlq_headers(), create_dlq_message(), DLQPropertiesAsync
 
 ### Community 51 - "Community 51"
 Cohesion: 0.67
-Nodes (2): export_reranker_model(), Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie
+Nodes (2): Configure root logger with a stdout handler.      Safe to call multiple times, setup_logging()
 
 ### Community 52 - "Community 52"
 Cohesion: 0.67
-Nodes (3): robots_txt_bypassed Callback Flag, robots.txt Total Block Detection & Bypass, Multi-Path Probe Guard (isBlanketBlock)
+Nodes (1): Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te
 
 ### Community 53 - "Community 53"
 Cohesion: 0.67
-Nodes (3): match_phrase Routing for Quoted Field:Value, Rule Match Viewer + Dynamic Service List, DLQ Manager UX Improvements Plan
+Nodes (2): export_embedding_model(), Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,
 
 ### Community 54 - "Community 54"
 Cohesion: 0.67
-Nodes (3): Google Sheets Import for MCP Gateway (2026-04-16), mcp-gateway-service + frontend, Google OAuth2 + Sheets API
+Nodes (2): export_reranker_model(), Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie
 
 ### Community 55 - "Community 55"
 Cohesion: 0.67
-Nodes (2): Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, verify_api_key()
+Nodes (3): robots_txt_bypassed Callback Flag, robots.txt Total Block Detection & Bypass, Multi-Path Probe Guard (isBlanketBlock)
 
 ### Community 56 - "Community 56"
-Cohesion: 1.0
-Nodes (1): Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu
+Cohesion: 0.67
+Nodes (3): match_phrase Routing for Quoted Field:Value, Rule Match Viewer + Dynamic Service List, DLQ Manager UX Improvements Plan
 
 ### Community 57 - "Community 57"
-Cohesion: 1.0
-Nodes (1): Shared threading lock for pymilvus connection management.  All Milvus CRUD and I
+Cohesion: 0.67
+Nodes (3): Google Sheets Import for MCP Gateway (2026-04-16), mcp-gateway-service + frontend, Google OAuth2 + Sheets API
 
 ### Community 58 - "Community 58"
-Cohesion: 1.0
-Nodes (2): Claude Config Optimization Plan, 20-25% Token Consumption Reduction
+Cohesion: 0.67
+Nodes (2): Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, verify_api_key()
 
 ### Community 59 - "Community 59"
 Cohesion: 1.0
-Nodes (2): DLQ Manager UX Improvements (2026-04-11), dlq-manager-service
+Nodes (1): Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu
 
 ### Community 60 - "Community 60"
 Cohesion: 1.0
-Nodes (2): Crawler Monitor Dataset & Queue Insights (2026-04-12), crawler-monitor-backend / frontend
+Nodes (1): Shared threading lock for pymilvus connection management.  All Milvus CRUD and I
 
 ### Community 61 - "Community 61"
 Cohesion: 1.0
-Nodes (2): Rationale: Reduce token consumption by 20-25% per conversation, Claude Config Optimization (2026-04-16)
+Nodes (2): Claude Config Optimization Plan, 20-25% Token Consumption Reduction
+
+### Community 62 - "Community 62"
+Cohesion: 1.0
+Nodes (2): DLQ Manager UX Improvements (2026-04-11), dlq-manager-service
+
+### Community 63 - "Community 63"
+Cohesion: 1.0
+Nodes (2): Crawler Monitor Dataset & Queue Insights (2026-04-12), crawler-monitor-backend / frontend
 
 ### Community 64 - "Community 64"
 Cohesion: 1.0
-Nodes (1): Creates a dictionary of headers for a DLQ message, compatible with both pika and
-
-### Community 65 - "Community 65"
-Cohesion: 1.0
-Nodes (1): Creates pika.BasicProperties for a DLQ message. For backward compatibility with
-
-### Community 66 - "Community 66"
-Cohesion: 1.0
-Nodes (1): Creates a dictionary of headers for a DLQ message based on an aio_pika message.
+Nodes (2): Rationale: Reduce token consumption by 20-25% per conversation, Claude Config Optimization (2026-04-16)
 
 ### Community 67 - "Community 67"
 Cohesion: 1.0
-Nodes (1): Creates a persistent aio_pika.Message ready for the Dead Letter Queue.
+Nodes (1): Creates a dictionary of headers for a DLQ message, compatible with both pika and
 
 ### Community 68 - "Community 68"
 Cohesion: 1.0
+Nodes (1): Creates pika.BasicProperties for a DLQ message. For backward compatibility with
+
+### Community 69 - "Community 69"
+Cohesion: 1.0
+Nodes (1): Creates a dictionary of headers for a DLQ message based on an aio_pika message.
+
+### Community 70 - "Community 70"
+Cohesion: 1.0
+Nodes (1): Creates a persistent aio_pika.Message ready for the Dead Letter Queue.
+
+### Community 71 - "Community 71"
+Cohesion: 1.0
 Nodes (1): Cleans up whitespace and removes control characters.
 
-### Community 72 - "Community 72"
+### Community 75 - "Community 75"
 Cohesion: 1.0
 Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrigeant
 
-### Community 83 - "Community 83"
+### Community 86 - "Community 86"
 Cohesion: 1.0
 Nodes (1): ignoreHTTPSErrors in Camoufox/Chromium
 
 ## Knowledge Gaps
-- **410 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+405 more)
+- **426 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+421 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 30`** (9 nodes): `QdrantProduitCrud.py`, `ModelConfig`, `QdrantProduitsCrud`, `.delete_produits()`, `._get_or_create_collection()`, `.get_produit()`, `.__init__()`, `.insert_produits()`, `.update_produits()`
+- **Thin community `Community 30`** (9 nodes): `QdrantFournisseursCrud.py`, `ModelConfig`, `QdrantFournisseursCrud`, `.delete_fournisseurs()`, `.get_fournisseurs()`, `._get_or_create_collection()`, `.__init__()`, `.insert_fournisseurs()`, `.update_fournisseurs()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 31`** (9 nodes): `QdrantWebsiteCrud.py`, `ModelConfig`, `QdrantWebsiteCrud`, `.delete_website()`, `._get_or_create_collection()`, `.get_website()`, `.__init__()`, `.insert_website()`, `.update_website()`
+- **Thin community `Community 31`** (9 nodes): `QdrantCategoriesCrud.py`, `ModelConfig`, `QdrantCategoriesCrud`, `.delete_categories()`, `.get_categories()`, `._get_or_create_collection()`, `.__init__()`, `.insert_categories()`, `.update_categories()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 34`** (9 nodes): `test_lua_scripts.py`, `Tests for Lua script string definitions. Validates that the scripts are well-fo`, `TestLuaScripts`, `.test_acquire_script_contains_expected_commands()`, `.test_acquire_script_is_non_empty_string()`, `.test_correct_counters_script_contains_expected_commands()`, `.test_correct_counters_script_is_non_empty_string()`, `.test_release_script_contains_expected_commands()`, `.test_release_script_is_non_empty_string()`
+- **Thin community `Community 32`** (9 nodes): `QdrantEchangeCrud.py`, `ModelConfig`, `QdrantEchangeCrud`, `.delete_echange()`, `.get_echange()`, `._get_or_create_collection()`, `.__init__()`, `.insert_echange()`, `.update_echange()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 42`** (6 nodes): `AnonymizeText`, `.anonymize_text()`, `.normalize_text()`, `.presidio_anonymizer()`, `gen_email_uuid()`, `AnonymizeText.py`
+- **Thin community `Community 35`** (9 nodes): `test_lua_scripts.py`, `Tests for Lua script string definitions. Validates that the scripts are well-fo`, `TestLuaScripts`, `.test_acquire_script_contains_expected_commands()`, `.test_acquire_script_is_non_empty_string()`, `.test_correct_counters_script_contains_expected_commands()`, `.test_correct_counters_script_is_non_empty_string()`, `.test_release_script_contains_expected_commands()`, `.test_release_script_is_non_empty_string()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 43`** (5 nodes): `rabbitmq_connection.py`, `RabbitMQConnection`, `.create_connection()`, `.__init__()`, `Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param`
+- **Thin community `Community 43`** (6 nodes): `AnonymizeText`, `.anonymize_text()`, `.normalize_text()`, `.presidio_anonymizer()`, `gen_email_uuid()`, `AnonymizeText.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 48`** (3 nodes): `logging_config.py`, `Configure root logger with a stdout handler.      Safe to call multiple times`, `setup_logging()`
+- **Thin community `Community 44`** (5 nodes): `rabbitmq_connection.py`, `RabbitMQConnection`, `.create_connection()`, `.__init__()`, `Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 49`** (3 nodes): `conftest.py`, `Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te`, `conftest.py`
+- **Thin community `Community 51`** (3 nodes): `logging_config.py`, `Configure root logger with a stdout handler.      Safe to call multiple times`, `setup_logging()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 50`** (3 nodes): `export_embedding_model()`, `Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,`, `export_embedding_to_onnx.py`
+- **Thin community `Community 52`** (3 nodes): `conftest.py`, `Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te`, `conftest.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 51`** (3 nodes): `export_reranker_model()`, `Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie`, `export_reranker_to_onnx.py`
+- **Thin community `Community 53`** (3 nodes): `export_embedding_model()`, `Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,`, `export_embedding_to_onnx.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 55`** (3 nodes): `auth.py`, `Verifies the API key if API_KEY is configured in settings.     If API_KEY is not`, `verify_api_key()`
+- **Thin community `Community 54`** (3 nodes): `export_reranker_model()`, `Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie`, `export_reranker_to_onnx.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 56`** (2 nodes): `lua_scripts.py`, `Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu`
+- **Thin community `Community 58`** (3 nodes): `auth.py`, `Verifies the API key if API_KEY is configured in settings.     If API_KEY is not`, `verify_api_key()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 57`** (2 nodes): `milvus_lock.py`, `Shared threading lock for pymilvus connection management.  All Milvus CRUD and I`
+- **Thin community `Community 59`** (2 nodes): `lua_scripts.py`, `Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 58`** (2 nodes): `Claude Config Optimization Plan`, `20-25% Token Consumption Reduction`
+- **Thin community `Community 60`** (2 nodes): `milvus_lock.py`, `Shared threading lock for pymilvus connection management.  All Milvus CRUD and I`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 59`** (2 nodes): `DLQ Manager UX Improvements (2026-04-11)`, `dlq-manager-service`
+- **Thin community `Community 61`** (2 nodes): `Claude Config Optimization Plan`, `20-25% Token Consumption Reduction`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 60`** (2 nodes): `Crawler Monitor Dataset & Queue Insights (2026-04-12)`, `crawler-monitor-backend / frontend`
+- **Thin community `Community 62`** (2 nodes): `DLQ Manager UX Improvements (2026-04-11)`, `dlq-manager-service`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 61`** (2 nodes): `Rationale: Reduce token consumption by 20-25% per conversation`, `Claude Config Optimization (2026-04-16)`
+- **Thin community `Community 63`** (2 nodes): `Crawler Monitor Dataset & Queue Insights (2026-04-12)`, `crawler-monitor-backend / frontend`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 64`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
+- **Thin community `Community 64`** (2 nodes): `Rationale: Reduce token consumption by 20-25% per conversation`, `Claude Config Optimization (2026-04-16)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 65`** (1 nodes): `Creates pika.BasicProperties for a DLQ message. For backward compatibility with`
+- **Thin community `Community 67`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 66`** (1 nodes): `Creates a dictionary of headers for a DLQ message based on an aio_pika message.`
+- **Thin community `Community 68`** (1 nodes): `Creates pika.BasicProperties for a DLQ message. For backward compatibility with`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 67`** (1 nodes): `Creates a persistent aio_pika.Message ready for the Dead Letter Queue.`
+- **Thin community `Community 69`** (1 nodes): `Creates a dictionary of headers for a DLQ message based on an aio_pika message.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 68`** (1 nodes): `Cleans up whitespace and removes control characters.`
+- **Thin community `Community 70`** (1 nodes): `Creates a persistent aio_pika.Message ready for the Dead Letter Queue.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 72`** (1 nodes): `Nettoie une chaîne de texte en normalisant les espaces et en corrigeant`
+- **Thin community `Community 71`** (1 nodes): `Cleans up whitespace and removes control characters.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 83`** (1 nodes): `ignoreHTTPSErrors in Camoufox/Chromium`
+- **Thin community `Community 75`** (1 nodes): `Nettoie une chaîne de texte en normalisant les espaces et en corrigeant`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 86`** (1 nodes): `ignoreHTTPSErrors in Camoufox/Chromium`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `main()` connect `Update-Mode Queue Builder` to `Redis Cache Rationale`?**
-  _High betweenness centrality (0.106) - this node is a cross-community bridge._
+  _High betweenness centrality (0.105) - this node is a cross-community bridge._
 - **Why does `common_utils.grpc_clients (client wrappers)` connect `GCS Archive Classifier` to `Qdrant CRUD Layer`, `Milvus Concurrency Guard`?**
-  _High betweenness centrality (0.086) - this node is a cross-community bridge._
+  _High betweenness centrality (0.102) - this node is a cross-community bridge._
 - **Are the 57 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 57 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 70 inferred relationships involving `str` (e.g. with `create_dlq_headers()` and `._preprocess_html()`) actually correct?**

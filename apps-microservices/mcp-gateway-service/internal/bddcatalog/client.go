@@ -1,0 +1,210 @@
+package bddcatalog
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+// Client is the gateway-side wrapper around the Hellopro BDD catalog HTTP API.
+// All endpoints are GET-only; writes are not part of this client's surface.
+type Client struct {
+	baseURL    string
+	adminToken string
+	httpClient *http.Client
+}
+
+// listTimeout caps the wait on cheap list endpoints (databases / tables /
+// fields). 15s is generous; production p99 is well under 2s.
+const listTimeout = 15 * time.Second
+
+// countTimeout caps the wait on /count endpoints. Upstream issues a real
+// SELECT COUNT(*) which is unindexed on tables in the millions and can
+// cross 30s on the largest registries — leaving listTimeout's 15s would
+// surface "context deadline exceeded" on legitimate slow queries.
+const countTimeout = 60 * time.Second
+
+// New returns a configured Client. Both arguments may be empty — callers
+// must guard with Enabled() before issuing requests.
+//
+// Per-call timeouts are applied via context.WithTimeout in each method.
+// The http.Client itself carries no Timeout so that callers can vary the
+// budget per endpoint (see countTimeout for the slow /count path).
+func New(baseURL, adminToken string) *Client {
+	return &Client{
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		adminToken: adminToken,
+		httpClient: &http.Client{},
+	}
+}
+
+// Enabled reports whether both the base URL and admin token are configured.
+// Safe to call on a nil receiver.
+func (c *Client) Enabled() bool {
+	return c != nil && c.baseURL != "" && c.adminToken != ""
+}
+
+// envelope wraps every upstream payload as {"code": 200, "response": {...}}.
+// Errors are surfaced via the HTTP status, so we ignore Code here and only
+// decode Response.
+type envelope struct {
+	Response json.RawMessage `json:"response"`
+}
+
+// unwrap pulls the inner payload out of the upstream envelope. Falls back to
+// the raw body when the envelope is absent (defensive — keeps tests and any
+// future flat-shape endpoints working).
+func unwrap(body []byte) []byte {
+	var env envelope
+	if err := json.Unmarshal(body, &env); err == nil && len(env.Response) > 0 {
+		return env.Response
+	}
+	return body
+}
+
+// ListDatabases returns the catalog's known databases.
+func (c *Client) ListDatabases(ctx context.Context) ([]Database, error) {
+	ctx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+	body, err := c.do(ctx, "/databases", nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Databases []Database `json:"databases"`
+	}
+	if err := json.Unmarshal(unwrap(body), &payload); err != nil {
+		return nil, fmt.Errorf("bdd catalog: decode databases: %w", err)
+	}
+	if payload.Databases == nil {
+		payload.Databases = []Database{}
+	}
+	return payload.Databases, nil
+}
+
+// ListTables returns tables for a database, optionally filtered by a free-text
+// search term passed through to the catalog as the "search" query parameter.
+func (c *Client) ListTables(ctx context.Context, databaseID int, search string) ([]Table, error) {
+	ctx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+	path := fmt.Sprintf("/databases/%d/tables", databaseID)
+	var query url.Values
+	if search != "" {
+		query = url.Values{"search": []string{search}}
+	}
+	body, err := c.do(ctx, path, query)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Tables []Table `json:"tables"`
+	}
+	if err := json.Unmarshal(unwrap(body), &payload); err != nil {
+		return nil, fmt.Errorf("bdd catalog: decode tables: %w", err)
+	}
+	if payload.Tables == nil {
+		payload.Tables = []Table{}
+	}
+	return payload.Tables, nil
+}
+
+// FieldsResponse pairs the column list with the upstream-declared primary
+// key. The catalog returns `{"fields":[...], "primary":"<col>"}`; primary
+// may be empty when the upstream cannot determine the table's PK.
+type FieldsResponse struct {
+	Fields  []Field `json:"fields"`
+	Primary string  `json:"primary,omitempty"`
+}
+
+// ListFields returns the columns of a single table together with the
+// upstream-declared primary key. Empty primary is normal when the
+// catalog has no PK for the table.
+func (c *Client) ListFields(ctx context.Context, databaseID, tableID int) (FieldsResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
+	path := fmt.Sprintf("/databases/%d/tables/%d/fields", databaseID, tableID)
+	body, err := c.do(ctx, path, nil)
+	if err != nil {
+		return FieldsResponse{}, err
+	}
+	var payload FieldsResponse
+	if err := json.Unmarshal(unwrap(body), &payload); err != nil {
+		return FieldsResponse{}, fmt.Errorf("bdd catalog: decode fields: %w", err)
+	}
+	if payload.Fields == nil {
+		payload.Fields = []Field{}
+	}
+	return payload, nil
+}
+
+// CountRows returns the upstream row count for a single table. The /count
+// endpoint runs an unindexed COUNT(*) on the source table — slow on the
+// largest registries — so we grant it a much larger per-call budget than
+// the cheap list endpoints.
+func (c *Client) CountRows(ctx context.Context, databaseID, tableID int) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, countTimeout)
+	defer cancel()
+	path := fmt.Sprintf("/databases/%d/tables/%d/count", databaseID, tableID)
+	body, err := c.do(ctx, path, nil)
+	if err != nil {
+		return 0, err
+	}
+	var payload struct {
+		Count int64 `json:"count"`
+	}
+	if err := json.Unmarshal(unwrap(body), &payload); err != nil {
+		return 0, fmt.Errorf("bdd catalog: decode count: %w", err)
+	}
+	return payload.Count, nil
+}
+
+// do issues an authenticated GET to baseURL+path. The query is appended
+// only when non-empty so callers don't accidentally send "?search=".
+func (c *Client) do(ctx context.Context, path string, query url.Values) ([]byte, error) {
+	if !c.Enabled() {
+		return nil, fmt.Errorf("bdd catalog: client not configured (BDD_CATALOG_BASE_URL/BDD_CATALOG_TOKEN unset)")
+	}
+
+	full := c.baseURL + path
+	if len(query) > 0 {
+		full += "?" + query.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, full, nil)
+	if err != nil {
+		return nil, fmt.Errorf("bdd catalog: build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.adminToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("bdd catalog: %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("bdd catalog: read body: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// NOTE: upstream body included verbatim — sanitise if upstream ever echoes auth headers in errors
+		return nil, fmt.Errorf("bdd catalog: status %d: %s", resp.StatusCode, truncate(body))
+	}
+	return body, nil
+}
+
+// truncate returns up to 200 chars of the given body for use in error
+// messages. Avoids dumping multi-megabyte upstream payloads into logs.
+func truncate(b []byte) string {
+	const max = 200
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "…"
+}

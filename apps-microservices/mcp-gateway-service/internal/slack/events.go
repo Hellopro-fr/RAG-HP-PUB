@@ -81,20 +81,31 @@ func (e ToolsRegressionEvent) ToPayload(envLabel, gatewayURL string) ([]byte, er
 // a request. Caller MUST gate delivery through Client.AllowAuthAlert to avoid
 // flooding.
 type UnauthorizedEvent struct {
-	ClientIP string
-	Endpoint string
-	Reason   string
+	ClientIP     string
+	Endpoint     string
+	Reason       string
+	MCPSessionID string
+	UserAgent    string
 }
 
 func (e UnauthorizedEvent) ToPayload(envLabel, gatewayURL string) ([]byte, error) {
-	return buildPayload(
+	lines := []string{
 		fmt.Sprintf(":lock: %sUnauthorized MCP access attempt", envPrefix(envLabel)),
 		fmt.Sprintf("Endpoint: `%s`", e.Endpoint),
 		fmt.Sprintf("Client IP: `%s`", e.ClientIP),
 		fmt.Sprintf("Reason: `%s`", truncate(e.Reason, 200)),
+	}
+	if e.MCPSessionID != "" {
+		lines = append(lines, fmt.Sprintf("MCP-Session-Id: `%s`", truncate(e.MCPSessionID, 128)))
+	}
+	if e.UserAgent != "" {
+		lines = append(lines, fmt.Sprintf("User-Agent: `%s`", truncate(e.UserAgent, 200)))
+	}
+	lines = append(lines,
 		fmt.Sprintf("Detected at: %s", nowUTC()),
 		gatewayFooter(gatewayURL),
 	)
+	return buildPayload(lines...)
 }
 
 // GatewayShutdownEvent fires from main.go during graceful shutdown.

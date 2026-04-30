@@ -417,17 +417,22 @@ router.addDefaultHandler(
 
                             // Regional path exclusion: extract alternative paths to exclude
                             if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                                // Belt-and-braces gate inside computeExcludedRegionalPaths: only
+                                // accept locale-shaped prefixes (e.g. /fr-FR, /en, /de-DE). Rejects
+                                // content paths like /nos-realisations that a malformed hreflang
+                                // could surface, which would otherwise blanket-block a content
+                                // section. Complements the API-side gate in alternative_urls
+                                // assembly.
                                 const winnerPrefix = DetectionLangueClient.extractPathPrefix(detectResult.url || url);
                                 const seedPrefix = DetectionLangueClient.extractPathPrefix(site);
+                                const { excluded, rejected } = DetectionLangueClient.computeExcludedRegionalPaths(
+                                    detectResult.alternative_urls,
+                                    winnerPrefix,
+                                    seedPrefix,
+                                );
 
-                                const excluded: string[] = [];
-                                for (const alt of detectResult.alternative_urls) {
-                                    const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
-                                    if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
-                                        if (!excluded.includes(altPrefix)) {
-                                            excluded.push(altPrefix);
-                                        }
-                                    }
+                                for (const r of rejected) {
+                                    log.info(`[REGIONAL_EXCLUSION] Rejected non-locale alt prefix: ${r.prefix} (from ${r.sourceUrl})`);
                                 }
 
                                 if (excluded.length > 0) {
@@ -570,15 +575,11 @@ router.addDefaultHandler(
 
                         if (detectResult.ok) {
                             isEnqueuingLinks = true;
-                        } else if (!needsNlp) {
-                            // Fallback: URL-only check (no method match required).
-                            // The stored method describes how the *homepage* was detected,
-                            // not which URL patterns are valid for internal pages.
-                            const checkUrlResult = await detectionClient.checkUrl(url);
-                            if (checkUrlResult.ok) {
-                                isEnqueuingLinks = true;
-                            }
                         }
+                        // No URL fallback after a clean rejection. The forced HTML detect
+                        // already analyzed the lang attribute; URL TLD/path signals cannot
+                        // override that verdict (aera-sa.fr/de/... leak case). API technical
+                        // failures are handled by the surrounding try/catch.
                     } catch (apiError: any) {
                         log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
                     }

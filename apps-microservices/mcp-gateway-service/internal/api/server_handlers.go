@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hellopro/mcp-gateway/internal/auth"
+	"github.com/hellopro/mcp-gateway/internal/bddcatalog"
 	"github.com/hellopro/mcp-gateway/internal/config"
 	"github.com/hellopro/mcp-gateway/internal/db"
 	"github.com/hellopro/mcp-gateway/internal/gateway"
@@ -103,6 +104,12 @@ type Handler struct {
 	// is shared with scopetoken/oauth2 middleware to resolve per-scope
 	// instructions at cache-miss time.
 	instructionRepo *repository.InstructionRepo
+	// BDD registry + upstream catalog client (Hellopro BDD tables onglet).
+	// bddUsedRepo writes to the gateway-owned bdd_used_tables/fields tables;
+	// bddCatalog is a read-only client to the upstream catalog HTTP API.
+	// Both are nil until wired by main.go.
+	bddUsedRepo *repository.BDDUsedRepo
+	bddCatalog  *bddcatalog.Client
 }
 
 // TokenCache is an interface for scope token cache operations.

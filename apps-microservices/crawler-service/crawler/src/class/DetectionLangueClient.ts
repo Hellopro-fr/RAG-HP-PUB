@@ -231,4 +231,64 @@ export class DetectionLangueClient {
             return false;
         }
     }
+
+    /**
+     * Returns true only for path prefixes shaped like a locale regional variant.
+     *
+     * Accepted shapes (case-insensitive):
+     *   /fr, /fr/, /fr-FR, /fr-FR/, /fr_FR, /fr_FR/, /fr-be, /en, /en-GB, /de-DE, /es, /es-ES, etc.
+     *
+     * Rejected shapes:
+     *   /nos-realisations, /produits, /a-propos, "", "/"
+     *
+     * Pattern: starts with "/", followed by 2-letter language code, optionally followed by
+     *   ("-" or "_") + 2-4 letter region code. Optional trailing slash. No further path content.
+     *
+     * Used as a belt-and-braces gate before adding alt URL prefixes returned by the detection
+     * API to `excludedRegionalPaths`, so a malformed hreflang declaration cannot drop content
+     * sections. Guards SHAPE, not language — accepts all 2-letter language codes.
+     */
+    static isLocalePathPrefix(prefix: string): boolean {
+        if (!prefix) return false;
+        return /^\/[a-z]{2}([-_][a-z]{2,4})?\/?$/i.test(prefix);
+    }
+
+    /**
+     * Compute the set of regional path prefixes to exclude during crawling, given the
+     * homepage's `alternative_urls` and the winner/seed locale prefixes.
+     *
+     * For each alternative URL, extract its path prefix and add it to `excluded` iff:
+     *   - the prefix differs from the winner's prefix (the locale we picked), and
+     *   - the prefix differs from the seed's prefix (the URL the user requested), and
+     *   - the prefix passes `isLocalePathPrefix` (belt-and-braces shape gate).
+     *
+     * Prefixes that fail the shape gate are returned in `rejected` alongside the source
+     * URL so the caller can log them. Caller handles all logging — this helper is pure.
+     *
+     * Result `excluded` is deduped (each prefix appears at most once).
+     */
+    static computeExcludedRegionalPaths(
+        alternativeUrls: AlternativeUrl[],
+        winnerPrefix: string | null,
+        seedPrefix: string | null,
+    ): { excluded: string[]; rejected: { prefix: string; sourceUrl: string }[] } {
+        const excluded: string[] = [];
+        const rejected: { prefix: string; sourceUrl: string }[] = [];
+
+        for (const alt of alternativeUrls) {
+            const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
+            if (!altPrefix || altPrefix === winnerPrefix || altPrefix === seedPrefix) {
+                continue;
+            }
+            if (!DetectionLangueClient.isLocalePathPrefix(altPrefix)) {
+                rejected.push({ prefix: altPrefix, sourceUrl: alt.url });
+                continue;
+            }
+            if (!excluded.includes(altPrefix)) {
+                excluded.push(altPrefix);
+            }
+        }
+
+        return { excluded, rejected };
+    }
 }

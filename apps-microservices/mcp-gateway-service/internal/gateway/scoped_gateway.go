@@ -24,6 +24,12 @@ const leexiToolPrefix = "leexi"
 // user-scope header onto outbound MCP requests.
 const ringoverToolPrefix = "ringover"
 
+// bddToolPrefix is the convention used when registering BDD-tagged backends.
+// Mirrors leexiToolPrefix — every backend whose ToolPrefix matches this
+// string receives the X-BDD-Allowed-Tables header when the active token /
+// OAuth2 client declares a BDD scope.
+const bddToolPrefix = "bdd"
+
 // LeexiAllowedParticipantsHeader mirrors the constant defined in mcp-leexi-service
 // (transport.AllowedParticipantsHeader). Duplicated here to avoid a cross-module
 // import; both sides MUST stay in sync.
@@ -33,6 +39,11 @@ const LeexiAllowedParticipantsHeader = "X-Leexi-Allowed-Participants"
 // mcp-ringover-service (transport.AllowedUserIDsHeader). Both sides MUST stay
 // in sync.
 const RingoverAllowedUserIDsHeader = "X-Ringover-Allowed-User-IDs"
+
+// BDDAllowedTablesHeader is the JSON-encoded allow-list passed downstream to
+// BDD-tagged backends. Same duplication caveat as the Leexi header — both
+// sides of the contract live in different services and must stay in sync.
+const BDDAllowedTablesHeader = "X-BDD-Allowed-Tables"
 
 // ScopedGateway wraps a Gateway but filters results to only the allowed server IDs
 // and optionally to specific tools per server.
@@ -52,6 +63,11 @@ type ScopedGateway struct {
 	leexiAdmin *leexiadmin.Client
 	// ringoverAdmin (optional) — same role as leexiAdmin for Ringover.
 	ringoverAdmin *ringoveradmin.Client
+	// bddResolver (optional) translates bdd_used_tables.id values into
+	// (database_id, table_name) pairs for the X-BDD-Allowed-Tables header.
+	// nil = fail-closed: when the token has a BDD scope, an empty allow-list
+	// is sent so the backend denies every BDD call.
+	bddResolver BDDTableResolver
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -68,6 +84,7 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 		instructions:  instructions,
 		leexiAdmin:    gw.leexiAdmin,
 		ringoverAdmin: gw.ringoverAdmin,
+		bddResolver:   gw.bddResolver,
 	}
 }
 
@@ -148,7 +165,9 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 
 // requestHeadersFor returns the set of headers to send to backend on this
 // particular tool call. It clones backend.AuthHeaders so the static map is
-// never mutated, and adds X-Leexi-Allowed-Participants when applicable.
+// never mutated, and adds the per-backend ownership headers when applicable
+// (X-Leexi-Allowed-Participants for the Leexi backend, X-BDD-Allowed-Tables
+// for BDD-tagged backends).
 func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *BackendServer) map[string]string {
 	headers := make(map[string]string, len(backend.AuthHeaders)+1)
 	for k, v := range backend.AuthHeaders {
@@ -159,10 +178,15 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		sg.injectLeexiHeader(ctx, headers)
 	case ringoverToolPrefix:
 		sg.injectRingoverHeader(ctx, headers)
+	case bddToolPrefix:
+		sg.injectBDDHeader(ctx, headers)
 	}
 	return headers
 }
 
+// injectLeexiHeader resolves the active Leexi filter and writes the
+// X-Leexi-Allowed-Participants header. No-op when the request has no
+// Leexi scope. Mutates the headers map in place.
 func (sg *ScopedGateway) injectLeexiHeader(ctx context.Context, headers map[string]string) {
 	filter, ok := scopetoken.LeexiFilterFromContext(ctx)
 	if !ok || filter == nil {
@@ -199,6 +223,65 @@ func (sg *ScopedGateway) injectRingoverHeader(ctx context.Context, headers map[s
 		parts[i] = strconv.Itoa(id)
 	}
 	headers[RingoverAllowedUserIDsHeader] = strings.Join(parts, ",")
+}
+
+// injectBDDHeader resolves the active BDD allow-list (a slice of
+// bdd_used_tables.id values) into a JSON array of {database_id, table_name}
+// pairs and writes the X-BDD-Allowed-Tables header. Behaviour:
+//   - No BDD scope on the request → no header (full access).
+//   - Filter set, every referenced ID resolves successfully → header with the
+//     full list.
+//   - Filter set, some/all IDs absent from the registry (deleted upstream)
+//     → header with whatever resolved; if nothing resolved, an empty JSON
+//     array is sent so the backend denies every call (fail-closed).
+//   - bddResolver not configured but filter set → empty array (also fail-closed).
+func (sg *ScopedGateway) injectBDDHeader(ctx context.Context, headers map[string]string) {
+	ids, ok := scopetoken.BDDFilterFromContext(ctx)
+	if !ok {
+		return
+	}
+	pairs := sg.resolveBDDPairs(ctx, ids)
+	encoded, err := json.Marshal(pairs)
+	if err != nil {
+		// json.Marshal of []bddTablePair never fails in practice. Log and
+		// fall back to a safe deny-all so we never accidentally lift the
+		// scope on a transient error.
+		log.Printf("[scoped] marshal bdd allow-list: %v", err)
+		headers[BDDAllowedTablesHeader] = "[]"
+		return
+	}
+	headers[BDDAllowedTablesHeader] = string(encoded)
+	if len(pairs) == 0 {
+		log.Printf("[scoped] bdd filter resolved to empty allow-list — sending deny-all (header=[])")
+	}
+}
+
+// bddTablePair is the wire shape for a single entry in X-BDD-Allowed-Tables.
+// Mirrors the contract documented in the task brief: numeric database id +
+// catalog table name, no other metadata.
+type bddTablePair struct {
+	DatabaseID int    `json:"database_id"`
+	TableName  string `json:"table_name"`
+}
+
+// resolveBDDPairs translates a slice of bdd_used_tables.id values into the
+// corresponding (database_id, table_name) tuples. Missing rows (deleted
+// in the registry between cache load and this call) are skipped silently —
+// the caller decides what an empty result means.
+func (sg *ScopedGateway) resolveBDDPairs(ctx context.Context, ids []string) []bddTablePair {
+	if sg.bddResolver == nil {
+		return nil
+	}
+	out := make([]bddTablePair, 0, len(ids))
+	for _, id := range ids {
+		row, err := sg.bddResolver.GetTable(ctx, id)
+		if err != nil {
+			log.Printf("[scoped] bdd resolve id=%s: %v (skipped)", id, err)
+			continue
+		}
+		out = append(out, bddTablePair{DatabaseID: row.DatabaseID, TableName: row.Name})
+	}
+	return out
 }
 
 // resolveLeexiParticipants turns a (mode, allowed-users, allowed-teams) tuple

@@ -577,10 +577,20 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      # Capacity tuning — see docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md § B.1
+      # Reduced from defaults (10/12) after observed OOM kill loop under real load:
+      # 10 Camoufox × ~600 MB > 4500m cgroup limit → restarts=9, dmesg WebExtensions OOM kills.
+      # New peak: 6 × ~600 MB ≈ 3.6 GB browsers + ~500 MB Python heap = fits with headroom.
+      # Trade: ~40% throughput reduction; BO + crawler-service handle 503 backpressure cleanly.
+      - BROWSER_SEMAPHORE_SIZE=6
+      - ADMISSION_MAX_SLOTS=8
     mem_limit: 4500m
     cpus: 4
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8999/api/v1/health || exit 1"]
+      # python:3.10-slim base image n'inclut pas curl → healthcheck cassé en boucle
+      # (FailingStreak: 77 observé). Utiliser urllib (déjà dans la stdlib Python)
+      # évite ~10 MB d'image bloat + une nouvelle dépendance apt.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8999/api/v1/health', timeout=5).read()"]
       interval: 30s
       timeout: 10s
       start_period: 30s
@@ -1313,7 +1323,7 @@ services:
       context: ./apps-microservices/crawler-monitor-backend
       dockerfile: Dockerfile
     container_name: crawler-monitor-backend
-    profiles: ["disabled"]
+    profiles: ["app"]
     restart: unless-stopped
     expose:
       - "3001"
@@ -1324,7 +1334,18 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - CRAWLER_STORAGE_PATH=/app/storage
+      - PORT=3001
+      - LOG_LEVEL=info
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
       - IMAGE_DOWNLOAD_SERVICE_URL=http://image-download-service:8505
+    healthcheck:
+      test: ["CMD", "/app/server", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     networks:
       - services-net
     logging: *logging_defaults
@@ -1334,7 +1355,7 @@ services:
       context: ./apps-microservices/crawler-monitor-frontend
       dockerfile: Dockerfile
     container_name: crawler-monitor-frontend
-    profiles: ["disabled"]
+    profiles: ["app"]
     restart: unless-stopped
     ports:
       - "3002:8099" # Exposé sur le port 3002
@@ -2273,6 +2294,11 @@ services:
       # Ringover admin proxy (symmetric to Leexi)
       - RINGOVER_INTERNAL_URL=${RINGOVER_INTERNAL_URL}
       - RINGOVER_ADMIN_TOKEN=${MCP_RINGOVER_ADMIN_TOKEN}
+      # Hellopro BDD catalog (read-only upstream — feeds Tables BDD admin onglet picker).
+      # Empty = picker disabled (503); gateway-owned registry CRUD still works.
+      - BDD_CATALOG_BASE_URL=${BDD_CATALOG_BASE_URL}
+      - BDD_CATALOG_TOKEN=${BDD_CATALOG_TOKEN}
+      - BDD_PUBLIC_API_TOKEN=${BDD_PUBLIC_API_TOKEN}
       - ALLOWED_EMAILS=${MCP_ALLOWED_EMAILS}
       # Google Sheets import (OAuth2)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}

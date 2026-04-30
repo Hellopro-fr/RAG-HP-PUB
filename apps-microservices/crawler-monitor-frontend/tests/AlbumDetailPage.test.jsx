@@ -15,6 +15,21 @@ vi.mock('../src/lib/api', () => ({
   setOnUnauthorized: vi.fn(),
 }));
 
+// Le ToastProvider n'est pas monté dans les tests — on stub useToast pour
+// éviter "useToast must be used within <ToastProvider>". Les pages utilisent
+// les méthodes .success/.error/.warn/.info de l'objet retourné.
+vi.mock('../src/components/ToastProvider', () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+  ToastProvider: ({ children }) => children,
+}));
+
 import { api } from '../src/lib/api';
 import AlbumDetailPage from '../src/pages/AlbumDetailPage';
 

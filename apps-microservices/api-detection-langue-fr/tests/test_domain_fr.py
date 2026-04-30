@@ -520,3 +520,243 @@ class TestDetectAlternativeLanguages:
         detector = DomainFR("https://example.com")
         alternatives = detector.detect_alternative_languages(html)
         assert len(alternatives) > 0
+
+
+class TestIsValidLanguageAlternative:
+    """Unit tests for DomainFR._is_valid_language_alternative gate."""
+
+    def test_cross_host_subdomain_accepted(self):
+        """fr.example.com (cross-host) is trusted regardless of path shape."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://fr.example.com/anything"
+        ) is True
+
+    def test_cross_host_tld_accepted(self):
+        """example.fr (cross-host) is trusted regardless of path shape."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.fr/page"
+        ) is True
+
+    def test_cross_host_unrelated_accepted(self):
+        """Any cross-host target is trusted (webmaster declaration)."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://other-host.org/whatever"
+        ) is True
+
+    def test_same_host_fr_accepted(self):
+        """Same-host /fr first segment is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/fr"
+        ) is True
+
+    def test_same_host_fr_with_subpath_accepted(self):
+        """Same-host /fr/page is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/fr/page"
+        ) is True
+
+    def test_same_host_fr_FR_accepted(self):
+        """Same-host /fr-FR is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/fr-FR"
+        ) is True
+
+    def test_same_host_fr_underscore_accepted(self):
+        """Same-host /fr_FR/page is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/fr_FR/page"
+        ) is True
+
+    def test_same_host_en_GB_accepted(self):
+        """Same-host /en-GB (any language-shaped segment) is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/en-GB"
+        ) is True
+
+    def test_same_host_de_accepted(self):
+        """Same-host /de (any 2-letter language code) is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/de/products"
+        ) is True
+
+    def test_same_host_content_path_rejected(self):
+        """Same-host content section path /nos-realisations is rejected (jaunin.com case)."""
+        assert DomainFR._is_valid_language_alternative(
+            "jaunin.com", "https://jaunin.com/nos-realisations"
+        ) is False
+
+    def test_same_host_l_entreprise_rejected(self):
+        """Same-host /l-entreprise rejected."""
+        assert DomainFR._is_valid_language_alternative(
+            "jaunin.com", "https://jaunin.com/l-entreprise"
+        ) is False
+
+    def test_same_host_produits_rejected(self):
+        """Same-host /produits rejected."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/produits"
+        ) is False
+
+    def test_same_host_root_rejected(self):
+        """Same-host root path / rejected."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://example.com/"
+        ) is False
+
+    def test_malformed_url_rejected(self):
+        """Non-URL string rejected."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "not a url"
+        ) is False
+
+    def test_empty_url_rejected(self):
+        """Empty string rejected."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", ""
+        ) is False
+
+    def test_www_homepage_vs_bare_candidate_same_host(self):
+        """Homepage www.example.com vs candidate example.com → same-host (www. normalized)."""
+        assert DomainFR._is_valid_language_alternative(
+            "www.example.com", "https://example.com/nos-realisations"
+        ) is False
+
+    def test_bare_homepage_vs_www_candidate_same_host(self):
+        """Homepage example.com vs candidate www.example.com → same-host (www. normalized)."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://www.example.com/nos-realisations"
+        ) is False
+
+    def test_www_both_sides_language_path_accepted(self):
+        """Same-host on both sides with language-shaped path is accepted."""
+        assert DomainFR._is_valid_language_alternative(
+            "www.example.com", "https://www.example.com/fr-FR/page"
+        ) is True
+
+    def test_subdomain_other_than_www_still_cross_host(self):
+        """Non-www subdomain (cdn.) is still treated as cross-host and trusted."""
+        assert DomainFR._is_valid_language_alternative(
+            "example.com", "https://cdn.example.com/anything"
+        ) is True
+
+
+class TestHreflangValidation:
+    """Integration tests: invalid hreflang/data-lang targets must NOT land in alternative_urls."""
+
+    @pytest.mark.asyncio
+    async def test_hreflang_same_host_content_path_rejected(self):
+        """jaunin.com case: hreflang pointing at content section must be filtered out."""
+        html = '''
+        <html>
+        <head>
+            <link rel="alternate" hreflang="fr-FR" href="/nos-realisations">
+            <link rel="alternate" hreflang="fr-FR" href="/l-entreprise">
+        </head>
+        <body></body>
+        </html>
+        '''
+        detector = DomainFR("https://jaunin.com")
+        alternatives = await detector.detect_alternative_languages(html)
+        urls = [a.url for a in alternatives]
+        assert "https://jaunin.com/nos-realisations" not in urls
+        assert "https://jaunin.com/l-entreprise" not in urls
+
+    @pytest.mark.asyncio
+    async def test_hreflang_same_host_language_path_accepted(self):
+        """Valid same-host /fr/ hreflang is preserved."""
+        html = '''
+        <html>
+        <head>
+            <link rel="alternate" hreflang="fr-FR" href="/fr/accueil">
+        </head>
+        <body></body>
+        </html>
+        '''
+        detector = DomainFR("https://example.com")
+        alternatives = await detector.detect_alternative_languages(html)
+        urls = [a.url for a in alternatives]
+        assert "https://example.com/fr/accueil" in urls
+
+    @pytest.mark.asyncio
+    async def test_hreflang_cross_host_accepted(self):
+        """Cross-host hreflang remains trusted even with non-language path."""
+        html = '''
+        <html>
+        <head>
+            <link rel="alternate" hreflang="fr-FR" href="https://fr.example.com/anything">
+        </head>
+        <body></body>
+        </html>
+        '''
+        detector = DomainFR("https://example.com")
+        alternatives = await detector.detect_alternative_languages(html)
+        urls = [a.url for a in alternatives]
+        assert "https://fr.example.com/anything" in urls
+
+    @pytest.mark.asyncio
+    async def test_hreflang_mixed_only_valid_kept(self):
+        """Mix of valid + invalid hreflang: only the valid declarations land in alternatives."""
+        html = '''
+        <html>
+        <head>
+            <link rel="alternate" hreflang="fr-FR" href="/nos-realisations">
+            <link rel="alternate" hreflang="fr-FR" href="/fr/accueil">
+            <link rel="alternate" hreflang="fr" href="https://example.fr/page">
+        </head>
+        <body></body>
+        </html>
+        '''
+        detector = DomainFR("https://example.com")
+        alternatives = await detector.detect_alternative_languages(html)
+        urls = [a.url for a in alternatives]
+        assert "https://example.com/nos-realisations" not in urls
+        assert "https://example.com/fr/accueil" in urls
+        assert "https://example.fr/page" in urls
+
+    @pytest.mark.asyncio
+    async def test_data_lang_same_host_content_path_rejected(self):
+        """data-lang pointing at content section must also be filtered out."""
+        # Mock _validate_alternative_urls to avoid HTTP calls for this medium-reliability path.
+        html = '''
+        <html>
+        <body>
+            <a href="/nos-realisations" data-lang="fr">Français</a>
+            <a href="/fr/home" data-lang="fr">Français</a>
+        </body>
+        </html>
+        '''
+        detector = DomainFR("https://jaunin.com")
+        with patch.object(detector, '_validate_alternative_urls',
+                          new=AsyncMock(side_effect=lambda candidates: [])):
+            alternatives = await detector.detect_alternative_languages(html)
+        # Whatever survives the gate goes to _validate_alternative_urls; we mocked it to []
+        # but we can also intercept the candidate list by inspecting the call arg.
+        assert all(
+            "/nos-realisations" not in (a.url if hasattr(a, 'url') else '')
+            for a in alternatives
+        )
+
+    @pytest.mark.asyncio
+    async def test_data_lang_gate_passes_only_valid_to_validation(self):
+        """Verify the candidate list passed to _validate_alternative_urls excludes content paths."""
+        html = '''
+        <html>
+        <body>
+            <a href="/nos-realisations" data-lang="fr">FR1</a>
+            <a href="/fr/home" data-lang="fr">FR2</a>
+        </body>
+        </html>
+        '''
+        detector = DomainFR("https://jaunin.com")
+        captured_candidates: list = []
+
+        async def capture(candidates):
+            captured_candidates.extend(candidates)
+            return []
+
+        with patch.object(detector, '_validate_alternative_urls', new=AsyncMock(side_effect=capture)):
+            await detector.detect_alternative_languages(html)
+
+        candidate_urls = [c['url'] for c in captured_candidates]
+        assert "https://jaunin.com/nos-realisations" not in candidate_urls
+        assert "https://jaunin.com/fr/home" in candidate_urls

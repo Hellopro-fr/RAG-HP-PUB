@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import {
@@ -12,6 +12,7 @@ import { AlbumProductList } from '../components/albums/AlbumProductList';
 import { DeleteImageOrProductDialog } from '../components/albums/DeleteImageOrProductDialog';
 import { ImageDetailSheet } from '../components/albums/ImageDetailSheet';
 import { Card } from '../components/ui/card';
+import { useToast } from '../components/ToastProvider';
 
 /**
  * Page détail `/albums/:domain` — Mix 1 (stacked products).
@@ -28,12 +29,31 @@ import { Card } from '../components/ui/card';
 export default function AlbumDetailPage({ token }) {
   const { domain: rawDomain } = useParams();
   const domain = decodeURIComponent(rawDomain);
+  const toast = useToast();
 
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('updated');
   const [pendingProductDelete, setPendingProductDelete] = useState(null);
   const [selected, setSelected] = useState(null);
+
+  // Mode d'affichage des images (stack/coverflow/reel/dial). Persisté en
+  // localStorage pour que l'utilisateur retrouve son mode préféré au refresh.
+  // Default = `coverflow` (cf. handoff design — README §"Default mode").
+  const [imageMode, setImageMode] = useState(() => {
+    try {
+      return localStorage.getItem('albumImageMode') || 'coverflow';
+    } catch {
+      return 'coverflow';
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('albumImageMode', imageMode);
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [imageMode]);
 
   const params = useMemo(() => ({ q, filter, sort }), [q, filter, sort]);
 
@@ -73,10 +93,39 @@ export default function AlbumDetailPage({ token }) {
   }, []);
 
   const handleRebuild = useCallback(
-    (p) => {
-      rebuildMutation.mutate({ domain, productId: p.id_produit });
+    async (p) => {
+      const label = p.nom || `#${p.id_produit}`;
+      try {
+        const res = await rebuildMutation.mutateAsync({
+          domain, productId: p.id_produit,
+        });
+        const dl = res?.downloaded ?? 0;
+        const fl = res?.failed ?? 0;
+        const sk = res?.skipped ?? 0;
+        const total = dl + fl + sk;
+        if (fl === 0 && sk === 0) {
+          toast.success(`${label} : ${dl}/${total} images re-téléchargées`);
+        } else if (dl > 0) {
+          toast.warn(`${label} : ${dl} ok · ${fl} échec · ${sk} skip`);
+        } else {
+          toast.error(`${label} : aucun re-téléchargement (${fl} échec · ${sk} skip)`);
+        }
+      } catch (err) {
+        // Distinction utile : 422 manifest legacy v1 vs autres erreurs
+        const status = err?.status;
+        const body = err?.body;
+        const detail = (typeof body === 'object' && body?.detail) || err?.message || 'erreur inconnue';
+        if (status === 422 && /legacy v1/i.test(String(detail))) {
+          toast.error(
+            `${label} : manifest v1 — re-ingérer côté BO pour migrer en v2`,
+            { durationMs: 8000 },
+          );
+        } else {
+          toast.error(`Rebuild ${label} échoué — ${detail}`);
+        }
+      }
     },
-    [domain, rebuildMutation],
+    [domain, rebuildMutation, toast],
   );
 
   const handleDelete = useCallback((p) => {
@@ -109,6 +158,8 @@ export default function AlbumDetailPage({ token }) {
         onFilter={setFilter}
         sort={sort}
         onSort={setSort}
+        imageMode={imageMode}
+        onImageMode={setImageMode}
       />
 
       {products.length === 0 ? (
@@ -125,6 +176,7 @@ export default function AlbumDetailPage({ token }) {
             onDelete={handleDelete}
             onLoadMore={() => productsQ.fetchNextPage()}
             hasMore={!!productsQ.hasNextPage}
+            imageMode={imageMode}
           />
         </Card>
       )}
