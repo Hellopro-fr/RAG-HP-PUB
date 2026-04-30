@@ -492,12 +492,12 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                 </div>
 
                 {error && (
-                  <div className="flex items-center gap-2 border-b border-destructive/40 bg-err-soft p-2 text-sm text-err">
+                  <div className="flex items-center gap-2 border-b border-err/40 bg-err-soft p-2 text-sm text-err">
                     <AlertCircle className="h-4 w-4" /> {error}
                   </div>
                 )}
                 {successMsg && (
-                  <div className="flex items-center gap-2 border-b border-success/40 bg-ok-soft p-2 text-sm text-ok">
+                  <div className="flex items-center gap-2 border-b border-ok/40 bg-ok-soft p-2 text-sm text-ok">
                     <CheckCircle className="h-4 w-4" /> {successMsg}
                   </div>
                 )}

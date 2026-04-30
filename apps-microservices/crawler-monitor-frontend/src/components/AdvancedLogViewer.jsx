@@ -145,14 +145,14 @@ const AdvancedLogViewer = ({ content, jobId }) => {
             <p className="text-xs text-ink-3">Erreurs</p>
           </div>
         </Card>
-        <Card className="flex items-center gap-3 border-warn/30 bg-warn/5 p-3">
+        <Card className="flex items-center gap-3 border-warn/30 bg-warn-soft p-3">
           <AlertTriangle className="h-7 w-7 text-warn" />
           <div>
             <p className="font-mono text-2xl font-bold text-warn">{levelStats.warn}</p>
             <p className="text-xs text-ink-3">Avertissements</p>
           </div>
         </Card>
-        <Card className="flex items-center gap-3 border-info/30 bg-info/5 p-3">
+        <Card className="flex items-center gap-3 border-info/30 bg-info-soft p-3">
           <Info className="h-7 w-7 text-info" />
           <div>
             <p className="font-mono text-2xl font-bold text-info">{levelStats.info}</p>

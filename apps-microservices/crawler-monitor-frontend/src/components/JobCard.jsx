@@ -21,9 +21,9 @@ const STATUS_MAP = {
 // Static class map — required so Tailwind keeps these classes in the bundle.
 const ACCENT_CLASSES = {
   info:        { badge: 'bg-info/15 text-info',               rail: 'border-l-info' },
-  success:     { badge: 'bg-ok-soft text-ok',         rail: 'border-l-success' },
-  destructive: { badge: 'bg-err-soft text-err', rail: 'border-l-destructive' },
-  warning:     { badge: 'bg-warn-soft text-warn',         rail: 'border-l-warning' },
+  success:     { badge: 'bg-ok-soft text-ok',         rail: 'border-l-ok' },
+  destructive: { badge: 'bg-err-soft text-err', rail: 'border-l-err' },
+  warning:     { badge: 'bg-warn-soft text-warn',         rail: 'border-l-warn' },
   muted:       { badge: 'bg-bg-2 text-ink-3',     rail: 'border-l-ink-3/40' },
 };
 
@@ -40,7 +40,7 @@ const JobCard = ({ job, onClick, isSelected }) => {
   const railClass = isSelected
     ? 'border-l-primary'
     : oomCount > 0
-      ? 'border-l-warning'
+      ? 'border-l-warn'
       : accent.rail;
 
   const hasMeta = job.crawl_mode === 'update' || oomCount > 0 || job.previous_crawl_id;

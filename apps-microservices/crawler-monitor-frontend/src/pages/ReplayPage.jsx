@@ -274,7 +274,7 @@ const ReplayPage = ({ token }) => {
                 'rounded px-2 py-0.5 text-xs transition-colors',
                 s === speed
                   ? 'bg-accent text-accent-foreground'
-                  : 'text-ink-3 hover:bg-accent hover:text-ink-0'
+                  : 'text-ink-3 hover:bg-bg-2 hover:text-ink-0'
               )}
             >
               {s}×
