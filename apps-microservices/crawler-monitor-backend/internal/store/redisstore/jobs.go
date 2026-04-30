@@ -11,8 +11,10 @@ type RawJob map[string]any
 func (c *Client) ListJobs(ctx context.Context) ([]RawJob, error) {
 	var keys []string
 	var cursor uint64
+	// COUNT=10000 keeps SCAN non-blocking on large keyspaces while avoiding
+	// excessive round-trips for typical (~few thousand) job populations.
 	for {
-		batch, next, err := c.rdb.Scan(ctx, cursor, JobPrefix+"*", 100).Result()
+		batch, next, err := c.rdb.Scan(ctx, cursor, JobPrefix+"*", 10000).Result()
 		if err != nil {
 			return nil, err
 		}

@@ -10,6 +10,8 @@ import (
 	"errors"
 	"sort"
 	"time"
+
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 )
 
 var windowMap = map[string]int64{
@@ -82,11 +84,11 @@ func AggregateDomains(jobs []RawJob, nowMs, windowMs int64) []DomainSummary {
 		if j.Domain == "" {
 			continue
 		}
-		t, err := time.Parse(time.RFC3339, j.StartTime)
-		if err != nil {
+		tMs := datetime.ParseStringMs(j.StartTime)
+		if tMs < 0 {
 			continue
 		}
-		if t.UnixMilli() < cutoff {
+		if tMs < cutoff {
 			continue
 		}
 		agg, exists := byDomain[j.Domain]
@@ -109,9 +111,8 @@ func AggregateDomains(jobs []RawJob, nowMs, windowMs int64) []DomainSummary {
 		if j.CrawlMode == "update" {
 			agg.updateCount++
 		}
-		ts := t.UnixMilli()
-		if ts > agg.lastRunTs {
-			agg.lastRunTs = ts
+		if tMs > agg.lastRunTs {
+			agg.lastRunTs = tMs
 			s := j.StartTime
 			agg.lastRunAt = &s
 			st := j.Status
@@ -149,14 +150,10 @@ func AggregateDomains(jobs []RawJob, nowMs, windowMs int64) []DomainSummary {
 	sort.SliceStable(out, func(i, j int) bool {
 		var ti, tj int64
 		if out[i].LastRunAt != nil {
-			if t, err := time.Parse(time.RFC3339, *out[i].LastRunAt); err == nil {
-				ti = t.UnixMilli()
-			}
+			ti = datetime.ParseStringMs(*out[i].LastRunAt)
 		}
 		if out[j].LastRunAt != nil {
-			if t, err := time.Parse(time.RFC3339, *out[j].LastRunAt); err == nil {
-				tj = t.UnixMilli()
-			}
+			tj = datetime.ParseStringMs(*out[j].LastRunAt)
 		}
 		return ti > tj // desc
 	})
@@ -191,20 +188,15 @@ func JobsForDomain(jobs []RawJob, domain string, windowMs, nowMs int64) DomainDe
 		if j.Domain != domain {
 			continue
 		}
-		t, err := time.Parse(time.RFC3339, j.StartTime)
-		if err != nil {
-			continue
-		}
-		if t.UnixMilli() < cutoff {
+		tMs := datetime.ParseStringMs(j.StartTime)
+		if tMs < 0 || tMs < cutoff {
 			continue
 		}
 		filtered = append(filtered, j)
 	}
 	// Sort newest first.
 	sort.SliceStable(filtered, func(i, j int) bool {
-		ti, _ := time.Parse(time.RFC3339, filtered[i].StartTime)
-		tj, _ := time.Parse(time.RFC3339, filtered[j].StartTime)
-		return ti.UnixMilli() > tj.UnixMilli()
+		return datetime.ParseStringMs(filtered[i].StartTime) > datetime.ParseStringMs(filtered[j].StartTime)
 	})
 
 	// Build chain via previous_crawl_id starting from the most recent job.
