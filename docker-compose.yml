@@ -714,12 +714,12 @@ services:
       - MYSQL_PORT=${GATEWAY_MYSQL_PORT:-3306}
       - MYSQL_USER=${GATEWAY_MYSQL_USER:-gateway_user}
       - MYSQL_PASS=${GATEWAY_MYSQL_PASS:-gateway_pass}
-      - MYSQL_DB=${ACCOUNT_MYSQL_DB:-account_db}
+      - MYSQL_DB=${GATEWAY_MYSQL_DB:-account_db}
       # ── HelloPro upstream auth ───────────────────────────────────────────
-      - HELLOPRO_AUTH_URL=${HELLOPRO_AUTH_URL}
+      - HELLOPRO_AUTH_URL=${AUTH_URL}
       - HELLOPRO_AUTH_TIMEOUT_SECONDS=${HELLOPRO_AUTH_TIMEOUT_SECONDS:-5}
       # ── JWT signing-key encryption (Fernet, base64-urlsafe 32 bytes) ─────
-      - JWT_KEY_ENCRYPTION_KEY=${JWT_KEY_ENCRYPTION_KEY}
+      - JWT_KEY_ENCRYPTION_KEY=${JWT_KEY_AUTH}
       - JWT_ISSUER=${JWT_ISSUER:-https://account.hellopro.eu}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
       - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-30}
@@ -744,14 +744,14 @@ services:
       dockerfile: apps-microservices/account-service-frontend/Dockerfile
     container_name: account-service-frontend
     profiles: ["app"]
-    expose: ["80"]
+    expose: ["8080"]
     depends_on:
       account-service-backend:
         condition: service_healthy
     networks:
       - services-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:80/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
