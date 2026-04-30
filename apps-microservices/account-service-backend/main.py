@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.responses import JSONResponse
 
+from app.middleware import RequestIdMiddleware
 from app.routers import (
     admin_clients,
     authorize,
@@ -23,6 +24,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="account-service-backend", lifespan=lifespan)
+app.add_middleware(RequestIdMiddleware)
 app.include_router(health.router)
 app.include_router(jwks.router)
 app.include_router(authorize.router)
