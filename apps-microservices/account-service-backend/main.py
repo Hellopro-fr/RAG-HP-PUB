@@ -5,6 +5,7 @@ from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.responses import JSONResponse
 
 from app.routers import (
+    admin_clients,
     authorize,
     health,
     introspect,
@@ -30,6 +31,7 @@ app.include_router(revoke.router)
 app.include_router(introspect.router)
 app.include_router(userinfo.router)
 app.include_router(logout.router)
+app.include_router(admin_clients.router)
 
 
 @app.exception_handler(FastAPIHTTPException)
