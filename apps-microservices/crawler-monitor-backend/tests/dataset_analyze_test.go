@@ -33,14 +33,14 @@ func TestDatasetAnalyze_NoDuplicates(t *testing.T) {
 	}
 	var body map[string]any
 	decodeJSON(t, resp.Body, &body)
-	if body["total"] != float64(4) {
-		t.Errorf("total=%v want 4", body["total"])
+	if body["totalItems"] != float64(4) {
+		t.Errorf("total=%v want 4", body["totalItems"])
 	}
-	if body["unique"] != float64(4) {
-		t.Errorf("unique=%v want 4", body["unique"])
+	if body["uniqueUrls"] != float64(4) {
+		t.Errorf("unique=%v want 4", body["uniqueUrls"])
 	}
-	if body["duplicates"] != float64(0) {
-		t.Errorf("duplicates=%v want 0", body["duplicates"])
+	if body["duplicateCount"] != float64(0) {
+		t.Errorf("duplicates=%v want 0", body["duplicateCount"])
 	}
 	byURL, _ := body["by_url"].([]any)
 	if len(byURL) != 0 {
@@ -69,14 +69,14 @@ func TestDatasetAnalyze_WithDuplicates(t *testing.T) {
 	var body map[string]any
 	decodeJSON(t, resp.Body, &body)
 
-	if body["total"] != float64(4) {
-		t.Errorf("total=%v want 4", body["total"])
+	if body["totalItems"] != float64(4) {
+		t.Errorf("total=%v want 4", body["totalItems"])
 	}
-	if body["unique"] != float64(2) {
-		t.Errorf("unique=%v want 2", body["unique"])
+	if body["uniqueUrls"] != float64(2) {
+		t.Errorf("unique=%v want 2", body["uniqueUrls"])
 	}
-	if body["duplicates"] != float64(2) {
-		t.Errorf("duplicates=%v want 2", body["duplicates"])
+	if body["duplicateCount"] != float64(2) {
+		t.Errorf("duplicates=%v want 2", body["duplicateCount"])
 	}
 	byURL, _ := body["by_url"].([]any)
 	if len(byURL) != 1 {
@@ -100,7 +100,7 @@ func TestDatasetAnalyze_Empty(t *testing.T) {
 	}
 	var body map[string]any
 	decodeJSON(t, resp.Body, &body)
-	if body["total"] != float64(0) || body["unique"] != float64(0) || body["duplicates"] != float64(0) {
+	if body["totalItems"] != float64(0) || body["uniqueUrls"] != float64(0) || body["duplicateCount"] != float64(0) {
 		t.Errorf("expected zeros, got %v", body)
 	}
 }
@@ -140,8 +140,8 @@ func TestDatasetDedup_KeepsNewest(t *testing.T) {
 	}
 	var body map[string]any
 	decodeJSON(t, resp.Body, &body)
-	if body["deleted"] != float64(2) {
-		t.Errorf("deleted=%v want 2", body["deleted"])
+	if body["removedCount"] != float64(2) {
+		t.Errorf("deleted=%v want 2", body["removedCount"])
 	}
 
 	// Vérifie qu'il reste 2 fichiers (1 dup le plus récent + 1 unique)
@@ -167,7 +167,7 @@ func TestDatasetDedup_NoDuplicates(t *testing.T) {
 	resp, _ := postJSON(srv.URL+"/api/jobs/"+jobID+"/dataset/deduplicate", tok, nil)
 	var body map[string]any
 	decodeJSON(t, resp.Body, &body)
-	if body["deleted"] != float64(0) {
-		t.Errorf("deleted=%v want 0", body["deleted"])
+	if body["removedCount"] != float64(0) {
+		t.Errorf("deleted=%v want 0", body["removedCount"])
 	}
 }

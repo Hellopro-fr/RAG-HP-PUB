@@ -19,12 +19,25 @@ type DupGroup struct {
 }
 
 // AnalyzeDup contient le résultat de l'analyse des doublons pour un dataset.
+// Field names mirrent server.js:1206-1212 (totalItems/uniqueUrls/duplicateCount/
+// duplicatesExample) — le frontend (`DuplicatesTab.jsx:24-38`) lit ces noms.
+// `by_url` est conservé en plus comme champ Go-only borné (cf. dupExampleMax)
+// pour éviter de renvoyer des dizaines de MB qui font crasher le frontend
+// avec un `Maximum call stack size exceeded` durant la React Query structural
+// sharing.
 type AnalyzeDup struct {
-	Total      int        `json:"total"`
-	Unique     int        `json:"unique"`
-	Duplicates int        `json:"duplicates"`
-	ByURL      []DupGroup `json:"by_url"`
+	TotalItems        int        `json:"totalItems"`
+	UniqueUrls        int        `json:"uniqueUrls"`
+	DuplicateCount    int        `json:"duplicateCount"`
+	DuplicatesExample []string   `json:"duplicatesExample"`
+	ByURL             []DupGroup `json:"by_url"`
 }
+
+// dupExampleMax limite le nombre d'URLs en exemple + le nombre de groupes
+// renvoyés en détail. Express ne renvoyait que 5 exemples ; on conserve la
+// liste des groupes pour les jobs de petite taille mais on coupe au-delà.
+const dupExampleMax = 5
+const dupGroupsMax = 200
 
 // rawEntry est la forme minimale attendue dans les fichiers JSON de dataset.
 type rawEntry struct {
@@ -39,7 +52,8 @@ func AnalyzeDuplicates(ctx context.Context, storage *filestore.Storage, jobID st
 	dir := dirs.mainDir
 
 	result := &AnalyzeDup{
-		ByURL: []DupGroup{},
+		DuplicatesExample: []string{},
+		ByURL:             []DupGroup{},
 	}
 
 	if dir == "" {
@@ -67,21 +81,24 @@ func AnalyzeDuplicates(ctx context.Context, storage *filestore.Storage, jobID st
 		if err := json.Unmarshal(raw, &data); err != nil || data.URL == "" {
 			continue
 		}
-		result.Total++
+		result.TotalItems++
 		urlMap[data.URL] = append(urlMap[data.URL], e.Name())
 	}
 
-	result.Unique = len(urlMap)
+	result.UniqueUrls = len(urlMap)
 
 	// Construit les groupes de doublons (count > 1 seulement)
 	for u, files := range urlMap {
 		if len(files) > 1 {
-			result.Duplicates += len(files) - 1
+			result.DuplicateCount += len(files) - 1
 			result.ByURL = append(result.ByURL, DupGroup{
 				URL:   u,
 				Count: len(files),
 				Files: files,
 			})
+			if len(result.DuplicatesExample) < dupExampleMax {
+				result.DuplicatesExample = append(result.DuplicatesExample, u)
+			}
 		}
 	}
 
@@ -89,6 +106,10 @@ func AnalyzeDuplicates(ctx context.Context, storage *filestore.Storage, jobID st
 	sort.Slice(result.ByURL, func(i, j int) bool {
 		return result.ByURL[i].URL < result.ByURL[j].URL
 	})
+	// Cap pour ne jamais renvoyer un payload qui fait exploser React Query.
+	if len(result.ByURL) > dupGroupsMax {
+		result.ByURL = result.ByURL[:dupGroupsMax]
+	}
 
 	return result, nil
 }
