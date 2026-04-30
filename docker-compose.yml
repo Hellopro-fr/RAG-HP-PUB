@@ -693,13 +693,14 @@ services:
       # pre-filled in Swagger UI automatically.
       - GATEWAY_DOCS_ADMIN_EMAILS=${GATEWAY_DOCS_ADMIN_EMAILS:-}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
-      # ── account-service OAuth client (demo /auth/account/* routes) ───────
-      - OAUTH_AUTHORIZE_URL=${OAUTH_AUTHORIZE_URL:-http://172.20.13.43:8080/signin}
-      - OAUTH_TOKEN_URL=${OAUTH_TOKEN_URL:-http://account-service-backend:8000/token}
-      - OAUTH_REVOKE_URL=${OAUTH_REVOKE_URL:-http://account-service-backend:8000/revoke}
-      - OAUTH_ACCOUNT_CLIENT_ID=${OAUTH_ACCOUNT_CLIENT_ID:-api-gateway}
-      - OAUTH_ACCOUNT_CLIENT_SECRET=${OAUTH_ACCOUNT_CLIENT_SECRET}
-      - OAUTH_ACCOUNT_REDIRECT_URI=${OAUTH_ACCOUNT_REDIRECT_URI:-http://172.20.13.43:8500/auth/account/callback}
+      # ── account-service consumer (simplified service-name flow) ──────────
+      - ACCOUNT_SIGNIN_URL=${ACCOUNT_SIGNIN_URL:-http://172.20.13.43:8080/signin}
+      - ACCOUNT_LOGIN_URL=${ACCOUNT_LOGIN_URL:-http://account-service-backend:8000/login}
+      - ACCOUNT_EXCHANGE_URL=${ACCOUNT_EXCHANGE_URL:-http://account-service-backend:8000/sessions/exchange}
+      - ACCOUNT_REVOKE_URL=${ACCOUNT_REVOKE_URL:-http://account-service-backend:8000/revoke}
+      - ACCOUNT_SERVICE_NAME=${ACCOUNT_SERVICE_NAME:-api-gateway}
+      # Optional, only needed for /revoke during logout:
+      - OAUTH_ACCOUNT_CLIENT_SECRET=${OAUTH_ACCOUNT_CLIENT_SECRET-}
     # depends_on:
     #   mysql:
     #     condition: service_healthy

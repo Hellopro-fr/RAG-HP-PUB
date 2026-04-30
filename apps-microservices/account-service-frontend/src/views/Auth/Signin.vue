@@ -218,7 +218,7 @@ import FullScreenLayout from '@/components/layout/FullScreenLayout.vue'
 import { useOAuthFlow } from '@/composables/useOAuthFlow'
 
 const router = useRouter()
-const { params, submitLogin } = useOAuthFlow()
+const { flow, submitLogin } = useOAuthFlow()
 
 const username = ref('')
 const password = ref('')
@@ -237,13 +237,16 @@ const handleSubmit = async () => {
     errorMessage.value = 'All fields are required'
     return
   }
-  if (!params.value) {
-    errorMessage.value = 'Missing OAuth parameters.'
+  if (!flow.value) {
+    errorMessage.value = 'Missing login parameters (service or OAuth).'
     return
   }
   submitting.value = true
   try {
-    const res = await submitLogin(username.value, password.value)
+    const res = (await submitLogin(username.value, password.value)) as {
+      redirect?: string
+      next?: string
+    }
     if (res.redirect) {
       window.location.assign(res.redirect)
       return

@@ -19,6 +19,7 @@ from app.routers import (
     health,
     introspect,
     jwks,
+    login_simple,
     logout,
     revoke,
     token,
@@ -60,6 +61,7 @@ app.include_router(introspect.router)
 app.include_router(userinfo.router)
 app.include_router(logout.router)
 app.include_router(admin_clients.router)
+app.include_router(login_simple.router)
 
 
 @app.exception_handler(FastAPIHTTPException)

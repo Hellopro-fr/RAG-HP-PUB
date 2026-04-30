@@ -98,3 +98,28 @@ class ClientSummary(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     error_description: str | None = None
+
+
+# ─── Simplified service-name flow ─────────────────────────────────────────────
+
+
+class LoginRequest(BaseModel):
+    """Submitted by the SPA after the user fills in the signin form."""
+
+    service: str
+    username: str
+    password: str
+    next: str = "/"
+
+
+class LoginResponse(BaseModel):
+    """SPA receives this; the browser then follows `redirect`."""
+
+    redirect: str
+
+
+class ExchangeRequest(BaseModel):
+    """Submitted server-to-server by the consumer's callback."""
+
+    service: str
+    login_session: str

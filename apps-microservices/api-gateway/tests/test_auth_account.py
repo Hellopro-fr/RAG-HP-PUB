@@ -1,17 +1,8 @@
-"""Smoke tests for the demo OAuth client integration with account-service."""
+"""Smoke tests for the account-service consumer integration."""
 
 import importlib
 
 from app.routers import auth_account
-
-
-def test_pkce_pair_returns_url_safe_strings():
-    verifier, challenge = auth_account._pkce_pair()
-    assert len(verifier) >= 43
-    assert "=" not in verifier
-    assert "=" not in challenge
-    assert "+" not in challenge
-    assert "/" not in challenge
 
 
 def test_module_exposes_routes():
@@ -23,5 +14,7 @@ def test_module_exposes_routes():
 
 def test_env_defaults_present():
     importlib.reload(auth_account)
-    assert auth_account.OAUTH_CLIENT_ID
-    assert auth_account.OAUTH_AUTHORIZE_URL.endswith("/signin")
+    assert auth_account.ACCOUNT_SERVICE_NAME
+    assert auth_account.ACCOUNT_SIGNIN_URL.endswith("/signin")
+    assert auth_account.ACCOUNT_LOGIN_URL.endswith("/login")
+    assert auth_account.ACCOUNT_EXCHANGE_URL.endswith("/sessions/exchange")

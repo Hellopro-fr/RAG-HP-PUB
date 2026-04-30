@@ -63,3 +63,25 @@ class SigningKey(Model):
 
     class Meta:
         table = "signing_key"
+
+
+class LoginSession(Model):
+    """One-shot, short-lived handoff token for the simplified login flow.
+
+    Issued by POST /login after credential validation, consumed by
+    POST /sessions/exchange. Bound to a single OAuthClient (service)
+    so that interception by another service is harmless.
+    """
+
+    token_hash = fields.CharField(max_length=64, pk=True)
+    client_id = fields.CharField(max_length=64, index=True)
+    sub = fields.CharField(max_length=128)
+    user_email = fields.CharField(max_length=255, null=True)
+    user_display_name = fields.CharField(max_length=255, null=True)
+    next_path = fields.CharField(max_length=512, default="/")
+    issued_at = fields.DatetimeField(auto_now_add=True)
+    expires_at = fields.DatetimeField(index=True)
+    consumed_at = fields.DatetimeField(null=True)
+
+    class Meta:
+        table = "login_session"
