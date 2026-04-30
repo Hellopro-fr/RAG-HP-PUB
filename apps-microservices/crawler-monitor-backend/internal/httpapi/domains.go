@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/domains"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 	"github.com/go-chi/chi/v5"
@@ -22,9 +23,7 @@ func rawJobsToDomain(rawJobs []redisstore.RawJob) []domains.RawJob {
 		if v, ok := rj["domain"].(string); ok {
 			j.Domain = v
 		}
-		if v, ok := rj["start_time"].(string); ok {
-			j.StartTime = v
-		}
+		j.StartTime = datetime.AnyToISO(rj["start_time"])
 		if v, ok := rj["status"].(string); ok {
 			j.Status = v
 		}
