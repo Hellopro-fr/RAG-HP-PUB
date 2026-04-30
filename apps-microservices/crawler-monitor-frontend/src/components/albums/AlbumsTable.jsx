@@ -36,15 +36,15 @@ function AlbumRow({ index, style, rows, onSelectDomain, onRequestDelete }) {
           onSelectDomain(r.domain);
         }
       }}
-      className={`grid ${GRID_COLS} cursor-pointer items-center border-b border-border px-3 hover:bg-accent/40 focus:outline-none focus-visible:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring`}
+      className={`grid ${GRID_COLS} cursor-pointer items-center border-b border-hairline px-3 hover:bg-bg-2 focus:outline-none focus-visible:bg-bg-2 focus-visible:ring-2 focus-visible:ring-accent`}
     >
       <div className="truncate font-mono text-sm">{r.domain}</div>
       <div className="font-mono text-sm">{r.product_count ?? 0}</div>
       <div className="font-mono text-sm">{r.image_count ?? 0}</div>
-      <div className={`font-mono text-sm ${r.error_count > 0 ? 'font-semibold text-destructive' : ''}`}>
+      <div className={`font-mono text-sm ${r.error_count > 0 ? 'font-semibold text-err' : ''}`}>
         {r.error_count ?? 0}
       </div>
-      <div className="text-xs text-muted-foreground">{formatDate(r.last_update)}</div>
+      <div className="text-xs text-ink-3">{formatDate(r.last_update)}</div>
       <div className="font-mono text-xs">{syncPercent(r)}</div>
       <div
         className="flex justify-end"
@@ -58,7 +58,7 @@ function AlbumRow({ index, style, rows, onSelectDomain, onRequestDelete }) {
           aria-label={`Supprimer l'album ${r.domain}`}
           onClick={() => onRequestDelete(r)}
         >
-          <Trash2 className="h-4 w-4 text-destructive" />
+          <Trash2 className="h-4 w-4 text-err" />
         </Button>
       </div>
     </div>
@@ -78,7 +78,7 @@ export function AlbumsTable({ rows, onSelectDomain, onRequestDelete, sort, onSor
     return (
       <button
         type="button"
-        className={`py-2 text-left text-xs text-muted-foreground hover:text-foreground ${active ? 'font-semibold text-foreground' : ''} ${className}`}
+        className={`py-2 text-left text-xs text-ink-3 hover:text-ink-0 ${active ? 'font-semibold text-ink-0' : ''} ${className}`}
         onClick={() => onSort(k)}
       >
         {label}{arrow}
@@ -90,8 +90,9 @@ export function AlbumsTable({ rows, onSelectDomain, onRequestDelete, sort, onSor
   const listHeight = Math.min(MAX_LIST_HEIGHT, Math.max(ROW_HEIGHT, rows.length * ROW_HEIGHT));
 
   return (
-    <div>
-      <div className={`grid ${GRID_COLS} border-b border-border bg-muted/30 px-3`}>
+    <div className="overflow-x-auto">
+      <div className="min-w-[600px]">
+      <div className={`grid ${GRID_COLS} border-b border-hairline bg-bg-2 px-3`}>
         <HeadCell k="domain"        label="Domaine" />
         <HeadCell k="product_count" label="Produits" />
         <HeadCell k="image_count"   label="Images" />
@@ -108,6 +109,7 @@ export function AlbumsTable({ rows, onSelectDomain, onRequestDelete, sort, onSor
         style={{ height: listHeight }}
         overscanCount={6}
       />
+      </div>
     </div>
   );
 }

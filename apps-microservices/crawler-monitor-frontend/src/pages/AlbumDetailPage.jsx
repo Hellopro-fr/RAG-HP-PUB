@@ -135,7 +135,7 @@ export default function AlbumDetailPage({ token }) {
   if (productsQ.isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+        <RefreshCw className="h-8 w-8 animate-spin text-ink-3" />
       </div>
     );
   }
@@ -163,7 +163,7 @@ export default function AlbumDetailPage({ token }) {
       />
 
       {products.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">
+        <Card className="p-8 text-center text-ink-3">
           Pas encore de produits téléchargés pour ce domaine.
         </Card>
       ) : (

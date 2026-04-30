@@ -18,13 +18,13 @@ import { cn } from '../lib/utils';
 
 const SEVERITY_STYLES = {
   critical: {
-    surface: 'border-destructive/40 bg-destructive/10 text-destructive',
-    chip:    'bg-destructive/20 text-destructive',
+    surface: 'border-err/40 bg-err-soft text-err',
+    chip:    'bg-err-soft text-err',
     Icon:    AlertCircle,
   },
   warn: {
-    surface: 'border-warning/40 bg-warning/10 text-warning',
-    chip:    'bg-warning/20 text-warning',
+    surface: 'border-warn/40 bg-warn-soft text-warn',
+    chip:    'bg-warn-soft text-warn',
     Icon:    AlertTriangle,
   },
   info: {
@@ -37,7 +37,7 @@ const SEVERITY_STYLES = {
 // Surface dominante quand il y a au moins une alerte critique : fond plein
 // destructive, lisible d'un coup d'œil en pleine nuit.
 const CRITICAL_DOMINANT_SURFACE =
-  'bg-destructive text-destructive-foreground border-destructive';
+  'bg-err text-err-foreground border-err';
 
 const SEVERITY_LABELS = {
   critical: 'Critique',

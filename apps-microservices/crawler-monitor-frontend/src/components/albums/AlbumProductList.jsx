@@ -34,7 +34,7 @@ function ProductRow({
     return (
       <div style={style} className="px-1 pb-2">
         {hasMore && (
-          <div className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+          <div className="rounded-md border border-dashed border-hairline p-3 text-center text-xs text-ink-3">
             Chargement…
           </div>
         )}

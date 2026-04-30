@@ -27,7 +27,7 @@ const IMAGE_MODES = [
 ];
 
 const SELECT_CLS =
-  'h-8 appearance-none rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+  'h-8 appearance-none rounded-md border border-hairline bg-bg-1 px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent';
 
 /**
  * Toolbar de la page détail album : recherche produit (nom ou id), sélecteur
@@ -52,7 +52,7 @@ export function AlbumToolbar({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-[200px] flex-1">
-        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
         <Input
           className="pl-8"
           placeholder="Rechercher un produit (nom ou id)"
@@ -63,7 +63,7 @@ export function AlbumToolbar({
 
       {onImageMode && (
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-mono uppercase text-muted-foreground tracking-wider">
+          <span className="text-xs font-mono uppercase text-ink-3 tracking-wider">
             Vue
           </span>
           <div className="flex gap-1">

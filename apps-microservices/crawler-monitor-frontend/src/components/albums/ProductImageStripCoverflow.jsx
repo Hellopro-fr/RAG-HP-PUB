@@ -11,15 +11,15 @@ function CoverflowImage({ img, domain }) {
   const src = `/cdn-images/${encodeURIComponent(domain)}/${img.thumb}`;
   if (isError) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <AlertCircle className="h-5 w-5 text-destructive" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <AlertCircle className="h-5 w-5 text-err" />
       </div>
     );
   }
   if (isDownloading) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="flex h-full w-full items-center justify-center bg-bg-2">
+        <Loader2 className="h-5 w-5 animate-spin text-ink-3" />
       </div>
     );
   }
@@ -99,7 +99,7 @@ export default function ProductImageStripCoverflow({ images, domain, onSelectIma
                 onClick={() => isCenter ? onSelectImage(img) : goTo(i)}
               >
                 <div
-                  className="relative h-full w-full cursor-pointer overflow-hidden rounded border border-border shadow-[0_12px_32px_-10px_rgba(0,0,0,0.85)]"
+                  className="relative h-full w-full cursor-pointer overflow-hidden rounded border border-hairline shadow-[0_12px_32px_-10px_rgba(0,0,0,0.85)]"
                   style={{ backfaceVisibility: 'hidden' }}
                 >
                   <CoverflowImage img={img} domain={domain} />
@@ -131,7 +131,7 @@ export default function ProductImageStripCoverflow({ images, domain, onSelectIma
         <button
           type="button"
           onClick={() => goTo(safeCenter - 1)}
-          className="absolute left-2 top-1/2 z-50 -translate-y-1/2 rounded-full border border-border bg-card/80 p-1.5 text-muted-foreground backdrop-blur hover:text-foreground"
+          className="absolute left-2 top-1/2 z-50 -translate-y-1/2 rounded-full border border-hairline bg-surface/80 p-1.5 text-ink-3 backdrop-blur hover:text-ink-0"
           aria-label="Image précédente"
           disabled={total <= 1}
         >
@@ -140,7 +140,7 @@ export default function ProductImageStripCoverflow({ images, domain, onSelectIma
         <button
           type="button"
           onClick={() => goTo(safeCenter + 1)}
-          className="absolute right-2 top-1/2 z-50 -translate-y-1/2 rounded-full border border-border bg-card/80 p-1.5 text-muted-foreground backdrop-blur hover:text-foreground"
+          className="absolute right-2 top-1/2 z-50 -translate-y-1/2 rounded-full border border-hairline bg-surface/80 p-1.5 text-ink-3 backdrop-blur hover:text-ink-0"
           aria-label="Image suivante"
           disabled={total <= 1}
         >
@@ -149,17 +149,17 @@ export default function ProductImageStripCoverflow({ images, domain, onSelectIma
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground min-w-0">
-          <span className="tabular-nums text-foreground">
+        <div className="flex items-center gap-2 font-mono text-[11px] text-ink-3 min-w-0">
+          <span className="tabular-nums text-ink-0">
             {String(safeCenter + 1).padStart(2, '0')}
-            <span className="text-muted-foreground">/{total}</span>
+            <span className="text-ink-3">/{total}</span>
           </span>
           <span className="text-border">·</span>
           <span className="truncate">{focused.filename} · {focused.status}</span>
         </div>
         <div className="flex h-1 flex-1 max-w-[200px] overflow-hidden rounded bg-secondary">
           <div
-            className="h-full bg-primary transition-[width] duration-500"
+            className="h-full bg-accent transition-[width] duration-500"
             style={{ width: `${((safeCenter + 1) / total) * 100}%` }}
           />
         </div>
