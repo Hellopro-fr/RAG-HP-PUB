@@ -60,7 +60,7 @@ async def authorize(request: Request, req: AuthorizeRequest):
 
     try:
         user = await validate_credentials(
-            req.email,
+            req.username,
             req.password,
             str(settings.HELLOPRO_AUTH_URL),
             timeout=settings.HELLOPRO_AUTH_TIMEOUT_SECONDS,

@@ -9,7 +9,7 @@ async def test_rate_limit_authorize(client, monkeypatch):
     from app.core.settings import get_settings
     get_settings.cache_clear()
     payload = {
-        "email": "u@x", "password": "p", "client_id": "nope",
+        "username": "u@x", "password": "p", "client_id": "nope",
         "redirect_uri": "https://x", "state": "s",
         "code_challenge": "c", "code_challenge_method": "S256",
     }

@@ -33,7 +33,7 @@ async def test_authorize_happy_path_returns_redirect(client, monkeypatch):
         return_value=httpx.Response(200, json={"email": "u@x", "display_name": "U"})
     )
     r = await client.post("/authorize", json={
-        "email": "u@x", "password": "p",
+        "username": "u@x", "password": "p",
         "client_id": "svc",
         "redirect_uri": "https://svc.hellopro.eu/cb",
         "state": "s", "code_challenge": "c",
@@ -48,7 +48,7 @@ async def test_authorize_happy_path_returns_redirect(client, monkeypatch):
 async def test_authorize_unknown_client_returns_400(client, monkeypatch):
     await _setup(monkeypatch)
     r = await client.post("/authorize", json={
-        "email": "u@x", "password": "p", "client_id": "nope",
+        "username": "u@x", "password": "p", "client_id": "nope",
         "redirect_uri": "https://x", "state": "s", "code_challenge": "c",
         "code_challenge_method": "S256",
     })
@@ -59,7 +59,7 @@ async def test_authorize_unknown_client_returns_400(client, monkeypatch):
 async def test_authorize_bad_redirect_uri_returns_400(client, monkeypatch):
     await _setup(monkeypatch)
     r = await client.post("/authorize", json={
-        "email": "u@x", "password": "p", "client_id": "svc",
+        "username": "u@x", "password": "p", "client_id": "svc",
         "redirect_uri": "https://attacker.example/cb",
         "state": "s", "code_challenge": "c",
         "code_challenge_method": "S256",
@@ -75,7 +75,7 @@ async def test_authorize_upstream_401_returns_401(client, monkeypatch):
         return_value=httpx.Response(401)
     )
     r = await client.post("/authorize", json={
-        "email": "u@x", "password": "wrong", "client_id": "svc",
+        "username": "u@x", "password": "wrong", "client_id": "svc",
         "redirect_uri": "https://svc.hellopro.eu/cb",
         "state": "s", "code_challenge": "c",
         "code_challenge_method": "S256",

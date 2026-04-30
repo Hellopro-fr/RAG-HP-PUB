@@ -43,7 +43,7 @@ async def test_full_oauth_flow(client, monkeypatch):
 
     # /authorize
     r = await client.post("/authorize", json={
-        "email": "u@hellopro.fr", "password": "p",
+        "username": "u@hellopro.fr", "password": "p",
         "client_id": "svc",
         "redirect_uri": "https://svc.hellopro.eu/cb",
         "state": "abc", "code_challenge": challenge,

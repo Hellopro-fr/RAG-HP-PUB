@@ -28,11 +28,11 @@ export function useOAuthFlow() {
     }
   })
 
-  async function submitLogin(email: string, password: string) {
+  async function submitLogin(username: string, password: string) {
     const p = params.value
     if (!p) throw new Error('missing_oauth_params')
     return await postJson<{ redirect?: string; next?: string }>('/authorize', {
-      email, password, ...p,
+      username, password, ...p,
     })
   }
 

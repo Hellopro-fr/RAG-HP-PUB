@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class AuthorizeRequest(BaseModel):
-    email: str
+    username: str
     password: str
     client_id: str
     redirect_uri: str
