@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class AuthorizeRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     client_id: str
     redirect_uri: str
