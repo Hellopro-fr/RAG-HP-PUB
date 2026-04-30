@@ -1,3 +1,9 @@
+/**
+ * One row in `timing.jsonl`. Phase fields (`*_ms`) feed the aggregator;
+ * `detect_method` and `detect_ok` are observational fields preserved in
+ * the JSONL trace for ad-hoc inspection (jq, grep) but not aggregated
+ * into `TimingSummary`.
+ */
 export interface PageTimingEntry {
     url: string;
     t: number;             // dequeue timestamp (ms since epoch)
@@ -72,3 +78,5 @@ export interface AggregatorState {
     samples: PoolSample[];
     detectMaxConcurrency: number;
 }
+
+export type PhaseKey = "wait_ms" | "nav_ms" | "pre_detect_ms" | "detect_ms" | "post_ms" | "total_ms";

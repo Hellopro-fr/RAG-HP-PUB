@@ -1,6 +1,7 @@
 import type {
     AggregatorState,
     PageTimingEntry,
+    PhaseKey,
     PhaseStats,
     PoolSample,
     TimingSummary,
@@ -67,11 +68,14 @@ export function buildSummary(state: AggregatorState): TimingSummary {
     const startedAt = state.startedAt ?? 0;
     let endAt = startedAt;
     if (N > 0) {
-        endAt = Math.max(...state.pages.map((p: PageTimingEntry) => p.t + p.total_ms));
+        for (const p of state.pages) {
+            const candidate = p.t + p.total_ms;
+            if (candidate > endAt) endAt = candidate;
+        }
     }
     const durationS = N === 0 ? 0 : Math.max(1, Math.round((endAt - startedAt) / 1000));
 
-    const phaseValues = (key: keyof PageTimingEntry): number[] =>
+    const phaseValues = (key: PhaseKey): number[] =>
         state.pages.map((p: PageTimingEntry) => Number(p[key] ?? 0));
 
     const totalSum = phaseValues("total_ms").reduce((a: number, b: number) => a + b, 0);

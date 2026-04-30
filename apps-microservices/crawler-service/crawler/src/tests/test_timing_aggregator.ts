@@ -144,4 +144,4 @@ function assertClose(actual: number, expected: number, tol: number, msg: string)
 }
 
 console.log(`timing_aggregator: ${passed} passed, ${failed} failed`);
-if (failed > 0) process.exit(1);
+if (failed > 0 || passed === 0) process.exit(1);
