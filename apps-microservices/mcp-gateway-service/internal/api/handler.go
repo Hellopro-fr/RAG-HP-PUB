@@ -148,6 +148,43 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	apiMux.HandleFunc("/api/v1/slack/status", h.handleSlackStatus)
 	apiMux.HandleFunc("/api/v1/slack/test", h.handleSlackTest)
 
+	// ── BDD registry routes (Hellopro BDD tables onglet) ─────────────────────
+	// Gateway-owned CRUD over bdd_used_tables / bdd_used_fields.
+	//
+	// Bulk / export / import are registered with exact paths BEFORE the
+	// trailing-slash catch-all below. net/http's ServeMux prefers the
+	// longer literal match over a prefix pattern, so these never fall into
+	// handleBDDUsedTableByID (which would otherwise try to parse "bulk",
+	// "export", or "import" as a UUID).
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/bulk", func(w http.ResponseWriter, r *http.Request) {
+		// /bulk multiplexes by method:
+		//   POST   → atomic multi-create (handleBDDUsedBulkCreate)
+		//   PATCH  → bulk update database_id / is_active
+		//   DELETE → bulk delete (cascades scope-token / OAuth2 joins)
+		switch r.Method {
+		case http.MethodPost:
+			h.handleBDDUsedBulkCreate(w, r)
+		case http.MethodPatch, http.MethodDelete:
+			h.handleBDDUsedBulkUpdateOrDelete(w, r)
+		default:
+			w.Header().Set("Allow", "POST, PATCH, DELETE")
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		}
+	})
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/export", h.handleBDDUsedExport)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/import", h.handleBDDUsedImport)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/import-doc", h.handleBDDUsedImportDoc)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/doc", h.handleBDDUsedDoc)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables", h.handleBDDUsedTables)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/", h.handleBDDUsedTableByID)
+	apiMux.HandleFunc("/api/v1/bdd/used/meta", h.handleBDDUsedMeta)
+
+	// ── BDD catalog read-only proxy ──────────────────────────────────────────
+	// Always mounted; the handlers return 503 when BDD_CATALOG_BASE_URL /
+	// BDD_CATALOG_TOKEN are unset, mirroring the Leexi proxy semantics.
+	apiMux.HandleFunc("/api/v1/bdd/catalog/databases", h.handleBDDCatalogDatabases)
+	apiMux.HandleFunc("/api/v1/bdd/catalog/databases/", h.handleBDDCatalogTablesAndFields)
+
 	// ── OAuth2 client routes ─────────────────────────────────────────────────
 	if h.oauth2Repo != nil {
 		apiMux.HandleFunc("/api/v1/oauth2/clients", h.handleOAuth2Clients)
@@ -449,6 +486,13 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		mux.HandleFunc("/api/v1/public/install-guides/configs/", h.handlePublicConfigBySlug)
 	}
 
+	// Public BDD registry endpoints (shared-secret auth via X-Admin-Token).
+	// Consumed by the external PHP MCP runner that historically read
+	// schema_doc.json + config.php from disk; pulling from the gateway
+	// keeps the runner's whitelist + doc in sync with the admin onglet.
+	mux.HandleFunc("/api/v1/public/bdd/schema-doc", h.handleBDDPublicSchemaDoc)
+	mux.HandleFunc("/api/v1/public/bdd/config", h.handleBDDPublicConfig)
+
 	// Applique les middlewares et monte sur le mux principal
 	wrapped := chain(apiMux, recovery, requestLogger, jsonContentType, bodyLimit, roleCheckMiddleware)
 	mux.Handle("/api/", wrapped)
@@ -486,8 +530,22 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
-	// User, audit, install guide, Google, and Slack admin endpoints always require admin
+	// User, audit, install guide, Google, Slack endpoints always require admin
 	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") || strings.HasPrefix(path, "/api/v1/slack") {
+		return true
+	}
+	// BDD: read-only role can GET the gateway-curated registry (list /
+	// detail / fields / meta / doc) so non-admins can browse table info.
+	// Catalog browsing (used only by the admin Add wizard) and every write
+	// stay admin-only.
+	if strings.HasPrefix(path, "/api/v1/bdd/") {
+		if method == http.MethodGet && strings.HasPrefix(path, "/api/v1/bdd/used/") {
+			// Export ships the full registry payload — keep admin-only.
+			if path == "/api/v1/bdd/used/tables/export" {
+				return true
+			}
+			return false
+		}
 		return true
 	}
 	// Server writes require admin

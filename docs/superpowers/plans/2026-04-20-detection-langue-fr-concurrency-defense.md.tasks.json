@@ -19,7 +19,7 @@
     {
       "id": 3,
       "subject": "Task 3: Add Prometheus metrics module + /metrics endpoint + scraper instrumentation",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2
       ],
@@ -28,7 +28,7 @@
     {
       "id": 4,
       "subject": "Task 4: Docker resource limits + healthcheck + Uvicorn --limit-concurrency",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         3
       ],
@@ -37,7 +37,7 @@
     {
       "id": 5,
       "subject": "Task 5: AdmissionController class with atomic counter tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4
       ],
@@ -46,7 +46,7 @@
     {
       "id": 6,
       "subject": "Task 6: Admission middleware with path-scoped controllers + integration tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         5
       ],
@@ -55,7 +55,7 @@
     {
       "id": 7,
       "subject": "Task 7: Wire admission middleware into main.py with env-driven config",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         6
       ],
@@ -64,7 +64,7 @@
     {
       "id": 8,
       "subject": "Task 8: InflightDedup class for URL coalescing",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         7
       ],
@@ -73,7 +73,7 @@
     {
       "id": 9,
       "subject": "Task 9: Wire InflightDedup into routes._detect_single_url",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         8
       ],
@@ -82,7 +82,7 @@
     {
       "id": 10,
       "subject": "Task 10: Create common_utils.detection_client Python helper with tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         9
       ],
@@ -91,7 +91,7 @@
     {
       "id": 11,
       "subject": "Task 11: Gateway per-service timeout map (detection=180s, others unchanged)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         10
       ],
@@ -100,7 +100,7 @@
     {
       "id": 12,
       "subject": "Task 12: Crawler DetectionLangueClient.ts — p-limit + 503 retry",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         11
       ],
@@ -109,12 +109,12 @@
     {
       "id": 13,
       "subject": "Task 13: Update api-gateway + crawler-service CLAUDE.md for caller contract",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         12
       ],
       "description": "**Goal:** Document caller-contract integration in both downstream services' CLAUDE.md.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-gateway/CLAUDE.md\", \"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -E 'DOWNSTREAM_TIMEOUTS_S|DETECTION_MAX_CONCURRENCY' apps-microservices/api-gateway/CLAUDE.md apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"Gateway documents timeout map\", \"Crawler documents env var contract\", \"Both reference spec\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-21T04:48:37Z"
+  "lastUpdated": "2026-04-26T19:17:01Z"
 }

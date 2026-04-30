@@ -1,0 +1,100 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/config"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/httpapi"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/auditstore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/filestore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/ws"
+)
+
+var version = "dev"
+
+func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck())
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("config.load", "err", err)
+		os.Exit(1)
+	}
+
+	rs, err := redisstore.New(cfg.RedisURL)
+	if err != nil {
+		slog.Error("redis.connect", "err", err)
+		os.Exit(1)
+	}
+	defer rs.Close()
+
+	fs := filestore.New(cfg.CrawlerStoragePath)
+	as := auditstore.New(cfg.AuditLogDir)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	hub := ws.NewHub()
+	defer hub.Close()
+	ps := ws.NewPubSub(rs.Raw(), hub, redisstore.UpdatesChannel, redisstore.HeartbeatChannel)
+	go ps.Run(ctx)
+
+	// Capacity snapshot ticker (60s) — feeds capacity:history:zset.
+	go func() {
+		// Initial snapshot so the chart isn't empty on first load.
+		_ = rs.SnapshotCapacity(ctx)
+		t := time.NewTicker(60 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := rs.SnapshotCapacity(ctx); err != nil {
+					slog.Warn("capacity.snapshot", "err", err)
+				}
+			}
+		}
+	}()
+
+	r := httpapi.NewRouter(httpapi.Deps{
+		Version:    version,
+		Config:     cfg,
+		RedisStore: rs,
+		FileStore:  fs,
+		AuditStore: httpapi.WrapAuditStore(as),
+		Hub:        hub,
+	})
+
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		slog.Info("server.start", "addr", srv.Addr, "version", version)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server.listen", "err", err)
+			os.Exit(1)
+		}
+	}()
+	<-ctx.Done()
+	slog.Info("server.shutdown.start")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutdownCtx)
+	slog.Info("server.shutdown.done")
+}

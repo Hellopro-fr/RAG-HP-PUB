@@ -81,17 +81,21 @@ func (m *AuditMiddleware) Wrap(next http.Handler) http.Handler {
 			return
 		}
 
-		// Read request body for write operations (capped at 10 KB).
-		// Skip binary multipart uploads — capturing only the first 10 KB
-		// would corrupt the body for the downstream handler, and the binary
-		// payload is not useful in audit logs anyway.
+		// Capture request body for write operations.
+		//
+		// Tee the body through a capped buffer so the downstream handler
+		// still sees the full payload. Pre-reading the body and replacing
+		// r.Body with a 10 KB-truncated copy (the previous approach)
+		// silently dropped the rest of the payload before the handler
+		// could consume it — caused "unexpected end of JSON input" on any
+		// API write larger than 10 KB (e.g. the BDD doc-shape import).
+		var auditBuf bytes.Buffer
 		var requestBody string
 		ct := r.Header.Get("Content-Type")
 		isMultipart := strings.HasPrefix(ct, "multipart/form-data")
 		if isAPIWrite && r.Body != nil && !isMultipart {
-			raw, _ := io.ReadAll(io.LimitReader(r.Body, auditMaxBodyBytes))
-			r.Body = io.NopCloser(bytes.NewReader(raw))
-			requestBody = sanitizeBody(string(raw))
+			tee := io.TeeReader(r.Body, &cappedWriter{w: &auditBuf, max: auditMaxBodyBytes})
+			r.Body = teeReadCloser{Reader: tee, Closer: r.Body}
 		} else if isAPIWrite && isMultipart {
 			requestBody = "[multipart upload: " + ct + "]"
 		}
@@ -99,6 +103,10 @@ func (m *AuditMiddleware) Wrap(next http.Handler) http.Handler {
 		// Capture response.
 		rc := &responseCapture{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rc, r)
+
+		if isAPIWrite && !isMultipart && auditBuf.Len() > 0 {
+			requestBody = sanitizeBody(auditBuf.String())
+		}
 
 		// Only log failed reads; always log writes and MCP.
 		if isAPIRead && rc.status < 400 {
@@ -194,6 +202,35 @@ func classifyRequest(method, path string) (action, resourceType, resourceID stri
 	}
 
 	return action, resourceType, resourceID
+}
+
+// cappedWriter forwards writes to `w` until `max` bytes have been written,
+// then drops further bytes silently while still reporting the full input
+// length so that an upstream io.TeeReader keeps passing the source data
+// through to the real consumer.
+type cappedWriter struct {
+	w   *bytes.Buffer
+	max int
+}
+
+func (c *cappedWriter) Write(p []byte) (int, error) {
+	remaining := c.max - c.w.Len()
+	if remaining > 0 {
+		take := len(p)
+		if take > remaining {
+			take = remaining
+		}
+		c.w.Write(p[:take])
+	}
+	return len(p), nil
+}
+
+// teeReadCloser pairs an io.Reader (typically an io.TeeReader) with the
+// original ReadCloser so net/http's request lifecycle still gets a Close
+// it can call.
+type teeReadCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // extractIP extracts the client IP address from the request.

@@ -1014,6 +1014,103 @@ def _adjust_fourchette_from_exemples(parsed: Dict[str, Any]) -> Optional[Dict[st
     return details
 
 
+# ---------------------------------------------------------------------------
+# Helpers : estimation de tokens et trim des chunks au budget LLM
+# ---------------------------------------------------------------------------
+
+# Limites tokens par provider : `max_input` = fenêtre totale du context window
+# (input + output partagent la même fenêtre), `reserve_output` = budget gardé
+# pour la réponse du LLM. Valeurs vérifiées via la doc officielle des providers.
+TOKEN_LIMITS_BY_PROVIDER: Dict[str, Dict[str, int]] = {
+    # Claude 4.x (haiku-4-5, sonnet-4-6, opus-4-7) : 200k context window
+    "claude": {"max_input": 200_000, "reserve_output": 16_000},
+    # Gemini 3.x Pro/Flash : 1 048 576 context window, 65 536 max output
+    "gemini": {"max_input": 1_048_576, "reserve_output": 65_536},
+    # GPT-5.x (mini/standard) : 400k context window, 128k max output
+    "gpt":    {"max_input": 400_000, "reserve_output": 32_000},
+}
+
+# Ratios chars/token par provider :
+#   - Claude : heuristique safe utilisée DANS la boucle de trim uniquement (rapide,
+#     pas d'appel réseau). Le check du final_prompt passe par l'API Anthropic exacte
+#     via `_count_tokens_claude_api` ci-dessous.
+#   - GPT / Gemini : heuristiques calibrées FR + données structurées.
+CHARS_PER_TOKEN_BY_PROVIDER: Dict[str, float] = {
+    "claude": 2.5,   # heuristique conservatrice (réel mesuré ~2.58)
+    "gpt":    3.01,
+    "gemini": 3.16,
+}
+
+# Modèle Claude par défaut pour le comptage exact (la famille Claude 4.x partage
+# le même tokenizer, donc le choix précis du modèle a peu d'impact).
+_CLAUDE_DEFAULT_MODEL_FOR_COUNT = "claude-haiku-4-5"
+
+# Client Anthropic en cache (singleton) pour éviter de recréer un client par appel.
+_anthropic_count_client = None
+
+
+async def _count_tokens_claude_api(
+    text: str,
+    model: str = _CLAUDE_DEFAULT_MODEL_FOR_COUNT,
+) -> int:
+    """
+    Comptage tokens exact via l'endpoint officiel Anthropic `messages.count_tokens`.
+    Précis 100 %, ~100-300 ms par appel — réservé aux vérifications ponctuelles
+    (avant / après trim), pas à la boucle de trim qui passe par l'heuristique.
+    """
+    global _anthropic_count_client
+    if _anthropic_count_client is None:
+        from anthropic import AsyncAnthropic
+        _anthropic_count_client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    response = await _anthropic_count_client.messages.count_tokens(
+        model=model,
+        messages=[{"role": "user", "content": text}],
+    )
+    return response.input_tokens
+
+
+def _estimate_tokens(text: str, provider: str = "claude") -> int:
+    """
+    Estimation token-count par heuristique chars/token (sync, sans réseau).
+
+    Pour Claude, préférer `_count_tokens_claude_api` quand la précision compte
+    (vérification du final_prompt). L'heuristique reste utile dans la boucle de
+    trim où on ne peut pas se permettre N appels API.
+    """
+    if not text:
+        return 0
+
+    ratio = CHARS_PER_TOKEN_BY_PROVIDER.get(provider, 3.0)
+    n = len(text)
+    return int(n / ratio) + (1 if n % ratio else 0)
+
+
+def _trim_chunks_to_token_budget(
+    chunks: List[str],
+    budget_tokens: int,
+    provider: str = "claude",
+    sep: str = "\n\n---\n\n",
+) -> Tuple[List[str], int]:
+    """
+    Garde les premiers chunks tant que leur jointure tient dans `budget_tokens`.
+    Les chunks en entrée sont supposés ordonnés par pertinence (les premiers gagnent).
+    Retourne (chunks_gardes, nb_retires).
+    """
+    if budget_tokens <= 0 or not chunks:
+        return [], len(chunks)
+
+    sep_tokens = _estimate_tokens(sep, provider=provider)
+    cumulative = 0
+    kept = 0
+    for i, c in enumerate(chunks):
+        added = _estimate_tokens(c, provider=provider) + (sep_tokens if i > 0 else 0)
+        if cumulative + added > budget_tokens:
+            break
+        cumulative += added
+        kept += 1
+    return chunks[:kept], len(chunks) - kept
+
+
 async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
@@ -1042,6 +1139,19 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     api_client = HelloProAPIClient()
     ID_PROCESS = "37"
 
+    # =========================================================================
+    # Choix du modèle LLM par défaut : "claude" | "chatgpt" | "gemini"
+    # Si `model` n'est pas fourni, on utilise le provider défini ici.
+    # =========================================================================
+    model_pardefaut = "claude"  # ← changer ici : "claude" | "chatgpt" | "gemini"
+
+    default_model_by_provider = {
+        "claude": settings.CLAUDE_MODEL_NAME,
+        "chatgpt": settings.CHATGPT_MODEL_NAME,
+        "gemini": settings.GEMINI_MODEL_NAME,
+    }
+    default_model_name = default_model_by_provider.get(model_pardefaut, settings.CLAUDE_MODEL_NAME)
+
     # Tracking file (visualisé dans QC-tracking-service)
     tracking_file = get_tracking_filepath(id_categorie, prefix="prix-traitement-v2")
     write_log(tracking_file, "=" * 80)
@@ -1049,7 +1159,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     write_log(tracking_file, "=" * 80)
     write_log(tracking_file, f"id_categorie: {id_categorie}")
     write_log(tracking_file, f"nom_categorie: {nom_categorie}")
-    write_log(tracking_file, f"model: {model or settings.CHATGPT_MODEL_NAME}")
+    write_log(tracking_file, f"model: {model or default_model_name} (model_pardefaut={model_pardefaut})")
     write_log(tracking_file, "")
     write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
     write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
@@ -1078,7 +1188,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": {},
                 "time_elapsed": elapsed,
                 "message": err_msg
@@ -1091,7 +1201,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": {},
                 "time_elapsed": elapsed,
                 "message": f"Aucun prix correspondant trouvé pour la catégorie {id_categorie}"
@@ -1103,7 +1213,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": {},
                 "time_elapsed": elapsed,
                 "message": f"Impossible de récupérer le prompt id={prompt_id}"
@@ -1156,7 +1266,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                 return {
                     "success": False,
                     "reponse": None,
-                    "matching": matching_response,
+                    # "matching": matching_response,  # désactivé temporairement
                     "api_response": {},
                     "time_elapsed": elapsed,
                     "message": "Tous les prix matchés ont été éliminés comme aberrants"
@@ -1234,10 +1344,76 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
-        llm_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.CHATGPT_MODEL_NAME
-        use_gemini = llm_model.startswith("gemini")
-        use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
-        use_claude = llm_model.startswith("claude")
+        # `model_pardefaut` / `default_model_name` définis en tête de fonction.
+        # Routage : si `model` fourni → détection par préfixe ; sinon → `model_pardefaut`.
+        if isinstance(model, str) and len(model.strip()) > 0:
+            llm_model = model
+            use_gemini = llm_model.startswith("gemini")
+            use_chatgpt = llm_model.startswith("chatgpt") or llm_model.startswith("gpt")
+            use_claude = llm_model.startswith("claude")
+        else:
+            llm_model = default_model_name
+            use_gemini = model_pardefaut == "gemini"
+            use_chatgpt = model_pardefaut == "chatgpt"
+            use_claude = model_pardefaut == "claude"
+
+        # =====================================================================
+        # Vérification budget tokens du final_prompt — trim si dépassement
+        # Pour Claude : comptage exact via API ; sinon : heuristique chars/token.
+        # =====================================================================
+        provider_key = "gemini" if use_gemini else ("claude" if use_claude else "gpt")
+        limits = TOKEN_LIMITS_BY_PROVIDER[provider_key]
+        budget_max = limits["max_input"] - limits["reserve_output"]
+
+        async def _count_tokens(t: str) -> int:
+            if provider_key == "claude":
+                try:
+                    return await _count_tokens_claude_api(t)
+                except Exception as exc:
+                    logger.warning(
+                        f"[{id_categorie}] V2 — count_tokens API échoué, fallback heuristique: {exc}"
+                    )
+            return _estimate_tokens(t, provider=provider_key)
+
+        final_prompt_tokens = await _count_tokens(final_prompt)
+
+        if final_prompt_tokens > budget_max:
+            # Tokens fixes du template (final_prompt sans la partie chunks)
+            chunks_tokens = await _count_tokens(all_chunks_text)
+            template_tokens = final_prompt_tokens - chunks_tokens
+            budget_chunks_tokens = budget_max - template_tokens
+
+            nb_chunks_avant = len(formatted_chunks)
+            formatted_chunks, nb_retires = _trim_chunks_to_token_budget(
+                formatted_chunks, budget_chunks_tokens, provider=provider_key
+            )
+            all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
+
+            # Reconstruire final_prompt avec les chunks réduits
+            final_prompt = prompt_text
+            final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
+            final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
+            final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+            final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
+
+
+            logger.warning(
+                f"[{id_categorie}] V2 — Budget tokens {provider_key} dépassé : "
+                f"{nb_retires}/{nb_chunks_avant} chunks retirés "
+                f"(prompt avant={final_prompt_tokens} tk > budget={budget_max} tk, "
+            )
+            write_log(tracking_file, "--- BUDGET TOKENS DÉPASSÉ → TRIM ---")
+            write_log(tracking_file, json.dumps({
+                "provider": provider_key,
+                "max_input": limits["max_input"],
+                "reserve_output": limits["reserve_output"],
+                "budget_max": budget_max,
+                "final_prompt_tokens_avant": final_prompt_tokens,
+                "chunks_avant": nb_chunks_avant,
+                "chunks_apres": len(formatted_chunks),
+                "chunks_retires": nb_retires,
+            }, ensure_ascii=False, indent=2))
+            write_log(tracking_file, "")
 
         logger.info(f"[{id_categorie}] V2 — Prompt: {final_prompt[:100]}...")
 
@@ -1267,7 +1443,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             claude = ClaudeProvider(model=actual_model, effort=effort, budget_tokens=budget_tokens)
             llm_result = await claude.chat(final_prompt)
 
-        else:
+        elif use_chatgpt:
             actual_model = llm_model if llm_model != "chatgpt" else settings.CHATGPT_MODEL_NAME
             type_ia = 1
             effort = None
@@ -1306,7 +1482,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": llm_result.get("api_response", {}),
                 "time_elapsed": elapsed,
                 "message": error_msg
@@ -1326,7 +1502,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             return {
                 "success": False,
                 "reponse": None,
-                "matching": matching_response,
+                # "matching": matching_response,  # désactivé temporairement
                 "api_response": llm_result.get("api_response", {}),
                 "time_elapsed": elapsed,
                 "message": error_msg
@@ -1357,7 +1533,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         return {
             "success": True,
             "reponse": parsed,
-            "matching": matching_response,
+            # "matching": matching_response,  # désactivé temporairement
             "api_response": llm_result.get("api_response", {}),
             "time_elapsed": elapsed,
             "message": f"{len(results)} prix matchés traités en {elapsed:.1f}s"
@@ -1369,7 +1545,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         return {
             "success": False,
             "reponse": None,
-            "matching": None,
+            # "matching": None,  # désactivé temporairement
             "api_response": {},
             "time_elapsed": elapsed,
             "message": f"Erreur inattendue: {str(e)}"

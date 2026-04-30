@@ -43,6 +43,12 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/conventional-commits.py"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/nextjs-formulaire-prepush-build.sh",
+            "timeout": 180
           }
         ]
       },
@@ -82,6 +88,16 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-review-gate.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR\"/graphify-out/.needs_update ] && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"graphify: a doc/config change in graph scope is pending semantic re-extraction (graphify-out/.needs_update flag is set). When convenient, run /graphify --update from this session to refresh the doc nodes.\"}}' || true"
           }
         ]
       }
