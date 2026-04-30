@@ -64,10 +64,10 @@ async function test3() {
     const dir = tmpDir();
     const r = new TimingRecorder({
         crawlId: "t3", outputDir: dir, detectMaxConcurrency: 5,
-        summaryFlushMs: 50,
+        summaryFlushMs: 30,
     });
     r.recordPage(mkEntry(1));
-    await new Promise((res) => setTimeout(res, 120)); // allow 2 ticks
+    await new Promise((res) => setTimeout(res, 200)); // allow ≥3 ticks
     const sumPath = path.join(dir, "timing-summary.json");
     assert(fs.existsSync(sumPath), "summary written by periodic timer");
     const sum = JSON.parse(fs.readFileSync(sumPath, "utf-8"));

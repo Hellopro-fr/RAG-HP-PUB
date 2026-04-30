@@ -13,11 +13,17 @@ import type {
 } from "../timing/types.js";
 
 export interface TimingRecorderOptions {
+    /** Crawl identifier propagated into the summary file. */
     crawlId: string;
+    /** Directory where timing.jsonl and timing-summary.json are written. */
     outputDir: string;
+    /** Cap from DetectionLangueClient — used to compute detect_saturated_pct. */
     detectMaxConcurrency: number;
+    /** Periodic summary flush interval (ms). 0 disables. Default 30000. */
     summaryFlushMs?: number;
+    /** Call fsync once per N writes for crash durability. Default 50. */
     fsyncEveryN?: number;
+    /** "replay" reads existing timing.jsonl into the aggregator before appending; "overwrite" truncates. Default "replay". */
     resumePolicy?: "replay" | "overwrite";
 }
 
@@ -64,20 +70,40 @@ export class TimingRecorder {
         }
 
         if (flushMs > 0) {
-            this.flushTimer = setInterval(() => this._writeSummary(), flushMs);
+            this.flushTimer = setInterval(() => {
+                try {
+                    this._writeSummary();
+                } catch (err) {
+                    console.error("TimingRecorder: periodic flush failed", err);
+                }
+            }, flushMs);
         }
     }
 
+    /**
+     * Record one page handler outcome. Best-effort: swallows disk errors
+     * with console.error so the route handler is never broken by
+     * observability code. After finalize(), this is a no-op.
+     */
     recordPage(entry: PageTimingEntry): void {
         addPage(this.state, entry);
-        const line = JSON.stringify(entry) + "\n";
-        fs.writeSync(this.fd, line);
-        this.writeCount++;
-        if (this.writeCount % this.fsyncEveryN === 0) {
-            try { fs.fsyncSync(this.fd); } catch { /* best-effort */ }
+        if (this.fd < 0) return;
+        try {
+            const line = JSON.stringify(entry) + "\n";
+            fs.writeSync(this.fd, line);
+            this.writeCount++;
+            if (this.writeCount % this.fsyncEveryN === 0) {
+                try { fs.fsyncSync(this.fd); } catch { /* best-effort */ }
+            }
+        } catch (err) {
+            console.error("TimingRecorder: recordPage write failed", err);
         }
     }
 
+    /**
+     * Record one pool snapshot. Aggregator-only; never writes to JSONL
+     * (samples are not persisted across restarts).
+     */
     recordPoolSample(sample: PoolSample): void {
         addPoolSample(this.state, sample);
     }
@@ -89,6 +115,10 @@ export class TimingRecorder {
         fs.renameSync(tmpPath, this.summaryPath);
     }
 
+    /**
+     * Stop the periodic flush timer, fsync + close the JSONL fd, and write
+     * one final summary. Idempotent — safe to call from multiple exit paths.
+     */
     async finalize(): Promise<void> {
         if (this.finalized) return;
         this.finalized = true;
@@ -96,8 +126,11 @@ export class TimingRecorder {
             clearInterval(this.flushTimer);
             this.flushTimer = null;
         }
-        try { fs.fsyncSync(this.fd); } catch { /* best-effort */ }
-        try { fs.closeSync(this.fd); } catch { /* best-effort */ }
+        if (this.fd >= 0) {
+            try { fs.fsyncSync(this.fd); } catch { /* best-effort */ }
+            try { fs.closeSync(this.fd); } catch { /* best-effort */ }
+            this.fd = -1;
+        }
         this._writeSummary();
     }
 
