@@ -1013,14 +1013,28 @@ class CrawlerManager:
             if status_filter and job_info.get("status") not in status_filter:
                 continue
             crawl_id = all_job_keys[i].replace(CRAWL_JOB_PREFIX, "")
+            # Heal-on-read: legacy Redis blobs may lack 'crawl_id' field.
+            # Caller already knows the id from the key suffix; inject it so
+            # downstream get_status can rely on the field being present.
+            job_info.setdefault("crawl_id", crawl_id)
             status_data = await self.get_status(job_info)
             if status_data:
                 statuses[crawl_id] = status_data
         return statuses
 
-    async def get_status(self, job_info: dict) -> CrawlStatus:
-        crawl_id = job_info['crawl_id']
-        storage_path = job_info["storage_path"]
+    async def get_status(self, job_info: dict) -> Optional[CrawlStatus]:
+        crawl_id = job_info.get('crawl_id')
+        if not crawl_id:
+            logger.error(
+                f"Skipping malformed job entry (missing 'crawl_id'): keys={list(job_info.keys())}"
+            )
+            return None
+        storage_path = job_info.get("storage_path")
+        if not storage_path:
+            logger.error(
+                f"Skipping malformed job entry '{crawl_id}' (missing 'storage_path')."
+            )
+            return None
 
         # --- START: CHECK FOR STATUS SNAPSHOT ---
         # If the job is not running and a status snapshot exists, use it instead of recalculating
