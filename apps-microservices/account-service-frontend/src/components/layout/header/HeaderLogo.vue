@@ -1,7 +1,6 @@
 <template>
   <router-link to="/" class="lg:hidden">
-    <img class="dark:hidden" src="/images/logo/logo.svg" alt="Logo" />
-    <img class="hidden dark:block" src="/images/logo/logo-dark.svg" alt="Logo" />
+    <img src="/images/servers/hp-logo.svg" alt="Portal Hellopro" width="32" height="32" />
   </router-link>
 </template>
 
