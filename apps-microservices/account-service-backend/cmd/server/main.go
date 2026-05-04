@@ -220,9 +220,10 @@ func main() {
 	requireAuth := auth.RequireAuth(cfg.JWTSecret)
 
 	mux.Handle("GET /api/v1/me", requireAuth(api.NewMeHandler(userInfoAdapter{userRepo})))
-	mux.Handle("/api/v1/admin/services", requireAdmin(api.NewAdminServiceHandler(api.AdminServiceDeps{Repo: oauthRepo, Encrypt: cipher.Encrypt})))
-	mux.Handle("/api/v1/admin/services/{id}", requireAdmin(api.NewAdminServiceDetailHandler(api.AdminServiceDetailDeps{Repo: oauthRepo, Encrypt: cipher.Encrypt})))
-	mux.Handle("/api/v1/admin/services/{id}/{op}", requireAdmin(api.NewAdminServiceDetailHandler(api.AdminServiceDetailDeps{Repo: oauthRepo, Encrypt: cipher.Encrypt})))
+	// Services CRUD: open to any authenticated user (full access).
+	mux.Handle("/api/v1/admin/services", requireAuth(api.NewAdminServiceHandler(api.AdminServiceDeps{Repo: oauthRepo, Encrypt: cipher.Encrypt})))
+	mux.Handle("/api/v1/admin/services/{id}", requireAuth(api.NewAdminServiceDetailHandler(api.AdminServiceDetailDeps{Repo: oauthRepo, Encrypt: cipher.Encrypt})))
+	mux.Handle("/api/v1/admin/services/{id}/{op}", requireAuth(api.NewAdminServiceDetailHandler(api.AdminServiceDetailDeps{Repo: oauthRepo, Encrypt: cipher.Encrypt})))
 	mux.Handle("GET /api/v1/admin/users", requireAdmin(api.NewAdminUserHandler(api.AdminUserDeps{
 		Repo:        userRepo,
 		RevokeAll:   refreshRepo,

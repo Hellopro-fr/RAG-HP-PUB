@@ -225,48 +225,41 @@ import {
 } from "../../icons";
 import SidebarWidget from "./SidebarWidget.vue";
 import { useSidebar } from "@/composables/useSidebar";
+import { useAuthStore } from "@/stores/auth";
 
 const route = useRoute();
+const auth = useAuthStore();
 
 const { isExpanded, isMobileOpen, isHovered, openSubmenu } = useSidebar();
 
-const menuGroups = [
-  {
-    title: "Administration",
-    items: [
-      {
-        icon: GridIcon,
-        name: "Services",
-        path: "/admin/services",
-      },
-      {
-        icon: UserCircleIcon,
-        name: "Utilisateurs",
-        path: "/admin/users",
-      },
-      {
-        icon: ListIcon,
-        name: "Journal d'audit",
-        path: "/admin/audit",
-      },
-      {
-        icon: PlugInIcon,
-        name: "Paramètres",
-        path: "/admin/parameters",
-      },
-    ],
-  },
-  {
-    title: "Mon compte",
-    items: [
-      {
-        icon: UserCircleIcon,
-        name: "Profil",
-        path: "/me",
-      },
-    ],
-  },
-];
+// Admin-only items are filtered out for non-admin users.
+const menuGroups = computed(() => {
+  const groups = [
+    {
+      title: "Espace de travail",
+      items: [
+        { icon: GridIcon, name: "Services", path: "/admin/services" },
+        { icon: PlugInIcon, name: "Paramètres", path: "/admin/parameters" },
+      ],
+    },
+    {
+      title: "Mon compte",
+      items: [
+        { icon: UserCircleIcon, name: "Profil", path: "/me" },
+      ],
+    },
+  ];
+  if (auth.isAdmin) {
+    groups.splice(1, 0, {
+      title: "Administration",
+      items: [
+        { icon: UserCircleIcon, name: "Utilisateurs", path: "/admin/users" },
+        { icon: ListIcon, name: "Journal d'audit", path: "/admin/audit" },
+      ],
+    });
+  }
+  return groups;
+});
 
 const isActive = (path) => route.path === path;
 

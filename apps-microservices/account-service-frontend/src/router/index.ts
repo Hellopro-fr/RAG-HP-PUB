@@ -17,20 +17,19 @@ const router = createRouter({
   routes: [
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { requiresAuth: false, title: 'Connexion' } },
     { path: '/me', name: 'me', component: () => import('@/views/MeView.vue'), meta: { requiresAuth: true, title: 'Profil' } },
-    { path: '/admin/services', name: 'services', component: () => import('@/views/AdminServicesView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Services' } },
-    { path: '/admin/services/new', name: 'service-create', component: () => import('@/views/ServiceFormView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Nouveau service' } },
-    { path: '/admin/services/:id/edit', name: 'service-edit', component: () => import('@/views/ServiceFormView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Modifier service' } },
+    // Services + parameters: open to any authenticated user (full access)
+    { path: '/admin/services', name: 'services', component: () => import('@/views/AdminServicesView.vue'), meta: { requiresAuth: true, title: 'Services' } },
+    { path: '/admin/services/new', name: 'service-create', component: () => import('@/views/ServiceFormView.vue'), meta: { requiresAuth: true, title: 'Nouveau service' } },
+    { path: '/admin/services/:id/edit', name: 'service-edit', component: () => import('@/views/ServiceFormView.vue'), meta: { requiresAuth: true, title: 'Modifier service' } },
+    { path: '/admin/parameters', name: 'parameters', component: () => import('@/views/ParametersView.vue'), meta: { requiresAuth: true, title: 'Paramètres' } },
+    // Users + sessions + audit: admin-only
     { path: '/admin/users', name: 'users', component: () => import('@/views/AdminUsersView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Utilisateurs' } },
     { path: '/admin/users/:email/sessions', name: 'user-sessions', component: () => import('@/views/UserSessionsView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Sessions utilisateur' } },
     { path: '/admin/audit', name: 'audit', component: () => import('@/views/AuditLogView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: "Journal d'audit" } },
-    { path: '/admin/parameters', name: 'parameters', component: () => import('@/views/ParametersView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Paramètres' } },
     {
       path: '/',
       name: 'root',
-      redirect: () => {
-        const a = useAuthStore()
-        return a.isAdmin ? '/admin/services' : '/me'
-      },
+      redirect: () => '/admin/services',
     },
     { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
