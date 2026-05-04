@@ -37,6 +37,14 @@ func (r *OAuth2ClientRepo) GetByClientID(clientID string) (*db.OAuth2Client, err
 	return &c, nil
 }
 
+func (r *OAuth2ClientRepo) GetByName(name string) (*db.OAuth2Client, error) {
+	var c db.OAuth2Client
+	if err := r.g.Where("name = ? AND is_active = ?", name, true).First(&c).Error; err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 func (r *OAuth2ClientRepo) Update(id string, fields map[string]interface{}) error {
 	return r.g.Model(&db.OAuth2Client{}).Where("id = ?", id).Updates(fields).Error
 }

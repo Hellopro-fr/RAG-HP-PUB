@@ -701,6 +701,7 @@ services:
       - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
       - ACCOUNT_CLIENT_ID_API_GATEWAY=${ACCOUNT_CLIENT_ID_API_GATEWAY:-}
       - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
+      - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
       - ACCOUNT_REDIRECT_URI=${ACCOUNT_REDIRECT_URI:-http://localhost:8500/auth/callback}
       - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
     # depends_on:
@@ -2400,6 +2401,7 @@ services:
       SECURE_COOKIE: ${ACCOUNT_SECURE_COOKIE:-false}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       SLACK_ENV_LABEL: ${SLACK_ENV_LABEL}
+      INTERNAL_ADMIN_TOKEN: ${ACCOUNT_INTERNAL_TOKEN}
     restart: unless-stopped
     networks:
       - services-net

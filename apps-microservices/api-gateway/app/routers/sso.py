@@ -29,7 +29,11 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
-from common_utils.sso import AccountCredentialsMissing, get_account_credentials
+from common_utils.sso import (
+    AccountCredentialsMissing,
+    get_account_credentials,
+    get_account_credentials_from_api,
+)
 
 logger = logging.getLogger("sso")
 
@@ -38,12 +42,23 @@ router = APIRouter(tags=["SSO"])
 ACCOUNT_BASE_URL = os.environ.get("ACCOUNT_BASE_URL", "http://account-service-backend:8600")
 ACCOUNT_REDIRECT_URI = os.environ.get("ACCOUNT_REDIRECT_URI", "")
 
-try:
-    ACCOUNT_CLIENT_ID, ACCOUNT_CLIENT_SECRET = get_account_credentials()
-except AccountCredentialsMissing as exc:
-    logger.warning("[sso] account-service credentials missing at boot: %s", exc)
-    ACCOUNT_CLIENT_ID = ""
-    ACCOUNT_CLIENT_SECRET = ""
+# Credentials are resolved lazily on first /auth/login request: env first
+# (instant, no network), then HTTP fallback to /internal/credentials/{name}
+# on account-service. Cache once we get them so we don't refetch per request.
+_cached_credentials: Optional[tuple[str, str]] = None
+
+
+async def _get_credentials() -> tuple[str, str]:
+    global _cached_credentials
+    if _cached_credentials:
+        return _cached_credentials
+    try:
+        _cached_credentials = get_account_credentials()
+        return _cached_credentials
+    except AccountCredentialsMissing:
+        pass
+    _cached_credentials = await get_account_credentials_from_api()
+    return _cached_credentials
 
 REPLAY_WINDOW_S = 5 * 60
 
@@ -55,8 +70,12 @@ def _b64url(data: bytes) -> str:
 @router.get("/auth/login", include_in_schema=False)
 async def auth_login() -> Response:
     """Start the PKCE flow: 302 to account-service /authorize with a fresh challenge."""
-    if not ACCOUNT_CLIENT_ID or not ACCOUNT_REDIRECT_URI:
-        raise HTTPException(500, "account-service SSO not configured (set ACCOUNT_CLIENT_ID + ACCOUNT_REDIRECT_URI)")
+    if not ACCOUNT_REDIRECT_URI:
+        raise HTTPException(500, "ACCOUNT_REDIRECT_URI not configured")
+    try:
+        client_id, _ = await _get_credentials()
+    except AccountCredentialsMissing as exc:
+        raise HTTPException(500, f"account-service credentials unavailable: {exc}")
 
     verifier = _b64url(secrets.token_bytes(32))
     challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
@@ -65,7 +84,7 @@ async def auth_login() -> Response:
     target = (
         f"{ACCOUNT_BASE_URL}/authorize"
         f"?response_type=code"
-        f"&client_id={ACCOUNT_CLIENT_ID}"
+        f"&client_id={client_id}"
         f"&redirect_uri={ACCOUNT_REDIRECT_URI}"
         f"&code_challenge={challenge}"
         f"&code_challenge_method=S256"
@@ -91,6 +110,11 @@ async def auth_callback(request: Request, code: Optional[str] = None, state: Opt
     if not verifier:
         raise HTTPException(400, "missing verifier")
 
+    try:
+        client_id, client_secret = await _get_credentials()
+    except AccountCredentialsMissing as exc:
+        raise HTTPException(500, f"account-service credentials unavailable: {exc}")
+
     async with httpx.AsyncClient(timeout=10) as cli:
         r = await cli.post(
             f"{ACCOUNT_BASE_URL}/token",
@@ -100,7 +124,7 @@ async def auth_callback(request: Request, code: Optional[str] = None, state: Opt
                 "redirect_uri": ACCOUNT_REDIRECT_URI,
                 "code_verifier": verifier,
             },
-            auth=(ACCOUNT_CLIENT_ID, ACCOUNT_CLIENT_SECRET),
+            auth=(client_id, client_secret),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
@@ -139,12 +163,14 @@ async def auth_callback(request: Request, code: Optional[str] = None, state: Opt
 async def logout_webhook(request: Request) -> Response:
     """Account-service back-channel logout. Drops the local session if the
     HMAC matches and the iat is within the replay window."""
-    if not ACCOUNT_CLIENT_SECRET:
-        raise HTTPException(500, "ACCOUNT_CLIENT_SECRET not configured")
+    try:
+        _, client_secret = await _get_credentials()
+    except AccountCredentialsMissing as exc:
+        raise HTTPException(500, f"account-service credentials unavailable: {exc}")
 
     body = await request.body()
     presented = request.headers.get("X-Logout-Signature", "")
-    expected = "sha256=" + hmac.new(ACCOUNT_CLIENT_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    expected = "sha256=" + hmac.new(client_secret.encode(), body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(presented, expected):
         raise HTTPException(401, "bad signature")
 

@@ -30,6 +30,7 @@ type Configuration struct {
 	SlackWebhookURL   string
 	SlackEnvLabel     string
 	SlackCooldownS    int
+	InternalAdminToken string
 }
 
 // buildMySQLDSN composes a DSN from MYSQL_DSN if set; otherwise from the
@@ -74,6 +75,7 @@ func Load() (*Configuration, error) {
 		SlackWebhookURL:   os.Getenv("SLACK_WEBHOOK_URL"),
 		SlackEnvLabel:     os.Getenv("SLACK_ENV_LABEL"),
 		SlackCooldownS:    envInt("SLACK_AUTH_ALERT_COOLDOWN", 600),
+		InternalAdminToken: os.Getenv("INTERNAL_ADMIN_TOKEN"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

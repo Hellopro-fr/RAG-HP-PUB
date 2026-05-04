@@ -189,6 +189,16 @@ func main() {
 	}))
 	mux.Handle("GET /authorize/branding/{client_id}", authserver.NewBrandingHandler(oauthRepo))
 
+	// Internal: admin-token-gated credentials lookup by service name.
+	// Consumed by libs/common-utils/sso + libs/account-client-go so services
+	// registered in the admin UI can fetch their client_id + client_secret
+	// programmatically without a DB connection or the AES key.
+	mux.Handle("GET /internal/credentials/{name}", api.NewInternalCredentialsHandler(api.InternalCredentialsDeps{
+		Repo:       oauthRepo,
+		Decrypt:    cipher.Decrypt,
+		AdminToken: cfg.InternalAdminToken,
+	}))
+
 	// Admin UI session endpoints
 	loginHandler := auth.NewLoginHandler(auth.Config{
 		AuthURL: cfg.AuthURL, JWTSecret: cfg.JWTSecret, JWTAudience: cfg.JWTAudience,

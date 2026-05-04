@@ -1,18 +1,24 @@
 """Resolve account-service OAuth2 client credentials by SERVICE_NAME.
 
-Convention: each service container sets `SERVICE_NAME` (e.g. `api-gateway`).
-The helper looks up two env vars derived from that name:
+Two strategies:
 
-    SERVICE_NAME=api-gateway
-        -> ACCOUNT_CLIENT_ID_API_GATEWAY
-        -> ACCOUNT_CLIENT_SECRET_API_GATEWAY
+1. **Env vars** (sync, no I/O). Convention:
 
-If the prefixed vars are not set, falls back to plain `ACCOUNT_CLIENT_ID`
-and `ACCOUNT_CLIENT_SECRET` so single-service deployments keep working
-without any rename.
+       SERVICE_NAME=api-gateway
+           -> ACCOUNT_CLIENT_ID_API_GATEWAY
+           -> ACCOUNT_CLIENT_SECRET_API_GATEWAY
 
-Used by api-gateway/app/routers/sso.py and any other Python service that
-acts as an OAuth2 client of account-service.
+   Falls back to plain ACCOUNT_CLIENT_ID / ACCOUNT_CLIENT_SECRET when
+   the prefixed pair isn't set.
+
+2. **Internal API call** (async). Fetches the credentials from
+   ``GET {ACCOUNT_BASE_URL}/internal/credentials/{name}`` with an
+   ``X-Admin-Token`` header. The endpoint is admin-token-gated on the
+   account-service side and decrypts the secret server-side, so
+   consumer services never need MySQL access or the AES key.
+
+Used by api-gateway/app/routers/sso.py and any other Python service
+that acts as an OAuth2 client of account-service.
 """
 
 from __future__ import annotations
@@ -63,5 +69,62 @@ def get_account_credentials(service_name: Optional[str] = None) -> Tuple[str, st
     raise AccountCredentialsMissing(
         "Account-service OAuth2 credentials not configured. "
         "Set ACCOUNT_CLIENT_ID_<SERVICE_NAME> + ACCOUNT_CLIENT_SECRET_<SERVICE_NAME> "
-        "(or plain ACCOUNT_CLIENT_ID + ACCOUNT_CLIENT_SECRET as fallback)."
+        "(or plain ACCOUNT_CLIENT_ID + ACCOUNT_CLIENT_SECRET as fallback), "
+        "or call get_account_credentials_from_db() for a DB lookup."
     )
+
+
+async def get_account_credentials_from_api(
+    service_name: Optional[str] = None,
+    *,
+    base_url: Optional[str] = None,
+    admin_token: Optional[str] = None,
+    timeout: float = 5.0,
+) -> Tuple[str, str]:
+    """Fetch ``(client_id, client_secret)`` from account-service over HTTP.
+
+    Calls ``GET {base_url}/internal/credentials/{service_name}`` with an
+    ``X-Admin-Token`` header. The endpoint is admin-gated on the
+    account-service side and decrypts the secret server-side, so this
+    consumer never needs MySQL access or the AES key.
+
+    Resolution order:
+      ``service_name`` arg    or  ``SERVICE_NAME`` env
+      ``base_url`` arg        or  ``ACCOUNT_BASE_URL`` env
+      ``admin_token`` arg     or  ``ACCOUNT_INTERNAL_TOKEN`` env
+
+    Lazy imports ``httpx`` — install it on the consumer (api-gateway has it).
+    """
+    name = service_name or os.environ.get("SERVICE_NAME", "").strip()
+    if not name:
+        raise AccountCredentialsMissing("service_name required (or set SERVICE_NAME env)")
+
+    base = (base_url or os.environ.get("ACCOUNT_BASE_URL", "")).rstrip("/")
+    if not base:
+        raise AccountCredentialsMissing("ACCOUNT_BASE_URL not set")
+
+    token = admin_token or os.environ.get("ACCOUNT_INTERNAL_TOKEN", "")
+    if not token:
+        raise AccountCredentialsMissing("ACCOUNT_INTERNAL_TOKEN not set")
+
+    import httpx  # lazy
+
+    from urllib.parse import quote
+    url = f"{base}/internal/credentials/{quote(name, safe='')}"
+    async with httpx.AsyncClient(timeout=timeout) as cli:
+        r = await cli.get(url, headers={"X-Admin-Token": token})
+
+    if r.status_code == 404:
+        raise AccountCredentialsMissing(
+            f"no active service named {name!r} in account-service"
+        )
+    if r.status_code != 200:
+        raise AccountCredentialsMissing(
+            f"internal credentials endpoint returned {r.status_code}: {r.text[:200]}"
+        )
+    body = r.json()
+    cid = body.get("client_id", "")
+    sec = body.get("client_secret", "")
+    if not cid or not sec:
+        raise AccountCredentialsMissing("internal credentials response missing fields")
+    return cid, sec
