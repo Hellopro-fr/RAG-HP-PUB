@@ -187,7 +187,7 @@ func main() {
 		ClientRepo: oauthRepo, Rotator: refreshRepo, Decrypt: cipher.Decrypt,
 		JWTSecret: cfg.JWTSecret, Issuer: cfg.PublicURL,
 	}))
-	mux.Handle("GET /authorize/branding/{client_id}.json", authserver.NewBrandingHandler(oauthRepo))
+	mux.Handle("GET /authorize/branding/{client_id}", authserver.NewBrandingHandler(oauthRepo))
 
 	// Admin UI session endpoints
 	loginHandler := auth.NewLoginHandler(auth.Config{

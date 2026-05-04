@@ -26,7 +26,7 @@ func TestBrandingHandler_ReturnsPublicFields(t *testing.T) {
 	cli := &db.OAuth2Client{ClientID: "x", Name: "Hellopro X", LogoURL: "/u/x.png", BrandColor: "#0055ff"}
 	h := NewBrandingHandler(fakeClientLookup{out: cli})
 
-	r := httptest.NewRequest(http.MethodGet, "/authorize/branding/x.json", nil)
+	r := httptest.NewRequest(http.MethodGet, "/authorize/branding/x", nil)
 	r.SetPathValue("client_id", "x")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -43,7 +43,7 @@ func TestBrandingHandler_ReturnsPublicFields(t *testing.T) {
 
 func TestBrandingHandler_404OnUnknownClient(t *testing.T) {
 	h := NewBrandingHandler(fakeClientLookup{err: errors.New("not found")})
-	r := httptest.NewRequest(http.MethodGet, "/authorize/branding/x.json", nil)
+	r := httptest.NewRequest(http.MethodGet, "/authorize/branding/x", nil)
 	r.SetPathValue("client_id", "x")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)

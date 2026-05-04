@@ -27,7 +27,7 @@ onMounted(async () => {
   if (!oauthMode.value) return
   try {
     const cid = String(route.query.client_id)
-    const res = await fetch(`/authorize/branding/${cid}.json`)
+    const res = await fetch(`/authorize/branding/${cid}`)
     if (res.ok) branding.value = await res.json()
   } catch {
     /* ignore: fallback to default branding */
