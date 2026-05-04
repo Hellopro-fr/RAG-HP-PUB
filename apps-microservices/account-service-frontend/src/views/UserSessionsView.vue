@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { KeyRound } from 'lucide-vue-next'
 import * as usersApi from '@/api/users'
 
 const route = useRoute()
@@ -43,7 +44,16 @@ onMounted(load)
           <td class="px-4 py-2">{{ s.expires_at }}</td>
           <td class="px-4 py-2 text-center">{{ s.revoked ? `oui (${s.revoked_reason})` : 'non' }}</td>
           <td class="px-4 py-2 text-right">
-            <button v-if="!s.revoked" class="text-red-600" @click="revoke(s.sid)">Révoquer</button>
+            <button
+              v-if="!s.revoked"
+              type="button"
+              title="Révoquer cette session"
+              aria-label="Révoquer cette session"
+              class="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-white/5"
+              @click="revoke(s.sid)"
+            >
+              <KeyRound :size="16" />
+            </button>
           </td>
         </tr>
       </tbody>

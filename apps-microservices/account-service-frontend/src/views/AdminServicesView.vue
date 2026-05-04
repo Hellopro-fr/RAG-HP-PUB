@@ -2,6 +2,7 @@
 import { h, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ColumnDef } from '@tanstack/vue-table'
+import { Pencil } from 'lucide-vue-next'
 import * as servicesApi from '@/api/services'
 import type { OAuth2Client } from '@/types/oauth2'
 import DataTable from '@/components/common/DataTable.vue'
@@ -67,12 +68,20 @@ const columns: ColumnDef<OAuth2Client, any>[] = [
     enableSorting: false,
     cell: (info) =>
       h(
-        'button',
-        {
-          class: 'text-blue-600 hover:underline',
-          onClick: () => router.push(`/admin/services/${info.row.original.id}/edit`),
-        },
-        'Modifier',
+        'div',
+        { class: 'flex justify-end' },
+        h(
+          'button',
+          {
+            type: 'button',
+            title: 'Modifier',
+            'aria-label': 'Modifier',
+            class:
+              'inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5',
+            onClick: () => router.push(`/admin/services/${info.row.original.id}/edit`),
+          },
+          h(Pencil, { size: 16 }),
+        ),
       ),
   },
 ]

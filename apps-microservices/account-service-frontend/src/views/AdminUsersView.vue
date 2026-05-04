@@ -1,9 +1,26 @@
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
+import { h, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ColumnDef } from '@tanstack/vue-table'
+import { ChevronUp, ChevronDown, Lock, Unlock, KeyRound, Users } from 'lucide-vue-next'
 import * as usersApi from '@/api/users'
 import DataTable from '@/components/common/DataTable.vue'
+
+function iconButton(icon: Component, title: string, color: string, onClick: () => void) {
+  return h(
+    'button',
+    {
+      type: 'button',
+      title,
+      'aria-label': title,
+      class:
+        'inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 ' +
+        color,
+      onClick,
+    },
+    h(icon, { size: 16 }),
+  )
+}
 
 const router = useRouter()
 const items = ref<usersApi.AdminUser[]>([])
@@ -71,60 +88,41 @@ const columns: ColumnDef<usersApi.AdminUser, any>[] = [
       const buttons: ReturnType<typeof h>[] = []
       if (u.is_admin) {
         buttons.push(
-          h(
-            'button',
-            { class: 'text-yellow-600', onClick: () => action(usersApi.demote, u.email, 'Rétrograder') },
-            'Rétrograder',
+          iconButton(ChevronDown, 'Rétrograder', 'hover:text-yellow-600', () =>
+            action(usersApi.demote, u.email, 'Rétrograder'),
           ),
         )
       } else {
         buttons.push(
-          h(
-            'button',
-            { class: 'text-blue-600', onClick: () => action(usersApi.promote, u.email, 'Promouvoir') },
-            'Promouvoir',
+          iconButton(ChevronUp, 'Promouvoir admin', 'hover:text-brand-500', () =>
+            action(usersApi.promote, u.email, 'Promouvoir'),
           ),
         )
       }
       if (u.is_allowed) {
         buttons.push(
-          h(
-            'button',
-            { class: 'text-red-600', onClick: () => action(usersApi.block, u.email, 'Bloquer') },
-            'Bloquer',
+          iconButton(Lock, 'Bloquer', 'hover:text-red-600', () =>
+            action(usersApi.block, u.email, 'Bloquer'),
           ),
         )
       } else {
         buttons.push(
-          h(
-            'button',
-            { class: 'text-green-600', onClick: () => action(usersApi.unblock, u.email, 'Débloquer') },
-            'Débloquer',
+          iconButton(Unlock, 'Débloquer', 'hover:text-green-600', () =>
+            action(usersApi.unblock, u.email, 'Débloquer'),
           ),
         )
       }
       buttons.push(
-        h(
-          'button',
-          {
-            class: 'text-red-700',
-            onClick: () => action(usersApi.revoke, u.email, 'Révoquer toutes les sessions de'),
-          },
-          'Révoquer',
+        iconButton(KeyRound, 'Révoquer toutes les sessions', 'hover:text-red-700', () =>
+          action(usersApi.revoke, u.email, 'Révoquer toutes les sessions de'),
         ),
       )
       buttons.push(
-        h(
-          'button',
-          {
-            class: 'text-gray-600',
-            onClick: () =>
-              router.push(`/admin/users/${encodeURIComponent(u.email)}/sessions`),
-          },
-          'Sessions',
+        iconButton(Users, 'Voir les sessions', 'hover:text-gray-700', () =>
+          router.push(`/admin/users/${encodeURIComponent(u.email)}/sessions`),
         ),
       )
-      return h('div', { class: 'flex gap-2 justify-end flex-wrap' }, buttons)
+      return h('div', { class: 'flex gap-1 justify-end' }, buttons)
     },
   },
 ]
