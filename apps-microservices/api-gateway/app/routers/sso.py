@@ -6,9 +6,12 @@ so existing DocsAuthMiddleware + /login handler keep working as fallback.
 
 Env vars (defaults match the docker-compose wiring):
     ACCOUNT_BASE_URL       — public URL of account-service (e.g. http://account-service-backend:8600 in-cluster, https://account.hellopro.fr in prod)
-    ACCOUNT_CLIENT_ID      — issued by account-service /admin/services
-    ACCOUNT_CLIENT_SECRET  — issued at create-time, store in secret manager
     ACCOUNT_REDIRECT_URI   — e.g. http://localhost:8050/auth/callback (must match the URI registered in account-service)
+
+Client credentials are resolved by `common_utils.sso.get_account_credentials()`,
+which derives env keys from `SERVICE_NAME` (e.g. SERVICE_NAME=api-gateway →
+ACCOUNT_CLIENT_ID_API_GATEWAY + ACCOUNT_CLIENT_SECRET_API_GATEWAY) and falls
+back to plain ACCOUNT_CLIENT_ID + ACCOUNT_CLIENT_SECRET when those aren't set.
 """
 
 from __future__ import annotations
@@ -26,14 +29,21 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
+from common_utils.sso import AccountCredentialsMissing, get_account_credentials
+
 logger = logging.getLogger("sso")
 
 router = APIRouter(tags=["SSO"])
 
 ACCOUNT_BASE_URL = os.environ.get("ACCOUNT_BASE_URL", "http://account-service-backend:8600")
-ACCOUNT_CLIENT_ID = os.environ.get("ACCOUNT_CLIENT_ID", "")
-ACCOUNT_CLIENT_SECRET = os.environ.get("ACCOUNT_CLIENT_SECRET", "")
 ACCOUNT_REDIRECT_URI = os.environ.get("ACCOUNT_REDIRECT_URI", "")
+
+try:
+    ACCOUNT_CLIENT_ID, ACCOUNT_CLIENT_SECRET = get_account_credentials()
+except AccountCredentialsMissing as exc:
+    logger.warning("[sso] account-service credentials missing at boot: %s", exc)
+    ACCOUNT_CLIENT_ID = ""
+    ACCOUNT_CLIENT_SECRET = ""
 
 REPLAY_WINDOW_S = 5 * 60
 

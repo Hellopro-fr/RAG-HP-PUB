@@ -694,9 +694,13 @@ services:
       - GATEWAY_DOCS_ADMIN_EMAILS=${GATEWAY_DOCS_ADMIN_EMAILS:-}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       # ── account-service SSO client (PKCE flow at /auth/login) ────────────
+      # common_utils.sso resolves SERVICE_NAME -> ACCOUNT_CLIENT_ID_<UPPER_SNAKE>
+      # + ACCOUNT_CLIENT_SECRET_<UPPER_SNAKE>, with fallback to plain
+      # ACCOUNT_CLIENT_ID/_SECRET for single-service stacks.
+      - SERVICE_NAME=api-gateway
       - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
-      - ACCOUNT_CLIENT_ID=${ACCOUNT_CLIENT_ID:-}
-      - ACCOUNT_CLIENT_SECRET=${ACCOUNT_CLIENT_SECRET:-}
+      - ACCOUNT_CLIENT_ID_API_GATEWAY=${ACCOUNT_CLIENT_ID_API_GATEWAY:-}
+      - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
       - ACCOUNT_REDIRECT_URI=${ACCOUNT_REDIRECT_URI:-http://localhost:8500/auth/callback}
       - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
     # depends_on:
