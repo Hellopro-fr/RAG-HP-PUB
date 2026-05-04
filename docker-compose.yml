@@ -693,6 +693,12 @@ services:
       # pre-filled in Swagger UI automatically.
       - GATEWAY_DOCS_ADMIN_EMAILS=${GATEWAY_DOCS_ADMIN_EMAILS:-}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      # ── account-service SSO client (PKCE flow at /auth/login) ────────────
+      - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
+      - ACCOUNT_CLIENT_ID=${ACCOUNT_CLIENT_ID:-}
+      - ACCOUNT_CLIENT_SECRET=${ACCOUNT_CLIENT_SECRET:-}
+      - ACCOUNT_REDIRECT_URI=${ACCOUNT_REDIRECT_URI:-http://localhost:8500/auth/callback}
+      - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
     # depends_on:
     #   mysql:
     #     condition: service_healthy
