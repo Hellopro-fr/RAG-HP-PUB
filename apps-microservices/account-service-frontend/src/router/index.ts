@@ -23,6 +23,7 @@ const router = createRouter({
     { path: '/admin/users', name: 'users', component: () => import('@/views/AdminUsersView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Utilisateurs' } },
     { path: '/admin/users/:email/sessions', name: 'user-sessions', component: () => import('@/views/UserSessionsView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Sessions utilisateur' } },
     { path: '/admin/audit', name: 'audit', component: () => import('@/views/AuditLogView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: "Journal d'audit" } },
+    { path: '/admin/parameters', name: 'parameters', component: () => import('@/views/ParametersView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Paramètres' } },
     {
       path: '/',
       name: 'root',
