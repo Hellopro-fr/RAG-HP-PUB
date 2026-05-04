@@ -30,7 +30,7 @@ const brandTitle = computed(() =>
 const subtitle = computed(() =>
   oauthMode.value ? 'Authentifiez-vous pour accéder à ce service.' : 'Accédez au tableau de bord.',
 )
-const logoUrl = computed(() => branding.value?.logo_url ?? '/images/servers/hp-logo.svg')
+const logoUrl = computed(() => branding.value?.logo_url || '/images/servers/hp-logo.svg')
 
 onMounted(async () => {
   if (!oauthMode.value) return
