@@ -1,0 +1,30 @@
+name: CI / account-service-frontend
+
+on:
+  pull_request:
+    paths:
+      - 'apps-microservices/account-service-frontend/**'
+      - '.github/workflows/ci_account_service_frontend.yml'
+  push:
+    branches: [main, features/account-service]
+    paths:
+      - 'apps-microservices/account-service-frontend/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps-microservices/account-service-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: apps-microservices/account-service-frontend/package-lock.json
+      - run: npm ci || npm install
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm test
+      - run: npm run build

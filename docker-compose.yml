@@ -693,6 +693,19 @@ services:
       # pre-filled in Swagger UI automatically.
       - GATEWAY_DOCS_ADMIN_EMAILS=${GATEWAY_DOCS_ADMIN_EMAILS:-}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      # ── account-service SSO client (PKCE flow at /auth/login) ────────────
+      # common_utils.sso resolves SERVICE_NAME -> ACCOUNT_CLIENT_ID_<UPPER_SNAKE>
+      # + ACCOUNT_CLIENT_SECRET_<UPPER_SNAKE>, with fallback to plain
+      # ACCOUNT_CLIENT_ID/_SECRET for single-service stacks.
+      - SERVICE_NAME=api-gateway
+      # In-cluster URL (server-to-server: /token + /internal/credentials)
+      - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
+      # Public URL emitted in 302 Location to the browser
+      - ACCOUNT_PUBLIC_URL=${ACCOUNT_PUBLIC_URL:-http://localhost:8601}
+      - ACCOUNT_CLIENT_ID_API_GATEWAY=${ACCOUNT_CLIENT_ID_API_GATEWAY:-}
+      - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
+      - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
+      - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
     # depends_on:
     #   mysql:
     #     condition: service_healthy
@@ -2357,6 +2370,59 @@ services:
     restart: unless-stopped
     ports:
       - "${MCP_GATEWAY_PORT:-8581}:8581"
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  account-service-backend:
+    build:
+      context: ./apps-microservices/account-service-backend
+    container_name: account-service-backend
+    expose: ["8600"]
+    environment:
+      ACCOUNT_PORT: 8600
+      ACCOUNT_PUBLIC_URL: ${ACCOUNT_PUBLIC_URL}
+      # Reuse api-gateway DB credentials so both services share the MySQL host
+      MYSQL_HOST: ${MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER:-gateway_user}
+      MYSQL_PASS: ${MYSQL_PASS:-gateway_pass}
+      MYSQL_DB: ${MYSQL_DB:-gateway_db}
+      ENCRYPTION_KEY: ${ACCOUNT_ENCRYPTION_KEY}
+      # Reuse api-gateway JWT/auth env so the same hellopro.fr login flow applies
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGO: ${JWT_ALGO}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      AUTH_URL: ${AUTH_URL}
+      ADMIN_EMAILS: ${GATEWAY_DOCS_ADMIN_EMAILS}
+      OAUTH2_DEFAULT_TOKEN_TTL: ${OAUTH2_DEFAULT_TOKEN_TTL:-60}
+      OAUTH2_DEFAULT_REFRESH_TTL: ${OAUTH2_DEFAULT_REFRESH_TTL:-2592000}
+      OAUTH2_AUTH_CODE_TTL: ${OAUTH2_AUTH_CODE_TTL:-600}
+      LOGOUT_WEBHOOK_TIMEOUT: ${LOGOUT_WEBHOOK_TIMEOUT:-5}
+      LOGOUT_WEBHOOK_RETRIES: ${LOGOUT_WEBHOOK_RETRIES:-3}
+      SECURE_COOKIE: ${ACCOUNT_SECURE_COOKIE:-false}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      SLACK_ENV_LABEL: ${SLACK_ENV_LABEL}
+      INTERNAL_ADMIN_TOKEN: ${ACCOUNT_INTERNAL_TOKEN}
+    restart: unless-stopped
+    networks:
+      - services-net
+    logging: *logging_defaults
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8600/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  account-service-frontend:
+    build:
+      context: ./apps-microservices/account-service-frontend
+    container_name: account-service-frontend
+    ports:
+      - "${ACCOUNT_FRONTEND_PORT:-8601}:8601"
+    depends_on:
+      - account-service-backend
+    restart: unless-stopped
     networks:
       - services-net
     logging: *logging_defaults
