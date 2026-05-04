@@ -223,7 +223,7 @@ func main() {
 		RevokeAll:   refreshRepo,
 		Broadcaster: userBroadcastAdapter{oauthRepo, refreshRepo, broadcaster},
 	})))
-	mux.Handle("/api/v1/admin/users/{email}/sessions", requireAdmin(api.NewSessionsHandler(api.SessionsDeps{Repo: refreshRepo})))
+	mux.Handle("GET /api/v1/admin/users/{email}/sessions", requireAdmin(api.NewSessionsHandler(api.SessionsDeps{Repo: refreshRepo})))
 	mux.Handle("POST /api/v1/admin/sessions/{sid}/revoke", requireAdmin(api.NewSessionsHandler(api.SessionsDeps{Repo: refreshRepo})))
 	mux.Handle("GET /api/v1/admin/audit", requireAdmin(api.NewAuditHandler(api.AuditDeps{Repo: auditRepo})))
 
