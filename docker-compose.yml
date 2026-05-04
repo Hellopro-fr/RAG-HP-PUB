@@ -2389,6 +2389,7 @@ services:
       LOGOUT_WEBHOOK_RETRIES: ${LOGOUT_WEBHOOK_RETRIES:-3}
       SECURE_COOKIE: "true"
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      SLACK_ENV_LABEL: ${SLACK_ENV_LABEL}
     restart: unless-stopped
     networks:
       - services-net

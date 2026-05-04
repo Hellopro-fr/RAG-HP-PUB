@@ -28,6 +28,7 @@ type Configuration struct {
 	LogoutWorkers     int
 	SecureCookie      bool
 	SlackWebhookURL   string
+	SlackEnvLabel     string
 	SlackCooldownS    int
 }
 
@@ -71,6 +72,7 @@ func Load() (*Configuration, error) {
 		LogoutWorkers:     envInt("LOGOUT_WORKERS", 4),
 		SecureCookie:      envBool("SECURE_COOKIE", true),
 		SlackWebhookURL:   os.Getenv("SLACK_WEBHOOK_URL"),
+		SlackEnvLabel:     os.Getenv("SLACK_ENV_LABEL"),
 		SlackCooldownS:    envInt("SLACK_AUTH_ALERT_COOLDOWN", 600),
 	}
 	if err := cfg.validate(); err != nil {
