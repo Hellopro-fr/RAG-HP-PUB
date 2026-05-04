@@ -5,13 +5,20 @@ End-to-end verification of the OAuth 2.1 + skip-consent + back-channel logout fl
 ## Prerequisites
 
 ```bash
-# .env at repo root must define:
-ACCOUNT_PUBLIC_URL=https://account.example.com   # or http://localhost:8600 for dev
-ACCOUNT_MYSQL_DSN=account:account@tcp(mysql:3306)/account_db?parseTime=true
-ACCOUNT_ENCRYPTION_KEY=$(openssl rand -hex 32)
-ACCOUNT_JWT_SECRET=$(openssl rand -hex 16)
-ACCOUNT_JWT_AUDIENCE=https://www.hellopro.fr
-HELLOPRO_AUTH_URL=https://www.hellopro.fr/login
+# Shared with api-gateway (already present in .env if api-gateway runs):
+MYSQL_HOST=mysql
+MYSQL_PORT=3306
+MYSQL_USER=gateway_user
+MYSQL_PASS=gateway_pass
+MYSQL_DB=gateway_db
+JWT_SECRET=<openssl rand -hex 16>
+JWT_ALGO=HS256
+JWT_AUDIENCE=https://www.hellopro.fr
+AUTH_URL=https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php
+
+# Account-service-specific:
+ACCOUNT_PUBLIC_URL=https://account.example.com    # or http://localhost:8600 for dev
+ACCOUNT_ENCRYPTION_KEY=<openssl rand -hex 32>
 ACCOUNT_ADMIN_EMAILS=youremail@hellopro.fr
 ACCOUNT_FRONTEND_PORT=8601
 ```

@@ -2369,12 +2369,19 @@ services:
     environment:
       ACCOUNT_PORT: 8600
       ACCOUNT_PUBLIC_URL: ${ACCOUNT_PUBLIC_URL}
-      MYSQL_DSN: ${ACCOUNT_MYSQL_DSN}
+      # Reuse api-gateway DB credentials so both services share the MySQL host
+      MYSQL_HOST: ${MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER:-gateway_user}
+      MYSQL_PASS: ${MYSQL_PASS:-gateway_pass}
+      MYSQL_DB: ${MYSQL_DB:-gateway_db}
       ENCRYPTION_KEY: ${ACCOUNT_ENCRYPTION_KEY}
-      JWT_SECRET: ${ACCOUNT_JWT_SECRET}
-      JWT_AUDIENCE: ${ACCOUNT_JWT_AUDIENCE:-https://www.hellopro.fr}
-      AUTH_URL: ${HELLOPRO_AUTH_URL}
-      ADMIN_EMAILS: ${ACCOUNT_ADMIN_EMAILS}
+      # Reuse api-gateway JWT/auth env so the same hellopro.fr login flow applies
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGO: ${JWT_ALGO}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      AUTH_URL: ${AUTH_URL}
+      ADMIN_EMAILS: ${GATEWAY_DOCS_ADMIN_EMAILS}
       OAUTH2_DEFAULT_TOKEN_TTL: ${OAUTH2_DEFAULT_TOKEN_TTL:-60}
       OAUTH2_DEFAULT_REFRESH_TTL: ${OAUTH2_DEFAULT_REFRESH_TTL:-2592000}
       OAUTH2_AUTH_CODE_TTL: ${OAUTH2_AUTH_CODE_TTL:-600}

@@ -13,6 +13,7 @@ type Configuration struct {
 	MySQLDSN          string
 	EncryptionKey     string
 	JWTSecret         string
+	JWTAlgo           string
 	JWTAudience       string
 	AuthURL           string
 	FallbackUser      string
@@ -30,15 +31,34 @@ type Configuration struct {
 	SlackCooldownS    int
 }
 
+// buildMySQLDSN composes a DSN from MYSQL_DSN if set; otherwise from the
+// per-component vars used by api-gateway (MYSQL_HOST/PORT/USER/PASS/DB),
+// so the same MySQL container and credentials work for both services.
+func buildMySQLDSN() string {
+	if v := os.Getenv("MYSQL_DSN"); v != "" {
+		return v
+	}
+	host := os.Getenv("MYSQL_HOST")
+	user := os.Getenv("MYSQL_USER")
+	pass := os.Getenv("MYSQL_PASS")
+	dbName := os.Getenv("MYSQL_DB")
+	if host == "" || user == "" || dbName == "" {
+		return ""
+	}
+	port := envStr("MYSQL_PORT", "3306")
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", user, pass, host, port, dbName)
+}
+
 func Load() (*Configuration, error) {
 	cfg := &Configuration{
 		Port:              envInt("ACCOUNT_PORT", 8600),
 		PublicURL:         strings.TrimRight(os.Getenv("ACCOUNT_PUBLIC_URL"), "/"),
-		MySQLDSN:          os.Getenv("MYSQL_DSN"),
+		MySQLDSN:          buildMySQLDSN(),
 		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
 		JWTSecret:         os.Getenv("JWT_SECRET"),
+		JWTAlgo:           envStr("JWT_ALGO", "HS256"),
 		JWTAudience:       envStr("JWT_AUDIENCE", "https://www.hellopro.fr"),
-		AuthURL:           os.Getenv("AUTH_URL"),
+		AuthURL:           envStr("AUTH_URL", "https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php"),
 		FallbackUser:      os.Getenv("FALLBACK_USER"),
 		FallbackPass:      os.Getenv("FALLBACK_PASS"),
 		FallbackEmail:     os.Getenv("FALLBACK_EMAIL"),
@@ -61,16 +81,13 @@ func Load() (*Configuration, error) {
 
 func (c *Configuration) validate() error {
 	if c.MySQLDSN == "" {
-		return fmt.Errorf("MYSQL_DSN is required")
+		return fmt.Errorf("MySQL connection required: set MYSQL_DSN or MYSQL_HOST + MYSQL_USER + MYSQL_PASS + MYSQL_DB")
 	}
 	if c.EncryptionKey == "" || len(c.EncryptionKey) != 64 {
 		return fmt.Errorf("ENCRYPTION_KEY must be 32 bytes hex (64 chars)")
 	}
 	if c.JWTSecret == "" {
 		return fmt.Errorf("JWT_SECRET is required")
-	}
-	if c.AuthURL == "" {
-		return fmt.Errorf("AUTH_URL is required")
 	}
 	if c.PublicURL == "" {
 		return fmt.Errorf("ACCOUNT_PUBLIC_URL is required")
