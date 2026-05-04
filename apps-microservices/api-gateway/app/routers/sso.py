@@ -39,7 +39,11 @@ logger = logging.getLogger("sso")
 
 router = APIRouter(tags=["SSO"])
 
-ACCOUNT_BASE_URL = os.environ.get("ACCOUNT_BASE_URL", "http://account-service-backend:8600")
+# Two URLs — keep the in-cluster path for server-to-server calls (token
+# exchange + /internal/credentials) but emit the public origin in 302
+# Location headers so the user's browser can actually resolve it.
+ACCOUNT_BASE_URL = os.environ.get("ACCOUNT_BASE_URL", "http://account-service-backend:8600").rstrip("/")
+ACCOUNT_PUBLIC_URL = os.environ.get("ACCOUNT_PUBLIC_URL", ACCOUNT_BASE_URL).rstrip("/")
 ACCOUNT_REDIRECT_URI = os.environ.get("ACCOUNT_REDIRECT_URI", "")
 
 # Credentials are resolved lazily on first /auth/login request: env first
@@ -82,7 +86,7 @@ async def auth_login() -> Response:
     state = _b64url(secrets.token_bytes(16))
 
     target = (
-        f"{ACCOUNT_BASE_URL}/authorize"
+        f"{ACCOUNT_PUBLIC_URL}/authorize"
         f"?response_type=code"
         f"&client_id={client_id}"
         f"&redirect_uri={ACCOUNT_REDIRECT_URI}"

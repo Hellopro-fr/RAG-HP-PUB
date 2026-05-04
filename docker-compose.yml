@@ -698,7 +698,10 @@ services:
       # + ACCOUNT_CLIENT_SECRET_<UPPER_SNAKE>, with fallback to plain
       # ACCOUNT_CLIENT_ID/_SECRET for single-service stacks.
       - SERVICE_NAME=api-gateway
+      # In-cluster URL (server-to-server: /token + /internal/credentials)
       - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
+      # Public URL emitted in 302 Location to the browser
+      - ACCOUNT_PUBLIC_URL=${ACCOUNT_PUBLIC_URL:-http://localhost:8601}
       - ACCOUNT_CLIENT_ID_API_GATEWAY=${ACCOUNT_CLIENT_ID_API_GATEWAY:-}
       - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
       - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
