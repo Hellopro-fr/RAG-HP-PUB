@@ -58,10 +58,16 @@ func NewInternalCredentialsHandler(d InternalCredentialsDeps) http.Handler {
 			writeJSONErr(w, http.StatusInternalServerError, "server_error", "decrypt failed")
 			return
 		}
+		uris := []string{}
+		if c.RedirectURIs != nil && *c.RedirectURIs != "" {
+			_ = json.Unmarshal([]byte(*c.RedirectURIs), &uris)
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"client_id":     c.ClientID,
 			"client_secret": string(plain),
+			"redirect_uris": uris,
+			"name":          c.Name,
 		})
 	})
 }

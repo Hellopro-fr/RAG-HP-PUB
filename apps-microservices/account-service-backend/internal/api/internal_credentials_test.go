@@ -37,10 +37,12 @@ func TestInternalCredentials_RequiresAdminToken(t *testing.T) {
 }
 
 func TestInternalCredentials_ReturnsDecryptedSecret(t *testing.T) {
+	uris := `["http://localhost:8500/auth/callback","https://prod.example/cb"]`
 	cli := &db.OAuth2Client{
 		Name:            "api-gateway",
 		ClientID:        "cli-1",
 		ClientSecretEnc: []byte("ENC:plaintext-secret"),
+		RedirectURIs:    &uris,
 		IsActive:        true,
 	}
 	h := NewInternalCredentialsHandler(InternalCredentialsDeps{
@@ -58,10 +60,14 @@ func TestInternalCredentials_ReturnsDecryptedSecret(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("Code=%d body=%s", w.Code, w.Body.String())
 	}
-	var got map[string]string
+	var got map[string]interface{}
 	_ = json.Unmarshal(w.Body.Bytes(), &got)
 	if got["client_id"] != "cli-1" || got["client_secret"] != "plaintext-secret" {
-		t.Fatalf("got=%v", got)
+		t.Fatalf("client fields=%v", got)
+	}
+	gotURIs, _ := got["redirect_uris"].([]interface{})
+	if len(gotURIs) != 2 || gotURIs[0] != "http://localhost:8500/auth/callback" {
+		t.Fatalf("redirect_uris=%v", gotURIs)
 	}
 }
 

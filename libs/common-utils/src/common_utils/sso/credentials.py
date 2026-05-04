@@ -74,17 +74,18 @@ def get_account_credentials(service_name: Optional[str] = None) -> Tuple[str, st
     )
 
 
-async def get_account_credentials_from_api(
+async def get_account_client_from_api(
     service_name: Optional[str] = None,
     *,
     base_url: Optional[str] = None,
     admin_token: Optional[str] = None,
     timeout: float = 5.0,
-) -> Tuple[str, str]:
-    """Fetch ``(client_id, client_secret)`` from account-service over HTTP.
+) -> dict:
+    """Fetch the full registered client record from account-service over HTTP.
 
     Calls ``GET {base_url}/internal/credentials/{service_name}`` with an
-    ``X-Admin-Token`` header. The endpoint is admin-gated on the
+    ``X-Admin-Token`` header. Returns ``{client_id, client_secret,
+    redirect_uris, name}``. The endpoint is admin-gated on the
     account-service side and decrypts the secret server-side, so this
     consumer never needs MySQL access or the AES key.
 
@@ -108,8 +109,8 @@ async def get_account_credentials_from_api(
         raise AccountCredentialsMissing("ACCOUNT_INTERNAL_TOKEN not set")
 
     import httpx  # lazy
-
     from urllib.parse import quote
+
     url = f"{base}/internal/credentials/{quote(name, safe='')}"
     async with httpx.AsyncClient(timeout=timeout) as cli:
         r = await cli.get(url, headers={"X-Admin-Token": token})
@@ -123,8 +124,21 @@ async def get_account_credentials_from_api(
             f"internal credentials endpoint returned {r.status_code}: {r.text[:200]}"
         )
     body = r.json()
-    cid = body.get("client_id", "")
-    sec = body.get("client_secret", "")
-    if not cid or not sec:
+    if not body.get("client_id") or not body.get("client_secret"):
         raise AccountCredentialsMissing("internal credentials response missing fields")
-    return cid, sec
+    return body
+
+
+async def get_account_credentials_from_api(
+    service_name: Optional[str] = None,
+    *,
+    base_url: Optional[str] = None,
+    admin_token: Optional[str] = None,
+    timeout: float = 5.0,
+) -> Tuple[str, str]:
+    """Tuple-only wrapper around get_account_client_from_api(): returns
+    just (client_id, client_secret) for callers that don't need redirect_uris."""
+    body = await get_account_client_from_api(
+        service_name, base_url=base_url, admin_token=admin_token, timeout=timeout
+    )
+    return body["client_id"], body["client_secret"]

@@ -31,8 +31,8 @@ from fastapi.responses import RedirectResponse
 
 from common_utils.sso import (
     AccountCredentialsMissing,
+    get_account_client_from_api,
     get_account_credentials,
-    get_account_credentials_from_api,
 )
 
 logger = logging.getLogger("sso")
@@ -46,23 +46,43 @@ ACCOUNT_BASE_URL = os.environ.get("ACCOUNT_BASE_URL", "http://account-service-ba
 ACCOUNT_PUBLIC_URL = os.environ.get("ACCOUNT_PUBLIC_URL", ACCOUNT_BASE_URL).rstrip("/")
 ACCOUNT_REDIRECT_URI = os.environ.get("ACCOUNT_REDIRECT_URI", "")
 
-# Credentials are resolved lazily on first /auth/login request: env first
-# (instant, no network), then HTTP fallback to /internal/credentials/{name}
-# on account-service. Cache once we get them so we don't refetch per request.
-_cached_credentials: Optional[tuple[str, str]] = None
+# Client record (id + secret + redirect_uris) resolved lazily on first
+# request: env first (no network), then HTTP fallback to
+# /internal/credentials/{name} on account-service. Cached afterwards.
+_cached_client: Optional[dict] = None
 
 
-async def _get_credentials() -> tuple[str, str]:
-    global _cached_credentials
-    if _cached_credentials:
-        return _cached_credentials
+async def _get_client() -> dict:
+    global _cached_client
+    if _cached_client:
+        return _cached_client
     try:
-        _cached_credentials = get_account_credentials()
-        return _cached_credentials
+        cid, sec = get_account_credentials()
+        _cached_client = {
+            "client_id": cid,
+            "client_secret": sec,
+            "redirect_uris": [],  # env path can't supply; falls back to ACCOUNT_REDIRECT_URI
+        }
+        return _cached_client
     except AccountCredentialsMissing:
         pass
-    _cached_credentials = await get_account_credentials_from_api()
-    return _cached_credentials
+    _cached_client = await get_account_client_from_api()
+    return _cached_client
+
+
+def _redirect_uri_from(client: dict) -> str:
+    """Pick the redirect_uri to send on /authorize.
+
+    Priority: explicit ACCOUNT_REDIRECT_URI env (still honored for parity
+    with non-API mode) → first entry in the client's registered
+    redirect_uris list.
+    """
+    if ACCOUNT_REDIRECT_URI:
+        return ACCOUNT_REDIRECT_URI
+    uris = client.get("redirect_uris") or []
+    if not uris:
+        raise HTTPException(500, "no redirect_uri available (set ACCOUNT_REDIRECT_URI or register one)")
+    return uris[0]
 
 REPLAY_WINDOW_S = 5 * 60
 
@@ -74,12 +94,11 @@ def _b64url(data: bytes) -> str:
 @router.get("/auth/login", include_in_schema=False)
 async def auth_login() -> Response:
     """Start the PKCE flow: 302 to account-service /authorize with a fresh challenge."""
-    if not ACCOUNT_REDIRECT_URI:
-        raise HTTPException(500, "ACCOUNT_REDIRECT_URI not configured")
     try:
-        client_id, _ = await _get_credentials()
+        client = await _get_client()
     except AccountCredentialsMissing as exc:
         raise HTTPException(500, f"account-service credentials unavailable: {exc}")
+    redirect_uri = _redirect_uri_from(client)
 
     verifier = _b64url(secrets.token_bytes(32))
     challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
@@ -88,8 +107,8 @@ async def auth_login() -> Response:
     target = (
         f"{ACCOUNT_PUBLIC_URL}/authorize"
         f"?response_type=code"
-        f"&client_id={client_id}"
-        f"&redirect_uri={ACCOUNT_REDIRECT_URI}"
+        f"&client_id={client['client_id']}"
+        f"&redirect_uri={redirect_uri}"
         f"&code_challenge={challenge}"
         f"&code_challenge_method=S256"
         f"&state={state}"
@@ -115,9 +134,10 @@ async def auth_callback(request: Request, code: Optional[str] = None, state: Opt
         raise HTTPException(400, "missing verifier")
 
     try:
-        client_id, client_secret = await _get_credentials()
+        client = await _get_client()
     except AccountCredentialsMissing as exc:
         raise HTTPException(500, f"account-service credentials unavailable: {exc}")
+    redirect_uri = _redirect_uri_from(client)
 
     async with httpx.AsyncClient(timeout=10) as cli:
         r = await cli.post(
@@ -125,10 +145,10 @@ async def auth_callback(request: Request, code: Optional[str] = None, state: Opt
             data={
                 "grant_type": "authorization_code",
                 "code": code,
-                "redirect_uri": ACCOUNT_REDIRECT_URI,
+                "redirect_uri": redirect_uri,
                 "code_verifier": verifier,
             },
-            auth=(client_id, client_secret),
+            auth=(client["client_id"], client["client_secret"]),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
@@ -168,13 +188,13 @@ async def logout_webhook(request: Request) -> Response:
     """Account-service back-channel logout. Drops the local session if the
     HMAC matches and the iat is within the replay window."""
     try:
-        _, client_secret = await _get_credentials()
+        client = await _get_client()
     except AccountCredentialsMissing as exc:
         raise HTTPException(500, f"account-service credentials unavailable: {exc}")
 
     body = await request.body()
     presented = request.headers.get("X-Logout-Signature", "")
-    expected = "sha256=" + hmac.new(client_secret.encode(), body, hashlib.sha256).hexdigest()
+    expected = "sha256=" + hmac.new(client["client_secret"].encode(), body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(presented, expected):
         raise HTTPException(401, "bad signature")
 
