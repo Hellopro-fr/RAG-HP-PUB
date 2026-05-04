@@ -1792,8 +1792,8 @@ class RecommendationService:
                 poids_c = carac.poids_caracteristique or "critique"
                 unite = carac.unite or ""
 
-                if poids_c != "critique":
-                    continue
+                # P8 (iter 7 PROD) — Expose secondaire (🟡) en plus de critique (🔴)
+                # au LLM reranker. Le system_prompt distingue déjà critique vs secondaire.
 
                 # Get the name from category definitions, fallback to id
                 cat_def = category_carac_map.get(cid, {})
