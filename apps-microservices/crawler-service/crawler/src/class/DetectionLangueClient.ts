@@ -1,6 +1,13 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import pLimit from "p-limit";
 
+// Local alias for the p-limit instance type. The installed p-limit version
+// exports its types via the `pLimit.Limit` namespace (CommonJS `export =`),
+// so `LimitFunction` is not directly importable. `ReturnType<typeof pLimit>`
+// resolves to the same `Limit` interface and stays in sync if the dep is
+// upgraded to the named-export variant.
+type PLimitInstance = ReturnType<typeof pLimit>;
+
 export interface AlternativeUrl {
     url: string;
     method: string;
@@ -34,9 +41,15 @@ export interface CheckUrlResult {
 
 export class DetectionLangueClient {
     private client: AxiosInstance;
-    private limit: ReturnType<typeof pLimit>;
+    private limit: PLimitInstance;
     private maxRetries: number;
     private backoffBaseS: number;
+    /**
+     * Configured detect-API concurrency cap. Cached at construction time so
+     * `pLimit(maxConcurrency)` and the public `maxConcurrency` accessor stay
+     * in sync even if the env var mutates at runtime.
+     */
+    public readonly maxConcurrency: number;
 
     constructor(baseUrl?: string) {
         const url =
@@ -48,7 +61,7 @@ export class DetectionLangueClient {
         }
 
         const timeoutMs = parseInt(process.env.DETECTION_REQUEST_TIMEOUT_S ?? "180") * 1000;
-        const maxConcurrency = parseInt(process.env.DETECTION_MAX_CONCURRENCY ?? "5");
+        this.maxConcurrency = parseInt(process.env.DETECTION_MAX_CONCURRENCY ?? "5");
         this.maxRetries = parseInt(process.env.DETECTION_MAX_RETRIES ?? "2");
         this.backoffBaseS = parseFloat(process.env.DETECTION_BACKOFF_BASE_S ?? "2");
 
@@ -56,7 +69,15 @@ export class DetectionLangueClient {
             baseURL: `${url}/api/v1`,
             timeout: timeoutMs,
         });
-        this.limit = pLimit(maxConcurrency);
+        this.limit = pLimit(this.maxConcurrency);
+    }
+
+    /**
+     * Returns the underlying p-limit instance for observability
+     * (pendingCount, activeCount). Read-only — do not call it.
+     */
+    get limiter(): Pick<PLimitInstance, "pendingCount" | "activeCount"> {
+        return this.limit;
     }
 
     /**
@@ -266,6 +287,13 @@ export class DetectionLangueClient {
      * URL so the caller can log them. Caller handles all logging — this helper is pure.
      *
      * Result `excluded` is deduped (each prefix appears at most once).
+     *
+     * **Implicit winner branch:** when both `winnerPrefix` and `seedPrefix` are
+     * null (homepage at site root), the FR-shaped alt with the lowest
+     * `region_priority` (undefined treated as worst) is treated as an implicit
+     * winner and skipped. This prevents excluding the canonical /fr/ content
+     * tree when the site exposes it via hreflang on a root-served homepage.
+     * Other-locale alts (e.g., /de, /en) are still excluded.
      */
     static computeExcludedRegionalPaths(
         alternativeUrls: AlternativeUrl[],
@@ -275,9 +303,38 @@ export class DetectionLangueClient {
         const excluded: string[] = [];
         const rejected: { prefix: string; sourceUrl: string }[] = [];
 
+        // When the homepage is at the site root, the canonical FR content tree
+        // (e.g., /fr/) is exposed via hreflang as an alternative URL. Treating it
+        // as a non-winning alternate (and therefore excluding it) drops every
+        // /fr/* link from the crawl. Detect this case by picking the FR-shaped
+        // alt with the lowest region_priority as the implicit winner.
+        let implicitWinnerPrefix: string | null = null;
+        if (winnerPrefix === null && seedPrefix === null) {
+            const FR_PREFIX_PATTERN = /^\/fr([-_][a-z]{2,4})?\/?$/i;
+            const candidates: { prefix: string; priority: number }[] = [];
+            for (const alt of alternativeUrls) {
+                const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
+                if (!altPrefix) continue;
+                if (!FR_PREFIX_PATTERN.test(altPrefix)) continue;
+                // undefined region_priority sorts last (treated as worst)
+                const priority = alt.region_priority ?? Number.MAX_SAFE_INTEGER;
+                candidates.push({ prefix: altPrefix, priority });
+            }
+            if (candidates.length > 0) {
+                // Stable sort: lowest priority first, ties keep original order.
+                candidates.sort((a, b) => a.priority - b.priority);
+                implicitWinnerPrefix = candidates[0].prefix;
+            }
+        }
+
         for (const alt of alternativeUrls) {
             const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
-            if (!altPrefix || altPrefix === winnerPrefix || altPrefix === seedPrefix) {
+            if (
+                !altPrefix ||
+                altPrefix === winnerPrefix ||
+                altPrefix === seedPrefix ||
+                altPrefix === implicitWinnerPrefix
+            ) {
                 continue;
             }
             if (!DetectionLangueClient.isLocalePathPrefix(altPrefix)) {

@@ -22,8 +22,55 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
+import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
+
+/**
+ * Per-request timing markers. `handlerStartAt` is captured at handler entry;
+ * the rest are populated lazily by Crawlee preNav/postNav hooks (T3) and
+ * inline detect-call wrappers below. Missing markers fall back to nearby
+ * markers in `buildTimingEntry` so every page produces a well-formed entry,
+ * even on abnormal exits before navigation completes.
+ */
+interface RequestTiming {
+    handlerStartAt: number;
+    dequeueAt?: number;     // populated by preNavigationHook (T3)
+    postNavAt?: number;     // populated by postNavigationHook (T3)
+    detectStartAt?: number; // populated inline before detect()
+    detectEndAt?: number;   // populated inline after detect()
+}
+
+/**
+ * Build a PageTimingEntry from accumulated markers. Tolerates missing markers
+ * (abnormal exits before postNav, or pages that never called detect) by
+ * folding the missing phase into zero — total_ms still reflects real
+ * handler wall-clock time.
+ */
+function buildTimingEntry(
+    timing: RequestTiming,
+    url: string,
+    detectMethod: string | undefined,
+    detectOk: boolean | undefined,
+): PageTimingEntry {
+    const handlerEndAt = Date.now();
+    const dequeueAt = timing.dequeueAt ?? timing.handlerStartAt;
+    const postNavAt = timing.postNavAt ?? dequeueAt;
+    const detectStartAt = timing.detectStartAt ?? postNavAt;
+    const detectEndAt = timing.detectEndAt ?? detectStartAt;
+    return {
+        url,
+        t: dequeueAt,
+        wait_ms: Math.max(0, dequeueAt - timing.handlerStartAt),
+        nav_ms: Math.max(0, postNavAt - dequeueAt),
+        pre_detect_ms: Math.max(0, detectStartAt - postNavAt),
+        detect_ms: Math.max(0, detectEndAt - detectStartAt),
+        post_ms: Math.max(0, handlerEndAt - detectEndAt),
+        total_ms: Math.max(0, handlerEndAt - dequeueAt),
+        detect_method: detectMethod,
+        detect_ok: detectOk,
+    };
+}
 
 // --- Blocked URL Log Deduplication ---
 // Logs each blocked URL only ONCE per crawl launch to reduce log pollution.
@@ -145,11 +192,33 @@ const ALWAYS_REMOVE_PARAMS = [
     "timestamp", "random", "nocache",
 ];
 
-const detectionClient = new DetectionLangueClient();
-
 router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
+        // Shared detect client (Part B). Constructed once in main.ts so the
+        // timing sampler observes the SAME p-limit queue (live pendingCount /
+        // activeCount). Fail fast if main.ts has not initialised it — a silent
+        // fallback would re-introduce the dual-client p-limit split that T4 fixes.
+        const detectionClient = context.detectionClient;
+        if (!detectionClient) {
+            throw new Error("context.detectionClient not initialised — main.ts must construct it before the router runs");
+        }
+
+        // Per-request timing markers. dequeueAt and postNavAt may already be
+        // present on request.userData when TIMING_ENABLED=true (written by the
+        // Crawlee pre/postNavigationHooks installed in functions.ts). Read from
+        // the SAME location the hooks write to (`request.userData._timing`),
+        // not `crawlingContext.userData._timing`.
+        const _timing: RequestTiming = {
+            handlerStartAt: Date.now(),
+            dequeueAt: (request.userData as any)?._timing?.dequeueAt,
+            postNavAt: (request.userData as any)?._timing?.postNavAt,
+        };
+        let _detectMethod: string | undefined;
+        let _detectOk: boolean | undefined;
+
         const proxyUrl = proxyInfo?.url || null;
+        let url = request.loadedUrl;
+        try {
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
         // Uses ignoredExtensions as single source of truth for blocked file types
@@ -173,8 +242,6 @@ router.addDefaultHandler(
             }
             return route.continue();
         });
-
-        let url = request.loadedUrl;
 
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
@@ -389,10 +456,14 @@ router.addDefaultHandler(
                 }
 
                 try {
+                    _timing.detectStartAt = Date.now();
                     const detectResult = await detectionClient.detect(url, content, {
                         mode: "complete",
                         proxyUrl: proxyUrl ?? undefined,
                     });
+                    _timing.detectEndAt = Date.now();
+                    _detectMethod = detectResult.method;
+                    _detectOk = detectResult.ok;
 
                     if (detectResult.ok) {
                         const primaryMethod = DetectionLangueClient.extractPrimaryMethod(detectResult.method);
@@ -516,10 +587,14 @@ router.addDefaultHandler(
                     }
 
                     try {
+                        _timing.detectStartAt = Date.now();
                         const autoCheck = await detectionClient.detect(url, content, {
                             mode: "simple",
                             proxyUrl: proxyUrl ?? undefined,
                         });
+                        _timing.detectEndAt = Date.now();
+                        _detectMethod = autoCheck.method;
+                        _detectOk = autoCheck.ok;
 
                         if (autoCheck.ok) {
                             const primaryMethod = DetectionLangueClient.extractPrimaryMethod(autoCheck.method);
@@ -566,12 +641,16 @@ router.addDefaultHandler(
                         // When stored method is URL-based or NLP-only, forced_method cannot
                         // validate HTML tags → use NLP to verify actual content instead.
                         // When stored method is HTML-based, use forced_method for fast validation.
+                        _timing.detectStartAt = Date.now();
                         const detectResult = await detectionClient.detect(url, content, {
                             forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
                             mode: "simple",
                             useNlpDetection: needsNlp,
                             proxyUrl: proxyUrl ?? undefined,
                         });
+                        _timing.detectEndAt = Date.now();
+                        _detectMethod = detectResult.method;
+                        _detectOk = detectResult.ok;
 
                         if (detectResult.ok) {
                             isEnqueuingLinks = true;
@@ -843,6 +922,18 @@ router.addDefaultHandler(
         // in update mode (pre-added to DedupManager during Phase 1 seeding).
         if (request.url === site && context.homepageReady) {
             context.homepageReady.resolve();
+        }
+        } finally {
+            // Single exit hook for ALL paths (return, throw, early break). When
+            // TIMING_ENABLED=false, context.timingRecorder is undefined and the
+            // optional chain is a no-op — zero overhead.
+            context.timingRecorder?.recordPage(
+                buildTimingEntry(_timing, url, _detectMethod, _detectOk),
+            );
+            // Drop the per-attempt marker so a Crawlee retry on the same Request
+            // does not reuse stale dequeueAt/postNavAt from the previous attempt
+            // (T3 review note N-4). preNavigationHook will repopulate.
+            try { delete (request.userData as any)._timing; } catch { /* best-effort */ }
         }
     }
 );
