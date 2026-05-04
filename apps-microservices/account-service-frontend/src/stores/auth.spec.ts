@@ -13,8 +13,7 @@ describe('auth store', () => {
       status: 200,
       json: async () => ({ email: 'a@x', is_admin: true, is_allowed: true }),
     })
-    // @ts-expect-error stub global
-    globalThis.fetch = fetchMock
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const a = useAuthStore()
     await a.login('a', 'p')
@@ -28,8 +27,7 @@ describe('auth store', () => {
       status: 401,
       json: async () => ({ error: 'invalid_grant', error_description: 'bad creds' }),
     })
-    // @ts-expect-error stub global
-    globalThis.fetch = fetchMock
+    globalThis.fetch = fetchMock as unknown as typeof fetch
     const a = useAuthStore()
     await expect(a.login('a', 'wrong')).rejects.toThrow('Unauthorized')
   })
