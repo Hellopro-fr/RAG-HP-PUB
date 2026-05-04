@@ -35,7 +35,10 @@ async def login_page(request: Request):
     if user and "token" in user:
         token = user["token"]
         try:
-            jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO], audience=JWT_AUDIENCE)
+            jwt.decode(
+                token, JWT_SECRET, algorithms=[JWT_ALGO],
+                options={"verify_aud": False},
+            )
             return RedirectResponse(url="/docs", status_code=303)
         except (ExpiredSignatureError, InvalidTokenError):
             request.session.clear()
