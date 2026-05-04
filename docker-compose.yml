@@ -2384,10 +2384,10 @@ services:
       ACCOUNT_PUBLIC_URL: ${ACCOUNT_PUBLIC_URL}
       # Reuse api-gateway DB credentials so both services share the MySQL host
       MYSQL_HOST: ${MYSQL_HOST:-mysql}
-      MYSQL_PORT: ${MYSQL_PORT:-3306}
-      MYSQL_USER: ${MYSQL_USER:-gateway_user}
-      MYSQL_PASS: ${MYSQL_PASS:-gateway_pass}
-      MYSQL_DB: ${MYSQL_DB:-gateway_db}
+      MYSQL_PORT: ${GATEWAY_MYSQL_PORT:-3306}
+      MYSQL_USER: ${GATEWAY_MYSQL_USER:-gateway_user}
+      MYSQL_PASS: ${GATEWAY_MYSQL_PASS:-gateway_pass}
+      MYSQL_DB: ${GATEWAY_MYSQL_DB:-gateway_db}
       ENCRYPTION_KEY: ${ACCOUNT_ENCRYPTION_KEY}
       # Reuse api-gateway JWT/auth env so the same hellopro.fr login flow applies
       JWT_SECRET: ${JWT_SECRET}
