@@ -1,4 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    title?: string
+    minRole?: 'admin' | 'user'
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -6,146 +15,40 @@ const router = createRouter({
     return savedPosition || { left: 0, top: 0 }
   },
   routes: [
+    { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { requiresAuth: false, title: 'Connexion' } },
+    { path: '/me', name: 'me', component: () => import('@/views/MeView.vue'), meta: { requiresAuth: true, title: 'Profil' } },
+    { path: '/admin/services', name: 'services', component: () => import('@/views/AdminServicesView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Services' } },
+    { path: '/admin/services/new', name: 'service-create', component: () => import('@/views/ServiceFormView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Nouveau service' } },
+    { path: '/admin/services/:id/edit', name: 'service-edit', component: () => import('@/views/ServiceFormView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Modifier service' } },
+    { path: '/admin/users', name: 'users', component: () => import('@/views/AdminUsersView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Utilisateurs' } },
+    { path: '/admin/users/:email/sessions', name: 'user-sessions', component: () => import('@/views/UserSessionsView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: 'Sessions utilisateur' } },
+    { path: '/admin/audit', name: 'audit', component: () => import('@/views/AuditLogView.vue'), meta: { requiresAuth: true, minRole: 'admin', title: "Journal d'audit" } },
     {
       path: '/',
-      name: 'Ecommerce',
-      component: () => import('../views/Ecommerce.vue'),
-      meta: {
-        title: 'eCommerce Dashboard',
+      name: 'root',
+      redirect: () => {
+        const a = useAuthStore()
+        return a.isAdmin ? '/admin/services' : '/me'
       },
     },
-    {
-      path: '/calendar',
-      name: 'Calendar',
-      component: () => import('../views/Others/Calendar.vue'),
-      meta: {
-        title: 'Calendar',
-      },
-    },
-    {
-      path: '/profile',
-      name: 'Profile',
-      component: () => import('../views/Others/UserProfile.vue'),
-      meta: {
-        title: 'Profile',
-      },
-    },
-    {
-      path: '/form-elements',
-      name: 'Form Elements',
-      component: () => import('../views/Forms/FormElements.vue'),
-      meta: {
-        title: 'Form Elements',
-      },
-    },
-    {
-      path: '/basic-tables',
-      name: 'Basic Tables',
-      component: () => import('../views/Tables/BasicTables.vue'),
-      meta: {
-        title: 'Basic Tables',
-      },
-    },
-    {
-      path: '/line-chart',
-      name: 'Line Chart',
-      component: () => import('../views/Chart/LineChart/LineChart.vue'),
-    },
-    {
-      path: '/bar-chart',
-      name: 'Bar Chart',
-      component: () => import('../views/Chart/BarChart/BarChart.vue'),
-    },
-    {
-      path: '/alerts',
-      name: 'Alerts',
-      component: () => import('../views/UiElements/Alerts.vue'),
-      meta: {
-        title: 'Alerts',
-      },
-    },
-    {
-      path: '/avatars',
-      name: 'Avatars',
-      component: () => import('../views/UiElements/Avatars.vue'),
-      meta: {
-        title: 'Avatars',
-      },
-    },
-    {
-      path: '/badge',
-      name: 'Badge',
-      component: () => import('../views/UiElements/Badges.vue'),
-      meta: {
-        title: 'Badge',
-      },
-    },
-
-    {
-      path: '/buttons',
-      name: 'Buttons',
-      component: () => import('../views/UiElements/Buttons.vue'),
-      meta: {
-        title: 'Buttons',
-      },
-    },
-
-    {
-      path: '/images',
-      name: 'Images',
-      component: () => import('../views/UiElements/Images.vue'),
-      meta: {
-        title: 'Images',
-      },
-    },
-    {
-      path: '/videos',
-      name: 'Videos',
-      component: () => import('../views/UiElements/Videos.vue'),
-      meta: {
-        title: 'Videos',
-      },
-    },
-    {
-      path: '/blank',
-      name: 'Blank',
-      component: () => import('../views/Pages/BlankPage.vue'),
-      meta: {
-        title: 'Blank',
-      },
-    },
-
-    {
-      path: '/error-404',
-      name: '404 Error',
-      component: () => import('../views/Errors/FourZeroFour.vue'),
-      meta: {
-        title: '404 Error',
-      },
-    },
-
-    {
-      path: '/signin',
-      name: 'Signin',
-      component: () => import('../views/Auth/Signin.vue'),
-      meta: {
-        title: 'Signin',
-      },
-    },
-    {
-      path: '/signup',
-      name: 'Signup',
-      component: () => import('../views/Auth/Signup.vue'),
-      meta: {
-        title: 'Signup',
-      },
-    },
+    { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
 })
 
-export default router
+router.beforeEach(async (to) => {
+  if (to.meta.requiresAuth === false) return true
 
-router.beforeEach((to, from, next) => {
-  document.title = `Vue.js ${to.meta.title} | TailAdmin - Vue.js Tailwind CSS Dashboard Template`
-  next()
+  const a = useAuthStore()
+  if (!a.isAuthenticated) {
+    const ok = await a.checkSession()
+    if (!ok) {
+      return { path: '/login', query: { redirect: to.fullPath } }
+    }
+  }
+  if (to.meta.minRole === 'admin' && !a.isAdmin) {
+    return { path: '/me' }
+  }
+  return true
 })
+
+export default router
