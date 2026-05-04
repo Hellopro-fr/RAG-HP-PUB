@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import type { ColumnDef } from '@tanstack/vue-table'
 import * as usersApi from '@/api/users'
+import DataTable from '@/components/common/DataTable.vue'
 
 const router = useRouter()
 const items = ref<usersApi.AdminUser[]>([])
-const total = ref(0)
 const loading = ref(true)
 const error = ref('')
 
 async function load() {
   loading.value = true
+  error.value = ''
   try {
-    const r = await usersApi.list(50, 0)
+    const r = await usersApi.list(200, 0)
     items.value = r.items
-    total.value = r.total
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Erreur'
   } finally {
@@ -33,41 +34,113 @@ async function action(fn: (e: string) => Promise<unknown>, email: string, label:
 }
 
 onMounted(load)
+
+const columns: ColumnDef<usersApi.AdminUser, any>[] = [
+  {
+    accessorKey: 'email',
+    header: 'Email',
+    cell: (info) => h('span', { class: 'font-mono text-sm' }, info.getValue() as string),
+  },
+  { accessorKey: 'display_name', header: 'Nom' },
+  {
+    accessorKey: 'is_admin',
+    header: 'Admin',
+    cell: (info) => (info.getValue() ? '✔' : ''),
+  },
+  {
+    accessorKey: 'is_allowed',
+    header: 'Autorisé',
+    cell: (info) =>
+      h(
+        'span',
+        { class: info.getValue() ? 'text-green-600' : 'text-red-600' },
+        info.getValue() ? '✔' : '✗',
+      ),
+  },
+  {
+    accessorKey: 'last_login_at',
+    header: 'Dernière connexion',
+    cell: (info) => (info.getValue() as string) ?? '—',
+  },
+  {
+    id: 'actions',
+    header: '',
+    enableSorting: false,
+    cell: (info) => {
+      const u = info.row.original
+      const buttons: ReturnType<typeof h>[] = []
+      if (u.is_admin) {
+        buttons.push(
+          h(
+            'button',
+            { class: 'text-yellow-600', onClick: () => action(usersApi.demote, u.email, 'Rétrograder') },
+            'Rétrograder',
+          ),
+        )
+      } else {
+        buttons.push(
+          h(
+            'button',
+            { class: 'text-blue-600', onClick: () => action(usersApi.promote, u.email, 'Promouvoir') },
+            'Promouvoir',
+          ),
+        )
+      }
+      if (u.is_allowed) {
+        buttons.push(
+          h(
+            'button',
+            { class: 'text-red-600', onClick: () => action(usersApi.block, u.email, 'Bloquer') },
+            'Bloquer',
+          ),
+        )
+      } else {
+        buttons.push(
+          h(
+            'button',
+            { class: 'text-green-600', onClick: () => action(usersApi.unblock, u.email, 'Débloquer') },
+            'Débloquer',
+          ),
+        )
+      }
+      buttons.push(
+        h(
+          'button',
+          {
+            class: 'text-red-700',
+            onClick: () => action(usersApi.revoke, u.email, 'Révoquer toutes les sessions de'),
+          },
+          'Révoquer',
+        ),
+      )
+      buttons.push(
+        h(
+          'button',
+          {
+            class: 'text-gray-600',
+            onClick: () =>
+              router.push(`/admin/users/${encodeURIComponent(u.email)}/sessions`),
+          },
+          'Sessions',
+        ),
+      )
+      return h('div', { class: 'flex gap-2 justify-end flex-wrap' }, buttons)
+    },
+  },
+]
 </script>
 
 <template>
   <div class="p-6">
-    <h1 class="text-2xl font-semibold mb-4">Utilisateurs ({{ total }})</h1>
+    <h1 class="text-2xl font-semibold mb-4">Utilisateurs</h1>
     <div v-if="error" class="mb-4 p-3 bg-red-50 text-red-700 rounded">{{ error }}</div>
-
-    <table class="w-full text-sm bg-white dark:bg-gray-900 rounded shadow">
-      <thead class="bg-gray-100 dark:bg-gray-800">
-        <tr>
-          <th class="px-4 py-2 text-left">Email</th>
-          <th class="px-4 py-2 text-left">Nom</th>
-          <th class="px-4 py-2">Admin</th>
-          <th class="px-4 py-2">Autorisé</th>
-          <th class="px-4 py-2 text-left">Dernière connexion</th>
-          <th class="px-4 py-2"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="u in items" :key="u.email" class="border-t">
-          <td class="px-4 py-2 font-mono">{{ u.email }}</td>
-          <td class="px-4 py-2">{{ u.display_name }}</td>
-          <td class="px-4 py-2 text-center">{{ u.is_admin ? '✔' : '' }}</td>
-          <td class="px-4 py-2 text-center">{{ u.is_allowed ? '✔' : '✗' }}</td>
-          <td class="px-4 py-2">{{ u.last_login_at ?? '—' }}</td>
-          <td class="px-4 py-2 text-right space-x-2">
-            <button v-if="!u.is_admin" class="text-blue-600" @click="action(usersApi.promote, u.email, 'Promouvoir')">Promouvoir</button>
-            <button v-else class="text-yellow-600" @click="action(usersApi.demote, u.email, 'Rétrograder')">Rétrograder</button>
-            <button v-if="u.is_allowed" class="text-red-600" @click="action(usersApi.block, u.email, 'Bloquer')">Bloquer</button>
-            <button v-else class="text-green-600" @click="action(usersApi.unblock, u.email, 'Débloquer')">Débloquer</button>
-            <button class="text-red-700" @click="action(usersApi.revoke, u.email, 'Révoquer toutes les sessions de')">Révoquer</button>
-            <button class="text-gray-600" @click="router.push(`/admin/users/${encodeURIComponent(u.email)}/sessions`)">Sessions</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <p v-if="loading" class="text-sm text-gray-500">Chargement...</p>
+    <DataTable
+      v-else
+      :rows="items"
+      :columns="columns"
+      search-placeholder="Rechercher par email, nom..."
+      empty-text="Aucun utilisateur"
+    />
   </div>
 </template>
