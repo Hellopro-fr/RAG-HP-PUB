@@ -22,24 +22,15 @@
       <router-link to="/">
         <img
           v-if="isExpanded || isHovered || isMobileOpen"
-          class="dark:hidden"
-          src="/images/logo/logo.svg"
-          alt="Logo"
-          width="150"
-          height="40"
-        />
-        <img
-          v-if="isExpanded || isHovered || isMobileOpen"
-          class="hidden dark:block"
-          src="/images/logo/logo-dark.svg"
-          alt="Logo"
-          width="150"
+          src="/images/servers/hp-logo.svg"
+          alt="Portal Hellopro"
+          width="40"
           height="40"
         />
         <img
           v-else
-          src="/images/logo/logo-icon.svg"
-          alt="Logo"
+          src="/images/servers/hp-logo.svg"
+          alt="Portal Hellopro"
           width="32"
           height="32"
         />
