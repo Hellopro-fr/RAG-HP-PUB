@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 func TestLogoutEventEnqueueAndPickPending(t *testing.T) {

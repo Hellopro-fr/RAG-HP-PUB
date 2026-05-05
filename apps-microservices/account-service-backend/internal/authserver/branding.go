@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 type ClientLookup interface {

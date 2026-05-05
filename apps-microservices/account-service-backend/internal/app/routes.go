@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hellopro/account-service/internal/api"
-	"github.com/hellopro/account-service/internal/auth"
-	"github.com/hellopro/account-service/internal/authserver"
-	"github.com/hellopro/account-service/internal/config"
-	"github.com/hellopro/account-service/internal/crypto"
-	"github.com/hellopro/account-service/internal/health"
-	"github.com/hellopro/account-service/internal/logout"
-	"github.com/hellopro/account-service/internal/metrics"
+	"account-service/internal/api"
+	"account-service/internal/auth"
+	"account-service/internal/authserver"
+	"account-service/internal/config"
+	"account-service/internal/crypto"
+	"account-service/internal/health"
+	"account-service/internal/logout"
+	"account-service/internal/metrics"
 )
 
 // routeDeps is the closed set of values registerRoutes needs. Bundling the

@@ -5,7 +5,7 @@ package repository
 import (
 	"testing"
 
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 func TestOAuth2ClientCRUD(t *testing.T) {

@@ -3,7 +3,7 @@ package app
 import (
 	"gorm.io/gorm"
 
-	"github.com/hellopro/account-service/internal/repository"
+	"account-service/internal/repository"
 )
 
 // Repos is the bundle of GORM-backed repositories the rest of the app

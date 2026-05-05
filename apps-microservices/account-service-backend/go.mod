@@ -1,4 +1,4 @@
-module github.com/hellopro/account-service
+module account-service
 
 go 1.24.13
 
