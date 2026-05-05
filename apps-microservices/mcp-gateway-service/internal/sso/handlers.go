@@ -91,6 +91,18 @@ func (h *Handlers) notify(r *http.Request, ev SSOErrorEvent) {
 	h.slack.Notify(ev)
 }
 
+// redirectError 303s the browser back to /login with error + error_description
+// query params so LoginView can render a user-friendly error UI instead of a
+// raw plain-text 4xx page. Used from every error site in /sso/callback.
+func (h *Handlers) redirectError(w http.ResponseWriter, r *http.Request, kind, message string) {
+	q := url.Values{}
+	q.Set("error", kind)
+	if message != "" {
+		q.Set("error_description", message)
+	}
+	http.Redirect(w, r, "/login?"+q.Encode(), http.StatusSeeOther)
+}
+
 // sanitiseQuery shortens code= / state= / refresh_token= values so they don't
 // fill Slack messages with credential-shaped strings. Keeps the prefix as
 // evidence the param was present without leaking the full secret.
@@ -180,14 +192,14 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	cookieVal, err := GetPendingCookie(r)
 	if err != nil {
 		h.notify(r, SSOErrorEvent{Kind: "no_pending_login", Reason: err.Error()})
-		http.Error(w, "no pending login", http.StatusBadRequest)
+		h.redirectError(w, r, "no_pending_login", "Aucune session de connexion en cours, merci de réessayer.")
 		return
 	}
 	pending, err := VerifyPendingState(h.stateKey, cookieVal)
 	if err != nil {
 		log.Printf("[sso] callback: pending state invalid: %v", err)
 		h.notify(r, SSOErrorEvent{Kind: "pending_state_invalid", Reason: err.Error()})
-		http.Error(w, "login expired or tampered, please retry", http.StatusBadRequest)
+		h.redirectError(w, r, "pending_state_invalid", "La connexion a expiré ou a été altérée, merci de réessayer.")
 		return
 	}
 	ClearPendingCookie(w, h.secureCk)
@@ -199,14 +211,14 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 			Kind:   "authorization_error",
 			Reason: errCode + ": " + desc,
 		})
-		http.Error(w, fmt.Sprintf("authorization failed: %s — %s", errCode, desc), http.StatusUnauthorized)
+		h.redirectError(w, r, errCode, desc)
 		return
 	}
 	code := q.Get("code")
 	state := q.Get("state")
 	if code == "" || state == "" {
 		h.notify(r, SSOErrorEvent{Kind: "missing_code_or_state", Reason: "code or state empty"})
-		http.Error(w, "missing code or state", http.StatusBadRequest)
+		h.redirectError(w, r, "missing_code_or_state", "La réponse d'authentification est incomplète.")
 		return
 	}
 	if state != pending.State {
@@ -220,7 +232,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 				"return_to":     pending.ReturnTo,
 			},
 		})
-		http.Error(w, "state mismatch", http.StatusBadRequest)
+		h.redirectError(w, r, "state_mismatch", "Le jeton d'état ne correspond pas. Merci de réessayer.")
 		return
 	}
 
@@ -228,7 +240,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[sso] callback: token exchange failed: %v", err)
 		h.notify(r, SSOErrorEvent{Kind: "token_exchange_failed", Reason: err.Error()})
-		http.Error(w, "token exchange failed", http.StatusBadGateway)
+		h.redirectError(w, r, "token_exchange_failed", "Échange du jeton avec le serveur d'authentification impossible.")
 		return
 	}
 
@@ -240,7 +252,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 			reason = err.Error()
 		}
 		h.notify(r, SSOErrorEvent{Kind: "invalid_token_payload", Reason: reason})
-		http.Error(w, "invalid token payload", http.StatusBadGateway)
+		h.redirectError(w, r, "invalid_token_payload", "Le jeton d'authentification est invalide.")
 		return
 	}
 
@@ -248,7 +260,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[sso] callback: upsert user failed: %v", err)
 		h.notify(r, SSOErrorEvent{Kind: "upsert_failed", Reason: err.Error(), UserEmail: email, Sub: sub})
-		http.Error(w, "failed to provision user", http.StatusInternalServerError)
+		h.redirectError(w, r, "upsert_failed", "Provisionnement de l'utilisateur impossible.")
 		return
 	}
 	if user != nil && !user.IsAllowed {
@@ -258,26 +270,26 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 			UserEmail: email,
 			Sub:       sub,
 		})
-		http.Error(w, "Access denied. Contact an administrator.", http.StatusForbidden)
+		h.redirectError(w, r, "user_blocked", "Accès refusé. Contactez un administrateur.")
 		return
 	}
 
 	sid, err := NewSessionID()
 	if err != nil {
 		h.notify(r, SSOErrorEvent{Kind: "session_id_gen_failed", Reason: err.Error(), UserEmail: email})
-		http.Error(w, "session error", http.StatusInternalServerError)
+		h.redirectError(w, r, "session_id_gen_failed", "Erreur interne lors de la création de la session.")
 		return
 	}
 	accessEnc, err := h.encryptor.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
 		h.notify(r, SSOErrorEvent{Kind: "encrypt_access_failed", Reason: err.Error(), UserEmail: email})
-		http.Error(w, "encryption error", http.StatusInternalServerError)
+		h.redirectError(w, r, "encrypt_access_failed", "Erreur de chiffrement du jeton d'accès.")
 		return
 	}
 	refreshEnc, err := h.encryptor.Encrypt([]byte(tok.RefreshToken))
 	if err != nil {
 		h.notify(r, SSOErrorEvent{Kind: "encrypt_refresh_failed", Reason: err.Error(), UserEmail: email})
-		http.Error(w, "encryption error", http.StatusInternalServerError)
+		h.redirectError(w, r, "encrypt_refresh_failed", "Erreur de chiffrement du jeton de rafraîchissement.")
 		return
 	}
 
@@ -303,7 +315,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.Create(row); err != nil {
 		log.Printf("[sso] callback: persist session failed: %v", err)
 		h.notify(r, SSOErrorEvent{Kind: "session_persist_failed", Reason: err.Error(), UserEmail: email, Sub: sub})
-		http.Error(w, "session error", http.StatusInternalServerError)
+		h.redirectError(w, r, "session_persist_failed", "Erreur lors de la persistance de la session.")
 		return
 	}
 
