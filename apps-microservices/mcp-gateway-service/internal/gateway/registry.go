@@ -3,7 +3,7 @@ package gateway
 import (
 	"sync"
 
-	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/mcp"
 )
 
 // BackendServer represents a registered MCP backend server.

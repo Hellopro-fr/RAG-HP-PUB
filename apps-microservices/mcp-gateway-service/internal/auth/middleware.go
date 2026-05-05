@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 // UserRepo is the interface for user lookup used by the auth middleware.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 // TestCreateBDDUsedTableRequest_JSONShape verifies the wire contract:

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/leexiadmin"
 )
 
 // validLeexiFilterModes lists the accepted Mode values. Anything else is

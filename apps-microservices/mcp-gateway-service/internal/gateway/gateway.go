@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
-	"github.com/hellopro/mcp-gateway/internal/mcp"
-	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
-	"github.com/hellopro/mcp-gateway/internal/transport"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/leexiadmin"
+	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/ringoveradmin"
+	"mcp-gateway/internal/transport"
 )
 
 // BDDTableResolver resolves a bdd_used_tables.id to its (database_id,

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
+	"mcp-gateway/internal/auth"
 )
 
 // Register mounts all REST API routes on the given mux under /api/v1/.

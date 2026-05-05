@@ -11,8 +11,8 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/repository"
 	"gorm.io/gorm"
 )
 

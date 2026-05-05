@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 // ── Admin: Executors ───────────────────────────────────────────────

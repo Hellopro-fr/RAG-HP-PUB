@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
-	"github.com/hellopro/mcp-gateway/internal/mcp"
-	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
-	"github.com/hellopro/mcp-gateway/internal/transport"
+	"mcp-gateway/internal/leexiadmin"
+	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/ringoveradmin"
+	"mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/transport"
 )
 
 // leexiToolPrefix is the convention used when registering the Leexi backend.

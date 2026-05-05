@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/slack"
 )
 
 // notifyUnauthorized fires a Slack alert for a rejected MCP request, gated by

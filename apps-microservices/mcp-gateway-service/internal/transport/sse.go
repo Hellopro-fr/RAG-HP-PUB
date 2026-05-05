@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/mcp"
 )
 
 // Handler is the interface the SSE server uses to dispatch MCP requests.

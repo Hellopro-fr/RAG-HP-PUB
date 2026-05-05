@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/ringoveradmin"
 )
 
 func TestResolveRingoverFilterForCreate_Nil(t *testing.T) {

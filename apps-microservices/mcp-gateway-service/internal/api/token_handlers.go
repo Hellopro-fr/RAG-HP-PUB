@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/scopetoken"
 )
 
 // ── Token CRUD handlers ──────────────────────────────────────────────────────

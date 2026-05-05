@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/crypto"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/crypto"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
 )
 
 // userRepo decouples SSOMiddleware from repository.UserRepo for testability.

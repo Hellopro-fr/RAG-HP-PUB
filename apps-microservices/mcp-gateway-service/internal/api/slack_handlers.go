@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/slack"
 )
 
 // handleSlackStatus returns the Slack notifications configuration snapshot

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/db"
+	oauth2pkg "mcp-gateway/internal/oauth2"
 )
 
 // TokenResponse is the OAuth2 token response (RFC 6749 Section 5.1).

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 // BDDFieldDTO is the JSON-friendly view of a BDDUsedField row.

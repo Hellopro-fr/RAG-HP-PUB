@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 // setupBDDTestDB creates an in-memory SQLite DB with a manual DDL that
