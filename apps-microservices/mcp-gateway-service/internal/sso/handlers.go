@@ -257,22 +257,61 @@ func (h *Handlers) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 // buildAccountLogoutURL composes the RP-initiated logout URL on account-service.
 // post_logout_redirect_uri targets the Vue /login route — the SPA's LoginView
-// already runs the same checkSession + /sso/login handoff that /sso/login does
-// directly, but lands the user on a URL that matches the gateway's "front
-// door" rather than the OAuth back channel. Falls back to the local /sso/login
-// path when GATEWAY_PUBLIC_URL or ACCOUNT_PUBLIC_URL is missing.
+// already runs the same checkSession + /sso/login handoff that /sso/login
+// does directly, but lands the user on a URL that matches the gateway's
+// "front door" rather than the OAuth back channel.
+//
+// Source of truth for scheme+host is the registered redirect_uri (which the
+// gateway already holds in client.RedirectURI). Account-service validates
+// post_logout_redirect_uri against that same host, so deriving from it
+// guarantees a match — using GATEWAY_PUBLIC_URL would diverge whenever the
+// env var and the DB row drift apart. Falls back to a relative /login when
+// the registered redirect_uri is missing or unparsable.
 func (h *Handlers) buildAccountLogoutURL() string {
 	if h.client == nil || h.client.AccountPublicURL == "" {
 		return "/login"
 	}
-	if h.gatewayPublicURL == "" {
+	gatewayBase := schemeHostOf(h.client.RedirectURI)
+	if gatewayBase == "" {
+		gatewayBase = h.gatewayPublicURL
+	}
+	if gatewayBase == "" {
 		return h.client.AccountPublicURL + "/logout"
 	}
-	postLogout := h.gatewayPublicURL + "/login"
+	postLogout := strings.TrimRight(gatewayBase, "/") + "/login"
 	q := url.Values{}
 	q.Set("client_id", h.client.ClientID)
 	q.Set("post_logout_redirect_uri", postLogout)
 	return h.client.AccountPublicURL + "/logout?" + q.Encode()
+}
+
+// schemeHostOf returns "scheme://host[:port]" for an absolute http(s) URL,
+// or "" if raw is not absolute. Avoids dragging url.Parse into the hot path
+// for what is effectively a prefix slice.
+func schemeHostOf(raw string) string {
+	const httpsPrefix = "https://"
+	const httpPrefix = "http://"
+	var prefix string
+	switch {
+	case strings.HasPrefix(raw, httpsPrefix):
+		prefix = httpsPrefix
+	case strings.HasPrefix(raw, httpPrefix):
+		prefix = httpPrefix
+	default:
+		return ""
+	}
+	rest := raw[len(prefix):]
+	end := len(rest)
+	for i, c := range rest {
+		if c == '/' || c == '?' || c == '#' {
+			end = i
+			break
+		}
+	}
+	if end == 0 {
+		return ""
+	}
+	return prefix + rest[:end]
 }
 
 // POST /api/v1/sso/logout — back-channel webhook from account-service. HMAC-
