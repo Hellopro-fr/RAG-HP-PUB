@@ -1188,7 +1188,8 @@ class DomainFR:
                         fetch_failed_count += 1
                         continue
 
-                    alt_content, alt_final_url = alt_content_result
+                    alt_content = alt_content_result.html
+                    alt_final_url = alt_content_result.final_url
 
                     # Vérifier que ce n'est pas une page de challenge
                     from app.services.language_detector import detect_challenge_page
