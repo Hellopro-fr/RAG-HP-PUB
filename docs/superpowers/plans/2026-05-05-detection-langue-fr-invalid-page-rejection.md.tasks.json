@@ -4,68 +4,83 @@
     {
       "id": "14",
       "subject": "Task 1: ScrapeResult dataclass + scraper.scrape_html migration",
-      "status": "pending",
-      "description": "**Goal:** Add ScrapeResult dataclass to scraper.py and migrate scrape_html to return it (with HTTP status code captured from page.goto).\n\n**Files:**\n- Modify: apps-microservices/api-detection-langue-fr/app/services/scraper.py:263-441\n- Create: apps-microservices/api-detection-langue-fr/tests/test_scraper_result.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/services/scraper.py\", \"apps-microservices/api-detection-langue-fr/tests/test_scraper_result.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_scraper_result.py tests/test_scraper.py -v\", \"acceptanceCriteria\": [\"ScrapeResult dataclass defined\", \"scrape_html returns Optional[ScrapeResult]\", \"response.status captured\", \"existing tests pass\"]}\n```"
+      "status": "completed",
+      "description": "**Goal:** Add ScrapeResult dataclass to scraper.py and migrate scrape_html to return it (with HTTP status code captured from page.goto).\n\n**Files:**\n- Modify: apps-microservices/api-detection-langue-fr/app/services/scraper.py:263-441\n- Create: apps-microservices/api-detection-langue-fr/tests/test_scraper_result.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/services/scraper.py\", \"apps-microservices/api-detection-langue-fr/tests/test_scraper_result.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_scraper_result.py tests/test_scraper.py -v\", \"acceptanceCriteria\": [\"ScrapeResult dataclass defined\", \"scrape_html returns Optional[ScrapeResult]\", \"response.status captured\", \"existing tests pass\"], \"commits\": [\"cfe2c0a3\"]}\n```"
     },
     {
       "id": "15",
       "subject": "Task 2: fetch_html migration to ScrapeResult",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": ["14"],
-      "description": "**Goal:** fetch_html returns ScrapeResult | None instead of tuple. Phase 1 retry + Phase 2 variant logic preserved.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/services/redirect_tracker.py\", \"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/tests/test_redirect_tracker_result.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_redirect_tracker_result.py -v\", \"acceptanceCriteria\": [\"fetch_html returns Optional[ScrapeResult]\", \"Phase 1 retry preserved\", \"Phase 2 variant fallback preserved\", \"routes.py call sites updated\"]}\n```"
+      "description": "**Goal:** fetch_html returns ScrapeResult | None instead of tuple. Phase 1 retry + Phase 2 variant logic preserved.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/services/redirect_tracker.py\", \"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/app/core/domain_fr.py\", \"apps-microservices/api-detection-langue-fr/tests/test_redirect_tracker_result.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_redirect_tracker_result.py -v\", \"acceptanceCriteria\": [\"fetch_html returns Optional[ScrapeResult]\", \"Phase 1 retry preserved\", \"Phase 2 variant fallback preserved\", \"routes.py call sites updated\", \"domain_fr.py:415 + 1191 tuple unpacks migrated (review fixup)\"], \"commits\": [\"491c1a5c\", \"fca695f9\"]}\n```"
     },
     {
       "id": "16",
       "subject": "Task 3: Add 6 env vars to config.py",
-      "status": "pending",
-      "description": "**Goal:** Add INVALID_PAGE_DETECTION_ENABLED, HOMEPAGE_FALLBACK_ENABLED, SOFT_404_TITLE_THIN_THRESHOLD, SOFT_404_H1_THIN_THRESHOLD, INVALID_PAGE_TTL_HARD_S, INVALID_PAGE_TTL_SOFT_S to Settings.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/config.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -c \\\"from app.core.config import settings; print(settings.INVALID_PAGE_DETECTION_ENABLED, settings.HOMEPAGE_FALLBACK_ENABLED, settings.SOFT_404_TITLE_THIN_THRESHOLD, settings.SOFT_404_H1_THIN_THRESHOLD, settings.INVALID_PAGE_TTL_HARD_S, settings.INVALID_PAGE_TTL_SOFT_S)\\\"\", \"acceptanceCriteria\": [\"6 settings exposed\", \"defaults match spec\", \"env override works\"]}\n```"
+      "status": "completed",
+      "description": "**Goal:** Add INVALID_PAGE_DETECTION_ENABLED, HOMEPAGE_FALLBACK_ENABLED, SOFT_404_TITLE_THIN_THRESHOLD, SOFT_404_H1_THIN_THRESHOLD, INVALID_PAGE_TTL_HARD_S, INVALID_PAGE_TTL_SOFT_S to Settings.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/config.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -c \\\"from app.core.config import settings; print(settings.INVALID_PAGE_DETECTION_ENABLED, settings.HOMEPAGE_FALLBACK_ENABLED, settings.SOFT_404_TITLE_THIN_THRESHOLD, settings.SOFT_404_H1_THIN_THRESHOLD, settings.INVALID_PAGE_TTL_HARD_S, settings.INVALID_PAGE_TTL_SOFT_S)\\\"\", \"acceptanceCriteria\": [\"6 settings exposed\", \"defaults match spec\", \"env override works\"], \"commits\": [\"7e5963af\"]}\n```"
     },
     {
       "id": "17",
       "subject": "Task 4: page_validator module + unit tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": ["14", "16"],
-      "description": "**Goal:** Pure validator classifying ScrapeResult against requested URL into VALID / HTTP_ERROR / SOFT_404 / REDIRECTED_TO_HOME.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/services/page_validator.py\", \"apps-microservices/api-detection-langue-fr/tests/test_page_validator.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_page_validator.py -v\", \"acceptanceCriteria\": [\"ValidationVerdict enum\", \"validate function\", \"all 14 unit tests pass\", \"fail-open on parse crash\"]}\n```"
+      "description": "**Goal:** Pure validator classifying ScrapeResult against requested URL into VALID / HTTP_ERROR / SOFT_404 / REDIRECTED_TO_HOME.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/services/page_validator.py\", \"apps-microservices/api-detection-langue-fr/tests/test_page_validator.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_page_validator.py -v\", \"acceptanceCriteria\": [\"ValidationVerdict enum\", \"validate function\", \"all 17 unit tests pass (plan said ~14)\", \"fail-open on parse crash\"], \"commits\": [\"a6dac857\"]}\n```"
     },
     {
       "id": "18",
       "subject": "Task 5: Add Prometheus metrics",
-      "status": "pending",
-      "description": "**Goal:** Add VALIDATION_VERDICTS (Counter, label=verdict) and HOMEPAGE_FALLBACK_TRIGGERED (Counter, label=outcome) to metrics.py.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/metrics.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -c \\\"from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED; VALIDATION_VERDICTS.labels(verdict='valid').inc(); HOMEPAGE_FALLBACK_TRIGGERED.labels(outcome='success').inc(); print('ok')\\\"\", \"acceptanceCriteria\": [\"VALIDATION_VERDICTS Counter\", \"HOMEPAGE_FALLBACK_TRIGGERED Counter\", \"importable\"]}\n```"
+      "status": "completed",
+      "description": "**Goal:** Add VALIDATION_VERDICTS (Counter, label=verdict) and HOMEPAGE_FALLBACK_TRIGGERED (Counter, label=outcome) to metrics.py.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/metrics.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -c \\\"from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED; VALIDATION_VERDICTS.labels(verdict='valid').inc(); HOMEPAGE_FALLBACK_TRIGGERED.labels(outcome='success').inc(); print('ok')\\\"\", \"acceptanceCriteria\": [\"VALIDATION_VERDICTS Counter\", \"HOMEPAGE_FALLBACK_TRIGGERED Counter\", \"importable\"], \"commits\": [\"69db964b\"]}\n```"
     },
     {
       "id": "19",
       "subject": "Task 6: Schema additions (homepage_fallback + analyzed_url)",
-      "status": "pending",
-      "description": "**Goal:** Add per-request opt-out flag and response disclosure field.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/models/schemas.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -c \\\"from app.models.schemas import DetectionRequest, DetectionResponse; r = DetectionRequest(url='https://example.com/'); print(r.homepage_fallback); resp = DetectionResponse(ok=True, url='https://example.com/', method='langHtml', analyzed_url='https://example.com/'); print(resp.analyzed_url)\\\"\", \"acceptanceCriteria\": [\"homepage_fallback field added\", \"analyzed_url field added\", \"defaults preserved\"]}\n```"
+      "status": "completed",
+      "description": "**Goal:** Add per-request opt-out flag and response disclosure field.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/models/schemas.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && python -c \\\"from app.models.schemas import DetectionRequest, DetectionResponse; r = DetectionRequest(url='https://example.com/'); print(r.homepage_fallback); resp = DetectionResponse(ok=True, url='https://example.com/', method='langHtml', analyzed_url='https://example.com/'); print(resp.analyzed_url)\\\"\", \"acceptanceCriteria\": [\"homepage_fallback field added\", \"analyzed_url field added\", \"defaults preserved\"], \"commits\": [\"2dff3a8c\"]}\n```"
     },
     {
       "id": "20",
       "subject": "Task 7: domain_cache.set ttl_override + requested_url field",
-      "status": "pending",
-      "description": "**Goal:** DomainCache.set accepts optional ttl_override; persists requested_url field in cached payload for cross-URL HIT awareness.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/domain_fr.py\", \"apps-microservices/api-detection-langue-fr/tests/test_domain_cache_ttl.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_domain_cache_ttl.py -v\", \"acceptanceCriteria\": [\"ttl_override kwarg\", \"TTL override honored\", \"requested_url persisted\", \"forward compat for old entries\"]}\n```"
+      "status": "completed",
+      "description": "**Goal:** DomainCache.set accepts optional ttl_override; persists requested_url field in cached payload for cross-URL HIT awareness.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/domain_fr.py\", \"apps-microservices/api-detection-langue-fr/tests/test_domain_cache_ttl.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_domain_cache_ttl.py -v\", \"acceptanceCriteria\": [\"ttl_override kwarg\", \"TTL override honored\", \"requested_url persisted\", \"forward compat for old entries\"], \"commits\": [\"a66849ee\"]}\n```"
     },
     {
       "id": "21",
       "subject": "Task 8: routes._detect_single_url orchestration",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": ["15", "17", "18", "19", "20"],
-      "description": "**Goal:** Wire validate + homepage fallback. Cache-HIT cross-URL fix. Per-verdict TTL on cache writes.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/tests/test_routes_invalid_page.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_routes_invalid_page.py -v\", \"acceptanceCriteria\": [\"cache HIT cross-URL sets analyzed_url\", \"validate after fetch\", \"homepage fallback hop\", \"per-verdict TTL\", \"metrics incremented\", \"kill switches honored\"]}\n```"
+      "description": "**Goal:** Wire validate + homepage fallback. Cache-HIT cross-URL fix. Per-verdict TTL on cache writes.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/tests/test_routes_invalid_page.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_routes_invalid_page.py -v\", \"acceptanceCriteria\": [\"cache HIT cross-URL sets analyzed_url\", \"validate after fetch\", \"homepage fallback hop\", \"per-verdict TTL\", \"metrics incremented\", \"kill switches honored\"], \"commits\": [\"39a12b06\"]}\n```"
     },
     {
       "id": "22",
       "subject": "Task 9: /detect-batch + /detect-debug behavior",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": ["21"],
-      "description": "**Goal:** Wire homepage_fallback through batch (default true) and confirm /detect-debug keeps fallback OFF.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/app/models/schemas.py\", \"apps-microservices/api-detection-langue-fr/tests/test_routes_invalid_page.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_routes_invalid_page.py -v\", \"acceptanceCriteria\": [\"BatchDetectionRequest.homepage_fallback\", \"batch passes flag through\", \"debug fallback OFF\", \"Pass 2 unchanged\"]}\n```"
+      "description": "**Goal:** Wire homepage_fallback through batch (default true) and confirm /detect-debug keeps fallback OFF.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/app/models/schemas.py\", \"apps-microservices/api-detection-langue-fr/tests/test_routes_invalid_page.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_routes_invalid_page.py -v\", \"acceptanceCriteria\": [\"BatchDetectionRequest.homepage_fallback\", \"batch passes flag through\", \"debug fallback OFF\", \"Pass 2 unchanged\"], \"commits\": [\"e401a0b3\"]}\n```"
     },
     {
       "id": "23",
       "subject": "Task 10: Update CLAUDE.md docs",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": ["22"],
-      "description": "**Goal:** Document new behavior, env vars, and method values for future Claude sessions.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/CLAUDE.md\"], \"verifyCommand\": \"grep -c 'Invalid Page Rejection\\\\|http_error\\\\|soft_404\\\\|redirected_to_home' apps-microservices/api-detection-langue-fr/CLAUDE.md\", \"acceptanceCriteria\": [\"new section added\", \"method values documented\", \"env vars table\", \"metrics documented\"]}\n```"
+      "description": "**Goal:** Document new behavior, env vars, and method values for future Claude sessions.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/CLAUDE.md\"], \"verifyCommand\": \"grep -c 'Invalid Page Rejection\\\\|http_error\\\\|soft_404\\\\|redirected_to_home' apps-microservices/api-detection-langue-fr/CLAUDE.md\", \"acceptanceCriteria\": [\"new section added\", \"method values documented\", \"env vars table\", \"metrics documented\"], \"commits\": [\"b1539ca5\"]}\n```"
+    },
+    {
+      "id": "24",
+      "subject": "Final whole-impl review fixups (I2 + I3 + M4)",
+      "status": "completed",
+      "blockedBy": ["21", "22", "23"],
+      "description": "**Goal:** Address final whole-impl reviewer findings on the completed feature.\n\n- I2 (IMPORTANT): routes.py homepage-fallback challenge-page rejection used `url=homepage` losing the original requested URL. Switched to `url=url`; analyzed_url still set to homepage.\n- I3 (test): added regression test `TestHomepageFallbackChallengePage::test_soft_404_homepage_is_challenge_page` covering the previously uncovered branch.\n- M4 (doc): CLAUDE.md `/detect-debug` row description corrected to reflect that the validator overrides result.ok / result.method / result.error when non-VALID, instead of \"warning only — no flow change\".\n\nDeferred: I1 (defensive expansion of `_NEVER_CACHE_METHODS`) — orchestration always passes ttl_override for invalid verdicts, so the implicit discipline holds. M1 / M2 / M3 / M5 — low impact, would expand scope.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/tests/test_routes_invalid_page.py\", \"apps-microservices/api-detection-langue-fr/CLAUDE.md\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_routes_invalid_page.py -v\", \"acceptanceCriteria\": [\"url=url preserved on homepage challenge rejection\", \"regression test for homepage challenge branch\", \"CLAUDE.md /detect-debug description corrected\", \"13/13 invalid_page tests pass\"], \"commits\": [\"8cd76d11\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-05T00:00:00Z"
+  "completedAt": "2026-05-05T00:00:00Z",
+  "lastUpdated": "2026-05-06T00:00:00Z",
+  "commitChain": {
+    "base": "98ce4499",
+    "head": "8cd76d11",
+    "branch": "features/poc",
+    "totalCommits": 12,
+    "testsPassing": "73/73 (excluding pre-existing-broken test_api.py + test_domain_fr.py per plan); 13/13 invalid_page integration tests"
+  }
 }
