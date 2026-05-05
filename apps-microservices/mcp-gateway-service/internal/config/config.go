@@ -79,6 +79,21 @@ type Config struct {
 	// PHP MCP runner that pulls schema_doc.json + config.php) send it as
 	// X-Admin-Token. Empty = endpoints return 503 (disabled).
 	BDDPublicAPIToken string // BDD_PUBLIC_API_TOKEN
+
+	// SSO (account-service OAuth2 client). When SSOEnabled, the gateway acts
+	// as a confidential OAuth2 client of account-service: redirects unauthenticated
+	// admin users to /sso/login → ${ACCOUNT_PUBLIC_URL}/authorize, exchanges the
+	// authorization code at the token endpoint, and stores the resulting
+	// access+refresh tokens in the sso_sessions table (encrypted with ENCRYPTION_KEY).
+	// The MCP /authorize endpoint in internal/authserver is unaffected.
+	SSOEnabled           bool   // SSO_ENABLED — enable SSO client mode (default false)
+	AccountPublicURL     string // ACCOUNT_PUBLIC_URL — browser-facing URL of account-service-frontend (e.g. https://account.hellopro.fr)
+	AccountInternalURL   string // ACCOUNT_INTERNAL_URL — in-cluster URL of account-service-backend (default = AccountPublicURL)
+	AccountInternalToken string // ACCOUNT_INTERNAL_TOKEN — shared secret for /internal/credentials/{name}
+	SSOClientName        string // SSO_CLIENT_NAME — service name registered in account-service (default "mcp-gateway")
+	SSOClientID          string // SSO_CLIENT_ID — static override; when empty, auto-fetched via /internal/credentials
+	SSOClientSecret      string // SSO_CLIENT_SECRET — static override; when empty, auto-fetched
+	SSORedirectURI       string // SSO_REDIRECT_URI — defaults to ${GATEWAY_PUBLIC_URL}/sso/callback
 }
 
 func Load() *Config {
@@ -173,6 +188,15 @@ func Load() *Config {
 		BDDCatalogToken:   os.Getenv("BDD_CATALOG_TOKEN"),
 
 		BDDPublicAPIToken: os.Getenv("BDD_PUBLIC_API_TOKEN"),
+
+		SSOEnabled:           strings.EqualFold(os.Getenv("SSO_ENABLED"), "true"),
+		AccountPublicURL:     strings.TrimRight(os.Getenv("ACCOUNT_PUBLIC_URL"), "/"),
+		AccountInternalURL:   strings.TrimRight(getEnv("ACCOUNT_INTERNAL_URL", os.Getenv("ACCOUNT_PUBLIC_URL")), "/"),
+		AccountInternalToken: os.Getenv("ACCOUNT_INTERNAL_TOKEN"),
+		SSOClientName:        getEnv("SSO_CLIENT_NAME", "mcp-gateway"),
+		SSOClientID:          os.Getenv("SSO_CLIENT_ID"),
+		SSOClientSecret:      os.Getenv("SSO_CLIENT_SECRET"),
+		SSORedirectURI:       os.Getenv("SSO_REDIRECT_URI"),
 	}
 }
 

@@ -122,6 +122,93 @@ func NewLogoutHandler() http.Handler {
 	})
 }
 
+// LogoutRedirectLookup is the interface the redirect-style logout handler
+// depends on. Implementations resolve a client_id to its registered
+// redirect_uris.
+type LogoutRedirectLookup interface {
+	GetClientRedirectURIs(clientID string) ([]string, error)
+}
+
+// NewLogoutRedirectHandler exposes a browser-friendly GET /logout that clears
+// the account_session cookie and 302s the browser back to a caller-supplied
+// post_logout_redirect_uri. The redirect target must (1) parse as an absolute
+// http(s) URL and (2) share host[:port] with one of the registered redirect_uris
+// of the supplied client_id; otherwise the handler falls back to /login. This
+// blocks the obvious open-redirect vector and keeps the trust boundary aligned
+// with OAuth2's redirect_uri allow-list — there is no separate logout allow-list
+// to maintain.
+func NewLogoutRedirectHandler(repo LogoutRedirectLookup) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ClearSession(w)
+
+		target := r.URL.Query().Get("post_logout_redirect_uri")
+		clientID := r.URL.Query().Get("client_id")
+		fallback := "/login"
+
+		if target == "" || clientID == "" || repo == nil {
+			http.Redirect(w, r, fallback, http.StatusSeeOther)
+			return
+		}
+		uris, err := repo.GetClientRedirectURIs(clientID)
+		if err != nil || len(uris) == 0 {
+			http.Redirect(w, r, fallback, http.StatusSeeOther)
+			return
+		}
+		if !sameHostAsAny(target, uris) {
+			http.Redirect(w, r, fallback, http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
+	})
+}
+
+func sameHostAsAny(rawURL string, registered []string) bool {
+	tHost, tScheme, ok := splitHostScheme(rawURL)
+	if !ok {
+		return false
+	}
+	for _, u := range registered {
+		rHost, rScheme, ok := splitHostScheme(strings.TrimSpace(u))
+		if !ok {
+			continue
+		}
+		if tScheme == rScheme && tHost == rHost {
+			return true
+		}
+	}
+	return false
+}
+
+// splitHostScheme parses raw and returns (host[:port], scheme, true) for absolute
+// http/https URLs. Anything else returns ok=false.
+func splitHostScheme(raw string) (string, string, bool) {
+	const httpsPrefix = "https://"
+	const httpPrefix = "http://"
+	var rest, scheme string
+	switch {
+	case strings.HasPrefix(raw, httpsPrefix):
+		scheme = "https"
+		rest = raw[len(httpsPrefix):]
+	case strings.HasPrefix(raw, httpPrefix):
+		scheme = "http"
+		rest = raw[len(httpPrefix):]
+	default:
+		return "", "", false
+	}
+	end := len(rest)
+	for i, c := range rest {
+		if c == '/' || c == '?' || c == '#' {
+			end = i
+			break
+		}
+	}
+	host := rest[:end]
+	if host == "" {
+		return "", "", false
+	}
+	return host, scheme, true
+}
+
 func writeAuthErr(w http.ResponseWriter, code int, errCode, desc string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)

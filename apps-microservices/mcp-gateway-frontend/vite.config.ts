@@ -24,6 +24,10 @@ export default defineConfig({
         target: 'http://localhost:8592',
         changeOrigin: true,
       },
+      '/sso': {
+        target: 'http://localhost:8592',
+        changeOrigin: true,
+      },
       '/token': {
         target: 'http://localhost:8592',
         changeOrigin: true,
