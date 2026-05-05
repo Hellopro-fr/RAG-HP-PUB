@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hellopro/mcp-gateway/internal/bddcatalog"
+	"mcp-gateway/internal/bddcatalog"
 )
 
 // newCatalogHandler returns a Handler with the bddCatalog wired to the

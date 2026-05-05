@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 	"github.com/testcontainers/testcontainers-go/modules/mysql"
 	"gorm.io/gorm"
 )

@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 // Sentinel errors surfaced by BDDUsedRepo. Callers should rely on

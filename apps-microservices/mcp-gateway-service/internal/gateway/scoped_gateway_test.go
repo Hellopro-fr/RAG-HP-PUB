@@ -7,9 +7,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/mcp"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/scopetoken"
 )
 
 func newScopedGatewayForTest(t *testing.T) *ScopedGateway {

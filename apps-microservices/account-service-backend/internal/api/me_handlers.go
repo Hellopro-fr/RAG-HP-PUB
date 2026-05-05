@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/hellopro/account-service/internal/auth"
+	"account-service/internal/auth"
 )
 
 type ctxKey int

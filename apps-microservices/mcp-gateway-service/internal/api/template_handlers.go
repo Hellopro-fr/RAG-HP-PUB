@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/runnerclient"
-	"github.com/hellopro/mcp-gateway/internal/validation"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/runnerclient"
+	"mcp-gateway/internal/validation"
 	"gorm.io/gorm"
 )
 

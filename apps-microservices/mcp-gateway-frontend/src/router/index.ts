@@ -279,6 +279,11 @@ const router = createRouter({
   ]
 })
 
+// SSO mode (account-service): redirect unauthenticated users full-page to
+// /sso/login on the gateway backend, which initiates the OAuth2 flow against
+// account-service. Legacy mode keeps the in-app /login route push.
+const SSO_MODE = import.meta.env.VITE_SSO_MODE === 'true'
+
 router.beforeEach(async (to) => {
   if (to.meta.requiresAuth === false) {
     return true
@@ -289,6 +294,11 @@ router.beforeEach(async (to) => {
   if (!authStore.isAuthenticated) {
     const valid = await authStore.checkSession()
     if (!valid) {
+      if (SSO_MODE) {
+        window.location.href = '/sso/login?return_to=' + encodeURIComponent(to.fullPath)
+        // Block the navigation while the browser tears down for the redirect.
+        return false
+      }
       return { path: '/login', query: { redirect: to.fullPath } }
     }
   }

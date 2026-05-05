@@ -13,8 +13,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	oauth2pkg "mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/repository"
 )
 
 // stubTokenCache implements api.TokenCache and records InvalidateAll calls

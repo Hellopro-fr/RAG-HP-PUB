@@ -3,7 +3,7 @@ package authserver
 import (
 	"net/http"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	"mcp-gateway/internal/repository"
 )
 
 // AuthServer holds dependencies for the OAuth2 Authorization Server endpoints.

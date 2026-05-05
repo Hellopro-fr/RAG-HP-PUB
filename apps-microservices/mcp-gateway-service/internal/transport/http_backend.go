@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/mcp"
 )
 
 // maxResponseSize is the maximum allowed response body size from a backend (10 MB).
