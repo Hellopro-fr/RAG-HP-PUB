@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -112,6 +112,16 @@ const authStore = useAuthStore()
 const username = ref('')
 const password = ref('')
 const errorMessage = ref('')
+
+// In SSO mode this view should never render the form — the router redirects
+// out before mount in 99% of cases, but a deep-link to /login still lands
+// here. Fire the redirect ourselves and short-circuit.
+onMounted(() => {
+  if (authStore.ssoMode) {
+    const target = (route.query.redirect as string) || '/'
+    authStore.redirectToLogin(target)
+  }
+})
 
 async function handleLogin() {
   errorMessage.value = ''

@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install
 COPY . .
+ARG VITE_SSO_MODE=true
+ENV VITE_SSO_MODE=${VITE_SSO_MODE}
 RUN npm run build
 
 # Stage 2: Serve
