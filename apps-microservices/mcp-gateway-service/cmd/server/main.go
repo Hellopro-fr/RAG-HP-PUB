@@ -165,18 +165,27 @@ func main() {
 		}
 
 		clientID, clientSecret := cfg.SSOClientID, cfg.SSOClientSecret
+		var fetchedRedirects []string
 		if clientID == "" || clientSecret == "" {
 			fetchCtx, fetchCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			id, sec, err := sso.FetchCredentialsFromAPI(fetchCtx, cfg.SSOClientName, cfg.AccountInternalURL, cfg.AccountInternalToken)
+			creds, err := sso.FetchCredentialsFromAPI(fetchCtx, cfg.SSOClientName, cfg.AccountInternalURL, cfg.AccountInternalToken)
 			fetchCancel()
 			if err != nil {
 				log.Fatalf("[main] FATAL: failed to fetch SSO client credentials for %q: %v", cfg.SSOClientName, err)
 			}
-			clientID, clientSecret = id, sec
-			log.Printf("[main] SSO client credentials fetched for %q", cfg.SSOClientName)
+			clientID, clientSecret = creds.ClientID, creds.ClientSecret
+			fetchedRedirects = creds.RedirectURIs
+			log.Printf("[main] SSO client credentials fetched for %q (redirect_uris=%d)", cfg.SSOClientName, len(fetchedRedirects))
 		}
 
+		// Resolve redirect_uri precedence: explicit env override > registered
+		// redirect_uris[0] from account-service > GATEWAY_PUBLIC_URL fallback.
+		// The registered URL is the source of truth — account-service rejects
+		// /authorize requests whose redirect_uri does not exactly match.
 		redirectURI := cfg.SSORedirectURI
+		if redirectURI == "" && len(fetchedRedirects) > 0 {
+			redirectURI = fetchedRedirects[0]
+		}
 		if redirectURI == "" {
 			redirectURI = strings.TrimRight(cfg.GatewayPublicURL, "/") + "/sso/callback"
 		}

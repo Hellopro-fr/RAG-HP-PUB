@@ -18,16 +18,19 @@ func TestFetchCredentialsFromAPI(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"client_id":"id-x","client_secret":"sec-y"}`))
+		_, _ = w.Write([]byte(`{"client_id":"id-x","client_secret":"sec-y","redirect_uris":["https://gw/sso/callback"]}`))
 	}))
 	defer srv.Close()
 
-	id, sec, err := FetchCredentialsFromAPI(context.Background(), "mcp-gateway", srv.URL, "tok")
+	creds, err := FetchCredentialsFromAPI(context.Background(), "mcp-gateway", srv.URL, "tok")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	if id != "id-x" || sec != "sec-y" {
-		t.Fatalf("got %q / %q", id, sec)
+	if creds.ClientID != "id-x" || creds.ClientSecret != "sec-y" {
+		t.Fatalf("got %q / %q", creds.ClientID, creds.ClientSecret)
+	}
+	if len(creds.RedirectURIs) != 1 || creds.RedirectURIs[0] != "https://gw/sso/callback" {
+		t.Fatalf("redirect_uris: %v", creds.RedirectURIs)
 	}
 }
 
@@ -37,7 +40,7 @@ func TestFetchCredentialsFromAPI_NotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := FetchCredentialsFromAPI(context.Background(), "missing", srv.URL, "tok")
+	_, err := FetchCredentialsFromAPI(context.Background(), "missing", srv.URL, "tok")
 	if err == nil {
 		t.Fatal("expected error")
 	}
