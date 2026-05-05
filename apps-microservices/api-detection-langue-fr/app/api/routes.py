@@ -108,7 +108,8 @@ async def _detect_single_url(
                 ok=False, url=url, method='fetch_failed',
                 error='Impossible de récupérer le contenu HTML'
             )
-        html_content, final_url = fetch_result
+        html_content = fetch_result.html
+        final_url = fetch_result.final_url
         if final_url and final_url != url:
             logger.info(f"Redirection: {url} → {final_url}")
             effective_url = final_url
@@ -527,7 +528,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
                         decision='Fetch failed — no content to analyze'
                     )
                 )
-            html_content, final_url = fetch_result
+            html_content = fetch_result.html
+            final_url = fetch_result.final_url
             if final_url and final_url != request.url:
                 logger.info(f"[DEBUG] Redirection: {request.url} → {final_url}")
                 redirected_from = request.url

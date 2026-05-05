@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 from urllib.parse import urlparse
 from app.core.config import settings
+from app.services.scraper import ScrapeResult, scrape_html, build_proxy_url
 
 # Erreurs non-retryables pour la MÊME URL (inutile de réessayer la même URL)
 # mais qui DOIVENT déclencher Phase 2 (variantes http/https, www/sans-www).
@@ -186,7 +187,7 @@ def _generate_url_variants(url: str) -> list[str]:
         return []
 
 
-async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[str, str]]:
+async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeResult]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
@@ -202,16 +203,14 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
       Ex: https://www.example.com → http://www.example.com → https://example.com → http://example.com
 
     Returns:
-        Tuple (contenu_html, url_finale) ou None en cas d'erreur.
-        url_finale est l'URL après redirections (peut différer de l'URL d'entrée).
+        ScrapeResult (html, final_url, status_code, headers) ou None en cas d'erreur totale.
+        ScrapeResult.final_url est l'URL après redirections (peut différer de l'URL d'entrée).
     """
     effective_proxy = proxy or settings.APIFY_PROXY
     if not effective_proxy:
         logger.error(f"Proxy obligatoire pour fetch_html: {url}. "
                      f"Configurez APIFY_PROXY ou passez proxy_url.")
         return None
-
-    from app.services.scraper import scrape_html, build_proxy_url
 
     max_retries = settings.HTTP_MAX_RETRIES
     last_error = None
@@ -227,10 +226,9 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
         try:
             result = await scrape_html(url, proxy=attempt_proxy)
             if result:
-                content, final_url = result
                 if attempt > 1:
                     logger.info(f"Récupération réussie pour {url} à la tentative {attempt}/{max_retries}")
-                return (content, final_url)
+                return result
 
             # Contenu vide/trop court — retryable
             last_error = "Contenu vide ou trop court"
@@ -273,12 +271,11 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
                 logger.warning(f"[VARIANTE] Test {variant}")
                 result = await scrape_html(variant, proxy=variant_proxy)
                 if result:
-                    content, final_url = result
                     logger.warning(
-                        f"[VARIANTE] Succès avec {variant} → {final_url} "
-                        f"({len(content)} caractères)"
+                        f"[VARIANTE] Succès avec {variant} → {result.final_url} "
+                        f"({len(result.html)} caractères)"
                     )
-                    return (content, final_url)
+                    return result
             except Exception as e:
                 if not _is_retryable_error(str(e)):
                     logger.warning(f"[VARIANTE] Erreur permanente pour {variant}: {e}")

@@ -412,7 +412,7 @@ class DomainFR:
             if effective_proxy:
                 result = await scrape_html(url, proxy=effective_proxy)
                 if result:
-                    content, _ = result
+                    content = result.html
                     if content and len(content) > 100:
                         return True
         except Exception:
