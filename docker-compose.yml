@@ -2321,6 +2321,16 @@ services:
       - GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SLACK_ENV_LABEL=${SLACK_ENV_LABEL:-dev}
+      # SSO client (account-service) — when SSO_ENABLED=true the admin UI
+      # /login is served by /sso/login → ${ACCOUNT_PUBLIC_URL}/authorize.
+      # client_id/secret are auto-fetched from account-service /internal/credentials
+      # using ACCOUNT_INTERNAL_TOKEN when SSO_CLIENT_ID/SECRET are unset.
+      - SSO_ENABLED=${MCP_SSO_ENABLED:-false}
+      - ACCOUNT_PUBLIC_URL=${ACCOUNT_PUBLIC_URL}
+      - ACCOUNT_INTERNAL_URL=${ACCOUNT_INTERNAL_URL:-http://account-service-backend:8600}
+      - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN}
+      - SSO_CLIENT_NAME=${MCP_SSO_CLIENT_NAME:-mcp-gateway}
+      - SSO_REDIRECT_URI=${MCP_SSO_REDIRECT_URI}
     volumes:
       - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:

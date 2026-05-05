@@ -33,6 +33,7 @@ import (
 	"github.com/hellopro/mcp-gateway/internal/runnerclient"
 	"github.com/hellopro/mcp-gateway/internal/scopetoken"
 	"github.com/hellopro/mcp-gateway/internal/slack"
+	"github.com/hellopro/mcp-gateway/internal/sso"
 	"github.com/hellopro/mcp-gateway/internal/transport"
 )
 
@@ -150,8 +151,68 @@ func main() {
 		FallbackEmail: cfg.FallbackEmail,
 	}
 
-	// Mount login/logout routes
-	if authCfg.Enabled {
+	// SSO mode (account-service OAuth2 client) — when enabled, /login + /logout
+	// are served by internal/sso instead of internal/auth, and the request-time
+	// auth middleware loads identity from sso_sessions rows. The MCP-protocol
+	// /authorize endpoint in internal/authserver is unaffected (different consumer).
+	var ssoMiddleware *sso.Middleware
+	if cfg.SSOEnabled {
+		if database == nil || encryptor == nil {
+			log.Fatalf("[main] FATAL: SSO_ENABLED=true requires MYSQL_DSN and ENCRYPTION_KEY")
+		}
+		if cfg.AccountPublicURL == "" {
+			log.Fatalf("[main] FATAL: SSO_ENABLED=true requires ACCOUNT_PUBLIC_URL")
+		}
+
+		clientID, clientSecret := cfg.SSOClientID, cfg.SSOClientSecret
+		if clientID == "" || clientSecret == "" {
+			fetchCtx, fetchCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			id, sec, err := sso.FetchCredentialsFromAPI(fetchCtx, cfg.SSOClientName, cfg.AccountInternalURL, cfg.AccountInternalToken)
+			fetchCancel()
+			if err != nil {
+				log.Fatalf("[main] FATAL: failed to fetch SSO client credentials for %q: %v", cfg.SSOClientName, err)
+			}
+			clientID, clientSecret = id, sec
+			log.Printf("[main] SSO client credentials fetched for %q", cfg.SSOClientName)
+		}
+
+		redirectURI := cfg.SSORedirectURI
+		if redirectURI == "" {
+			redirectURI = strings.TrimRight(cfg.GatewayPublicURL, "/") + "/sso/callback"
+		}
+
+		ssoClient := &sso.Client{
+			ClientID:           clientID,
+			ClientSecret:       clientSecret,
+			AccountPublicURL:   cfg.AccountPublicURL,
+			AccountInternalURL: cfg.AccountInternalURL,
+			RedirectURI:        redirectURI,
+			Scope:              "openid profile email",
+		}
+		ssoRepo := repository.NewSSOSessionRepo(database)
+		ssoHandlers := sso.NewHandlers(ssoClient, ssoRepo, userRepo, encryptor, cfg.SecureCookie).
+			WithStateKey([]byte(cfg.JWTSecret))
+		ssoHandlers.RegisterHandlers(mux)
+		ssoMiddleware = sso.NewMiddleware(ssoClient, ssoRepo, userRepo, cfg.SecureCookie).
+			WithEncryptor(encryptor)
+
+		// Background reaper: drop sessions whose refresh window expired more
+		// than a day ago. Cheap (single DELETE) so we run it once an hour.
+		goSafeExit(slackClient, "sso-reaper", func() {
+			t := time.NewTicker(time.Hour)
+			defer t.Stop()
+			for range t.C {
+				if n, err := ssoRepo.ReapExpired(24 * time.Hour); err != nil {
+					log.Printf("[sso] reaper error: %v", err)
+				} else if n > 0 {
+					log.Printf("[sso] reaped %d expired session(s)", n)
+				}
+			}
+		})
+
+		log.Printf("[main] SSO mode enabled — /sso/login → %s/authorize (client_id=%s)", cfg.AccountPublicURL, clientID)
+	} else if authCfg.Enabled {
+		// Legacy direct-auth mode (back-compat / dev).
 		auth.RegisterHandlers(mux, authCfg, userRepo, slackClient)
 		log.Println("[main] authentication enabled — login at /login")
 	}
@@ -317,9 +378,16 @@ func main() {
 	mux.Handle("/mcp/", combinedMW(mcpMux))
 	log.Println("[main] streamable HTTP mounted at /mcp (OAuth2 + scope token auth)")
 
-	// Wrap entire mux with auth middleware
-	authMiddleware := auth.Middleware(authCfg, userRepo)
-	var handler http.Handler = authMiddleware(mux)
+	// Wrap entire mux with auth middleware. SSO mode swaps in sso.Middleware
+	// which loads identity from sso_sessions rows; legacy mode keeps the JWT/
+	// hellopro.fr cookie path.
+	var handler http.Handler
+	if ssoMiddleware != nil {
+		handler = ssoMiddleware.Handler(mux)
+	} else {
+		authMiddleware := auth.Middleware(authCfg, userRepo)
+		handler = authMiddleware(mux)
+	}
 
 	// Wrap with audit middleware if available
 	if auditRepo != nil {
