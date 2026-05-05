@@ -41,6 +41,10 @@ class DetectionRequest(BaseModel):
         default=False,
         description="(Debug uniquement) Inclure le contenu HTML complet et le texte nettoye complet dans la reponse debug"
     )
+    homepage_fallback: bool = Field(
+        default=True,
+        description="Si la page demandée est invalide (404, soft-404, redirect-to-home), tenter une fois la page d'accueil du domaine. Désactiver pour avoir une réponse strictement URL-level."
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -96,6 +100,10 @@ class DetectionResponse(BaseModel):
     group: Optional[str] = Field(
         default=None,
         description="Clé du groupe (first_match mode uniquement)"
+    )
+    analyzed_url: Optional[str] = Field(
+        default=None,
+        description="URL réellement analysée si différente de l'URL demandée (cas: repli homepage, ou cache HIT cross-URL via la clé domain). None = analyse directe de l'URL demandée."
     )
 
 
