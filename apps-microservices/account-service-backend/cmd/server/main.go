@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -60,6 +61,29 @@ func (a userInfoAdapter) FindByEmail(email string) (api.UserInfo, error) {
 		IsAdmin:     u.IsAdmin,
 		IsAllowed:   u.IsAllowed,
 	}, nil
+}
+
+// logoutRedirectLookup implements auth.LogoutRedirectLookup over the existing
+// OAuth2ClientRepo. The redirect_uris column is a JSON array stored as *string;
+// we parse it lazily on each call rather than caching since /logout is a
+// low-traffic endpoint.
+type logoutRedirectLookup struct {
+	repo *repository.OAuth2ClientRepo
+}
+
+func (l logoutRedirectLookup) GetClientRedirectURIs(clientID string) ([]string, error) {
+	c, err := l.repo.GetByClientID(clientID)
+	if err != nil {
+		return nil, err
+	}
+	if c.RedirectURIs == nil || *c.RedirectURIs == "" {
+		return nil, nil
+	}
+	var uris []string
+	if err := json.Unmarshal([]byte(*c.RedirectURIs), &uris); err != nil {
+		return nil, err
+	}
+	return uris, nil
 }
 
 type userBroadcastAdapter struct {
@@ -207,6 +231,12 @@ func main() {
 	}, upsertAdapter)
 	mux.Handle("POST /api/v1/login", loginHandler)
 	mux.Handle("POST /api/v1/logout", auth.NewLogoutHandler())
+	// Browser-friendly RP-initiated logout. Clears the account_session cookie
+	// and 302s back to ?post_logout_redirect_uri (validated against the
+	// registered redirect_uris of ?client_id). Used by the mcp-gateway logout
+	// flow to sign the user out everywhere — see /sso/logout in the gateway
+	// service for the calling side.
+	mux.Handle("GET /logout", auth.NewLogoutRedirectHandler(logoutRedirectLookup{repo: oauthRepo}))
 
 	// Admin guard
 	resolver := func(email string) (bool, bool) {

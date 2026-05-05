@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install
 COPY . .
+ARG VITE_SSO_MODE=true
+ENV VITE_SSO_MODE=${VITE_SSO_MODE}
 RUN npm run build
 
 # Stage 2: Serve
@@ -16,5 +18,5 @@ RUN chown -R appuser:appgroup /var/cache/nginx /var/log/nginx /usr/share/nginx/h
     && touch /var/run/nginx.pid && chown appuser:appgroup /var/run/nginx.pid
 USER appuser
 EXPOSE 8581
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8581/ || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:8581/ || exit 1
 CMD ["nginx", "-g", "daemon off;"]
