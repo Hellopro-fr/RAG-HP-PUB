@@ -99,8 +99,23 @@ class DomainCache:
             logger.debug(f"Cache get error ({url}): {e}")
         return None
 
-    async def set(self, input_url: str, result_url: str, result: dict) -> None:
-        """Stocke le résultat pour input_url ET result_url (si redirection)."""
+    async def set(
+        self,
+        input_url: str,
+        result_url: str,
+        result: dict,
+        ttl_override: Optional[int] = None,
+    ) -> None:
+        """Stocke le résultat pour input_url ET result_url (si redirection).
+
+        ttl_override: bypass the method-based TTL logic when provided. Used by
+        the page validator orchestration to set per-verdict TTLs (7d for
+        http_error / redirected_to_home, 6h for soft_404).
+
+        The persisted payload always carries `requested_url = input_url`
+        so cross-URL cache HITs (different path on the same domain) can
+        surface the originating URL via DetectionResponse.analyzed_url.
+        """
         client = await self._get_client()
         if not client:
             return
@@ -112,8 +127,13 @@ class DomainCache:
             if not input_domain:
                 return
 
-            # TTL basé sur la qualité du résultat
-            if method in self._TRANSIENT_METHODS or any(
+            # Persist requested_url for cross-URL HIT awareness.
+            result["requested_url"] = input_url
+
+            # TTL: override > method-based logic.
+            if ttl_override is not None:
+                ttl = ttl_override
+            elif method in self._TRANSIENT_METHODS or any(
                 method.startswith(prefix) for prefix in ('HTTP_',)
             ):
                 ttl = self.TTL_TRANSIENT
