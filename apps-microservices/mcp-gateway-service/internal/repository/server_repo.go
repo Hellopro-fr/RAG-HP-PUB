@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/hellopro/mcp-gateway/internal/crypto"
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/crypto"
+	"mcp-gateway/internal/db"
 	"gorm.io/gorm"
 )
 

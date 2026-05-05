@@ -9,11 +9,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/validation"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	goGoogle "mcp-gateway/internal/google"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/validation"
 	"golang.org/x/oauth2"
 )
 

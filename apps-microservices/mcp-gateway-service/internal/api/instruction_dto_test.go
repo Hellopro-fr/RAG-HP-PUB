@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 func TestToLLMInstructionResponse(t *testing.T) {

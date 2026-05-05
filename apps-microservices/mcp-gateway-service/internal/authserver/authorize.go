@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
 )
 
 //go:embed templates/*.html

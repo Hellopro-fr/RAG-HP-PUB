@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/bddcatalog"
+	"mcp-gateway/internal/bddcatalog"
 )
 
 // catalogDisabledMsg is returned by every catalog proxy route when the

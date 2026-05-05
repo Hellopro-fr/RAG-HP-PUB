@@ -3,7 +3,7 @@ package api
 import (
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 )
 
 // LLMInstructionRowRequest is one row inside a create/update body. Kind is

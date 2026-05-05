@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/gateway"
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/slack"
 )
 
 // Checker periodically pings all active MCP backend servers and updates their health status.

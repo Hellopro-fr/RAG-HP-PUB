@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/crypto"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	"mcp-gateway/internal/crypto"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
 )
 
 // userUpserter abstracts repository.UserRepo's UpsertOnLogin so handlers can

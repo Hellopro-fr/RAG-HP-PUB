@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	oauth2pkg "mcp-gateway/internal/oauth2"
 )
 
 // ── OAuth2 Client CRUD handlers ─────────────────────────────────────────────
