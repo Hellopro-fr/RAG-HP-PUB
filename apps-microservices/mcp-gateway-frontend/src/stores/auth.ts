@@ -105,9 +105,22 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout(): Promise<void> {
+    let nextURL = '/sso/login'
     try {
       if (SSO_MODE) {
-        await fetch('/logout', { method: 'POST', credentials: 'include' })
+        const res = await fetch('/logout', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        })
+        if (res.ok) {
+          const data = await res.json().catch(() => null) as { logout_url?: string } | null
+          if (data?.logout_url) {
+            // Backend returns the account-service /logout URL so the portal
+            // session cookie is also cleared (single-sign-out).
+            nextURL = data.logout_url
+          }
+        }
       } else if (token.value) {
         await fetch('/logout', {
           method: 'POST',
@@ -118,7 +131,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (!SSO_MODE) clearToken()
       user.value = null
       if (SSO_MODE) {
-        window.location.href = '/sso/login'
+        window.location.href = nextURL
       }
     }
   }

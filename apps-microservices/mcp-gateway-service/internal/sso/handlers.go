@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,12 +27,16 @@ type userUpserter interface {
 // Handlers carries shared dependencies for the /sso/* HTTP routes. Set up
 // once at boot and registered via RegisterHandlers.
 type Handlers struct {
-	client     *Client
-	repo       *repository.SSOSessionRepo
-	users      userUpserter
-	encryptor  *crypto.Encryptor
-	stateKey   []byte
-	secureCk   bool
+	client    *Client
+	repo      *repository.SSOSessionRepo
+	users     userUpserter
+	encryptor *crypto.Encryptor
+	stateKey  []byte
+	secureCk  bool
+	// gatewayPublicURL is the externally-reachable base URL of this service
+	// (e.g. http://mcp-hellopro.com:8581). Used as post_logout_redirect_uri
+	// when bouncing the browser through account-service /logout.
+	gatewayPublicURL string
 }
 
 // NewHandlers builds a Handlers struct. Nil dependencies are tolerated for
@@ -44,6 +49,14 @@ func NewHandlers(client *Client, repo *repository.SSOSessionRepo, users userUpse
 // short-lived gw_sso_pending cookie that round-trips the PKCE verifier.
 func (h *Handlers) WithStateKey(key []byte) *Handlers {
 	h.stateKey = key
+	return h
+}
+
+// WithGatewayPublicURL records this gateway's externally-reachable URL. The
+// /logout handler uses it to build a post_logout_redirect_uri that account-
+// service can validate against the gateway's registered redirect_uris.
+func (h *Handlers) WithGatewayPublicURL(u string) *Handlers {
+	h.gatewayPublicURL = strings.TrimRight(u, "/")
 	return h
 }
 
@@ -213,7 +226,10 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /logout — user-initiated logout. Best-effort revoke at account-service,
-// then drop the row + clear cookie, then redirect.
+// drop the local session row, clear the cookie, then bounce the browser
+// through account-service's /logout so its admin-UI session cookie also dies
+// (single-sign-out). Account-service redirects back to /sso/login here once
+// the cookie is cleared.
 func (h *Handlers) handleLogout(w http.ResponseWriter, r *http.Request) {
 	sid, err := GetSessionID(r)
 	if err == nil {
@@ -228,13 +244,35 @@ func (h *Handlers) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	ClearSessionCookie(w, h.secureCk)
 
+	logoutURL := h.buildAccountLogoutURL()
+
 	if strings.Contains(r.Header.Get("Accept"), "application/json") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true,"logout_url":"` + logoutURL + `"}`))
 		return
 	}
-	http.Redirect(w, r, "/sso/login", http.StatusSeeOther)
+	http.Redirect(w, r, logoutURL, http.StatusSeeOther)
+}
+
+// buildAccountLogoutURL composes the RP-initiated logout URL on account-service.
+// Falls back to the local /sso/login path when the gateway public URL or the
+// account-service URL is missing — a degraded but safe behavior.
+func (h *Handlers) buildAccountLogoutURL() string {
+	if h.client == nil || h.client.AccountPublicURL == "" {
+		return "/sso/login"
+	}
+	postLogout := h.gatewayPublicURL + "/sso/login"
+	if h.gatewayPublicURL == "" {
+		// Without a registered post_logout_redirect_uri the account-service
+		// handler will simply send the browser to its own /login. Acceptable
+		// fallback; user can navigate back manually.
+		return h.client.AccountPublicURL + "/logout"
+	}
+	q := url.Values{}
+	q.Set("client_id", h.client.ClientID)
+	q.Set("post_logout_redirect_uri", postLogout)
+	return h.client.AccountPublicURL + "/logout?" + q.Encode()
 }
 
 // POST /api/v1/sso/logout — back-channel webhook from account-service. HMAC-

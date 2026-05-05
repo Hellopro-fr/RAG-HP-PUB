@@ -200,7 +200,8 @@ func main() {
 		}
 		ssoRepo := repository.NewSSOSessionRepo(database)
 		ssoHandlers := sso.NewHandlers(ssoClient, ssoRepo, userRepo, encryptor, cfg.SecureCookie).
-			WithStateKey([]byte(cfg.JWTSecret))
+			WithStateKey([]byte(cfg.JWTSecret)).
+			WithGatewayPublicURL(cfg.GatewayPublicURL)
 		ssoHandlers.RegisterHandlers(mux)
 		ssoMiddleware = sso.NewMiddleware(ssoClient, ssoRepo, userRepo, cfg.SecureCookie).
 			WithEncryptor(encryptor)
