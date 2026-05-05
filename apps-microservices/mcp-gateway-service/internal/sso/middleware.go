@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hellopro/mcp-gateway/internal/auth"
@@ -32,6 +33,15 @@ type Middleware struct {
 	users      userRepoIface
 	encryptor  *crypto.Encryptor
 	secureCk   bool
+
+	// refreshLocks serializes concurrent refresh attempts per session id.
+	// Two requests landing in the refresh window at the same time would each
+	// call /token, the second hitting invalid_grant because account-service
+	// rotated the refresh token after the first call. We hold a per-sid mutex
+	// for the read-decrypt-refresh-write critical section so the second
+	// request re-reads the row (now with the rotated tokens) and skips the
+	// refresh altogether.
+	refreshLocks sync.Map // map[string]*sync.Mutex
 }
 
 // NewMiddleware constructs the middleware. Pass nils when wiring up at boot
@@ -105,16 +115,38 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		// Refresh window: if access_exp is within 60s, rotate tokens before
-		// continuing. Refresh failure → drop session → 401.
-		if time.Until(sess.AccessExp) < 60*time.Second {
-			if err := m.refresh(r.Context(), sess); err != nil {
-				log.Printf("[sso] refresh failed for sid=%s: %v", sid, err)
-				_ = m.repo.Delete(sid)
-				ClearSessionCookie(w, m.secureCk)
-				m.unauthorized(w, r, "refresh failed")
+		// Refresh policy: only refresh once the access token is expired (with
+		// a 5s slack for clock skew on long-running handlers). Pre-emptive
+		// refresh causes invalid_grant races against concurrent requests,
+		// since account-service rotates the refresh token on every call.
+		// A per-sid mutex serializes refresh attempts; the loser re-reads
+		// the now-rotated row and exits the critical section without calling
+		// /token a second time.
+		if time.Until(sess.AccessExp) < 5*time.Second {
+			lockAny, _ := m.refreshLocks.LoadOrStore(sid, &sync.Mutex{})
+			lock := lockAny.(*sync.Mutex)
+			lock.Lock()
+			fresh, err := m.repo.FindByID(sid)
+			if err != nil {
+				lock.Unlock()
+				m.unauthorized(w, r, "session vanished")
 				return
 			}
+			if time.Until(fresh.AccessExp) < 5*time.Second {
+				if err := m.refresh(r.Context(), fresh); err != nil {
+					lock.Unlock()
+					m.refreshLocks.Delete(sid)
+					log.Printf("[sso] refresh failed for sid=%s: %v", sid, err)
+					_ = m.repo.Delete(sid)
+					ClearSessionCookie(w, m.secureCk)
+					m.unauthorized(w, r, "refresh failed")
+					return
+				}
+				sess = fresh
+			} else {
+				sess = fresh
+			}
+			lock.Unlock()
 		}
 
 		_ = m.repo.Touch(sid)

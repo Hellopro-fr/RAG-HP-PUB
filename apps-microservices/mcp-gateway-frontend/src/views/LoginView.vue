@@ -113,14 +113,20 @@ const username = ref('')
 const password = ref('')
 const errorMessage = ref('')
 
-// In SSO mode this view should never render the form — the router redirects
-// out before mount in 99% of cases, but a deep-link to /login still lands
-// here. Fire the redirect ourselves and short-circuit.
-onMounted(() => {
-  if (authStore.ssoMode) {
-    const target = (route.query.redirect as string) || '/'
-    authStore.redirectToLogin(target)
+// In SSO mode the form never renders. Two cases:
+//  - User already has a valid gw_session cookie (e.g., logged in via account-
+//    service then deep-linked to /login). Skip the OAuth dance and push
+//    straight to the post-login target.
+//  - No session yet. Hand off to /sso/login which kicks off the PKCE flow.
+onMounted(async () => {
+  if (!authStore.ssoMode) return
+  const target = (route.query.redirect as string) || '/'
+  const valid = await authStore.checkSession()
+  if (valid) {
+    router.push(target)
+    return
   }
+  authStore.redirectToLogin(target)
 })
 
 async function handleLogin() {
