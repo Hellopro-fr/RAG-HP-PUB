@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 // NameLookup looks up an oauth2_clients row by its display name.

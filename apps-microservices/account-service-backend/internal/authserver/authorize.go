@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 type AuthorizeParams struct {

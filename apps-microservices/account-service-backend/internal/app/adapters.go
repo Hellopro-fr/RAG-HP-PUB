@@ -5,11 +5,11 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/hellopro/account-service/internal/api"
-	"github.com/hellopro/account-service/internal/crypto"
-	"github.com/hellopro/account-service/internal/db"
-	"github.com/hellopro/account-service/internal/logout"
-	"github.com/hellopro/account-service/internal/repository"
+	"account-service/internal/api"
+	"account-service/internal/crypto"
+	"account-service/internal/db"
+	"account-service/internal/logout"
+	"account-service/internal/repository"
 )
 
 // cryptoAdapter narrows *crypto.Cipher down to logout.Decrypter so the

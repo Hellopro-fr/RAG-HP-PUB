@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hellopro/account-service/internal/app"
-	"github.com/hellopro/account-service/internal/config"
+	"account-service/internal/app"
+	"account-service/internal/config"
 )
 
 const version = "0.1.0"

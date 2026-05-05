@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 type Decrypter interface {

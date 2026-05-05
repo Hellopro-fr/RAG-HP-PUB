@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 func TestAuthCodeSingleUse(t *testing.T) {

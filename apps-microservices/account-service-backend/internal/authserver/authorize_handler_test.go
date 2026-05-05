@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hellopro/account-service/internal/auth"
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/auth"
+	"account-service/internal/db"
 )
 
 type fakeAuthCodeRepo struct {

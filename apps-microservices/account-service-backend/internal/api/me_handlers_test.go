@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hellopro/account-service/internal/auth"
+	"account-service/internal/auth"
 )
 
 type fakeUserResolver struct {

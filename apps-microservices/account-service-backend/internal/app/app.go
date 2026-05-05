@@ -19,13 +19,13 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/hellopro/account-service/internal/api"
-	"github.com/hellopro/account-service/internal/auth"
-	"github.com/hellopro/account-service/internal/config"
-	"github.com/hellopro/account-service/internal/crypto"
-	"github.com/hellopro/account-service/internal/db"
-	"github.com/hellopro/account-service/internal/logout"
-	"github.com/hellopro/account-service/internal/repository"
+	"account-service/internal/api"
+	"account-service/internal/auth"
+	"account-service/internal/config"
+	"account-service/internal/crypto"
+	"account-service/internal/db"
+	"account-service/internal/logout"
+	"account-service/internal/repository"
 )
 
 // App owns every long-lived dependency built at boot. main() drives Run /

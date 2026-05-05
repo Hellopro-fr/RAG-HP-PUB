@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hellopro/account-service/internal/db"
+	"account-service/internal/db"
 )
 
 func TestAdminServices_RotateSecret(t *testing.T) {
