@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import (
@@ -19,9 +19,11 @@ from app.models.schemas import (
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
-from app.core.metrics import DEDUP_HITS
+from app.core.metrics import DEDUP_HITS, VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
+from app.services.page_validator import validate as validate_page, ValidationVerdict
+from app.services.scraper import ScrapeResult
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,25 @@ def _normalize_url_for_dedup(url: str) -> str:
         return f"{scheme}://{host}{path}{q}"
     except Exception:
         return url
+
+
+def _homepage_of(url: str) -> str:
+    """Build the root URL for a given URL (preserves scheme + host + port)."""
+    p = urlparse(url)
+    return urlunparse((p.scheme or "https", p.netloc, "/", "", "", ""))
+
+
+def _is_homepage(url: str) -> bool:
+    """True if URL has root path (no segments)."""
+    p = urlparse(url)
+    return (p.path or "/") in ("", "/")
+
+
+def _ttl_from_verdict(verdict_value: str) -> int:
+    """Map a verdict string to its cache TTL (settings-aware)."""
+    if verdict_value == ValidationVerdict.SOFT_404.value:
+        return settings.INVALID_PAGE_TTL_SOFT_S
+    return settings.INVALID_PAGE_TTL_HARD_S
 
 
 # =============================================================================
@@ -72,26 +93,27 @@ async def _detect_single_url(
     use_nlp_detection: bool = True,
     forced_method: Optional[str] = None,
     force_refresh: bool = False,
+    homepage_fallback: bool = True,
 ) -> DetectionResponse:
-    """
-    Pipeline de détection FR pour une URL unique (logique partagée /detect + batch).
-
-    Gère : cache lookup/store, HTML fetch, challenge detection, DomainFR pipeline.
-    Skip le cache si html_content est fourni (résultat page-level, pas domain-level)
-    ou si force_refresh est True.
-    """
+    """Pipeline de détection FR pour une URL unique."""
     effective_url = url
     html_was_provided = html_content is not None
+    fetch_result: Optional[ScrapeResult] = None
 
     if not html_was_provided:
-        # Check cache (skip if force_refresh)
+        # [1] Cache lookup (domain-keyed)
         if not force_refresh:
             cached = await domain_cache.get(url)
             if cached:
                 logger.info(f"Cache HIT {url}")
+                # Cross-URL HIT awareness: domain key may have been seeded by a
+                # different requested URL. Surface the originating URL.
+                cached_req_url = cached.get("requested_url") or cached.get("url")
+                if cached_req_url and cached_req_url != url and not cached.get("analyzed_url"):
+                    cached["analyzed_url"] = cached_req_url
                 return DetectionResponse(**cached)
 
-        # Fetch HTML (with inflight dedup unless force_refresh)
+        # [2] Fetch HTML (with inflight dedup unless force_refresh)
         if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
             dedup_key = _normalize_url_for_dedup(url)
             prev_hits = _inflight_dedup.hits
@@ -108,30 +130,123 @@ async def _detect_single_url(
                 ok=False, url=url, method='fetch_failed',
                 error='Impossible de récupérer le contenu HTML'
             )
+
         html_content = fetch_result.html
         final_url = fetch_result.final_url
         if final_url and final_url != url:
             logger.info(f"Redirection: {url} → {final_url}")
             effective_url = final_url
 
+        # [3] Validate page (skip if kill-switch off)
+        if settings.INVALID_PAGE_DETECTION_ENABLED:
+            verdict = validate_page(fetch_result, requested_url=url)
+            VALIDATION_VERDICTS.labels(verdict=verdict.value).inc()
+            if verdict != ValidationVerdict.VALID:
+                logger.info(
+                    f"[VALIDATE] {verdict.value} for {url} "
+                    f"(status={fetch_result.status_code}, final={final_url})"
+                )
+                # [5] Homepage fallback
+                homepage = _homepage_of(url)
+                want_fallback = (
+                    homepage_fallback
+                    and settings.HOMEPAGE_FALLBACK_ENABLED
+                    and not _is_homepage(url)
+                )
+                if want_fallback:
+                    logger.info(f"[FALLBACK] {url} → homepage {homepage}")
+                    if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
+                        hp_key = _normalize_url_for_dedup(homepage)
+                        hp_fetch = await _inflight_dedup.coalesce(
+                            hp_key, lambda: fetch_html(homepage, proxy_url)
+                        )
+                    else:
+                        hp_fetch = await fetch_html(homepage, proxy_url)
+
+                    if not hp_fetch:
+                        HOMEPAGE_FALLBACK_TRIGGERED.labels(outcome="network_failure").inc()
+                        rejection = DetectionResponse(
+                            ok=False, url=url, method=verdict.value,
+                            error=f"Page invalide ({verdict.value}) — repli homepage a échoué (réseau)",
+                        )
+                        await domain_cache.set(
+                            url, url, rejection.model_dump(),
+                            ttl_override=domain_cache.TTL_TRANSIENT,
+                        )
+                        return rejection
+
+                    hp_verdict = validate_page(hp_fetch, requested_url=homepage)
+                    VALIDATION_VERDICTS.labels(verdict=hp_verdict.value).inc()
+                    if hp_verdict != ValidationVerdict.VALID:
+                        HOMEPAGE_FALLBACK_TRIGGERED.labels(outcome="rejected").inc()
+                        logger.warning(
+                            f"[FALLBACK] FAILED {url} (verdict={verdict.value}) "
+                            f"and homepage {homepage} (verdict={hp_verdict.value})"
+                        )
+                        rejection = DetectionResponse(
+                            ok=False, url=url, method=verdict.value,
+                            error=f"Page invalide ({verdict.value}) et page d'accueil également invalide ({hp_verdict.value})",
+                        )
+                        await domain_cache.set(
+                            url, url, rejection.model_dump(),
+                            ttl_override=_ttl_from_verdict(verdict.value),
+                        )
+                        return rejection
+
+                    # Homepage valid → run challenge_page detection + DomainFR on homepage HTML
+                    challenge = detect_challenge_page(hp_fetch.html)
+                    if challenge:
+                        rejection = DetectionResponse(
+                            ok=False, url=homepage, method='challenge_page',
+                            error=_build_challenge_error_msg(challenge),
+                            analyzed_url=homepage,
+                        )
+                        await domain_cache.set(
+                            url, homepage, rejection.model_dump(),
+                        )
+                        return rejection
+
+                    detector = DomainFR(
+                        homepage=homepage,
+                        forced_method=forced_method,
+                        use_nlp_detection=use_nlp_detection,
+                        original_homepage=url,
+                    )
+                    hp_result = await detector.check_page_if_french(hp_fetch.html, mode)
+                    hp_result.analyzed_url = homepage
+                    HOMEPAGE_FALLBACK_TRIGGERED.labels(outcome="success").inc()
+                    logger.info(f"[FALLBACK] OK {url} via {homepage}")
+                    await domain_cache.set(url, homepage, hp_result.model_dump())
+                    return hp_result
+
+                # No fallback (disabled, or url == homepage) → cache rejection + return
+                rejection = DetectionResponse(
+                    ok=False, url=url, method=verdict.value,
+                    error=f"Page invalide ({verdict.value})",
+                )
+                await domain_cache.set(
+                    url, url, rejection.model_dump(),
+                    ttl_override=_ttl_from_verdict(verdict.value),
+                )
+                return rejection
+
+    # [4] VALID path (or kill-switch off): existing flow — challenge + DomainFR
     challenge = detect_challenge_page(html_content)
     if challenge:
         logger.warning(f"Challenge/block {challenge} pour {effective_url}")
         return DetectionResponse(
             ok=False, url=effective_url, method='challenge_page',
-            error=_build_challenge_error_msg(challenge)
+            error=_build_challenge_error_msg(challenge),
         )
 
     detector = DomainFR(
         homepage=effective_url,
         forced_method=forced_method,
         use_nlp_detection=use_nlp_detection,
-        original_homepage=url if effective_url != url else None
+        original_homepage=url if effective_url != url else None,
     )
     result = await detector.check_page_if_french(html_content, mode)
 
-    # Write to cache: skip only if html_content was provided (page-level result)
-    # force_refresh should still write to cache (overwrite stale data)
     if not html_was_provided:
         await domain_cache.set(url, effective_url, result.model_dump())
 
@@ -180,6 +295,7 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
             use_nlp_detection=request.use_nlp_detection,
             forced_method=request.forced_method,
             force_refresh=request.force_refresh,
+            homepage_fallback=request.homepage_fallback,
         )
     except Exception as e:
         return DetectionResponse(
