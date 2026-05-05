@@ -57,12 +57,13 @@ api-detection-langue-fr/
 
 1. **Cache Redis** — Lookup by normalized domain. TTL: 30d (ok=true), 7d (ok=false definitive), 6h (transient failures). Bypass via `force_refresh=true`.
 2. **Fetch HTML** — Playwright headless via Apify proxy. 3 retries (auto rotation) + fallback URL variants (http/https, www/sans-www).
-3. **Challenge detection** — Identifies Cloudflare, DataDome, Squid, Imperva, HTTP 4XX/5XX error pages.
-4. **URL analysis** — TLD `.fr` (strong signal), `/fr/` path, `lang=fr` query, `fr.` subdomain.
-5. **HTML tags** — `<html lang>`, `<meta og:locale>`, `<meta name=LANGUAGE>`, `<meta http-equiv=content-language>`.
-6. **NLP** — fastText primary → langdetect+langid cross-check when uncertain. Cookie consent banners stripped before analysis.
-7. **Alternative links** — hreflang, data-lang, data-gt-lang, `/fr/` links, option tags. Sorted by reliability (high/medium/low), validated via HTTP.
-8. **Decision matrix** — 9 cases combining URL/HTML/NLP signals with confidence scores.
+3. **Page validation** — Classifies the fetched page: `valid` / `http_error` (4XX/5XX) / `soft_404` (200 OK + body looks like "page not found") / `redirected_to_home` (deep path 302'd to root). Invalid → optional one-hop homepage fallback.
+4. **Challenge detection** — Identifies Cloudflare, DataDome, Squid, Imperva, HTTP 4XX/5XX error pages.
+5. **URL analysis** — TLD `.fr` (strong signal), `/fr/` path, `lang=fr` query, `fr.` subdomain.
+6. **HTML tags** — `<html lang>`, `<meta og:locale>`, `<meta name=LANGUAGE>`, `<meta http-equiv=content-language>`.
+7. **NLP** — fastText primary → langdetect+langid cross-check when uncertain. Cookie consent banners stripped before analysis.
+8. **Alternative links** — hreflang, data-lang, data-gt-lang, `/fr/` links, option tags. Sorted by reliability (high/medium/low), validated via HTTP.
+9. **Decision matrix** — 9 cases combining URL/HTML/NLP signals with confidence scores.
 
 ## Conventions
 
@@ -97,6 +98,53 @@ Prometheus metrics exposed at `/metrics` for all three layers.
 | `INFLIGHT_DEDUP_ENABLED` | `true` | Kill switch for URL dedup |
 
 Callers MUST use the shared contract: `libs/common-utils/src/common_utils/detection_client.py` (Python) or mirror its env vars (`DETECTION_MAX_CONCURRENCY`, `DETECTION_REQUEST_TIMEOUT_S`, `DETECTION_MAX_RETRIES`, `DETECTION_BACKOFF_BASE_S`) in other languages.
+
+## Invalid Page Rejection & Homepage Fallback
+
+Three new method values surface in `DetectionResponse.method` when the requested page is rejected:
+
+| Method | Meaning | Cache TTL |
+|---|---|---|
+| `http_error` | Hard 4XX/5XX status | 7 days |
+| `soft_404` | 200 OK but body matches not-found heuristic (title/H1 regex + thin content, or URL path 404 marker) | 6 hours |
+| `redirected_to_home` | Requested non-root path, server redirected to `/` | 7 days |
+
+Callers should treat these as definitive failures (do NOT retry).
+
+When validation rejects, the service tries the domain's homepage once. If the homepage is valid, the request returns `ok=True` with `analyzed_url=<homepage>` set. If the homepage also fails, the original verdict is returned.
+
+`analyzed_url` is also set on cache HITs where the cached entry was originally seeded by a different URL on the same domain (e.g., requesting `/some/page` returns a cached homepage answer because the cache is keyed by domain).
+
+### Per-request flag
+
+- `homepage_fallback: bool = true` on `DetectionRequest` and `BatchDetectionRequest`. Set `false` for strict URL-level mode.
+
+### Env vars
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INVALID_PAGE_DETECTION_ENABLED` | `true` | Master kill switch for the validator. `false` = pre-validation behavior (page-validator skipped entirely). |
+| `HOMEPAGE_FALLBACK_ENABLED` | `true` | Master kill switch for the homepage fallback hop. `false` = always return rejection on invalid page. |
+| `SOFT_404_TITLE_THIN_THRESHOLD` | `2000` | Visible-text char limit when title regex matches. |
+| `SOFT_404_H1_THIN_THRESHOLD` | `1500` | Visible-text char limit when H1 regex matches. |
+| `INVALID_PAGE_TTL_HARD_S` | `604800` (7d) | Cache TTL for `http_error` + `redirected_to_home`. |
+| `INVALID_PAGE_TTL_SOFT_S` | `21600` (6h) | Cache TTL for `soft_404`. |
+
+### Endpoint behavior
+
+| Endpoint | Validate? | Homepage fallback? |
+|---|---|---|
+| `/detect` | Yes | Yes (default ON) |
+| `/detect-batch` (all modes) | Yes | Yes (default ON, per item) |
+| `/detect-debug` | Yes (warning only — no flow change) | **OFF** (debug shows requested URL's actual pipeline state) |
+| `/check-url` | N/A (no HTML fetch) | N/A |
+
+Batch Pass 2 retry: still `fetch_failed` + `challenge_page` only. New method values are NOT retried.
+
+### Metrics
+
+- `detection_validation_verdicts_total{verdict}` — counter, label values: `valid`, `http_error`, `soft_404`, `redirected_to_home`.
+- `detection_homepage_fallback_triggered_total{outcome}` — counter, label values: `success`, `rejected`, `network_failure`.
 
 ## Dependencies on Other Services
 
