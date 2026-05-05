@@ -2331,6 +2331,10 @@ services:
       - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN}
       - SSO_CLIENT_NAME=${MCP_SSO_CLIENT_NAME:-mcp-gateway}
       - SSO_REDIRECT_URI=${MCP_SSO_REDIRECT_URI}
+      # Dedicated Slack webhook for SSO error events (state mismatch, refresh
+      # failure, blocked users, tampered logout webhooks). Independent of
+      # SLACK_WEBHOOK_URL so login alerts can land in their own channel.
+      - LOGIN_SLACK_URL=${LOGIN_SLACK_URL}
     volumes:
       - /mnt/data/docker/images/mcp_server:/data/uploads
     # depends_on:
