@@ -17,5 +17,5 @@ RUN printf 'proxy_http_version 1.1;\nproxy_set_header Host $host;\nproxy_set_hea
     && touch /var/run/nginx.pid && chown appuser:appgroup /var/run/nginx.pid
 USER appuser
 EXPOSE 8601
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8601/ || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:8601/ || exit 1
 CMD ["nginx", "-g", "daemon off;"]
