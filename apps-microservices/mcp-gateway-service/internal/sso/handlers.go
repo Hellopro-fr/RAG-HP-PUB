@@ -146,7 +146,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if state != pending.State {
-		log.Printf("[sso] callback: state mismatch")
+		log.Printf("[sso] callback: state mismatch (query=%s pending=%s return_to=%s)", state, pending.State, pending.ReturnTo)
 		http.Error(w, "state mismatch", http.StatusBadRequest)
 		return
 	}

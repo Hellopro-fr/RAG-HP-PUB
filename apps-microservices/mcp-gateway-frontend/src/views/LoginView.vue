@@ -116,17 +116,22 @@ const errorMessage = ref('')
 // In SSO mode the form never renders. Two cases:
 //  - User already has a valid gw_session cookie (e.g., logged in via account-
 //    service then deep-linked to /login). Skip the OAuth dance and push
-//    straight to the post-login target.
+//    straight to the home route.
 //  - No session yet. Hand off to /sso/login which kicks off the PKCE flow.
+//
+// route.query.redirect is intentionally ignored — /login is a fresh landing
+// surface; carrying a stale redirect across the OAuth round trip turned out
+// to surface state-mismatch and post-logout-loop edge cases. Users that need
+// a deep link should point at the protected route directly; the global
+// router guard will then preserve the URL through /sso/login.
 onMounted(async () => {
   if (!authStore.ssoMode) return
-  const target = (route.query.redirect as string) || '/'
   const valid = await authStore.checkSession()
   if (valid) {
-    router.push(target)
+    router.push('/')
     return
   }
-  authStore.redirectToLogin(target)
+  authStore.redirectToLogin('/')
 })
 
 async function handleLogin() {
