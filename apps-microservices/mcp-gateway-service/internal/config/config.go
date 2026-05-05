@@ -94,6 +94,12 @@ type Config struct {
 	SSOClientID          string // SSO_CLIENT_ID — static override; when empty, auto-fetched via /internal/credentials
 	SSOClientSecret      string // SSO_CLIENT_SECRET — static override; when empty, auto-fetched
 	SSORedirectURI       string // SSO_REDIRECT_URI — defaults to ${GATEWAY_PUBLIC_URL}/sso/callback
+	// LoginSlackURL is a dedicated Slack incoming webhook for SSO error
+	// events (state mismatch, refresh failure, token exchange errors, denied
+	// users, tampered logout webhooks). Independent of SLACK_WEBHOOK_URL so
+	// login alerts can land in a different channel than the operational
+	// gateway alerts. Empty = SSO Slack notifications disabled.
+	LoginSlackURL string // LOGIN_SLACK_URL
 }
 
 func Load() *Config {
@@ -197,6 +203,7 @@ func Load() *Config {
 		SSOClientID:          os.Getenv("SSO_CLIENT_ID"),
 		SSOClientSecret:      os.Getenv("SSO_CLIENT_SECRET"),
 		SSORedirectURI:       os.Getenv("SSO_REDIRECT_URI"),
+		LoginSlackURL:        os.Getenv("LOGIN_SLACK_URL"),
 	}
 }
 

@@ -199,12 +199,18 @@ func main() {
 			Scope:              "openid profile email",
 		}
 		ssoRepo := repository.NewSSOSessionRepo(database)
+		ssoSlack := sso.NewSlackNotifier(cfg.LoginSlackURL, cfg.SlackEnvLabel, cfg.GatewayPublicURL)
+		if cfg.LoginSlackURL != "" {
+			log.Printf("[main] SSO error notifications → LOGIN_SLACK_URL")
+		}
 		ssoHandlers := sso.NewHandlers(ssoClient, ssoRepo, userRepo, encryptor, cfg.SecureCookie).
 			WithStateKey([]byte(cfg.JWTSecret)).
-			WithGatewayPublicURL(cfg.GatewayPublicURL)
+			WithGatewayPublicURL(cfg.GatewayPublicURL).
+			WithSlack(ssoSlack)
 		ssoHandlers.RegisterHandlers(mux)
 		ssoMiddleware = sso.NewMiddleware(ssoClient, ssoRepo, userRepo, cfg.SecureCookie).
-			WithEncryptor(encryptor)
+			WithEncryptor(encryptor).
+			WithSlack(ssoSlack)
 
 		// Background reaper: drop sessions whose refresh window expired more
 		// than a day ago. Cheap (single DELETE) so we run it once an hour.

@@ -37,6 +37,9 @@ type Handlers struct {
 	// (e.g. http://mcp-hellopro.com:8581). Used as post_logout_redirect_uri
 	// when bouncing the browser through account-service /logout.
 	gatewayPublicURL string
+	// slack is the optional dedicated SSO error notifier (LOGIN_SLACK_URL).
+	// nil = notifications disabled.
+	slack *SlackNotifier
 }
 
 // NewHandlers builds a Handlers struct. Nil dependencies are tolerated for
@@ -58,6 +61,60 @@ func (h *Handlers) WithStateKey(key []byte) *Handlers {
 func (h *Handlers) WithGatewayPublicURL(u string) *Handlers {
 	h.gatewayPublicURL = strings.TrimRight(u, "/")
 	return h
+}
+
+// WithSlack attaches a Slack notifier used to forward SSO error events to a
+// dedicated webhook (LOGIN_SLACK_URL). Pass nil to disable notifications.
+func (h *Handlers) WithSlack(s *SlackNotifier) *Handlers {
+	h.slack = s
+	return h
+}
+
+// notify is a nil-safe shorthand that fills the request-scoped fields on
+// the event (path, query, IP, UA) before forwarding to the Slack notifier.
+func (h *Handlers) notify(r *http.Request, ev SSOErrorEvent) {
+	if h.slack == nil {
+		return
+	}
+	if ev.RequestPath == "" {
+		ev.RequestPath = r.URL.Path
+	}
+	if ev.Query == "" {
+		ev.Query = sanitiseQuery(r.URL.RawQuery)
+	}
+	if ev.ClientIP == "" {
+		ev.ClientIP = clientIP(r)
+	}
+	if ev.UserAgent == "" {
+		ev.UserAgent = r.UserAgent()
+	}
+	h.slack.Notify(ev)
+}
+
+// sanitiseQuery shortens code= / state= / refresh_token= values so they don't
+// fill Slack messages with credential-shaped strings. Keeps the prefix as
+// evidence the param was present without leaking the full secret.
+func sanitiseQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parts := strings.Split(raw, "&")
+	for i, p := range parts {
+		eq := strings.IndexByte(p, '=')
+		if eq < 0 {
+			continue
+		}
+		key := p[:eq]
+		val := p[eq+1:]
+		switch key {
+		case "code", "state", "refresh_token", "access_token", "client_secret", "token":
+			if len(val) > 12 {
+				val = val[:12] + "…"
+			}
+			parts[i] = key + "=" + val
+		}
+	}
+	return strings.Join(parts, "&")
 }
 
 // RegisterHandlers mounts /sso/login, /sso/callback, /logout, and the
@@ -122,12 +179,14 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	cookieVal, err := GetPendingCookie(r)
 	if err != nil {
+		h.notify(r, SSOErrorEvent{Kind: "no_pending_login", Reason: err.Error()})
 		http.Error(w, "no pending login", http.StatusBadRequest)
 		return
 	}
 	pending, err := VerifyPendingState(h.stateKey, cookieVal)
 	if err != nil {
 		log.Printf("[sso] callback: pending state invalid: %v", err)
+		h.notify(r, SSOErrorEvent{Kind: "pending_state_invalid", Reason: err.Error()})
 		http.Error(w, "login expired or tampered, please retry", http.StatusBadRequest)
 		return
 	}
@@ -136,17 +195,31 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if errCode := q.Get("error"); errCode != "" {
 		desc := q.Get("error_description")
+		h.notify(r, SSOErrorEvent{
+			Kind:   "authorization_error",
+			Reason: errCode + ": " + desc,
+		})
 		http.Error(w, fmt.Sprintf("authorization failed: %s — %s", errCode, desc), http.StatusUnauthorized)
 		return
 	}
 	code := q.Get("code")
 	state := q.Get("state")
 	if code == "" || state == "" {
+		h.notify(r, SSOErrorEvent{Kind: "missing_code_or_state", Reason: "code or state empty"})
 		http.Error(w, "missing code or state", http.StatusBadRequest)
 		return
 	}
 	if state != pending.State {
 		log.Printf("[sso] callback: state mismatch (query=%s pending=%s return_to=%s)", state, pending.State, pending.ReturnTo)
+		h.notify(r, SSOErrorEvent{
+			Kind:   "state_mismatch",
+			Reason: "query state did not match pending state",
+			ExtraFields: map[string]string{
+				"query_state":   state,
+				"pending_state": pending.State,
+				"return_to":     pending.ReturnTo,
+			},
+		})
 		http.Error(w, "state mismatch", http.StatusBadRequest)
 		return
 	}
@@ -154,6 +227,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	tok, err := h.client.ExchangeCode(r.Context(), code, pending.Verifier, h.client.RedirectURI)
 	if err != nil {
 		log.Printf("[sso] callback: token exchange failed: %v", err)
+		h.notify(r, SSOErrorEvent{Kind: "token_exchange_failed", Reason: err.Error()})
 		http.Error(w, "token exchange failed", http.StatusBadGateway)
 		return
 	}
@@ -161,6 +235,11 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	sub, email, name, err := ParseAccessTokenIdentity(tok.AccessToken)
 	if err != nil || email == "" {
 		log.Printf("[sso] callback: cannot parse identity from access token: %v", err)
+		reason := "missing email claim"
+		if err != nil {
+			reason = err.Error()
+		}
+		h.notify(r, SSOErrorEvent{Kind: "invalid_token_payload", Reason: reason})
 		http.Error(w, "invalid token payload", http.StatusBadGateway)
 		return
 	}
@@ -168,26 +247,36 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	user, err := h.users.UpsertOnLogin(email, name)
 	if err != nil {
 		log.Printf("[sso] callback: upsert user failed: %v", err)
+		h.notify(r, SSOErrorEvent{Kind: "upsert_failed", Reason: err.Error(), UserEmail: email, Sub: sub})
 		http.Error(w, "failed to provision user", http.StatusInternalServerError)
 		return
 	}
 	if user != nil && !user.IsAllowed {
+		h.notify(r, SSOErrorEvent{
+			Kind:      "user_blocked",
+			Reason:    "user authenticated but is_allowed=false",
+			UserEmail: email,
+			Sub:       sub,
+		})
 		http.Error(w, "Access denied. Contact an administrator.", http.StatusForbidden)
 		return
 	}
 
 	sid, err := NewSessionID()
 	if err != nil {
+		h.notify(r, SSOErrorEvent{Kind: "session_id_gen_failed", Reason: err.Error(), UserEmail: email})
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
 	}
 	accessEnc, err := h.encryptor.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
+		h.notify(r, SSOErrorEvent{Kind: "encrypt_access_failed", Reason: err.Error(), UserEmail: email})
 		http.Error(w, "encryption error", http.StatusInternalServerError)
 		return
 	}
 	refreshEnc, err := h.encryptor.Encrypt([]byte(tok.RefreshToken))
 	if err != nil {
+		h.notify(r, SSOErrorEvent{Kind: "encrypt_refresh_failed", Reason: err.Error(), UserEmail: email})
 		http.Error(w, "encryption error", http.StatusInternalServerError)
 		return
 	}
@@ -213,6 +302,7 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.repo.Create(row); err != nil {
 		log.Printf("[sso] callback: persist session failed: %v", err)
+		h.notify(r, SSOErrorEvent{Kind: "session_persist_failed", Reason: err.Error(), UserEmail: email, Sub: sub})
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
 	}
@@ -329,6 +419,10 @@ func (h *Handlers) handleSSOLogoutWebhook(w http.ResponseWriter, r *http.Request
 	sig := r.Header.Get("X-Account-Signature")
 	if err := VerifyWebhookSignature([]byte(h.client.ClientSecret), body, sig); err != nil {
 		log.Printf("[sso] webhook signature rejected: %v", err)
+		h.notify(r, SSOErrorEvent{
+			Kind:   "webhook_signature_invalid",
+			Reason: err.Error(),
+		})
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}

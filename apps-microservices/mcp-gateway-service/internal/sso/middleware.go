@@ -42,6 +42,9 @@ type Middleware struct {
 	// request re-reads the row (now with the rotated tokens) and skips the
 	// refresh altogether.
 	refreshLocks sync.Map // map[string]*sync.Mutex
+
+	// slack is the optional dedicated SSO error notifier. nil = disabled.
+	slack *SlackNotifier
 }
 
 // NewMiddleware constructs the middleware. Pass nils when wiring up at boot
@@ -55,6 +58,13 @@ func NewMiddleware(client *Client, repo *repository.SSOSessionRepo, users userRe
 // rest. Required: SSO mode rejects boot without ENCRYPTION_KEY.
 func (m *Middleware) WithEncryptor(e *crypto.Encryptor) *Middleware {
 	m.encryptor = e
+	return m
+}
+
+// WithSlack attaches a Slack notifier used to forward middleware-level SSO
+// error events (refresh failures, etc.) to LOGIN_SLACK_URL.
+func (m *Middleware) WithSlack(s *SlackNotifier) *Middleware {
+	m.slack = s
 	return m
 }
 
@@ -137,6 +147,17 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 					lock.Unlock()
 					m.refreshLocks.Delete(sid)
 					log.Printf("[sso] refresh failed for sid=%s: %v", sid, err)
+					if m.slack != nil {
+						m.slack.Notify(SSOErrorEvent{
+							Kind:        "refresh_failed",
+							Reason:      err.Error(),
+							UserEmail:   fresh.Email,
+							Sub:         fresh.Sub,
+							ClientIP:    clientIP(r),
+							UserAgent:   r.UserAgent(),
+							RequestPath: r.URL.Path,
+						})
+					}
 					_ = m.repo.Delete(sid)
 					ClearSessionCookie(w, m.secureCk)
 					m.unauthorized(w, r, "refresh failed")
