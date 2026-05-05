@@ -4,13 +4,33 @@ import os
 import random
 import time
 import uuid
+from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urlparse
 
 from app.core.config import settings
 from app.core.metrics import BROWSER_LAUNCH_DURATION
 
+try:
+    from playwright.async_api import async_playwright
+except ImportError:
+    async_playwright = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ScrapeResult:
+    """Result of a Playwright scrape: HTML body + final URL + HTTP status + headers.
+
+    status_code is 0 when Playwright returned no Response object (rare —
+    happens when navigation aborts before any response is received).
+    """
+    html: str
+    final_url: str
+    status_code: int
+    content_type: str = ""
+    headers: dict = field(default_factory=dict)
 
 
 def build_proxy_url(base_proxy: str, session_id: Optional[str] = None, country: Optional[str] = 'FR') -> str:
@@ -260,7 +280,7 @@ async def _inject_cookie_consent(context, url: str) -> None:
         pass
 
 
-async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[tuple[str, str]]:
+async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[ScrapeResult]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
@@ -277,12 +297,11 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
         proxy: Proxy URL obligatoire (format: http://user:pass@host:port)
 
     Returns:
-        Tuple (contenu_html, url_finale) ou None en cas d'erreur.
-        url_finale est l'URL après redirections (peut différer de l'URL d'entrée).
+        ScrapeResult (html, final_url, status_code, content_type, headers) ou None en cas d'erreur.
+        status_code est 0 si Playwright n'a retourné aucun objet Response.
+        final_url est l'URL après redirections (peut différer de l'URL d'entrée).
     """
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
+    if async_playwright is None:
         logger.error(
             "Playwright non installé. Installez-le avec: "
             "pip install playwright && python -m playwright install chromium"
@@ -331,8 +350,9 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 #   Les pages Cloudflare challenge chargent en < 5s.
                 # Phase 2 : networkidle avec timeout court (bonus JS rendering)
                 nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
+                response = None  # initialise avant le try pour rester en scope
                 try:
-                    await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
+                    response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
                 except Exception as nav_e:
                     err_str = str(nav_e)
                     # Erreurs permanentes — re-raise pour que fetch_html puisse
@@ -435,7 +455,16 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                         logger.info(f"Scraping réussi pour {url} → {final_url} ({len(content)} caractères)")
                     else:
                         logger.info(f"Scraping réussi pour {url} ({len(content)} caractères)")
-                    return (content, final_url)
+                    content_type = response.headers.get('content-type', '') if response else ''
+                    status_code = response.status if response else 0
+                    headers = dict(response.headers) if response else {}
+                    return ScrapeResult(
+                        html=content,
+                        final_url=final_url,
+                        status_code=status_code,
+                        content_type=content_type,
+                        headers=headers,
+                    )
                 else:
                     logger.warning(f"Contenu trop court pour {url}")
                     return None
