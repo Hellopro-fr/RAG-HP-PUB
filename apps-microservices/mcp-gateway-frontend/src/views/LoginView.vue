@@ -39,14 +39,33 @@
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-1">Connexion</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">Connectez-vous pour accéder au tableau de bord</p>
 
+          <!-- SSO callback failure UI (state mismatch, expired pending, etc.).
+               Shown only when /sso/callback bounced the browser back here with
+               ?error=...&error_description=... — clicking "Réessayer" re-enters
+               the OAuth flow via /sso/login. -->
+          <div v-if="authStore.ssoMode && ssoErrorKind" class="space-y-4">
+            <div class="p-3 bg-error-50 dark:bg-error-500/15 border border-error-200 dark:border-error-500/30 rounded-md text-sm text-error-600 dark:text-error-400">
+              <p class="font-medium">Connexion impossible</p>
+              <p class="mt-1">{{ ssoErrorMessage }}</p>
+              <p class="mt-2 text-xs opacity-75">Code : {{ ssoErrorKind }}</p>
+            </div>
+            <button
+              type="button"
+              class="w-full py-2.5 px-4 bg-brand-500 text-white font-medium rounded-md hover:bg-brand-600"
+              @click="retrySsoLogin"
+            >
+              Réessayer
+            </button>
+          </div>
+
           <div
-            v-if="errorMessage"
+            v-if="errorMessage && !ssoErrorKind"
             class="mb-4 p-3 bg-error-50 dark:bg-error-500/15 border border-error-200 dark:border-error-500/30 rounded-md text-sm text-error-600 dark:text-error-400"
           >
             {{ errorMessage }}
           </div>
 
-          <form @submit.prevent="handleLogin">
+          <form v-if="!authStore.ssoMode || !ssoErrorKind" @submit.prevent="handleLogin">
             <div class="mb-4">
               <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Nom d'utilisateur
@@ -112,8 +131,37 @@ const authStore = useAuthStore()
 const username = ref('')
 const password = ref('')
 const errorMessage = ref('')
+const ssoErrorKind = ref('')
+const ssoErrorMessage = ref('')
 
-// In SSO mode the form never renders. Two cases:
+function defaultErrorMessage(kind: string): string {
+  switch (kind) {
+    case 'state_mismatch':
+      return 'Le jeton d\'état ne correspond pas. Merci de vous reconnecter.'
+    case 'pending_state_invalid':
+      return 'La session de connexion a expiré. Merci de réessayer.'
+    case 'no_pending_login':
+      return 'Aucune session de connexion en cours, merci de réessayer.'
+    case 'user_blocked':
+      return 'Accès refusé. Contactez un administrateur.'
+    case 'token_exchange_failed':
+      return 'Échange du jeton avec le serveur d\'authentification impossible.'
+    case 'invalid_token_payload':
+      return 'Le jeton d\'authentification est invalide.'
+    default:
+      return 'Erreur d\'authentification : ' + kind
+  }
+}
+
+function retrySsoLogin() {
+  authStore.redirectToLogin('/')
+}
+
+// In SSO mode the form never renders. Three cases:
+//  - The query carries ?error=... (the backend /sso/callback bounced here
+//    after a failure). Render the error and a "Réessayer" button instead of
+//    auto-restarting the OAuth dance — otherwise we'd loop on persistent
+//    failures.
 //  - User already has a valid gw_session cookie (e.g., logged in via account-
 //    service then deep-linked to /login). Skip the OAuth dance and push
 //    straight to the home route.
@@ -121,11 +169,16 @@ const errorMessage = ref('')
 //
 // route.query.redirect is intentionally ignored — /login is a fresh landing
 // surface; carrying a stale redirect across the OAuth round trip turned out
-// to surface state-mismatch and post-logout-loop edge cases. Users that need
-// a deep link should point at the protected route directly; the global
-// router guard will then preserve the URL through /sso/login.
+// to surface state-mismatch and post-logout-loop edge cases.
 onMounted(async () => {
   if (!authStore.ssoMode) return
+  const errKind = (route.query.error as string) || ''
+  const errDesc = (route.query.error_description as string) || ''
+  if (errKind) {
+    ssoErrorKind.value = errKind
+    ssoErrorMessage.value = errDesc || defaultErrorMessage(errKind)
+    return
+  }
   const valid = await authStore.checkSession()
   if (valid) {
     router.push('/')
@@ -133,6 +186,7 @@ onMounted(async () => {
   }
   authStore.redirectToLogin('/')
 })
+
 
 async function handleLogin() {
   errorMessage.value = ''
