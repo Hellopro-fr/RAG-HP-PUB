@@ -197,7 +197,7 @@ async def _detect_single_url(
                     challenge = detect_challenge_page(hp_fetch.html)
                     if challenge:
                         rejection = DetectionResponse(
-                            ok=False, url=homepage, method='challenge_page',
+                            ok=False, url=url, method='challenge_page',
                             error=_build_challenge_error_msg(challenge),
                             analyzed_url=homepage,
                         )

@@ -237,3 +237,40 @@ class TestDetectDebugFallbackOff:
         body = r.json()
         assert body["result"]["method"] == "http_error"
         assert fetch_mock.await_count == 1
+
+
+class TestHomepageFallbackChallengePage:
+    @pytest.mark.asyncio
+    async def test_soft_404_homepage_is_challenge_page(self, client):
+        """When the homepage fallback hits a Cloudflare/DataDome challenge page,
+        rejection must surface url=requested (not homepage) and analyzed_url=homepage.
+        Regression guard for I2 from final whole-impl review."""
+        soft = _scrape(
+            html="<html><head><title>Page introuvable</title></head><body>x</body></html>",
+            final_url="https://example.com/missing", status_code=200,
+        )
+        # Homepage HTML is a Cloudflare challenge page (passes validator since 200
+        # + not URL/title soft-404 marker, but detect_challenge_page fires).
+        cloudflare_html = (
+            '<html><head><title>Just a moment...</title></head>'
+            '<body><script src="cdn-cgi/challenge-platform/v1/orchestrate/chl_page/v1"></script>'
+            '<input name="cf-turnstile-response" />'
+            '<noindex></body></html>'
+        )
+        homepage_challenge = _scrape(
+            html=cloudflare_html,
+            final_url="https://example.com/", status_code=200,
+        )
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", AsyncMock(side_effect=[soft, homepage_challenge])):
+            r = client.post("/api/v1/detect", json={
+                "url": "https://example.com/missing", "homepage_fallback": True,
+            })
+        body = r.json()
+        assert body["ok"] is False
+        assert body["method"] == "challenge_page"
+        # Original requested URL preserved on the rejection — not overwritten by homepage.
+        assert body["url"] == "https://example.com/missing"
+        # analyzed_url discloses the homepage that produced the challenge verdict.
+        assert body["analyzed_url"] == "https://example.com/"

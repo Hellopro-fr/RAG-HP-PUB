@@ -136,7 +136,7 @@ When validation rejects, the service tries the domain's homepage once. If the ho
 |---|---|---|
 | `/detect` | Yes | Yes (default ON) |
 | `/detect-batch` (all modes) | Yes | Yes (default ON, per item) |
-| `/detect-debug` | Yes (warning only — no flow change) | **OFF** (debug shows requested URL's actual pipeline state) |
+| `/detect-debug` | Yes (overrides result.ok / result.method / result.error if non-VALID — pipeline trace preserved) | **OFF** (debug shows requested URL's actual pipeline state) |
 | `/check-url` | N/A (no HTML fetch) | N/A |
 
 Batch Pass 2 retry: still `fetch_failed` + `challenge_page` only. New method values are NOT retried.
