@@ -149,6 +149,10 @@ class BatchDetectionRequest(BaseModel):
         le=50,
         description="Nombre de requêtes parallèles max"
     )
+    homepage_fallback: bool = Field(
+        default=True,
+        description="Tenter un repli vers la page d'accueil si la page demandée est invalide (pour chaque item du lot)."
+    )
 
     model_config = {
         "json_schema_extra": {

@@ -363,6 +363,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 mode=detection_mode,
                 use_nlp_detection=request.use_nlp_detection,
                 force_refresh=request.force_refresh,
+                homepage_fallback=request.homepage_fallback,
             )
 
             count = await _increment_count()
@@ -617,6 +618,7 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
         fetched_by = 'provided'
         effective_url = request.url
         redirected_from = None
+        fetch_result: Optional[ScrapeResult] = None
 
         if not html_content:
             fetched_by = 'api'
@@ -663,12 +665,27 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
             original_homepage=request.url if effective_url != request.url else None
         )
 
-        return await detector.check_page_if_french_debug(
+        debug_response = await detector.check_page_if_french_debug(
             html_content, request.mode, fetched_by=fetched_by,
             include_full_content=request.include_full_content,
             redirected_from=redirected_from,
             challenge_detected=challenge
         )
+
+        # [VALIDATE] Run page validator in debug mode — no fallback, just override result fields.
+        if settings.INVALID_PAGE_DETECTION_ENABLED and fetch_result is not None:
+            verdict = validate_page(fetch_result, requested_url=request.url)
+            VALIDATION_VERDICTS.labels(verdict=verdict.value).inc()
+            if verdict != ValidationVerdict.VALID:
+                logger.info(
+                    f"[DEBUG][VALIDATE] {verdict.value} for {request.url} "
+                    f"(status={fetch_result.status_code}, final={fetch_result.final_url})"
+                )
+                debug_response.result.ok = False
+                debug_response.result.method = verdict.value
+                debug_response.result.error = f"Page invalide ({verdict.value})"
+
+        return debug_response
 
     except Exception as e:
         from app.models.schemas import (

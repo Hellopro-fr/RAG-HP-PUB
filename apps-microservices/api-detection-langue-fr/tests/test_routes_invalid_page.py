@@ -178,3 +178,62 @@ class TestKillSwitches:
         body = r.json()
         assert body["ok"] is False
         assert body["method"] == "soft_404"
+
+
+class TestDetectBatchPassesHomepageFallback:
+    @pytest.mark.asyncio
+    async def test_batch_passes_homepage_fallback_flag(self, client):
+        soft = _scrape(
+            html="<html><head><title>Page introuvable</title></head><body>x</body></html>",
+            final_url="https://example.com/missing", status_code=200,
+        )
+        homepage = _scrape(
+            html='<html lang="fr"><body>' + "Bonjour " * 100 + "</body></html>",
+            final_url="https://example.com/", status_code=200,
+        )
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", AsyncMock(side_effect=[soft, homepage])):
+            r = client.post("/api/v1/detect-batch", json={
+                "items": [{"url": "https://example.com/missing"}],
+                "homepage_fallback": True,
+                "max_concurrency": 1,
+            })
+        body = r.json()
+        assert body["total"] == 1
+        assert body["results"][0]["ok"] is True
+        assert body["results"][0]["analyzed_url"] == "https://example.com/"
+
+    @pytest.mark.asyncio
+    async def test_batch_pass2_does_not_retry_invalid_methods(self, client):
+        """Pass 2 retries fetch_failed + challenge_page only — not http_error/soft_404."""
+        scrape = _scrape(status_code=404)
+        # If Pass 2 retried, fetch_html would be called > 1 time. Assert it's exactly 1.
+        fetch_mock = AsyncMock(return_value=scrape)
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", fetch_mock):
+            r = client.post("/api/v1/detect-batch", json={
+                "items": [{"url": "https://example.com/missing"}],
+                "homepage_fallback": False,
+                "max_concurrency": 1,
+            })
+        body = r.json()
+        assert body["results"][0]["method"] == "http_error"
+        assert fetch_mock.await_count == 1
+
+
+class TestDetectDebugFallbackOff:
+    @pytest.mark.asyncio
+    async def test_debug_does_not_trigger_homepage_fallback(self, client):
+        scrape = _scrape(status_code=404)
+        fetch_mock = AsyncMock(return_value=scrape)
+        with patch("app.api.routes.fetch_html", fetch_mock):
+            r = client.post("/api/v1/detect-debug", json={
+                "url": "https://example.com/missing",
+            })
+        # /detect-debug returns DebugDetectionResponse; result.method must reflect
+        # the verdict, but no homepage hop should occur (only one fetch_html call).
+        body = r.json()
+        assert body["result"]["method"] == "http_error"
+        assert fetch_mock.await_count == 1
