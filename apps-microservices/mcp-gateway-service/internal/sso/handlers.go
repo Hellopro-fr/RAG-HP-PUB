@@ -256,19 +256,19 @@ func (h *Handlers) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildAccountLogoutURL composes the RP-initiated logout URL on account-service.
-// Falls back to the local /sso/login path when the gateway public URL or the
-// account-service URL is missing — a degraded but safe behavior.
+// post_logout_redirect_uri targets the Vue /login route — the SPA's LoginView
+// already runs the same checkSession + /sso/login handoff that /sso/login does
+// directly, but lands the user on a URL that matches the gateway's "front
+// door" rather than the OAuth back channel. Falls back to the local /sso/login
+// path when GATEWAY_PUBLIC_URL or ACCOUNT_PUBLIC_URL is missing.
 func (h *Handlers) buildAccountLogoutURL() string {
 	if h.client == nil || h.client.AccountPublicURL == "" {
-		return "/sso/login"
+		return "/login"
 	}
-	postLogout := h.gatewayPublicURL + "/sso/login"
 	if h.gatewayPublicURL == "" {
-		// Without a registered post_logout_redirect_uri the account-service
-		// handler will simply send the browser to its own /login. Acceptable
-		// fallback; user can navigate back manually.
 		return h.client.AccountPublicURL + "/logout"
 	}
+	postLogout := h.gatewayPublicURL + "/login"
 	q := url.Values{}
 	q.Set("client_id", h.client.ClientID)
 	q.Set("post_logout_redirect_uri", postLogout)
