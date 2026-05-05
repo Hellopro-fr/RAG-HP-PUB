@@ -2380,6 +2380,8 @@ services:
     restart: unless-stopped
     ports:
       - "${MCP_GATEWAY_PORT:-8581}:8581"
+    environment:
+      - VITE_SSO_MODE=${MCP_SSO_ENABLED}
     networks:
       - services-net
     logging: *logging_defaults
