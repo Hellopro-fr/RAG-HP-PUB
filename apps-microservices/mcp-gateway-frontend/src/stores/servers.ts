@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { serversApi } from '@/api/servers'
+import { serversApi, type ServerListFilters } from '@/api/servers'
 import type { Server } from '@/types/server'
 
 export const useServersStore = defineStore('servers', () => {
@@ -8,12 +8,10 @@ export const useServersStore = defineStore('servers', () => {
   const tags = ref<string[]>([])
   const isLoading = ref(false)
 
-  async function fetchServers(filters?: { is_active?: string; tag?: string; exclude_templates?: string }): Promise<void> {
+  async function fetchServers(filters?: ServerListFilters): Promise<void> {
     isLoading.value = true
     try {
       const response = await serversApi.list(filters)
-      console.log('[serversStore] API response:', JSON.stringify(response).substring(0, 500))
-      console.log('[serversStore] servers count:', response.servers?.length, 'first server tool_names:', response.servers?.[0]?.tool_names?.length)
       servers.value = response.servers
     } finally {
       isLoading.value = false
@@ -24,15 +22,22 @@ export const useServersStore = defineStore('servers', () => {
     tags.value = await serversApi.listTags()
   }
 
+  function patchServer(updated: Server): void {
+    const idx = servers.value.findIndex(s => s.id === updated.id)
+    if (idx >= 0) servers.value[idx] = updated
+  }
+
   async function createServer(data: Parameters<typeof serversApi.create>[0]): Promise<Server> {
     const server = await serversApi.create(data)
+    // List refetch — current filter may be active, blind prepend can contaminate
+    // a filtered view (and tags may have changed).
     await fetchServers()
     return server
   }
 
   async function updateServer(id: string, data: Parameters<typeof serversApi.update>[1]): Promise<Server> {
     const server = await serversApi.update(id, data)
-    await fetchServers()
+    patchServer(server)
     return server
   }
 
@@ -47,21 +52,25 @@ export const useServersStore = defineStore('servers', () => {
     } else {
       await serversApi.disable(id)
     }
-    await fetchServers()
+    // enable/disable return void — fetch the single row to patch in place.
+    const fresh = await serversApi.get(id)
+    patchServer(fresh)
   }
 
   async function discoverServer(id: string): Promise<void> {
-    await serversApi.discover(id)
-    await fetchServers()
+    const fresh = await serversApi.discover(id)
+    patchServer(fresh)
   }
 
   async function discoverAll(): Promise<void> {
     await serversApi.discoverAll()
+    // Cluster-wide refresh — every row's discovered tool set may have changed.
     await fetchServers()
   }
 
   async function importServers(json: unknown, autoDiscover?: boolean) {
     const result = await serversApi.import(json, autoDiscover)
+    // Bulk insert — refetch to surface new rows under the active filter.
     await fetchServers()
     return result
   }

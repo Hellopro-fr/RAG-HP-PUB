@@ -10,9 +10,26 @@ import type {
 
 const BASE = '/api/v1'
 
+export interface ServerListFilters {
+  is_active?: boolean
+  tag?: string
+  created_by?: string
+  exclude_templates?: boolean
+}
+
+function serializeFilters(filters?: ServerListFilters): Record<string, string> | undefined {
+  if (!filters) return undefined
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(filters)) {
+    if (v === undefined) continue
+    out[k] = typeof v === 'boolean' ? String(v) : v
+  }
+  return out
+}
+
 export const serversApi = {
-  list(params?: { is_active?: string; tag?: string; created_by?: string; exclude_templates?: string }): Promise<ServerListResponse> {
-    return api.get<ServerListResponse>(`${BASE}/servers`, params as Record<string, string>)
+  list(params?: ServerListFilters): Promise<ServerListResponse> {
+    return api.get<ServerListResponse>(`${BASE}/servers`, serializeFilters(params))
   },
 
   get(id: string): Promise<ServerDetail> {

@@ -117,7 +117,7 @@
         <div
           v-else
           class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 prose prose-sm max-w-none dark:prose-invert"
-          v-html="descriptionDraft || '<em class=\'text-gray-400\'>Aucune description</em>'"
+          v-safe-html="descriptionDraft || '<em class=\'text-gray-400\'>Aucune description</em>'"
         />
       </section>
 

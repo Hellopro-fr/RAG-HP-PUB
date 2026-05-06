@@ -36,7 +36,7 @@
             {{ cmd.label }}
             <span class="text-sm font-normal text-gray-500 dark:text-gray-400">- {{ cmd.description }}</span>
           </h2>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1" v-html="cmd.intro" />
+          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1" v-safe-html="cmd.intro" />
         </div>
 
         <div class="px-6 py-4">
@@ -69,7 +69,7 @@
                 <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">
                   <strong>{{ option.label }}</strong>
                 </p>
-                <p v-if="option.note" class="text-sm text-gray-500 dark:text-gray-500 mb-1" v-html="option.note" />
+                <p v-if="option.note" class="text-sm text-gray-500 dark:text-gray-500 mb-1" v-safe-html="option.note" />
                 <CodeBlock v-if="option.code" :code="option.code" @copy="handleCopy" />
               </div>
             </div>
@@ -98,7 +98,7 @@
               class="mt-3 rounded-lg p-3 text-sm"
               :class="cmd.noteClass"
             >
-              <strong>{{ cmd.noteLabel }}</strong> <span v-html="cmd.noteText" />
+              <strong>{{ cmd.noteLabel }}</strong> <span v-safe-html="cmd.noteText" />
             </div>
           </div>
         </div>

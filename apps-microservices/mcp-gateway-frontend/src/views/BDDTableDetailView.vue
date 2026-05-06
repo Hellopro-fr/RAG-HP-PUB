@@ -144,7 +144,7 @@
         <div
           v-if="table.description"
           class="prose prose-sm dark:prose-invert max-w-none text-sm text-gray-700 dark:text-gray-300"
-          v-html="sanitizedDescription"
+          v-safe-html="sanitizedDescription"
         />
         <p v-else class="text-sm text-gray-400">
           Aucune description.

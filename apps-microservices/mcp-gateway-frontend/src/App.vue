@@ -1,14 +1,12 @@
 <template>
   <ThemeProvider>
-    <SidebarProvider>
-      <DocsLayout v-if="isDocsLayout">
-        <RouterView />
-      </DocsLayout>
-      <AppLayout v-else-if="showLayout">
-        <RouterView />
-      </AppLayout>
-      <RouterView v-else />
-    </SidebarProvider>
+    <DocsLayout v-if="isDocsLayout">
+      <RouterView />
+    </DocsLayout>
+    <AppLayout v-else-if="showLayout">
+      <RouterView />
+    </AppLayout>
+    <RouterView v-else />
   </ThemeProvider>
 </template>
 
@@ -18,7 +16,6 @@ import { RouterView, useRoute } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import DocsLayout from '@/components/layout/DocsLayout.vue';
 import ThemeProvider from '@/components/layout/ThemeProvider.vue';
-import SidebarProvider from '@/components/layout/SidebarProvider.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
