@@ -26,3 +26,12 @@ $LAUNCHER /usr/local/linkbynet/scripts/cron/wget "https://script.hellopro.fr/scr
 #   2. Supprime les orphelins Typesense (DELETED en Milvus)
 # Email de notification a la fin (succes ou echec).
 $LAUNCHER /usr/local/linkbynet/scripts/cron/wget "https://script.hellopro.fr/script/rag/sync_typesense_daily.php?token=hp_cron_2026_04_30_xZ7q"&
+
+# === Synonymes Typesense ===
+# Quotidien : sync_synonyms_daily.php pull le cache local depuis l'API VM.
+# Hebdo (lundi) : auto_generate_synonyms_weekly.php regenere les synonymes
+# depuis le catalogue Typesense. La logique daily/weekly est dans le script.
+$LAUNCHER /usr/local/linkbynet/scripts/cron/wget "https://script.hellopro.fr/script/typesense/sync_synonyms_daily.php?token=hp_synsync_2026_04_30_xZ7q"&
+if [ $(date +%u) -eq 1 ]; then
+    $LAUNCHER /usr/local/linkbynet/scripts/cron/wget "https://script.hellopro.fr/script/typesense/auto_generate_synonyms_weekly.php?token=hp_syngen_2026_04_30_xZ7q"&
+fi
