@@ -4,17 +4,24 @@
  * =========================
  * Script cron quotidien sur Ecritel (cf moteur_solr.sh / crontab Linkbynet).
  *
- * Appelle l'API VM `/sync/incremental` pour :
- *   1. Upserter dans Typesense les produits modifies en Milvus depuis 24h
- *      (couvre NEW + UPDATED via le champ date_maj)
- *   2. Supprimer de Typesense les produits qui ne sont plus en Milvus
+ * Effectue 2 etapes en chaine :
+ *   ETAPE 1 : POST /sync/incremental
+ *     - Upserter dans Typesense les produits modifies en Milvus depuis 24h
+ *       (couvre NEW + UPDATED via le champ date_maj)
+ *     - Supprimer de Typesense les produits qui ne sont plus en Milvus
+ *
+ *   ETAPE 2 : POST /admin/synonyms/auto-generate (ajout 2026-05-06)
+ *     - Regenere les synonymes pour les nouvelles categories ingerees a
+ *       l'etape 1. Sans ca, les nouvelles categories n'ont pas leurs
+ *       variantes (mini-pelle / minipelle / mini pelle).
+ *     - Si l'etape 1 a echoue, on saute l'etape 2.
  *
  * Usage cron (dans moteur_solr.sh) :
  *   wget https://script.hellopro.fr/script/rag/sync_typesense_daily.php?token=XXX
  *
  * Effet attendu :
- *   - Duree : 5-30 min selon volume modifs
- *   - Email de notification a la fin (succes ou echec)
+ *   - Duree totale : 5-35 min selon volume modifs
+ *   - Email de notification a la fin (succes ou echec) avec stats des 2 etapes
  *
  * Inspire de nettoyage_produits_supprimes_milvus.php (meme pattern api_call cURL).
  */
@@ -34,6 +41,9 @@ require_once($_SERVER['DOCUMENT_ROOT'] . "fonctions/fonctions_generales.php");
 
 // URL de l'API VM (le service opti-moteur-front qui expose POST /sync/incremental)
 define('SYNC_API_URL', 'https://api.hellopro.eu/optimoteur-service/sync/incremental');
+
+// URL de l'API VM pour l'auto-generation des synonymes (etape 2)
+define('AUTO_GEN_SYNONYMS_URL', 'https://api.hellopro.eu/optimoteur-service/admin/synonyms/auto-generate');
 
 // Token d'auth (header X-Sync-Token). Doit matcher SYNC_TOKEN dans app/router/sync.py
 // CHANGER avant de mettre en prod.
@@ -170,8 +180,8 @@ try {
         exit(1);
     }
 
-    // SUCCES
-    echo "\n[SUCCES] Sync termine\n";
+    // SUCCES ETAPE 1
+    echo "\n[SUCCES ETAPE 1] Sync termine\n";
     echo "  TS Collection      : " . ($result['ts_collection'] ?? '?') . "\n";
     echo "  Since              : " . ($result['since_iso'] ?? '?') . "\n";
     echo "  Milvus recent rows : " . ($result['milvus_recent_rows'] ?? 0) . "\n";
@@ -179,24 +189,86 @@ try {
     echo "  TS upsert errors   : " . ($result['ts_upsert_errors'] ?? 0) . "\n";
     echo "  TS orphans deleted : " . ($result['ts_orphans_deleted'] ?? 0) . "\n";
     echo "  Duration (API)     : " . ($result['duration_s'] ?? 0) . "s\n";
-    echo "  Duration (total)   : {$elapsed}s\n";
     echo "  TS docs before     : " . ($result['ts_docs_before'] ?? 0) . "\n";
     echo "  TS docs after      : " . ($result['ts_docs_after'] ?? 0) . "\n";
 
-    // Email de notification (succes)
+    // =========================================================================
+    // ETAPE 2 : Auto-generate synonymes (apres ingestion reussie)
+    // =========================================================================
+    $synonyms_result = null;
+    $synonyms_error = null;
+
+    echo "\n==========================================\n";
+    echo "ETAPE 2 : Auto-generate synonymes\n";
+    echo "==========================================\n";
+    echo "[INFO] Appel API VM /admin/synonyms/auto-generate...\n";
+
+    try {
+        $syn_response = api_call(
+            AUTO_GEN_SYNONYMS_URL,
+            'POST',
+            null  // pas de body (les params sont en query string si besoin)
+        );
+        $syn_http = $syn_response['http_code'];
+        $syn_body = $syn_response['body'];
+        $synonyms_result = json_decode($syn_body, true);
+
+        if ($syn_http !== 200 || !$synonyms_result) {
+            $synonyms_error = "HTTP $syn_http : $syn_body";
+            echo "[WARN ETAPE 2] $synonyms_error\n";
+        } else {
+            echo "[SUCCES ETAPE 2]\n";
+            echo "  Categories scannees    : " . ($synonyms_result['nb_categories'] ?? 0) . "\n";
+            echo "  Synonymes generes      : " . ($synonyms_result['nb_synonyms_generated'] ?? 0) . "\n";
+            echo "  Synonymes pushes       : " . ($synonyms_result['nb_synonyms_pushed'] ?? 0) . "\n";
+            echo "  Erreurs                : " . ($synonyms_result['nb_errors'] ?? 0) . "\n";
+        }
+    } catch (Exception $e) {
+        $synonyms_error = $e->getMessage();
+        echo "[EXCEPTION ETAPE 2] $synonyms_error\n";
+    }
+
+    $elapsed = round(microtime(true) - $start_time, 2);
+    echo "\n  Duration (total)   : {$elapsed}s\n";
+
+    // =========================================================================
+    // EMAIL DE NOTIFICATION (succes etape 1 + status etape 2)
+    // =========================================================================
+    $syn_status = $synonyms_error
+        ? "<span style='color:red'>WARN: $synonyms_error</span>"
+        : sprintf("OK (%d pushes)", $synonyms_result['nb_synonyms_pushed'] ?? 0);
+
     $subject = sprintf(
-        "[Script][Sync] OK Typesense - %d upserted, %d deleted",
+        "[Script][Sync] OK Typesense - %d upserted, %d deleted, syn:%s",
         $result['ts_upserted'] ?? 0,
-        $result['ts_orphans_deleted'] ?? 0
+        $result['ts_orphans_deleted'] ?? 0,
+        $synonyms_error ? "ERR" : "OK"
     );
-    $message = "<h2>Sync Typesense quotidien - SUCCES</h2>";
+
+    $message = "<h2>Sync Typesense quotidien - SUCCES ETAPE 1</h2>";
+    $message .= "<h3>Etape 1 : Sync incremental</h3>";
     $message .= "<table border='1' cellpadding='5' cellspacing='0'>";
     foreach ($result as $k => $v) {
         $message .= "<tr><td><strong>$k</strong></td><td>$v</td></tr>";
     }
-    $message .= "<tr><td><strong>Total elapsed</strong></td><td>{$elapsed}s</td></tr>";
     $message .= "</table>";
 
+    $message .= "<h3>Etape 2 : Auto-generate synonymes</h3>";
+    if ($synonyms_error) {
+        $message .= "<p style='color:red'><strong>ECHEC :</strong> "
+                  . htmlspecialchars($synonyms_error) . "</p>";
+    } elseif ($synonyms_result) {
+        $message .= "<table border='1' cellpadding='5' cellspacing='0'>";
+        foreach (['nb_categories', 'nb_synonyms_generated', 'nb_synonyms_pushed', 'nb_errors'] as $k) {
+            $v = $synonyms_result[$k] ?? 0;
+            $message .= "<tr><td><strong>$k</strong></td><td>$v</td></tr>";
+        }
+        $message .= "</table>";
+    } else {
+        $message .= "<p>Aucune donnee.</p>";
+    }
+
+    $message .= "<p><strong>Total elapsed:</strong> {$elapsed}s</p>";
     envoyer_mail_scripts($subject, '', NOTIFICATION_EMAIL, $message, 0);
 
 } catch (Exception $e) {
