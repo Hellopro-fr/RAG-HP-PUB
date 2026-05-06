@@ -136,9 +136,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Header helper for legacy (non-SSO) callers that still need to attach
+  // Authorization manually (e.g. multipart fetches outside api/client.ts).
+  // Returns an empty object in SSO mode where the cookie carries identity.
+  function authHeader(): Record<string, string> {
+    if (SSO_MODE || !token.value) return {}
+    return { Authorization: `Bearer ${token.value}` }
+  }
+
+  // Note: `token` is intentionally NOT returned. Components must not read
+  // the raw bearer; use authHeader() or rely on api/client.ts which reads
+  // localStorage directly in legacy mode.
   return {
-    user, token, isLoading, isAuthenticated, userRole, isAdmin, isReadOnly,
-    hasRole, checkSession, login, logout, redirectToLogin,
+    user, isLoading, isAuthenticated, userRole, isAdmin, isReadOnly,
+    hasRole, checkSession, login, logout, redirectToLogin, authHeader,
     ssoMode: SSO_MODE,
   }
 })

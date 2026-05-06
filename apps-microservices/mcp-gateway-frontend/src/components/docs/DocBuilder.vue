@@ -238,6 +238,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 
 const toast = useToast()
 
@@ -402,8 +403,8 @@ async function uploadImage(file: File): Promise<string | null> {
     }
     const data = await res.json()
     return data.image as string
-  } catch (e: any) {
-    toast.error(e?.message || 'Echec de l\'envoi de l\'image')
+  } catch (e: unknown) {
+    toast.error(toErrorMessage(e, 'Echec de l\'envoi de l\'image'))
     return null
   } finally {
     uploadingImage.value = false

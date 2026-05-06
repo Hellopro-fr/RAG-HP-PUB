@@ -198,6 +198,7 @@ import { useServersStore } from '@/stores/servers'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { api } from '@/api/client'
+import { ApiError } from '@/types/api'
 import { serversApi } from '@/api/servers'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import FilterPanel from '@/components/shared/FilterPanel.vue'
@@ -221,7 +222,7 @@ const filters = reactive({
 })
 
 onMounted(async () => {
-  await serversStore.fetchServers({ exclude_templates: 'true' })
+  await serversStore.fetchServers({ exclude_templates: true })
   loading.value = false
 })
 
@@ -278,7 +279,7 @@ async function handleToggle(id: string, enable: boolean) {
     } else {
       await serversApi.disable(id)
     }
-    await serversStore.fetchServers({ exclude_templates: 'true' })
+    await serversStore.fetchServers({ exclude_templates: true })
     toast.success(enable ? 'Documentation activee' : 'Documentation desactivee')
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Erreur')
@@ -291,7 +292,7 @@ async function handleGenerateSlugs() {
     const res = await api.post<{ updated: number }>('/api/v1/servers/generate-slugs')
     if (res.updated > 0) {
       toast.success(`${res.updated} slug(s) genere(s)`)
-      await serversStore.fetchServers({ exclude_templates: 'true' })
+      await serversStore.fetchServers({ exclude_templates: true })
     } else {
       toast.success('Tous les serveurs ont deja un slug')
     }
@@ -402,16 +403,18 @@ async function processBatchFile(file: File) {
         doc_slug: entry.doc_slug ?? server.doc_slug ?? '',
         doc_description: entry.doc_description ?? '',
         doc_config_guide: entry.doc_config_guide ?? { authType: '', steps: [] }
-      } as any)
+      })
       updated++
-    } catch (err: any) {
+    } catch (err: unknown) {
       skipped++
-      const errMsg = err?.body?.error || ''
+      const errMsg = err instanceof ApiError && err.body && typeof err.body === 'object'
+        ? ((err.body as Record<string, unknown>).error as string | undefined ?? '')
+        : ''
       skippedNames.push((entry.server_name || entry.doc_slug || '?') + (errMsg ? ` (${errMsg})` : ''))
     }
   }
 
-  await serversStore.fetchServers({ exclude_templates: 'true' })
+  await serversStore.fetchServers({ exclude_templates: true })
   batchSuccess.value = `${updated} documentation(s) importee(s)` + (skipped > 0 ? `, ${skipped} ignoree(s): ${skippedNames.join(', ')}` : '')
 }
 </script>

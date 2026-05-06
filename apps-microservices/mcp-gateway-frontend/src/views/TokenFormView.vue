@@ -617,9 +617,9 @@ const generatedMcpJson = computed(() => {
 
   // Prefer the dedicated top-level `mcp_config` field; fall back to page-builder element
   const mcpEl = Array.isArray(selectedExec?.content)
-    ? selectedExec!.content.find((el: any) => el?.type === 'mcp-config')
+    ? selectedExec!.content.find((el) => el?.type === 'mcp-config')
     : null
-  const mcpTemplate = (selectedExec?.mcp_config as string) || (mcpEl?.props?.code as string) || ''
+  const mcpTemplate = (selectedExec?.mcp_config as string) || mcpEl?.props?.code || ''
 
   if (mcpTemplate) {
     const withAllowHttp = form.allow_http

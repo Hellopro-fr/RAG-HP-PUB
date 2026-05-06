@@ -143,12 +143,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installGuidesAdminApi } from '@/api/install-guides'
 import { useToast } from '@/composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import WysiwygEditor from '@/components/shared/WysiwygEditor.vue'
 import ExecutorPageBuilder from '@/components/install-guides/ExecutorPageBuilder.vue'
 import PrimeIconPicker from '@/components/shared/PrimeIconPicker.vue'
 import ColorClassPicker from '@/components/shared/ColorClassPicker.vue'
-import type { ExecutorElement } from '@/types/install-guide'
+import type { ExecutorElement, InstallExecutor } from '@/types/install-guide'
 import { encodeHtmlEntities, encodeTextEntities } from '@/utils/htmlEntities'
 
 const route = useRoute()
@@ -193,7 +194,7 @@ onMounted(async () => {
         display_order: e.display_order,
         is_active: e.is_active,
       }
-      contentElements.value = (e.content || []).map((el: any) => ({
+      contentElements.value = (e.content || []).map((el) => ({
         ...el,
         id: el.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
         props: el.props || {},
@@ -224,7 +225,7 @@ function encodeAllEntities() {
 
   // Page-builder elements
   contentElements.value = contentElements.value.map(el => {
-    const newProps: Record<string, any> = {}
+    const newProps: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(el.props || {})) {
       if (skipEncodingKeys.has(k) || typeof v !== 'string') {
         newProps[k] = v
@@ -233,7 +234,7 @@ function encodeAllEntities() {
       const isHtmlish = /<[a-zA-Z\/!]/.test(v)
       newProps[k] = isHtmlish ? encodeHtmlEntities(v) : encodeTextEntities(v)
     }
-    return { ...el, props: newProps }
+    return { ...el, props: newProps as ExecutorElement['props'] }
   })
   toast.success('Accents convertis en entites HTML')
 }
@@ -255,8 +256,8 @@ async function handleSave() {
       toast.success('Executeur cree')
     }
     router.push('/install-guides-admin')
-  } catch (err: any) {
-    toast.error(err?.body?.error || 'Erreur lors de l\'enregistrement')
+  } catch (err: unknown) {
+    toast.error(toErrorMessage(err, 'Erreur lors de l\'enregistrement'))
   } finally {
     submitting.value = false
   }
@@ -273,7 +274,9 @@ function handleExport() {
   URL.revokeObjectURL(url)
 }
 
-function applyImportData(data: any) {
+type ImportedExecutor = Partial<Omit<InstallExecutor, 'content'>> & { content?: ExecutorElement[] }
+
+function applyImportData(data: ImportedExecutor) {
   if (data.slug) form.value.slug = data.slug
   if (data.label) form.value.label = data.label
   if (data.sub !== undefined) form.value.sub = data.sub
@@ -283,7 +286,7 @@ function applyImportData(data: any) {
   if (data.icon) form.value.icon = data.icon
   if (data.color) form.value.color = data.color
   if (data.content) {
-    contentElements.value = data.content.map((el: any) => ({
+    contentElements.value = data.content.map((el) => ({
       ...el,
       id: el.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
       props: el.props || {},

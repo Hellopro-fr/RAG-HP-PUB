@@ -135,7 +135,7 @@
           <div class="p-4">
             <!-- Rendered HTML as the human would see it. Body comes from the
                  trusted admin WYSIWYG so we render it directly. -->
-            <div class="prose prose-sm dark:prose-invert max-w-none wysiwyg-content" v-html="row.body" />
+            <div class="prose prose-sm dark:prose-invert max-w-none wysiwyg-content" v-safe-html="row.body" />
           </div>
         </article>
       </div>

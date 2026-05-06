@@ -73,7 +73,7 @@
             <p class="text-sm text-gray-500 dark:text-gray-400">{{ cmd.description }}</p>
           </div>
         </div>
-        <div class="mt-4 text-sm text-gray-600 dark:text-gray-400" v-html="cmd.intro" />
+        <div class="mt-4 text-sm text-gray-600 dark:text-gray-400" v-safe-html="cmd.intro" />
       </div>
 
       <!-- Dynamic content elements -->
@@ -107,7 +107,7 @@
                 </span>
                 <div class="pt-0.5 flex-1">
                   <p class="font-medium text-gray-900 dark:text-white text-sm">{{ option.label }}</p>
-                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-html="option.note" />
+                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-safe-html="option.note" />
                   <div v-if="option.code" class="mt-2">
                     <CodeBlock :code="option.code" @copy="handleCopy" />
                   </div>
@@ -147,14 +147,14 @@
           class="mb-8 rounded-lg p-3 text-sm"
           :class="el.props.cssClass || 'bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'"
         >
-          <strong>{{ el.props.label }}</strong> <span v-html="el.props.text" />
+          <strong>{{ el.props.label }}</strong> <span v-safe-html="el.props.text" />
         </div>
 
         <!-- Text -->
         <div
           v-else-if="el.type === 'text'"
           class="mb-8 text-sm text-gray-700 dark:text-gray-300"
-          v-html="el.props.content"
+          v-safe-html="el.props.content"
         />
 
         <!-- Divider -->
@@ -176,7 +176,7 @@
                 </span>
                 <div class="pt-0.5 flex-1">
                   <p class="font-medium text-gray-900 dark:text-white text-sm">{{ option.label }}</p>
-                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-html="option.note" />
+                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-safe-html="option.note" />
                   <div v-if="option.code" class="mt-2"><CodeBlock :code="option.code" @copy="handleCopy" /></div>
                 </div>
               </div>
@@ -227,7 +227,7 @@ function installWithTerminal(osId: string): InstallOption[] {
   // Try content elements first (new format), fallback to legacy install field
   let base: InstallOption[] = []
   if (cmd.value?.content?.length) {
-    const osInstall = cmd.value.content.find((el: any) => el.type === 'os-install')
+    const osInstall = cmd.value.content.find((el) => el.type === 'os-install')
     if (osInstall) base = osInstall.props?.install?.[osId] || []
   } else {
     base = cmd.value?.install?.[osId] || []

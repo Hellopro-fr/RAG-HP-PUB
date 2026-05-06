@@ -71,7 +71,7 @@
           />
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ server.name }}</h1>
         </div>
-        <div v-if="server.description" class="docs-html-content mt-1" v-html="server.description" />
+        <div v-if="server.description" class="docs-html-content mt-1" v-safe-html="server.description" />
         <div class="mt-3 text-sm text-gray-500 dark:text-gray-400">
           {{ server.tools_count }} outil{{ server.tools_count !== 1 ? 's' : '' }}
         </div>
@@ -101,7 +101,7 @@
               </span>
               <div class="pt-0.5">
                 <p class="font-medium text-gray-900 dark:text-white text-sm">{{ step.title }}</p>
-                <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5 doc-step-body" v-html="step.description" />
+                <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5 doc-step-body" v-safe-html="step.description" />
                 <a
                   v-if="step.link"
                   :href="step.link"
@@ -127,7 +127,7 @@
             <div
               v-else-if="step.type === 'text'"
               class="text-sm text-gray-700 dark:text-gray-300 doc-step-body"
-              v-html="step.description"
+              v-safe-html="step.description"
             />
 
             <!-- Image element -->

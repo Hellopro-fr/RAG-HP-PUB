@@ -7,10 +7,28 @@ export interface InstallOption {
 
 export type ExecutorElementType = 'os-install' | 'verify' | 'mcp-config' | 'cli-command' | 'note' | 'text' | 'divider'
 
+// Props shape covers every element type in a single optional bag — keeps
+// the legacy `el.props.foo` access pattern working everywhere without a
+// discriminated narrowing on every call site. Extend as new element types
+// land.
+export interface ExecutorElementProps {
+  title?: string
+  code?: string
+  text?: string
+  label?: string
+  content?: string
+  cssClass?: string
+  // Legacy alias still used by InstallConfigDetailView; keep until the
+  // backend is normalised to `cssClass` everywhere.
+  class?: string
+  // Only set for `os-install` elements — keyed by OS id ('linux'|'mac'|...).
+  install?: Record<string, InstallOption[]>
+}
+
 export interface ExecutorElement {
   id: string
   type: ExecutorElementType
-  props: Record<string, any>
+  props: ExecutorElementProps
 }
 
 export interface InstallExecutor {
@@ -32,6 +50,8 @@ export interface InstallExecutor {
   content: ExecutorElement[]
   display_order: number
   is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface ConfigStepTable {
@@ -46,6 +66,9 @@ export interface ConfigStep {
   codeField?: string
   hasExecutorSelector?: boolean
   table?: ConfigStepTable[]
+  // UI-only sentinel added by the StepBuilder while editing — survives
+  // round-trips so drag/drop key tracking stays stable.
+  _id?: string
 }
 
 export interface InstallConfig {
@@ -58,4 +81,6 @@ export interface InstallConfig {
   content: ConfigStep[]
   display_order: number
   is_active: boolean
+  created_at?: string
+  updated_at?: string
 }

@@ -1,3 +1,19 @@
+// One step entry inside a server documentation config guide. The `type`
+// discriminator covers `step` (default), `text`, `image`, `link`, `divider`
+// — see views/ServerDocView.vue for the canonical builder mapping.
+export interface DocConfigGuideStep {
+  type?: string
+  title: string
+  description: string
+  link?: string
+  image?: string
+}
+
+export interface DocConfigGuide {
+  authType: string
+  steps: DocConfigGuideStep[]
+}
+
 export interface ServerToolName {
   name: string
   description?: string
@@ -59,7 +75,7 @@ export interface Server {
   has_auth_headers: boolean
   doc_slug?: string
   doc_description?: string
-  doc_config_guide?: { authType: string; steps: { type?: string; title: string; description: string; link?: string; image?: string }[] }
+  doc_config_guide?: DocConfigGuide
   // Non-empty when the server originated from a template flow (stdio
   // instance or http_batch sheet import). Mirrors the Go backend DTO.
   template_slug?: string
@@ -95,7 +111,7 @@ export interface CreateServerRequest {
   icon?: string
   doc_slug?: string
   doc_description?: string
-  doc_config_guide?: { authType: string; steps: { type?: string; title: string; description: string; link?: string; image?: string }[] }
+  doc_config_guide?: DocConfigGuide
   auto_discover?: boolean
 }
 
