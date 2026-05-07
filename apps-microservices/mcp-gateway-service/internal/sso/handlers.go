@@ -367,14 +367,30 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 // NOT persist an SSOSession row (the OAuth2 client receives its own
 // access+refresh token pair from /token after consent — the upstream
 // account-service tokens are short-lived and discarded here).
+//
+// Mints a gateway-signed JWT for the SessionData.Token field instead of
+// stashing tok.AccessToken (the upstream account-service token). authserver's
+// tier-1 check validates the Token with the gateway's JWT_SECRET — using the
+// upstream token would only work as long as both services share the same
+// secret, a fragile coupling. Mirroring the bridge path keeps tier-1 self-
+// contained.
 func (h *Handlers) completeOAuth2Login(w http.ResponseWriter, r *http.Request, pending PendingState, tok *TokenResponse, email, name string) error {
 	if h.authJWTSecret == "" {
 		return fmt.Errorf("authJWTSecret not configured (call WithAuthSession at boot)")
 	}
+	claims := auth.Claims{
+		Exp:  time.Now().Add(24 * time.Hour).Unix(),
+		Iat:  time.Now().Unix(),
+		Name: name,
+	}
+	gatewayToken, err := auth.SignJWT(h.authJWTSecret, claims)
+	if err != nil {
+		return fmt.Errorf("sign gateway session token: %w", err)
+	}
 	if err := auth.SetSession(w, h.authJWTSecret, auth.SessionData{
 		DisplayName: name,
 		Email:       email,
-		Token:       tok.AccessToken,
+		Token:       gatewayToken,
 	}, h.secureCk); err != nil {
 		return fmt.Errorf("set auth session: %w", err)
 	}
