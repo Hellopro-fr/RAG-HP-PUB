@@ -29,6 +29,7 @@ type Gateway struct {
 	leexiAdmin    *leexiadmin.Client    // optional; nil disables Leexi team expansion
 	ringoverAdmin *ringoveradmin.Client // optional; nil disables Ringover team expansion
 	bddResolver   BDDTableResolver      // optional; nil disables BDD header injection
+	gatewayUsers  gatewayUserFinder     // optional; nil disables auto-self admin fallback
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -50,6 +51,12 @@ func (g *Gateway) SetLeexiAdmin(c *leexiadmin.Client) {
 // to resolve "teams" filter mode into user IDs at request time.
 func (g *Gateway) SetRingoverAdmin(c *ringoveradmin.Client) {
 	g.ringoverAdmin = c
+}
+
+// SetGatewayUserFinder registers the user finder used by auto-self override
+// to detect gateway admins. Pass *repository.UserRepo at boot.
+func (g *Gateway) SetGatewayUserFinder(f gatewayUserFinder) {
+	g.gatewayUsers = f
 }
 
 // SetBDDResolver attaches the BDD used-table resolver consumed by

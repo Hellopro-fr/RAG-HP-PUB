@@ -8,12 +8,20 @@ import (
 	"strconv"
 	"strings"
 
+	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/leexiadmin"
 	"mcp-gateway/internal/mcp"
 	"mcp-gateway/internal/ringoveradmin"
 	"mcp-gateway/internal/scopetoken"
 	"mcp-gateway/internal/transport"
 )
+
+// gatewayUserFinder abstracts the slice of *repository.UserRepo that the
+// auto-self override needs (admin-role lookup by email). Defining it as an
+// interface lets tests substitute an in-memory fake without spinning up GORM.
+type gatewayUserFinder interface {
+	GetByEmail(email string) (*db.GatewayUser, error)
+}
 
 // leexiToolPrefix is the convention used when registering the Leexi backend.
 // When a backend's ToolPrefix matches this string, the scoped gateway treats
@@ -68,6 +76,10 @@ type ScopedGateway struct {
 	// nil = fail-closed: when the token has a BDD scope, an empty allow-list
 	// is sent so the backend denies every BDD call.
 	bddResolver BDDTableResolver
+	// gatewayUsers (optional) is consulted by auto-self override to learn
+	// whether an authenticated end-user is a gateway admin. nil disables the
+	// admin-fallback branch — non-admin behavior applies to everyone.
+	gatewayUsers gatewayUserFinder
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -85,6 +97,7 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 		leexiAdmin:    gw.leexiAdmin,
 		ringoverAdmin: gw.ringoverAdmin,
 		bddResolver:   gw.bddResolver,
+		gatewayUsers:  gw.gatewayUsers,
 	}
 }
 
