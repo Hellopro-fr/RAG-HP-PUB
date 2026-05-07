@@ -391,18 +391,23 @@ func registerRESTAndOAuthServer(
 	authCodeRepo := repository.NewAuthCodeRepo(dbs.database)
 	consentRepo := repository.NewConsentRepo(dbs.database)
 	refreshRepo := repository.NewRefreshRepo(dbs.database)
+	// Wire the SSO bridge for /authorize so an authenticated admin browser
+	// (gw_session cookie) skips the legacy login form. Constructing the repo
+	// here keeps buildSSO focused on its own wiring.
+	ssoSessionRepo := repository.NewSSOSessionRepo(dbs.database)
 
 	authSrv := authserver.NewAuthServer(authserver.AuthServerConfig{
-		OAuth2Repo:   oauth2Repo,
-		AuthCodeRepo: authCodeRepo,
-		ConsentRepo:  consentRepo,
-		RefreshRepo:  refreshRepo,
-		ServerRepo:   dbs.repo,
-		JWTSecret:    cfg.JWTSecret,
-		PublicURL:    cfg.GatewayPublicURL,
-		AuthURL:      cfg.AuthURL,
-		SecureCookie: cfg.SecureCookie,
-		RefreshTTL:   cfg.OAuth2RefreshTokenTTL,
+		OAuth2Repo:     oauth2Repo,
+		AuthCodeRepo:   authCodeRepo,
+		ConsentRepo:    consentRepo,
+		RefreshRepo:    refreshRepo,
+		ServerRepo:     dbs.repo,
+		SSOSessionRepo: ssoSessionRepo,
+		JWTSecret:      cfg.JWTSecret,
+		PublicURL:      cfg.GatewayPublicURL,
+		AuthURL:        cfg.AuthURL,
+		SecureCookie:   cfg.SecureCookie,
+		RefreshTTL:     cfg.OAuth2RefreshTokenTTL,
 	})
 	authSrv.Register(mux)
 	authSrv.RegisterAPI(mux)
