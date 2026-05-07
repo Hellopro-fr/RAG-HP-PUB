@@ -265,6 +265,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Utilisateurs', minRole: 'admin' }
     },
     {
+      path: '/server-authorizations',
+      name: 'server-authorizations',
+      component: () => import('@/views/ServerAuthorizationsView.vue'),
+      meta: { requiresAuth: true, title: 'Serveur Autorisation', minRole: 'admin' }
+    },
+    {
       path: '/audit-logs',
       name: 'audit-logs',
       component: () => import('@/views/AuditLogView.vue'),
