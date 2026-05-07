@@ -16,6 +16,7 @@ var validLeexiFilterModes = map[string]struct{}{
 	LeexiFilterModeUsers:   {},
 	LeexiFilterModeTeams:   {},
 	LeexiFilterModeCreator: {},
+	LeexiFilterModeSelf:    {},
 }
 
 // resolveLeexiFilterForCreate validates a LeexiFilterDTO and returns the
@@ -44,6 +45,13 @@ func resolveLeexiFilterForCreate(
 	switch filter.Mode {
 	case LeexiFilterModeNone:
 		return LeexiFilterModeNone, nil, nil, nil
+
+	case LeexiFilterModeSelf:
+		// "self" is a runtime-resolved mode — the email comes from the
+		// OAuth2 access-token JWT on every request, so no UUID is stored
+		// on the token/client row. The injector in ScopedGateway reads the
+		// email out of context and calls leexiadmin.FindUserByEmail.
+		return LeexiFilterModeSelf, nil, nil, nil
 
 	case LeexiFilterModeUsers:
 		if len(filter.UserUUIDs) == 0 {

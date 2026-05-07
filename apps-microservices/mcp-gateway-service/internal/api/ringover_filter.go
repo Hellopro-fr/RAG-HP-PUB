@@ -16,6 +16,7 @@ var validRingoverFilterModes = map[string]struct{}{
 	RingoverFilterModeUsers:   {},
 	RingoverFilterModeTeams:   {},
 	RingoverFilterModeCreator: {},
+	RingoverFilterModeSelf:    {},
 }
 
 // resolveRingoverFilterForCreate validates a RingoverFilterDTO and returns the
@@ -44,6 +45,12 @@ func resolveRingoverFilterForCreate(
 	switch filter.Mode {
 	case RingoverFilterModeNone:
 		return RingoverFilterModeNone, nil, nil, nil
+
+	case RingoverFilterModeSelf:
+		// "self" is resolved at request time from the OAuth2 access-token
+		// email; no integer ID is stored at create time. See ScopedGateway
+		// for the runtime header injection.
+		return RingoverFilterModeSelf, nil, nil, nil
 
 	case RingoverFilterModeUsers:
 		if len(filter.UserIDs) == 0 {

@@ -12,6 +12,7 @@ const (
 	LeexiFilterModeUsers   = "users"
 	LeexiFilterModeTeams   = "teams"
 	LeexiFilterModeCreator = "creator"
+	LeexiFilterModeSelf    = "self"
 )
 
 // LeexiFilterDTO carries the per-token Leexi ownership scope from / to the
@@ -33,6 +34,7 @@ const (
 	RingoverFilterModeUsers   = "users"
 	RingoverFilterModeTeams   = "teams"
 	RingoverFilterModeCreator = "creator"
+	RingoverFilterModeSelf    = "self"
 )
 
 // RingoverFilterDTO carries the per-token Ringover ownership scope from / to
