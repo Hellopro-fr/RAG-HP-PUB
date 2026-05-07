@@ -30,6 +30,7 @@ type Gateway struct {
 	ringoverAdmin *ringoveradmin.Client // optional; nil disables Ringover team expansion
 	bddResolver   BDDTableResolver      // optional; nil disables BDD header injection
 	gatewayUsers  gatewayUserFinder     // optional; nil disables auto-self admin fallback
+	serverAuth    serverAuthorizer      // optional; nil disables Step-0 server-authorization bypass
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -57,6 +58,13 @@ func (g *Gateway) SetRingoverAdmin(c *ringoveradmin.Client) {
 // to detect gateway admins. Pass *repository.UserRepo at boot.
 func (g *Gateway) SetGatewayUserFinder(f gatewayUserFinder) {
 	g.gatewayUsers = f
+}
+
+// SetServerAuthorizer registers the per-server full-access grant repository
+// consulted by the Step-0 bypass in requestHeadersFor. Pass
+// *repository.ServerAuthorizationRepo at boot.
+func (g *Gateway) SetServerAuthorizer(s serverAuthorizer) {
+	g.serverAuth = s
 }
 
 // SetBDDResolver attaches the BDD used-table resolver consumed by

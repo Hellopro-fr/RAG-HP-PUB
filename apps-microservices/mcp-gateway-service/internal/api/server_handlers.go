@@ -110,6 +110,8 @@ type Handler struct {
 	// Both are nil until wired by main.go.
 	bddUsedRepo *repository.BDDUsedRepo
 	bddCatalog  *bddcatalog.Client
+	// serverAuthRepo backs the /api/v1/server-authorizations admin CRUD.
+	serverAuthRepo *repository.ServerAuthorizationRepo
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -192,6 +194,12 @@ func (h *Handler) SetSlack(client *slack.Client) {
 // SetInstructionRepo wires the LLM-instruction repository.
 func (h *Handler) SetInstructionRepo(repo *repository.InstructionRepo) {
 	h.instructionRepo = repo
+}
+
+// SetServerAuthorizationRepo wires the per-server full-access grants repo
+// used by /api/v1/server-authorizations admin endpoints.
+func (h *Handler) SetServerAuthorizationRepo(repo *repository.ServerAuthorizationRepo) {
+	h.serverAuthRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────

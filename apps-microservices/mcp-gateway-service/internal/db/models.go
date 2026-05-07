@@ -600,3 +600,19 @@ type OAuth2ClientBDDTable struct {
 }
 
 func (OAuth2ClientBDDTable) TableName() string { return "oauth2_client_bdd_tables" }
+
+// ServerAuthorization grants a specific end-user (by email) full unfiltered
+// access to a specific MCP server. When a row exists for (server_id, email),
+// the gateway skips all filter-header injection (Leexi/Ringover/BDD) on
+// outbound requests targeting that server — the backend receives only the
+// static auth headers and treats the call as unrestricted.
+//
+// Primary key is (server_id, email). Insert/delete is the admin-side API.
+type ServerAuthorization struct {
+	ServerID  string    `gorm:"type:char(36);primaryKey" json:"server_id"`
+	Email     string    `gorm:"type:varchar(255);primaryKey" json:"email"`
+	CreatedBy string    `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	CreatedAt time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+}
+
+func (ServerAuthorization) TableName() string { return "server_authorizations" }

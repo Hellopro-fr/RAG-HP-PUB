@@ -1,0 +1,6 @@
+/gateway
+*.test
+*.out
+.env
+.env.*
+!.env.example
