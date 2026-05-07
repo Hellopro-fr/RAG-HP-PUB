@@ -65,25 +65,37 @@ def _extract_tokens(cat_name: str, keep_stopwords: bool) -> List[str]:
     keep_stopwords = True  : garde tous les tokens (utile pour matcher
       les concatenations utilisateur type "fauteuildebureau").
       "Fauteuil de bureau"  -> ["fauteuil", "de", "bureau"]
+
+    Filtre len >= 2 dans les deux cas pour eviter les artefacts d'apostrophes
+    (ex: "Cartouches d'encre" -> token "d" isole -> deviendrait "ds" apres
+    pluralization, polluant le synonyme).
     """
     norm = _normalize(cat_name)
     # Supprime tout ce qui est entre parentheses (specs techniques).
     norm = re.sub(r"\([^)]*\)", " ", norm)
     raw = re.findall(r"[a-z0-9]+", norm)
     if keep_stopwords:
-        return [t for t in raw if len(t) >= 1 and not t.isdigit()]
+        # FIX (PR #550) : len >= 2 au lieu de >= 1 pour eviter "d" -> "ds"
+        return [t for t in raw if len(t) >= 2 and not t.isdigit()]
     return [
         t for t in raw
         if len(t) >= 2 and t not in _STOPWORDS_FR and not t.isdigit()
     ]
 
 
-def _sing_plur_forms(token: str) -> List[str]:
+def _sing_plur_forms(token: str, is_stopword: bool = False) -> List[str]:
     """
     Retourne le token + ses variantes singulier/pluriel (heuristique FR).
     Utilise pour couvrir les cas "minipelle" (singulier) vs "Mini-pelles"
     (pluriel dans le nom de categorie).
+
+    FIX (PR #550) : si is_stopword=True, retourne [token] sans pluralization.
+    Evite les artefacts type "et" -> "ets", "pour" -> "pours", "de" -> "des"
+    qui generent des synonymes invalides "cable ets adaptateur",
+    "support pours ecran", "table des travail", etc.
     """
+    if is_stopword:
+        return [token]
     forms = {token}
     # pluriel -> singulier
     if token.endswith("aux") and len(token) >= 5:
@@ -127,7 +139,13 @@ def _build_variants(tokens: List[str]) -> Set[str]:
         return set()
 
     # Pour chaque token, ses formes s/p
-    token_forms = [_sing_plur_forms(t) for t in tokens]
+    # FIX (PR #550) : ne pluralise pas les stopwords FR (et, pour, de, ...)
+    # pour eviter des variantes parasites du type "cable ets adaptateur"
+    # ("et" -> "ets") ou "support pours ecran" ("pour" -> "pours").
+    token_forms = [
+        _sing_plur_forms(t, is_stopword=(t in _STOPWORDS_FR))
+        for t in tokens
+    ]
 
     variants: Set[str] = set()
     for combo in product(*token_forms):
