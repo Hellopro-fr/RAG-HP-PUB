@@ -196,8 +196,13 @@ def _slug_id(s: str) -> str:
 def _list_categories(collection: str) -> List[str]:
     """
     Retourne la liste des noms de categories distincts dans la collection
-    via un facet query 'match all'. Cap a 2000 categories (HelloPro tourne
-    autour de 8300 rubriques en BDD mais toutes ne sont pas ingerees).
+    via un facet query 'match all'. Cap a 5000 categories (HelloPro tourne
+    autour de 8300 rubriques en BDD mais toutes ne sont pas ingerees, et
+    Typesense produits_prod en contient ~3100 actuellement).
+
+    Note : max_facet_values Typesense est plafonne a 10000 cote serveur
+    (facet_values_max_count), 5000 laisse une marge x2 pour la croissance
+    sans degrader les perfs (facet sur 1.5M docs ~ 50-100ms).
     """
     params = {
         "collection": collection,
@@ -205,7 +210,7 @@ def _list_categories(collection: str) -> List[str]:
         "query_by": "categorie",
         "per_page": 1,
         "facet_by": "categorie",
-        "max_facet_values": 2000,
+        "max_facet_values": 5000,
     }
     try:
         res = typesense_client.multi_search({"searches": [params]})
