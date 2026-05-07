@@ -50,3 +50,46 @@ func TestPendingStateTampered(t *testing.T) {
 		t.Fatal("expected signature error")
 	}
 }
+
+func TestSignAndVerifyPendingState_RoundTripsPurpose(t *testing.T) {
+	secret := []byte("hmac-secret-for-tests")
+	in := PendingState{
+		Verifier: "v",
+		State:    "s",
+		ReturnTo: "/authorize?response_type=code&client_id=x",
+		Exp:      time.Now().Add(5 * time.Minute).Unix(),
+		Purpose:  "oauth2",
+	}
+	tok, err := SignPendingState(secret, in)
+	if err != nil {
+		t.Fatalf("SignPendingState: %v", err)
+	}
+	got, err := VerifyPendingState(secret, tok)
+	if err != nil {
+		t.Fatalf("VerifyPendingState: %v", err)
+	}
+	if got.Purpose != "oauth2" {
+		t.Fatalf("Purpose round-trip failed: got %q want %q", got.Purpose, "oauth2")
+	}
+}
+
+func TestSignAndVerifyPendingState_PurposeOmittedWhenEmpty(t *testing.T) {
+	secret := []byte("hmac-secret-for-tests")
+	in := PendingState{
+		Verifier: "v",
+		State:    "s",
+		ReturnTo: "/",
+		Exp:      time.Now().Add(5 * time.Minute).Unix(),
+	}
+	tok, err := SignPendingState(secret, in)
+	if err != nil {
+		t.Fatalf("SignPendingState: %v", err)
+	}
+	got, err := VerifyPendingState(secret, tok)
+	if err != nil {
+		t.Fatalf("VerifyPendingState: %v", err)
+	}
+	if got.Purpose != "" {
+		t.Fatalf("expected empty Purpose for default state, got %q", got.Purpose)
+	}
+}

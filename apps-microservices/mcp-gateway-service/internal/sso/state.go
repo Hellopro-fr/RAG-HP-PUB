@@ -23,6 +23,12 @@ type PendingState struct {
 	State    string `json:"s"`
 	ReturnTo string `json:"r"`
 	Exp      int64  `json:"e"`
+	// Purpose distinguishes the post-callback flow. "" or "admin" routes the
+	// callback through the admin-UI path (gateway_users upsert + gw_session
+	// cookie). "oauth2" routes through the OAuth2-authorize path (no admin
+	// upsert, sets mcp_session cookie via internal/auth, then redirects back
+	// to /authorize so the consent screen can render).
+	Purpose string `json:"p,omitempty"`
 }
 
 // SignPendingState encodes the state to a compact "<base64url-payload>.<base64url-mac>"
