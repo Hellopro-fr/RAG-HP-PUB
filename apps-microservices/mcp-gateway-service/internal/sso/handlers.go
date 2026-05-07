@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/repository"
@@ -276,6 +277,15 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if pending.Purpose == "oauth2" {
+		if err := h.completeOAuth2Login(w, r, pending, tok, email, name); err != nil {
+			log.Printf("[sso] callback: oauth2 path failed: %v", err)
+			h.notify(r, SSOErrorEvent{Kind: "oauth2_session_failed", Reason: err.Error(), UserEmail: email, Sub: sub})
+			h.redirectError(w, r, "oauth2_session_failed", "Authentification OAuth2 impossible.")
+		}
+		return
+	}
+
 	user, err := h.users.UpsertOnLogin(email, name)
 	if err != nil {
 		log.Printf("[sso] callback: upsert user failed: %v", err)
@@ -345,6 +355,35 @@ func (h *Handlers) handleCallback(w http.ResponseWriter, r *http.Request) {
 		target = "/"
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// completeOAuth2Login finishes the SSO callback for Purpose=oauth2: writes the
+// mcp_session cookie consumed by internal/authserver, then redirects the
+// browser back to the original /authorize URL stashed in pending.ReturnTo.
+//
+// Deliberately does NOT upsert gateway_users (random Hellopro employees should
+// not appear in the admin user table just because they OAuth2'd into an MCP
+// client), does NOT set gw_session (admin UI session is unrelated), and does
+// NOT persist an SSOSession row (the OAuth2 client receives its own
+// access+refresh token pair from /token after consent — the upstream
+// account-service tokens are short-lived and discarded here).
+func (h *Handlers) completeOAuth2Login(w http.ResponseWriter, r *http.Request, pending PendingState, tok *TokenResponse, email, name string) error {
+	if h.authJWTSecret == "" {
+		return fmt.Errorf("authJWTSecret not configured (call WithAuthSession at boot)")
+	}
+	if err := auth.SetSession(w, h.authJWTSecret, auth.SessionData{
+		DisplayName: name,
+		Email:       email,
+		Token:       tok.AccessToken,
+	}, h.secureCk); err != nil {
+		return fmt.Errorf("set auth session: %w", err)
+	}
+	target := pending.ReturnTo
+	if target == "" || !strings.HasPrefix(target, "/") {
+		target = "/"
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+	return nil
 }
 
 // POST /logout — user-initiated logout. Best-effort revoke at account-service,

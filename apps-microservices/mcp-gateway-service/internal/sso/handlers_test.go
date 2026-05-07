@@ -1,9 +1,15 @@
 package sso
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 // Compile-only smoke test — full integration coverage lives in cmd/server e2e.
@@ -105,5 +111,89 @@ func TestHandleLogin_RejectsUnknownPurpose(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown purpose, got %d", rec.Code)
+	}
+}
+
+// fakeAccountServer answers /token with a canned authorization_code response.
+// The access token is a minimal HS256 JWT carrying sub/email/name claims so
+// ParseAccessTokenIdentity returns the expected identity without crypto setup.
+func fakeAccountServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/token") {
+			http.NotFound(w, r)
+			return
+		}
+		hdr := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+		body := base64.RawURLEncoding.EncodeToString([]byte(
+			fmt.Sprintf(`{"sub":"u-1","email":"alice@example.com","name":"Alice","exp":%d}`, time.Now().Add(time.Hour).Unix()),
+		))
+		toSign := hdr + "." + body
+		mac := hmac.New(sha256.New, []byte("upstream-jwt-secret"))
+		mac.Write([]byte(toSign))
+		sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		jwt := toSign + "." + sig
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"r-1","token_type":"Bearer","expires_in":3600}`, jwt)
+	}))
+}
+
+func TestHandleCallback_OAuth2PurposeWritesAuthSession(t *testing.T) {
+	srv := fakeAccountServer(t)
+	defer srv.Close()
+
+	authJWTSecret := "auth-session-secret"
+	stateSecret := []byte("hmac-secret-for-tests")
+
+	h := NewHandlers(&Client{
+		ClientID:           "c1",
+		ClientSecret:       "s1",
+		AccountPublicURL:   srv.URL,
+		AccountInternalURL: srv.URL,
+		RedirectURI:        srv.URL + "/sso/callback",
+		Scope:              "openid email",
+	}, nil, nil, nil, false).
+		WithStateKey(stateSecret).
+		WithAuthSession(authJWTSecret)
+
+	pending := PendingState{
+		Verifier: "verifier-xyz",
+		State:    "state-abc",
+		ReturnTo: "/authorize?response_type=code&client_id=mcp-x",
+		Exp:      time.Now().Add(5 * time.Minute).Unix(),
+		Purpose:  "oauth2",
+	}
+	tok, err := SignPendingState(stateSecret, pending)
+	if err != nil {
+		t.Fatalf("SignPendingState: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/sso/callback?code=auth-code-1&state=state-abc", nil)
+	req.AddCookie(&http.Cookie{Name: PendingCookieName, Value: tok})
+	rec := httptest.NewRecorder()
+	h.handleCallback(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/authorize?response_type=code&client_id=mcp-x" {
+		t.Fatalf("unexpected redirect: %q", got)
+	}
+
+	var sawAuth, sawSession bool
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "mcp_session" {
+			sawAuth = true
+		}
+		if c.Name == CookieName {
+			sawSession = true
+		}
+	}
+	if !sawAuth {
+		t.Fatal("expected mcp_session cookie to be set on OAuth2 path")
+	}
+	if sawSession {
+		t.Fatal("did not expect gw_session cookie on OAuth2 path")
 	}
 }
