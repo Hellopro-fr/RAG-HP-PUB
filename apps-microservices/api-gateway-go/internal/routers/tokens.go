@@ -1,0 +1,254 @@
+package routers
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+
+	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/auth"
+	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
+	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
+)
+
+const maxActiveAccessTokens = 10
+
+// TokenDeps holds all dependencies for the token route handlers.
+type TokenDeps struct {
+	DB                       *gorm.DB
+	Cache                    *cachepkg.Cache
+	JWT                      *auth.JWT
+	AdminKey                 string
+	AccessTokenExpireMinutes int
+}
+
+type tokenGenerateReq struct {
+	ServiceName string `json:"service_name" binding:"required"`
+}
+
+type tokenGenerateResp struct {
+	ServiceName               string    `json:"service_name"`
+	RefreshToken              string    `json:"refresh_token"`
+	AccessToken               string    `json:"access_token"`
+	AccessTokenExpiresMinutes int       `json:"access_token_expires_minutes"`
+	AccessTokenExpiresAt      time.Time `json:"access_token_expires_at"`
+	CreatedAt                 time.Time `json:"created_at"`
+}
+
+type tokenRefreshReq struct {
+	ServiceName  string `json:"service_name" binding:"required"`
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+type tokenRefreshResp struct {
+	ServiceName               string    `json:"service_name"`
+	AccessToken               string    `json:"access_token"`
+	AccessTokenExpiresMinutes int       `json:"access_token_expires_minutes"`
+	AccessTokenExpiresAt      time.Time `json:"access_token_expires_at"`
+}
+
+type tokenRevokeReq struct {
+	ServiceName string `json:"service_name" binding:"required"`
+}
+
+type tokenRevokeResp struct {
+	ServiceName string `json:"service_name"`
+	Revoked     bool   `json:"revoked"`
+	Message     string `json:"message"`
+}
+
+// RegisterTokens registers /auth/token/generate, /auth/token/refresh, and /auth/token/revoke.
+func RegisterTokens(r *gin.Engine, d TokenDeps) {
+	g := r.Group("/auth")
+	g.POST("/token/generate", auth.RequireAdminKey(d.AdminKey), generateHandler(d))
+	g.POST("/token/refresh", refreshHandler(d))
+	g.POST("/token/revoke", auth.RequireAdminKey(d.AdminKey), revokeHandler(d))
+}
+
+func generateHandler(d TokenDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body tokenGenerateReq
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": err.Error()})
+			return
+		}
+		ctx := c.Request.Context()
+
+		// Reuse existing active refresh token for this service if present.
+		var rt dbpkg.InfoRefreshToken
+		err := d.DB.WithContext(ctx).
+			Where("nom_service = ? AND est_actif = ?", body.ServiceName, true).
+			First(&rt).Error
+		if err == gorm.ErrRecordNotFound {
+			rt = dbpkg.InfoRefreshToken{
+				NomService: body.ServiceName,
+				Token:      d.JWT.GenerateRefreshToken(body.ServiceName),
+				IPCreation: clientIP(c),
+				EstActif:   true,
+			}
+			if err := d.DB.WithContext(ctx).Create(&rt).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+				return
+			}
+		} else if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+			return
+		}
+
+		access := d.JWT.GenerateAccessToken(body.ServiceName, rt.ID)
+		exp := time.Now().UTC().Add(time.Duration(d.AccessTokenExpireMinutes) * time.Minute)
+		acc := dbpkg.InfoAccessToken{
+			IDRefreshToken: rt.ID,
+			Token:          access,
+			DateExpiration: exp,
+			EstActif:       true,
+		}
+		if err := d.DB.WithContext(ctx).Create(&acc).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+			return
+		}
+		_ = d.Cache.SetJSON(ctx, "access_token:"+access,
+			map[string]any{"service": body.ServiceName, "rtid": rt.ID},
+			time.Duration(d.AccessTokenExpireMinutes)*time.Minute)
+		_ = pruneAccessTokens(ctx, d.DB, rt.ID)
+
+		c.JSON(http.StatusOK, tokenGenerateResp{
+			ServiceName:               body.ServiceName,
+			RefreshToken:              rt.Token,
+			AccessToken:               access,
+			AccessTokenExpiresMinutes: d.AccessTokenExpireMinutes,
+			AccessTokenExpiresAt:      exp,
+			CreatedAt:                 rt.DateCreation,
+		})
+	}
+}
+
+func refreshHandler(d TokenDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body tokenRefreshReq
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": err.Error()})
+			return
+		}
+		ctx := c.Request.Context()
+
+		var rt dbpkg.InfoRefreshToken
+		err := d.DB.WithContext(ctx).
+			Where("nom_service = ? AND token = ? AND est_actif = ?", body.ServiceName, body.RefreshToken, true).
+			First(&rt).Error
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid or revoked refresh token"})
+			return
+		}
+
+		access := d.JWT.GenerateAccessToken(body.ServiceName, rt.ID)
+		exp := time.Now().UTC().Add(time.Duration(d.AccessTokenExpireMinutes) * time.Minute)
+		_ = d.DB.WithContext(ctx).Create(&dbpkg.InfoAccessToken{
+			IDRefreshToken: rt.ID,
+			Token:          access,
+			DateExpiration: exp,
+			EstActif:       true,
+		})
+		_ = d.Cache.SetJSON(ctx, "access_token:"+access,
+			map[string]any{"service": body.ServiceName, "rtid": rt.ID},
+			time.Duration(d.AccessTokenExpireMinutes)*time.Minute)
+		_ = pruneAccessTokens(ctx, d.DB, rt.ID)
+
+		c.JSON(http.StatusOK, tokenRefreshResp{
+			ServiceName:               body.ServiceName,
+			AccessToken:               access,
+			AccessTokenExpiresMinutes: d.AccessTokenExpireMinutes,
+			AccessTokenExpiresAt:      exp,
+		})
+	}
+}
+
+func revokeHandler(d TokenDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body tokenRevokeReq
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": err.Error()})
+			return
+		}
+		ctx := c.Request.Context()
+
+		var rts []dbpkg.InfoRefreshToken
+		if err := d.DB.WithContext(ctx).
+			Where("nom_service = ? AND est_actif = ?", body.ServiceName, true).
+			Find(&rts).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+			return
+		}
+		if len(rts) == 0 {
+			c.JSON(http.StatusOK, tokenRevokeResp{
+				ServiceName: body.ServiceName,
+				Revoked:     false,
+				Message:     "no active token found for this service",
+			})
+			return
+		}
+
+		ids := make([]uint, len(rts))
+		for i, r := range rts {
+			ids[i] = r.ID
+		}
+		_ = d.DB.WithContext(ctx).Model(&dbpkg.InfoRefreshToken{}).
+			Where("id IN ?", ids).Update("est_actif", false)
+		_ = d.DB.WithContext(ctx).Model(&dbpkg.InfoAccessToken{}).
+			Where("id_refresh_token_id IN ? AND est_actif = ?", ids, true).Update("est_actif", false)
+
+		// Evict access tokens from cache.
+		var accs []dbpkg.InfoAccessToken
+		_ = d.DB.WithContext(ctx).Where("id_refresh_token_id IN ?", ids).Find(&accs).Error
+		for _, a := range accs {
+			_ = d.Cache.Delete(ctx, "access_token:"+a.Token)
+		}
+
+		c.JSON(http.StatusOK, tokenRevokeResp{
+			ServiceName: body.ServiceName,
+			Revoked:     true,
+			Message:     "refresh token revoked",
+		})
+	}
+}
+
+// pruneAccessTokens keeps only the 10 most-recent non-expired active access tokens
+// per refresh token and deactivates any expired-but-still-active rows.
+// Mirrors the Python api-gateway behaviour.
+func pruneAccessTokens(ctx context.Context, gdb *gorm.DB, refreshID uint) error {
+	now := time.Now().UTC()
+
+	// Deactivate expired rows first.
+	_ = gdb.WithContext(ctx).Model(&dbpkg.InfoAccessToken{}).
+		Where("id_refresh_token_id = ? AND est_actif = ? AND date_expiration < ?", refreshID, true, now).
+		Update("est_actif", false)
+
+	// Find remaining active non-expired tokens, newest first.
+	var active []dbpkg.InfoAccessToken
+	if err := gdb.WithContext(ctx).
+		Where("id_refresh_token_id = ? AND est_actif = ? AND date_expiration >= ?", refreshID, true, now).
+		Order("date_creation DESC").
+		Find(&active).Error; err != nil {
+		return err
+	}
+	if len(active) <= maxActiveAccessTokens {
+		return nil
+	}
+
+	excessIDs := make([]uint, 0, len(active)-maxActiveAccessTokens)
+	for _, a := range active[maxActiveAccessTokens:] {
+		excessIDs = append(excessIDs, a.ID)
+	}
+	_ = gdb.WithContext(ctx).Model(&dbpkg.InfoAccessToken{}).
+		Where("id IN ?", excessIDs).Update("est_actif", false)
+	return nil
+}
+
+func clientIP(c *gin.Context) string {
+	if ip := c.ClientIP(); ip != "" {
+		return ip
+	}
+	return "unknown"
+}
