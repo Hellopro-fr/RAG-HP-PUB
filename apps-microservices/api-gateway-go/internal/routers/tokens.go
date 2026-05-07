@@ -3,6 +3,7 @@ package routers
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -59,12 +60,15 @@ type tokenRevokeResp struct {
 	Message     string `json:"message"`
 }
 
-// RegisterTokens registers /auth/token/generate, /auth/token/refresh, and /auth/token/revoke.
+// RegisterTokens registers all /auth/* token and log routes.
 func RegisterTokens(r *gin.Engine, d TokenDeps) {
 	g := r.Group("/auth")
 	g.POST("/token/generate", auth.RequireAdminKey(d.AdminKey), generateHandler(d))
 	g.POST("/token/refresh", refreshHandler(d))
 	g.POST("/token/revoke", auth.RequireAdminKey(d.AdminKey), revokeHandler(d))
+	g.GET("/token/refresh-tokens", listRefreshHandler(d))
+	g.GET("/token/all-refresh-tokens", auth.RequireAdminKey(d.AdminKey), listAllRefreshHandler(d))
+	g.GET("/logs", auth.RequireAdminKey(d.AdminKey), logsHandler(d))
 }
 
 func generateHandler(d TokenDeps) gin.HandlerFunc {
@@ -244,6 +248,128 @@ func pruneAccessTokens(ctx context.Context, gdb *gorm.DB, refreshID uint) error 
 	_ = gdb.WithContext(ctx).Model(&dbpkg.InfoAccessToken{}).
 		Where("id IN ?", excessIDs).Update("est_actif", false)
 	return nil
+}
+
+type refreshTokenEntry struct {
+	ID           uint      `json:"id"`
+	ServiceName  string    `json:"service_name"`
+	Token        string    `json:"token"`
+	DateCreation time.Time `json:"date_creation"`
+	IPCreation   string    `json:"ip_creation"`
+	EstActif     bool      `json:"est_actif"`
+}
+
+type refreshTokenList struct {
+	Total int                  `json:"total"`
+	Items []refreshTokenEntry  `json:"items"`
+}
+
+type apiCallHistoryEntry struct {
+	ID             uint      `json:"id"`
+	ServiceName    string    `json:"service_name"`
+	Method         string    `json:"method"`
+	Path           string    `json:"path"`
+	StatusCode     int       `json:"status_code"`
+	ClientIP       string    `json:"client_ip"`
+	RequestHeaders *string   `json:"request_headers"`
+	CalledAt       time.Time `json:"called_at"`
+	DurationMs     *int      `json:"duration_ms"`
+}
+
+type apiCallHistoryList struct {
+	Total    int64                 `json:"total"`
+	Page     int                   `json:"page"`
+	PageSize int                   `json:"page_size"`
+	Items    []apiCallHistoryEntry `json:"items"`
+}
+
+func listRefreshHandler(d TokenDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		serviceName := c.Query("service_name")
+		if serviceName == "" {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": "service_name is required"})
+			return
+		}
+		activeOnly := c.DefaultQuery("active_only", "true") != "false"
+		ctx := c.Request.Context()
+		q := d.DB.WithContext(ctx).Where("nom_service = ?", serviceName)
+		if activeOnly {
+			q = q.Where("est_actif = ?", true)
+		}
+		var rows []dbpkg.InfoRefreshToken
+		if err := q.Order("nom_service").Find(&rows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+			return
+		}
+		entries := make([]refreshTokenEntry, len(rows))
+		for i, r := range rows {
+			entries[i] = refreshTokenEntry{
+				ID: r.ID, ServiceName: r.NomService, Token: r.Token,
+				DateCreation: r.DateCreation, IPCreation: r.IPCreation, EstActif: r.EstActif,
+			}
+		}
+		c.JSON(http.StatusOK, refreshTokenList{Total: len(entries), Items: entries})
+	}
+}
+
+func listAllRefreshHandler(d TokenDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		q := d.DB.WithContext(ctx)
+		if v, ok := c.GetQuery("active_only"); ok {
+			q = q.Where("est_actif = ?", v == "true")
+		}
+		var rows []dbpkg.InfoRefreshToken
+		if err := q.Order("nom_service, date_creation DESC").Find(&rows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+			return
+		}
+		entries := make([]refreshTokenEntry, len(rows))
+		for i, r := range rows {
+			entries[i] = refreshTokenEntry{
+				ID: r.ID, ServiceName: r.NomService, Token: r.Token,
+				DateCreation: r.DateCreation, IPCreation: r.IPCreation, EstActif: r.EstActif,
+			}
+		}
+		c.JSON(http.StatusOK, refreshTokenList{Total: len(entries), Items: entries})
+	}
+}
+
+func logsHandler(d TokenDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		page := atoiDefault(c.DefaultQuery("page", "1"), 1)
+		pageSize := atoiDefault(c.DefaultQuery("page_size", "50"), 50)
+		if pageSize > 500 {
+			pageSize = 500
+		}
+		serviceName := c.Query("service_name")
+		q := d.DB.WithContext(ctx).Model(&dbpkg.ApiCallHistory{})
+		if serviceName != "" {
+			q = q.Where("service_name = ?", serviceName)
+		}
+		var total int64
+		_ = q.Count(&total).Error
+		var rows []dbpkg.ApiCallHistory
+		_ = q.Order("called_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error
+		entries := make([]apiCallHistoryEntry, len(rows))
+		for i, r := range rows {
+			entries[i] = apiCallHistoryEntry{
+				ID: r.ID, ServiceName: r.ServiceName, Method: r.Method, Path: r.Path,
+				StatusCode: r.StatusCode, ClientIP: r.ClientIP, RequestHeaders: r.RequestHeaders,
+				CalledAt: r.CalledAt, DurationMs: r.DurationMs,
+			}
+		}
+		c.JSON(http.StatusOK, apiCallHistoryList{Total: total, Page: page, PageSize: pageSize, Items: entries})
+	}
+}
+
+func atoiDefault(s string, def int) int {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return def
+	}
+	return n
 }
 
 func clientIP(c *gin.Context) string {
