@@ -92,16 +92,16 @@ async def sync_health():
     health = {"status": "ok", "milvus": "?", "typesense": "?"}
 
     try:
-        col = milvus.collection
+        col = milvus.get_collection(settings.MILVUS_COLLECTION)
         n = col.num_entities
-        health["milvus"] = f"ok ({n} entities)"
+        health["milvus"] = f"ok ({n} entities, collection={settings.MILVUS_COLLECTION})"
     except Exception as e:
         health["milvus"] = f"error: {e}"
         health["status"] = "degraded"
 
     try:
-        info = typesense_client.collections[settings.TYPESENSE_COLLECTION].retrieve()
-        health["typesense"] = f"ok ({info.get('num_documents', 0)} docs)"
+        info = typesense_client.collection_stats(settings.TYPESENSE_COLLECTION)
+        health["typesense"] = f"ok ({info.get('num_documents', 0)} docs, collection={settings.TYPESENSE_COLLECTION})"
     except Exception as e:
         health["typesense"] = f"error: {e}"
         health["status"] = "degraded"

@@ -97,7 +97,7 @@ def _ts_export_ids(collection: str) -> set:
 
 def _milvus_get_ids() -> set:
     """Retourne le set des ids actuels en Milvus (id_produit_chunk)."""
-    col = milvus.collection
+    col = milvus.get_collection(settings.MILVUS_COLLECTION)
     iterator = col.query_iterator(
         expr=None,
         output_fields=["id_produit", "chunk_number"],
@@ -122,7 +122,7 @@ def _milvus_get_ids() -> set:
 
 def _milvus_get_recent(since_iso: str, limit: int = 0) -> List[Dict[str, Any]]:
     """Retourne les rows Milvus avec date_maj >= since_iso."""
-    col = milvus.collection
+    col = milvus.get_collection(settings.MILVUS_COLLECTION)
     expr = f'date_maj >= "{since_iso}"'
     iterator = col.query_iterator(
         expr=expr,
