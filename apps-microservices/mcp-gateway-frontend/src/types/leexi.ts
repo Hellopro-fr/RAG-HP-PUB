@@ -2,7 +2,7 @@
 // (GET /api/v1/leexi/users, GET /api/v1/leexi/teams). These shapes are also
 // used by the per-token Leexi ownership filter UI.
 
-export type LeexiFilterMode = 'none' | 'users' | 'teams' | 'creator'
+export type LeexiFilterMode = 'none' | 'users' | 'teams' | 'creator' | 'self'
 
 export interface LeexiFilter {
   mode: LeexiFilterMode

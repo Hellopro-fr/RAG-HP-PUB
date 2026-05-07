@@ -580,6 +580,8 @@ const leexiFilterSummary = computed(() => {
       return `${(f.team_uuids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
     default:
       return 'Aucune restriction'
   }
@@ -594,6 +596,8 @@ const ringoverFilterSummary = computed(() => {
       return `${(f.team_ids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
     default:
       return 'Aucune restriction'
   }

@@ -3,7 +3,7 @@
 // identifies users with numeric integer IDs (not UUIDs), so the filter shape
 // carries `number[]` arrays rather than `string[]`.
 
-export type RingoverFilterMode = 'none' | 'users' | 'teams' | 'creator'
+export type RingoverFilterMode = 'none' | 'users' | 'teams' | 'creator' | 'self'
 
 export interface RingoverFilter {
   mode: RingoverFilterMode
