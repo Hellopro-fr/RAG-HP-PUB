@@ -40,6 +40,11 @@ type Handlers struct {
 	// slack is the optional dedicated SSO error notifier (LOGIN_SLACK_URL).
 	// nil = notifications disabled.
 	slack *SlackNotifier
+	// authJWTSecret is the HMAC key used by internal/auth.SetSession when the
+	// SSO callback runs the OAuth2-authorize flow. Empty disables the OAuth2
+	// branch (callback returns 500 if a Purpose=oauth2 pending state arrives
+	// without a configured secret).
+	authJWTSecret string
 }
 
 // NewHandlers builds a Handlers struct. Nil dependencies are tolerated for
@@ -67,6 +72,13 @@ func (h *Handlers) WithGatewayPublicURL(u string) *Handlers {
 // dedicated webhook (LOGIN_SLACK_URL). Pass nil to disable notifications.
 func (h *Handlers) WithSlack(s *SlackNotifier) *Handlers {
 	h.slack = s
+	return h
+}
+
+// WithAuthSession registers the JWT secret used to sign the mcp_session cookie
+// when a Purpose=oauth2 callback completes. Wire from cfg.JWTSecret.
+func (h *Handlers) WithAuthSession(jwtSecret string) *Handlers {
+	h.authJWTSecret = jwtSecret
 	return h
 }
 
