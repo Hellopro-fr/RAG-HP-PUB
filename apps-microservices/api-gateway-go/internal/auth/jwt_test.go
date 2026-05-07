@@ -16,7 +16,7 @@ func TestGenerateAndVerifyAccessToken(t *testing.T) {
 	claims, err := j.VerifyAccessToken(tok)
 	require.NoError(t, err)
 	require.Equal(t, "svc", claims.Subject)
-	require.Equal(t, uint(42), claims.RefreshTokenID)
+	require.Equal(t, int64(42), claims.RefreshTokenID)
 }
 
 func TestVerifyExpired(t *testing.T) {
