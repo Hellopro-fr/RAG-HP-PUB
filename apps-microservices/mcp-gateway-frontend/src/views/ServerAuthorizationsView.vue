@@ -3,81 +3,170 @@
     <PageBreadcrumb page-title="Serveur Autorisation" />
 
     <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
-      Octroie un accès complet (sans filtre Leexi / Ringover / BDD) à un utilisateur
-      sur un serveur MCP spécifique.
+      Octroie un accès complet (sans filtre Leexi / Ringover / BDD) à un ou plusieurs
+      utilisateurs sur un ou plusieurs serveurs MCP.
     </p>
 
-    <!-- Server picker + add form -->
     <div
       class="mb-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900"
     >
       <div class="grid gap-4 md:grid-cols-2">
-        <label class="flex flex-col gap-1 text-sm">
-          <span class="text-gray-600 dark:text-gray-400">Serveur</span>
-          <select
-            v-model="selectedServer"
-            class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
+        <!-- Server checkbox list -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-600 dark:text-gray-400">
+              Serveurs ({{ selectedServerIds.length }} sélectionné(s))
+            </span>
+            <div class="flex gap-3 text-xs">
+              <button
+                type="button"
+                class="text-brand-500 hover:text-brand-600 font-medium"
+                @click="selectAllServers"
+              >
+                Tout
+              </button>
+              <button
+                type="button"
+                class="text-brand-500 hover:text-brand-600 font-medium"
+                @click="selectedServerIds = []"
+              >
+                Aucun
+              </button>
+            </div>
+          </div>
+          <input
+            v-model="serverSearch"
+            type="text"
+            placeholder="Rechercher un serveur…"
+            class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+          />
+          <div
+            class="border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800 max-h-[320px] overflow-y-auto"
           >
-            <option value="">— Tous les serveurs —</option>
-            <option v-for="s in servers" :key="s.id" :value="s.id">
-              {{ s.name }}
-            </option>
-          </select>
-        </label>
+            <label
+              v-for="s in filteredServers"
+              :key="s.id"
+              class="flex items-center gap-3 px-4 py-2.5 cursor-pointer bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-white/5"
+            >
+              <input
+                type="checkbox"
+                :value="s.id"
+                v-model="selectedServerIds"
+                class="rounded border-gray-300 text-brand-500 dark:border-gray-700 shrink-0"
+              />
+              <i class="pi pi-server text-sm text-gray-400 dark:text-gray-500" />
+              <span class="text-sm text-gray-800 dark:text-gray-200 truncate">{{ s.name }}</span>
+            </label>
+            <div
+              v-if="filteredServers.length === 0"
+              class="px-4 py-6 text-center text-sm text-gray-400 dark:text-gray-500"
+            >
+              Aucun serveur trouvé
+            </div>
+          </div>
+        </div>
+
+        <!-- User checkbox list -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-600 dark:text-gray-400">
+              Utilisateurs ({{ selectedEmails.length }} sélectionné(s))
+            </span>
+            <div class="flex gap-3 text-xs">
+              <button
+                type="button"
+                class="text-brand-500 hover:text-brand-600 font-medium"
+                @click="selectAllUsers"
+              >
+                Tout
+              </button>
+              <button
+                type="button"
+                class="text-brand-500 hover:text-brand-600 font-medium"
+                @click="selectedEmails = []"
+              >
+                Aucun
+              </button>
+            </div>
+          </div>
+          <input
+            v-model="userSearch"
+            type="text"
+            placeholder="Rechercher un utilisateur…"
+            class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+          />
+          <div
+            class="border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800 max-h-[320px] overflow-y-auto"
+          >
+            <label
+              v-for="u in filteredUsers"
+              :key="u.id"
+              class="flex items-center gap-3 px-4 py-2.5 cursor-pointer bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-white/5"
+            >
+              <input
+                type="checkbox"
+                :value="u.email"
+                v-model="selectedEmails"
+                class="rounded border-gray-300 text-brand-500 dark:border-gray-700 shrink-0"
+              />
+              <i class="pi pi-user text-sm text-gray-400 dark:text-gray-500" />
+              <div class="min-w-0 flex-1">
+                <p class="text-sm text-gray-800 dark:text-gray-200 truncate">
+                  {{ u.display_name || u.email }}
+                </p>
+                <p
+                  v-if="u.display_name"
+                  class="text-[11px] text-gray-400 dark:text-gray-500 truncate"
+                >
+                  {{ u.email }}
+                </p>
+              </div>
+            </label>
+            <div
+              v-if="filteredUsers.length === 0"
+              class="px-4 py-6 text-center text-sm text-gray-400 dark:text-gray-500"
+            >
+              Aucun utilisateur trouvé
+            </div>
+          </div>
+        </div>
       </div>
 
-      <form
-        v-if="selectedServer"
-        class="mt-4 flex flex-col gap-3 md:flex-row md:items-end"
-        @submit.prevent="addGrant"
-      >
-        <label class="flex flex-1 flex-col gap-1 text-sm">
-          <span class="text-gray-600 dark:text-gray-400">Utilisateur à autoriser</span>
-          <select
-            v-model="selectedEmail"
-            class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
-          >
-            <option value="">— Sélectionnez un utilisateur —</option>
-            <option v-for="u in users" :key="u.id" :value="u.email">
-              {{ u.display_name ? `${u.display_name} (${u.email})` : u.email }}
-            </option>
-          </select>
-        </label>
+      <div class="mt-4 flex items-center justify-between">
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          {{ pairCount }} autorisation(s) seront créées.
+        </p>
         <button
-          type="submit"
-          :disabled="!selectedEmail || creating"
+          type="button"
+          :disabled="pairCount === 0 || creating"
           class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+          @click="addGrants"
         >
           {{ creating ? 'Octroi…' : 'Octroyer' }}
         </button>
-      </form>
+      </div>
     </div>
 
-    <!-- Loading -->
     <div v-if="loading" class="text-center py-12">
       <i class="pi pi-spinner pi-spin text-2xl text-brand-500" />
     </div>
 
-    <!-- Grants table -->
     <template v-else>
       <h2 class="mb-3 text-base font-semibold text-gray-900 dark:text-white">
         Autorisations
-        <span
-          v-if="selectedServerName"
-          class="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400"
-        >
-          — {{ selectedServerName }}
+        <span class="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
+          ({{ filteredGrants.length }})
         </span>
       </h2>
 
       <div
-        v-if="grants.length === 0"
+        v-if="filteredGrants.length === 0"
         class="rounded-lg border border-dashed border-gray-300 bg-white py-12 text-center text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400"
       >
         <i class="pi pi-shield text-4xl mb-3 block" />
         <p class="font-medium">Aucune autorisation enregistrée.</p>
-        <p v-if="!selectedServer" class="text-sm mt-1">
-          Sélectionnez un serveur pour octroyer un nouvel accès.
+        <p class="text-sm mt-1">
+          Sélectionnez serveurs et utilisateurs pour octroyer des accès.
         </p>
       </div>
 
@@ -89,7 +178,7 @@
           <thead class="bg-gray-50 dark:bg-gray-800">
             <tr class="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
               <th class="px-4 py-3 font-medium">Email</th>
-              <th v-if="!selectedServer" class="px-4 py-3 font-medium">Serveur</th>
+              <th class="px-4 py-3 font-medium">Serveur</th>
               <th class="px-4 py-3 font-medium">Octroyé par</th>
               <th class="px-4 py-3 font-medium">Date</th>
               <th class="px-4 py-3 text-right font-medium">Actions</th>
@@ -97,13 +186,13 @@
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             <tr
-              v-for="g in grants"
+              v-for="g in filteredGrants"
               :key="`${g.server_id}-${g.email}`"
               class="text-gray-700 dark:text-gray-200"
             >
               <td class="px-4 py-3">{{ g.email }}</td>
-              <td v-if="!selectedServer" class="px-4 py-3">
-                <span class="font-mono text-xs">
+              <td class="px-4 py-3">
+                <span class="text-sm">
                   {{ serverNameById(g.server_id) || g.server_id }}
                 </span>
               </td>
@@ -127,7 +216,6 @@
       </div>
     </template>
 
-    <!-- Revoke confirm -->
     <ConfirmDialog
       :open="!!pendingRemoval"
       title="Révoquer l'autorisation"
@@ -140,7 +228,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { serverAuthorizationsApi } from '@/api/server-authorizations'
 import { serversApi } from '@/api/servers'
 import { usersApi } from '@/api/users'
@@ -159,16 +247,42 @@ const toast = useToast()
 
 const servers = ref<ServerOption[]>([])
 const users = ref<User[]>([])
-const selectedServer = ref<string>('')
 const grants = ref<ServerAuthorization[]>([])
-const selectedEmail = ref('')
+
+const selectedServerIds = ref<string[]>([])
+const selectedEmails = ref<string[]>([])
+const serverSearch = ref('')
+const userSearch = ref('')
+
 const loading = ref(false)
 const creating = ref(false)
 const pendingRemoval = ref<ServerAuthorization | undefined>(undefined)
 
-const selectedServerName = computed(
-  () => servers.value.find((s) => s.id === selectedServer.value)?.name ?? '',
+const filteredServers = computed(() => {
+  const q = serverSearch.value.trim().toLowerCase()
+  if (!q) return servers.value
+  return servers.value.filter((s) => s.name.toLowerCase().includes(q))
+})
+
+const filteredUsers = computed(() => {
+  const q = userSearch.value.trim().toLowerCase()
+  if (!q) return users.value
+  return users.value.filter(
+    (u) =>
+      u.email.toLowerCase().includes(q) ||
+      (u.display_name ?? '').toLowerCase().includes(q),
+  )
+})
+
+const pairCount = computed(
+  () => selectedServerIds.value.length * selectedEmails.value.length,
 )
+
+const filteredGrants = computed(() => {
+  if (selectedServerIds.value.length === 0) return grants.value
+  const set = new Set(selectedServerIds.value)
+  return grants.value.filter((g) => set.has(g.server_id))
+})
 
 const confirmMessage = computed(() => {
   const g = pendingRemoval.value
@@ -188,6 +302,14 @@ function formatDate(iso: string): string {
   } catch {
     return iso
   }
+}
+
+function selectAllServers(): void {
+  selectedServerIds.value = filteredServers.value.map((s) => s.id)
+}
+
+function selectAllUsers(): void {
+  selectedEmails.value = filteredUsers.value.map((u) => u.email)
 }
 
 async function loadServers(): Promise<void> {
@@ -211,9 +333,7 @@ async function loadUsers(): Promise<void> {
 async function loadGrants(): Promise<void> {
   loading.value = true
   try {
-    grants.value = await serverAuthorizationsApi.list(
-      selectedServer.value || undefined,
-    )
+    grants.value = await serverAuthorizationsApi.list()
   } catch {
     toast.error('Impossible de charger les autorisations')
     grants.value = []
@@ -222,20 +342,32 @@ async function loadGrants(): Promise<void> {
   }
 }
 
-async function addGrant(): Promise<void> {
-  const email = selectedEmail.value
-  if (!selectedServer.value || !email) return
+async function addGrants(): Promise<void> {
+  if (pairCount.value === 0) return
   creating.value = true
+  let ok = 0
+  let fail = 0
   try {
-    await serverAuthorizationsApi.create({
-      server_id: selectedServer.value,
-      email,
-    })
-    selectedEmail.value = ''
-    toast.success('Autorisation octroyée')
+    for (const serverID of selectedServerIds.value) {
+      for (const email of selectedEmails.value) {
+        try {
+          await serverAuthorizationsApi.create({
+            server_id: serverID,
+            email,
+          })
+          ok++
+        } catch {
+          fail++
+        }
+      }
+    }
+    if (fail === 0) {
+      toast.success(`${ok} autorisation(s) octroyée(s)`)
+    } else {
+      toast.error(`${ok} octroyée(s), ${fail} échec(s)`)
+    }
+    selectedEmails.value = []
     await loadGrants()
-  } catch {
-    toast.error("Impossible d'octroyer l'autorisation")
   } finally {
     creating.value = false
   }
@@ -264,9 +396,5 @@ async function confirmRemove(): Promise<void> {
 onMounted(async () => {
   await Promise.all([loadServers(), loadUsers()])
   await loadGrants()
-})
-
-watch(selectedServer, () => {
-  loadGrants()
 })
 </script>
