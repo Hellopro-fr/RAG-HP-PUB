@@ -11,7 +11,7 @@ import (
 )
 
 func TestResolveRingoverFilterForCreate_Nil(t *testing.T) {
-	mode, u, te, err := resolveRingoverFilterForCreate(context.Background(), nil, nil, "")
+	mode, u, te, err := resolveRingoverFilterForCreate(context.Background(), nil, nil, "", false)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestResolveRingoverFilterForCreate_Nil(t *testing.T) {
 
 func TestResolveRingoverFilterForCreate_InvalidMode(t *testing.T) {
 	_, _, _, err := resolveRingoverFilterForCreate(
-		context.Background(), nil, &RingoverFilterDTO{Mode: "bogus"}, "",
+		context.Background(), nil, &RingoverFilterDTO{Mode: "bogus"}, "", false,
 	)
 	if err == nil {
 		t.Fatal("expected error for invalid mode")
@@ -31,7 +31,7 @@ func TestResolveRingoverFilterForCreate_InvalidMode(t *testing.T) {
 
 func TestResolveRingoverFilterForCreate_UsersRequiresIDs(t *testing.T) {
 	_, _, _, err := resolveRingoverFilterForCreate(
-		context.Background(), nil, &RingoverFilterDTO{Mode: RingoverFilterModeUsers}, "",
+		context.Background(), nil, &RingoverFilterDTO{Mode: RingoverFilterModeUsers}, "", false,
 	)
 	if err == nil {
 		t.Fatal("expected error for empty user_ids")
@@ -40,7 +40,7 @@ func TestResolveRingoverFilterForCreate_UsersRequiresIDs(t *testing.T) {
 
 func TestResolveRingoverFilterForCreate_UsersOK(t *testing.T) {
 	mode, u, te, err := resolveRingoverFilterForCreate(
-		context.Background(), nil, &RingoverFilterDTO{Mode: RingoverFilterModeUsers, UserIDs: []int{10, 20}}, "",
+		context.Background(), nil, &RingoverFilterDTO{Mode: RingoverFilterModeUsers, UserIDs: []int{10, 20}}, "", false,
 	)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -59,7 +59,7 @@ func TestResolveRingoverFilterForCreate_UsersOK(t *testing.T) {
 
 func TestResolveRingoverFilterForCreate_TeamsOK(t *testing.T) {
 	mode, u, te, err := resolveRingoverFilterForCreate(
-		context.Background(), nil, &RingoverFilterDTO{Mode: RingoverFilterModeTeams, TeamIDs: []int{7}}, "",
+		context.Background(), nil, &RingoverFilterDTO{Mode: RingoverFilterModeTeams, TeamIDs: []int{7}}, "", false,
 	)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -80,7 +80,7 @@ func TestResolveRingoverFilterForCreate_CreatorWithoutAdmin(t *testing.T) {
 	// admin client disabled (empty url/token) → reject creator mode.
 	disabled := ringoveradmin.NewClient("", "")
 	_, _, _, err := resolveRingoverFilterForCreate(
-		context.Background(), disabled, &RingoverFilterDTO{Mode: RingoverFilterModeCreator}, "x@y.fr",
+		context.Background(), disabled, &RingoverFilterDTO{Mode: RingoverFilterModeCreator}, "x@y.fr", false,
 	)
 	if err == nil {
 		t.Fatal("expected error when admin client is disabled")

@@ -10,7 +10,7 @@ import (
 // with no UUID columns and no error. This protects the existing modes from
 // regression as new modes (e.g. "self") are added to the validator.
 func TestResolveLeexiFilterForCreate_NoneMode(t *testing.T) {
-	mode, users, teams, err := resolveLeexiFilterForCreate(context.Background(), nil, nil, "")
+	mode, users, teams, err := resolveLeexiFilterForCreate(context.Background(), nil, nil, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error for nil filter: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestResolveLeexiFilterForCreate_NoneMode(t *testing.T) {
 	}
 
 	dto := &LeexiFilterDTO{Mode: LeexiFilterModeNone}
-	mode, users, teams, err = resolveLeexiFilterForCreate(context.Background(), nil, dto, "")
+	mode, users, teams, err = resolveLeexiFilterForCreate(context.Background(), nil, dto, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error for explicit none: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestResolveLeexiFilterForCreate_NoneMode(t *testing.T) {
 
 func TestResolveLeexiFilterForCreate_InvalidMode(t *testing.T) {
 	dto := &LeexiFilterDTO{Mode: "bogus"}
-	_, _, _, err := resolveLeexiFilterForCreate(context.Background(), nil, dto, "")
+	_, _, _, err := resolveLeexiFilterForCreate(context.Background(), nil, dto, "", false)
 	if err == nil {
 		t.Fatalf("expected error for invalid mode, got nil")
 	}
