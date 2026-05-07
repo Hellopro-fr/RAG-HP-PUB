@@ -173,11 +173,19 @@ func (h *Handlers) handleLogin(w http.ResponseWriter, r *http.Request) {
 		returnTo = "/"
 	}
 
+	purpose := r.URL.Query().Get("purpose")
+	if purpose != "" && purpose != "oauth2" {
+		// Reject unknown purposes early so a typo can't slip through and
+		// silently fall back to the admin path.
+		http.Error(w, "invalid purpose", http.StatusBadRequest)
+		return
+	}
 	pending := PendingState{
 		Verifier: verifier,
 		State:    stateNonce,
 		ReturnTo: returnTo,
 		Exp:      time.Now().Add(5 * time.Minute).Unix(),
+		Purpose:  purpose,
 	}
 	cookieVal, err := SignPendingState(h.stateKey, pending)
 	if err != nil {
