@@ -713,6 +713,47 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # Parallel-run during cutover; remove after Python decommission
+  api-gateway-go-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/api-gateway-go/Dockerfile
+    container_name: api-gateway-go-service
+    image: api-gateway-go:dev
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8501:8500"
+    env_file:
+      - .env
+    environment:
+      # ── Gateway MySQL (token store) ──────────────────────────────────────
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=${GATEWAY_MYSQL_PORT:-3306}
+      - MYSQL_USER=${GATEWAY_MYSQL_USER:-gateway_user}
+      - MYSQL_PASS=${GATEWAY_MYSQL_PASS:-gateway_pass}
+      - MYSQL_DB=${GATEWAY_MYSQL_DB:-gateway_db}
+      # ── Token security ───────────────────────────────────────────────────
+      - GATEWAY_ADMIN_KEY=${GATEWAY_ADMIN_KEY:-changeme-admin-key}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      # ── Docs admin auto-fill (comma-separated emails) ────────────────────
+      - GATEWAY_DOCS_ADMIN_EMAILS=${GATEWAY_DOCS_ADMIN_EMAILS:-}
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      # ── account-service SSO client (PKCE flow at /auth/login) ────────────
+      - SERVICE_NAME=api-gateway
+      - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
+      - ACCOUNT_PUBLIC_URL=${ACCOUNT_PUBLIC_URL:-http://localhost:8601}
+      - ACCOUNT_CLIENT_ID_API_GATEWAY=${ACCOUNT_CLIENT_ID_API_GATEWAY:-}
+      - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
+      - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
+      - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   devis-processor-service:
     build:
       context: .
