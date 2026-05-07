@@ -104,6 +104,11 @@ func Build(cfg *config.Config) (*App, error) {
 		log.Println("[main] Ringover admin client configured for ownership-scoped tokens")
 	}
 
+	if dbStack.userRepo != nil {
+		gw.SetGatewayUserFinder(dbStack.userRepo)
+		log.Println("[main] gateway_users wired into Gateway for auto-self admin fallback")
+	}
+
 	tokenCache := scopetoken.NewCache(60 * time.Second)
 	oauth2Cache := oauth2pkg.NewCache(60 * time.Second)
 	var instructionRepo *repository.InstructionRepo
