@@ -301,7 +301,8 @@ func buildSSO(cfg *config.Config, mux *http.ServeMux, dbs dbStack, authCfg auth.
 	ssoHandlers := sso.NewHandlers(ssoClient, ssoRepo, dbs.userRepo, dbs.encryptor, cfg.SecureCookie).
 		WithStateKey([]byte(cfg.JWTSecret)).
 		WithGatewayPublicURL(cfg.GatewayPublicURL).
-		WithSlack(ssoSlack)
+		WithSlack(ssoSlack).
+		WithAuthSession(cfg.JWTSecret)
 	ssoHandlers.RegisterHandlers(mux)
 	ssoMiddleware := sso.NewMiddleware(ssoClient, ssoRepo, dbs.userRepo, cfg.SecureCookie).
 		WithEncryptor(dbs.encryptor).
