@@ -1,0 +1,59 @@
+openapi: 3.1.0
+info:
+  title: Hellopro APIs
+  version: 1.0.0
+  description: |
+    > NOTE: This is the gateway base spec. Schema bodies are filled in by snapshotting the Python service's current /openapi.json output for gateway-owned paths. See tools/openapi-snapshot.sh.
+paths:
+  /auth/token/generate:
+    post:
+      summary: Generer un refresh token + access token pour un service (admin uniquement)
+      security: [{AdminCle: []}]
+      responses:
+        '200':
+          description: OK
+  /auth/token/refresh:
+    post:
+      summary: Echanger un refresh token contre un nouvel access token
+      responses:
+        '200':
+          description: OK
+  /auth/token/revoke:
+    post:
+      summary: Revoquer le refresh token d'un service
+      security: [{AdminCle: []}]
+      responses:
+        '200':
+          description: OK
+  /auth/token/refresh-tokens:
+    get:
+      summary: Lister les refresh tokens d'un service
+      responses:
+        '200':
+          description: OK
+  /auth/token/all-refresh-tokens:
+    get:
+      summary: Lister tous les refresh tokens (admin uniquement)
+      security: [{AdminCle: []}]
+      responses:
+        '200':
+          description: OK
+  /auth/logs:
+    get:
+      summary: Journal d'audit pagine
+      security: [{AdminCle: []}]
+      responses:
+        '200':
+          description: OK
+components:
+  securitySchemes:
+    Bearer Token:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    AdminCle:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+security:
+  - Bearer Token: []
