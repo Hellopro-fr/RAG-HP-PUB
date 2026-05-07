@@ -24,6 +24,14 @@ type gatewayUserFinder interface {
 	GetByEmail(email string) (*db.GatewayUser, error)
 }
 
+// serverAuthorizer abstracts repository.ServerAuthorizationRepo. Defining as
+// an interface keeps tests in the gateway package free of GORM. nil disables
+// Step-0 bypass — the gateway falls through to auto-self override + admin
+// config like before.
+type serverAuthorizer interface {
+	IsAuthorized(serverID, email string) bool
+}
+
 // leexiToolPrefix is the convention used when registering the Leexi backend.
 // When a backend's ToolPrefix matches this string, the scoped gateway treats
 // it as the Leexi backend for the purposes of participant-scope header injection.
@@ -81,6 +89,10 @@ type ScopedGateway struct {
 	// whether an authenticated end-user is a gateway admin. nil disables the
 	// admin-fallback branch — non-admin behavior applies to everyone.
 	gatewayUsers gatewayUserFinder
+	// serverAuth (optional) is consulted by the Step-0 bypass in
+	// requestHeadersFor. When the end-user has a full-access grant for the
+	// target backend, every filter header is skipped. nil disables Step-0.
+	serverAuth serverAuthorizer
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -99,6 +111,7 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 		ringoverAdmin: gw.ringoverAdmin,
 		bddResolver:   gw.bddResolver,
 		gatewayUsers:  gw.gatewayUsers,
+		serverAuth:    gw.serverAuth,
 	}
 }
 
@@ -187,6 +200,16 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 	for k, v := range backend.AuthHeaders {
 		headers[k] = v
 	}
+
+	// Step 0 — server-level full-access grant. When the end-user is granted
+	// unfiltered access on this specific server, skip every filter header
+	// and let the backend treat the call as unrestricted. Per-server (matched
+	// by backend.ID) and per-email (from EndUserEmailContextKey).
+	if sg.isServerAuthorized(ctx, backend.ID) {
+		log.Printf("[scoped] server-authorization bypass for backend %s", backend.ID)
+		return headers
+	}
+
 	switch backend.ToolPrefix {
 	case leexiToolPrefix:
 		sg.injectLeexiHeader(ctx, headers)
@@ -196,6 +219,23 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		sg.injectBDDHeader(ctx, headers)
 	}
 	return headers
+}
+
+// isServerAuthorized returns true when the request's end-user has an explicit
+// full-access grant for this server. Returns false when:
+//   - serverAuthorizer is not configured (boot-time choice)
+//   - no email in context (client_credentials grant — there's no user to
+//     match a grant against)
+//   - email is in context but no row in server_authorizations
+func (sg *ScopedGateway) isServerAuthorized(ctx context.Context, serverID string) bool {
+	if sg.serverAuth == nil {
+		return false
+	}
+	email, ok := scopetoken.EndUserEmailFromContext(ctx)
+	if !ok {
+		return false
+	}
+	return sg.serverAuth.IsAuthorized(serverID, email)
 }
 
 // injectLeexiHeader resolves the active Leexi filter and writes the
