@@ -379,6 +379,11 @@ func registerRESTAndOAuthServer(
 		log.Println("[main] BDD catalog client configured (read-only proxy enabled)")
 	}
 
+	serverAuthRepo := repository.NewServerAuthorizationRepo(dbs.database)
+	apiHandler.SetServerAuthorizationRepo(serverAuthRepo)
+	gw.SetServerAuthorizer(serverAuthRepo)
+	log.Println("[main] server_authorizations wired into Gateway for full-access bypass")
+
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
 		redirectURL := strings.TrimRight(cfg.GatewayPublicURL, "/") + "/api/v1/google/callback"
 		googleOAuth := goGoogle.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, redirectURL)
