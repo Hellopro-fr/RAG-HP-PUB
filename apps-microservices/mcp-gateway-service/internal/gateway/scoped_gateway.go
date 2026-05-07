@@ -303,6 +303,22 @@ func (sg *ScopedGateway) resolveLeexiParticipants(ctx context.Context, f *scopet
 			return nil
 		}
 		return uuids
+	case "self":
+		email, ok := scopetoken.EndUserEmailFromContext(ctx)
+		if !ok {
+			log.Printf("[scoped] leexi filter mode=self but no end-user email on context (likely client_credentials grant) — deny-all")
+			return nil
+		}
+		if sg.leexiAdmin == nil || !sg.leexiAdmin.Enabled() {
+			log.Printf("[scoped] leexi filter mode=self but leexiadmin client is not configured")
+			return nil
+		}
+		user, err := sg.leexiAdmin.FindUserByEmail(ctx, email)
+		if err != nil {
+			log.Printf("[scoped] leexi self-mode: email %q not found: %v", email, err)
+			return nil
+		}
+		return []string{user.UUID}
 	default:
 		return nil
 	}
@@ -326,6 +342,22 @@ func (sg *ScopedGateway) resolveRingoverAllowedUsers(ctx context.Context, f *sco
 			return nil
 		}
 		return ids
+	case "self":
+		email, ok := scopetoken.EndUserEmailFromContext(ctx)
+		if !ok {
+			log.Printf("[scoped] ringover filter mode=self but no end-user email on context (likely client_credentials grant) — deny-all")
+			return nil
+		}
+		if sg.ringoverAdmin == nil || !sg.ringoverAdmin.Enabled() {
+			log.Printf("[scoped] ringover filter mode=self but ringoveradmin client is not configured")
+			return nil
+		}
+		user, err := sg.ringoverAdmin.FindUserByEmail(ctx, email)
+		if err != nil {
+			log.Printf("[scoped] ringover self-mode: email %q not found: %v", email, err)
+			return nil
+		}
+		return []int{user.UserID}
 	default:
 		return nil
 	}
