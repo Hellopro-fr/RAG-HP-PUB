@@ -32,18 +32,20 @@
         @submit.prevent="addGrant"
       >
         <label class="flex flex-1 flex-col gap-1 text-sm">
-          <span class="text-gray-600 dark:text-gray-400">Email à autoriser</span>
-          <input
-            v-model="newEmail"
-            type="email"
-            required
-            placeholder="user@example.com"
-            class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 placeholder:text-gray-400"
-          />
+          <span class="text-gray-600 dark:text-gray-400">Utilisateur à autoriser</span>
+          <select
+            v-model="selectedEmail"
+            class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
+          >
+            <option value="">— Sélectionnez un utilisateur —</option>
+            <option v-for="u in users" :key="u.id" :value="u.email">
+              {{ u.display_name ? `${u.display_name} (${u.email})` : u.email }}
+            </option>
+          </select>
         </label>
         <button
           type="submit"
-          :disabled="!newEmail.trim() || creating"
+          :disabled="!selectedEmail || creating"
           class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {{ creating ? 'Octroi…' : 'Octroyer' }}
@@ -141,10 +143,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { serverAuthorizationsApi } from '@/api/server-authorizations'
 import { serversApi } from '@/api/servers'
+import { usersApi } from '@/api/users'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { ServerAuthorization } from '@/types/server-authorization'
+import type { User } from '@/types/user'
 
 interface ServerOption {
   id: string
@@ -154,9 +158,10 @@ interface ServerOption {
 const toast = useToast()
 
 const servers = ref<ServerOption[]>([])
+const users = ref<User[]>([])
 const selectedServer = ref<string>('')
 const grants = ref<ServerAuthorization[]>([])
-const newEmail = ref('')
+const selectedEmail = ref('')
 const loading = ref(false)
 const creating = ref(false)
 const pendingRemoval = ref<ServerAuthorization | undefined>(undefined)
@@ -194,6 +199,15 @@ async function loadServers(): Promise<void> {
   }
 }
 
+async function loadUsers(): Promise<void> {
+  try {
+    const response = await usersApi.list()
+    users.value = response.users
+  } catch {
+    toast.error("Impossible de charger la liste des utilisateurs")
+  }
+}
+
 async function loadGrants(): Promise<void> {
   loading.value = true
   try {
@@ -209,7 +223,7 @@ async function loadGrants(): Promise<void> {
 }
 
 async function addGrant(): Promise<void> {
-  const email = newEmail.value.trim()
+  const email = selectedEmail.value
   if (!selectedServer.value || !email) return
   creating.value = true
   try {
@@ -217,7 +231,7 @@ async function addGrant(): Promise<void> {
       server_id: selectedServer.value,
       email,
     })
-    newEmail.value = ''
+    selectedEmail.value = ''
     toast.success('Autorisation octroyée')
     await loadGrants()
   } catch {
@@ -248,7 +262,7 @@ async function confirmRemove(): Promise<void> {
 }
 
 onMounted(async () => {
-  await loadServers()
+  await Promise.all([loadServers(), loadUsers()])
   await loadGrants()
 })
 
