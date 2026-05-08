@@ -62,6 +62,9 @@ func (r *Resolver) Resolve(ctx context.Context) (*ClientCredentials, error) {
 	if err != nil {
 		return nil, err
 	}
+	if tok := os.Getenv("ACCOUNT_INTERNAL_TOKEN"); tok != "" {
+		req.Header.Set("X-Admin-Token", tok)
+	}
 	resp, err := r.cfg.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
