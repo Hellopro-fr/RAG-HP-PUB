@@ -29,7 +29,11 @@ func init() {
 }
 
 func main() {
+	// Mirror api-gateway (Python) settings.py:
+	//   load_dotenv(".env")
+	//   if Path(".env.url").exists(): load_dotenv(".env.url", override=True)
 	_ = godotenv.Load()
+	_ = godotenv.Overload(".env.url")
 	cfg := config.Load()
 
 	ctx := context.Background()

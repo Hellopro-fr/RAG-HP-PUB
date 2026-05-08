@@ -15,8 +15,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/gateway
 
 FROM gcr.io/distroless/static-debian12:nonroot
-WORKDIR /
-COPY --from=builder /out/gateway /gateway
+WORKDIR /app
+COPY --from=builder /out/gateway /app/gateway
 EXPOSE 8500
 USER nonroot:nonroot
-ENTRYPOINT ["/gateway"]
+ENTRYPOINT ["/app/gateway"]
