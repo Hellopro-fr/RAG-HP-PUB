@@ -3,7 +3,7 @@
 **Status:** Design approved (brainstorming session 2026-05-08).
 **Date:** 2026-05-08
 **Owner:** sandrianirinaharivelo@hellopro.fr
-**Branch:** `features/mcp-oauth2-user` (current); implementation will branch to `features/api-catalog` before plan execution.
+**Base branch:** `origin/features/poc` (implementation branch will be cut from this, not from the current `features/mcp-oauth2-user`).
 **Related specs:** `2026-05-04-account-service-sso-design.md`, `2026-05-07-api-gateway-go-port-design.md`.
 
 ## Context
