@@ -2,25 +2,102 @@ openapi: 3.1.0
 info:
   title: Hellopro APIs
   version: 1.0.0
-  description: |
-    > NOTE: This is the gateway base spec. Schema bodies are filled in by snapshotting the Python service's current /openapi.json output for gateway-owned paths. See tools/openapi-snapshot.sh.
+  description: |2
+
+    > ⚠️ **Note importante — Authentification désactivée temporairement**
+    >
+    > Le contrôle d'accès par **Bearer Token** (`access_token`) n'est **pas encore actif**.
+    > Vous pouvez appeler tous les endpoints **sans fournir de token** pour le moment.
+    > Cette restriction sera activée prochainement.
+
+    ---
+
+    ## 🔐 Authentification — Comment accéder aux services
+
+    Tous les appels aux microservices transitent par cette gateway et doivent être authentifiés
+    via un **Bearer Token** (JWT à durée de vie limitée).
+
+    ### Étape 1 — Récupérer votre refresh token
+
+    > 💡 Le **refresh token** de votre service est automatiquement généré au démarrage de la gateway.
+    > Vous n'avez pas besoin de le créer manuellement.
+
+    Exécutez l'endpoint suivant en renseignant le nom de votre service :
+
+    `GET /auth/token/refresh-tokens?service_name=<nom-de-votre-service>`
+
+    La réponse contient votre `refresh_token`. Conservez-le, il est permanent tant que le service est actif.
+
+    ### Étape 2 — Générer un access token
+
+    Échangez votre `refresh_token` contre un **access token** avec une durée de vie de 24h via `POST /auth/token/refresh` :
+
+    ```json
+    {
+      "service_name": "<nom-de-votre-service>",
+      "refresh_token": "<votre-refresh-token>"
+    }
+    ```
+
+    La réponse contient un `access_token` valable pour une durée de 24h.
+
+    ### Étape 3 — Appeler les services
+
+    ### 🖥️ Utilisation dans Swagger UI
+
+    1. Exécutez `GET /auth/token/refresh-tokens` pour obtenir votre `refresh_token`.
+    2. Exécutez `POST /auth/token/refresh` — pour obtenir l'`access_token`.
+    3. Cliquez sur **🔒 Authorize**, collez l'access token dans le champ **Bearer Token**, puis validez.
+
+    ### ⚙️ Pour les requêtes APIs
+
+    Ajoutez l'access token dans l'en-tête `Authorization` de chaque requête :
+
+    ```
+    Authorization: Bearer <votre-access-token>
+    ```
+
+    ### Étape 4 — Renouveler l'access token
+
+    Lorsque l'access token expire, répétez l'**Étape 2** pour en obtenir un nouveau à partir du même refresh token.
+
+    <!-- ADMIN_SECTION -->
+
+    ---
+
+    ## 🛡️ Section Administration *(visible uniquement par les administrateurs)*
+
+    Les endpoints ci-dessous sont protégés par l'en-tête `X-Admin-Key`.
+    La valeur attendue correspond à la variable d'environnement **`GATEWAY_ADMIN_KEY`**.
+    Elle est automatiquement injectée dans vos requêtes Swagger UI.
+
+    > ⚠️ **Avant d'utiliser un endpoint admin** : cliquez sur le bouton **🔒 Authorize** en haut de la page,
+    > puis validez le champ **AdminCle** (il est déjà pré-rempli automatiquement).
+    > Sans cette étape, vos requêtes seront rejetées avec une erreur `403 Forbidden`.
+
+    | Endpoint | Rôle |
+    |----------|------|
+    | `POST /auth/token/generate` | Crée (ou réutilise) le refresh token d'un service et émet un access token initial. |
+    | `POST /auth/token/revoke` | Désactive le refresh token d'un service et invalide tous ses access tokens (DB + Redis). |
+    | `GET /auth/logs` | Journal d'audit paginé de tous les appels proxysés : méthode, chemin, service, statut, IP, durée. |
+    | `GET /auth/token/all-refresh-tokens` | Liste les refresh tokens de **tous** les services. Filtre optionnel `active_only` (`true` / `false` / absent = tous). |
 paths:
   /auth/token/generate:
     post:
-      summary: Generer un refresh token + access token pour un service (admin uniquement)
+      summary: Générer un refresh token + access token pour un service (admin uniquement)
       security: [{AdminCle: []}]
       responses:
         '200':
           description: OK
   /auth/token/refresh:
     post:
-      summary: Echanger un refresh token contre un nouvel access token
+      summary: Échanger un refresh token contre un nouvel access token
       responses:
         '200':
           description: OK
   /auth/token/revoke:
     post:
-      summary: Revoquer le refresh token d'un service
+      summary: Révoquer le refresh token d'un service (admin uniquement)
       security: [{AdminCle: []}]
       responses:
         '200':
@@ -33,14 +110,14 @@ paths:
           description: OK
   /auth/token/all-refresh-tokens:
     get:
-      summary: Lister tous les refresh tokens (admin uniquement)
+      summary: Lister tous les refresh tokens — tous services (admin uniquement)
       security: [{AdminCle: []}]
       responses:
         '200':
           description: OK
   /auth/logs:
     get:
-      summary: Journal d'audit pagine
+      summary: Journal d'audit paginé des appels API (admin uniquement)
       security: [{AdminCle: []}]
       responses:
         '200':
@@ -51,9 +128,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: Coller l'access token généré depuis **POST /auth/token/generate** or **POST /auth/token/refresh**.
     AdminCle:
       type: apiKey
       in: header
       name: X-Admin-Key
+      description: Clé Admin (variable env `GATEWAY_ADMIN_KEY`) — gestion des historiques et refresh tokens.
 security:
   - Bearer Token: []
