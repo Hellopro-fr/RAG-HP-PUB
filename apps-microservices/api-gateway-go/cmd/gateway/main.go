@@ -12,8 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/auth"
 	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
+	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/catalog"
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/config"
 	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/openapi"
@@ -55,6 +59,27 @@ func main() {
 	jwtSvc := auth.NewJWT(cfg.JWTSecret, cfg.JWTAlgo, time.Duration(cfg.AccessTokenExpireMinutes)*time.Minute)
 
 	serviceMap := config.BuildServiceMap()
+
+	var routeSource = "env"
+	if cfg.UseCatalog {
+		conn, err := grpc.NewClient(cfg.APICatalogGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Printf("catalog dial setup failed (err=%v); using env map", err)
+		} else {
+			cli := catalog.NewClient(conn)
+			refresher := catalog.NewRefresher(cli, cfg.CatalogRefreshInterval, serviceMap)
+			m, src := refresher.Bootstrap(ctx, cfg.CatalogDialTimeout)
+			serviceMap = m
+			routeSource = src
+			// NOTE: proxy handlers receive the bootstrapped static map. Live periodic
+			// refreshes update the refresher's internal state but the proxy won't pick
+			// them up until the gateway restarts.
+			// TODO(catalog): plumb refresher.Snapshot() into proxy handlers to enable
+			// zero-downtime route updates.
+			go refresher.Run(ctx)
+		}
+	}
+	log.Printf("gateway routes loaded: count=%d source=%s", len(serviceMap), routeSource)
 
 	if err := dbpkg.BootstrapRefreshTokens(ctx, gdb, serviceMap, jwtIssuerAdapter{j: jwtSvc}); err != nil {
 		log.Fatalf("bootstrap refresh tokens: %v", err)
