@@ -11,12 +11,19 @@ export interface Answer {
   secondaryText?: string;
 }
 
+export interface BulleAide {
+  libelle?: string;
+  explication?: string[];
+  astuce?: string;
+}
+
 export interface Question {
   id: number;
   title: string;
   justification: string;
   multiSelect: boolean;
   answers: Answer[];
+  bulleAide?: BulleAide | null;
 }
 
 export type UserAnswers = Record<number, string[]>;

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { basePath } from '@/lib/utils';
 import type { CharacteristicDefinition, CharacteristicsMap } from '@/types/characteristics';
+import type { BulleAide } from '@/types';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 
 // Toujours utiliser le proxy Next.js pour éviter les problèmes CORS
@@ -163,6 +164,7 @@ interface ApiQuestion {
   intitule: string;
   choix: string;              // "1" = multi, "2" = single
   justification: string | null;
+  bulle_aide?: BulleAide | null;
   id_reponse_parent: number | null;
   id_question_parent: number | null;
   reponses: ApiAnswer[];
@@ -181,6 +183,7 @@ interface NormalizedQuestion {
   title: string;
   type: 'single' | 'multi';
   justification: string | null;
+  bulleAide: BulleAide | null;
   answers: NormalizedAnswer[];
 }
 
@@ -205,7 +208,8 @@ function normalizeQuestion(apiQuestion: ApiQuestion, questionIndex: number): Nor
     title: apiQuestion.intitule,
     type: apiQuestion.choix === '1' ? 'multi' : 'single',  // "1" = multi, "2" = single
     justification: apiQuestion.justification,
-    answers: apiQuestion.reponses.map((r) => ({      
+    bulleAide: apiQuestion.bulle_aide ?? null,
+    answers: apiQuestion.reponses.map((r) => ({
       id: String(r.id_reponse),
       code: String(r.id_reponse),
       mainText: r.reponse,

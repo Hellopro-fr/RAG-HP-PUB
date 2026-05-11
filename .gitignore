@@ -130,9 +130,12 @@ docker-compose.override.yml
 # Logs folder
 ./logs/
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/skills/_workspace/
 .gitignore
 
 .next
+*.tsbuildinfo
 package-lock.json
 .gitignore
 apps-microservices/nextjs-formulaire-hp/package-lock.json
