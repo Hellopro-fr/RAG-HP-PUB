@@ -716,6 +716,7 @@ services:
     logging: *logging_defaults
 
   # Cutover completed 2026-05-07: Go service now primary on port 8500
+  # API_CATALOG: GATEWAY_USE_CATALOG=true makes routes flow from catalog gRPC.
   api-gateway-go-service:
     build:
       context: .
@@ -758,6 +759,11 @@ services:
       - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
       - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
       - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
+      # ── API Catalog (route source) ───────────────────────────────────────
+      - GATEWAY_USE_CATALOG=${GATEWAY_USE_CATALOG:-true}
+      - API_CATALOG_GRPC=${API_CATALOG_GRPC:-api-catalog-service:9100}
+      - CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL:-60s}
+      - CATALOG_DIAL_TIMEOUT=${CATALOG_DIAL_TIMEOUT:-3s}
     # depends_on:
     #   mysql:
     #     condition: service_healthy

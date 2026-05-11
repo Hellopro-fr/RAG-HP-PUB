@@ -55,7 +55,10 @@ func main() {
 		return config.Load().SeedTargets
 	}
 
-	grpcSrv := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.NewAdminInterceptor(cfg.AdminKey)))
+	grpcSrv := grpc.NewServer(grpc.ChainUnaryInterceptor(
+		grpcserver.NewLoggingInterceptor(),
+		grpcserver.NewAdminInterceptor(cfg.AdminKey),
+	))
 	pb.RegisterApiCatalogServer(grpcSrv, grpcserver.NewServer(grpcserver.Deps{
 		Services: sr, Endpoints: er, Scanner: sc, Seeds: seeds, AdminKey: cfg.AdminKey,
 	}))
