@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/config"
@@ -22,7 +23,19 @@ import (
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/scanner"
 )
 
+// envURLPath is the seed-file path (mirrors api-gateway-go convention).
+// Read once at boot and reloaded before every scan tick so SERVICE_*
+// additions take effect without a container restart.
+const envURLPath = ".env.url"
+
+func reloadEnvURL() {
+	if _, err := os.Stat(envURLPath); err == nil {
+		_ = godotenv.Overload(envURLPath)
+	}
+}
+
 func main() {
+	reloadEnvURL()
 	cfg := config.Load()
 
 	g, err := db.Open(cfg.MySQLHost, cfg.MySQLPort, cfg.MySQLUser, cfg.MySQLPass, cfg.MySQLDB)
@@ -38,6 +51,7 @@ func main() {
 	sc := scanner.New(scanner.Deps{Services: sr, Endpoints: er, Concurrency: cfg.ScanConcurrency, Timeout: cfg.ProbeTimeout})
 
 	seeds := func() map[string]string {
+		reloadEnvURL()
 		return config.Load().SeedTargets
 	}
 

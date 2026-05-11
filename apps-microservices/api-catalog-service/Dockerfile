@@ -9,6 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server 
 FROM alpine:3.20
 RUN adduser -D -H -u 10001 catalog && apk add --no-cache ca-certificates wget
 USER catalog
+WORKDIR /app
 COPY --from=build /out/server /usr/local/bin/server
 EXPOSE 9100 9101
 ENTRYPOINT ["/usr/local/bin/server"]

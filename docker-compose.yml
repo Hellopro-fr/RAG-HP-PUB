@@ -775,7 +775,9 @@ services:
     #     condition: service_healthy
     env_file:
       - .env
-      - ./apps-microservices/api-gateway/.env.url
+    volumes:
+      - ./apps-microservices/api-gateway/.env.url:/app/.env.url:ro
+    working_dir: /app
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: ${GATEWAY_MYSQL_PORT:-3306}
