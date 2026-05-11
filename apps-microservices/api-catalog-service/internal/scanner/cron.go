@@ -7,9 +7,14 @@ import (
 )
 
 func RunCron(ctx context.Context, s *Scanner, interval time.Duration, seeds func() map[string]string) {
+	log.Printf("scanner cron started, interval=%s (initial scan now)", interval)
+	if s != nil {
+		rep := s.Run(ctx, seeds())
+		log.Printf("scan boot: scanned=%d ok=%d failed=%d", rep.ServicesScanned, rep.ServicesOK, rep.ServicesFailed)
+	}
+
 	t := time.NewTicker(interval)
 	defer t.Stop()
-	log.Printf("scanner cron started, interval=%s", interval)
 	for {
 		select {
 		case <-ctx.Done():
