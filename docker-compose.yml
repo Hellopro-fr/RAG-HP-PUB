@@ -777,9 +777,9 @@ services:
       - .env
     environment:
       MYSQL_HOST: mysql
-      MYSQL_PORT: "3306"
-      MYSQL_USER: ${CATALOG_MYSQL_USER:-catalog_user}
-      MYSQL_PASS: ${CATALOG_MYSQL_PASS}
+      MYSQL_PORT: ${GATEWAY_MYSQL_PORT:-3306}
+      MYSQL_USER: ${GATEWAY_MYSQL_USER:-gateway_user}
+      MYSQL_PASS: ${GATEWAY_MYSQL_PASS:-gateway_pass}
       MYSQL_DB: ${CATALOG_MYSQL_DB:-catalog_db}
       GRPC_PORT: "9100"
       HEALTH_PORT: "9101"
