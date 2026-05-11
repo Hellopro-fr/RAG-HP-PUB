@@ -73,6 +73,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go scanner.RunCron(ctx, sc, cfg.ScanInterval, seeds)
+	go scanner.WatchFile(ctx, envURLPath, 500*time.Millisecond, func() {
+		rep := sc.Run(ctx, seeds())
+		log.Printf("scan (env.url change): scanned=%d ok=%d failed=%d", rep.ServicesScanned, rep.ServicesOK, rep.ServicesFailed)
+	})
 
 	go func() {
 		log.Printf("gRPC listening on :%d", cfg.GRPCPort)
