@@ -13,10 +13,13 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"gorm.io/gorm"
 
 	"account-service/internal/api"
@@ -61,15 +64,39 @@ func Build(cfg *config.Configuration, version string) (*App, error) {
 	upsert := newUserUpserter(repos.User)
 	pool, broadcaster, bcgCancel := buildLogoutPipeline(cfg, cipher, repos.Logout)
 
+	// Wire the API Catalog gRPC client when the backend address is configured.
+	// Leave catCli nil when the env var is absent so the service starts without
+	// the catalog backend (handlers return 503 from gRPC Unavailable).
+	var catCli api.CatalogClientIface
+	var catAudit api.CatalogAuditFn
+	if cfg.APICatalogGRPC != "" {
+		conn, err := grpc.NewClient(cfg.APICatalogGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, fmt.Errorf("dial api-catalog: %w", err)
+		}
+		catCli = api.NewCatalogClient(conn, cfg.CatalogAdminKey)
+	}
+	if repos.Audit != nil {
+		catAudit = func(ctx context.Context, actor, action, target string) {
+			_ = repos.Audit.Insert(&db.AuditLog{
+				Event:       action,
+				ActorEmail:  actor,
+				TargetEmail: target,
+			})
+		}
+	}
+
 	mux := http.NewServeMux()
 	registerRoutes(mux, routeDeps{
-		cfg:         cfg,
-		repos:       repos,
-		cipher:      cipher,
-		upsert:      upsert,
-		broadcaster: broadcaster,
-		dbPing:      dbPinger{g: gormDB},
-		version:     version,
+		cfg:          cfg,
+		repos:        repos,
+		cipher:       cipher,
+		upsert:       upsert,
+		broadcaster:  broadcaster,
+		dbPing:       dbPinger{g: gormDB},
+		version:      version,
+		catalog:      catCli,
+		catalogAudit: catAudit,
 	})
 
 	root := api.RequestLog(api.Recover(mux))

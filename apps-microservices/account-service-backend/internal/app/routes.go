@@ -18,13 +18,15 @@ import (
 // dependencies here keeps the function arity sane and lets each subsystem
 // (oauth2, sessions, admin, broadcast) get a coherent slice of state.
 type routeDeps struct {
-	cfg         *config.Configuration
-	repos       Repos
-	cipher      *crypto.Cipher
-	upsert      auth.UserUpserter
-	broadcaster *logout.Broadcaster
-	dbPing      health.Pinger
-	version     string
+	cfg          *config.Configuration
+	repos        Repos
+	cipher       *crypto.Cipher
+	upsert       auth.UserUpserter
+	broadcaster  *logout.Broadcaster
+	dbPing       health.Pinger
+	version      string
+	catalog      api.CatalogClientIface
+	catalogAudit api.CatalogAuditFn
 }
 
 // registerRoutes mounts every route on mux. Split out of main() so the entry
@@ -127,6 +129,21 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	mux.Handle("GET /api/v1/admin/users/{email}/sessions", requireAdmin(api.NewSessionsHandler(sessionsDeps)))
 	mux.Handle("POST /api/v1/admin/sessions/{sid}/revoke", requireAdmin(api.NewSessionsHandler(sessionsDeps)))
 	mux.Handle("GET /api/v1/admin/audit", requireAdmin(api.NewAuditHandler(api.AuditDeps{Repo: r.Audit})))
+
+	// API Catalog — proxy to api-catalog-service via gRPC.
+	// A nil client (APICatalogGRPC unset) is fine: the handler returns 503 from gRPC Unavailable.
+	catalogHandler := api.NewAPICatalogHandler(api.APICatalogDeps{
+		Client: d.catalog,
+		Audit:  d.catalogAudit,
+	})
+	mux.Handle("GET /api/v1/admin/api", requireAuth(catalogHandler))
+	mux.Handle("POST /api/v1/admin/api", requireAdmin(catalogHandler))
+	// Explicit rescan-all before the wildcard {id} routes so Go mux picks the more specific pattern.
+	mux.Handle("POST /api/v1/admin/api/rescan", requireAdmin(catalogHandler))
+	mux.Handle("GET /api/v1/admin/api/{id}", requireAuth(catalogHandler))
+	mux.Handle("PUT /api/v1/admin/api/{id}", requireAdmin(catalogHandler))
+	mux.Handle("DELETE /api/v1/admin/api/{id}", requireAdmin(catalogHandler))
+	mux.Handle("POST /api/v1/admin/api/{id}/{op}", requireAdmin(catalogHandler))
 
 	// Health + Prometheus metrics.
 	mux.Handle("GET /health", health.NewHandler(d.version, d.dbPing))
