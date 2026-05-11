@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	oauth2pkg "mcp-gateway/internal/oauth2"
 )
 
 // ── OAuth2 Client CRUD handlers ─────────────────────────────────────────────
@@ -104,7 +104,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve and validate the optional Leexi ownership filter.
 	mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-		r.Context(), h.leexiAdmin, req.LeexiFilter, creatorEmail,
+		r.Context(), h.leexiAdmin, req.LeexiFilter, creatorEmail, true, /* OAuth2 client path */
 	)
 	if lerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -116,7 +116,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 
 	// Ringover filter.
 	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
-		r.Context(), h.ringoverAdmin, req.RingoverFilter, creatorEmail,
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, creatorEmail, true, /* OAuth2 client path */
 	)
 	if rerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
@@ -316,7 +316,7 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 	if req.LeexiFilter != nil {
 		mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy,
+			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy, true, /* OAuth2 client path */
 		)
 		if lerr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -329,7 +329,7 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 	if req.RingoverFilter != nil {
 		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
-			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy,
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy, true, /* OAuth2 client path */
 		)
 		if rerr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})

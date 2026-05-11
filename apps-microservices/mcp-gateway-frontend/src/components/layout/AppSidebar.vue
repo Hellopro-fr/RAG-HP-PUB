@@ -281,16 +281,24 @@ const menuGroups = computed<MenuGroup[]>(() => {
     groups.push({ title: 'Gestion', items: gestionItems })
   }
 
-  // Securite group — OAuth2 always
+  // Securite group — OAuth2 always; Serveur Autorisation admin-only
+  const securiteItems: MenuItem[] = [
+    {
+      icon: 'pi pi-shield',
+      name: 'OAuth2',
+      path: '/oauth2',
+    },
+  ]
+  if (authStore.isAdmin) {
+    securiteItems.push({
+      icon: 'pi pi-user-plus',
+      name: 'Serveur Autorisation',
+      path: '/server-authorizations',
+    })
+  }
   groups.push({
     title: 'Securite',
-    items: [
-      {
-        icon: 'pi pi-shield',
-        name: 'OAuth2',
-        path: '/oauth2',
-      },
-    ],
+    items: securiteItems,
   })
 
   // Administration group — only for admins

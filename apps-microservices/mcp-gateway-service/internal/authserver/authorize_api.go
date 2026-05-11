@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
 )
 
 // ── JSON API DTOs ────────────────────────────────────────────────────────────

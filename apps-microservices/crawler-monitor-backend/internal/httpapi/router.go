@@ -64,7 +64,7 @@ func NewRouter(d Deps) http.Handler {
 
 			rt.Route("/api/jobs", func(rt chi.Router) {
 				rt.Get("/", jobsListHandler(d.RedisStore))
-				rt.Get("/{id}/details", jobsDetailsHandler(d.RedisStore))
+				rt.Get("/{id}/details", jobsDetailsHandler(d.RedisStore, d.FileStore))
 				rt.Get("/{id}/performance", jobsPerformanceHandler(d.RedisStore))
 				// Replay : best-effort audit (nil auditstore is tolerated)
 				var replayCPU float64 = 0.85

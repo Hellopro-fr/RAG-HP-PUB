@@ -12,7 +12,8 @@ import (
 	"math"
 	"sort"
 	"strings"
-	"time"
+
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 )
 
 // Thresholds holds all configurable alert thresholds.
@@ -299,14 +300,5 @@ func Evaluate(inputs Inputs, nowMs int64, t Thresholds) []Alert {
 
 // parseJobTimeMs parses an ISO timestamp string and returns UnixMilli, or -1.
 func parseJobTimeMs(s string) int64 {
-	if s == "" {
-		return -1
-	}
-	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05Z"} {
-		t, err := time.Parse(layout, s)
-		if err == nil {
-			return t.UnixMilli()
-		}
-	}
-	return -1
+	return datetime.ParseStringMs(s)
 }

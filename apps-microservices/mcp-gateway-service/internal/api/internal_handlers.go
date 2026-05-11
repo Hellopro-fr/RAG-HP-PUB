@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hellopro/mcp-gateway/internal/runnerclient"
+	"mcp-gateway/internal/runnerclient"
 )
 
 type runnerSyncResponse struct {

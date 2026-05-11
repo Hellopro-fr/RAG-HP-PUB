@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'User-Agent': request.headers.get('user-agent') || 'NextJS-UX-Matching',
           'X-Forwarded-For': request.headers.get('x-forwarded-for') || request.ip || '',
+          'Cookie': request.headers.get('cookie') || '',
           // Ne pas définir Content-Type - le runtime le définit avec le boundary
         },
         body: phpFormData,
@@ -145,6 +146,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': request.headers.get('user-agent') || 'NextJS-UX-Matching',
           'X-Forwarded-For': request.headers.get('x-forwarded-for') || request.ip || '',
+          'Cookie': request.headers.get('cookie') || '',
         },
         body: urlParams.toString(),
       });

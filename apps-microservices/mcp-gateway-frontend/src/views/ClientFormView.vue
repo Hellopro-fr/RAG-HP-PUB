@@ -203,7 +203,7 @@
           :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
         >
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Leexi</h3>
-          <LeexiFilterPanel v-model="form.leexi_filter" />
+          <LeexiFilterPanel v-model="form.leexi_filter" :allow-self="true" />
         </div>
 
         <!-- Section 3b: Accès Ringover (only when a Ringover server is selected) -->
@@ -213,7 +213,7 @@
           :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
         >
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Ringover</h3>
-          <RingoverFilterPanel v-model="form.ringover_filter" />
+          <RingoverFilterPanel v-model="form.ringover_filter" :allow-self="true" />
         </div>
 
         <!-- Section 3c: Accès BDD (only when a BDD server is selected) -->
@@ -489,6 +489,8 @@ const leexiFilterSummary = computed(() => {
       return `${(f.team_uuids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
     default:
       return 'Aucune restriction'
   }
@@ -503,6 +505,8 @@ const ringoverFilterSummary = computed(() => {
       return `${(f.team_ids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
     default:
       return 'Aucune restriction'
   }

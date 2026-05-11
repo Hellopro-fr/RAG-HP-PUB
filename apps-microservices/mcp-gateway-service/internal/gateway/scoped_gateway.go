@@ -8,12 +8,29 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
-	"github.com/hellopro/mcp-gateway/internal/mcp"
-	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
-	"github.com/hellopro/mcp-gateway/internal/transport"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/leexiadmin"
+	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/ringoveradmin"
+	"mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/transport"
 )
+
+// gatewayUserFinder abstracts the slice of *repository.UserRepo that the
+// auto-self override needs (admin-role lookup by email). Defining it as an
+// interface lets tests substitute an in-memory fake without spinning up GORM.
+type gatewayUserFinder interface {
+	GetByEmail(email string) (*db.GatewayUser, error)
+}
+
+// serverAuthorizer abstracts repository.ServerAuthorizationRepo. Defining as
+// an interface keeps tests in the gateway package free of GORM. nil disables
+// Step-0 bypass — the gateway falls through to auto-self override + admin
+// config like before.
+type serverAuthorizer interface {
+	IsAuthorized(serverID, email string) bool
+}
 
 // leexiToolPrefix is the convention used when registering the Leexi backend.
 // When a backend's ToolPrefix matches this string, the scoped gateway treats
@@ -68,6 +85,14 @@ type ScopedGateway struct {
 	// nil = fail-closed: when the token has a BDD scope, an empty allow-list
 	// is sent so the backend denies every BDD call.
 	bddResolver BDDTableResolver
+	// gatewayUsers (optional) is consulted by auto-self override to learn
+	// whether an authenticated end-user is a gateway admin. nil disables the
+	// admin-fallback branch — non-admin behavior applies to everyone.
+	gatewayUsers gatewayUserFinder
+	// serverAuth (optional) is consulted by the Step-0 bypass in
+	// requestHeadersFor. When the end-user has a full-access grant for the
+	// target backend, every filter header is skipped. nil disables Step-0.
+	serverAuth serverAuthorizer
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -85,6 +110,8 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 		leexiAdmin:    gw.leexiAdmin,
 		ringoverAdmin: gw.ringoverAdmin,
 		bddResolver:   gw.bddResolver,
+		gatewayUsers:  gw.gatewayUsers,
+		serverAuth:    gw.serverAuth,
 	}
 }
 
@@ -173,6 +200,16 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 	for k, v := range backend.AuthHeaders {
 		headers[k] = v
 	}
+
+	// Step 0 — server-level full-access grant. When the end-user is granted
+	// unfiltered access on this specific server, skip every filter header
+	// and let the backend treat the call as unrestricted. Per-server (matched
+	// by backend.ID) and per-email (from EndUserEmailContextKey).
+	if sg.isServerAuthorized(ctx, backend.ID) {
+		log.Printf("[scoped] server-authorization bypass for backend %s", backend.ID)
+		return headers
+	}
+
 	switch backend.ToolPrefix {
 	case leexiToolPrefix:
 		sg.injectLeexiHeader(ctx, headers)
@@ -184,20 +221,54 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 	return headers
 }
 
+// isServerAuthorized returns true when the request's end-user has an explicit
+// full-access grant for this server. Returns false when:
+//   - serverAuthorizer is not configured (boot-time choice)
+//   - no email in context (client_credentials grant — there's no user to
+//     match a grant against)
+//   - email is in context but no row in server_authorizations
+func (sg *ScopedGateway) isServerAuthorized(ctx context.Context, serverID string) bool {
+	if sg.serverAuth == nil {
+		return false
+	}
+	email, ok := scopetoken.EndUserEmailFromContext(ctx)
+	if !ok {
+		return false
+	}
+	return sg.serverAuth.IsAuthorized(serverID, email)
+}
+
 // injectLeexiHeader resolves the active Leexi filter and writes the
-// X-Leexi-Allowed-Participants header. No-op when the request has no
-// Leexi scope. Mutates the headers map in place.
+// X-Leexi-Allowed-Participants header. Mutates the headers map in place.
+//
+// Resolution order:
+//  1. Auto-self override — when the request carries an end-user email and
+//     that email maps to a Leexi user, the request is locked to that user
+//     regardless of the admin-configured filter (per-backend independent).
+//  2. Admin-configured filter — used when no email is on context (typically
+//     a client_credentials grant) OR when the end-user is a gateway admin
+//     without a Leexi account.
+//  3. Otherwise (email present, no Leexi match, not a gateway admin) —
+//     deny-sentinel so the downstream service rejects every call.
 func (sg *ScopedGateway) injectLeexiHeader(ctx context.Context, headers map[string]string) {
+	// Step 1 — auto-self override (per-backend independent).
+	if uuid, denied := sg.tryAutoSelfLeexi(ctx); uuid != "" {
+		headers[LeexiAllowedParticipantsHeader] = uuid
+		return
+	} else if denied {
+		log.Printf("[scoped] leexi auto-self denied: end-user has no Leexi match and is not a gateway admin")
+		headers[LeexiAllowedParticipantsHeader] = "00000000-0000-0000-0000-000000000000"
+		return
+	}
+
+	// Step 2 — admin-configured filter (existing path; reached when no email
+	// in context OR end-user is a gateway admin without a Leexi account).
 	filter, ok := scopetoken.LeexiFilterFromContext(ctx)
 	if !ok || filter == nil {
 		return
 	}
 	participants := sg.resolveLeexiParticipants(ctx, filter)
 	if len(participants) == 0 {
-		// Resolution returned nothing — for "users"/"creator" this means an
-		// empty allow-list (deny everything); pass a sentinel the downstream
-		// service interprets as "no calls allowed". Sending an empty header
-		// would be ambiguous, so we send a clearly invalid UUID.
 		log.Printf("[scoped] leexi filter mode=%q resolved to empty allow-list — sending deny sentinel", filter.Mode)
 		headers[LeexiAllowedParticipantsHeader] = "00000000-0000-0000-0000-000000000000"
 		return
@@ -205,15 +276,67 @@ func (sg *ScopedGateway) injectLeexiHeader(ctx context.Context, headers map[stri
 	headers[LeexiAllowedParticipantsHeader] = strings.Join(participants, ",")
 }
 
+// tryAutoSelfLeexi runs the auto-self override for the Leexi backend. Return
+// values:
+//   - (uuid, false) — override succeeded, caller should inject the UUID.
+//   - ("", true)    — email present, no Leexi match, end-user is not a
+//     gateway admin → caller should inject deny-sentinel.
+//   - ("", false)   — no email OR end-user is a gateway admin → caller should
+//     fall through to the admin-configured filter.
+func (sg *ScopedGateway) tryAutoSelfLeexi(ctx context.Context) (string, bool) {
+	email, ok := scopetoken.EndUserEmailFromContext(ctx)
+	if !ok {
+		return "", false
+	}
+	if sg.leexiAdmin == nil || !sg.leexiAdmin.Enabled() {
+		return "", false
+	}
+	user, err := sg.leexiAdmin.FindUserByEmail(ctx, email)
+	if err == nil {
+		return user.UUID, false
+	}
+	if sg.isGatewayAdmin(email) {
+		return "", false
+	}
+	return "", true
+}
+
+// isGatewayAdmin returns true when the email belongs to a gateway_users row
+// with Role=admin. Returns false when the repo isn't configured, the row is
+// missing, or the role is anything else.
+func (sg *ScopedGateway) isGatewayAdmin(email string) bool {
+	if sg.gatewayUsers == nil {
+		return false
+	}
+	user, err := sg.gatewayUsers.GetByEmail(email)
+	if err != nil || user == nil {
+		return false
+	}
+	return user.Role == auth.RoleAdmin
+}
+
+// injectRingoverHeader is the Ringover-side mirror of injectLeexiHeader:
+// auto-self override first, admin-configured filter second, deny-sentinel
+// for non-admin end-users without a Ringover match. See injectLeexiHeader
+// for the full resolution-order rationale.
 func (sg *ScopedGateway) injectRingoverHeader(ctx context.Context, headers map[string]string) {
+	// Step 1 — auto-self override (per-backend independent).
+	if id, denied := sg.tryAutoSelfRingover(ctx); id != "" {
+		headers[RingoverAllowedUserIDsHeader] = id
+		return
+	} else if denied {
+		log.Printf("[scoped] ringover auto-self denied: end-user has no Ringover match and is not a gateway admin")
+		headers[RingoverAllowedUserIDsHeader] = "0"
+		return
+	}
+
+	// Step 2 — admin-configured filter (existing path).
 	filter, ok := scopetoken.RingoverFilterFromContext(ctx)
 	if !ok || filter == nil {
 		return
 	}
 	ids := sg.resolveRingoverAllowedUsers(ctx, filter)
 	if len(ids) == 0 {
-		// Deny-all sentinel: "0" is never a real Ringover user_id, so the
-		// downstream service treats it as "allow no users".
 		log.Printf("[scoped] ringover filter mode=%q resolved to empty allow-list — sending deny sentinel", filter.Mode)
 		headers[RingoverAllowedUserIDsHeader] = "0"
 		return
@@ -223,6 +346,25 @@ func (sg *ScopedGateway) injectRingoverHeader(ctx context.Context, headers map[s
 		parts[i] = strconv.Itoa(id)
 	}
 	headers[RingoverAllowedUserIDsHeader] = strings.Join(parts, ",")
+}
+
+// tryAutoSelfRingover mirrors tryAutoSelfLeexi for the Ringover backend.
+func (sg *ScopedGateway) tryAutoSelfRingover(ctx context.Context) (string, bool) {
+	email, ok := scopetoken.EndUserEmailFromContext(ctx)
+	if !ok {
+		return "", false
+	}
+	if sg.ringoverAdmin == nil || !sg.ringoverAdmin.Enabled() {
+		return "", false
+	}
+	user, err := sg.ringoverAdmin.FindUserByEmail(ctx, email)
+	if err == nil {
+		return strconv.Itoa(user.UserID), false
+	}
+	if sg.isGatewayAdmin(email) {
+		return "", false
+	}
+	return "", true
 }
 
 // injectBDDHeader resolves the active BDD allow-list (a slice of
@@ -303,6 +445,22 @@ func (sg *ScopedGateway) resolveLeexiParticipants(ctx context.Context, f *scopet
 			return nil
 		}
 		return uuids
+	case "self":
+		email, ok := scopetoken.EndUserEmailFromContext(ctx)
+		if !ok {
+			log.Printf("[scoped] leexi filter mode=self but no end-user email on context (likely client_credentials grant) — deny-all")
+			return nil
+		}
+		if sg.leexiAdmin == nil || !sg.leexiAdmin.Enabled() {
+			log.Printf("[scoped] leexi filter mode=self but leexiadmin client is not configured")
+			return nil
+		}
+		user, err := sg.leexiAdmin.FindUserByEmail(ctx, email)
+		if err != nil {
+			log.Printf("[scoped] leexi self-mode: email %q not found: %v", email, err)
+			return nil
+		}
+		return []string{user.UUID}
 	default:
 		return nil
 	}
@@ -326,6 +484,22 @@ func (sg *ScopedGateway) resolveRingoverAllowedUsers(ctx context.Context, f *sco
 			return nil
 		}
 		return ids
+	case "self":
+		email, ok := scopetoken.EndUserEmailFromContext(ctx)
+		if !ok {
+			log.Printf("[scoped] ringover filter mode=self but no end-user email on context (likely client_credentials grant) — deny-all")
+			return nil
+		}
+		if sg.ringoverAdmin == nil || !sg.ringoverAdmin.Enabled() {
+			log.Printf("[scoped] ringover filter mode=self but ringoveradmin client is not configured")
+			return nil
+		}
+		user, err := sg.ringoverAdmin.FindUserByEmail(ctx, email)
+		if err != nil {
+			log.Printf("[scoped] ringover self-mode: email %q not found: %v", email, err)
+			return nil
+		}
+		return []int{user.UserID}
 	default:
 		return nil
 	}

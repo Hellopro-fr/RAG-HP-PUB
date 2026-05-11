@@ -1013,14 +1013,28 @@ class CrawlerManager:
             if status_filter and job_info.get("status") not in status_filter:
                 continue
             crawl_id = all_job_keys[i].replace(CRAWL_JOB_PREFIX, "")
+            # Heal-on-read: legacy Redis blobs may lack 'crawl_id' field.
+            # Caller already knows the id from the key suffix; inject it so
+            # downstream get_status can rely on the field being present.
+            job_info.setdefault("crawl_id", crawl_id)
             status_data = await self.get_status(job_info)
             if status_data:
                 statuses[crawl_id] = status_data
         return statuses
 
-    async def get_status(self, job_info: dict) -> CrawlStatus:
-        crawl_id = job_info['crawl_id']
-        storage_path = job_info["storage_path"]
+    async def get_status(self, job_info: dict) -> Optional[CrawlStatus]:
+        crawl_id = job_info.get('crawl_id')
+        if not crawl_id:
+            logger.error(
+                f"Skipping malformed job entry (missing 'crawl_id'): keys={list(job_info.keys())}"
+            )
+            return None
+        storage_path = job_info.get("storage_path")
+        if not storage_path:
+            logger.error(
+                f"Skipping malformed job entry '{crawl_id}' (missing 'storage_path')."
+            )
+            return None
 
         # --- START: CHECK FOR STATUS SNAPSHOT ---
         # If the job is not running and a status snapshot exists, use it instead of recalculating
@@ -1690,7 +1704,8 @@ class CrawlerManager:
                     files_to_keep = {'crawler.log', '_callback_payload.json',
                                      '_completion_marker.json', '_status_snapshot.json',
                                      '_exit_reason.json', '_update_report.json',
-                                     'update_stats.json'}
+                                     'update_stats.json',
+                                     'timing.jsonl', 'timing-summary.json'}
                     for root, dirs, files in os.walk(job_storage_path, topdown=False):
                         for name in files:
                             if name not in files_to_keep:
@@ -1862,6 +1877,53 @@ class CrawlerManager:
             except Exception as release_err:
                 logger.warning(f"Could not release reconciliation leader lock: {release_err}")
 
+    async def _load_completion_marker_or_none(self, storage_path: str) -> Optional[dict]:
+        """
+        Reads {storage_path}/_completion_marker.json and returns parsed dict if
+        valid + has a recognized terminal final_status. Returns None otherwise.
+
+        Used by _reconcile_locked to detect Redis state drift: a crawl may have
+        completed (marker on disk) but Redis still shows status="running" due to
+        a missed write, replica race, or aborted set_json. Trusting the marker
+        avoids firing a spurious failure webhook.
+
+        Pattern matches the read in app/router/crawler.py status endpoint.
+
+        Suppresses all IO + JSON errors — failure to read = "no marker", which
+        falls through to the existing stale-failure path (safest default).
+
+        Args:
+            storage_path: absolute path to the crawl's storage directory.
+
+        Returns:
+            Parsed marker dict (with final_status in {"finished","failed","stopped"})
+            on success. None if the marker is missing, malformed, or has an
+            unrecognized final_status.
+        """
+        if not storage_path:
+            return None
+        marker_path = os.path.join(storage_path, '_completion_marker.json')
+        if not os.path.isfile(marker_path):
+            return None
+        try:
+            async with aiofiles.open(marker_path, 'r') as f:
+                content = await f.read()
+            marker = json.loads(content)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(
+                f"_load_completion_marker_or_none: failed to read {marker_path}: {e}"
+            )
+            return None
+
+        final_status = marker.get("final_status")
+        if final_status not in ("finished", "failed", "stopped"):
+            logger.warning(
+                f"_load_completion_marker_or_none: unknown final_status "
+                f"'{final_status}' in {marker_path}"
+            )
+            return None
+        return marker
+
     async def _reconcile_locked(self):
         """
         Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
@@ -1898,6 +1960,39 @@ class CrawlerManager:
                 status = job_data.get("status")
 
                 if status in ("running", "restarting_oom", "stopping"):
+                    # Marker check (NEW): Redis may show non-terminal status
+                    # while the on-disk completion marker indicates the crawl
+                    # already ended (state drift from missed write or replica
+                    # race — observed on crawl 6244 where success path wrote
+                    # marker + status='finished' but Redis status remained
+                    # 'running' 6 minutes later when reconciler fired).
+                    #
+                    # Trust marker as ground truth; skip the failure webhook
+                    # (already sent at original finalize) and reconcile Redis
+                    # state. Counter decrement + lock release still required —
+                    # those resources were held by the stale running entry.
+                    storage_path = job_data.get("storage_path", "")
+                    marker = await self._load_completion_marker_or_none(storage_path)
+                    if marker:
+                        marker_status = marker["final_status"]
+                        logger.info(
+                            f"Job '{crawl_id}' has completion marker "
+                            f"(final_status='{marker_status}') but Redis status "
+                            f"is '{status}'. Reconciling from marker; webhook skipped."
+                        )
+                        # Release global slot (was held by stale running entry).
+                        await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                        # Release distributed lock if still held.
+                        await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+                        # Reconcile Redis state from marker.
+                        job_data["status"] = marker_status
+                        if "last_heartbeat" in job_data:
+                            del job_data["last_heartbeat"]
+                        await cache_service.set_json(all_job_keys[i], job_data)
+                        await self._publish_update(crawl_id, marker_status)
+                        # Skip remaining stale-detection logic for this job.
+                        continue
+
                     # Check for staleness — applies to both running and restarting_oom jobs.
                     # A restarting_oom job holds a concurrency slot but may be orphaned
                     # if the replica that owned it crashed without cleanup.

@@ -7,7 +7,7 @@ import { ImageThumb } from './ImageThumb';
  */
 export function ProductImageStrip({ domain, images, onSelectImage }) {
   if (!images || images.length === 0) {
-    return <div className="text-xs italic text-muted-foreground">Aucune image</div>;
+    return <div className="text-xs italic text-ink-3">Aucune image</div>;
   }
   return (
     <div className="flex gap-2 overflow-x-auto pt-1">

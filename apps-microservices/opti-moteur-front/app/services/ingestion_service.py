@@ -29,6 +29,7 @@ MILVUS_OUTPUT_FIELDS = [
     "ean", "sku", "reference",
     "date_ajout", "date_maj",
     "chunk_number", "total_chunks",
+    "url_images",  # 2026-05-07 : ajoute pour que les vignettes s'affichent en P2-P4 Typesense
     "embedding",
 ]
 
@@ -66,6 +67,7 @@ def _row_to_doc(row: Dict[str, Any]) -> Dict[str, Any]:
         "date_maj":        row.get("date_maj") or "",
         "chunk_number":    int(row.get("chunk_number", 0) or 0),
         "total_chunks":    int(row.get("total_chunks", 1) or 1),
+        "url_images":      row.get("url_images") or "",  # 2026-05-07
         "embedding":       list(row["embedding"]),
     }
     ph = _parse_price(row.get("prix_ht"))

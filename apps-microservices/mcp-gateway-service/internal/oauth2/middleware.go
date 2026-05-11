@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/slack"
 )
 
 // notifyUnauthorized fires a Slack alert for a rejected MCP request, gated by
@@ -61,7 +61,7 @@ func CombinedMiddleware(
 			authHeader := r.Header.Get("Authorization")
 			if strings.HasPrefix(authHeader, "Bearer ") {
 				bearerToken := authHeader[7:]
-				clientID, err := ValidateAccessToken(bearerToken, jwtSecret)
+				clientID, userEmail, err := ValidateAccessToken(bearerToken, jwtSecret)
 				if err != nil {
 					log.Printf("[oauth2] invalid bearer token: %v", err)
 					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="invalid_token", resource_metadata="%s/.well-known/oauth-authorization-server"`, publicURL))
@@ -196,6 +196,9 @@ func CombinedMiddleware(
 				}
 				if len(cc.BDDAllowedTableIDs) > 0 {
 					ctx = context.WithValue(ctx, scopetoken.BDDFilterContextKey, cc.BDDAllowedTableIDs)
+				}
+				if userEmail != "" {
+					ctx = context.WithValue(ctx, scopetoken.EndUserEmailContextKey, userEmail)
 				}
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

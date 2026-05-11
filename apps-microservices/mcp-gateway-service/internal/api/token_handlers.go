@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/scopetoken"
 )
 
 // ── Token CRUD handlers ──────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve and validate the optional Leexi ownership filter.
 	mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-		r.Context(), h.leexiAdmin, req.LeexiFilter, token.CreatedBy,
+		r.Context(), h.leexiAdmin, req.LeexiFilter, token.CreatedBy, false, /* scope-token path */
 	)
 	if lerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -133,7 +133,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve and validate the optional Ringover ownership filter.
 	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
-		r.Context(), h.ringoverAdmin, req.RingoverFilter, token.CreatedBy,
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, token.CreatedBy, false, /* scope-token path */
 	)
 	if rerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
@@ -312,7 +312,7 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 	// or relax the scope.
 	if req.LeexiFilter != nil {
 		mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy,
+			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy, false, /* scope-token path */
 		)
 		if lerr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -326,7 +326,7 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 	// Symmetric handling for the Ringover filter.
 	if req.RingoverFilter != nil {
 		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
-			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy,
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy, false, /* scope-token path */
 		)
 		if rerr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})

@@ -164,6 +164,8 @@ const leexiBadge = computed<string | null>(() => {
       return `${(f.team_uuids || []).length} team(s)`
     case 'creator':
       return 'creator only'
+    case 'self':
+      return 'connected user (self)'
     default:
       return null
   }
@@ -182,9 +184,9 @@ function buildMcpJsonString(tokenValue: string): string {
   // 1. Try the executor's persisted template
   const exec = props.executors.find(e => e.slug === command)
   const mcpEl = Array.isArray(exec?.content)
-    ? exec!.content.find((el: any) => el?.type === 'mcp-config')
+    ? exec!.content.find((el) => el?.type === 'mcp-config')
     : null
-  const template = (exec?.mcp_config as string) || (mcpEl?.props?.code as string) || ''
+  const template = (exec?.mcp_config as string) || mcpEl?.props?.code || ''
 
   if (template) {
     const allowHttp = !!props.token.allow_http

@@ -2,14 +2,10 @@
   <div>
     <!-- Page header (full width) -->
     <div class="mb-6 flex items-center gap-4">
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-        @click="router.push('/servers')"
-      >
-        <i class="pi pi-arrow-left text-xs" />
+      <BaseButton variant="ghost" size="sm" @click="router.push('/servers')">
+        <i class="pi pi-arrow-left text-xs mr-1" />
         Retour
-      </button>
+      </BaseButton>
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
         {{ isEdit ? 'Modifier le serveur' : 'Nouveau serveur' }}
       </h1>
@@ -37,139 +33,69 @@
         <!-- Section 1: Informations de base -->
         <div v-show="isEdit || currentStep === 0" class="space-y-4">
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Informations de base</h3>
-          <!-- Name -->
-          <div>
-            <label for="form-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Nom <span class="text-red-500">*</span>
-            </label>
-            <input
-              id="form-name"
-              v-model="form.name"
-              type="text"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-              placeholder="Mon serveur MCP"
-            />
-          </div>
+          <FormField label="Nom" required>
+            <template #default="{ id }">
+              <BaseInput :id="id" v-model="form.name" placeholder="Mon serveur MCP" />
+            </template>
+          </FormField>
 
-          <!-- Transport -->
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Transport</label>
             <div class="flex items-center gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  v-model="form.mcp_transport"
-                  type="radio"
-                  value="http"
-                  class="text-brand-500"
-                />
+                <input v-model="form.mcp_transport" type="radio" value="http" class="text-brand-500" />
                 <span class="text-sm text-gray-800 dark:text-gray-200">HTTP</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  v-model="form.mcp_transport"
-                  type="radio"
-                  value="stdio"
-                  class="text-brand-500"
-                />
+                <input v-model="form.mcp_transport" type="radio" value="stdio" class="text-brand-500" />
                 <span class="text-sm text-gray-800 dark:text-gray-200">Stdio</span>
               </label>
             </div>
           </div>
 
-          <!-- HTTP fields -->
           <template v-if="form.mcp_transport === 'http'">
-            <div>
-              <label for="form-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                URL <span class="text-red-500">*</span>
-              </label>
-              <input
-                id="form-url"
-                v-model="form.url"
-                type="url"
-                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                placeholder="https://mcp-server.example.com"
-              />
-            </div>
-            <div>
-              <label for="form-transport" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Préférence de transport
-              </label>
-              <select
-                id="form-transport"
-                v-model="form.transport_preference"
-                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 appearance-none"
-              >
-                <option value="auto">Auto</option>
-                <option value="sse">SSE</option>
-                <option value="streamable-http">Streamable HTTP</option>
-              </select>
-            </div>
-            <div>
-              <label for="form-timeout" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Timeout (ms)
-              </label>
-              <input
-                id="form-timeout"
-                v-model.number="form.connect_timeout_ms"
-                type="number"
-                min="1000"
-                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-              />
-            </div>
-            <div>
-              <label for="form-auth-headers" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                En-têtes d'authentification (JSON)
-              </label>
-              <textarea
-                id="form-auth-headers"
-                v-model="authHeadersJson"
-                rows="3"
-                class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 font-mono shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                placeholder='{"Authorization": "Bearer xxx"}'
-              />
-              <p v-if="authHeadersError" class="text-xs text-error-500 dark:text-error-400 mt-1">{{ authHeadersError }}</p>
-            </div>
+            <FormField label="URL" required>
+              <template #default="{ id }">
+                <BaseInput :id="id" v-model="form.url" type="url" placeholder="https://mcp-server.example.com" />
+              </template>
+            </FormField>
+            <FormField label="Préférence de transport">
+              <template #default="{ id }">
+                <BaseSelect :id="id" v-model="form.transport_preference">
+                  <option value="auto">Auto</option>
+                  <option value="sse">SSE</option>
+                  <option value="streamable-http">Streamable HTTP</option>
+                </BaseSelect>
+              </template>
+            </FormField>
+            <FormField label="Timeout (ms)">
+              <template #default="{ id }">
+                <BaseInput :id="id" v-model.number="form.connect_timeout_ms" type="number" />
+              </template>
+            </FormField>
+            <FormField label="En-têtes d'authentification (JSON)" :error="authHeadersError">
+              <template #default="{ id }">
+                <BaseTextarea :id="id" v-model="authHeadersJson" :rows="3" monospace placeholder='{"Authorization": "Bearer xxx"}' />
+              </template>
+            </FormField>
           </template>
 
-          <!-- Stdio fields -->
           <template v-if="form.mcp_transport === 'stdio'">
-            <div>
-              <label for="form-command" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Commande <span class="text-red-500">*</span>
-              </label>
-              <input
-                id="form-command"
-                v-model="form.mcp_command"
-                type="text"
-                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                placeholder="npx"
-              />
-            </div>
-            <div>
-              <label for="form-args" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Arguments (un par ligne)
-              </label>
-              <textarea
-                id="form-args"
-                v-model="argsText"
-                rows="3"
-                class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 font-mono shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
-              />
-            </div>
-            <div>
-              <label for="form-env" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Variables d'environnement (JSON)
-              </label>
-              <textarea
-                id="form-env"
-                v-model="envJson"
-                rows="3"
-                class="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 font-mono shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                placeholder='{"API_KEY": "xxx"}'
-              />
-              <p v-if="envJsonError" class="text-xs text-error-500 dark:text-error-400 mt-1">{{ envJsonError }}</p>
-            </div>
+            <FormField label="Commande" required>
+              <template #default="{ id }">
+                <BaseInput :id="id" v-model="form.mcp_command" placeholder="npx" />
+              </template>
+            </FormField>
+            <FormField label="Arguments (un par ligne)">
+              <template #default="{ id }">
+                <BaseTextarea :id="id" v-model="argsText" :rows="3" monospace placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir" />
+              </template>
+            </FormField>
+            <FormField label="Variables d'environnement (JSON)" :error="envJsonError">
+              <template #default="{ id }">
+                <BaseTextarea :id="id" v-model="envJson" :rows="3" monospace placeholder='{"API_KEY": "xxx"}' />
+              </template>
+            </FormField>
           </template>
         </div>
 
@@ -192,10 +118,8 @@
               </span>
             </div>
             <div class="relative">
-              <input
+              <BaseInput
                 v-model="tagSearch"
-                type="text"
-                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 placeholder="Rechercher ou créer un tag..."
                 @keydown.enter.prevent="addTagFromSearch"
                 @keydown.escape="tagSearch = ''; showTagDropdown = false"
@@ -221,21 +145,11 @@
           <!-- Icon picker -->
           <IconPicker v-model="form.icon" />
 
-          <!-- Tool prefix -->
-          <div>
-            <label for="form-tool-prefix" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Préfixe d'outils
-            </label>
-            <input
-              id="form-tool-prefix"
-              v-model="form.tool_prefix"
-              type="text"
-              pattern="[a-zA-Z0-9]*"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-              placeholder="myprefix"
-            />
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Alphanumérique uniquement</p>
-          </div>
+          <FormField label="Préfixe d'outils" hint="Alphanumérique uniquement">
+            <template #default="{ id }">
+              <BaseInput :id="id" v-model="form.tool_prefix" placeholder="myprefix" pattern="[a-zA-Z0-9]*" />
+            </template>
+          </FormField>
 
           <!-- Auto-discover (create only) -->
           <div v-if="!isEdit" class="flex items-center gap-2">
@@ -346,63 +260,19 @@
 
       <!-- Edit mode: single submit -->
       <div v-if="isEdit" class="flex justify-end gap-3 mt-6">
-        <button
-          type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-          @click="router.push('/servers')"
-        >
-          Annuler
-        </button>
-        <button
-          type="button"
-          class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-          :disabled="submitting || !isStep1Valid"
-          @click="handleSubmit"
-        >
-          <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
-          Enregistrer
-        </button>
+        <BaseButton variant="secondary" @click="router.push('/servers')">Annuler</BaseButton>
+        <BaseButton :disabled="!isStep1Valid" :loading="submitting" @click="handleSubmit">Enregistrer</BaseButton>
       </div>
 
       <!-- Create mode: step navigation -->
       <div v-else class="flex justify-between mt-6">
-        <button
-          v-if="currentStep > 0"
-          type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-          @click="goBack"
-        >
-          Précédent
-        </button>
+        <BaseButton v-if="currentStep > 0" variant="secondary" @click="goBack">Précédent</BaseButton>
         <div v-else />
 
         <div class="flex gap-3">
-          <button
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-            @click="router.push('/servers')"
-          >
-            Annuler
-          </button>
-          <button
-            v-if="currentStep < 2"
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-            :disabled="!canGoNext"
-            @click="goNext"
-          >
-            Suivant
-          </button>
-          <button
-            v-if="currentStep === 2"
-            type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600 disabled:opacity-50"
-            :disabled="submitting"
-            @click="handleSubmit"
-          >
-            <i v-if="submitting" class="pi pi-spinner pi-spin mr-1" />
-            Créer
-          </button>
+          <BaseButton variant="secondary" @click="router.push('/servers')">Annuler</BaseButton>
+          <BaseButton v-if="currentStep < 2" :disabled="!canGoNext" @click="goNext">Suivant</BaseButton>
+          <BaseButton v-if="currentStep === 2" :loading="submitting" @click="handleSubmit">Créer</BaseButton>
         </div>
       </div>
     </template>
@@ -418,6 +288,12 @@ import { useToast } from '@/composables/useToast'
 import { serversApi } from '@/api/servers'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import IconPicker from '@/components/servers/IconPicker.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import FormField from '@/components/ui/FormField.vue'
+import { toErrorMessage } from '@/utils/error'
 import type { CreateServerRequest } from '@/types/server'
 
 const route = useRoute()
@@ -514,7 +390,7 @@ onMounted(async () => {
         envJson.value = JSON.stringify(server.mcp_env, null, 2)
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors du chargement du serveur')
+      toast.error(toErrorMessage(err, 'Erreur lors du chargement du serveur'))
       router.push('/servers')
     } finally {
       loading.value = false
@@ -615,7 +491,7 @@ async function handleSubmit() {
     toast.success(isEdit.value ? 'Serveur modifié' : 'Serveur créé')
     router.push('/servers')
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    toast.error(toErrorMessage(err, 'Erreur lors de l\'enregistrement'))
   } finally {
     submitting.value = false
   }

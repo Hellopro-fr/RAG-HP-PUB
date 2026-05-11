@@ -81,6 +81,29 @@ def _resolve(path_str: str) -> Path:
         return p
 
 
+def _to_repo_relative(path_str: str) -> str:
+    """Normalize a path to repo-relative POSIX form for cross-machine comparison.
+
+    A path like `D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\foo\\bar.py`
+    captured on one clone normalizes to `libs/foo/bar.py`, matching the same
+    file on another clone at `C:\\Users\\name\\Workspaces\\RAG-HP-PUB\\libs\\foo\\bar.py`.
+    Falls back to a POSIX-normalized absolute string when the marker is absent
+    and `relative_to(REPO_ROOT)` is not possible (different drive, sibling repo).
+    """
+    s = str(path_str).replace("\\", "/")
+    marker = "RAG-HP-PUB/"
+    idx = s.rfind(marker)
+    if idx >= 0:
+        return s[idx + len(marker):]
+    p = Path(path_str)
+    if p.is_absolute():
+        try:
+            return p.resolve().relative_to(REPO_ROOT).as_posix()
+        except (ValueError, OSError):
+            return s
+    return s
+
+
 def _collect_changed() -> list[str]:
     """Gather changed files from argv then fall back to GRAPHIFY_CHANGED env."""
     if len(sys.argv) > 1:
@@ -90,12 +113,16 @@ def _collect_changed() -> list[str]:
 
 
 def _load_scope_paths() -> set[str]:
-    """Return the set of absolute path strings currently in the graph.
+    """Return the set of repo-relative POSIX path strings currently in the graph.
 
     Prefers `graph.json` (tracked, available to every teammate). Falls back
     to `manifest.json` if graph is unreadable — the fallback path mostly
     matters during first-time graph seeding when graph.json does not yet
     exist.
+
+    Storage form is repo-relative (e.g. `libs/foo/bar.py`) so a graph captured
+    on `D:\\DevHellopro\\...\\RAG-HP-PUB` matches a clone at
+    `C:\\Users\\name\\...\\RAG-HP-PUB`. See `_to_repo_relative`.
     """
     if GRAPH_JSON.exists():
         try:
@@ -108,13 +135,7 @@ def _load_scope_paths() -> set[str]:
                 source_file = node.get("source_file")
                 if not source_file:
                     continue
-                source_path = Path(source_file)
-                if not source_path.is_absolute():
-                    source_path = REPO_ROOT / source_path
-                try:
-                    result.add(str(source_path.resolve()))
-                except OSError:
-                    continue
+                result.add(_to_repo_relative(source_file))
             if result:
                 return result
 
@@ -125,9 +146,9 @@ def _load_scope_paths() -> set[str]:
             for key, value in manifest.items():
                 if isinstance(value, list):
                     for item in value:
-                        result_mf.add(str(Path(item).resolve()))
+                        result_mf.add(_to_repo_relative(item))
                 else:
-                    result_mf.add(str(Path(key).resolve()))
+                    result_mf.add(_to_repo_relative(key))
         return result_mf
     return set()
 
@@ -162,9 +183,8 @@ def main() -> int:
 
     in_scope_changed: list[Path] = []
     for raw_path in changed:
-        resolved = _resolve(raw_path)
-        if str(resolved) in scope_paths:
-            in_scope_changed.append(resolved)
+        if _to_repo_relative(raw_path) in scope_paths:
+            in_scope_changed.append(_resolve(raw_path))
 
     if not in_scope_changed:
         return 0

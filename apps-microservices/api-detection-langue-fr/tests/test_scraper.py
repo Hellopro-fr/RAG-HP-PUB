@@ -108,7 +108,7 @@ class TestRouteHandlerCleanup:
         call_order = []
         mock_page = MagicMock()
         mock_page.unroute_all = AsyncMock(side_effect=lambda **kw: call_order.append("unroute_all"))
-        mock_page.goto = AsyncMock()
+        mock_page.goto = AsyncMock(return_value=None)
         mock_page.wait_for_load_state = AsyncMock()
         mock_page.content = AsyncMock(return_value="<html><body>" + "x" * 200 + "</body></html>")
         mock_page.url = "https://example.com/"
@@ -125,11 +125,12 @@ class TestRouteHandlerCleanup:
         mock_browser.new_context = AsyncMock(return_value=mock_context)
         mock_browser.close = AsyncMock(side_effect=lambda: call_order.append("browser.close"))
 
-        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
-             patch("playwright.async_api.async_playwright") as mock_pw:
-            mock_pw.return_value.__aenter__.return_value = MagicMock()
-            mock_pw.return_value.__aexit__ = AsyncMock(return_value=None)
+        mock_pw = MagicMock()
+        mock_pw.__aenter__ = AsyncMock(return_value=mock_pw)
+        mock_pw.__aexit__ = AsyncMock(return_value=None)
 
+        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
+             patch.object(scraper, "async_playwright", return_value=mock_pw):
             result = await scraper.scrape_html(
                 "https://example.com", proxy="http://u:p@proxy:8000"
             )
@@ -169,11 +170,12 @@ class TestRouteHandlerCleanup:
             closed["browser"] = True
         mock_browser.close = AsyncMock(side_effect=close_br)
 
-        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
-             patch("playwright.async_api.async_playwright") as mock_pw:
-            mock_pw.return_value.__aenter__.return_value = MagicMock()
-            mock_pw.return_value.__aexit__ = AsyncMock(return_value=None)
+        mock_pw = MagicMock()
+        mock_pw.__aenter__ = AsyncMock(return_value=mock_pw)
+        mock_pw.__aexit__ = AsyncMock(return_value=None)
 
+        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
+             patch.object(scraper, "async_playwright", return_value=mock_pw):
             with pytest.raises(Exception, match="ERR_SSL_PROTOCOL_ERROR"):
                 await scraper.scrape_html(
                     "https://example.com", proxy="http://u:p@proxy:8000"

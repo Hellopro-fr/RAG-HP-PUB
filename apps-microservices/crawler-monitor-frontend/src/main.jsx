@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import ToastProvider from './components/ToastProvider.jsx'
 import { ThemeProvider } from './components/providers/ThemeProvider.jsx'
 import { TooltipProvider } from './components/ui/tooltip'
+import { tryAutoReloadOnStaleChunk, clearStaleChunkReloadFlag } from './lib/staleChunk'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,6 +23,21 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// Intercepter les rejets de promesses non catches (echecs import() lazy()).
+// Les chunks charges via React.lazy() peuvent echouer AVANT d'atteindre l'ErrorBoundary
+// car le rejet se propage en unhandledrejection. On le capture ici en premier.
+window.addEventListener('unhandledrejection', (event) => {
+  if (tryAutoReloadOnStaleChunk(event.reason)) {
+    // Eviter la pollution de la console si le rechargement est en cours
+    event.preventDefault();
+  }
+});
+
+// Apres 5s de fonctionnement normal, effacer le flag de tentative de rechargement.
+// Si la page s'est rechargee et que tout fonctionne, le compteur est remis a zero
+// pour ne pas bloquer une eventuelle vraie erreur future.
+setTimeout(clearStaleChunkReloadFlag, 5000);
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -12,13 +12,14 @@ const (
 	LeexiFilterModeUsers   = "users"
 	LeexiFilterModeTeams   = "teams"
 	LeexiFilterModeCreator = "creator"
+	LeexiFilterModeSelf    = "self"
 )
 
 // LeexiFilterDTO carries the per-token Leexi ownership scope from / to the
 // frontend. UserUUIDs and TeamUUIDs are mutually exclusive in practice and
 // are only meaningful for their corresponding Mode.
 type LeexiFilterDTO struct {
-	Mode      string   `json:"mode"`                  // none | users | teams | creator
+	Mode      string   `json:"mode"`                  // none | users | teams | creator | self
 	UserUUIDs []string `json:"user_uuids,omitempty"`  // Mode = users
 	TeamUUIDs []string `json:"team_uuids,omitempty"`  // Mode = teams
 	// CreatorUUID is set in responses only — it is the resolved UUID of the
@@ -33,13 +34,14 @@ const (
 	RingoverFilterModeUsers   = "users"
 	RingoverFilterModeTeams   = "teams"
 	RingoverFilterModeCreator = "creator"
+	RingoverFilterModeSelf    = "self"
 )
 
 // RingoverFilterDTO carries the per-token Ringover ownership scope from / to
 // the frontend. Ringover identifies users with numeric integer IDs, so the
 // user/team slices are int rather than UUID-strings.
 type RingoverFilterDTO struct {
-	Mode    string `json:"mode"`                // none | users | teams | creator
+	Mode    string `json:"mode"`                // none | users | teams | creator | self
 	UserIDs []int  `json:"user_ids,omitempty"`  // Mode = users
 	TeamIDs []int  `json:"team_ids,omitempty"`  // Mode = teams
 	// CreatorUserID is set in responses only — the resolved user_id of the

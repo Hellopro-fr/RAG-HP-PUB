@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/db"
+	oauth2pkg "mcp-gateway/internal/oauth2"
 )
 
 // RegistrationRequest is the RFC 7591 client registration request.

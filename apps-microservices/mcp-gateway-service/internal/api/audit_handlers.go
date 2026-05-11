@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	"mcp-gateway/internal/repository"
 )
 
 // handleAuditLogs handles GET /api/v1/audit-logs with query params:

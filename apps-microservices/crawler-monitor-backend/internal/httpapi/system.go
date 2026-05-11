@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/systemstats"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/ws"
@@ -34,12 +35,8 @@ func systemStatsHandler(rs *redisstore.Client) http.HandlerFunc {
 		jobs := make([]systemstats.RawJob, 0, len(rawJobs))
 		for _, rj := range rawJobs {
 			var j systemstats.RawJob
-			if v, ok := rj["start_time"].(string); ok {
-				j.StartTime = v
-			}
-			if v, ok := rj["end_time"].(string); ok {
-				j.EndTime = v
-			}
+			j.StartTime = datetime.AnyToISO(rj["start_time"])
+			j.EndTime = datetime.AnyToISO(rj["end_time"])
 			if v, ok := rj["status"].(string); ok {
 				j.Status = v
 			}

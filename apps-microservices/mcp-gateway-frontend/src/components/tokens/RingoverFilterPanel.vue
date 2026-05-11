@@ -21,6 +21,7 @@
         <option value="teams">&Eacute;quipes s&eacute;lectionn&eacute;es</option>
         -->
         <option value="creator">Cr&eacute;ateur du jeton uniquement</option>
+        <option v-if="allowSelf" value="self">Utilisateur connect&eacute; (self)</option>
       </select>
       <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
         Limite les appels Ringover accessibles par ce jeton selon l'agent propri&eacute;taire (<code>user_id</code>) de chaque appel.
@@ -111,6 +112,15 @@
       <i class="pi pi-info-circle mr-1" />
       L'identifiant Ringover du cr&eacute;ateur du jeton sera r&eacute;solu &agrave; partir de son adresse email lors de la cr&eacute;ation, puis utilis&eacute; comme filtre <code>advanced.users</code>.
     </div>
+
+    <!-- Self info — resolved per-request from the OAuth2 access-token email claim. -->
+    <div
+      v-if="model.mode === 'self'"
+      class="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-sm text-gray-600 dark:text-gray-400"
+    >
+      <i class="pi pi-info-circle mr-1" />
+      L'identifiant Ringover de l'utilisateur connect&eacute; sera r&eacute;solu &agrave; chaque requ&ecirc;te &agrave; partir de l'email port&eacute; par le token OAuth2, puis utilis&eacute; comme filtre <code>advanced.users</code>.
+    </div>
   </div>
 </template>
 
@@ -119,7 +129,16 @@ import { ref, watch, onMounted, computed } from 'vue'
 import { ringoverApi } from '@/api/ringover'
 import type { RingoverFilter, RingoverFilterMode, RingoverUser, RingoverTeam } from '@/types/ringover'
 
-const props = defineProps<{ modelValue: RingoverFilter }>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: RingoverFilter
+    // Whether the 'self' mode option is offered. Only OAuth2 client forms set
+    // this to true — scope tokens carry no end-user identity, so 'self' would
+    // deny-all on every call.
+    allowSelf?: boolean
+  }>(),
+  { allowSelf: false }
+)
 const emit = defineEmits<{ (e: 'update:modelValue', value: RingoverFilter): void }>()
 
 const model = computed<RingoverFilter>(() => props.modelValue)

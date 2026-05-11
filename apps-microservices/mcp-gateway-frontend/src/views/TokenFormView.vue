@@ -580,6 +580,8 @@ const leexiFilterSummary = computed(() => {
       return `${(f.team_uuids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
     default:
       return 'Aucune restriction'
   }
@@ -594,6 +596,8 @@ const ringoverFilterSummary = computed(() => {
       return `${(f.team_ids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
     default:
       return 'Aucune restriction'
   }
@@ -617,9 +621,9 @@ const generatedMcpJson = computed(() => {
 
   // Prefer the dedicated top-level `mcp_config` field; fall back to page-builder element
   const mcpEl = Array.isArray(selectedExec?.content)
-    ? selectedExec!.content.find((el: any) => el?.type === 'mcp-config')
+    ? selectedExec!.content.find((el) => el?.type === 'mcp-config')
     : null
-  const mcpTemplate = (selectedExec?.mcp_config as string) || (mcpEl?.props?.code as string) || ''
+  const mcpTemplate = (selectedExec?.mcp_config as string) || mcpEl?.props?.code || ''
 
   if (mcpTemplate) {
     const withAllowHttp = form.allow_http

@@ -171,25 +171,26 @@ Les réponses sont persistées dans `graphify-out/memory/` et promues en nœuds 
 
 La source unique de vérité est `graphify-out/services-policy.yml` (tracké, lisible par machine, lu par le workflow CI coverage-check). Les tableaux ci-dessous sont le résumé pour humain ; les garder en phase avec le YAML lors de l'ajout d'un service.
 
-### Dans le graphe (2)
+### Dans le graphe (3)
 
 | Service | Ajouté | Pourquoi |
 |---------|--------|----------|
 | `apps-microservices/crawler-service` | 2026-04-24 | Node.js + Python, machine à états complexe, cluster récent de corrections (relance OOM, élection de leader, staging d'archives). |
 | `apps-microservices/graph-rag-api-recherche-rust-service` | 2026-04-24 | Rust (Actix-web / tonic). Récupération centrale. Stack unique ; cross-links vers les clients gRPC de libs/rust-common-utils et vers les providers LLM Python. |
+| `apps-microservices/api-detection-langue-fr` | 2026-05-05 | Serveur FastAPI qui répond au client detection-langue-fr du crawler. Promu depuis `templated_wrapper` car le travail caller-contract / admission-control / inflight-dedup a rendu les questions cross-service (crawler → backend) routinières. |
 
-### Hors graphe (89)
+### Hors graphe (90)
 
 Regroupés par raison. Voir `graphify-out/services-policy.yml` pour la liste complète avec détails par service.
 
 | Code raison | Signification | Nombre |
 |-------------|---------------|-------:|
 | `too_small` | < 10 fichiers et pas de CLAUDE.md riche. Un grep brut suffit. | 11 |
-| `frontend` | Frontend Next.js / React, toolchain séparée. | 5 |
+| `frontend` | Frontend Next.js / React, toolchain séparée. | 6 |
 | `debug_variant` | Variante debug ou test d'un autre service. | 1 |
 | `template_scaffold` | Template servant à scaffolder de nouveaux services, pas un service vivant. | 1 |
-| `templated_wrapper` | Wrapper FastAPI / processor suivant un pattern commun ; grapher une référence, ignorer les frères. | 63 |
-| `candidate_deferred` | Service large / unique qui vaudrait la peine d'être graphé, pas prioritaire. Promouvoir quand une requête cross-service fait émerger le besoin. | 8 |
+| `templated_wrapper` | Wrapper FastAPI / processor suivant un pattern commun ; grapher une référence, ignorer les frères. | 62 |
+| `candidate_deferred` | Service large / unique qui vaudrait la peine d'être graphé, pas prioritaire. Promouvoir quand une requête cross-service fait émerger le besoin. | 9 |
 
 Avant de lancer `/graphify <path> --update`, vérifier que le service n'est pas déjà dans une de ces listes :
 

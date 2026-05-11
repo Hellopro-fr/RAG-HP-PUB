@@ -8,7 +8,8 @@ package systemstats
 import (
 	"errors"
 	"math"
-	"time"
+
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 )
 
 // WINDOW_MAP mirrors the JS WINDOW_MAP for system stats.
@@ -65,15 +66,11 @@ func AggregateJobStats(jobs []RawJob, nowMs, windowMs int64) JobStats {
 
 	var inWindow []RawJob
 	for _, j := range jobs {
-		t, err := time.Parse(time.RFC3339, j.StartTime)
-		if err != nil {
-			// Try without nanoseconds.
-			t, err = time.Parse("2006-01-02T15:04:05Z", j.StartTime)
-			if err != nil {
-				continue
-			}
+		tMs := datetime.ParseStringMs(j.StartTime)
+		if tMs < 0 {
+			continue
 		}
-		if t.UnixMilli() >= cutoff {
+		if tMs >= cutoff {
 			inWindow = append(inWindow, j)
 		}
 	}
@@ -109,10 +106,10 @@ func AggregateJobStats(jobs []RawJob, nowMs, windowMs int64) JobStats {
 			updateMode++
 		}
 		if status == "finished" && j.StartTime != "" && j.EndTime != "" {
-			st, err1 := time.Parse(time.RFC3339, j.StartTime)
-			et, err2 := time.Parse(time.RFC3339, j.EndTime)
-			if err1 == nil && err2 == nil {
-				d := et.UnixMilli() - st.UnixMilli()
+			stMs := datetime.ParseStringMs(j.StartTime)
+			etMs := datetime.ParseStringMs(j.EndTime)
+			if stMs >= 0 && etMs >= 0 {
+				d := etMs - stMs
 				if d >= 0 {
 					durationsMs = append(durationsMs, d)
 				}

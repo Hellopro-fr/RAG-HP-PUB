@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
 )
 
 const auditChannelBuffer = 256

@@ -39,9 +39,9 @@ const ReplicaMonitor = ({ replicas, token }) => {
 
   const getStatusClass = (timestamp) => {
     const age = Date.now() - timestamp;
-    if (age < 5000)  return 'bg-success animate-pulse';
-    if (age < 15000) return 'bg-warning';
-    return 'bg-destructive';
+    if (age < 5000)  return 'bg-ok animate-pulse';
+    if (age < 15000) return 'bg-warn';
+    return 'bg-err';
   };
 
   const CircularProgress = ({ cpu, ram, totalRam }) => {
@@ -76,17 +76,17 @@ const ReplicaMonitor = ({ replicas, token }) => {
   return (
     <Card className="p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <Server className="h-4 w-4 text-primary" />
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-3">
+          <Server className="h-4 w-4 text-accent" />
           Crawler Replicas
-          <span className="font-mono text-xs normal-case text-muted-foreground tracking-normal">
+          <span className="font-mono text-xs normal-case text-ink-3 tracking-normal">
             ({activeReplicas.length} actifs)
           </span>
         </h2>
       </div>
 
       {activeReplicas.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">
+        <div className="py-12 text-center text-ink-3">
           <Server className="mx-auto mb-3 h-12 w-12 opacity-40" />
           <p className="text-sm">Aucun replica actif</p>
         </div>
@@ -102,17 +102,17 @@ const ReplicaMonitor = ({ replicas, token }) => {
             return (
               <div
                 key={replica.replicaId}
-                className="rounded-md border border-border bg-background p-4 transition-colors hover:border-muted-foreground/40"
+                className="rounded-md border border-hairline bg-bg-1 p-4 transition-colors hover:border-muted-foreground/40"
               >
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex min-w-0 flex-1 items-center gap-2">
                     <div className={cn('h-2.5 w-2.5 shrink-0 rounded-full', statusClass)} />
-                    <span className="truncate font-mono text-xs font-semibold text-foreground">
+                    <span className="truncate font-mono text-xs font-semibold text-ink-0">
                       {String(replica.replicaId || '').substring(0, 12)}
                     </span>
                     <CoherencePastille ruleId="replica_job_mapping" itemKey={replica.replicaId} />
                   </div>
-                  <Cpu className="h-4 w-4 shrink-0 text-primary" />
+                  <Cpu className="h-4 w-4 shrink-0 text-accent" />
                 </div>
 
                 <div className="mb-3 flex flex-col items-center">
@@ -120,10 +120,10 @@ const ReplicaMonitor = ({ replicas, token }) => {
                     <CircularProgress cpu={replica.cpu} ram={replica.ram} totalRam={replica.totalRam} />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="text-center">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">CPU</div>
+                        <div className="text-[10px] uppercase tracking-wider text-ink-3">CPU</div>
                         <div className="font-mono text-lg font-bold text-info">{formatCpu(replica.cpu)}</div>
-                        <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">RAM</div>
-                        <div className="font-mono text-sm font-semibold text-primary">{formatBytes(replica.ram)}</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-wider text-ink-3">RAM</div>
+                        <div className="font-mono text-sm font-semibold text-accent">{formatBytes(replica.ram)}</div>
                       </div>
                     </div>
                   </div>
@@ -153,21 +153,21 @@ const ReplicaMonitor = ({ replicas, token }) => {
                 )}
 
                 {(replica.domain || linkedJob) && (
-                  <div className="mb-3 space-y-1 rounded border border-border bg-muted/40 p-2 text-xs">
+                  <div className="mb-3 space-y-1 rounded border border-hairline bg-bg-2/40 p-2 text-xs">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="shrink-0 text-muted-foreground">Job:</span>
+                      <span className="shrink-0 text-ink-3">Job:</span>
                       {crawlMode === 'update' && (
-                        <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">↻ update</span>
+                        <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent">↻ update</span>
                       )}
                       {crawlMode === 'standard' && (
                         <span className="rounded bg-info/15 px-1.5 py-0.5 text-[10px] text-info">▶ standard</span>
                       )}
                     </div>
                     {replica.domain && (
-                      <div className="truncate font-mono text-foreground" title={replica.domain}>{replica.domain}</div>
+                      <div className="truncate font-mono text-ink-0" title={replica.domain}>{replica.domain}</div>
                     )}
                     {replica.jobId && (
-                      <div className="truncate font-mono text-[10px] text-muted-foreground" title={replica.jobId}>
+                      <div className="truncate font-mono text-[10px] text-ink-3" title={replica.jobId}>
                         #{String(replica.jobId).slice(0, 12)}
                       </div>
                     )}
@@ -179,8 +179,8 @@ const ReplicaMonitor = ({ replicas, token }) => {
                   const sorted = [...replica.topProcesses].sort((a, b) => (b.ram || 0) - (a.ram || 0)).slice(0, 5);
                   const measured = sorted.reduce((acc, p) => acc + (p.ram || 0), 0);
                   return (
-                    <div className="mt-3 border-t border-border pt-3">
-                      <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <div className="mt-3 border-t border-hairline pt-3">
+                      <div className="mb-2 text-[10px] uppercase tracking-wider text-ink-3">
                         Top RAM Processes:
                       </div>
                       <div className="space-y-1.5">
@@ -189,29 +189,29 @@ const ReplicaMonitor = ({ replicas, token }) => {
                           const isCritical = procPct > 75;
                           const isHigh = procPct > 50;
                           const nameClass = isCritical
-                            ? 'text-destructive font-semibold'
-                            : isHigh ? 'text-warning font-semibold' : 'text-foreground';
-                          const barClass = isCritical ? 'bg-destructive' : isHigh ? 'bg-warning' : 'bg-primary';
+                            ? 'text-err font-semibold'
+                            : isHigh ? 'text-warn font-semibold' : 'text-ink-0';
+                          const barClass = isCritical ? 'bg-err' : isHigh ? 'bg-warn' : 'bg-accent';
                           return (
                             <div key={idx}>
                               <div className="flex justify-between text-xs">
                                 <span className={cn('flex-1 truncate font-mono', nameClass)}>
                                   {isCritical ? '⚠ ' : ''}{proc.name}
                                 </span>
-                                <span className="ml-2 font-mono text-primary">{formatBytes(proc.ram)}</span>
+                                <span className="ml-2 font-mono text-accent">{formatBytes(proc.ram)}</span>
                               </div>
-                              <div className="mt-0.5 h-0.5 overflow-hidden rounded-full bg-muted">
+                              <div className="mt-0.5 h-0.5 overflow-hidden rounded-full bg-bg-2">
                                 <div className={cn('h-full', barClass)} style={{ width: `${procPct}%` }} />
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                      <div className="mt-2 space-y-0.5 text-[10px] text-muted-foreground">
+                      <div className="mt-2 space-y-0.5 text-[10px] text-ink-3">
                         <div>
                           Container: {formatBytes(replica.ram)} / {formatBytes(totalRam)} ({(totalRam > 0 ? Math.min((replica.ram || 0) / totalRam * 100, 100) : 0).toFixed(0)}%)
                         </div>
-                        <div className="text-muted-foreground">
+                        <div className="text-ink-3">
                           Top {sorted.length} process RSS: {formatBytes(measured)}{' '}
                           <span title="La somme des RSS process est souvent supérieure au total container car la mémoire partagée (libs, shared pages) est comptée dans chaque process.">ⓘ</span>
                         </div>

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
-	"github.com/hellopro/mcp-gateway/internal/mcp"
-	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
-	"github.com/hellopro/mcp-gateway/internal/transport"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/leexiadmin"
+	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/ringoveradmin"
+	"mcp-gateway/internal/transport"
 )
 
 // BDDTableResolver resolves a bdd_used_tables.id to its (database_id,
@@ -29,6 +29,8 @@ type Gateway struct {
 	leexiAdmin    *leexiadmin.Client    // optional; nil disables Leexi team expansion
 	ringoverAdmin *ringoveradmin.Client // optional; nil disables Ringover team expansion
 	bddResolver   BDDTableResolver      // optional; nil disables BDD header injection
+	gatewayUsers  gatewayUserFinder     // optional; nil disables auto-self admin fallback
+	serverAuth    serverAuthorizer      // optional; nil disables Step-0 server-authorization bypass
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -50,6 +52,19 @@ func (g *Gateway) SetLeexiAdmin(c *leexiadmin.Client) {
 // to resolve "teams" filter mode into user IDs at request time.
 func (g *Gateway) SetRingoverAdmin(c *ringoveradmin.Client) {
 	g.ringoverAdmin = c
+}
+
+// SetGatewayUserFinder registers the user finder used by auto-self override
+// to detect gateway admins. Pass *repository.UserRepo at boot.
+func (g *Gateway) SetGatewayUserFinder(f gatewayUserFinder) {
+	g.gatewayUsers = f
+}
+
+// SetServerAuthorizer registers the per-server full-access grant repository
+// consulted by the Step-0 bypass in requestHeadersFor. Pass
+// *repository.ServerAuthorizationRepo at boot.
+func (g *Gateway) SetServerAuthorizer(s serverAuthorizer) {
+	g.serverAuth = s
 }
 
 // SetBDDResolver attaches the BDD used-table resolver consumed by

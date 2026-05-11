@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/slack"
 )
 
 // notifyLoginFailure surfaces a rejected admin-UI login attempt to Slack.

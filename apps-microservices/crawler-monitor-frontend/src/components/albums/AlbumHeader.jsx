@@ -11,17 +11,17 @@ export function AlbumHeader({ domain, totalProducts, totalImages, errorCount, on
     <header className="space-y-2">
       <Link
         to="/albums"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-0"
       >
         <ArrowLeft className="h-3 w-3" /> Albums
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-mono text-2xl font-semibold">{domain}</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-mono text-[26px] font-semibold tracking-[-0.025em]">{domain}</h1>
+          <p className="text-sm text-ink-3">
             {totalProducts} produits · {totalImages} images
             {errorCount > 0 && (
-              <span className="text-destructive"> · {errorCount} en erreur</span>
+              <span className="text-err"> · {errorCount} en erreur</span>
             )}
           </p>
         </div>

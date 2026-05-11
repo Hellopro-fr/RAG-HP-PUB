@@ -167,7 +167,14 @@ def score_constraint(
     """
     blocked_val = scoring_params["blocked_val"]
     different_val = scoring_params["different_val"]
-    c_unknown_score = scoring_params["c_unknown_score"]
+    # P1 (iter 1 PROD) — Pénalité différenciée : critique absent = -1.2 (cap fort),
+    # secondaire absent = neutre (0). Logique : absent secondaire = données graph
+    # incomplètes, ne doit pas être pire que "présent mais faux" (v_different=-0.3).
+    _c_w = constraint.get("c_weight", 1)
+    if _c_w >= 5:  # critique
+        c_unknown_score = min(scoring_params["c_unknown_score"], -1.2)
+    else:           # secondaire absent → neutre
+        c_unknown_score = scoring_params["c_unknown_score"]  # 0 par défaut
 
     target_list = constraint.get("target_list", [])
     blocking_list = constraint.get("blocking_list", [])
@@ -1048,6 +1055,16 @@ class RecommendationServiceV2:
                     logging.warning("[V2-TIMING] requery_total: %.3fs", requery_time)
                 except Exception as e:
                     logging.error("[V2] Re-query failed: %s", e, exc_info=True)
+
+            # P9 (iter 8 PROD) — Score plancher de qualité : produits top avec
+            # global_score < abs_threshold×1.25 déplacés vers liste.
+            # Mieux vaut 2 résultats de qualité que 3 dont 1 médiocre (Mode C P9).
+            quality_floor = scoring_params.get("absolute_threshold", 0.2) * 1.25
+            below_floor = [p for p in reranked_top if (p.coeff_caracteristique or 0.0) < quality_floor]
+            if below_floor:
+                reranked_top = [p for p in reranked_top if (p.coeff_caracteristique or 0.0) >= quality_floor]
+                reranked_liste = below_floor + reranked_liste
+                logging.warning("[V2-P9] quality_floor=%.3f → %d produit(s) déplacés top→liste", quality_floor, len(below_floor))
 
             total_time = time.perf_counter() - start_time
             logging.warning(

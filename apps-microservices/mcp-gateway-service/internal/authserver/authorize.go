@@ -8,21 +8,18 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/sso"
 )
 
 //go:embed templates/*.html
 var templateFS embed.FS
 
-var (
-	loginTmpl   = template.Must(template.ParseFS(templateFS, "templates/login.html"))
-	consentTmpl = template.Must(template.ParseFS(templateFS, "templates/consent.html"))
-)
+var consentTmpl = template.Must(template.ParseFS(templateFS, "templates/consent.html"))
 
 type authorizeParams struct {
 	ResponseType        string
@@ -57,8 +54,6 @@ func (s *AuthServer) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		action := r.FormValue("action")
 		switch action {
-		case "login":
-			s.handleLogin(w, r, client, params)
 		case "consent":
 			s.handleConsent(w, r, client, params)
 		default:
@@ -122,6 +117,7 @@ func (s *AuthServer) isRegisteredRedirectURI(client *db.OAuth2Client, uri string
 }
 
 func (s *AuthServer) showLoginOrConsent(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, params *authorizeParams) {
+	// Tier 1: existing OAuth2 authserver session — render consent directly.
 	session, err := auth.GetSession(r, s.jwtSecret)
 	if err == nil {
 		if _, err := auth.ValidateJWT(session.Token, s.jwtSecret, ""); err == nil {
@@ -130,69 +126,74 @@ func (s *AuthServer) showLoginOrConsent(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
-	loginTmpl.Execute(w, map[string]string{
-		"ClientName":          client.Name,
-		"ClientID":            params.ClientID,
-		"RedirectURI":         params.RedirectURI,
-		"CodeChallenge":       params.CodeChallenge,
-		"CodeChallengeMethod": params.CodeChallengeMethod,
-		"State":               params.State,
-		"Error":               "",
-		"Username":            "",
-	})
+	// Tier 2: bridge from an active admin SSO session if one exists. Mint a
+	// fresh mcp_session so subsequent requests in this OAuth2 flow find the
+	// authserver session via tier 1.
+	if email, ok := s.bridgeFromSSOSession(r); ok {
+		if err := s.mintAuthSession(w, email, ""); err != nil {
+			log.Printf("[authserver] bridge mint session: %v", err)
+			// Fall through to tier 3 on failure so the user can still log in.
+		} else {
+			s.renderConsent(w, client, params, email)
+			return
+		}
+	}
+
+	// Tier 3: no usable session — redirect to /sso/login with the original
+	// authorize URL preserved so the browser lands back here once the cookie
+	// is set and tier 1 picks up.
+	returnTo := "/authorize?" + r.URL.RawQuery
+	q := url.Values{}
+	q.Set("return_to", returnTo)
+	q.Set("purpose", "oauth2")
+	http.Redirect(w, r, "/sso/login?"+q.Encode(), http.StatusSeeOther)
 }
 
-func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, params *authorizeParams) {
-	username := strings.TrimSpace(r.FormValue("username"))
-	password := r.FormValue("password")
-
-	if username == "" || password == "" {
-		loginTmpl.Execute(w, map[string]string{
-			"ClientName":          client.Name,
-			"ClientID":            params.ClientID,
-			"RedirectURI":         params.RedirectURI,
-			"CodeChallenge":       params.CodeChallenge,
-			"CodeChallengeMethod": params.CodeChallengeMethod,
-			"State":               params.State,
-			"Error":               "Tous les champs sont obligatoires",
-			"Username":            username,
-		})
-		return
+// bridgeFromSSOSession returns the email of an authenticated admin user when
+// the request carries a valid, non-expired gw_session cookie pointing to an
+// sso_sessions row. The boolean distinguishes "no bridge possible" (cookie
+// absent / row missing / expired / repo not configured) from "successful
+// bridge".
+func (s *AuthServer) bridgeFromSSOSession(r *http.Request) (string, bool) {
+	if s.ssoSessionRepo == nil {
+		return "", false
 	}
-
-	authResp, err := auth.AuthenticateHellopro(s.authURL, username, password)
-	if err != nil || !authResp.Success {
-		log.Printf("[authserver] login failed for %s", username)
-		loginTmpl.Execute(w, map[string]string{
-			"ClientName":          client.Name,
-			"ClientID":            params.ClientID,
-			"RedirectURI":         params.RedirectURI,
-			"CodeChallenge":       params.CodeChallenge,
-			"CodeChallengeMethod": params.CodeChallengeMethod,
-			"State":               params.State,
-			"Error":               "Login / Mot de passe invalide",
-			"Username":            username,
-		})
-		return
+	sid, err := sso.GetSessionID(r)
+	if err != nil {
+		return "", false
 	}
-
-	token := authResp.Token
-	if token == "" {
-		claims := auth.Claims{
-			Exp:  time.Now().Add(24 * time.Hour).Unix(),
-			Iat:  time.Now().Unix(),
-			Name: authResp.DisplayName,
-		}
-		token, _ = auth.SignJWT(s.jwtSecret, claims)
+	row, err := s.ssoSessionRepo.FindByID(sid)
+	if err != nil || row == nil {
+		return "", false
 	}
-	auth.SetSession(w, s.jwtSecret, auth.SessionData{
-		DisplayName: authResp.DisplayName,
-		Email:       authResp.Email,
-		Token:       token,
+	if !row.AccessExp.IsZero() && time.Now().After(row.AccessExp) {
+		return "", false
+	}
+	if row.Email == "" {
+		return "", false
+	}
+	return row.Email, true
+}
+
+// mintAuthSession writes the mcp_session cookie used by tier 1. The Token
+// field stashes a freshly-minted JWT so auth.ValidateJWT in subsequent
+// requests passes — the upstream account-service token is not available here,
+// and the consent flow only needs the email + a non-empty session.
+func (s *AuthServer) mintAuthSession(w http.ResponseWriter, email, displayName string) error {
+	claims := auth.Claims{
+		Exp:  time.Now().Add(24 * time.Hour).Unix(),
+		Iat:  time.Now().Unix(),
+		Name: displayName,
+	}
+	tok, err := auth.SignJWT(s.jwtSecret, claims)
+	if err != nil {
+		return err
+	}
+	return auth.SetSession(w, s.jwtSecret, auth.SessionData{
+		DisplayName: displayName,
+		Email:       email,
+		Token:       tok,
 	}, s.secureCookie)
-
-	log.Printf("[authserver] user %s logged in for OAuth2 authorize", authResp.Email)
-	s.renderConsent(w, client, params, authResp.Email)
 }
 
 func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Client, params *authorizeParams, userEmail string) {

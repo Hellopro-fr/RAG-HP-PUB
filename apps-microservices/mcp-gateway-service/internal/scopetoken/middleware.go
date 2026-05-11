@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/slack"
 )
 
 // notifyUnauthorized alerts Slack (if configured) about a rejected MCP request.
@@ -78,6 +78,24 @@ type ResolvedInstruction struct {
 func AllowedInstructionsFromContext(ctx context.Context) ([]ResolvedInstruction, bool) {
 	v, ok := ctx.Value(AllowedInstructionsContextKey).([]ResolvedInstruction)
 	return v, ok
+}
+
+// EndUserEmailContextKey carries the authenticated end-user's email captured
+// at OAuth2 login time. Only the bearer-token branch of the OAuth2 middleware
+// sets this value (authorization_code / refresh_token grants); X-MCP-Scope-Token
+// requests and client_credentials grants leave it absent. ScopedGateway reads
+// it to resolve filter mode "self" at request time.
+const EndUserEmailContextKey = "scope_end_user_email"
+
+// EndUserEmailFromContext returns the end-user email captured during OAuth2
+// login, plus a boolean to distinguish "missing" from "explicitly empty". A
+// non-string stored value is treated as missing — defensive in depth.
+func EndUserEmailFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(EndUserEmailContextKey).(string)
+	if !ok || v == "" {
+		return "", false
+	}
+	return v, true
 }
 
 // LeexiFilterContext is the runtime view of the persisted scope.

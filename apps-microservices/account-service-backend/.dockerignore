@@ -1,0 +1,7 @@
+.git
+.gitignore
+.dockerignore
+*_test.go
+*.md
+docs/
+node_modules/

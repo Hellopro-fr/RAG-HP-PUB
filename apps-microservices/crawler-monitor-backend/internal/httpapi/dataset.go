@@ -64,7 +64,8 @@ func datasetAnalyzeHandler(storage *filestore.Storage) http.HandlerFunc {
 
 // datasetDeduplicateHandler handles POST /api/jobs/{id}/dataset/deduplicate.
 // Supprime les doublons dans le dataset principal du job, en gardant le fichier le plus récent.
-// Retourne {"deleted": N}. Traduit server.js:1214-1297.
+// Retourne {"removedCount", "mainRemovedCount", "nfrRemovedCount"} — shape attendue
+// par DuplicatesTab.jsx:38. Traduit server.js:1214-1297.
 func datasetDeduplicateHandler(storage *filestore.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
@@ -73,6 +74,10 @@ func datasetDeduplicateHandler(storage *filestore.Storage) http.HandlerFunc {
 			WriteError(w, 500, "Failed to deduplicate dataset")
 			return
 		}
-		WriteJSON(w, 200, map[string]int{"deleted": deleted})
+		WriteJSON(w, 200, map[string]int{
+			"removedCount":     deleted,
+			"mainRemovedCount": deleted,
+			"nfrRemovedCount":  0,
+		})
 	}
 }

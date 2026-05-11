@@ -374,6 +374,27 @@ type GatewayUser struct {
 
 func (GatewayUser) TableName() string { return "gateway_users" }
 
+// SSOSession persists per-browser admin-UI sessions backed by an account-service
+// OAuth2 access+refresh token pair. The opaque session ID lives in the HttpOnly
+// gw_session cookie; access_token and refresh_token are AES-256-GCM ciphertext
+// (encrypted with ENCRYPTION_KEY in internal/sso, never stored in plaintext).
+type SSOSession struct {
+	ID            string    `gorm:"type:varchar(64);primaryKey" json:"id"`
+	UserID        uint64    `gorm:"not null;index:idx_sso_user" json:"user_id"`
+	Sub           string    `gorm:"type:varchar(255);not null;index:idx_sso_sub" json:"sub"`
+	Email         string    `gorm:"type:varchar(255);not null" json:"email"`
+	AccessToken   []byte    `gorm:"type:varbinary(2048);not null" json:"-"`
+	RefreshToken  []byte    `gorm:"type:varbinary(512);not null" json:"-"`
+	AccessExp     time.Time `gorm:"type:datetime(3);not null" json:"access_exp"`
+	RefreshExp    time.Time `gorm:"type:datetime(3);not null;index:idx_sso_refresh_exp" json:"refresh_exp"`
+	CreatedAt     time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	LastSeenAt    time.Time `gorm:"type:datetime(3);not null" json:"last_seen_at"`
+	UserAgent     string    `gorm:"type:varchar(255)" json:"user_agent,omitempty"`
+	ClientIP      string    `gorm:"type:varchar(45)" json:"client_ip,omitempty"`
+}
+
+func (SSOSession) TableName() string { return "sso_sessions" }
+
 // AuditLog records API actions for auditing.
 type AuditLog struct {
 	ID             uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
@@ -579,3 +600,19 @@ type OAuth2ClientBDDTable struct {
 }
 
 func (OAuth2ClientBDDTable) TableName() string { return "oauth2_client_bdd_tables" }
+
+// ServerAuthorization grants a specific end-user (by email) full unfiltered
+// access to a specific MCP server. When a row exists for (server_id, email),
+// the gateway skips all filter-header injection (Leexi/Ringover/BDD) on
+// outbound requests targeting that server — the backend receives only the
+// static auth headers and treats the call as unrestricted.
+//
+// Primary key is (server_id, email). Insert/delete is the admin-side API.
+type ServerAuthorization struct {
+	ServerID  string    `gorm:"type:char(36);primaryKey" json:"server_id"`
+	Email     string    `gorm:"type:varchar(255);primaryKey" json:"email"`
+	CreatedBy string    `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	CreatedAt time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+}
+
+func (ServerAuthorization) TableName() string { return "server_authorizations" }

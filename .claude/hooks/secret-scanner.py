@@ -56,6 +56,50 @@ EXCLUDE_FILES = {
 
 EXCLUDE_DIRS = {'.git', 'node_modules', '.venv', '__pycache__', '.claude'}
 
+# Internal-only hostnames common in Docker Compose / container environments.
+# When a connection-string finding targets one of these AND the line is an
+# env-var fallback (process.env.X || '...', os.environ.get('X', '...')), it
+# is the documented internal default — not an exfilable secret.
+INTERNAL_HOSTS = {
+    'localhost', '127.0.0.1', '0.0.0.0', '::1',
+    'redis', 'rabbitmq', 'postgres', 'postgresql', 'mongo', 'mongodb',
+    'mysql', 'elasticsearch', 'milvus', 'qdrant', 'neo4j',
+}
+
+# Indicators that the URL on the line is an env-var fallback default.
+ENV_FALLBACK_INDICATORS = (
+    re.compile(r'process\.env\.'),
+    re.compile(r'os\.environ\.get'),
+    re.compile(r'os\.getenv'),
+    re.compile(r'\bgetenv\s*\('),
+    re.compile(r'\bSettings\b'),  # Pydantic BaseSettings field defaults
+)
+
+# Extract the host portion of a connection string to validate it is internal.
+_CONN_HOST_RE = re.compile(
+    r'(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqp)://'
+    r'(?:[^@/\s"\']+@)?'  # optional userinfo
+    r'([^:/?\s"\']+)'      # host
+)
+
+
+def is_benign_default(line, finding_name):
+    """Skip findings on env-var fallback lines targeting internal hosts.
+
+    Narrow allowlist: only applies to *Connection String findings, only when
+    the line shows an env-var fallback pattern, and only when the URL host
+    is in the internal-hosts set. Real connection strings to external hosts
+    or with embedded credentials still trigger the scanner.
+    """
+    if 'Connection String' not in finding_name:
+        return False
+    if not any(p.search(line) for p in ENV_FALLBACK_INDICATORS):
+        return False
+    m = _CONN_HOST_RE.search(line)
+    if not m:
+        return False
+    return m.group(1).lower() in INTERNAL_HOSTS
+
 
 def get_staged_files():
     """Get list of staged files."""
@@ -82,6 +126,8 @@ def scan_file(filepath):
             for i, line in enumerate(f, 1):
                 for pattern, name, severity in PATTERNS:
                     if re.search(pattern, line):
+                        if is_benign_default(line, name):
+                            continue
                         findings.append((filepath, i, name, severity))
     except (FileNotFoundError, PermissionError):
         pass

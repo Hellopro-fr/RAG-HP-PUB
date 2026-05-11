@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/ringoveradmin"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/ringoveradmin"
 )
 
 // validRingoverFilterModes lists the accepted Mode values. Anything else is
@@ -16,6 +16,7 @@ var validRingoverFilterModes = map[string]struct{}{
 	RingoverFilterModeUsers:   {},
 	RingoverFilterModeTeams:   {},
 	RingoverFilterModeCreator: {},
+	RingoverFilterModeSelf:    {},
 }
 
 // resolveRingoverFilterForCreate validates a RingoverFilterDTO and returns the
@@ -27,11 +28,18 @@ var validRingoverFilterModes = map[string]struct{}{
 // adminClient may be nil when no Ringover integration is configured: in that
 // case all modes other than "none" are rejected with an error to avoid
 // persisting unenforceable scopes.
+//
+// forOAuth2 must be true when invoked from the OAuth2-client API path and
+// false from the scope-token API path. The "self" mode resolves the end-user
+// email from the access-token JWT at request time, so it is meaningful only
+// for OAuth2 clients; scope tokens carry no end-user identity and would
+// deny-all at runtime, so we reject "self" up front for scope tokens.
 func resolveRingoverFilterForCreate(
 	ctx context.Context,
 	adminClient *ringoveradmin.Client,
 	filter *RingoverFilterDTO,
 	callerEmail string,
+	forOAuth2 bool,
 ) (mode string, userIDs json.RawMessage, teamIDs json.RawMessage, err error) {
 	if filter == nil || filter.Mode == "" {
 		return RingoverFilterModeNone, nil, nil, nil
@@ -44,6 +52,18 @@ func resolveRingoverFilterForCreate(
 	switch filter.Mode {
 	case RingoverFilterModeNone:
 		return RingoverFilterModeNone, nil, nil, nil
+
+	case RingoverFilterModeSelf:
+		// "self" is OAuth2-only — it resolves the access-token email claim
+		// at request time. Scope tokens have no end-user identity, so reject
+		// at the API rather than persisting a row that will deny-all at runtime.
+		if !forOAuth2 {
+			return "", nil, nil, fmt.Errorf("ringover_filter.mode %q is only supported on OAuth2 clients", RingoverFilterModeSelf)
+		}
+		// "self" is resolved at request time from the OAuth2 access-token
+		// email; no integer ID is stored at create time. See ScopedGateway
+		// for the runtime header injection.
+		return RingoverFilterModeSelf, nil, nil, nil
 
 	case RingoverFilterModeUsers:
 		if len(filter.UserIDs) == 0 {
