@@ -765,6 +765,40 @@ services:
       - services-net
     logging: *logging_defaults
 
+  api-catalog-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/api-catalog-service/Dockerfile
+    profiles: ["app"]
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: ${CATALOG_MYSQL_USER:-catalog_user}
+      MYSQL_PASS: ${CATALOG_MYSQL_PASS}
+      MYSQL_DB: ${CATALOG_MYSQL_DB:-catalog_db}
+      GRPC_PORT: "9100"
+      HEALTH_PORT: "9101"
+      ADMIN_KEY: ${CATALOG_ADMIN_KEY}
+      SCAN_INTERVAL: 15m
+      SCAN_CONCURRENCY: "16"
+      PROBE_TIMEOUT: 3s
+    expose:
+      - "9100"
+      - "9101"
+    restart: unless-stopped
+    networks:
+      - services-net
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
   devis-processor-service:
     build:
       context: .
