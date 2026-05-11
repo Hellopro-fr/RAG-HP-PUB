@@ -124,7 +124,7 @@ const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
           </div>
 
           {/* CTA desktop (sm+) — match Lovable V2 : orange accent, 16px / 600, arrow-right */}
-          <div className="hidden sm:block mt-8 text-center">
+          <div className="hidden sm:flex sm:flex-col sm:items-center mt-8">
             <button
               onClick={onContinue}
               className="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-base font-semibold text-accent-foreground shadow-lg shadow-accent/25 hover:bg-accent/90 transition-colors"
@@ -132,9 +132,11 @@ const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
               C'est parti
               <ArrowRight className="h-4 w-4" />
             </button>
-            <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              Pas besoin d'email pour voir votre résultat
+            <p className="mt-3 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <Lock className="h-3 w-3" />
+                Pas besoin d'email pour voir votre résultat
+              </span>
             </p>
           </div>
         </div>
@@ -146,9 +148,11 @@ const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
         style={{ fontFamily: SYSTEM_FONT_STACK }}
       >
         <div className="px-4 py-3 text-center border-b border-border/50">
-          <p className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Lock className="h-3 w-3" />
-            Pas besoin d'email pour voir votre résultat
+          <p className="text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <Lock className="h-3 w-3" />
+              Pas besoin d'email pour voir votre résultat
+            </span>
           </p>
         </div>
         <div className="p-4">
