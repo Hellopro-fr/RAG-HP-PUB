@@ -720,8 +720,8 @@ services:
     build:
       context: .
       dockerfile: apps-microservices/api-gateway-go/Dockerfile
-    container_name: api-gateway-go-service
-    image: api-gateway-go:dev
+    # container_name: api-gateway-go-service
+    # image: api-gateway-go:dev
     profiles: ["app"] # Profile for the main application stack
     volumes:
       - ./apps-microservices/api-gateway/.env.url:/app/.env.url:ro
