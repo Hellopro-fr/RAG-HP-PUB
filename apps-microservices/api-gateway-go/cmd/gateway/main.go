@@ -60,6 +60,10 @@ func main() {
 
 	serviceMap := config.BuildServiceMap()
 
+	// getServices returns the current route map. When catalog refresher is
+	// active, snapshot wins; otherwise falls back to the env-derived map.
+	getServices := func() map[string]string { return serviceMap }
+
 	var routeSource = "env"
 	if cfg.UseCatalog {
 		conn, err := grpc.NewClient(cfg.APICatalogGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -71,11 +75,13 @@ func main() {
 			m, src := refresher.Bootstrap(ctx, cfg.CatalogDialTimeout)
 			serviceMap = m
 			routeSource = src
-			// NOTE: proxy handlers receive the bootstrapped static map. Live periodic
-			// refreshes update the refresher's internal state but the proxy won't pick
-			// them up until the gateway restarts.
-			// TODO(catalog): plumb refresher.Snapshot() into proxy handlers to enable
-			// zero-downtime route updates.
+			getServices = func() map[string]string {
+				cur, _ := refresher.Snapshot()
+				if cur == nil {
+					return serviceMap
+				}
+				return cur
+			}
 			go refresher.Run(ctx)
 		}
 	}
@@ -125,15 +131,15 @@ func main() {
 	}
 	routers.RegisterDocs(r, routers.DocsDeps{
 		BaseSpec:    baseSpec,
-		ServiceMap:  serviceMap,
+		Services:    getServices,
 		AdminEmails: adminEmails,
 		AdminKey:    cfg.GatewayAdminKey,
 	})
 
 	verifier := auth.NewAPITokenVerifier(jwtSvc, gdb, cache, config.BuildExcludedRoutes())
-	wsHandler := proxy.NewWSHandler(serviceMap)
+	wsHandler := proxy.NewWSHandler(getServices)
 	httpHandler := proxy.NewHTTPHandler(proxy.HTTPDeps{
-		ServiceMap:        serviceMap,
+		Services:          getServices,
 		DownstreamTimeout: config.BuildDownstreamTimeouts(),
 		History:           historyWorker,
 	})

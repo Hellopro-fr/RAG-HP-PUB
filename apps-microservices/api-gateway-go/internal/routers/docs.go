@@ -15,9 +15,11 @@ import (
 var swaggerHTML []byte
 
 // DocsDeps holds the dependencies needed by the docs routes.
+// Services is a snapshot getter so /openapi.json aggregation picks up
+// live route updates from the api-catalog refresher per request.
 type DocsDeps struct {
 	BaseSpec    map[string]any
-	ServiceMap  map[string]string
+	Services    func() map[string]string
 	AdminEmails map[string]struct{}
 	AdminKey    string
 }
@@ -27,7 +29,7 @@ func RegisterDocs(r *gin.Engine, d DocsDeps) {
 	r.GET("/openapi.json", func(c *gin.Context) {
 		spec, _ := openapi.Aggregate(c.Request.Context(), openapi.AggregateInput{
 			Base:     d.BaseSpec,
-			Services: d.ServiceMap,
+			Services: d.Services(),
 		})
 		c.JSON(200, spec)
 	})
@@ -35,7 +37,7 @@ func RegisterDocs(r *gin.Engine, d DocsDeps) {
 	r.GET("/openapi-public.json", func(c *gin.Context) {
 		spec, _ := openapi.Aggregate(c.Request.Context(), openapi.AggregateInput{
 			Base:     d.BaseSpec,
-			Services: d.ServiceMap,
+			Services: d.Services(),
 		})
 		c.JSON(200, openapi.Filter(spec))
 	})

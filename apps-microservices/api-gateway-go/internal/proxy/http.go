@@ -45,8 +45,10 @@ type HistoryEnqueuer interface {
 }
 
 // HTTPDeps holds the dependencies for the HTTP reverse proxy handler.
+// Services is a snapshot getter so the proxy picks up live route updates
+// (e.g. from the api-catalog refresher) without rebuilding the handler.
 type HTTPDeps struct {
-	ServiceMap        map[string]string
+	Services          func() map[string]string
 	DownstreamTimeout map[string]float64
 	History           HistoryEnqueuer
 }
@@ -64,7 +66,7 @@ func NewHTTPHandler(d HTTPDeps) gin.HandlerFunc {
 		service := c.Param("service")
 		path := strings.TrimPrefix(c.Param("path"), "/")
 
-		baseURL, ok := d.ServiceMap["/"+service]
+		baseURL, ok := d.Services()["/"+service]
 		if !ok {
 			c.JSON(404, gin.H{"detail": "Service not found"})
 			return
