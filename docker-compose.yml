@@ -789,7 +789,7 @@ services:
       MYSQL_PORT: ${GATEWAY_MYSQL_PORT:-3306}
       MYSQL_USER: ${GATEWAY_MYSQL_USER:-gateway_user}
       MYSQL_PASS: ${GATEWAY_MYSQL_PASS:-gateway_pass}
-      MYSQL_DB: ${GATEWAY_MYSQL_DB:-catalog_db}
+      MYSQL_DB: ${GATEWAY_MYSQL_DB:-gateway_db}
       GRPC_PORT: "9100"
       HEALTH_PORT: "9101"
       ADMIN_KEY: ${CATALOG_ADMIN_KEY:-dev-catalog-key}
