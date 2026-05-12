@@ -1,4 +1,4 @@
-module github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go
+module api-gateway-go
 
 go 1.24.0
 

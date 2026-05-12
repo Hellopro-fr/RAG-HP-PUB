@@ -13,9 +13,9 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
-	pb "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/genproto/api_catalog"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/repository"
+	"api-catalog-service/internal/db"
+	pb "api-catalog-service/internal/genproto/api_catalog"
+	"api-catalog-service/internal/repository"
 )
 
 func startBufServer(t *testing.T) (pb.ApiCatalogClient, func()) {

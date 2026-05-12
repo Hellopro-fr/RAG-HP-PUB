@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
+	"api-catalog-service/internal/db"
 )
 
 func ProbeREST(ctx context.Context, baseURL string, timeout time.Duration) ([]db.EndpointRow, error) {

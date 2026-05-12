@@ -11,8 +11,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/repository"
+	"api-catalog-service/internal/db"
+	"api-catalog-service/internal/repository"
 )
 
 func TestMergeTargets_EnvOverridesDB(t *testing.T) {

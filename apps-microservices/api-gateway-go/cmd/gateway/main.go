@@ -15,15 +15,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/auth"
-	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/catalog"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/config"
-	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/openapi"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/proxy"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/routers"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/sso"
+	"api-gateway-go/internal/auth"
+	cachepkg "api-gateway-go/internal/cache"
+	"api-gateway-go/internal/catalog"
+	"api-gateway-go/internal/config"
+	dbpkg "api-gateway-go/internal/db"
+	"api-gateway-go/internal/openapi"
+	"api-gateway-go/internal/proxy"
+	"api-gateway-go/internal/routers"
+	"api-gateway-go/internal/sso"
 )
 
 func init() {

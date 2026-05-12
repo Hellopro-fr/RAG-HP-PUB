@@ -8,7 +8,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/openapi"
+	"api-gateway-go/internal/openapi"
 )
 
 //go:embed assets/swagger.html

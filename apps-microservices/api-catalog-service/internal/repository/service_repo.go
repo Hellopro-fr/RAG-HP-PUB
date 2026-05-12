@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
+	"api-catalog-service/internal/db"
 )
 
 var ErrNotFound = errors.New("not found")

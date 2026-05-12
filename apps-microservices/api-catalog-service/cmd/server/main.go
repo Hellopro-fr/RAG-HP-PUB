@@ -14,13 +14,13 @@ import (
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/config"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
-	pb "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/genproto/api_catalog"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/grpcserver"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/health"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/repository"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/scanner"
+	"api-catalog-service/internal/config"
+	"api-catalog-service/internal/db"
+	pb "api-catalog-service/internal/genproto/api_catalog"
+	"api-catalog-service/internal/grpcserver"
+	"api-catalog-service/internal/health"
+	"api-catalog-service/internal/repository"
+	"api-catalog-service/internal/scanner"
 )
 
 // envURLPath is the seed-file path (mirrors api-gateway-go convention).

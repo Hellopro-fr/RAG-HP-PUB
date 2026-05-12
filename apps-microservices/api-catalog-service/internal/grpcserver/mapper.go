@@ -5,8 +5,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
-	pb "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/genproto/api_catalog"
+	"api-catalog-service/internal/db"
+	pb "api-catalog-service/internal/genproto/api_catalog"
 )
 
 func ServiceRowToProto(r db.ServiceRow) *pb.Service {
