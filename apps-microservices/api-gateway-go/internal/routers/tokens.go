@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/auth"
-	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
-	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
+	"api-gateway-go/internal/auth"
+	cachepkg "api-gateway-go/internal/cache"
+	dbpkg "api-gateway-go/internal/db"
 )
 
 const maxActiveAccessTokens = 10

@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	pb "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/genproto/api_catalog"
+	pb "api-gateway-go/internal/genproto/api_catalog"
 )
 
 // Client wraps the generated gRPC ApiCatalog client.

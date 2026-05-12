@@ -10,10 +10,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
-	pb "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/genproto/api_catalog"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/repository"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/scanner"
+	"api-catalog-service/internal/db"
+	pb "api-catalog-service/internal/genproto/api_catalog"
+	"api-catalog-service/internal/repository"
+	"api-catalog-service/internal/scanner"
 )
 
 // Deps holds the dependencies injected into the gRPC server.

@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/repository"
+	"api-catalog-service/internal/db"
+	"api-catalog-service/internal/repository"
 )
 
 type Deps struct {

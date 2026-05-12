@@ -1,4 +1,4 @@
-module github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service
+module api-catalog-service
 
 go 1.25.0
 

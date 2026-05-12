@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
+	"api-catalog-service/internal/db"
 )
 
 func ProbeGRPC(ctx context.Context, address string, timeout time.Duration, opts ...grpc.DialOption) ([]db.EndpointRow, error) {

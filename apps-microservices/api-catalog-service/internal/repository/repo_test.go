@@ -6,7 +6,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-catalog-service/internal/db"
+	"api-catalog-service/internal/db"
 )
 
 func newDB(t *testing.T) *gorm.DB {
