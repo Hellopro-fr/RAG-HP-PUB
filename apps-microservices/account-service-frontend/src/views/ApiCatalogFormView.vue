@@ -163,12 +163,8 @@ async function submit() {
 
             <div class="space-y-4">
               <div>
-                <label class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Nom <span class="text-red-500">*</span>
-                  <span
-                    class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-[10px] font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-                    title="Premier segment de la route exposée par la passerelle (ex: /mon-service). Le suffixe -service est ajouté automatiquement s'il manque ; si vous le tapez, il est conservé tel quel."
-                  >i</span>
                 </label>
                 <input
                   v-model="form.name"
@@ -177,9 +173,12 @@ async function submit() {
                   :disabled="isEdit"
                   class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
-                <p v-if="!isEdit && form.name" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Route exposée : <code class="font-mono">/{{ normalizedName }}</code>
-                </p>
+                <div v-if="!isEdit" class="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
+                  Premier segment de la route exposée par la passerelle (ex&nbsp;: <code class="font-mono">/mon-service</code>). Le nom est mis en minuscules&nbsp;; le suffixe <code class="font-mono">-service</code> est ajouté automatiquement s'il manque, sinon il est conservé tel quel.
+                  <div v-if="form.name" class="mt-1 text-blue-900 dark:text-blue-100">
+                    Route exposée&nbsp;: <code class="font-mono">/{{ normalizedName }}</code>
+                  </div>
+                </div>
                 <p v-if="isEdit" class="text-xs text-gray-400 mt-1">Le nom est un identifiant immuable.</p>
               </div>
 
