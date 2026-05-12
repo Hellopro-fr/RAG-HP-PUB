@@ -267,6 +267,15 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					_ = json.Unmarshal(dbToken.RingoverAllowedTeamIDs, &ct.RingoverAllowedTeamIDs)
 				}
 
+				// Decode persisted Zoho filter for runtime header injection.
+				ct.ZohoFilterMode = dbToken.ZohoFilterMode
+				if len(dbToken.ZohoAllowedEmails) > 0 {
+					_ = json.Unmarshal(dbToken.ZohoAllowedEmails, &ct.ZohoAllowedEmails)
+				}
+				if ct.ZohoFilterMode == "creator" {
+					ct.ZohoCreatorEmail = dbToken.CreatedBy
+				}
+
 				// BDD scope: flatten the join rows into a flat slice of IDs.
 				// Empty slice = no restriction; the runtime injector keys off
 				// the presence of the slice (len > 0), see ScopedGateway.
@@ -319,6 +328,13 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					Mode:           ct.RingoverFilterMode,
 					AllowedUserIDs: ct.RingoverAllowedUserIDs,
 					AllowedTeamIDs: ct.RingoverAllowedTeamIDs,
+				})
+			}
+			if ct.ZohoFilterMode != "" && ct.ZohoFilterMode != "none" {
+				ctx = context.WithValue(ctx, ZohoFilterContextKey, &ZohoFilterContext{
+					Mode:          ct.ZohoFilterMode,
+					AllowedEmails: ct.ZohoAllowedEmails,
+					CreatorEmail:  ct.ZohoCreatorEmail,
 				})
 			}
 			if len(ct.BDDAllowedTableIDs) > 0 {
