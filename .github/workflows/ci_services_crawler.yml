@@ -1,0 +1,72 @@
+name: CI SERVICE CRAWLER
+
+# Déclencheurs :
+#   - push sur main ou features/poc, uniquement si ça touche crawler-service ou ce workflow
+#   - PR vers main ou develop
+#   - manuel via l'onglet Actions
+on:
+  push:
+    branches: [ "main", "features/poc" ]
+    paths:
+      - 'apps-microservices/crawler-service/crawler/**'
+      - 'apps-microservices/crawler-service/grafana/**'
+      - '.github/workflows/ci_services_crawler.yml'
+  pull_request:
+    branches: [ "main", "develop" ]
+    paths:
+      - 'apps-microservices/crawler-service/crawler/**'
+      - 'apps-microservices/crawler-service/grafana/**'
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: 'crawler-service'
+
+jobs:
+  test:
+    name: Type-check + tests + JSON dashboard
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps-microservices/crawler-service/crawler
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        # Pas de package-lock.json dans le repo — on utilise npm install
+        # (à remplacer par `npm ci` quand un lockfile sera committé).
+        run: npm install --no-audit --no-fund
+
+      - name: Type-check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Unit tests (node:test)
+        # Tests existants : diezDecision.test.ts, questionMarkDecision.test.ts
+        # Non-régression sur les modifs StatsManager / UpdateChecker / routes / main.
+        run: npm test
+
+      - name: Validate Grafana dashboard JSON
+        working-directory: apps-microservices/crawler-service
+        run: |
+          python -m json.tool grafana/provisioning/dashboards/observabilite_crawling.json > /dev/null
+          echo "✅ JSON valide"
+
+      # Optionnel : publier un petit artefact pour confirmer la fin du job
+      - name: Build status artifact
+        if: success()
+        run: |
+          mkdir -p dist
+          echo "ci-ok $(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist/ci-status.txt
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: crawler-ci-status
+          path: apps-microservices/crawler-service/crawler/dist/ci-status.txt
+          retention-days: 7
