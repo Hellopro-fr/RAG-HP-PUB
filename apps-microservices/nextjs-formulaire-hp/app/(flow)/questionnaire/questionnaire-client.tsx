@@ -32,7 +32,7 @@ export default function QuestionnaireClient({
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
   const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
-  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
+  const { goToSelection, goToSomethingToAdd, goToBudget } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
@@ -45,7 +45,7 @@ export default function QuestionnaireClient({
   // État pour le loader de matching et la destination après
   const [showLoader, setShowLoader] = useState(false);
   const [loaderProgress, setLoaderProgress] = useState(0);
-  const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
+  const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | 'budget' | null>(null);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
   // Priorité : props du Server Component > searchParams client
@@ -232,7 +232,10 @@ export default function QuestionnaireClient({
     setLoaderProgress(100);
     // Attendre que la barre anime jusqu'à 100% avant de naviguer
     await new Promise(resolve => setTimeout(resolve, 1500));
-    setRedirectDestination(destination);
+    // Intercaler la page /budget avant /selection. Le flow alternatif
+    // 'something-to-add' reste tel quel (pas de budget si flow dégradé).
+    const finalDestination = destination === 'something-to-add' ? destination : 'budget';
+    setRedirectDestination(finalDestination);
   };
 
   // Navigation dès que les données sont prêtes (matching + prix terminés)
@@ -240,11 +243,13 @@ export default function QuestionnaireClient({
     if (redirectDestination) {
       if (redirectDestination === 'something-to-add') {
         goToSomethingToAdd();
+      } else if (redirectDestination === 'budget') {
+        goToBudget();
       } else {
         goToSelection();
       }
     }
-  }, [redirectDestination, goToSelection, goToSomethingToAdd]);
+  }, [redirectDestination, goToSelection, goToSomethingToAdd, goToBudget]);
 
   // Afficher le loader pendant le matching
   if (showLoader) {
