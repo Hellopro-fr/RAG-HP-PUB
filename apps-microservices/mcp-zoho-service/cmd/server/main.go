@@ -1,18 +1,20 @@
 // Package main is the entry point for mcp-zoho-service.
-// It boots config, starts an HTTP server, and shuts down gracefully on SIGINT/SIGTERM.
 package main
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"mcp-zoho-service/internal/config"
+	"mcp-zoho-service/internal/crypto"
+	"mcp-zoho-service/internal/db"
+	"mcp-zoho-service/internal/routing"
+	"mcp-zoho-service/internal/transport"
 )
 
 func main() {
@@ -21,22 +23,30 @@ func main() {
 		log.Fatalf("[mcp-zoho-service] config: %v", err)
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
-
-	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
+	dec, err := crypto.NewDecryptor(cfg.EncryptionKey)
+	if err != nil {
+		log.Fatalf("[mcp-zoho-service] crypto: %v", err)
 	}
+
+	conn, err := db.Open(cfg.MySQLDSN)
+	if err != nil {
+		log.Fatalf("[mcp-zoho-service] db: %v", err)
+	}
+	defer conn.Close()
+
+	queries := db.NewQueries(conn)
+	resolver := routing.NewResolver(queries, dec, cfg.CacheTTL, cfg.SelfURL)
+	srv := &transport.Server{
+		Resolver:        resolver,
+		UpstreamTimeout: cfg.UpstreamTimeout,
+		GatewayToken:    cfg.GatewayToken,
+	}
+	httpSrv := srv.MustListen(fmt.Sprintf(":%d", cfg.Port))
 
 	go func() {
 		log.Printf("[mcp-zoho-service] listening on :%d", cfg.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("[mcp-zoho-service] server: %v", err)
+		if err := httpSrv.ListenAndServe(); err != nil && err.Error() != "http: Server closed" {
+			log.Fatalf("[mcp-zoho-service] http: %v", err)
 		}
 	}()
 
@@ -47,7 +57,7 @@ func main() {
 	log.Printf("[mcp-zoho-service] shutting down")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := httpSrv.Shutdown(ctx); err != nil {
 		log.Printf("[mcp-zoho-service] shutdown: %v", err)
 	}
 }
