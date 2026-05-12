@@ -12,8 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/auth"
 	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
+	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/catalog"
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/config"
 	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
 	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/openapi"
@@ -55,6 +59,33 @@ func main() {
 	jwtSvc := auth.NewJWT(cfg.JWTSecret, cfg.JWTAlgo, time.Duration(cfg.AccessTokenExpireMinutes)*time.Minute)
 
 	serviceMap := config.BuildServiceMap()
+
+	// getServices returns the current route map. When catalog refresher is
+	// active, snapshot wins; otherwise falls back to the env-derived map.
+	getServices := func() map[string]string { return serviceMap }
+
+	var routeSource = "env"
+	if cfg.UseCatalog {
+		conn, err := grpc.NewClient(cfg.APICatalogGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Printf("catalog dial setup failed (err=%v); using env map", err)
+		} else {
+			cli := catalog.NewClient(conn)
+			refresher := catalog.NewRefresher(cli, cfg.CatalogRefreshInterval, serviceMap)
+			m, src := refresher.Bootstrap(ctx, cfg.CatalogDialTimeout)
+			serviceMap = m
+			routeSource = src
+			getServices = func() map[string]string {
+				cur, _ := refresher.Snapshot()
+				if cur == nil {
+					return serviceMap
+				}
+				return cur
+			}
+			go refresher.Run(ctx)
+		}
+	}
+	log.Printf("gateway routes loaded: count=%d source=%s", len(serviceMap), routeSource)
 
 	if err := dbpkg.BootstrapRefreshTokens(ctx, gdb, serviceMap, jwtIssuerAdapter{j: jwtSvc}); err != nil {
 		log.Fatalf("bootstrap refresh tokens: %v", err)
@@ -100,15 +131,15 @@ func main() {
 	}
 	routers.RegisterDocs(r, routers.DocsDeps{
 		BaseSpec:    baseSpec,
-		ServiceMap:  serviceMap,
+		Services:    getServices,
 		AdminEmails: adminEmails,
 		AdminKey:    cfg.GatewayAdminKey,
 	})
 
 	verifier := auth.NewAPITokenVerifier(jwtSvc, gdb, cache, config.BuildExcludedRoutes())
-	wsHandler := proxy.NewWSHandler(serviceMap)
+	wsHandler := proxy.NewWSHandler(getServices)
 	httpHandler := proxy.NewHTTPHandler(proxy.HTTPDeps{
-		ServiceMap:        serviceMap,
+		Services:          getServices,
 		DownstreamTimeout: config.BuildDownstreamTimeouts(),
 		History:           historyWorker,
 	})

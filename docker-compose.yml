@@ -716,6 +716,7 @@ services:
     logging: *logging_defaults
 
   # Cutover completed 2026-05-07: Go service now primary on port 8500
+  # API_CATALOG: GATEWAY_USE_CATALOG=true makes routes flow from catalog gRPC.
   api-gateway-go-service:
     build:
       context: .
@@ -758,12 +759,54 @@ services:
       - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
       - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
       - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
+      # ── API Catalog (route source) ───────────────────────────────────────
+      - GATEWAY_USE_CATALOG=${GATEWAY_USE_CATALOG:-true}
+      - API_CATALOG_GRPC=${API_CATALOG_GRPC:-api-catalog-service:9100}
+      - CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL:-60s}
+      - CATALOG_DIAL_TIMEOUT=${CATALOG_DIAL_TIMEOUT:-3s}
     # depends_on:
     #   mysql:
     #     condition: service_healthy
     networks:
       - services-net
     logging: *logging_defaults
+
+  api-catalog-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/api-catalog-service/Dockerfile
+    profiles: ["app"]
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./apps-microservices/api-gateway/.env.url:/app/.env.url:ro
+    working_dir: /app
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: ${GATEWAY_MYSQL_PORT:-3306}
+      MYSQL_USER: ${GATEWAY_MYSQL_USER:-gateway_user}
+      MYSQL_PASS: ${GATEWAY_MYSQL_PASS:-gateway_pass}
+      MYSQL_DB: ${CATALOG_MYSQL_DB:-catalog_db}
+      GRPC_PORT: "9100"
+      HEALTH_PORT: "9101"
+      ADMIN_KEY: ${CATALOG_ADMIN_KEY:-dev-catalog-key}
+      SCAN_INTERVAL: 15m
+      SCAN_CONCURRENCY: "16"
+      PROBE_TIMEOUT: 3s
+    expose:
+      - "9100"
+      - "9101"
+    restart: unless-stopped
+    networks:
+      - services-net
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
   devis-processor-service:
     build:
@@ -1817,8 +1860,8 @@ services:
       RUST_LOG: graph_rag_api_recherche_rust_service=debug
     networks:
       - services-net
-      - services-ext-net
-      - services-global-net
+      # - services-ext-net
+      # - services-global-net
 
   phpmyadmin:
     image: phpmyadmin:latest
@@ -2478,6 +2521,9 @@ services:
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       SLACK_ENV_LABEL: ${SLACK_ENV_LABEL}
       INTERNAL_ADMIN_TOKEN: ${ACCOUNT_INTERNAL_TOKEN}
+      # API Catalog (broker)
+      API_CATALOG_GRPC: ${API_CATALOG_GRPC:-api-catalog-service:9100}
+      CATALOG_ADMIN_KEY: ${CATALOG_ADMIN_KEY:-dev-catalog-key}
     restart: unless-stopped
     networks:
       - services-net
