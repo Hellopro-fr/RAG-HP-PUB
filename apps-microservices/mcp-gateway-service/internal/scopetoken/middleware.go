@@ -50,6 +50,13 @@ const LeexiFilterContextKey = "scope_leexi_filter"
 // forwarding a tools/call to a Ringover-tagged backend.
 const RingoverFilterContextKey = "scope_ringover_filter"
 
+// ZohoFilterContextKey carries a *ZohoFilterContext describing the active
+// per-token / per-OAuth2-client Zoho ownership scope. Absence of the key
+// means no admin filter is configured (Step 2 of requestHeadersFor sees
+// nothing and emits no header). When the imported-server Step 1 path
+// fires, this context is ignored.
+const ZohoFilterContextKey = "scope_zoho_filter"
+
 // ScopeNameContextKey carries the human-readable name of the active scope
 // token or OAuth2 client. ScopedGateway reads it to override serverInfo.name
 // on the MCP initialize response so clients see the credential label instead
@@ -121,6 +128,21 @@ type RingoverFilterContext struct {
 // RingoverFilterFromContext returns the typed Ringover filter info if any was set.
 func RingoverFilterFromContext(ctx context.Context) (*RingoverFilterContext, bool) {
 	v, ok := ctx.Value(RingoverFilterContextKey).(*RingoverFilterContext)
+	return v, ok
+}
+
+// ZohoFilterContext is the runtime view of the persisted Zoho scope.
+type ZohoFilterContext struct {
+	Mode          string   // "none" | "users" | "creator"
+	AllowedEmails []string // for mode "users"
+	// CreatorEmail is the owning user's email captured at scope-token /
+	// OAuth2-client write time. Used only for mode "creator".
+	CreatorEmail string
+}
+
+// ZohoFilterFromContext returns the typed Zoho filter info if any was set.
+func ZohoFilterFromContext(ctx context.Context) (*ZohoFilterContext, bool) {
+	v, ok := ctx.Value(ZohoFilterContextKey).(*ZohoFilterContext)
 	return v, ok
 }
 
