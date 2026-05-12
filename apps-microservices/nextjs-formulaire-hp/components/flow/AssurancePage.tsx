@@ -52,7 +52,7 @@ const AssurancePage = ({ onContinue }: AssurancePageProps) => {
       className="flex flex-col min-h-full"
       style={{ fontFamily: SYSTEM_FONT_STACK }}
     >
-      <section className="py-12 lg:py-16">
+      <section className="py-12 lg:py-16 pb-32 sm:pb-12">
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
           {/* Titre — Lovable : text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight */}
           <h2 className="text-center text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground tracking-tight">
@@ -91,8 +91,8 @@ const AssurancePage = ({ onContinue }: AssurancePageProps) => {
             })}
           </div>
 
-          {/* CTA — Lovable : rounded-xl px-8 py-5 text-base sm:text-lg font-bold bg-accent hover:opacity-90 shadow-lg, flèche dans le texte */}
-          <div className="mt-12 flex flex-col items-center gap-3 pb-24 sm:pb-0">
+          {/* CTA desktop (sm+) — Lovable V1 : rounded-xl px-8 py-5 text-base sm:text-lg font-bold bg-accent, flèche dans le texte */}
+          <div className="hidden sm:flex flex-col items-center gap-3 mt-12">
             <button
               onClick={onContinue}
               className="inline-flex items-center justify-center rounded-xl px-8 py-5 text-base sm:text-lg font-bold bg-accent text-accent-foreground hover:opacity-90 transition-opacity shadow-lg"
@@ -105,6 +105,22 @@ const AssurancePage = ({ onContinue }: AssurancePageProps) => {
           </div>
         </div>
       </section>
+
+      {/* CTA sticky mobile — ajout par rapport à Lovable V1 pour booster la conversion sur petit écran */}
+      <div
+        className="sm:hidden fixed bottom-0 left-0 right-0 z-20 bg-background/95 backdrop-blur border-t border-border/40 px-4 py-3 flex flex-col items-center gap-1.5"
+        style={{ fontFamily: SYSTEM_FONT_STACK }}
+      >
+        <button
+          onClick={onContinue}
+          className="w-full inline-flex items-center justify-center rounded-xl px-6 py-3.5 text-base font-bold bg-accent text-accent-foreground hover:opacity-90 transition-opacity shadow-lg"
+        >
+          Commencer le questionnaire (1 min) →
+        </button>
+        <p className="text-[11px] text-muted-foreground">
+          Pas de mail nécessaire pour voir le résultat
+        </p>
+      </div>
     </div>
   );
 };
