@@ -43,6 +43,7 @@ type ColumnMapping struct {
 	MCPEnv              string `json:"mcp_env,omitempty"`     // JSON object string
 	DocSlug             string `json:"doc_slug,omitempty"`
 	DocDescription      string `json:"doc_description,omitempty"`
+	CreatedBy           string `json:"created_by,omitempty"` // Optional — sheet column whose cell value sets mcp_servers.created_by; empty/missing falls back to connected user
 }
 
 // SheetImportRequest is the request body for POST /api/v1/google/sheets/import.
