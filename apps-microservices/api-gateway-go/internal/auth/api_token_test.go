@@ -13,8 +13,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
-	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
+	cachepkg "api-gateway-go/internal/cache"
+	dbpkg "api-gateway-go/internal/db"
 )
 
 func setupAuthDeps(t *testing.T) (*APITokenVerifier, *gorm.DB, *miniredis.Miniredis) {

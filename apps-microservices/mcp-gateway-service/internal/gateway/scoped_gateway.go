@@ -62,6 +62,20 @@ const RingoverAllowedUserIDsHeader = "X-Ringover-Allowed-User-IDs"
 // sides of the contract live in different services and must stay in sync.
 const BDDAllowedTablesHeader = "X-BDD-Allowed-Tables"
 
+// ZohoAllowedUserHeader carries one or more comma-separated emails when the
+// active backend is Zoho-tagged and a filter (auto or admin) applies.
+const ZohoAllowedUserHeader = "X-Zoho-Allowed-User"
+
+// zohoDenySentinel is the email value injected when the admin-configured
+// Zoho filter resolves to an empty allow-list. The Zoho MCP backend treats
+// any unknown email as no-access; this value is intentionally never a real
+// account.
+const zohoDenySentinel = "deny-all@hellopro.fr.deny"
+
+// zohoToolPrefix is the ToolPrefix value identifying Zoho backends in the
+// in-memory registry. Mirrors leexiToolPrefix / ringoverToolPrefix.
+const zohoToolPrefix = "zoho"
+
 // ScopedGateway wraps a Gateway but filters results to only the allowed server IDs
 // and optionally to specific tools per server.
 // It implements the transport.Handler interface.
@@ -215,6 +229,8 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		sg.injectLeexiHeader(ctx, headers)
 	case ringoverToolPrefix:
 		sg.injectRingoverHeader(ctx, headers)
+	case zohoToolPrefix:
+		sg.injectZohoHeader(ctx, headers, backend)
 	case bddToolPrefix:
 		sg.injectBDDHeader(ctx, headers)
 	}
@@ -502,6 +518,48 @@ func (sg *ScopedGateway) resolveRingoverAllowedUsers(ctx context.Context, f *sco
 		return []int{user.UserID}
 	default:
 		return nil
+	}
+}
+
+// injectZohoHeader resolves the Zoho filter for this request.
+//
+// Step 1 — when the backend is an imported Zoho server (non-empty
+// TemplateSlug + non-empty CreatedBy), inject the server's created_by as
+// the allowed user. Per-server, deterministic; end-user identity is not
+// consulted.
+//
+// Step 2 — otherwise, resolve the admin-configured per-token /
+// per-OAuth2-client filter:
+//   - mode "none" or no filter on ctx → no header (unrestricted backend)
+//   - mode "users" with non-empty list → comma-joined emails
+//   - mode "users" with empty list → deny sentinel
+//   - mode "creator" with non-empty CreatorEmail → single email
+//   - mode "creator" with empty CreatorEmail → deny sentinel
+func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[string]string, backend *BackendServer) {
+	// Step 1 — auto-filter on imported Zoho servers.
+	if backend.TemplateSlug != "" && backend.CreatedBy != "" {
+		headers[ZohoAllowedUserHeader] = backend.CreatedBy
+		return
+	}
+
+	// Step 2 — admin-configured filter.
+	filter, ok := scopetoken.ZohoFilterFromContext(ctx)
+	if !ok || filter == nil || filter.Mode == "none" {
+		return
+	}
+	switch filter.Mode {
+	case "users":
+		if len(filter.AllowedEmails) == 0 {
+			headers[ZohoAllowedUserHeader] = zohoDenySentinel
+			return
+		}
+		headers[ZohoAllowedUserHeader] = strings.Join(filter.AllowedEmails, ",")
+	case "creator":
+		if filter.CreatorEmail == "" {
+			headers[ZohoAllowedUserHeader] = zohoDenySentinel
+			return
+		}
+		headers[ZohoAllowedUserHeader] = filter.CreatorEmail
 	}
 }
 

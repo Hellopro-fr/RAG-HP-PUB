@@ -132,6 +132,15 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := applyZohoFilterToDBRow(
+		req.ZohoFilter,
+		func(m string) { client.ZohoFilterMode = m },
+		func(b json.RawMessage) { client.ZohoAllowedEmails = b },
+	); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
 	if len(req.RedirectURIs) > 0 {
 		redirectJSON, _ := json.Marshal(req.RedirectURIs)
 		s := string(redirectJSON)
@@ -262,6 +271,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&client),
 		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&client),
 		BDDFilter:             bddDTO,
+		ZohoFilter:            oauth2ClientZohoFilterToDTO(&client),
 	})
 }
 
@@ -338,6 +348,19 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 		updates["ringover_filter_mode"] = mode
 		updates["ringover_allowed_user_ids"] = userIDs
 		updates["ringover_allowed_team_ids"] = teamIDs
+	}
+
+	if req.ZohoFilter != nil {
+		if err := applyZohoFilterToDBRow(
+			req.ZohoFilter,
+			func(m string) { existing.ZohoFilterMode = m },
+			func(b json.RawMessage) { existing.ZohoAllowedEmails = b },
+		); err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+		updates["zoho_filter_mode"] = existing.ZohoFilterMode
+		updates["zoho_allowed_emails"] = existing.ZohoAllowedEmails
 	}
 
 	if len(updates) > 0 {
@@ -481,6 +504,20 @@ func (h *Handler) revokeOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+func oauth2ClientZohoFilterToDTO(c *db.OAuth2Client) *ZohoFilterDTO {
+	if c == nil || c.ZohoFilterMode == "" || c.ZohoFilterMode == ZohoFilterModeNone {
+		return nil
+	}
+	dto := &ZohoFilterDTO{Mode: c.ZohoFilterMode}
+	if c.ZohoFilterMode == ZohoFilterModeUsers && len(c.ZohoAllowedEmails) > 0 {
+		_ = json.Unmarshal(c.ZohoAllowedEmails, &dto.AllowedEmails)
+	}
+	if c.ZohoFilterMode == ZohoFilterModeCreator {
+		dto.CreatorEmail = c.CreatedBy
+	}
+	return dto
+}
+
 func (h *Handler) isOAuth2ClientOwner(r *http.Request, client *db.OAuth2Client) bool {
 	if client.CreatedBy == "" {
 		return true
@@ -557,5 +594,6 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&c),
 		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&c),
 		BDDFilter:             oauth2ClientBDDFilterToDTO(&c),
+		ZohoFilter:            oauth2ClientZohoFilterToDTO(&c),
 	}
 }

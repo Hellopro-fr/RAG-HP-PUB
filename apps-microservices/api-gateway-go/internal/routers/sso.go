@@ -17,7 +17,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/sso"
+	"api-gateway-go/internal/sso"
 )
 
 // SSODeps holds all dependencies for the SSO route handlers.

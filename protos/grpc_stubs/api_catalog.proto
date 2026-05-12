@@ -1,0 +1,87 @@
+syntax = "proto3";
+package api_catalog;
+option go_package = "rag-hp/api_catalog;api_catalog";
+
+import "google/protobuf/timestamp.proto";
+
+service ApiCatalog {
+  rpc ListServices(ListServicesRequest)   returns (ListServicesResponse);
+  rpc GetService(GetServiceRequest)       returns (Service);
+  rpc ListEndpoints(ListEndpointsRequest) returns (ListEndpointsResponse);
+  rpc CreateService(CreateServiceRequest) returns (Service);
+  rpc UpdateService(UpdateServiceRequest) returns (Service);
+  rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
+  rpc RescanAll(RescanAllRequest)         returns (RescanReport);
+  rpc RescanService(RescanServiceRequest) returns (RescanReport);
+}
+
+enum Protocol { PROTOCOL_UNSPECIFIED = 0; REST = 1; WS = 2; GRPC = 3; }
+enum Source   { SOURCE_UNSPECIFIED   = 0; ENV  = 1; MANUAL = 2; SCAN = 3; }
+enum Status   { STATUS_UNSPECIFIED   = 0; ACTIVE = 1; DEPRECATED = 2; DOWN = 3; }
+
+message Service {
+  string id = 1;
+  string name = 2;
+  string base_url = 3;
+  repeated Protocol protocols = 4;
+  Source source = 5;
+  Status status = 6;
+  string description = 7;
+  string owner = 8;
+  repeated string tags = 9;
+  string api_info_url = 10;
+  string grpc_address = 11;
+  google.protobuf.Timestamp last_scanned_at = 12;
+  bool   last_scan_ok = 13;
+  string last_scan_error = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+message Endpoint {
+  string id = 1;
+  string service_id = 2;
+  Protocol protocol = 3;
+  string method = 4;
+  string path = 5;
+  string summary = 6;
+  string operation_id = 7;
+  repeated string tags = 8;
+  bool deprecated = 9;
+}
+
+message ListServicesRequest   { int32 limit = 1; int32 offset = 2; string filter = 3; }
+message ListServicesResponse  { repeated Service items = 1; int64 total = 2; }
+message GetServiceRequest     { string id = 1; }
+message ListEndpointsRequest  { string service_id = 1; Protocol protocol = 2; }
+message ListEndpointsResponse { repeated Endpoint items = 1; }
+
+message CreateServiceRequest {
+  string name = 1;
+  string base_url = 2;
+  repeated Protocol protocols = 3;
+  string description = 4;
+  string owner = 5;
+  repeated string tags = 6;
+  string api_info_url = 7;
+  string grpc_address = 8;
+  string created_by = 9;
+}
+message UpdateServiceRequest {
+  string id = 1;
+  optional string description = 2;
+  optional string owner = 3;
+  repeated string tags = 4;
+  optional Status status = 5;
+}
+message DeleteServiceRequest  { string id = 1; }
+message DeleteServiceResponse { bool deleted = 1; }
+message RescanAllRequest      { bool force = 1; }
+message RescanServiceRequest  { string id = 1; }
+message RescanReport {
+  int32 services_scanned = 1;
+  int32 services_ok = 2;
+  int32 services_failed = 3;
+  repeated string errors = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}

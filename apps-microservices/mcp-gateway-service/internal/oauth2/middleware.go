@@ -144,6 +144,15 @@ func CombinedMiddleware(
 						_ = json.Unmarshal(client.RingoverAllowedTeamIDs, &cc.RingoverAllowedTeamIDs)
 					}
 
+					// Decode persisted Zoho filter (email strings).
+					cc.ZohoFilterMode = client.ZohoFilterMode
+					if len(client.ZohoAllowedEmails) > 0 {
+						_ = json.Unmarshal(client.ZohoAllowedEmails, &cc.ZohoAllowedEmails)
+					}
+					if cc.ZohoFilterMode == "creator" {
+						cc.ZohoCreatorEmail = client.CreatedBy
+					}
+
 					// BDD scope (mirrors scope-token middleware).
 					if len(client.BDDTables) > 0 {
 						cc.BDDAllowedTableIDs = make([]string, 0, len(client.BDDTables))
@@ -192,6 +201,13 @@ func CombinedMiddleware(
 						Mode:           cc.RingoverFilterMode,
 						AllowedUserIDs: cc.RingoverAllowedUserIDs,
 						AllowedTeamIDs: cc.RingoverAllowedTeamIDs,
+					})
+				}
+				if cc.ZohoFilterMode != "" && cc.ZohoFilterMode != "none" {
+					ctx = context.WithValue(ctx, scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+						Mode:          cc.ZohoFilterMode,
+						AllowedEmails: cc.ZohoAllowedEmails,
+						CreatorEmail:  cc.ZohoCreatorEmail,
 					})
 				}
 				if len(cc.BDDAllowedTableIDs) > 0 {
