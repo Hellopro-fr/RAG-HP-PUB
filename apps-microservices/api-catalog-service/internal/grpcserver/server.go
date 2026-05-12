@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -73,6 +74,13 @@ func (s *Server) CreateService(ctx context.Context, req *pb.CreateServiceRequest
 	if req.GetName() == "" || req.GetBaseUrl() == "" {
 		return nil, status.Error(codes.InvalidArgument, "name and base_url required")
 	}
+	// Normalize: gateway routes services under "/<name>"; the convention is
+	// for every service name to end with "-service" so the proxy can strip it
+	// later. Append the suffix iff missing so admins can type either form.
+	name := req.GetName()
+	if !strings.HasSuffix(name, "-service") {
+		name += "-service"
+	}
 	protos := make([]string, 0, len(req.GetProtocols()))
 	for _, p := range req.GetProtocols() {
 		if v := StrFromProto(p); v != "" {
@@ -86,7 +94,7 @@ func (s *Server) CreateService(ctx context.Context, req *pb.CreateServiceRequest
 		tagsJSON = string(b)
 	}
 	row := &db.ServiceRow{
-		ID: uuid.NewString(), Name: req.GetName(), BaseURL: req.GetBaseUrl(),
+		ID: uuid.NewString(), Name: name, BaseURL: req.GetBaseUrl(),
 		Protocols: string(pj), Source: "manual", Status: "active",
 		Description: req.GetDescription(), Owner: req.GetOwner(),
 		Tags: tagsJSON, APIInfoURL: req.GetApiInfoUrl(), GRPCAddress: req.GetGrpcAddress(),

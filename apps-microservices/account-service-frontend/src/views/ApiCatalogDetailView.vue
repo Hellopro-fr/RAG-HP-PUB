@@ -205,8 +205,8 @@ async function deleteService() {
             </dl>
           </div>
 
-          <!-- Admin actions -->
-          <div v-if="auth.isAdmin" class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-5 space-y-2">
+          <!-- Actions: Modifier/Rescan open to all auth users; Supprimer admin-only -->
+          <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-5 space-y-2">
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Actions</h2>
             <button
               type="button"
@@ -224,6 +224,7 @@ async function deleteService() {
               {{ rescanning ? 'Scan en cours…' : 'Rescan' }}
             </button>
             <button
+              v-if="auth.isAdmin"
               type="button"
               class="w-full px-4 py-2 text-sm rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
               @click="deleteService"

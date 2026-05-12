@@ -145,7 +145,6 @@ const columns: ColumnDef<ApiCatalogService, any>[] = [
       <h1 class="text-2xl font-semibold">Catalogue API</h1>
       <div class="flex gap-2">
         <button
-          v-if="auth.isAdmin"
           class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           :disabled="rescanning"
           @click="rescanAll"
@@ -154,7 +153,6 @@ const columns: ColumnDef<ApiCatalogService, any>[] = [
           {{ rescanning ? 'Scan en cours…' : 'Rescan all' }}
         </button>
         <button
-          v-if="auth.isAdmin"
           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
           @click="router.push('/admin/api/new')"
         >
