@@ -825,3 +825,24 @@ func fetchGoogleEmail(client *http.Client) (string, error) {
 	}
 	return info.Email, nil
 }
+
+// resolveCreatedBy returns the created_by value to stamp on a row.
+// Empty column header, missing header, or empty/whitespace cell all fall back
+// to fallback (the connected user's email). Non-empty cells are trimmed.
+//
+// Kept pure and decoupled from *http.Request so both import handlers share
+// one definition of the rule (see google_handlers_test.go for the contract).
+func resolveCreatedBy(column string, row []string, colIndex map[string]int, fallback string) string {
+	if column == "" {
+		return fallback
+	}
+	idx, ok := colIndex[column]
+	if !ok || idx >= len(row) {
+		return fallback
+	}
+	v := strings.TrimSpace(row[idx])
+	if v == "" {
+		return fallback
+	}
+	return v
+}
