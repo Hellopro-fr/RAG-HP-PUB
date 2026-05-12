@@ -537,6 +537,8 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 		Name:          srv.ServerName,
 		Version:       srv.ServerVersion,
 		ToolPrefix:    srv.ToolPrefix,
+		TemplateSlug:  srv.TemplateSlug,
+		CreatedBy:     srv.CreatedBy,
 	}
 	for _, t := range srv.Tools {
 		backend.Tools = append(backend.Tools, mcp.Tool{
