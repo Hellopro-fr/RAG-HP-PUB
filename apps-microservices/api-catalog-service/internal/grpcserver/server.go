@@ -95,6 +95,12 @@ func (s *Server) CreateService(ctx context.Context, req *pb.CreateServiceRequest
 	if err := s.d.Services.Create(row); err != nil {
 		return nil, status.Error(codes.AlreadyExists, err.Error())
 	}
+	// Immediate scan: probe REST/WS/gRPC so endpoints surface without
+	// waiting for the next cron tick (matches admin expectation: create
+	// a service, see its endpoints right away).
+	if s.d.Scanner != nil {
+		s.d.Scanner.Run(ctx, map[string]string{row.Name: row.BaseURL})
+	}
 	got, _ := s.d.Services.GetByID(row.ID)
 	return ServiceRowToProto(*got), nil
 }
