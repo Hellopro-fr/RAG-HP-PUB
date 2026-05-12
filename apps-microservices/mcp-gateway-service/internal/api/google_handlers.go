@@ -694,6 +694,7 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 	}
 
 	id := uuid.New().String()
+	createdBy := resolveCreatedBy(mapping.CreatedBy, row, colIndex, userEmail)
 	srv := db.MCPServer{
 		ID:                  id,
 		Name:                name,
@@ -704,7 +705,7 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 		HealthStatus:        "unknown",
 		MCPTransport:        "http",
 		DocSlug:             generateDocSlug(name, id),
-		CreatedBy:           userEmail,
+		CreatedBy:           createdBy,
 		// TemplateSlug is non-empty only when the caller is the templates
 		// catalog (e.g. custom-http). The regular /servers/import-google
 		// flow leaves this empty so the imported rows show up in the docs
