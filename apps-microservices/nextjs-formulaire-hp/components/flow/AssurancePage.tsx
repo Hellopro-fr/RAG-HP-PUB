@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, RefreshCw, ListChecks, ArrowRight } from "lucide-react";
+import { FileText, LoaderCircle, ListChecks, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AssurancePageProps {
@@ -12,7 +12,7 @@ interface AssurancePageProps {
 
 interface AssuranceStep {
   number: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   iconBg: string;
   title: string;
   description: string;
@@ -32,7 +32,7 @@ const STEPS: AssuranceStep[] = [
   },
   {
     number: "02.",
-    icon: RefreshCw,
+    icon: LoaderCircle,
     iconBg: "bg-accent",
     title: "Notre agent IA analyse vos besoins",
     description: "Plus de 250 produits sont comparés afin de trouver les plus adaptés pour vous.",
@@ -52,37 +52,38 @@ const AssurancePage = ({ onContinue }: AssurancePageProps) => {
       className="flex flex-col min-h-full"
       style={{ fontFamily: SYSTEM_FONT_STACK }}
     >
-      <div className="flex-1 px-4 sm:px-6 lg:px-10 py-8 sm:py-12 lg:py-16 pb-32 sm:pb-12">
-        <div className="mx-auto max-w-5xl">
-          {/* Titre + sous-titre — match Lovable : 36px / 800 / tracking-tight */}
-          <div className="text-center">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground leading-[1.1] tracking-tight">
-              Comment ça se passe ?
-            </h2>
-            <p className="mt-3 text-sm sm:text-base text-muted-foreground">
-              3 étapes pour recevoir votre short-list personnalisée.
-            </p>
-          </div>
+      <section className="py-12 lg:py-16">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+          {/* Titre — Lovable : text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight */}
+          <h2 className="text-center text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground tracking-tight">
+            Comment ça se passe ?
+          </h2>
+          <p className="text-center mt-4 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+            3 étapes pour recevoir votre short-list personnalisée.
+          </p>
 
-          {/* 3 cards */}
-          <div className="mt-8 sm:mt-10 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+          {/* Grid 3 cards — Lovable : md:grid-cols-3 gap-6 lg:gap-8 */}
+          <div className="mt-12 lg:mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
             {STEPS.map((step, index) => {
               const Icon = step.icon;
               return (
                 <div
                   key={step.number}
-                  className="rounded-2xl border border-border bg-card p-6 sm:p-7 animate-fade-in"
+                  className="rounded-xl bg-card border border-border p-8 lg:p-10 shadow-sm hover:shadow-md transition-shadow animate-fade-in"
                   style={{ animationDelay: `${index * 80}ms`, animationFillMode: "both" }}
                 >
-                  <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center text-white", step.iconBg)}>
-                    <Icon className="h-6 w-6" />
+                  {/* Icône — Lovable : h-14 w-14 rounded-xl mb-6 / SVG h-7 w-7 */}
+                  <div className={cn("flex h-14 w-14 items-center justify-center rounded-xl mb-6", step.iconBg)}>
+                    <Icon className={cn("h-7 w-7", step.iconBg === "bg-primary" ? "text-primary-foreground" : "text-accent-foreground")} />
                   </div>
-                  <p className="mt-6 text-sm text-muted-foreground">{step.number}</p>
-                  {/* Card title — match Lovable : 24px / 800 */}
-                  <h3 className="mt-2 text-2xl font-extrabold text-foreground leading-[1.25]">
+                  {/* Numéro — Lovable : text-lg font-semibold mb-2 (au-dessus du titre) */}
+                  <p className="text-lg font-semibold text-muted-foreground mb-2">{step.number}</p>
+                  {/* Card title — Lovable : text-2xl font-extrabold leading-tight mb-4 */}
+                  <h3 className="text-2xl font-extrabold text-foreground leading-tight mb-4">
                     {step.title}
                   </h3>
-                  <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+                  {/* Description — Lovable : text-base leading-relaxed */}
+                  <p className="text-base text-muted-foreground leading-relaxed">
                     {step.description}
                   </p>
                 </div>
@@ -90,40 +91,20 @@ const AssurancePage = ({ onContinue }: AssurancePageProps) => {
             })}
           </div>
 
-          {/* CTA desktop (visible en sm+) — match Lovable : 16px / 700 */}
-          <div className="hidden sm:block mt-10 text-center">
+          {/* CTA — Lovable : rounded-xl px-8 py-5 text-base sm:text-lg font-bold bg-accent hover:opacity-90 shadow-lg, flèche dans le texte */}
+          <div className="mt-12 flex flex-col items-center gap-3 pb-24 sm:pb-0">
             <button
               onClick={onContinue}
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-8 py-4 text-base font-bold text-accent-foreground shadow-lg shadow-accent/25 hover:bg-accent/90 hover:scale-[1.02] transition-all"
+              className="inline-flex items-center justify-center rounded-xl px-8 py-5 text-base sm:text-lg font-bold bg-accent text-accent-foreground hover:opacity-90 transition-opacity shadow-lg"
             >
-              Commencer le questionnaire (1 min) <ArrowRight className="h-4 w-4" />
+              Commencer le questionnaire (1 min) →
             </button>
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Pas de mail nécessaire pour voir le résultat
             </p>
           </div>
         </div>
-      </div>
-
-      {/* CTA sticky mobile (pleine largeur, en bas) */}
-      <div
-        className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)]"
-        style={{ fontFamily: SYSTEM_FONT_STACK }}
-      >
-        <div className="px-4 py-3 text-center border-b border-border/50">
-          <p className="text-[10px] text-muted-foreground">
-            Pas de mail nécessaire pour voir le résultat
-          </p>
-        </div>
-        <div className="p-4">
-          <button
-            onClick={onContinue}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-6 py-3.5 text-base font-bold text-accent-foreground shadow-lg shadow-accent/25 transition-all"
-          >
-            Commencer le questionnaire <ArrowRight className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };
