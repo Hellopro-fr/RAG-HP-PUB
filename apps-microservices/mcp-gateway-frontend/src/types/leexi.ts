@@ -13,6 +13,15 @@ export interface LeexiFilter {
   creator_uuid?: string
 }
 
+// ZohoFilter mirrors the backend ZohoFilterDTO. allowed_emails is
+// meaningful only when mode === 'users'. creator_email is response-only
+// and reflects the row's created_by snapshot when mode === 'creator'.
+export interface ZohoFilter {
+  mode: 'none' | 'users' | 'creator'
+  allowed_emails?: string[]
+  creator_email?: string
+}
+
 export interface LeexiUser {
   uuid: string
   email?: string

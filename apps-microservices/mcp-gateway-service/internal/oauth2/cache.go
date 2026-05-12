@@ -40,6 +40,11 @@ type CachedClient struct {
 	// list of bdd_used_tables.id rows the OAuth2 client is restricted to.
 	// Empty slice = no BDD restriction.
 	BDDAllowedTableIDs []string
+
+	// Zoho ownership scope — mirrors scopetoken.CachedToken.
+	ZohoFilterMode    string
+	ZohoAllowedEmails []string
+	ZohoCreatorEmail  string
 }
 
 // Cache provides an in-memory TTL cache for OAuth2 client scope lookups.

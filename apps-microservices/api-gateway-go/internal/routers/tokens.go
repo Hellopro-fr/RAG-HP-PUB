@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/auth"
-	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
-	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
+	"api-gateway-go/internal/auth"
+	cachepkg "api-gateway-go/internal/cache"
+	dbpkg "api-gateway-go/internal/db"
 )
 
 const maxActiveAccessTokens = 10
@@ -194,7 +194,7 @@ func revokeHandler(d TokenDeps) gin.HandlerFunc {
 			return
 		}
 
-		ids := make([]uint, len(rts))
+		ids := make([]int64, len(rts))
 		for i, r := range rts {
 			ids[i] = r.ID
 		}
@@ -221,7 +221,7 @@ func revokeHandler(d TokenDeps) gin.HandlerFunc {
 // pruneAccessTokens keeps only the 10 most-recent non-expired active access tokens
 // per refresh token and deactivates any expired-but-still-active rows.
 // Mirrors the Python api-gateway behaviour.
-func pruneAccessTokens(ctx context.Context, gdb *gorm.DB, refreshID uint) error {
+func pruneAccessTokens(ctx context.Context, gdb *gorm.DB, refreshID int64) error {
 	now := time.Now().UTC()
 
 	// Deactivate expired rows first.
@@ -241,7 +241,7 @@ func pruneAccessTokens(ctx context.Context, gdb *gorm.DB, refreshID uint) error 
 		return nil
 	}
 
-	excessIDs := make([]uint, 0, len(active)-maxActiveAccessTokens)
+	excessIDs := make([]int64, 0, len(active)-maxActiveAccessTokens)
 	for _, a := range active[maxActiveAccessTokens:] {
 		excessIDs = append(excessIDs, a.ID)
 	}
@@ -251,7 +251,7 @@ func pruneAccessTokens(ctx context.Context, gdb *gorm.DB, refreshID uint) error 
 }
 
 type refreshTokenEntry struct {
-	ID           uint      `json:"id"`
+	ID           int64   `json:"id"`
 	ServiceName  string    `json:"service_name"`
 	Token        string    `json:"token"`
 	DateCreation time.Time `json:"date_creation"`
@@ -265,7 +265,7 @@ type refreshTokenList struct {
 }
 
 type apiCallHistoryEntry struct {
-	ID             uint      `json:"id"`
+	ID             int64   `json:"id"`
 	ServiceName    string    `json:"service_name"`
 	Method         string    `json:"method"`
 	Path           string    `json:"path"`

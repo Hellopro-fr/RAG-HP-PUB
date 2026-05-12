@@ -40,6 +40,10 @@ export interface ColumnMapping {
   mcp_env?: string
   doc_slug?: string
   doc_description?: string
+  // Optional — when set, each row's cell at this column header becomes the
+  // created_by stamped on the imported mcp_servers row. Empty falls back to
+  // the connected user.
+  created_by?: string
 }
 
 export interface SheetImportRequest {
@@ -89,4 +93,7 @@ export interface InstanceSheetImportRequest {
   fixed_tool_prefix?: string
   fixed_icon?: string
   name_prefix?: string
+  // Optional — sheet column whose cell value sets the template instance's
+  // created_by. Empty/unmapped falls back to the connected user.
+  created_by_column?: string
 }

@@ -16,7 +16,7 @@ func newProxyRouter(serviceMap map[string]string, timeouts map[string]float64, h
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := NewHTTPHandler(HTTPDeps{
-		ServiceMap:        serviceMap,
+		Services:          func() map[string]string { return serviceMap },
 		DownstreamTimeout: timeouts,
 		History:           hist,
 	})

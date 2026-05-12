@@ -14,7 +14,7 @@ var (
 
 type AccessClaims struct {
 	Subject        string
-	RefreshTokenID uint
+	RefreshTokenID int64
 }
 
 type JWT struct {
@@ -27,7 +27,7 @@ func NewJWT(secret, alg string, accessDuration time.Duration) *JWT {
 	return &JWT{secret: []byte(secret), alg: alg, access: accessDuration}
 }
 
-func (j *JWT) GenerateAccessToken(service string, refreshID uint) string {
+func (j *JWT) GenerateAccessToken(service string, refreshID int64) string {
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
 		"sub":  service,
@@ -57,12 +57,12 @@ func (j *JWT) VerifyAccessToken(raw string) (AccessClaims, error) {
 		return AccessClaims{}, err
 	}
 	sub, _ := c["sub"].(string)
-	var rtid uint
+	var rtid int64
 	switch v := c["rtid"].(type) {
 	case float64:
-		rtid = uint(v)
+		rtid = int64(v)
 	case int64:
-		rtid = uint(v)
+		rtid = v
 	}
 	return AccessClaims{Subject: sub, RefreshTokenID: rtid}, nil
 }

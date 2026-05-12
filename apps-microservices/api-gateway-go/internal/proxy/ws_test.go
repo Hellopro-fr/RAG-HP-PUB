@@ -31,7 +31,8 @@ func TestWebSocketEcho(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	wsHandler := NewWSHandler(map[string]string{"/svc-service": strings.Replace(backend.URL, "http://", "ws://", 1)})
+	svcMap := map[string]string{"/svc-service": strings.Replace(backend.URL, "http://", "ws://", 1)}
+	wsHandler := NewWSHandler(func() map[string]string { return svcMap })
 	r.GET("/:service/*path", wsHandler)
 
 	gw := httptest.NewServer(r)

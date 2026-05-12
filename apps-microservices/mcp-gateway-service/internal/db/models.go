@@ -234,6 +234,13 @@ type ScopeToken struct {
 	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
 	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
 
+	// Zoho ownership scope — see ZohoFilterMode constants in api/token_dto.go.
+	// "users":   ZohoAllowedEmails is authoritative (JSON array of email strings).
+	// "creator": resolved single email from the token's CreatedBy at write time.
+	// "none":    no filter (default).
+	ZohoFilterMode    string          `gorm:"type:varchar(16);not null;default:'none'" json:"zoho_filter_mode"`
+	ZohoAllowedEmails json.RawMessage `gorm:"type:json" json:"zoho_allowed_emails,omitempty"`
+
 	// Associations
 	Servers      []ScopeTokenServer      `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []ScopeTokenTool        `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
@@ -291,6 +298,10 @@ type OAuth2Client struct {
 	RingoverFilterMode     string          `gorm:"type:varchar(16);not null;default:'none'" json:"ringover_filter_mode"`
 	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
 	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
+
+	// Zoho ownership scope — same semantics as ScopeToken.ZohoFilterMode.
+	ZohoFilterMode    string          `gorm:"type:varchar(16);not null;default:'none'" json:"zoho_filter_mode"`
+	ZohoAllowedEmails json.RawMessage `gorm:"type:json" json:"zoho_allowed_emails,omitempty"`
 
 	// Associations
 	Servers      []OAuth2ClientServer      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`

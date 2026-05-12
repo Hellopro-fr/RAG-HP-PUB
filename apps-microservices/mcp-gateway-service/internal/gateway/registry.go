@@ -15,6 +15,14 @@ type BackendServer struct {
 	Name          string
 	Version       string
 	ToolPrefix    string // optional alphanumeric prefix for tool names: {prefix}_{tool_name}
+	// TemplateSlug echoes mcp_servers.template_slug. Non-empty means this
+	// backend was created via the /templates catalog (stdio instance or
+	// http_batch sheet import). Read by the Zoho header injector to decide
+	// whether to fire the auto-filter Step 1 path.
+	TemplateSlug string
+	// CreatedBy echoes mcp_servers.created_by. Used by the Zoho header
+	// injector to populate X-Zoho-Allowed-User on imported Zoho backends.
+	CreatedBy     string
 	Capabilities  mcp.ServerCapabilities
 	Tools         []mcp.Tool
 	Resources     []mcp.Resource
