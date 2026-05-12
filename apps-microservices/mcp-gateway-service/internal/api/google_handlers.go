@@ -450,6 +450,12 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("credentials_column %q not found in sheet headers", req.CredentialsColumn)})
 		return
 	}
+	if req.CreatedByColumn != "" {
+		if _, ok := colIndex[req.CreatedByColumn]; !ok {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("created_by_column %q not found in sheet headers", req.CreatedByColumn)})
+			return
+		}
+	}
 	for key, col := range req.ExtraEnvColumns {
 		if col == "" {
 			continue
@@ -471,7 +477,7 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 		}
 	}
 
-	createdBy := auth.UserEmailFromContext(r.Context())
+	fallbackCreatedBy := auth.UserEmailFromContext(r.Context())
 	resp := SheetImportResponse{
 		Total:   len(rows),
 		Results: make([]SheetImportResultEntry, 0, len(rows)),
@@ -538,6 +544,7 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 			continue
 		}
 
+		rowCreatedBy := resolveCreatedBy(req.CreatedByColumn, row, colIndex, fallbackCreatedBy)
 		_, _, cerr := h.createInstanceFromSpec(
 			r.Context(),
 			tpl,
@@ -548,7 +555,7 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 			req.FixedIcon,
 			req.FixedToolPrefix,
 			req.AutoDiscover,
-			createdBy,
+			rowCreatedBy,
 		)
 		if cerr != nil {
 			_, msg := classifyCreateInstanceError(cerr)

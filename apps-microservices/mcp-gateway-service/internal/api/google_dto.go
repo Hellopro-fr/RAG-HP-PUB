@@ -29,18 +29,18 @@ type SheetPreviewResponse struct {
 
 // ColumnMapping maps spreadsheet column headers to MCP server fields.
 type ColumnMapping struct {
-	Name                string `json:"name"`                           // Required
-	URL                 string `json:"url"`                            // Required
-	AuthHeaders         string `json:"auth_headers,omitempty"`         // JSON string
-	Tags                string `json:"tags,omitempty"`                 // Comma-separated
+	Name                string `json:"name"`                   // Required
+	URL                 string `json:"url"`                    // Required
+	AuthHeaders         string `json:"auth_headers,omitempty"` // JSON string
+	Tags                string `json:"tags,omitempty"`         // Comma-separated
 	TransportPreference string `json:"transport_preference,omitempty"`
 	ConnectTimeoutMs    string `json:"connect_timeout_ms,omitempty"`
 	ToolPrefix          string `json:"tool_prefix,omitempty"`
 	Icon                string `json:"icon,omitempty"`
 	MCPTransport        string `json:"mcp_transport,omitempty"`
 	MCPCommand          string `json:"mcp_command,omitempty"`
-	MCPArgs             string `json:"mcp_args,omitempty"`    // JSON array string
-	MCPEnv              string `json:"mcp_env,omitempty"`     // JSON object string
+	MCPArgs             string `json:"mcp_args,omitempty"` // JSON array string
+	MCPEnv              string `json:"mcp_env,omitempty"`  // JSON object string
 	DocSlug             string `json:"doc_slug,omitempty"`
 	DocDescription      string `json:"doc_description,omitempty"`
 	CreatedBy           string `json:"created_by,omitempty"` // Optional — sheet column whose cell value sets mcp_servers.created_by; empty/missing falls back to connected user
@@ -53,10 +53,10 @@ type SheetImportRequest struct {
 	ColumnMapping ColumnMapping `json:"column_mapping"`
 	AutoDiscover  bool          `json:"auto_discover"`
 	// Override fields — applied to all imported servers (take precedence over column mapping).
-	NamePrefix     string `json:"name_prefix,omitempty"`      // Prepended to every server name
-	FixedTags      string `json:"fixed_tags,omitempty"`       // Comma-separated tags applied to all servers (merged with sheet column)
-	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"` // Tool prefix applied to all servers (overrides sheet column)
-	FixedIcon            string `json:"fixed_icon,omitempty"`             // Icon applied to all servers (overrides sheet column)
+	NamePrefix           string `json:"name_prefix,omitempty"`           // Prepended to every server name
+	FixedTags            string `json:"fixed_tags,omitempty"`            // Comma-separated tags applied to all servers (merged with sheet column)
+	FixedToolPrefix      string `json:"fixed_tool_prefix,omitempty"`     // Tool prefix applied to all servers (overrides sheet column)
+	FixedIcon            string `json:"fixed_icon,omitempty"`            // Icon applied to all servers (overrides sheet column)
 	DisableDocumentation bool   `json:"disable_documentation,omitempty"` // When true, imported servers have no documentation page
 	// TemplateSlug is set when the import was launched from the templates
 	// catalog (e.g. custom-http). Empty for regular server imports from
@@ -94,6 +94,10 @@ type InstanceSheetImportRequest struct {
 	FixedToolPrefix string `json:"fixed_tool_prefix,omitempty"`
 	FixedIcon       string `json:"fixed_icon,omitempty"`
 	NamePrefix      string `json:"name_prefix,omitempty"`
+	// Optional — when set, each row's cell at this column populates
+	// template_instances.created_by (and the linked mcp_servers row).
+	// Empty header or empty cell falls back to the connected user.
+	CreatedByColumn string `json:"created_by_column,omitempty"`
 }
 
 // SheetImportResponse is the response for POST /api/v1/google/sheets/import.
