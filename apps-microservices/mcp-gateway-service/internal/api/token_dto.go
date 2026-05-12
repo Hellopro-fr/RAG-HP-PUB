@@ -60,6 +60,22 @@ type BDDFilterDTO struct {
 	UsedTableIDs []string `json:"used_table_ids"`
 }
 
+// ZohoFilterMode constants — accepted values for ZohoFilterDTO.Mode.
+const (
+	ZohoFilterModeNone    = "none"
+	ZohoFilterModeUsers   = "users"
+	ZohoFilterModeCreator = "creator"
+)
+
+// ZohoFilterDTO carries the per-token / per-client Zoho ownership scope.
+// AllowedEmails is meaningful only when Mode = "users". CreatorEmail is
+// response-only — set to the resolved CreatedBy when Mode = "creator".
+type ZohoFilterDTO struct {
+	Mode          string   `json:"mode"`                     // none | users | creator
+	AllowedEmails []string `json:"allowed_emails,omitempty"` // Mode = users
+	CreatorEmail  string   `json:"creator_email,omitempty"`  // response-only when Mode = creator
+}
+
 // CreateTokenRequest is the body for POST /api/v1/tokens.
 type CreateTokenRequest struct {
 	Name           string                `json:"name"`
@@ -74,6 +90,7 @@ type CreateTokenRequest struct {
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`    // nil = unrestricted (mode=none)
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"` // nil = unrestricted (mode=none)
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`      // nil = unrestricted (full BDD access)
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // CreateTokenResponse is returned once on creation (includes raw token).
@@ -95,6 +112,7 @@ type CreateTokenResponse struct {
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // TokenResponse is the standard token response (no raw token).
@@ -118,6 +136,7 @@ type TokenResponse struct {
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // UpdateTokenRequest is the body for PUT /api/v1/tokens/{id}.
@@ -133,6 +152,7 @@ type UpdateTokenRequest struct {
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // CreateTokenResponse already declared above is extended via leexi_filter in
