@@ -129,6 +129,7 @@ func main() {
 	for _, e := range cfg.DocsAdminEmails {
 		adminEmails[e] = struct{}{}
 	}
+	routers.RegisterFavicon(r)
 	routers.RegisterDocs(r, routers.DocsDeps{
 		BaseSpec:    baseSpec,
 		Services:    getServices,
