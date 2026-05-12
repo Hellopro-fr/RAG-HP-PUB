@@ -231,6 +231,12 @@ class CrawlerManager:
         try:
             os.makedirs(job_storage_path, exist_ok=True)
             logger.info(f"Using storage for crawl_id '{crawl_id}' at '{job_storage_path}'")
+
+            # Wipe any persistent state from a prior run of this crawl_id before
+            # spawning the new subprocess. Observed bug (crawl 6229 with dropData=true):
+            # old _completion_marker.json survives makedirs, reconciler then declares
+            # the new running crawl finished and skips its success webhook.
+            await self._cleanup_stale_state_for_relaunch(crawl_id, job_storage_path)
         except OSError as e:
             await _rollback_claim(decrement_counter=True)
             logger.error(f"Failed to create/access storage directory for crawl '{crawl_id}': {e}")
