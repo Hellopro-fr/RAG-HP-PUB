@@ -136,14 +136,15 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		Client: d.catalog,
 		Audit:  d.catalogAudit,
 	})
+	// Any authenticated user may create/update/rescan API entries; delete stays admin-only.
 	mux.Handle("GET /api/v1/admin/api", requireAuth(catalogHandler))
-	mux.Handle("POST /api/v1/admin/api", requireAdmin(catalogHandler))
+	mux.Handle("POST /api/v1/admin/api", requireAuth(catalogHandler))
 	// Explicit rescan-all before the wildcard {id} routes so Go mux picks the more specific pattern.
-	mux.Handle("POST /api/v1/admin/api/rescan", requireAdmin(catalogHandler))
+	mux.Handle("POST /api/v1/admin/api/rescan", requireAuth(catalogHandler))
 	mux.Handle("GET /api/v1/admin/api/{id}", requireAuth(catalogHandler))
-	mux.Handle("PUT /api/v1/admin/api/{id}", requireAdmin(catalogHandler))
+	mux.Handle("PUT /api/v1/admin/api/{id}", requireAuth(catalogHandler))
 	mux.Handle("DELETE /api/v1/admin/api/{id}", requireAdmin(catalogHandler))
-	mux.Handle("POST /api/v1/admin/api/{id}/{op}", requireAdmin(catalogHandler))
+	mux.Handle("POST /api/v1/admin/api/{id}/{op}", requireAuth(catalogHandler))
 
 	// Health + Prometheus metrics.
 	mux.Handle("GET /health", health.NewHandler(d.version, d.dbPing))

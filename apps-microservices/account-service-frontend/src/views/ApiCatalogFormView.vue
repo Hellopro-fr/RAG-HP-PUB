@@ -43,6 +43,14 @@ const form = reactive<{
 // are editable only when source === 'manual'. name is always locked in edit mode.
 const identityLocked = computed(() => isEdit.value && serviceSource.value !== 'manual')
 
+// Server-side normalization mirror: lowercase + append "-service" iff
+// missing. Preview the final stored name so the user sees it live.
+const normalizedName = computed(() => {
+  const raw = form.name.trim().toLowerCase()
+  if (!raw) return ''
+  return raw.endsWith('-service') ? raw : `${raw}-service`
+})
+
 const parsedTags = computed(() =>
   form.tagsInput
     .split(',')
@@ -155,16 +163,23 @@ async function submit() {
 
             <div class="space-y-4">
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Nom <span class="text-red-500">*</span>
+                  <span
+                    class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-[10px] font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                    title="Premier segment de la route exposée par la passerelle (ex: /mon-service). Le suffixe -service est ajouté automatiquement s'il manque ; si vous le tapez, il est conservé tel quel."
+                  >i</span>
                 </label>
                 <input
                   v-model="form.name"
                   type="text"
-                  placeholder="mon-service-api"
+                  placeholder="mon-service ou mon-service-api"
                   :disabled="isEdit"
                   class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
+                <p v-if="!isEdit && form.name" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Route exposée : <code class="font-mono">/{{ normalizedName }}</code>
+                </p>
                 <p v-if="isEdit" class="text-xs text-gray-400 mt-1">Le nom est un identifiant immuable.</p>
               </div>
 

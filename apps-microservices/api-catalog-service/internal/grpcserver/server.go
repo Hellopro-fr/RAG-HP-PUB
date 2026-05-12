@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -73,6 +74,17 @@ func (s *Server) CreateService(ctx context.Context, req *pb.CreateServiceRequest
 	if req.GetName() == "" || req.GetBaseUrl() == "" {
 		return nil, status.Error(codes.InvalidArgument, "name and base_url required")
 	}
+	// Normalize: lower-case + append "-service" iff missing. Gateway routes
+	// under "/<name>" and the convention is for every name to end with
+	// "-service". Lowercasing keeps env-sourced and manual entries directly
+	// comparable so duplicates are caught before the unique-index error.
+	name := strings.ToLower(strings.TrimSpace(req.GetName()))
+	if !strings.HasSuffix(name, "-service") {
+		name += "-service"
+	}
+	if existing, err := s.d.Services.GetByName(name); err == nil && existing != nil {
+		return nil, status.Errorf(codes.AlreadyExists, "service %q already exists", name)
+	}
 	protos := make([]string, 0, len(req.GetProtocols()))
 	for _, p := range req.GetProtocols() {
 		if v := StrFromProto(p); v != "" {
@@ -86,7 +98,7 @@ func (s *Server) CreateService(ctx context.Context, req *pb.CreateServiceRequest
 		tagsJSON = string(b)
 	}
 	row := &db.ServiceRow{
-		ID: uuid.NewString(), Name: req.GetName(), BaseURL: req.GetBaseUrl(),
+		ID: uuid.NewString(), Name: name, BaseURL: req.GetBaseUrl(),
 		Protocols: string(pj), Source: "manual", Status: "active",
 		Description: req.GetDescription(), Owner: req.GetOwner(),
 		Tags: tagsJSON, APIInfoURL: req.GetApiInfoUrl(), GRPCAddress: req.GetGrpcAddress(),
