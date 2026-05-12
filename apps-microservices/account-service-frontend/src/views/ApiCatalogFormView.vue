@@ -43,11 +43,10 @@ const form = reactive<{
 // are editable only when source === 'manual'. name is always locked in edit mode.
 const identityLocked = computed(() => isEdit.value && serviceSource.value !== 'manual')
 
-// Server-side normalization: appends "-service" iff the user-typed name
-// doesn't already end with it. Mirrored here so the user sees the final
-// route preview while typing.
+// Server-side normalization mirror: lowercase + append "-service" iff
+// missing. Preview the final stored name so the user sees it live.
 const normalizedName = computed(() => {
-  const raw = form.name.trim()
+  const raw = form.name.trim().toLowerCase()
   if (!raw) return ''
   return raw.endsWith('-service') ? raw : `${raw}-service`
 })
