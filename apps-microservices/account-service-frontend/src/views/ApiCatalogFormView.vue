@@ -164,7 +164,7 @@ async function submit() {
             <div class="space-y-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Nom <span class="text-red-500">*</span>
+                  Path <span class="text-red-500">*</span>
                 </label>
                 <input
                   v-model="form.name"
