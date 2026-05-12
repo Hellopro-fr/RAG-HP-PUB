@@ -762,7 +762,7 @@ services:
       # ── API Catalog (route source) ───────────────────────────────────────
       - GATEWAY_USE_CATALOG=${GATEWAY_USE_CATALOG:-true}
       - API_CATALOG_GRPC=${API_CATALOG_GRPC:-api-catalog-service:9100}
-      - CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL:-60s}
+      - CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL:-5s}
       - CATALOG_DIAL_TIMEOUT=${CATALOG_DIAL_TIMEOUT:-3s}
     # depends_on:
     #   mysql:
