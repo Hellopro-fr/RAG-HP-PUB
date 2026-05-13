@@ -17,10 +17,10 @@
     {
       "id": "47",
       "subject": "Task 3: Manual verification (docker compose smoke + Ecritel production)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": ["46"],
       "description": "**Goal:** End-to-end verification. Operations task.\n\n**Files:** None modified.\n\n**Verify:** Logs + Redis evidence per spec §6.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"docker compose logs -f crawler-service | grep -E 'completion marker|Reconciling'\", \"acceptanceCriteria\": [\"docker smoke passes\", \"production deploy confirmed\", \"large crawl finishes without bogus failure webhook\", \"BO sub-problem B [webhook-lock] dropped does NOT fire\", \"real stale path still fires\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-30T18:00:00Z"
+  "lastUpdated": "2026-05-12T16:30:00Z"
 }

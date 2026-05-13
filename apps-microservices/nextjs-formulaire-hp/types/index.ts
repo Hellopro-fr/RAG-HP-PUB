@@ -20,7 +20,6 @@ export interface BulleAide {
 export interface Question {
   id: number;
   title: string;
-  justification: string;
   multiSelect: boolean;
   answers: Answer[];
   bulleAide?: BulleAide | null;

@@ -136,8 +136,26 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 		}
 	}
 
+	// Preserve metadata that lives on the registry but wasn't fetched from
+	// the upstream init result: TemplateSlug, CreatedBy, Tags. Health-checker
+	// re-discovery would otherwise wipe them every probe cycle.
+	if prev := g.registry.FindByID(id); prev != nil {
+		if srv.TemplateSlug == "" {
+			srv.TemplateSlug = prev.TemplateSlug
+		}
+		if srv.CreatedBy == "" {
+			srv.CreatedBy = prev.CreatedBy
+		}
+		if len(srv.Tags) == 0 {
+			srv.Tags = prev.Tags
+		}
+		if srv.ToolPrefix == "" {
+			srv.ToolPrefix = prev.ToolPrefix
+		}
+	}
+
 	g.registry.Register(srv)
-	log.Printf("[gateway] registered backend: %s (%s %s) [%s] id=%s", url, srv.Name, srv.Version, srv.TransportType, id)
+	log.Printf("[gateway] registered backend: %s (%s %s) [%s] id=%s tags=%v", url, srv.Name, srv.Version, srv.TransportType, id, srv.Tags)
 	return nil
 }
 

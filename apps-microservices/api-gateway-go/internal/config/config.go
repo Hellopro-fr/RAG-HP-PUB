@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all runtime configuration loaded from environment variables.
@@ -29,6 +30,11 @@ type Config struct {
 	SecureCookie    bool
 	ServiceName     string
 	DocsAdminEmails []string
+
+	UseCatalog             bool
+	APICatalogGRPC         string
+	CatalogRefreshInterval time.Duration
+	CatalogDialTimeout     time.Duration
 }
 
 // Load reads environment variables and returns a populated Config.
@@ -58,6 +64,11 @@ func Load() Config {
 		SecureCookie:    getenvBool("SECURE_COOKIE", false),
 		ServiceName:     getenv("SERVICE_NAME", "api-gateway"),
 		DocsAdminEmails: parseAdminEmails(os.Getenv("GATEWAY_DOCS_ADMIN_EMAILS")),
+
+		UseCatalog:             getenvBool("GATEWAY_USE_CATALOG", false),
+		APICatalogGRPC:         getenv("API_CATALOG_GRPC", "api-catalog-service:9100"),
+		CatalogRefreshInterval: getenvDuration("CATALOG_REFRESH_INTERVAL", 60*time.Second),
+		CatalogDialTimeout:     getenvDuration("CATALOG_DIAL_TIMEOUT", 3*time.Second),
 	}
 
 	return cfg
@@ -92,6 +103,19 @@ func getenvBool(key string, def bool) bool {
 		return def
 	}
 	return v == "1" || v == "true" || v == "yes"
+}
+
+// getenvDuration parses a duration env var (e.g. "30s", "5m"), returning def on absence or parse failure.
+func getenvDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return def
+	}
+	return d
 }
 
 // parseAdminEmails splits a comma-separated email list, trims whitespace,

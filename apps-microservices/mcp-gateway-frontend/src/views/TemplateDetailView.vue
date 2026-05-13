@@ -65,7 +65,8 @@
             </p>
           </div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <!-- Stdio-only header actions: hidden for Zoho templates -->
+        <div v-if="!isZohoTemplate" class="flex items-center gap-2 shrink-0">
           <router-link
             :to="{ name: 'template-instance-sheet-import', params: { slug } }"
             class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 shrink-0"
@@ -91,9 +92,9 @@
         {{ template.description }}
       </p>
 
-      <!-- Required env schema -->
+      <!-- Required env schema (stdio only — Zoho templates have no required_extra_env) -->
       <section
-        v-if="template.required_extra_env && template.required_extra_env.length > 0"
+        v-if="!isZohoTemplate && template.required_extra_env && template.required_extra_env.length > 0"
         class="mb-8 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-5"
       >
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">
@@ -123,11 +124,23 @@
         </ul>
       </section>
 
-      <!-- Instances section -->
-      <section>
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4">
-          Instances ({{ instances.length }})
-        </h3>
+      <!-- Zoho branch: admin + user imports management -->
+      <ZohoImportsSection v-if="isZohoTemplate" :template-slug="template.slug" />
+
+      <!-- Instances section (stdio only) -->
+      <section v-else>
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+            Instances ({{ filteredInstances.length }}<span v-if="filteredInstances.length !== instances.length"> / {{ instances.length }}</span>)
+          </h3>
+          <label v-if="authStore.isAdmin && creators.length > 1" class="flex items-center gap-2 text-xs">
+            <span class="text-gray-600 dark:text-gray-400">Créé par</span>
+            <select v-model="creatorFilter" class="px-2 py-1 text-xs border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+              <option value="">Tous</option>
+              <option v-for="email in creators" :key="email" :value="email">{{ email }}</option>
+            </select>
+          </label>
+        </div>
 
         <div
           v-if="store.isLoading && instances.length === 0"
@@ -137,12 +150,13 @@
         </div>
 
         <div
-          v-else-if="instances.length === 0"
+          v-else-if="filteredInstances.length === 0"
           class="text-center py-12 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 rounded-lg border border-dashed border-gray-200 dark:border-gray-800"
         >
           <i class="pi pi-inbox text-3xl mb-3 block" />
           <p class="text-sm">
-            Aucune instance &mdash; cliquez sur + Add instance pour commencer.
+            <span v-if="creatorFilter">Aucune instance pour ce créateur.</span>
+            <span v-else>Aucune instance &mdash; cliquez sur + Add instance pour commencer.</span>
           </p>
         </div>
 
@@ -151,7 +165,7 @@
           class="grid grid-cols-1 xl:grid-cols-2 gap-4"
         >
           <TemplateInstanceCard
-            v-for="inst in instances"
+            v-for="inst in filteredInstances"
             :key="inst.id"
             :inst="inst"
             @restart="onRestart"
@@ -163,8 +177,9 @@
       </section>
     </template>
 
-    <!-- Delete confirm dialog -->
+    <!-- Delete confirm dialog (stdio only — Zoho uses inline confirm()) -->
     <ConfirmDialog
+      v-if="!isZohoTemplate"
       :open="!!deletingInstance"
       title="Supprimer l'instance"
       message="Êtes-vous sûr de vouloir supprimer cette instance ? Cette action est irréversible."
@@ -174,6 +189,7 @@
     />
 
     <RotateCredentialsModal
+      v-if="!isZohoTemplate"
       :instance="rotateTarget"
       :open="rotateTarget !== null"
       @update:open="(o) => { if (!o) rotateTarget = null }"
@@ -181,6 +197,7 @@
     />
 
     <InstanceLogsModal
+      v-if="!isZohoTemplate"
       :instance="logsTarget"
       :open="logsTarget !== null"
       @update:open="(o) => { if (!o) logsTarget = null }"
@@ -192,6 +209,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTemplatesStore } from '@/stores/templates'
+import { useAuthStore } from '@/stores/auth'
 import { templatesApi } from '@/api/templates'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
@@ -199,7 +217,12 @@ import TemplateInstanceCard from '@/components/templates/TemplateInstanceCard.vu
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import RotateCredentialsModal from '@/components/templates/RotateCredentialsModal.vue'
 import InstanceLogsModal from '@/components/templates/InstanceLogsModal.vue'
+import ZohoImportsSection from '@/components/zoho/ZohoImportsSection.vue'
 import type { Template, TemplateInstance } from '@/types/templates'
+
+function isZohoSlug(slug: string): boolean {
+  return slug === 'zoho' || slug.startsWith('zoho-')
+}
 
 const props = defineProps<{
   slug: string
@@ -207,7 +230,9 @@ const props = defineProps<{
 
 const router = useRouter()
 const store = useTemplatesStore()
+const authStore = useAuthStore()
 const toast = useToast()
+const creatorFilter = ref('')
 
 const template = ref<Template | null>(null)
 const loading = ref(false)
@@ -220,6 +245,25 @@ const deletingInstance = ref<TemplateInstance | null>(null)
 const instances = computed(() =>
   store.instances.filter(i => i.template_slug === props.slug)
 )
+
+// Distinct creator emails for the admin-only "Créé par" instance filter.
+// Skipped on non-admins because the API already scopes the list server-side.
+const creators = computed(() => {
+  const set = new Set<string>()
+  for (const inst of instances.value) {
+    if (inst.created_by) set.add(inst.created_by)
+  }
+  return Array.from(set).sort()
+})
+
+const filteredInstances = computed(() => {
+  if (!creatorFilter.value) return instances.value
+  return instances.value.filter(inst => inst.created_by === creatorFilter.value)
+})
+
+// Zoho templates (slug === 'zoho' or starts with 'zoho-') use ZohoImportsSection
+// instead of the stdio instance management UI.
+const isZohoTemplate = computed(() => template.value !== null && isZohoSlug(template.value.slug))
 
 async function loadAll(slug: string): Promise<void> {
   loading.value = true

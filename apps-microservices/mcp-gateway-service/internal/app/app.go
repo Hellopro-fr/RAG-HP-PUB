@@ -384,6 +384,10 @@ func registerRESTAndOAuthServer(
 	gw.SetServerAuthorizer(serverAuthRepo)
 	log.Println("[main] server_authorizations wired into Gateway for full-access bypass")
 
+	apiHandler.SetEncryptor(dbs.encryptor)
+	apiHandler.SetZohoImportRepo(repository.NewZohoImportRepo(dbs.database))
+	log.Println("[main] zoho-imports admin REST wired")
+
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
 		redirectURL := strings.TrimRight(cfg.GatewayPublicURL, "/") + "/api/v1/google/callback"
 		googleOAuth := goGoogle.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, redirectURL)
@@ -529,6 +533,10 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 
 // registerFromDBCache enregistre un serveur depuis les données cachées en base.
 func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
+	tags := make([]string, 0, len(srv.Tags))
+	for _, t := range srv.Tags {
+		tags = append(tags, t.Tag)
+	}
 	backend := &gateway.BackendServer{
 		ID:            srv.ID,
 		URL:           srv.URL,
@@ -537,6 +545,9 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 		Name:          srv.ServerName,
 		Version:       srv.ServerVersion,
 		ToolPrefix:    srv.ToolPrefix,
+		TemplateSlug:  srv.TemplateSlug,
+		CreatedBy:     srv.CreatedBy,
+		Tags:          tags,
 	}
 	for _, t := range srv.Tools {
 		backend.Tools = append(backend.Tools, mcp.Tool{
