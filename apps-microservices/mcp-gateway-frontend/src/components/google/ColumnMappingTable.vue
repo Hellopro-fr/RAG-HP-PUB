@@ -126,6 +126,7 @@ const fields: FieldDef[] = [
   { key: 'mcp_env', label: 'Env MCP (JSON)', required: false },
   { key: 'doc_slug', label: 'Slug documentation', required: false },
   { key: 'doc_description', label: 'Description documentation', required: false },
+  { key: 'created_by', label: 'Créateur (défaut : utilisateur connecté)', required: false },
 ]
 
 // Track which mode each dual-mode field is in

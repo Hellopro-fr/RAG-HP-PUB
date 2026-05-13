@@ -8,7 +8,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
+	dbpkg "api-gateway-go/internal/db"
 )
 
 func TestHistoryWorkerSanitizes(t *testing.T) {

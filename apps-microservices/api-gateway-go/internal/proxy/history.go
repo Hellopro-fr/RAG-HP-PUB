@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
+	dbpkg "api-gateway-go/internal/db"
 )
 
 var sensitiveHeaders = map[string]struct{}{

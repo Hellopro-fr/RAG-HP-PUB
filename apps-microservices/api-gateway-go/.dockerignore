@@ -1,6 +1,0 @@
-.git
-.idea
-*.test
-*.out
-gateway
-tests/integration/.cache

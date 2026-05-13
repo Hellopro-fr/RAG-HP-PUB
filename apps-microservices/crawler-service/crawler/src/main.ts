@@ -743,6 +743,10 @@ if (crawlMode === 'update') {
     const totalConsolidated = remainingUrls.length + 1; // +1 for homepage
     console.log(`Consolidated ${totalConsolidated} URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
 
+    if (context.statsManager && consolidationCounts.duplicatesRemoved > 0) {
+        await context.statsManager.increment("filtered_duplicate", consolidationCounts.duplicatesRemoved);
+    }
+
     // Safety net: update mode with 0 URLs means previous crawl data was unavailable
     if (totalConsolidated <= 1) {
         console.error(`❌ Update mode produced 0 URLs from previous crawl '${previousCrawlId}'. No data to compare against. Aborting.`);
@@ -964,6 +968,20 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     }
 
 
+    // Read deperdition counters from StatsManager (defaults to 0 if unavailable)
+    async function readStat(metric: string): Promise<number> {
+        if (!context.statsManager) return 0;
+        try { return await context.statsManager.getValue(metric); } catch { return 0; }
+    }
+    const filtered_qm = await readStat("filtered_qm");
+    const filtered_hash = await readStat("filtered_hash");
+    const filtered_ext = await readStat("filtered_ext");
+    const filtered_nonfr = await readStat("filtered_nonfr");
+    const filtered_duplicate = await readStat("filtered_duplicate");
+    const dropped_cb = await readStat("dropped_cb");
+    const timeout_individual = await readStat("timeout_individual");
+    const success_extracted = await readStat("success");
+
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
@@ -978,6 +996,15 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         camoufox_used: context.camoufoxEnabled,
         diezDecisionMode: getDiezDecisionMode(isError),
         questionMarkDecisionMode: getQuestionMarkDecisionMode(isError),
+        // Observability — deperdition counters (StatsManager / Redis-backed)
+        filtered_qm,
+        filtered_hash,
+        filtered_ext,
+        filtered_nonfr,
+        filtered_duplicate,
+        dropped_cb,
+        timeout_individual,
+        success_extracted,
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');

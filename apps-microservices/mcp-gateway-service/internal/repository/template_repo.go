@@ -138,17 +138,31 @@ func (r *InstanceRepo) FindByMCPServerID(serverID string) (*db.TemplateInstance,
 	return &inst, nil
 }
 
-// ListAll returns all template instances, newest first.
-func (r *InstanceRepo) ListAll() ([]db.TemplateInstance, error) {
+// ListAll returns all template instances, newest first. When createdBy is a
+// non-empty string the result is scoped to rows owned by that user (plus
+// legacy rows with an empty created_by); an empty string returns every row
+// and is the contract relied on by admin list views + the runner-sync
+// internal endpoint.
+func (r *InstanceRepo) ListAll(createdBy string) ([]db.TemplateInstance, error) {
+	q := r.db.Order("created_at DESC")
+	if createdBy != "" {
+		q = q.Where("created_by = ? OR created_by = ''", createdBy)
+	}
 	var out []db.TemplateInstance
-	err := r.db.Order("created_at DESC").Find(&out).Error
+	err := q.Find(&out).Error
 	return out, err
 }
 
 // ListByTemplate returns instances filtered by template slug, newest first.
-func (r *InstanceRepo) ListByTemplate(slug string) ([]db.TemplateInstance, error) {
+// The createdBy semantics mirror ListAll: empty = no filter, non-empty scopes
+// to the caller's rows + legacy rows.
+func (r *InstanceRepo) ListByTemplate(slug, createdBy string) ([]db.TemplateInstance, error) {
+	q := r.db.Where("template_slug = ?", slug).Order("created_at DESC")
+	if createdBy != "" {
+		q = q.Where("created_by = ? OR created_by = ''", createdBy)
+	}
 	var out []db.TemplateInstance
-	err := r.db.Where("template_slug = ?", slug).Order("created_at DESC").Find(&out).Error
+	err := q.Find(&out).Error
 	return out, err
 }
 
