@@ -69,11 +69,16 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	var env requestEnvelope
 	_ = json.Unmarshal(rawBody, &env) // ID extraction is best-effort
 
+	log.Printf("[mcp-zoho-service] /mcp method=%s email=%q login=%q body_bytes=%d", env.Method, email, login, len(rawBody))
+
 	res, err := s.Resolver.Resolve(r.Context(), email, login)
 	if err != nil {
+		log.Printf("[mcp-zoho-service] /mcp method=%s email=%q resolve_error=%v", env.Method, email, err)
 		s.writeResolverError(w, env.ID, email, err)
 		return
 	}
+
+	log.Printf("[mcp-zoho-service] /mcp method=%s email=%q routing_to=%s", env.Method, email, res.UpstreamURL)
 
 	upstream, perr := proxy.ForwardJSONRPC(r.Context(), res.UpstreamURL, res.Headers, bytes.NewReader(rawBody), s.UpstreamTimeout)
 	if perr != nil {
