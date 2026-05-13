@@ -1,0 +1,167 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+
+	"mcp-gateway/internal/crypto"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
+)
+
+// newZohoAdminTestDB builds an in-memory SQLite DB with the ZohoImport table.
+// The gateway's MySQL-typed columns (`datetime(3)`) are not portable to SQLite;
+// the table is created via hand-rolled DDL that mirrors the column set.
+func newZohoAdminTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	gormDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gormDB.Exec(`
+		CREATE TABLE zoho_imports (
+			id            TEXT PRIMARY KEY,
+			name          TEXT NOT NULL DEFAULT '',
+			url           TEXT NOT NULL,
+			auth_headers  BLOB,
+			created_by    TEXT NOT NULL DEFAULT '',
+			is_admin      INTEGER NOT NULL DEFAULT 0,
+			is_active     INTEGER NOT NULL DEFAULT 1,
+			template_slug TEXT NOT NULL DEFAULT '',
+			created_at    DATETIME NOT NULL,
+			updated_at    DATETIME NOT NULL
+		)
+	`).Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	return gormDB
+}
+
+func newTestZohoAdminHandler(t *testing.T) *Handler {
+	t.Helper()
+	gormDB := newZohoAdminTestDB(t)
+	enc, err := crypto.NewEncryptor("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("crypto: %v", err)
+	}
+	h := &Handler{}
+	h.encryptor = enc
+	h.SetZohoImportRepo(repository.NewZohoImportRepo(gormDB))
+	return h
+}
+
+func TestZohoAdmin_PostCreatesThenUpdates(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(ZohoAdminCreateRequest{
+		Name:        "Zoho CRM",
+		URL:         "https://mcp.zoho.eu/v1",
+		AuthHeaders: map[string]string{"Authorization": "Bearer v1"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("first POST status = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
+	}
+	var first ZohoAdminResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &first)
+	if first.URL != "https://mcp.zoho.eu/v1" {
+		t.Fatalf("URL = %q", first.URL)
+	}
+
+	body, _ = json.Marshal(ZohoAdminCreateRequest{
+		Name:        "Zoho CRM",
+		URL:         "https://mcp.zoho.eu/v2",
+		AuthHeaders: map[string]string{"Authorization": "Bearer v2"},
+	})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second POST status = %d, want 200", rec.Code)
+	}
+	var second ZohoAdminResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &second)
+	if second.ID != first.ID {
+		t.Fatalf("ID changed: %q -> %q", first.ID, second.ID)
+	}
+	if second.URL != "https://mcp.zoho.eu/v2" {
+		t.Fatalf("URL = %q", second.URL)
+	}
+
+	_ = db.ZohoImport{} // touch import so it doesn't go unused
+}
+
+func TestZohoAdmin_GetReturnsAdminOr404(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/admin", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET before create: status = %d, want 404", rec.Code)
+	}
+
+	body, _ := json.Marshal(ZohoAdminCreateRequest{Name: "Z", URL: "https://zoho", AuthHeaders: map[string]string{"X-Auth": "k"}})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/admin", nil)
+	rec = httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET: %d", rec.Code)
+	}
+	var got ZohoAdminResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if len(got.AuthHeaderKeys) != 1 || got.AuthHeaderKeys[0] != "X-Auth" {
+		t.Fatalf("AuthHeaderKeys = %+v, want [X-Auth]", got.AuthHeaderKeys)
+	}
+}
+
+func TestZohoAdmin_DeleteClears(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(ZohoAdminCreateRequest{Name: "Z", URL: "https://zoho", AuthHeaders: map[string]string{"X-Auth": "k"}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/zoho-imports/admin", nil)
+	rec = httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE: %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/admin", nil)
+	rec = httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET after delete: %d, want 404", rec.Code)
+	}
+}
+
+func TestZohoAdmin_RejectsBadJSON(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader([]byte("not json")))
+	rec := httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
