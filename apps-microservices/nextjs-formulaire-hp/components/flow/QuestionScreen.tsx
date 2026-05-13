@@ -78,13 +78,9 @@ const QuestionScreen = ({
   const isOtherSelected = selectedAnswers.includes("other");
   const hasSelection = selectedAnswers.length > 0;
 
-  // Panneau d'aide latéral : bulle_aide API (priorité) → catalogue statique → fallback justification
-  const explanation = getQuestionExplanation(
-    displayedQuestion.id,
-    `Q${currentIndex + 1}`,
-    displayedQuestion.bulleAide,
-    displayedQuestion.justification,
-  );
+  // Panneau d'aide latéral : exclusivement alimenté par `bulle_aide` API.
+  // Si la donnée est absente ou malformée, le panneau est masqué (layout mono-colonne).
+  const explanation = getQuestionExplanation(displayedQuestion.bulleAide);
 
   const handleAnswerClick = (answerId: string) => {
     // For single select, auto-advance after selection - except for "other" which needs text input
