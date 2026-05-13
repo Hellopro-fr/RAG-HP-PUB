@@ -96,6 +96,8 @@ func (h *Handler) handleZohoAdminPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	discoverZohoToolsForImport(r.Context(), h.zohoImportRepo, h.encryptor, row)
+
 	status := http.StatusCreated
 	if existing != nil {
 		status = http.StatusOK
@@ -171,6 +173,10 @@ func (h *Handler) handleZohoImportByID(w http.ResponseWriter, r *http.Request) {
 		h.handleZohoImportTest(w, r, id)
 		return
 	}
+	if rest == "discover" {
+		h.handleZohoImportDiscover(w, r, id)
+		return
+	}
 	if rest != "" {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "unknown subroute"})
 		return
@@ -195,6 +201,38 @@ func (h *Handler) handleZohoImportByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
 	}
+}
+
+// handleZohoImportDiscover synchronously re-fetches the tool catalog from
+// the row's upstream URL with its decrypted headers and atomically swaps
+// it into zoho_import_tools. Returns the count actually persisted so the
+// operator can confirm at-a-glance.
+func (h *Handler) handleZohoImportDiscover(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	row, err := h.zohoImportRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if row == nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+		return
+	}
+	tools, fetchErr := fetchZohoTools(r.Context(), h.encryptor, row)
+	if fetchErr != nil {
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: fetchErr.Error()})
+		return
+	}
+	count, perr := h.zohoImportRepo.ReplaceTools(row.ID, tools)
+	if perr != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: perr.Error()})
+		return
+	}
+	log.Printf("[zoho-discover] import=%s manual refresh tools=%d", row.ID, count)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "tools": count})
 }
 
 // splitZohoImportPath parses "/api/v1/zoho-imports/{id}" or
@@ -386,6 +424,12 @@ func (h *Handler) handleZohoImportTest(w http.ResponseWriter, r *http.Request, i
 
 	out.StatusCode = resp.StatusCode
 	out.OK = resp.StatusCode >= 200 && resp.StatusCode < 400
+	if out.OK {
+		// Reuse the same probe to refresh the persisted catalog for this row.
+		// Fire-and-forget so a downstream decode failure never flips the test
+		// result the operator sees.
+		go discoverZohoToolsForImport(context.Background(), h.zohoImportRepo, h.encryptor, row)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 

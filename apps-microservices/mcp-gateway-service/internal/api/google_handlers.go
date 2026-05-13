@@ -742,6 +742,7 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 			result.Message = cerr.Error()
 			return result
 		}
+		discoverZohoToolsForImport(r.Context(), h.zohoImportRepo, h.encryptor, zohoRow)
 		result.Status = "imported"
 		return result
 	}

@@ -228,12 +228,62 @@ func (r *ZohoImportRepo) Update(id string, patch ZohoUpdatePatch) (*db.ZohoImpor
 
 // DeleteByID removes row id. Returns ErrZohoImportNotFound when missing.
 func (r *ZohoImportRepo) DeleteByID(id string) error {
-	res := r.db.Where("id = ?", id).Delete(&db.ZohoImport{})
-	if res.Error != nil {
-		return res.Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("id = ?", id).Delete(&db.ZohoImport{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrZohoImportNotFound
+		}
+		return tx.Where("import_id = ?", id).Delete(&db.ZohoImportTool{}).Error
+	})
+}
+
+// ReplaceTools atomically replaces every tool row attached to importID with
+// the supplied slice. Empty tools deletes the catalog without re-inserting,
+// matching the "discovery returned zero tools" path. Returns the number of
+// rows finally present (== len(tools) on success). Caller must already have
+// validated importID exists.
+func (r *ZohoImportRepo) ReplaceTools(importID string, tools []db.ZohoImportTool) (int, error) {
+	if importID == "" {
+		return 0, fmt.Errorf("import id required")
 	}
-	if res.RowsAffected == 0 {
-		return ErrZohoImportNotFound
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("import_id = ?", importID).Delete(&db.ZohoImportTool{}).Error; err != nil {
+			return err
+		}
+		if len(tools) == 0 {
+			return nil
+		}
+		now := time.Now()
+		for i := range tools {
+			tools[i].ImportID = importID
+			tools[i].ID = 0
+			tools[i].CreatedAt = now
+			tools[i].UpdatedAt = now
+		}
+		return tx.Create(&tools).Error
+	})
+	if err != nil {
+		return 0, err
 	}
-	return nil
+	return len(tools), nil
+}
+
+// ListTools returns the persisted tool catalog for a given import row in a
+// stable (name ASC) order. Returns an empty slice (never nil) when the
+// import has no tools — caller treats that as "fall back to admin row".
+func (r *ZohoImportRepo) ListTools(importID string) ([]db.ZohoImportTool, error) {
+	if importID == "" {
+		return []db.ZohoImportTool{}, nil
+	}
+	var rows []db.ZohoImportTool
+	if err := r.db.Where("import_id = ?", importID).Order("name ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		rows = []db.ZohoImportTool{}
+	}
+	return rows, nil
 }

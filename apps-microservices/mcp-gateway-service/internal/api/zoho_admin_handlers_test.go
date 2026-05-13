@@ -41,6 +41,20 @@ func newZohoAdminTestDB(t *testing.T) *gorm.DB {
 	`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
+	if err := gormDB.Exec(`
+		CREATE TABLE zoho_import_tools (
+			id           INTEGER PRIMARY KEY AUTOINCREMENT,
+			import_id    TEXT NOT NULL,
+			name         TEXT NOT NULL,
+			description  TEXT NOT NULL DEFAULT '',
+			input_schema TEXT NOT NULL,
+			created_at   DATETIME NOT NULL,
+			updated_at   DATETIME NOT NULL,
+			UNIQUE (import_id, name)
+		)
+	`).Error; err != nil {
+		t.Fatalf("create tools table: %v", err)
+	}
 	return gormDB
 }
 
