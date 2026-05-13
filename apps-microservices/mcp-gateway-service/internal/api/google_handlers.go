@@ -854,3 +854,11 @@ func resolveCreatedBy(column string, row []string, colIndex map[string]int, fall
 	}
 	return v
 }
+
+// detectZohoTemplate returns true when the template's slug is a Zoho catalog
+// entry (matches ^zoho(-.*)?$). The detection is anchored on the catalog slug,
+// not on imported sheet content, so a future non-Zoho template can't
+// accidentally route through the zoho_imports table.
+func detectZohoTemplate(slug string) bool {
+	return slug == "zoho" || strings.HasPrefix(slug, "zoho-")
+}
