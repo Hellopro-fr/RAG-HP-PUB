@@ -536,6 +536,16 @@ func (sg *ScopedGateway) resolveRingoverAllowedUsers(ctx context.Context, f *sco
 //   - mode "creator" with non-empty CreatorEmail → single email
 //   - mode "creator" with empty CreatorEmail → deny sentinel
 func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[string]string, backend *BackendServer) {
+	// Identity headers for mcp-zoho-service. Independent of the X-Zoho-Allowed-User
+	// filter feature: these are always injected on Zoho backends when an end-user
+	// is on context, so the downstream router can pick the right per-user upstream.
+	if email, ok := scopetoken.EndUserEmailFromContext(ctx); ok {
+		headers["X-End-User-Email"] = email
+		if at := strings.IndexByte(email, '@'); at > 0 {
+			headers["X-End-User-Login"] = email[:at]
+		}
+	}
+
 	// Step 1 — auto-filter on imported Zoho servers.
 	if backend.TemplateSlug != "" && backend.CreatedBy != "" {
 		headers[ZohoAllowedUserHeader] = backend.CreatedBy
