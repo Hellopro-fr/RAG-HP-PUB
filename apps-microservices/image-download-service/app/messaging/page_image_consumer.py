@@ -2,8 +2,6 @@ import aio_pika
 import json
 import logging
 import os
-from typing import Optional
-
 from image_download_service.core.downloader import Downloader
 from common_utils.autres.DLQProperties import DLQProperties
 
@@ -35,6 +33,7 @@ class PageImageConsumer:
         """
         self.connection = connection
         self.downloader = Downloader()
+        self._consumer_tag = None
 
         # Noms des composants RabbitMQ (topologie isolée, miroir du pattern FP)
         self.exchange_name = EXCHANGE_NAME
@@ -116,6 +115,9 @@ class PageImageConsumer:
 
     def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
         """Récupère le nombre de tentatives depuis les headers x-death (miroir FP)."""
+        # Note : RabbitMQ consolide les entrées x-death par (queue, reason). On lit donc
+        # une seule entrée pour notre retry queue et son `count` est incrémenté à chaque
+        # rejet successif depuis cette queue. Pas besoin de sommer plusieurs entrées.
         if message.headers and "x-death" in message.headers:
             for death in message.headers["x-death"]:
                 if death.get("queue") == self.retry_queue_name:
@@ -232,6 +234,10 @@ class PageImageConsumer:
                 )
                 logger.info("PageImageConsumer message envoyé à la DLQ : %s", self.dead_letter_queue_name)
         except Exception as dlq_error:
+            # TODO Chantier D follow-up : si _send_to_dlq échoue, le message est ack() côté caller
+            #                              → perte silencieuse. Hérité du pattern FP (consumer.py).
+            #                              Fix structurel à coordonner avec FP (NACK requeue ou
+            #                              retry-publish vers DLQ avec circuit-breaker).
             logger.error("PageImageConsumer erreur lors de l'envoi à la DLQ : %s", dlq_error)
 
     async def start_consuming(self) -> None:
@@ -248,4 +254,15 @@ class PageImageConsumer:
         queue = await self._setup_queues(channel)
 
         logger.info("PageImageConsumer : en attente de messages pages images...")
-        await queue.consume(self._on_message_callback)
+        self._consumer_tag = await queue.consume(self._on_message_callback)
+
+    async def stop(self) -> None:
+        """Annule le consumer-tag côté broker. À appeler dans le lifespan shutdown
+        avant `task.cancel()` pour éviter qu'aio_pika ne laisse une inscription orpheline.
+        """
+        if self._consumer_tag is not None:
+            try:
+                await self._consumer_tag.cancel()
+            except Exception as exc:
+                logger.warning("PageImageConsumer stop : échec cancel consumer-tag : %s", exc)
+            self._consumer_tag = None
