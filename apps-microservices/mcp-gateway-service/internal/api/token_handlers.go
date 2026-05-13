@@ -511,7 +511,13 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request, id string)
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // isTokenOwner checks if the current user owns the token (or if the token has no owner).
+// Admins (role == "admin") bypass the ownership check and can mutate any
+// token — read, update, revoke, delete — so support flows can fix or remove
+// a token created by another user.
 func (h *Handler) isTokenOwner(r *http.Request, token *db.ScopeToken) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	if token.CreatedBy == "" {
 		return true // legacy tokens with no owner are accessible to everyone
 	}

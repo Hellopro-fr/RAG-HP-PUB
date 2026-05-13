@@ -809,8 +809,13 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 
 // checkOwnership verifies the current user owns the server.
 // If auth is disabled (no user in context), access is allowed.
+// Admins (role == "admin") bypass the ownership check so they can fix or
+// remove a server created by another user.
 // Returns false and writes a 403 response if ownership check fails.
 func checkOwnership(r *http.Request, srv *db.MCPServer, w http.ResponseWriter) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	userEmail := auth.UserEmailFromContext(r.Context())
 	if userEmail == "" {
 		// Auth disabled — no ownership filtering

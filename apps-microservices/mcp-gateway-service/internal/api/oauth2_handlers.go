@@ -519,7 +519,13 @@ func oauth2ClientZohoFilterToDTO(c *db.OAuth2Client) *ZohoFilterDTO {
 	return dto
 }
 
+// isOAuth2ClientOwner gates per-row mutations (read, update, revoke, delete).
+// Admins (role == "admin") bypass the ownership check so they can fix or remove
+// a client created by another user.
 func (h *Handler) isOAuth2ClientOwner(r *http.Request, client *db.OAuth2Client) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	if client.CreatedBy == "" {
 		return true
 	}
