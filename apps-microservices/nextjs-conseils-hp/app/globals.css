@@ -1,0 +1,74 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ============================================================================
+   Design tokens — alignés avec nextjs-formulaire-hp (HSL).
+   Toute modification ici doit être répercutée sur le formulaire pour cohérence UX.
+   ============================================================================ */
+
+@theme {
+  /* === Couleurs de base === */
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(220 13% 13%);
+
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(220 13% 13%);
+
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(220 13% 13%);
+
+  --color-primary: hsl(231 100% 60%);
+  --color-primary-foreground: hsl(0 0% 100%);
+
+  --color-secondary: hsl(220 14% 96%);
+  --color-secondary-foreground: hsl(220 13% 13%);
+
+  --color-muted: hsl(220 14% 96%);
+  --color-muted-foreground: hsl(220 9% 46%);
+
+  --color-accent: hsl(21 80% 55%);
+  --color-accent-foreground: hsl(0 0% 100%);
+
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  --color-border: hsl(220 13% 91%);
+  --color-input: hsl(220 13% 91%);
+  --color-ring: hsl(231 100% 60%);
+
+  /* === Couleurs sémantiques === */
+  --color-success: hsl(142 71% 45%);
+  --color-success-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 100%);
+  --color-info: hsl(199 89% 48%);
+  --color-info-foreground: hsl(0 0% 100%);
+
+  /* === Spécifique cartes fournisseurs (réutilisable conseils) === */
+  --color-recommended: hsl(231 100% 97%);
+  --color-recommended-border: hsl(231 100% 85%);
+  --color-match-high: hsl(142 71% 45%);
+  --color-match-medium: hsl(38 92% 50%);
+  --color-match-low: hsl(220 9% 46%);
+
+  /* === Rayons === */
+  --radius: 0.5rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+
+  /* === Conteneur === */
+  --container-2xl: 1400px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
