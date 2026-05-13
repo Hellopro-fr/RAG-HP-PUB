@@ -363,3 +363,78 @@ func TestZohoImports_Delete_AdminRow400(t *testing.T) {
 		t.Fatalf("expected redirect message in body, got %s", rec.Body.String())
 	}
 }
+
+func TestZohoImports_Test_Success(t *testing.T) {
+	hits := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","result":{"tools":[]},"id":1}`))
+	}))
+	defer upstream.Close()
+
+	h := newTestZohoAdminHandler(t)
+	in := &db.ZohoImport{
+		Name: "x", URL: upstream.URL, CreatedBy: "alice@hp.fr",
+		TemplateSlug: "zoho-crm",
+	}
+	if err := h.zohoImportRepo.CreateUserImport(in); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/"+in.ID+"/test", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var out ZohoImportTestResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if !out.OK {
+		t.Fatalf("ok = false, body=%s", rec.Body.String())
+	}
+	if out.StatusCode != 200 {
+		t.Fatalf("status_code = %d", out.StatusCode)
+	}
+	if out.LatencyMs < 0 {
+		t.Fatalf("latency_ms = %d, want >= 0", out.LatencyMs)
+	}
+	if hits != 1 {
+		t.Fatalf("upstream hits = %d", hits)
+	}
+}
+
+func TestZohoImports_Test_UpstreamError(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer upstream.Close()
+
+	h := newTestZohoAdminHandler(t)
+	in := &db.ZohoImport{Name: "x", URL: upstream.URL, CreatedBy: "a@hp.fr", TemplateSlug: "zoho-crm"}
+	if err := h.zohoImportRepo.CreateUserImport(in); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/"+in.ID+"/test", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d (should still be 200 with envelope)", rec.Code)
+	}
+	var out ZohoImportTestResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out.OK || out.StatusCode != 502 {
+		t.Fatalf("DTO = %+v, want ok=false status=502", out)
+	}
+}
+
+func TestZohoImports_Test_404(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/missing/test", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}

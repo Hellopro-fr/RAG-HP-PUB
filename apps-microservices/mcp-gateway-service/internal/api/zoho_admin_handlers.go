@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -325,8 +327,63 @@ func (h *Handler) handleZohoImportDelete(w http.ResponseWriter, _ *http.Request,
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) handleZohoImportTest(w http.ResponseWriter, _ *http.Request, _ string) {
-	writeJSON(w, http.StatusNotImplemented, ErrorResponse{Error: "test not implemented yet"})
+func (h *Handler) handleZohoImportTest(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	row, err := h.zohoImportRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if row == nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+		return
+	}
+
+	headers := map[string]string{}
+	if len(row.AuthHeaders) > 0 && h.encryptor != nil {
+		if pt, derr := h.encryptor.Decrypt(row.AuthHeaders); derr == nil {
+			_ = json.Unmarshal(pt, &headers)
+		}
+	}
+
+	const probeBody = `{"jsonrpc":"2.0","method":"tools/list","id":1}`
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	probeReq, rerr := http.NewRequestWithContext(ctx, http.MethodPost, row.URL, strings.NewReader(probeBody))
+	if rerr != nil {
+		writeJSON(w, http.StatusOK, ZohoImportTestResponse{OK: false, Error: rerr.Error()})
+		return
+	}
+	probeReq.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		probeReq.Header.Set(k, v)
+	}
+
+	log.Printf("[zoho-imports] test row id=%s by admin", row.ID)
+
+	start := time.Now()
+	resp, perr := http.DefaultClient.Do(probeReq)
+	latency := time.Since(start).Milliseconds()
+	out := ZohoImportTestResponse{LatencyMs: latency}
+	if perr != nil {
+		out.OK = false
+		if errors.Is(perr, context.DeadlineExceeded) {
+			out.Error = "timeout"
+		} else {
+			out.Error = perr.Error()
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	defer resp.Body.Close()
+
+	out.StatusCode = resp.StatusCode
+	out.OK = resp.StatusCode >= 200 && resp.StatusCode < 400
+	writeJSON(w, http.StatusOK, out)
 }
 
 // zohoAdminToResponse renders a row into the wire shape, decrypting
