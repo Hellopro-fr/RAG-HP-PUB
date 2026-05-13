@@ -82,7 +82,9 @@ func setupAuthorizeTestDB(t *testing.T) *gorm.DB {
 			leexi_allowed_team_uuids TEXT,
 			ringover_filter_mode TEXT NOT NULL DEFAULT 'none',
 			ringover_allowed_user_ids TEXT,
-			ringover_allowed_team_ids TEXT
+			ringover_allowed_team_ids TEXT,
+			zoho_filter_mode TEXT NOT NULL DEFAULT 'none',
+			zoho_allowed_emails TEXT
 		)`,
 		`CREATE TABLE oauth2_client_servers (
 			client_id TEXT NOT NULL,

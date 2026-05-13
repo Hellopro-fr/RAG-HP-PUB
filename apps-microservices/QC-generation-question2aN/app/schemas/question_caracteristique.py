@@ -7,12 +7,18 @@ class ReponseQuestion(BaseModel):
     id_reponse: str = Field(..., description="ID unique de la réponse")
     reponse: str = Field(..., description="Intitulé de la réponse")
 
+class BulleAide(BaseModel):
+    """Bulle d'aide affichée à côté de la question (remplace l'ancienne justification texte)"""
+    libelle: str = Field(default="", description="Titre court de la bulle d'aide")
+    explication: List[str] = Field(default_factory=list, description="Liste de paragraphes d'explication")
+    astuce: str = Field(default="", description="Astuce / recommandation courte")
+
 class Question(BaseModel):
     """Schéma pour une question"""
     id_question: str = Field(..., description="ID unique de la question")
     intitule: str = Field(..., description="Intitulé de la question")
     choix: int = Field(default=1, description="Type choix de question: 1=single, 2=multiple")
-    justification: str = Field(..., description="Justification de la question")
+    bulle_aide: BulleAide = Field(default_factory=BulleAide, description="Bulle d'aide structurée")
     reponses: List[ReponseQuestion] = Field(default_factory=list, description="Liste des réponses")
 
 class RequestProcessus(BaseModel):

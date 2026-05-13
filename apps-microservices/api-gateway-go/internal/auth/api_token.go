@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	cachepkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/cache"
-	dbpkg "github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/db"
+	cachepkg "api-gateway-go/internal/cache"
+	dbpkg "api-gateway-go/internal/db"
 )
 
 // APITokenVerifier validates Bearer tokens on proxied requests.

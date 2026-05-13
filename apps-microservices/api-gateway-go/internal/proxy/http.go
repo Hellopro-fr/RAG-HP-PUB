@@ -8,11 +8,27 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// logAccess emits a single line on stdout in uvicorn's default access log
+// format (prefixed with a Python-logging-style timestamp) so api-gateway-go
+// logs are visually consistent with api-gateway (FastAPI).
+//
+// Layout: '<YYYY-MM-DD HH:MM:SS,mmm> <levelprefix> <client_addr> - "<request_line>" <status>'
+// levelprefix = level name + ':' padded to 8 chars
+// (INFO -> "INFO:    ", WARNING -> "WARNING: ", ERROR -> "ERROR:   ").
+func logAccess(level, clientAddr, method, reqURI, proto string, status int) {
+	now := time.Now()
+	ts := fmt.Sprintf("%s,%03d", now.Format("2006-01-02 15:04:05"), now.Nanosecond()/int(time.Millisecond))
+	sep := strings.Repeat(" ", 8-len(level))
+	fmt.Fprintf(os.Stdout, "%s %s:%s %s - \"%s %s %s\" %d %s\n",
+		ts, level, sep, clientAddr, method, reqURI, proto, status, http.StatusText(status))
+}
 
 var excludedReqHeaders = map[string]struct{}{
 	"host": {}, "content-length": {}, "transfer-encoding": {}, "connection": {},
@@ -29,8 +45,10 @@ type HistoryEnqueuer interface {
 }
 
 // HTTPDeps holds the dependencies for the HTTP reverse proxy handler.
+// Services is a snapshot getter so the proxy picks up live route updates
+// (e.g. from the api-catalog refresher) without rebuilding the handler.
 type HTTPDeps struct {
-	ServiceMap        map[string]string
+	Services          func() map[string]string
 	DownstreamTimeout map[string]float64
 	History           HistoryEnqueuer
 }
@@ -48,7 +66,7 @@ func NewHTTPHandler(d HTTPDeps) gin.HandlerFunc {
 		service := c.Param("service")
 		path := strings.TrimPrefix(c.Param("path"), "/")
 
-		baseURL, ok := d.ServiceMap["/"+service]
+		baseURL, ok := d.Services()["/"+service]
 		if !ok {
 			c.JSON(404, gin.H{"detail": "Service not found"})
 			return
@@ -86,8 +104,10 @@ func NewHTTPHandler(d HTTPDeps) gin.HandlerFunc {
 		durationMs := int(time.Since(start) / time.Millisecond)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) || isTimeoutErr(err) {
+				logAccess("INFO", c.Request.RemoteAddr, c.Request.Method, c.Request.URL.RequestURI(), c.Request.Proto, 504)
 				c.JSON(504, gin.H{"detail": fmt.Sprintf("Le service '%s' a depasse son timeout (%vs).", service, totalTimeout.Seconds())})
 			} else {
+				logAccess("INFO", c.Request.RemoteAddr, c.Request.Method, c.Request.URL.RequestURI(), c.Request.Proto, 503)
 				c.JSON(503, gin.H{"detail": fmt.Sprintf("Le service '%s' est indisponible.", service)})
 			}
 			return
@@ -109,6 +129,8 @@ func NewHTTPHandler(d HTTPDeps) gin.HandlerFunc {
 		c.Writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		c.Writer.WriteHeader(resp.StatusCode)
 		_, _ = c.Writer.Write(respBody)
+
+		logAccess("INFO", c.Request.RemoteAddr, c.Request.Method, c.Request.URL.RequestURI(), c.Request.Proto, resp.StatusCode)
 
 		if d.History != nil {
 			headers := make(map[string]string, len(c.Request.Header))
