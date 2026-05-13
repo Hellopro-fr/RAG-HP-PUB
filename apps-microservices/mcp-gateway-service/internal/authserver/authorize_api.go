@@ -1,6 +1,7 @@
 package authserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,7 +11,19 @@ import (
 
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/mcp"
 )
+
+// ZohoToolsForUser is the optional dependency that buildServerList uses to
+// override the cached admin Zoho tool catalog with the connected user's own
+// catalog at consent time. Implementations return a map keyed by
+// mcp_servers.id, value = live tools fetched from that backend with the
+// user's identity headers. A nil map (or missing server entry, or any
+// upstream error) leaves the cached admin catalog in place — same fail-open
+// behaviour as the per-request tools/list path.
+type ZohoToolsForUser interface {
+	FetchZohoToolsForUser(ctx context.Context, email string) map[string][]mcp.Tool
+}
 
 // ── JSON API DTOs ────────────────────────────────────────────────────────────
 
@@ -135,7 +148,7 @@ func (s *AuthServer) handleAuthorizeInfo(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Build server list
-	servers := s.buildServerList(client)
+	servers := s.buildServerList(r.Context(), client, userEmail)
 
 	resp := authorizeInfoResponse{
 		ClientName: client.Name,
@@ -246,7 +259,7 @@ func (s *AuthServer) handleAuthorizeLogin(w http.ResponseWriter, r *http.Request
 		Secure:   s.secureCookie,
 	})
 
-	servers := s.buildServerList(client)
+	servers := s.buildServerList(r.Context(), client, authResp.Email)
 
 	writeJSON(w, http.StatusOK, authorizeLoginResponse{
 		Success:    true,
@@ -407,13 +420,17 @@ func (s *AuthServer) handleAuthorizeConsent(w http.ResponseWriter, r *http.Reque
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-func (s *AuthServer) buildServerList(client *db.OAuth2Client) []authorizeServerDTO {
+func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Client, userEmail string) []authorizeServerDTO {
 	hasPreConfiguredScope := len(client.Servers) > 0
 
 	servers, _ := s.serverRepo.ListActive()
 	serverMap := make(map[string]db.MCPServer, len(servers))
+	zohoIDs := make(map[string]bool, len(servers))
 	for _, srv := range servers {
 		serverMap[srv.ID] = srv
+		if isZohoServer(srv) {
+			zohoIDs[srv.ID] = true
+		}
 	}
 
 	var result []authorizeServerDTO
@@ -469,7 +486,64 @@ func (s *AuthServer) buildServerList(client *db.OAuth2Client) []authorizeServerD
 		}
 	}
 
+	result = applyZohoUserTools(ctx, result, zohoIDs, s.zohoFetcher, userEmail)
 	return result
+}
+
+// isZohoServer returns true when the registered server is the Zoho stub —
+// either by tool_prefix or by carrying the "zoho" tag (case-insensitive).
+// Mirrors the same check the scoped gateway runs at request time.
+func isZohoServer(srv db.MCPServer) bool {
+	if strings.EqualFold(srv.ToolPrefix, "zoho") {
+		return true
+	}
+	for _, t := range srv.Tags {
+		if strings.EqualFold(t.Tag, "zoho") {
+			return true
+		}
+	}
+	return false
+}
+
+// applyZohoUserTools substitutes the cached admin tool catalog with the
+// connected user's live catalog for every Zoho-tagged server in the result.
+// No-ops when the user is anonymous, when the fetcher is not configured,
+// when there are no Zoho servers in scope, or when the fetcher returns no
+// entry for a given server (fail-open: the client never sees an empty Zoho
+// catalog because of an upstream hiccup). Pure function: testable without
+// any AuthServer or repository fakes.
+func applyZohoUserTools(
+	ctx context.Context,
+	servers []authorizeServerDTO,
+	zohoIDs map[string]bool,
+	fetcher ZohoToolsForUser,
+	userEmail string,
+) []authorizeServerDTO {
+	if fetcher == nil || userEmail == "" || len(zohoIDs) == 0 {
+		return servers
+	}
+	live := fetcher.FetchZohoToolsForUser(ctx, userEmail)
+	if len(live) == 0 {
+		return servers
+	}
+	for i, srv := range servers {
+		if !zohoIDs[srv.ID] {
+			continue
+		}
+		userTools, ok := live[srv.ID]
+		if !ok {
+			continue
+		}
+		converted := make([]authorizeToolDTO, 0, len(userTools))
+		for _, t := range userTools {
+			converted = append(converted, authorizeToolDTO{
+				Name:        t.Name,
+				Description: t.Description,
+			})
+		}
+		servers[i].Tools = converted
+	}
+	return servers
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

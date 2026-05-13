@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/leexiadmin"
@@ -157,6 +158,42 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 	g.registry.Register(srv)
 	log.Printf("[gateway] registered backend: %s (%s %s) [%s] id=%s tags=%v", url, srv.Name, srv.Version, srv.TransportType, id, srv.Tags)
 	return nil
+}
+
+// FetchZohoToolsForUser live-fetches the tool catalog of every registered
+// Zoho-tagged (or zoho-prefixed) backend with the end-user identity headers
+// derived from email. Used by the OAuth2 consent screen to show the user
+// the same per-user catalog they will get from tools/list at runtime. On
+// upstream error for a given backend, that backend is omitted from the
+// result so the consent screen falls back to the cached admin catalog
+// (caller's fail-open contract).
+func (g *Gateway) FetchZohoToolsForUser(ctx context.Context, email string) map[string][]mcp.Tool {
+	if email == "" {
+		return nil
+	}
+	out := make(map[string][]mcp.Tool)
+	for _, srv := range g.registry.All() {
+		if !srv.HasTag("zoho") && srv.ToolPrefix != "zoho" {
+			continue
+		}
+		headers := make(map[string]string, len(srv.AuthHeaders)+2)
+		for k, v := range srv.AuthHeaders {
+			headers[k] = v
+		}
+		headers["X-End-User-Email"] = email
+		if at := strings.IndexByte(email, '@'); at > 0 {
+			headers["X-End-User-Login"] = email[:at]
+		}
+		client := transport.NewBackendClientWithEndpoint(srv.MessageURL, headers)
+		tools, err := client.ListTools(ctx)
+		if err != nil {
+			log.Printf("[gateway] consent zoho tools/list backend=%s email=%s err=%v — falling back to cached admin tools", srv.ID, email, err)
+			continue
+		}
+		log.Printf("[gateway] consent zoho tools/list backend=%s email=%s live_count=%d", srv.ID, email, len(tools))
+		out[srv.ID] = tools
+	}
+	return out
 }
 
 // RegisterFromCache registers a backend from cached DB data (no network call).

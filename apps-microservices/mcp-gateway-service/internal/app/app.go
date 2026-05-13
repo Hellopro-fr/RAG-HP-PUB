@@ -417,6 +417,7 @@ func registerRESTAndOAuthServer(
 		RefreshRepo:    refreshRepo,
 		ServerRepo:     dbs.repo,
 		SSOSessionRepo: ssoSessionRepo,
+		ZohoFetcher:    gw,
 		JWTSecret:      cfg.JWTSecret,
 		PublicURL:      cfg.GatewayPublicURL,
 		AuthURL:        cfg.AuthURL,
