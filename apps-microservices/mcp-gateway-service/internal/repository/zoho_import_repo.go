@@ -122,8 +122,11 @@ var ErrZohoImportNotFound = errors.New("zoho_import not found")
 // ZohoListFilter narrows the List query. Each field is independently
 // optional: nil filters are dropped at the SQL layer.
 type ZohoListFilter struct {
-	IsAdmin *bool  // nil = both
-	Search  string // matches name or created_by, case-insensitive substring
+	IsAdmin   *bool  // nil = both
+	Search    string // matches name or created_by, case-insensitive substring
+	CreatedBy string // when non-empty, restricts the list to rows owned by this
+	// email (plus rows with an empty created_by). Used to scope non-admin
+	// callers to their own imports.
 }
 
 // ZohoUpdatePatch is the bag of optionally-set fields for Update. A nil pointer
@@ -156,6 +159,9 @@ func (r *ZohoImportRepo) List(filter ZohoListFilter, page, limit int) ([]db.Zoho
 	if s := strings.TrimSpace(filter.Search); s != "" {
 		like := "%" + strings.ToLower(s) + "%"
 		tx = tx.Where("LOWER(name) LIKE ? OR LOWER(created_by) LIKE ?", like, like)
+	}
+	if filter.CreatedBy != "" {
+		tx = tx.Where("created_by = ? OR created_by = ''", filter.CreatedBy)
 	}
 
 	var total int64

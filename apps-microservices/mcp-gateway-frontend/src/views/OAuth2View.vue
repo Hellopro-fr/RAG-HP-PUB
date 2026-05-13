@@ -57,6 +57,13 @@
             <option value="soon">Expire sous 30j</option>
           </select>
         </label>
+        <label v-if="authStore.isAdmin" class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Créé par</span>
+          <select v-model="filters.createdBy" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option v-for="email in creators" :key="email" :value="email">{{ email }}</option>
+          </select>
+        </label>
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-gray-600 dark:text-gray-400">Créé après</span>
           <input v-model="filters.createdFrom" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
@@ -122,6 +129,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { oauth2Api } from '@/api/oauth2'
 import { useServersStore } from '@/stores/servers'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import ClientCard from '@/components/oauth2/ClientCard.vue'
@@ -131,6 +139,7 @@ import type { OAuth2Client } from '@/types/oauth2'
 
 const router = useRouter()
 const serversStore = useServersStore()
+const authStore = useAuthStore()
 const toast = useToast()
 
 const clients = ref<OAuth2Client[]>([])
@@ -146,6 +155,7 @@ const filters = reactive({
   expiresBucket: '' as '' | 'never' | 'expired' | 'soon',
   createdFrom: '',
   createdTo: '',
+  createdBy: '',
 })
 
 function inCreatedRange(iso: string): boolean {
@@ -178,8 +188,19 @@ const filteredClients = computed(() => {
     if (filters.serverId && !c.server_ids.includes(filters.serverId)) return false
     if (!matchesExpires(c.expires_at)) return false
     if (!inCreatedRange(c.created_at)) return false
+    if (filters.createdBy && c.created_by !== filters.createdBy) return false
     return true
   })
+})
+
+// Distinct creator emails for the admin-only "Créé par" filter dropdown.
+// Skipped on non-admins because the API already scopes the list server-side.
+const creators = computed(() => {
+  const set = new Set<string>()
+  for (const c of clients.value) {
+    if (c.created_by) set.add(c.created_by)
+  }
+  return Array.from(set).sort()
 })
 
 const activeFilterCount = computed(() => {
@@ -191,6 +212,7 @@ const activeFilterCount = computed(() => {
   if (filters.expiresBucket) n++
   if (filters.createdFrom) n++
   if (filters.createdTo) n++
+  if (filters.createdBy) n++
   return n
 })
 
@@ -202,6 +224,7 @@ function resetFilters() {
   filters.expiresBucket = ''
   filters.createdFrom = ''
   filters.createdTo = ''
+  filters.createdBy = ''
 }
 
 onMounted(() => {

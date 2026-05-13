@@ -351,7 +351,9 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 	}
 	tag := r.URL.Query().Get("tag")
 
-	servers, err := h.repo.ListAll(isActive, tag, "")
+	// Admins see every server; non-admins are scoped to rows they created
+	// (plus legacy rows with an empty created_by — handled in the repo).
+	servers, err := h.repo.ListAll(isActive, tag, effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})

@@ -47,8 +47,9 @@ func (h *Handler) handleOAuth2ClientByID(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) listOAuth2Clients(w http.ResponseWriter, r *http.Request) {
-	userEmail := auth.UserEmailFromContext(r.Context())
-	clients, err := h.oauth2Repo.ListAll(userEmail)
+	// Admins (role == "admin") bypass the created_by filter and see every
+	// client across the workspace. Non-admins keep the per-creator scope.
+	clients, err := h.oauth2Repo.ListAll(effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

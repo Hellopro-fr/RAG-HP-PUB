@@ -124,7 +124,10 @@ func (h *Handler) handleZohoImports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := repository.ZohoListFilter{Search: r.URL.Query().Get("search")}
+	filter := repository.ZohoListFilter{
+		Search:    r.URL.Query().Get("search"),
+		CreatedBy: effectiveCreatorFilter(r.Context()),
+	}
 	if isAdminParam := r.URL.Query().Get("is_admin"); isAdminParam != "" {
 		val := isAdminParam == "true" || isAdminParam == "1"
 		filter.IsAdmin = &val

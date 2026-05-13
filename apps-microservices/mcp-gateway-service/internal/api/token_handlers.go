@@ -54,8 +54,9 @@ func (h *Handler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
-	userEmail := auth.UserEmailFromContext(r.Context())
-	tokens, err := h.tokenRepo.ListAll(userEmail)
+	// Admins (role == "admin") bypass the created_by filter and see every
+	// token across the workspace. Non-admins keep the per-creator scope.
+	tokens, err := h.tokenRepo.ListAll(effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
