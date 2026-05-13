@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"log"
 	"strings"
 	"sync"
 
@@ -118,6 +119,9 @@ func (r *Registry) SetTags(id string, tags []string) {
 	defer r.mu.Unlock()
 	if s, ok := r.servers[id]; ok {
 		s.Tags = tags
+		log.Printf("[registry] SetTags id=%s tags=%v", id, tags)
+	} else {
+		log.Printf("[registry] SetTags id=%s tags=%v — backend NOT in registry (not yet discovered or unregistered)", id, tags)
 	}
 }
 
