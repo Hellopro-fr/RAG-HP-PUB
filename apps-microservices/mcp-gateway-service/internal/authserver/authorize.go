@@ -13,8 +13,21 @@ import (
 	"github.com/google/uuid"
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/mcp"
 	"mcp-gateway/internal/sso"
 )
+
+// toServerTools projects a slice of mcp.Tool (live per-user catalog) into
+// the db.ServerTool shape so the consent renderer can iterate it through
+// the same code path as the cached admin catalog. ServerID is left blank —
+// the caller injects the surrounding server context.
+func toServerTools(tools []mcp.Tool) []db.ServerTool {
+	out := make([]db.ServerTool, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, db.ServerTool{Name: t.Name, Description: t.Description})
+	}
+	return out
+}
 
 //go:embed templates/*.html
 var templateFS embed.FS
@@ -121,7 +134,7 @@ func (s *AuthServer) showLoginOrConsent(w http.ResponseWriter, r *http.Request, 
 	session, err := auth.GetSession(r, s.jwtSecret)
 	if err == nil {
 		if _, err := auth.ValidateJWT(session.Token, s.jwtSecret, ""); err == nil {
-			s.renderConsent(w, client, params, session.Email)
+			s.renderConsent(w, r, client, params, session.Email)
 			return
 		}
 	}
@@ -134,7 +147,7 @@ func (s *AuthServer) showLoginOrConsent(w http.ResponseWriter, r *http.Request, 
 			log.Printf("[authserver] bridge mint session: %v", err)
 			// Fall through to tier 3 on failure so the user can still log in.
 		} else {
-			s.renderConsent(w, client, params, email)
+			s.renderConsent(w, r, client, params, email)
 			return
 		}
 	}
@@ -196,16 +209,28 @@ func (s *AuthServer) mintAuthSession(w http.ResponseWriter, email, displayName s
 	}, s.secureCookie)
 }
 
-func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Client, params *authorizeParams, userEmail string) {
+func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, params *authorizeParams, userEmail string) {
 	// Check if the client has pre-configured server/tool scope (admin-assigned)
 	hasPreConfiguredScope := len(client.Servers) > 0
 
 	servers, _ := s.serverRepo.ListActive()
 
-	// Build server lookup for name resolution
+	// Build server lookup for name resolution + identify Zoho-tagged servers
+	// so the per-user catalog override can substitute their tools below.
 	serverMap := make(map[string]db.MCPServer, len(servers))
+	zohoIDs := make(map[string]bool, len(servers))
 	for _, srv := range servers {
 		serverMap[srv.ID] = srv
+		if isZohoServer(srv) {
+			zohoIDs[srv.ID] = true
+		}
+	}
+
+	// Per-user Zoho catalog override — fetched once before iterating servers
+	// so we can swap admin tools for the user's own tools per Zoho backend.
+	var zohoUserTools map[string][]mcp.Tool
+	if s.zohoFetcher != nil && userEmail != "" && len(zohoIDs) > 0 {
+		zohoUserTools = s.zohoFetcher.FetchZohoToolsForUser(r.Context(), userEmail)
 	}
 
 	type toolEntry struct {
@@ -243,9 +268,17 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 				Name:    srv.Name,
 				Checked: true,
 			}
-			// If specific tools are assigned, list them; otherwise all tools
+			// If specific tools are assigned, list them; otherwise all tools.
+			// For Zoho-tagged servers, swap admin tools for the connected
+			// user's live catalog when the override resolved.
 			srvTools := allowedTools[srv.ID]
-			for _, t := range srv.Tools {
+			source := srv.Tools
+			if zohoIDs[srv.ID] {
+				if user, ok := zohoUserTools[srv.ID]; ok {
+					source = toServerTools(user)
+				}
+			}
+			for _, t := range source {
 				if srvTools != nil && !srvTools[t.Name] {
 					continue
 				}
@@ -273,13 +306,19 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 		}
 
 		for _, srv := range servers {
+			source := srv.Tools
+			if zohoIDs[srv.ID] {
+				if user, ok := zohoUserTools[srv.ID]; ok {
+					source = toServerTools(user)
+				}
+			}
 			entry := serverEntry{
 				ID:        srv.ID,
 				Name:      srv.Name,
-				ToolCount: len(srv.Tools),
+				ToolCount: len(source),
 				Checked:   checkedIDs[srv.ID],
 			}
-			for _, t := range srv.Tools {
+			for _, t := range source {
 				entry.Tools = append(entry.Tools, toolEntry{
 					Name:        t.Name,
 					Description: t.Description,
