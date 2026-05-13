@@ -544,6 +544,9 @@ func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[strin
 		if at := strings.IndexByte(email, '@'); at > 0 {
 			headers["X-End-User-Login"] = email[:at]
 		}
+		log.Printf("[scoped] zoho injectHeaders backend=%s tool_prefix=%s email=%s — forwarding identity", backend.ID, backend.ToolPrefix, email)
+	} else {
+		log.Printf("[scoped] zoho injectHeaders backend=%s tool_prefix=%s NO end_user_email in ctx — discovery/health probe or non-OAuth2 grant", backend.ID, backend.ToolPrefix)
 	}
 
 	// Step 1 — auto-filter on imported Zoho servers.
