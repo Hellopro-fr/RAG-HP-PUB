@@ -197,6 +197,11 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 
 ### Zoho Imports Admin (`/api/v1/`)
 - `GET/POST/DELETE /api/v1/zoho-imports/admin` — manage the singleton admin Zoho row consumed by `mcp-zoho-service`. POST upserts (201 on create, 200 on update); GET returns the row with `auth_headers` keys redacted; DELETE clears.
+- `GET /api/v1/zoho-imports` — paginated list of all Zoho rows (admin + users). Query params: `is_admin=true|false`, `search=<substring on name or created_by>`, `page=N`, `limit=M` (default 1/20, max 100). `auth_headers` are redacted to header key names.
+- `GET /api/v1/zoho-imports/{id}` — fetch one row (same DTO shape as list items).
+- `PATCH /api/v1/zoho-imports/{id}` — partial update. Body fields all optional: `name`, `url`, `auth_headers` (replaces blob; `{}` clears it), `is_active`. Empty body → 400. `is_admin` and `created_by` are not editable here.
+- `DELETE /api/v1/zoho-imports/{id}` — hard delete a per-user row (204). Returns 400 when the target is the singleton admin row (use `/api/v1/zoho-imports/admin` for that).
+- `POST /api/v1/zoho-imports/{id}/test` — server-side `POST tools/list` probe against the row's upstream URL with decrypted headers, 10s timeout. Returns `{ok, status_code?, latency_ms, error?}`. Logs only the row ID + caller email (never the URL or headers).
 
 ### Runner Sync (internal, shared-secret auth via `X-Admin-Token`)
 - `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)
