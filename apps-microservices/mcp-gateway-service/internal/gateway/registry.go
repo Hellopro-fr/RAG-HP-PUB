@@ -110,6 +110,17 @@ func (r *Registry) SetToolPrefix(id, prefix string) {
 	}
 }
 
+// SetTags replaces the tag slice for a registered backend server. Used by
+// the PUT /servers/{id} handler so server_tags edits are reflected in the
+// in-memory registry without waiting for a full re-discovery cycle.
+func (r *Registry) SetTags(id string, tags []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.servers[id]; ok {
+		s.Tags = tags
+	}
+}
+
 // SyncToolActiveStates updates the IsActive flag for all tools of a server
 // based on the provided map of tool_name → is_active.
 func (r *Registry) SyncToolActiveStates(serverID string, activeStates map[string]bool) {
