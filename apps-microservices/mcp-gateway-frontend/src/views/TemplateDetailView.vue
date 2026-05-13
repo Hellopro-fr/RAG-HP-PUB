@@ -65,7 +65,8 @@
             </p>
           </div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <!-- Stdio-only header actions: hidden for Zoho templates -->
+        <div v-if="!isZohoTemplate" class="flex items-center gap-2 shrink-0">
           <router-link
             :to="{ name: 'template-instance-sheet-import', params: { slug } }"
             class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 shrink-0"
@@ -91,9 +92,9 @@
         {{ template.description }}
       </p>
 
-      <!-- Required env schema -->
+      <!-- Required env schema (stdio only — Zoho templates have no required_extra_env) -->
       <section
-        v-if="template.required_extra_env && template.required_extra_env.length > 0"
+        v-if="!isZohoTemplate && template.required_extra_env && template.required_extra_env.length > 0"
         class="mb-8 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-5"
       >
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">
@@ -123,8 +124,11 @@
         </ul>
       </section>
 
-      <!-- Instances section -->
-      <section>
+      <!-- Zoho branch: admin + user imports management -->
+      <ZohoImportsSection v-if="isZohoTemplate" :template-slug="template.slug" />
+
+      <!-- Instances section (stdio only) -->
+      <section v-else>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4">
           Instances ({{ instances.length }})
         </h3>
@@ -163,8 +167,9 @@
       </section>
     </template>
 
-    <!-- Delete confirm dialog -->
+    <!-- Delete confirm dialog (stdio only — Zoho uses inline confirm()) -->
     <ConfirmDialog
+      v-if="!isZohoTemplate"
       :open="!!deletingInstance"
       title="Supprimer l'instance"
       message="Êtes-vous sûr de vouloir supprimer cette instance ? Cette action est irréversible."
@@ -174,6 +179,7 @@
     />
 
     <RotateCredentialsModal
+      v-if="!isZohoTemplate"
       :instance="rotateTarget"
       :open="rotateTarget !== null"
       @update:open="(o) => { if (!o) rotateTarget = null }"
@@ -181,6 +187,7 @@
     />
 
     <InstanceLogsModal
+      v-if="!isZohoTemplate"
       :instance="logsTarget"
       :open="logsTarget !== null"
       @update:open="(o) => { if (!o) logsTarget = null }"
@@ -199,7 +206,12 @@ import TemplateInstanceCard from '@/components/templates/TemplateInstanceCard.vu
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import RotateCredentialsModal from '@/components/templates/RotateCredentialsModal.vue'
 import InstanceLogsModal from '@/components/templates/InstanceLogsModal.vue'
+import ZohoImportsSection from '@/components/zoho/ZohoImportsSection.vue'
 import type { Template, TemplateInstance } from '@/types/templates'
+
+function isZohoSlug(slug: string): boolean {
+  return slug === 'zoho' || slug.startsWith('zoho-')
+}
 
 const props = defineProps<{
   slug: string
@@ -220,6 +232,10 @@ const deletingInstance = ref<TemplateInstance | null>(null)
 const instances = computed(() =>
   store.instances.filter(i => i.template_slug === props.slug)
 )
+
+// Zoho templates (slug === 'zoho' or starts with 'zoho-') use ZohoImportsSection
+// instead of the stdio instance management UI.
+const isZohoTemplate = computed(() => template.value !== null && isZohoSlug(template.value.slug))
 
 async function loadAll(slug: string): Promise<void> {
   loading.value = true
