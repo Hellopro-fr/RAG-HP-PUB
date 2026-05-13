@@ -627,3 +627,24 @@ type ServerAuthorization struct {
 }
 
 func (ServerAuthorization) TableName() string { return "server_authorizations" }
+
+// ZohoImport stores per-user and admin Zoho upstream URLs used by
+// mcp-zoho-service for per-call routing. Rows are written by the gateway
+// (sheet-import handler + admin REST endpoint) and read by the service.
+//
+// At most one row may have isAdmin=true AND isActive=true (enforced by the
+// repo layer). Admin rows MUST have empty createdBy.
+type ZohoImport struct {
+	ID           string    `gorm:"type:char(36);primaryKey" json:"id"`
+	Name         string    `gorm:"type:varchar(255);not null;default:''" json:"name"`
+	URL          string    `gorm:"type:varchar(2048);not null" json:"url"`
+	AuthHeaders  []byte    `gorm:"type:blob" json:"-"`
+	CreatedBy    string    `gorm:"type:varchar(255);not null;default:'';index:idx_zoho_created_by" json:"created_by"`
+	IsAdmin      bool      `gorm:"not null;default:false;index:idx_zoho_admin_active,priority:1" json:"is_admin"`
+	IsActive     bool      `gorm:"not null;default:true;index:idx_zoho_admin_active,priority:2;index:idx_zoho_active" json:"is_active"`
+	TemplateSlug string    `gorm:"type:varchar(64);not null;default:''" json:"template_slug"`
+	CreatedAt    time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (ZohoImport) TableName() string { return "zoho_imports" }
