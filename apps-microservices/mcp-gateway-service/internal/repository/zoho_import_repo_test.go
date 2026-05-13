@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -130,5 +132,156 @@ func TestZohoImportRepo_DeleteAdmin(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("expected nil after delete, got %+v", got)
+	}
+}
+
+func TestZohoImportRepo_List_PaginatesAndFilters(t *testing.T) {
+	gormDB := newZohoImportTestDB(t)
+	repo := NewZohoImportRepo(gormDB)
+
+	if _, err := repo.UpdateOrCreateAdmin(&db.ZohoImport{Name: "admin", URL: "https://admin"}); err != nil {
+		t.Fatalf("seed admin: %v", err)
+	}
+	for i, e := range []string{"alice@hp.fr", "bob@hp.fr", "carol@hp.fr"} {
+		if err := repo.CreateUserImport(&db.ZohoImport{
+			Name: fmt.Sprintf("u%d", i), URL: "https://u", CreatedBy: e, TemplateSlug: "zoho-crm",
+		}); err != nil {
+			t.Fatalf("seed user %d: %v", i, err)
+		}
+	}
+
+	rows, total, err := repo.List(ZohoListFilter{}, 1, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if total != 4 || len(rows) != 4 {
+		t.Fatalf("List all: total=%d len=%d, want 4/4", total, len(rows))
+	}
+
+	adminBool := true
+	rows, total, err = repo.List(ZohoListFilter{IsAdmin: &adminBool}, 1, 10)
+	if err != nil {
+		t.Fatalf("List admin: %v", err)
+	}
+	if total != 1 || !rows[0].IsAdmin {
+		t.Fatalf("admin filter: total=%d row.IsAdmin=%v", total, rows[0].IsAdmin)
+	}
+
+	userBool := false
+	_, total, err = repo.List(ZohoListFilter{IsAdmin: &userBool}, 1, 10)
+	if err != nil {
+		t.Fatalf("List users: %v", err)
+	}
+	if total != 3 {
+		t.Fatalf("users filter: total=%d, want 3", total)
+	}
+
+	rows, total, err = repo.List(ZohoListFilter{}, 2, 2)
+	if err != nil {
+		t.Fatalf("List page2: %v", err)
+	}
+	if total != 4 || len(rows) != 2 {
+		t.Fatalf("page 2: total=%d len=%d", total, len(rows))
+	}
+
+	rows, total, err = repo.List(ZohoListFilter{Search: "alice"}, 1, 10)
+	if err != nil {
+		t.Fatalf("List search: %v", err)
+	}
+	if total != 1 || rows[0].CreatedBy != "alice@hp.fr" {
+		t.Fatalf("search: total=%d row.CreatedBy=%q", total, rows[0].CreatedBy)
+	}
+}
+
+func TestZohoImportRepo_GetByID(t *testing.T) {
+	gormDB := newZohoImportTestDB(t)
+	repo := NewZohoImportRepo(gormDB)
+
+	in := &db.ZohoImport{Name: "x", URL: "https://x", CreatedBy: "alice@hp.fr", TemplateSlug: "zoho-crm"}
+	if err := repo.CreateUserImport(in); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := repo.GetByID(in.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got == nil || got.URL != "https://x" {
+		t.Fatalf("got = %+v", got)
+	}
+
+	missing, err := repo.GetByID("does-not-exist")
+	if err != nil {
+		t.Fatalf("GetByID missing: %v", err)
+	}
+	if missing != nil {
+		t.Fatalf("expected nil, got %+v", missing)
+	}
+}
+
+func TestZohoImportRepo_Update(t *testing.T) {
+	gormDB := newZohoImportTestDB(t)
+	repo := NewZohoImportRepo(gormDB)
+
+	in := &db.ZohoImport{Name: "old", URL: "https://old", CreatedBy: "alice@hp.fr", TemplateSlug: "zoho-crm"}
+	if err := repo.CreateUserImport(in); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	newName := "new"
+	newURL := "https://new"
+	newHeaders := []byte{0xAA, 0xBB}
+	patch := ZohoUpdatePatch{Name: &newName, URL: &newURL, AuthHeaders: &newHeaders}
+	updated, err := repo.Update(in.ID, patch)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Name != "new" || updated.URL != "https://new" || !bytes.Equal(updated.AuthHeaders, newHeaders) {
+		t.Fatalf("updated = %+v", updated)
+	}
+
+	off := false
+	updated, err = repo.Update(in.ID, ZohoUpdatePatch{IsActive: &off})
+	if err != nil {
+		t.Fatalf("toggle: %v", err)
+	}
+	if updated.IsActive {
+		t.Fatalf("expected is_active=false")
+	}
+
+	empty := []byte{}
+	updated, err = repo.Update(in.ID, ZohoUpdatePatch{AuthHeaders: &empty})
+	if err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if len(updated.AuthHeaders) != 0 {
+		t.Fatalf("expected empty auth_headers, got %v", updated.AuthHeaders)
+	}
+
+	_, err = repo.Update("missing", ZohoUpdatePatch{Name: &newName})
+	if !errors.Is(err, ErrZohoImportNotFound) {
+		t.Fatalf("err = %v, want ErrZohoImportNotFound", err)
+	}
+}
+
+func TestZohoImportRepo_DeleteByID(t *testing.T) {
+	gormDB := newZohoImportTestDB(t)
+	repo := NewZohoImportRepo(gormDB)
+
+	in := &db.ZohoImport{Name: "x", URL: "https://x", CreatedBy: "alice@hp.fr", TemplateSlug: "zoho-crm"}
+	if err := repo.CreateUserImport(in); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := repo.DeleteByID(in.ID); err != nil {
+		t.Fatalf("DeleteByID: %v", err)
+	}
+	got, _ := repo.GetByID(in.ID)
+	if got != nil {
+		t.Fatalf("expected nil after delete, got %+v", got)
+	}
+
+	if err := repo.DeleteByID("missing"); !errors.Is(err, ErrZohoImportNotFound) {
+		t.Fatalf("err = %v, want ErrZohoImportNotFound", err)
 	}
 }
