@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"mcp-gateway/internal/db"
@@ -105,6 +107,158 @@ func (h *Handler) handleZohoAdminDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleZohoImports dispatches GET /api/v1/zoho-imports.
+// Verb fan-out: PATCH/DELETE go to /api/v1/zoho-imports/{id} via
+// handleZohoImportByID; this handler covers the collection path only.
+func (h *Handler) handleZohoImports(w http.ResponseWriter, r *http.Request) {
+	if h.zohoImportRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "zoho imports not configured"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+
+	filter := repository.ZohoListFilter{Search: r.URL.Query().Get("search")}
+	if isAdminParam := r.URL.Query().Get("is_admin"); isAdminParam != "" {
+		val := isAdminParam == "true" || isAdminParam == "1"
+		filter.IsAdmin = &val
+	}
+	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
+	limit := parsePositiveInt(r.URL.Query().Get("limit"), 20)
+
+	rows, total, err := h.zohoImportRepo.List(filter, page, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	out := ZohoImportListResponse{
+		Rows:  make([]ZohoImportRowDTO, 0, len(rows)),
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	}
+	for i := range rows {
+		out.Rows = append(out.Rows, zohoImportToRowDTO(&rows[i], h))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleZohoImportByID dispatches GET/PATCH/DELETE on /api/v1/zoho-imports/{id}
+// and POST on /api/v1/zoho-imports/{id}/test (delegated to handleZohoImportTest).
+func (h *Handler) handleZohoImportByID(w http.ResponseWriter, r *http.Request) {
+	if h.zohoImportRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "zoho imports not configured"})
+		return
+	}
+
+	id, rest := splitZohoImportPath(r.URL.Path)
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing zoho import id"})
+		return
+	}
+
+	if rest == "test" {
+		h.handleZohoImportTest(w, r, id)
+		return
+	}
+	if rest != "" {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "unknown subroute"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		row, err := h.zohoImportRepo.GetByID(id)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+			return
+		}
+		if row == nil {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, zohoImportToRowDTO(row, h))
+	case http.MethodPatch:
+		h.handleZohoImportPatch(w, r, id)
+	case http.MethodDelete:
+		h.handleZohoImportDelete(w, r, id)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+	}
+}
+
+// splitZohoImportPath parses "/api/v1/zoho-imports/{id}" or
+// "/api/v1/zoho-imports/{id}/test" and returns (id, subroute).
+// Returns ("", "") when the path doesn't match.
+func splitZohoImportPath(p string) (string, string) {
+	const prefix = "/api/v1/zoho-imports/"
+	if !strings.HasPrefix(p, prefix) {
+		return "", ""
+	}
+	rest := strings.TrimPrefix(p, prefix)
+	parts := strings.SplitN(rest, "/", 2)
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], parts[1]
+}
+
+// parsePositiveInt returns def when the input is empty, unparseable, or < 1.
+func parsePositiveInt(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return def
+	}
+	return n
+}
+
+// zohoImportToRowDTO renders a row into the wire shape, decrypting auth_headers
+// only to extract key names (values redacted).
+func zohoImportToRowDTO(row *db.ZohoImport, h *Handler) ZohoImportRowDTO {
+	keys := make([]string, 0)
+	if len(row.AuthHeaders) > 0 && h.encryptor != nil {
+		if pt, err := h.encryptor.Decrypt(row.AuthHeaders); err == nil {
+			var m map[string]string
+			if json.Unmarshal(pt, &m) == nil {
+				for k := range m {
+					keys = append(keys, k)
+				}
+			}
+		}
+	}
+	return ZohoImportRowDTO{
+		ID:             row.ID,
+		Name:           row.Name,
+		URL:            row.URL,
+		IsAdmin:        row.IsAdmin,
+		IsActive:       row.IsActive,
+		CreatedBy:      row.CreatedBy,
+		TemplateSlug:   row.TemplateSlug,
+		AuthHeaderKeys: keys,
+		CreatedAt:      row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:      row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+// handleZohoImportPatch / handleZohoImportDelete / handleZohoImportTest are
+// implemented in Tasks 4 and 5; declare stubs so the file compiles. Replace
+// with real implementations in those tasks.
+func (h *Handler) handleZohoImportPatch(w http.ResponseWriter, _ *http.Request, _ string) {
+	writeJSON(w, http.StatusNotImplemented, ErrorResponse{Error: "patch not implemented yet"})
+}
+func (h *Handler) handleZohoImportDelete(w http.ResponseWriter, _ *http.Request, _ string) {
+	writeJSON(w, http.StatusNotImplemented, ErrorResponse{Error: "delete not implemented yet"})
+}
+func (h *Handler) handleZohoImportTest(w http.ResponseWriter, _ *http.Request, _ string) {
+	writeJSON(w, http.StatusNotImplemented, ErrorResponse{Error: "test not implemented yet"})
 }
 
 // zohoAdminToResponse renders a row into the wire shape, decrypting

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -163,5 +164,84 @@ func TestZohoAdmin_RejectsBadJSON(t *testing.T) {
 	h.handleZohoAdmin(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestZohoImports_List_RedactsAuthHeaders(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(ZohoAdminCreateRequest{
+		Name:        "admin",
+		URL:         "https://admin",
+		AuthHeaders: map[string]string{"Authorization": "Bearer admin", "X-Custom": "v"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seed admin: %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports", nil)
+	rec = httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var out ZohoImportListResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out.Total != 1 || len(out.Rows) != 1 {
+		t.Fatalf("total=%d len=%d", out.Total, len(out.Rows))
+	}
+	got := out.Rows[0]
+	if got.URL != "https://admin" {
+		t.Fatalf("URL = %q", got.URL)
+	}
+	if len(got.AuthHeaderKeys) != 2 {
+		t.Fatalf("AuthHeaderKeys len = %d, want 2", len(got.AuthHeaderKeys))
+	}
+	raw := rec.Body.String()
+	if strings.Contains(raw, "Bearer admin") {
+		t.Fatalf("Bearer admin leaked: %s", raw)
+	}
+}
+
+func TestZohoImports_List_FiltersIsAdmin(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(ZohoAdminCreateRequest{Name: "admin", URL: "https://admin"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if err := h.zohoImportRepo.CreateUserImport(&db.ZohoImport{
+		Name: "alice", URL: "https://alice", CreatedBy: "alice@hp.fr", TemplateSlug: "zoho-crm",
+	}); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports?is_admin=true", nil)
+	rec = httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	var out ZohoImportListResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out.Total != 1 || !out.Rows[0].IsAdmin {
+		t.Fatalf("admin filter: total=%d row.IsAdmin=%v", out.Total, out.Rows[0].IsAdmin)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports?is_admin=false", nil)
+	rec = httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out.Total != 1 || out.Rows[0].IsAdmin {
+		t.Fatalf("user filter: total=%d row.IsAdmin=%v", out.Total, out.Rows[0].IsAdmin)
+	}
+}
+
+func TestZohoImports_GetByID_404(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/missing-id", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }

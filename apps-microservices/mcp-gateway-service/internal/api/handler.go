@@ -135,6 +135,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Admin-only singleton: POST upserts, GET returns, DELETE clears. Always
 	// mounted; handleZohoAdmin returns 503 when the repo is not wired.
 	apiMux.HandleFunc("/api/v1/zoho-imports/admin", h.handleZohoAdmin)
+	// Collection list and per-ID operations. /admin is registered above so
+	// net/http's longer-prefix rule keeps it from falling into the catch-all.
+	apiMux.HandleFunc("/api/v1/zoho-imports", h.handleZohoImports)
+	apiMux.HandleFunc("/api/v1/zoho-imports/", h.handleZohoImportByID)
 
 	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
 	//    user/team picker). Always mounted; the handlers themselves return
@@ -564,8 +568,8 @@ func isAdminOnly(path, method string) bool {
 	if strings.HasPrefix(path, "/api/v1/server-authorizations") {
 		return true
 	}
-	// Zoho import admin singleton (GET/POST/DELETE) is always admin-only.
-	if path == "/api/v1/zoho-imports/admin" {
+	// All zoho-imports endpoints (admin singleton + collection list + per-ID) are admin-only.
+	if strings.HasPrefix(path, "/api/v1/zoho-imports") {
 		return true
 	}
 	// User, audit, install guide, Google, Slack endpoints always require admin
