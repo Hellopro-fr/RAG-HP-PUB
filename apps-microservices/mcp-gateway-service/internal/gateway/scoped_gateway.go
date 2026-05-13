@@ -224,15 +224,22 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		return headers
 	}
 
-	switch backend.ToolPrefix {
-	case leexiToolPrefix:
-		sg.injectLeexiHeader(ctx, headers)
-	case ringoverToolPrefix:
-		sg.injectRingoverHeader(ctx, headers)
-	case zohoToolPrefix:
+	// Zoho dispatch fires on either the "zoho" tag (preferred) OR
+	// tool_prefix=="zoho" (legacy). Tag-based identification lets operators
+	// configure the proxy stub `mcp_servers` row independently of the
+	// tool_prefix used to namespace tools. Leexi / Ringover / BDD still
+	// dispatch on tool_prefix.
+	if backend.HasTag(zohoToolPrefix) || backend.ToolPrefix == zohoToolPrefix {
 		sg.injectZohoHeader(ctx, headers, backend)
-	case bddToolPrefix:
-		sg.injectBDDHeader(ctx, headers)
+	} else {
+		switch backend.ToolPrefix {
+		case leexiToolPrefix:
+			sg.injectLeexiHeader(ctx, headers)
+		case ringoverToolPrefix:
+			sg.injectRingoverHeader(ctx, headers)
+		case bddToolPrefix:
+			sg.injectBDDHeader(ctx, headers)
+		}
 	}
 	return headers
 }
