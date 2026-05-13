@@ -9,6 +9,52 @@ logger = logging.getLogger(__name__)
 # Threshold: above this pixel count, delegate to pyvips for shrink-on-load
 LARGE_IMAGE_THRESHOLD = 50_000_000  # 50M pixels
 
+
+def _detect_extension(content: bytes, image_stream: io.BytesIO) -> tuple[str, str | None]:
+    """
+    Detect output format and file extension from raw image bytes.
+
+    Reads the first 10 bytes for SVG detection, then uses PIL to sniff the
+    format (without full decode). Returns early for SVG.
+
+    Args:
+        content:      Raw image bytes.
+        image_stream: Seekable BytesIO wrapping the same bytes (seek(0) assumed).
+
+    Returns:
+        Tuple (extension, original_format) where:
+          - extension is one of '.jpg', '.png', '.gif'
+          - original_format is the PIL format string (e.g. 'JPEG', 'PNG', 'GIF',
+            'WEBP', 'SVG') or None if unknown.
+
+    Note:
+        WEBP is mapped to '.png' (parité PHP case 18 — conversion WebP→PNG).
+        SVG is detected from byte-level header inspection (no PIL involved).
+        All unknown formats default to '.png'.
+    """
+    header_bytes = content[:10]
+
+    # SVG: detected from raw bytes before PIL involvement
+    if b'<svg' in header_bytes or b'<?xml' in header_bytes:
+        return '.png', 'SVG'
+
+    # Use PIL to sniff format without full decode
+    image_stream.seek(0)
+    with Image.open(image_stream) as img:
+        original_format = img.format.upper() if img.format else None
+
+    if original_format == 'GIF':
+        return '.gif', 'GIF'
+    elif original_format in ('JPEG', 'JPG'):
+        return '.jpg', 'JPEG'
+    elif original_format == 'WEBP':
+        # PHP converts WebP to PNG (case 18)
+        return '.png', 'WEBP'
+    else:
+        # PNG and all others → .png
+        return '.png', original_format or 'PNG'
+
+
 class ImageProcessor:
     def __init__(self):
         pass
@@ -16,10 +62,16 @@ class ImageProcessor:
     def process_image(self, content: bytes, domain: str, product_id: str, product_name: str, base_storage_dir: str, filename: str = "", index: int = 0):
         """
         Processes the image:
-        1. Converts to RGBA/RGB
-        2. Resizes main image (max 800x800)
-        3. Creates thumbnail (110x110)
-        4. Saves both in sharded directory structure (produit-2 / produit-3)
+        1. Detects format from content bytes (not from filename extension)
+        2. Converts to RGBA/RGB
+        3. Resizes main image (max 800x800)
+        4. Creates thumbnail (110x110)
+        5. Saves both in sharded directory structure (produit-2 / produit-3)
+
+        Pre-refactor behavior preserved: _build_paths is called AFTER format
+        detection so the correct extension is applied to the stored filename.
+        This mirrors the original code where ``extension`` was computed before
+        the _build_paths call.
 
         Args:
             filename: Nom de fichier explicite pré-construit (ex: via _build_filename).
@@ -31,11 +83,25 @@ class ImageProcessor:
             dict: Paths to the saved main image and thumbnail, plus image metadata.
                   Keys: main_path, thumb_path, filename, width, height, format, file_size.
         """
-        # Compute FP-specific paths then delegate to shared helper
-        paths = self._build_paths(domain, product_id, product_name, base_storage_dir, ".jpg", filename=filename, index=index)
+        if not content:
+            raise ValueError("Image content is empty")
+
+        # --- C1 FIX: detect format BEFORE calling _build_paths ---
+        # Pre-refactor: _build_paths was called after original_format + extension
+        # were determined inside the processing loop. The hardcoded ".jpg" that
+        # was here caused callers passing ".png"/".webp"/".gif" filenames to have
+        # their extension silently overwritten before format was known.
+        image_stream = io.BytesIO(content)
+        image_stream.seek(0)
+        extension, original_format = _detect_extension(content, image_stream)
+
+        paths = self._build_paths(domain, product_id, product_name, base_storage_dir, extension, filename=filename, index=index)
         output_main_dir = os.path.dirname(paths["main_file_path"])
         output_thumb_dir = os.path.dirname(paths["thumb_file_path"])
         resolved_filename = paths["filename"]
+        # resolved_filename already has the correct extension set by _build_paths.
+        # _process_image_internal will re-apply extension correction for safety
+        # (idempotent for the FP path, required for process_image_page callers).
 
         return self._process_image_internal(
             content=content,
@@ -50,39 +116,55 @@ class ImageProcessor:
         """
         Processes an image for a NON-FP page (Chantier D pipeline).
 
-        Output paths use the pages sharding scheme:
-            pages/{shard1}/{shard2}/{filename}
-        where shard1/shard2 are the last two characters of storage_subdir (or a
-        hash-derived shard if storage_subdir is used directly as a shard key).
+        Output paths use the pages sharding scheme derived from the filename stem::
 
-        The sharding mirrors the produit-2/3 scheme but rooted at ``pages/``:
-            <storage_subdir>/pages/{c1}/{c2}/{filename}   (main)
-            <storage_subdir>/pages/thumbs/{c1}/{c2}/{filename}   (thumb)
+            <storage_subdir>/pages/{shard1}/{shard2}/{filename}       (main)
+            <storage_subdir>/pages/thumbs/{shard1}/{shard2}/{filename} (thumb)
+
+        Shard derivation (char-based, mirrors produit-2/3 scheme):
+
+            shard1 = last character of the filename stem (highest entropy for
+                     sequential names like "page-001" → "1", "page-002" → "2")
+            shard2 = second-to-last character of the filename stem
+
+        Note: for sequential filenames (``page-001``, ``page-002``, …) the last
+        char has 10 entropy values (0..9) but the second-to-last is correlated
+        within a single sequential run (e.g. all "page-00X" share shard2="0").
+        Distribution is OK across many pages but skewed within a single batch.
+        A future improvement could use ``hash(filename) % 100`` for better
+        entropy; for now the spec-aligned char-based scheme is used.
+
+        Note on ``domain``: the ``storage_subdir`` is already rooted at the
+        domain directory (caller's responsibility). The ``domain`` parameter is
+        used only for log message context — it does NOT influence path computation.
 
         Args:
             content:        Raw image bytes.
-            domain:         Domaine source (used to root the storage path,
-                            e.g. ``/nfs/images/{domain}/``).
+            domain:         Domaine source — metadata only, used in log messages
+                            (e.g. ``"example.com"``). Path computation uses
+                            ``storage_subdir`` exclusively.
             storage_subdir: Absolute base directory for this page's image storage
                             (e.g. ``/nfs/images/example.com/pages/abc123``).
             filename:       Pre-built filename (with extension) for the output file.
+                            The extension will be corrected by ``_process_image_internal``
+                            if a format conversion occurs (e.g. WebP→PNG).
 
         Returns:
             dict: main_path, thumb_path, filename, width, height, format, file_size.
         """
-        # Compute pages-scheme sharding from the filename stem
-        # Derive a 2-level shard from the filename (last 2 non-extension chars)
+        # Compute pages-scheme sharding from the filename stem.
+        # shard1 = last char, shard2 = second-to-last char (see docstring above).
         base, _ = os.path.splitext(filename)
-        # Pad to at least 2 characters
+        # Pad to at least 2 characters so indexing [-1]/[-2] is always safe
         padded = base.zfill(2) if len(base) < 2 else base
-        shard1 = padded[-1]
-        shard2 = padded[-2] if len(padded) >= 2 else "0"
+        shard1 = padded[-1]    # last char  — highest entropy for sequential names
+        shard2 = padded[-2]    # second-to-last char
 
         output_main_dir = os.path.join(storage_subdir, "pages", shard1, shard2)
         output_thumb_dir = os.path.join(storage_subdir, "pages", "thumbs", shard1, shard2)
 
-        os.makedirs(output_main_dir, exist_ok=True)
-        os.makedirs(output_thumb_dir, exist_ok=True)
+        # makedirs is delegated to _process_image_internal for symmetric
+        # responsibility between FP (makedirs via _build_paths) and pages paths.
 
         return self._process_image_internal(
             content=content,
@@ -101,12 +183,22 @@ class ImageProcessor:
         then performs format detection, flatten-on-white, resize (800x800 main,
         110x110 thumb), and saves both files.
 
+        makedirs responsibility: this helper creates output_main_dir and
+        output_thumb_dir so that both callers (FP via _build_paths already
+        created dirs, and pages via process_image_page which defers here) have
+        symmetric mkdir behaviour. The exist_ok=True makes the FP-side call
+        idempotent.
+
         Args:
             content:          Raw image bytes.
             output_main_dir:  Absolute directory for the main (800x800) image.
             output_thumb_dir: Absolute directory for the thumbnail (110x110).
-            filename:         Final filename (with extension). The extension may be
-                              corrected here if a format conversion occurs (e.g. WebP→PNG).
+            filename:         Final filename (with extension). The extension is
+                              corrected here when format conversion occurs
+                              (e.g. WebP→PNG). For FP callers, _build_paths
+                              already applied the correct extension, so this
+                              correction is idempotent. For process_image_page
+                              callers, this correction is the authoritative one.
             _log_context:     Optional string appended to log messages for traceability.
 
         Returns:
@@ -122,6 +214,12 @@ class ImageProcessor:
         try:
             if not content:
                 raise ValueError("Image content is empty")
+
+            # I3: Create output directories here so both FP and pages callers have
+            # symmetric makedirs responsibility. FP: _build_paths already created
+            # dirs; exist_ok makes this idempotent. Pages: this is the only makedirs.
+            os.makedirs(output_main_dir, exist_ok=True)
+            os.makedirs(output_thumb_dir, exist_ok=True)
 
             # Create fresh BytesIO stream
             image_stream = io.BytesIO(content)
@@ -152,22 +250,23 @@ class ImageProcessor:
                     image.close()
                     return self._process_with_vips_internal(content, original_format, output_main_dir, output_thumb_dir, filename, _log_context=_log_context)
 
-                # OPTIMIZATION: For JPEGs, we can load a draft (thumbnail) directly
-                if total_pixels > 50_000_000 and image.format == 'JPEG':
-                     logger.info(f"Large JPEG detected [{_log_context}] ({width}x{height}). Using draft mode to save RAM.")
-                     image.draft('RGB', (800, 800))
+                # NOTE (M1): The "draft mode" JPEG optimisation that was here
+                # (image.draft('RGB', (800, 800))) was unreachable: the
+                # total_pixels > LARGE_IMAGE_THRESHOLD branch above already
+                # handles all images above 50M pixels and returns early via
+                # pyvips. The draft branch can never be reached. Removed.
 
-                image.load() # Force load (or load draft)
+                image.load()  # Force load
             except Exception as pil_error:
                 raise pil_error
 
             original_format = image.format.upper() if image.format else "JPEG"
 
             # Determine output format and extension based on PHP logic
-            # Case 1 (GIF) -> .gif
+            # Case 1 (GIF)  -> .gif
             # Case 2 (JPEG) -> .jpg
-            # Case 3 (PNG) -> .png
-            # Case 18 (WEBP) -> .png
+            # Case 3 (PNG)  -> .png
+            # Case 18 (WEBP)-> .png  (PHP converts WebP to PNG)
 
             if original_format == 'GIF':
                 output_format = 'GIF'
@@ -187,7 +286,11 @@ class ImageProcessor:
                 output_format = 'PNG'
                 extension = '.png'
 
-            # Correct filename extension to match actual output format
+            # C2: Correct filename extension to match actual output format.
+            # For FP callers: _build_paths already applied the correct extension
+            # (post C1 fix), so this is idempotent (base + same_ext = unchanged).
+            # For process_image_page callers: this is the authoritative correction
+            # (caller may pass ".webp" filename that must become ".png").
             base, _ = os.path.splitext(filename)
             filename = base + extension
 
@@ -254,43 +357,17 @@ class ImageProcessor:
             logger.error(f"Error processing image [{_log_context}]: {e}")
             raise e
 
-    def _process_with_vips(self, content: bytes, original_format: str, domain: str, product_id: str, product_name: str, base_storage_dir: str, filename: str = "", index: int = 0):
-        """
-        Processes large images using pyvips (libvips) with shrink-on-load.
-        FP-specific entry point that computes produit-2/3 paths then delegates
-        to _process_with_vips_internal.
-
-        This is used as a fallback for images that would OOM with PIL's full decompression.
-        """
-        # Determine extension first (needed for _build_paths)
-        if original_format == 'GIF':
-            extension = '.gif'
-        elif original_format in ('JPEG', 'JPG'):
-            extension = '.jpg'
-        elif original_format == 'WEBP':
-            extension = '.png'
-        else:
-            extension = '.png'
-
-        paths = self._build_paths(domain, product_id, product_name, base_storage_dir, extension, filename=filename, index=index)
-        output_main_dir = os.path.dirname(paths["main_file_path"])
-        output_thumb_dir = os.path.dirname(paths["thumb_file_path"])
-        resolved_filename = paths["filename"]
-
-        return self._process_with_vips_internal(
-            content=content,
-            original_format=original_format,
-            output_main_dir=output_main_dir,
-            output_thumb_dir=output_thumb_dir,
-            filename=resolved_filename,
-            _log_context=f"product {product_id}",
-        )
-
     def _process_with_vips_internal(self, content: bytes, original_format: str, output_main_dir: str, output_thumb_dir: str, filename: str, _log_context: str = ""):
         """
         Shared pyvips processing core: shrink-on-load resize + thumbnail + save.
 
         Knows nothing about FP vs pages path schemes — receives pre-computed dirs.
+
+        Note (M2): _process_with_vips (the FP-specific wrapper that called
+        _build_paths then delegated here) has been removed because process_image()
+        now handles format detection and _build_paths itself before calling
+        _process_image_internal, which in turn calls this method directly.
+        The wrapper was unreachable after the C1/C2 refactor.
 
         Returns:
             dict with keys: main_path, thumb_path, filename, width, height, format, file_size.
@@ -378,13 +455,18 @@ class ImageProcessor:
         """
         Builds the sharded directory paths and filename for a product image.
         Shared between PIL and pyvips processing paths.
-        Used by the FP flow (process_image / _process_with_vips).
+        Used exclusively by the FP flow (process_image).
 
         Args:
-            extension: Extension avec point (ex: ".jpg"). Utilisée pour le sharding
-                       même quand filename est fourni explicitement.
+            extension: Extension avec point (ex: ".jpg"). Utilisée pour corriger
+                       l'extension du filename ET pour construire le filename
+                       legacy quand ``filename`` est vide.
+                       Must be the ACTUAL output extension (post format-detection),
+                       not a guess based on the input filename.
             filename:  Nom de fichier pré-construit (ex: via _build_filename).
                        Prend la priorité sur index si non vide.
+                       The extension will be replaced with ``extension`` to enforce
+                       format-content consistency (e.g. webp→png conversion).
             index:     Paramètre legacy ; utilisé uniquement si filename est vide.
         """
         # Create sharded path components
@@ -417,7 +499,8 @@ class ImageProcessor:
         thumb_rel_dir = os.path.join("images", domain, "produit-3", rep1, rep2, rep3)
         thumb_full_dir = os.path.join(base_storage_dir, thumb_rel_dir)
 
-        # Create directories
+        # Create directories (FP path — _process_image_internal will also call
+        # makedirs with exist_ok=True, making this idempotent)
         os.makedirs(main_full_dir, exist_ok=True)
         os.makedirs(thumb_full_dir, exist_ok=True)
 
