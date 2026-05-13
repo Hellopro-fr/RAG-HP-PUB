@@ -195,6 +195,9 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 - `POST /template-instances/{id}/restart` — respawn subprocess
 - `POST /template-instances/{id}/rotate-credentials` — upload replacement SA JSON + respawn
 
+### Zoho Imports Admin (`/api/v1/`)
+- `GET/POST/DELETE /api/v1/zoho-imports/admin` — manage the singleton admin Zoho row consumed by `mcp-zoho-service`. POST upserts (201 on create, 200 on update); GET returns the row with `auth_headers` keys redacted; DELETE clears.
+
 ### Runner Sync (internal, shared-secret auth via `X-Admin-Token`)
 - `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)
 
@@ -235,6 +238,7 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 | `SLACK_AUTH_ALERT_COOLDOWN` | `600` | Seconds between duplicate unauthorized alerts per (ip, endpoint). `0` disables the cooldown. |
 | `ZOHO_INTERNAL_URL` | — | In-cluster URL of mcp-zoho-service (e.g. `http://mcp-zoho-service:8596`). Reserved for future health checks. |
 | `ZOHO_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-zoho-service. Must match `ZOHO_GATEWAY_TOKEN` on the service side. |
+| `ZOHO_STUB_SERVER_ID` | — | UUID of the gateway's `mcp_servers` row whose URL points at `mcp-zoho-service`. Captured by the operator and pasted into `.env`; required by the service to gate admin grants. |
 
 ## Database
 
@@ -267,6 +271,7 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 | `bdd_used_fields` | Per-table field selection with curated descriptions |
 | `scope_token_bdd_tables` | Join: scope token ↔ allowed BDD used-tables |
 | `oauth2_client_bdd_tables` | Join: OAuth2 client ↔ allowed BDD used-tables |
+| `zoho_imports` | Per-user (and admin singleton) Zoho upstream URLs consumed by mcp-zoho-service for routing |
 
 Connection pooling: max 25 open, 5 idle connections.
 
@@ -286,7 +291,7 @@ Connection pooling: max 25 open, 5 idle connections.
   - Filter modes: `none` (unrestricted), `users`, `teams`, `creator` (frozen at create time from creator email), `self` (per-request, OAuth2 clients only — resolves the access-token `email` claim via `leexiadmin.FindUserByEmail` on every call). `self` is rejected for scope tokens (no end-user identity) and fails closed for `client_credentials` grants (no email claim).
 - Scope tokens and OAuth2 clients carry an optional **Ringover ownership filter** mirroring the Leexi one — same five modes (`none`/`users`/`teams`/`creator`/`self`), but Ringover identifies users via integer `user_id` instead of UUIDs. When set on a request to a Ringover-tagged backend (`ToolPrefix == "ringover"`), the gateway adds `X-Ringover-Allowed-User-IDs` (comma-separated ints, deny-sentinel `0`). See `internal/ringoveradmin/` for the user/team resolution and cache (5 min TTL).
 - Scope tokens and OAuth2 clients carry an optional **BDD scope filter** (`bdd_filter.used_table_ids`). When the filter is non-empty and the request targets a backend with `ToolPrefix == "bdd"`, the gateway resolves the IDs against `bdd_used_tables` and adds `X-BDD-Allowed-Tables: [{"database_id":int,"table_name":str}, ...]` to the outbound MCP request. **Fail-closed**: if the filter is set but every referenced row was deleted, the gateway emits `[]` so the upstream BDD MCP backend denies all calls. Empty/absent filter = full access.
-- **Zoho ownership filter**: scope tokens and OAuth2 clients carry an optional Zoho filter (`ZohoFilterMode` + `ZohoAllowedEmails`). Resolution at `requestHeadersFor`: Step 0 server-authorization grant → **Step 1 imported-server auto-filter** (when `backend.ToolPrefix == "zoho"` AND `backend.TemplateSlug != ""` AND `backend.CreatedBy != ""`, inject `X-Zoho-Allowed-User: <created_by>`) → Step 2 admin-configured filter (modes: `none` no header, `users` comma-joined emails, `creator` single email = token/client `created_by`). Deny sentinel `deny-all@hellopro.fr.deny` is injected when an admin filter resolves to an empty allow-list. The Zoho MCP backend enforces the header server-side. **Per-user routing** to the user's imported Zoho instance is handled by the dedicated `mcp-zoho-service` (port 8596) — the gateway sees that service as one Zoho backend and the service picks the right upstream from `X-End-User-Email` / `X-End-User-Login` headers the gateway always injects on Zoho-tagged calls.
+- **Zoho ownership filter**: scope tokens and OAuth2 clients carry an optional Zoho filter (`ZohoFilterMode` + `ZohoAllowedEmails`). Resolution at `requestHeadersFor`: Step 0 server-authorization grant → **Step 1 imported-server auto-filter** (when `backend.ToolPrefix == "zoho"` AND `backend.TemplateSlug != ""` AND `backend.CreatedBy != ""`, inject `X-Zoho-Allowed-User: <created_by>`) → Step 2 admin-configured filter (modes: `none` no header, `users` comma-joined emails, `creator` single email = token/client `created_by`). Deny sentinel `deny-all@hellopro.fr.deny` is injected when an admin filter resolves to an empty allow-list. The Zoho MCP backend enforces the header server-side. **Per-user routing** to the user's imported Zoho instance is handled by the dedicated `mcp-zoho-service` (port 8596) — the gateway sees that service as one Zoho backend and the service picks the right upstream from `X-End-User-Email` / `X-End-User-Login` headers the gateway always injects on Zoho-tagged calls. The per-user Zoho upstream URLs now live in the dedicated `zoho_imports` table (managed by the sheet-import handler and the admin endpoint `POST /api/v1/zoho-imports/admin`); `mcp_servers` keeps only the stub row pointing at `mcp-zoho-service`.
 - The catalog (`tbl_sauvegarde_tables` / `tbl_sauvegarde_champs`) is owned by the upstream Hellopro BDD admin API at `BDD_CATALOG_BASE_URL` — gateway is read-only against it. The "used tables" registry (gateway-curated subset + descriptions) lives in the gateway DB.
 - OAuth2 Authorization Server is MCP spec-compliant: OAuth 2.1, RFC 8414 (metadata), RFC 7591 (dynamic registration), PKCE (S256).
 - **OAuth2 `/authorize` login**: three-tier session resolution.
