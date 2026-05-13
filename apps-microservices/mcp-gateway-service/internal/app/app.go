@@ -417,6 +417,7 @@ func registerRESTAndOAuthServer(
 		RefreshRepo:    refreshRepo,
 		ServerRepo:     dbs.repo,
 		SSOSessionRepo: ssoSessionRepo,
+		ZohoFetcher:    gw,
 		JWTSecret:      cfg.JWTSecret,
 		PublicURL:      cfg.GatewayPublicURL,
 		AuthURL:        cfg.AuthURL,
@@ -533,6 +534,10 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 
 // registerFromDBCache enregistre un serveur depuis les données cachées en base.
 func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
+	tags := make([]string, 0, len(srv.Tags))
+	for _, t := range srv.Tags {
+		tags = append(tags, t.Tag)
+	}
 	backend := &gateway.BackendServer{
 		ID:            srv.ID,
 		URL:           srv.URL,
@@ -543,6 +548,7 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 		ToolPrefix:    srv.ToolPrefix,
 		TemplateSlug:  srv.TemplateSlug,
 		CreatedBy:     srv.CreatedBy,
+		Tags:          tags,
 	}
 	for _, t := range srv.Tools {
 		backend.Tools = append(backend.Tools, mcp.Tool{

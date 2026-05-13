@@ -20,6 +20,9 @@ func TestMatchesUserEmail(t *testing.T) {
 		{"malformed created_by (no local-part) never matches", "@hp.fr", "alice@hp.fr", "alice", false},
 		{"login-only fallback when email empty and logins match", "alice@hp.fr", "", "alice", true},
 		{"email match wins over login fallback", "alice@hp.fr", "alice@hp.fr", "irrelevant", true},
+		{"bare-login created_by matches login", "alice", "alice@hp.fr", "alice", true},
+		{"bare-login created_by matches email local-part", "alice", "alice@hp.fr", "", true},
+		{"bare-login created_by mismatch", "bob", "alice@hp.fr", "alice", false},
 	}
 
 	for _, tc := range cases {

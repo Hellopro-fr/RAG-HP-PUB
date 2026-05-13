@@ -135,7 +135,7 @@ func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Resp
 	case "initialize":
 		return sg.handleInitialize(ctx, req)
 	case "tools/list":
-		return sg.handleToolsList(req)
+		return sg.handleToolsList(ctx, req)
 	case "tools/call":
 		return sg.handleToolsCall(ctx, req)
 	case "resources/list":
@@ -169,12 +169,91 @@ func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request)
 	return okResp(req.ID, result)
 }
 
-func (sg *ScopedGateway) handleToolsList(req *mcp.Request) *mcp.Response {
-	tools := sg.registry.MergedToolsFilteredWithTools(sg.allowedIDs, sg.allowedTools)
+func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) *mcp.Response {
+	// Per-user Zoho tools/list — when an end-user identity is on the context
+	// AND the scope contains a Zoho-tagged backend, fetch the tool catalog
+	// live from mcp-zoho-service with the user's identity headers so the
+	// client sees the user's own Zoho tools instead of the cached admin
+	// catalog. Default flow (no identity, or no Zoho in scope) keeps using
+	// the merged registry cache.
+	_, hasEmail := scopetoken.EndUserEmailFromContext(ctx)
+	zohoBackends := sg.zohoBackendsInScope()
+	if !hasEmail || len(zohoBackends) == 0 {
+		tools := sg.registry.MergedToolsFilteredWithTools(sg.allowedIDs, sg.allowedTools)
+		if tools == nil {
+			tools = []mcp.Tool{}
+		}
+		return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
+	}
+
+	zohoIDs := make(map[string]bool, len(zohoBackends))
+	for _, b := range zohoBackends {
+		zohoIDs[b.ID] = true
+	}
+	nonZohoAllowed := make(map[string]bool, len(sg.allowedIDs))
+	for id, ok := range sg.allowedIDs {
+		if ok && !zohoIDs[id] {
+			nonZohoAllowed[id] = true
+		}
+	}
+
+	tools := sg.registry.MergedToolsFilteredWithTools(nonZohoAllowed, sg.allowedTools)
+	for _, b := range zohoBackends {
+		tools = append(tools, sg.fetchZohoTools(ctx, b)...)
+	}
 	if tools == nil {
 		tools = []mcp.Tool{}
 	}
 	return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
+}
+
+// zohoBackendsInScope returns the allowed backends carrying the Zoho tag
+// (or the legacy "zoho" tool_prefix). Order is undefined — caller must not
+// rely on it. Empty when no Zoho backend is in scope.
+func (sg *ScopedGateway) zohoBackendsInScope() []*BackendServer {
+	var out []*BackendServer
+	for _, s := range sg.registry.All() {
+		if !sg.allowedIDs[s.ID] {
+			continue
+		}
+		if s.HasTag(zohoToolPrefix) || s.ToolPrefix == zohoToolPrefix {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// fetchZohoTools live-fetches a Zoho backend's tool catalog using the
+// end-user identity headers from ctx. On error, falls back to the cached
+// admin catalog so the client never sees an empty tool list because of a
+// transient upstream failure. Applies the same per-server allow-list
+// filter as the cached path.
+func (sg *ScopedGateway) fetchZohoTools(ctx context.Context, b *BackendServer) []mcp.Tool {
+	headers := sg.requestHeadersFor(ctx, b)
+	client := transport.NewBackendClientWithEndpoint(b.MessageURL, headers)
+	liveTools, err := client.ListTools(ctx)
+	if err != nil {
+		log.Printf("[scoped] zoho tools/list live-fetch backend=%s err=%v — falling back to cached admin tools", b.ID, err)
+		return sg.registry.MergedToolsFilteredWithTools(map[string]bool{b.ID: true}, sg.allowedTools)
+	}
+	log.Printf("[scoped] zoho tools/list live-fetch backend=%s live_count=%d", b.ID, len(liveTools))
+	var toolSet map[string]bool
+	if sg.allowedTools != nil {
+		toolSet = sg.allowedTools[b.ID]
+	}
+	out := make([]mcp.Tool, 0, len(liveTools))
+	for _, t := range liveTools {
+		if toolSet != nil && !toolSet[t.Name] {
+			continue
+		}
+		out = append(out, mcp.Tool{
+			Name:        PrefixedToolName(b.ToolPrefix, t.Name),
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+			IsActive:    true,
+		})
+	}
+	return out
 }
 
 func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) *mcp.Response {
@@ -224,15 +303,22 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		return headers
 	}
 
-	switch backend.ToolPrefix {
-	case leexiToolPrefix:
-		sg.injectLeexiHeader(ctx, headers)
-	case ringoverToolPrefix:
-		sg.injectRingoverHeader(ctx, headers)
-	case zohoToolPrefix:
+	// Zoho dispatch fires on either the "zoho" tag (preferred) OR
+	// tool_prefix=="zoho" (legacy). Tag-based identification lets operators
+	// configure the proxy stub `mcp_servers` row independently of the
+	// tool_prefix used to namespace tools. Leexi / Ringover / BDD still
+	// dispatch on tool_prefix.
+	if backend.HasTag(zohoToolPrefix) || backend.ToolPrefix == zohoToolPrefix {
 		sg.injectZohoHeader(ctx, headers, backend)
-	case bddToolPrefix:
-		sg.injectBDDHeader(ctx, headers)
+	} else {
+		switch backend.ToolPrefix {
+		case leexiToolPrefix:
+			sg.injectLeexiHeader(ctx, headers)
+		case ringoverToolPrefix:
+			sg.injectRingoverHeader(ctx, headers)
+		case bddToolPrefix:
+			sg.injectBDDHeader(ctx, headers)
+		}
 	}
 	return headers
 }
@@ -544,6 +630,9 @@ func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[strin
 		if at := strings.IndexByte(email, '@'); at > 0 {
 			headers["X-End-User-Login"] = email[:at]
 		}
+		log.Printf("[scoped] zoho injectHeaders backend=%s tool_prefix=%s email=%s — forwarding identity", backend.ID, backend.ToolPrefix, email)
+	} else {
+		log.Printf("[scoped] zoho injectHeaders backend=%s tool_prefix=%s NO end_user_email in ctx — discovery/health probe or non-OAuth2 grant", backend.ID, backend.ToolPrefix)
 	}
 
 	// Step 1 — auto-filter on imported Zoho servers.

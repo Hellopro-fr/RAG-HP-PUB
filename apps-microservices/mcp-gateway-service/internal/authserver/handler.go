@@ -26,6 +26,10 @@ type AuthServer struct {
 	// cookie reuses the SSO identity instead of bouncing through /sso/login.
 	// Nil disables the bridge — falls through to the SSO-redirect path.
 	ssoSessionRepo ssoSessionFinder
+	// zohoFetcher (optional) — when set, the consent screen overrides the
+	// cached admin Zoho tool catalog with the connected user's live catalog.
+	// Nil disables the override and falls back to the cached admin tools.
+	zohoFetcher    ZohoToolsForUser
 	jwtSecret      string
 	publicURL      string
 	authURL        string // hellopro.fr auth endpoint
@@ -41,6 +45,7 @@ type AuthServerConfig struct {
 	RefreshRepo    *repository.RefreshRepo
 	ServerRepo     *repository.ServerRepo
 	SSOSessionRepo ssoSessionFinder // optional, enables gw_session bridge
+	ZohoFetcher    ZohoToolsForUser // optional, enables per-user Zoho consent override
 	JWTSecret      string
 	PublicURL      string
 	AuthURL        string
@@ -57,6 +62,7 @@ func NewAuthServer(cfg AuthServerConfig) *AuthServer {
 		refreshRepo:    cfg.RefreshRepo,
 		serverRepo:     cfg.ServerRepo,
 		ssoSessionRepo: cfg.SSOSessionRepo,
+		zohoFetcher:    cfg.ZohoFetcher,
 		jwtSecret:      cfg.JWTSecret,
 		publicURL:      cfg.PublicURL,
 		authURL:        cfg.AuthURL,
