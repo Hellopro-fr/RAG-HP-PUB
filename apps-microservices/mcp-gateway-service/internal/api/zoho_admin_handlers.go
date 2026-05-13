@@ -248,15 +248,83 @@ func zohoImportToRowDTO(row *db.ZohoImport, h *Handler) ZohoImportRowDTO {
 	}
 }
 
-// handleZohoImportPatch / handleZohoImportDelete / handleZohoImportTest are
-// implemented in Tasks 4 and 5; declare stubs so the file compiles. Replace
-// with real implementations in those tasks.
-func (h *Handler) handleZohoImportPatch(w http.ResponseWriter, _ *http.Request, _ string) {
-	writeJSON(w, http.StatusNotImplemented, ErrorResponse{Error: "patch not implemented yet"})
+func (h *Handler) handleZohoImportPatch(w http.ResponseWriter, r *http.Request, id string) {
+	var req ZohoImportUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	if req.Name == nil && req.URL == nil && req.AuthHeaders == nil && req.IsActive == nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "no fields to update"})
+		return
+	}
+
+	patch := repository.ZohoUpdatePatch{
+		Name:     req.Name,
+		URL:      req.URL,
+		IsActive: req.IsActive,
+	}
+	if req.AuthHeaders != nil {
+		var encrypted []byte
+		if len(*req.AuthHeaders) > 0 {
+			raw, err := json.Marshal(*req.AuthHeaders)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "encode auth_headers: " + err.Error()})
+				return
+			}
+			if h.encryptor != nil {
+				encrypted, err = h.encryptor.Encrypt(raw)
+				if err != nil {
+					writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "encrypt: " + err.Error()})
+					return
+				}
+			} else {
+				encrypted = raw
+			}
+		} else {
+			encrypted = []byte{}
+		}
+		patch.AuthHeaders = &encrypted
+	}
+
+	row, err := h.zohoImportRepo.Update(id, patch)
+	if err != nil {
+		if errors.Is(err, repository.ErrZohoImportNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, zohoImportToRowDTO(row, h))
 }
-func (h *Handler) handleZohoImportDelete(w http.ResponseWriter, _ *http.Request, _ string) {
-	writeJSON(w, http.StatusNotImplemented, ErrorResponse{Error: "delete not implemented yet"})
+
+func (h *Handler) handleZohoImportDelete(w http.ResponseWriter, _ *http.Request, id string) {
+	row, err := h.zohoImportRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if row == nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+		return
+	}
+	if row.IsAdmin {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "use /api/v1/zoho-imports/admin to delete the admin row"})
+		return
+	}
+
+	if err := h.zohoImportRepo.DeleteByID(id); err != nil {
+		if errors.Is(err, repository.ErrZohoImportNotFound) {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
+
 func (h *Handler) handleZohoImportTest(w http.ResponseWriter, _ *http.Request, _ string) {
 	writeJSON(w, http.StatusNotImplemented, ErrorResponse{Error: "test not implemented yet"})
 }

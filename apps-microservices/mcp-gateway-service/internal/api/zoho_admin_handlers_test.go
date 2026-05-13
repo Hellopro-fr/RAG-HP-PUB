@@ -245,3 +245,121 @@ func TestZohoImports_GetByID_404(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
+
+func TestZohoImports_Patch_UpdatesFields(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	in := &db.ZohoImport{Name: "old", URL: "https://old", CreatedBy: "alice@hp.fr", TemplateSlug: "zoho-crm"}
+	if err := h.zohoImportRepo.CreateUserImport(in); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"name":         "new",
+		"url":          "https://new",
+		"auth_headers": map[string]string{"Authorization": "Bearer x"},
+		"is_active":    false,
+	})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/zoho-imports/"+in.ID, bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var out ZohoImportRowDTO
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out.Name != "new" || out.URL != "https://new" || out.IsActive {
+		t.Fatalf("DTO = %+v", out)
+	}
+	if len(out.AuthHeaderKeys) != 1 || out.AuthHeaderKeys[0] != "Authorization" {
+		t.Fatalf("AuthHeaderKeys = %+v", out.AuthHeaderKeys)
+	}
+}
+
+func TestZohoImports_Patch_ClearsAuthHeaders(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	in := &db.ZohoImport{
+		Name: "x", URL: "https://x", CreatedBy: "alice@hp.fr", TemplateSlug: "zoho-crm",
+		AuthHeaders: []byte{0xAA},
+	}
+	if err := h.zohoImportRepo.CreateUserImport(in); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{"auth_headers": map[string]string{}})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/zoho-imports/"+in.ID, bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	got, _ := h.zohoImportRepo.GetByID(in.ID)
+	if len(got.AuthHeaders) != 0 {
+		t.Fatalf("expected cleared auth_headers, got %v", got.AuthHeaders)
+	}
+}
+
+func TestZohoImports_Patch_EmptyBody400(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	in := &db.ZohoImport{Name: "x", URL: "https://x", CreatedBy: "a@hp.fr", TemplateSlug: "zoho-crm"}
+	_ = h.zohoImportRepo.CreateUserImport(in)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/zoho-imports/"+in.ID, bytes.NewReader([]byte("{}")))
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestZohoImports_Patch_404(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(map[string]any{"name": "x"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/zoho-imports/missing-id", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d", rec.Code)
+	}
+}
+
+func TestZohoImports_Delete_UserRow(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	in := &db.ZohoImport{Name: "x", URL: "https://x", CreatedBy: "a@hp.fr", TemplateSlug: "zoho-crm"}
+	if err := h.zohoImportRepo.CreateUserImport(in); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/zoho-imports/"+in.ID, nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	got, _ := h.zohoImportRepo.GetByID(in.ID)
+	if got != nil {
+		t.Fatalf("expected nil, got %+v", got)
+	}
+}
+
+func TestZohoImports_Delete_AdminRow400(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(ZohoAdminCreateRequest{Name: "admin", URL: "https://admin"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/admin", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoAdmin(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seed admin: %d", rec.Code)
+	}
+	var seeded ZohoAdminResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &seeded)
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/zoho-imports/"+seeded.ID, nil)
+	rec = httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "/api/v1/zoho-imports/admin") {
+		t.Fatalf("expected redirect message in body, got %s", rec.Body.String())
+	}
+}
