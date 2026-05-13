@@ -385,8 +385,10 @@ func registerRESTAndOAuthServer(
 	log.Println("[main] server_authorizations wired into Gateway for full-access bypass")
 
 	apiHandler.SetEncryptor(dbs.encryptor)
-	apiHandler.SetZohoImportRepo(repository.NewZohoImportRepo(dbs.database))
-	log.Println("[main] zoho-imports admin REST wired")
+	zohoImportRepo := repository.NewZohoImportRepo(dbs.database)
+	apiHandler.SetZohoImportRepo(zohoImportRepo)
+	gw.SetZohoUserCatalog(&zohoCatalogAdapter{imports: zohoImportRepo})
+	log.Println("[main] zoho-imports admin REST wired + persisted catalog source attached to gateway")
 
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
 		redirectURL := strings.TrimRight(cfg.GatewayPublicURL, "/") + "/api/v1/google/callback"
