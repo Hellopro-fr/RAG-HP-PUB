@@ -10,20 +10,18 @@ import (
 	"mcp-zoho-service/internal/db"
 )
 
-// stubRunner satisfies QueryRunner with controllable in-memory data so the
-// resolver can be tested without a live MySQL.
 type stubRunner struct {
-	adminRow    *db.ServerRow
+	adminRow    *db.ImportRow
 	adminErr    error
-	importRow   *db.ServerRow
+	importRow   *db.ImportRow
 	importErr   error
-	grants      map[string]map[string]bool // serverID → email(lowercased) → granted
+	grants      map[string]map[string]bool // stubID → email(lower) → granted
 	adminCalls  int
 	grantCalls  int
 	importCalls int
 }
 
-func (s *stubRunner) FindAdminZohoServer(_ context.Context, _ string) (*db.ServerRow, error) {
+func (s *stubRunner) FindAdminZohoImport(_ context.Context) (*db.ImportRow, error) {
 	s.adminCalls++
 	if s.adminErr != nil {
 		return nil, s.adminErr
@@ -34,16 +32,16 @@ func (s *stubRunner) FindAdminZohoServer(_ context.Context, _ string) (*db.Serve
 	return s.adminRow, nil
 }
 
-func (s *stubRunner) IsAdminGranted(_ context.Context, serverID, email string) (bool, error) {
+func (s *stubRunner) IsAdminGranted(_ context.Context, stubID, email string) (bool, error) {
 	s.grantCalls++
-	g, ok := s.grants[serverID]
+	g, ok := s.grants[stubID]
 	if !ok {
 		return false, nil
 	}
 	return g[lower(email)], nil
 }
 
-func (s *stubRunner) FindUserZohoImport(_ context.Context, _, _ string) (*db.ServerRow, error) {
+func (s *stubRunner) FindUserZohoImport(_ context.Context, _, _ string) (*db.ImportRow, error) {
 	s.importCalls++
 	if s.importErr != nil {
 		return nil, s.importErr
@@ -54,53 +52,62 @@ func (s *stubRunner) FindUserZohoImport(_ context.Context, _, _ string) (*db.Ser
 	return s.importRow, nil
 }
 
-// fakeDecryptor returns its input unchanged so tests don't need a real key.
 type fakeDecryptor struct{}
 
 func (fakeDecryptor) Decrypt(b []byte) ([]byte, error) { return b, nil }
 
+const testStubID = "stub-uuid-1234"
+
 func TestResolver_AdminGranted(t *testing.T) {
 	sr := &stubRunner{
-		adminRow: &db.ServerRow{ID: "admin-1", URL: "http://admin-zoho/mcp", AuthHeaders: []byte(`{"Authorization":"Bearer admin"}`)},
-		grants:   map[string]map[string]bool{"admin-1": {"alice@hp.fr": true}},
+		adminRow: &db.ImportRow{ID: "admin-1", URL: "http://admin-zoho/mcp", AuthHeaders: []byte(`{"Authorization":"Bearer admin"}`), IsAdmin: true},
+		grants:   map[string]map[string]bool{testStubID: {"alice@hp.fr": true}},
 	}
-	r := NewResolver(sr, fakeDecryptor{}, time.Minute, "http://self/mcp")
+	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
 
 	got, err := r.Resolve(context.Background(), "alice@hp.fr", "alice")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if got.UpstreamURL != "http://admin-zoho/mcp" {
-		t.Fatalf("upstream = %q, want admin", got.UpstreamURL)
+		t.Fatalf("upstream = %q", got.UpstreamURL)
 	}
 	if got.Headers["Authorization"] != "Bearer admin" {
-		t.Fatalf("headers = %+v, want admin bearer", got.Headers)
+		t.Fatalf("Authorization = %q", got.Headers["Authorization"])
+	}
+}
+
+func TestResolver_AdminGrantedButNoAdminRow(t *testing.T) {
+	sr := &stubRunner{
+		grants: map[string]map[string]bool{testStubID: {"alice@hp.fr": true}},
+	}
+	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
+
+	_, err := r.Resolve(context.Background(), "alice@hp.fr", "alice")
+	if !errors.Is(err, ErrNoAdminZohoConfigured) {
+		t.Fatalf("err = %v, want ErrNoAdminZohoConfigured", err)
 	}
 }
 
 func TestResolver_UserImport(t *testing.T) {
 	sr := &stubRunner{
-		adminRow:  &db.ServerRow{ID: "admin-1", URL: "http://admin-zoho/mcp"},
 		grants:    map[string]map[string]bool{},
-		importRow: &db.ServerRow{ID: "user-1", URL: "http://alice-zoho/mcp", CreatedBy: "alice@hp.fr", AuthHeaders: []byte(`{"Authorization":"Bearer alice"}`)},
+		importRow: &db.ImportRow{ID: "user-1", URL: "http://alice-zoho/mcp", CreatedBy: "alice@hp.fr"},
 	}
-	r := NewResolver(sr, fakeDecryptor{}, time.Minute, "http://self/mcp")
+	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
 
 	got, err := r.Resolve(context.Background(), "alice@hp.fr", "alice")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	if got.UpstreamURL != "http://alice-zoho/mcp" {
-		t.Fatalf("upstream = %q, want alice", got.UpstreamURL)
+		t.Fatalf("upstream = %q", got.UpstreamURL)
 	}
 }
 
 func TestResolver_NoMatch(t *testing.T) {
-	sr := &stubRunner{
-		adminRow:  &db.ServerRow{ID: "admin-1", URL: "http://admin-zoho/mcp"},
-		importErr: sql.ErrNoRows,
-	}
-	r := NewResolver(sr, fakeDecryptor{}, time.Minute, "http://self/mcp")
+	sr := &stubRunner{importErr: sql.ErrNoRows}
+	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
 
 	_, err := r.Resolve(context.Background(), "charlie@hp.fr", "charlie")
 	if !errors.Is(err, ErrNoZohoConfigured) {
@@ -108,19 +115,9 @@ func TestResolver_NoMatch(t *testing.T) {
 	}
 }
 
-func TestResolver_AdminRowMissing(t *testing.T) {
-	sr := &stubRunner{adminErr: sql.ErrNoRows}
-	r := NewResolver(sr, fakeDecryptor{}, time.Minute, "http://self/mcp")
-
-	_, err := r.Resolve(context.Background(), "alice@hp.fr", "alice")
-	if !errors.Is(err, ErrMisconfigured) {
-		t.Fatalf("err = %v, want ErrMisconfigured", err)
-	}
-}
-
 func TestResolver_EmptyEmail(t *testing.T) {
 	sr := &stubRunner{}
-	r := NewResolver(sr, fakeDecryptor{}, time.Minute, "http://self/mcp")
+	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
 
 	_, err := r.Resolve(context.Background(), "", "")
 	if !errors.Is(err, ErrInvalidIdentity) {
@@ -130,16 +127,16 @@ func TestResolver_EmptyEmail(t *testing.T) {
 
 func TestResolver_CacheHit(t *testing.T) {
 	sr := &stubRunner{
-		adminRow: &db.ServerRow{ID: "admin-1", URL: "http://admin/mcp"},
-		grants:   map[string]map[string]bool{"admin-1": {"alice@hp.fr": true}},
+		adminRow: &db.ImportRow{ID: "admin-1", URL: "http://admin/mcp"},
+		grants:   map[string]map[string]bool{testStubID: {"alice@hp.fr": true}},
 	}
-	r := NewResolver(sr, fakeDecryptor{}, time.Minute, "http://self/mcp")
+	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
 
 	if _, err := r.Resolve(context.Background(), "alice@hp.fr", "alice"); err != nil {
-		t.Fatalf("first Resolve: %v", err)
+		t.Fatalf("first: %v", err)
 	}
 	if _, err := r.Resolve(context.Background(), "alice@hp.fr", "alice"); err != nil {
-		t.Fatalf("second Resolve: %v", err)
+		t.Fatalf("second: %v", err)
 	}
 	if sr.adminCalls > 1 || sr.grantCalls > 1 {
 		t.Fatalf("cache miss on second call: admin=%d grant=%d", sr.adminCalls, sr.grantCalls)

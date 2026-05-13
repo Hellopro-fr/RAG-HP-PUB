@@ -98,6 +98,12 @@ func (s *Server) writeResolverError(w http.ResponseWriter, id json.RawMessage, e
 		http.Error(w, `{"error":"missing_end_user_email"}`, http.StatusBadRequest)
 	case errors.Is(err, routing.ErrMisconfigured):
 		http.Error(w, `{"error":"misconfigured_admin_row"}`, http.StatusServiceUnavailable)
+	case errors.Is(err, routing.ErrNoAdminZohoConfigured):
+		body := mcperr.WriteRPCError(rawID(id), mcperr.CodeNoZohoConfigured, "no admin Zoho server configured", map[string]string{
+			"end_user_email": email,
+			"category":       "no_admin_zoho_configured",
+		})
+		writeJSONRPC(w, body)
 	case errors.Is(err, routing.ErrNoZohoConfigured):
 		body := mcperr.WriteRPCError(rawID(id), mcperr.CodeNoZohoConfigured, "no Zoho server configured for "+email, map[string]string{
 			"end_user_email": email,

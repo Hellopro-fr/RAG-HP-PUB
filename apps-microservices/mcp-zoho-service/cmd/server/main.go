@@ -35,7 +35,7 @@ func main() {
 	defer conn.Close()
 
 	queries := db.NewQueries(conn)
-	resolver := routing.NewResolver(queries, dec, cfg.CacheTTL, cfg.SelfURL)
+	resolver := routing.NewResolver(queries, dec, cfg.CacheTTL, cfg.StubServerID)
 	srv := &transport.Server{
 		Resolver:        resolver,
 		UpstreamTimeout: cfg.UpstreamTimeout,

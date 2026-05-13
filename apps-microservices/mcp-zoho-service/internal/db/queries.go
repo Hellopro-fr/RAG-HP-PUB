@@ -17,33 +17,30 @@ func NewQueries(db *sql.DB) *Queries {
 	return &Queries{db: db}
 }
 
-// FindAdminZohoServer returns the single mcp_servers row representing the
-// admin's global Zoho upstream: tool_prefix='zoho', template_slug='',
-// is_active, and url != selfURL (excludes this service's own row).
-// Returns sql.ErrNoRows when no such row exists.
-func (q *Queries) FindAdminZohoServer(ctx context.Context, selfURL string) (*ServerRow, error) {
+// FindAdminZohoImport returns the singleton admin row from zoho_imports.
+// Returns sql.ErrNoRows when no admin row is configured.
+func (q *Queries) FindAdminZohoImport(ctx context.Context) (*ImportRow, error) {
 	const query = `
-		SELECT id, url, auth_headers, created_by
-		FROM mcp_servers
-		WHERE tool_prefix = 'zoho'
-		  AND template_slug = ''
-		  AND is_active = 1
-		  AND url <> ?
+		SELECT id, url, auth_headers, created_by, is_admin
+		FROM zoho_imports
+		WHERE is_admin = 1 AND is_active = 1
 		ORDER BY created_at ASC
 		LIMIT 1
 	`
-	row := q.db.QueryRowContext(ctx, query, selfURL)
-	out := &ServerRow{}
-	if err := row.Scan(&out.ID, &out.URL, &out.AuthHeaders, &out.CreatedBy); err != nil {
+	row := q.db.QueryRowContext(ctx, query)
+	out := &ImportRow{}
+	if err := row.Scan(&out.ID, &out.URL, &out.AuthHeaders, &out.CreatedBy, &out.IsAdmin); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// IsAdminGranted returns true when there is a server_authorizations row
-// granting full access on serverID for the given email (case-insensitive).
-func (q *Queries) IsAdminGranted(ctx context.Context, serverID, email string) (bool, error) {
-	if serverID == "" || email == "" {
+// IsAdminGranted returns true when a server_authorizations row grants
+// full access on stubServerID for the given email (case-insensitive).
+// stubServerID is the UUID of the mcp_servers row whose tool_prefix='zoho'
+// and url points at this service (configured via ZOHO_STUB_SERVER_ID).
+func (q *Queries) IsAdminGranted(ctx context.Context, stubServerID, email string) (bool, error) {
+	if stubServerID == "" || email == "" {
 		return false, nil
 	}
 	const query = `
@@ -54,7 +51,7 @@ func (q *Queries) IsAdminGranted(ctx context.Context, serverID, email string) (b
 		LIMIT 1
 	`
 	var dummy int
-	err := q.db.QueryRowContext(ctx, query, serverID, email).Scan(&dummy)
+	err := q.db.QueryRowContext(ctx, query, stubServerID, email).Scan(&dummy)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -64,12 +61,10 @@ func (q *Queries) IsAdminGranted(ctx context.Context, serverID, email string) (b
 	return true, nil
 }
 
-// FindUserZohoImport returns the oldest active mcp_servers row whose
-// tool_prefix starts with 'zoho', template_slug is non-empty, and whose
-// created_by matches the caller's identity by exact-email OR login-portion.
-// When more than one row matches, the oldest by created_at wins.
+// FindUserZohoImport returns the oldest active per-user zoho_imports row
+// whose created_by matches by exact email or by login-portion.
 // Returns sql.ErrNoRows when nothing matches.
-func (q *Queries) FindUserZohoImport(ctx context.Context, email, login string) (*ServerRow, error) {
+func (q *Queries) FindUserZohoImport(ctx context.Context, email, login string) (*ImportRow, error) {
 	emailLower := strings.ToLower(email)
 	loginLower := strings.ToLower(login)
 	if emailLower == "" && loginLower == "" {
@@ -77,11 +72,9 @@ func (q *Queries) FindUserZohoImport(ctx context.Context, email, login string) (
 	}
 
 	const query = `
-		SELECT id, url, auth_headers, created_by
-		FROM mcp_servers
-		WHERE template_slug <> ''
-		  AND is_active = 1
-		  AND LOWER(tool_prefix) LIKE 'zoho%'
+		SELECT id, url, auth_headers, created_by, is_admin
+		FROM zoho_imports
+		WHERE is_admin = 0 AND is_active = 1
 		  AND (
 		        LOWER(created_by) = ?
 		     OR (? <> '' AND LOWER(created_by) LIKE CONCAT(?, '@%'))
@@ -90,8 +83,8 @@ func (q *Queries) FindUserZohoImport(ctx context.Context, email, login string) (
 		LIMIT 1
 	`
 	row := q.db.QueryRowContext(ctx, query, emailLower, loginLower, loginLower)
-	out := &ServerRow{}
-	if err := row.Scan(&out.ID, &out.URL, &out.AuthHeaders, &out.CreatedBy); err != nil {
+	out := &ImportRow{}
+	if err := row.Scan(&out.ID, &out.URL, &out.AuthHeaders, &out.CreatedBy, &out.IsAdmin); err != nil {
 		return nil, err
 	}
 	return out, nil

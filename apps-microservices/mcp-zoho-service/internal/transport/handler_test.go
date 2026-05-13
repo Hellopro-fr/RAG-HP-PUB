@@ -18,12 +18,12 @@ import (
 
 // stubRunner satisfies routing.QueryRunner with fixed admin + grant + optional import.
 type stubRunner struct {
-	adminRow  *db.ServerRow
+	adminRow  *db.ImportRow
 	granted   bool
-	importRow *db.ServerRow
+	importRow *db.ImportRow
 }
 
-func (s stubRunner) FindAdminZohoServer(_ context.Context, _ string) (*db.ServerRow, error) {
+func (s stubRunner) FindAdminZohoImport(_ context.Context) (*db.ImportRow, error) {
 	if s.adminRow == nil {
 		return nil, sql.ErrNoRows
 	}
@@ -34,7 +34,7 @@ func (s stubRunner) IsAdminGranted(_ context.Context, _ string, _ string) (bool,
 	return s.granted, nil
 }
 
-func (s stubRunner) FindUserZohoImport(_ context.Context, _, _ string) (*db.ServerRow, error) {
+func (s stubRunner) FindUserZohoImport(_ context.Context, _, _ string) (*db.ImportRow, error) {
 	if s.importRow == nil {
 		return nil, sql.ErrNoRows
 	}
@@ -59,12 +59,12 @@ func newServerWith(t *testing.T, runner stubRunner) (*Server, *httptest.Server) 
 	if runner.importRow != nil && runner.importRow.URL == "" {
 		runner.importRow.URL = upstream.URL
 	}
-	r := routing.NewResolver(runner, fakeDec{}, time.Minute, "http://self/mcp")
+	r := routing.NewResolver(runner, fakeDec{}, time.Minute, "stub-id")
 	return &Server{Resolver: r, GatewayToken: "secret", UpstreamTimeout: time.Second}, upstream
 }
 
 func TestHandler_MissingEmail400(t *testing.T) {
-	s, up := newServerWith(t, stubRunner{adminRow: &db.ServerRow{ID: "admin-1"}})
+	s, up := newServerWith(t, stubRunner{adminRow: &db.ImportRow{ID: "admin-1"}})
 	defer up.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{}`))
@@ -78,7 +78,7 @@ func TestHandler_MissingEmail400(t *testing.T) {
 }
 
 func TestHandler_BadAdminToken401(t *testing.T) {
-	s, up := newServerWith(t, stubRunner{adminRow: &db.ServerRow{ID: "admin-1"}})
+	s, up := newServerWith(t, stubRunner{adminRow: &db.ImportRow{ID: "admin-1"}})
 	defer up.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{}`))
@@ -92,7 +92,7 @@ func TestHandler_BadAdminToken401(t *testing.T) {
 }
 
 func TestHandler_NoMatchReturnsRPCError(t *testing.T) {
-	s, up := newServerWith(t, stubRunner{adminRow: &db.ServerRow{ID: "admin-1"}, granted: false, importRow: nil})
+	s, up := newServerWith(t, stubRunner{adminRow: &db.ImportRow{ID: "admin-1"}, granted: false, importRow: nil})
 	defer up.Close()
 
 	body := bytes.NewBufferString(`{"jsonrpc":"2.0","method":"tools/list","id":42}`)
@@ -143,8 +143,8 @@ func TestHandler_ProxiesBodyVerbatim(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	adminRow := &db.ServerRow{ID: "admin-1", URL: upstream.URL, AuthHeaders: []byte(`{"Authorization":"Bearer admin"}`)}
-	r := routing.NewResolver(stubRunner{adminRow: adminRow, granted: true}, fakeDec{}, time.Minute, "http://self/mcp")
+	adminRow := &db.ImportRow{ID: "admin-1", URL: upstream.URL, AuthHeaders: []byte(`{"Authorization":"Bearer admin"}`)}
+	r := routing.NewResolver(stubRunner{adminRow: adminRow, granted: true}, fakeDec{}, time.Minute, "stub-id")
 	s := &Server{Resolver: r, GatewayToken: "secret", UpstreamTimeout: time.Second}
 
 	body := bytes.NewBufferString(`{"jsonrpc":"2.0","method":"tools/list","id":7}`)

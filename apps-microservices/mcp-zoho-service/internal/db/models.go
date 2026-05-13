@@ -3,10 +3,11 @@
 // only the subset the resolver needs.
 package db
 
-// ServerRow is the narrow view of an mcp_servers row used by the resolver.
-type ServerRow struct {
+// ImportRow is the narrow view of a zoho_imports row used by the resolver.
+type ImportRow struct {
 	ID          string
 	URL         string
-	AuthHeaders []byte // encrypted blob
+	AuthHeaders []byte
 	CreatedBy   string
+	IsAdmin     bool
 }

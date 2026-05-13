@@ -27,15 +27,13 @@ func TestQueries_Smoke(t *testing.T) {
 	ctx := context.Background()
 	q := NewQueries(conn)
 
-	// Existence of a usable schema is enough for this smoke — non-ErrNoRows
-	// failures are real bugs in the SQL.
-	if _, err := q.FindAdminZohoServer(ctx, "http://self/mcp"); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("FindAdminZohoServer: %v", err)
+	if _, err := q.FindAdminZohoImport(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("FindAdminZohoImport: %v", err)
 	}
 	if _, err := q.FindUserZohoImport(ctx, "alice@hp.fr", "alice"); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("FindUserZohoImport: %v", err)
 	}
-	if _, err := q.IsAdminGranted(ctx, "any-server-id", "alice@hp.fr"); err != nil {
+	if _, err := q.IsAdminGranted(ctx, "any-stub-id", "alice@hp.fr"); err != nil {
 		t.Fatalf("IsAdminGranted: %v", err)
 	}
 }

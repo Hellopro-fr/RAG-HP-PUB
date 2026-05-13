@@ -16,6 +16,7 @@ type Config struct {
 	EncryptionKey   string
 	GatewayToken    string
 	SelfURL         string
+	StubServerID    string
 	CacheTTL        time.Duration
 	UpstreamTimeout time.Duration
 	LogLevel        string
@@ -30,6 +31,7 @@ func Load() (*Config, error) {
 		EncryptionKey:   os.Getenv("ENCRYPTION_KEY"),
 		GatewayToken:    os.Getenv("ZOHO_GATEWAY_TOKEN"),
 		SelfURL:         os.Getenv("ZOHO_SELF_URL"),
+		StubServerID:    os.Getenv("ZOHO_STUB_SERVER_ID"),
 		CacheTTL:        time.Duration(envInt("ZOHO_ROUTING_CACHE_TTL", 60)) * time.Second,
 		UpstreamTimeout: time.Duration(envInt("ZOHO_UPSTREAM_TIMEOUT", 30)) * time.Second,
 		LogLevel:        envDefault("LOG_LEVEL", "info"),
@@ -46,6 +48,9 @@ func Load() (*Config, error) {
 	}
 	if c.SelfURL == "" {
 		return nil, fmt.Errorf("ZOHO_SELF_URL is required (used to exclude the service's own row when picking the admin upstream)")
+	}
+	if c.StubServerID == "" {
+		return nil, fmt.Errorf("ZOHO_STUB_SERVER_ID is required (UUID of the gateway's mcp_servers stub row whose URL points at this service)")
 	}
 	return c, nil
 }
