@@ -2484,8 +2484,8 @@ services:
       - "8596:8596"
     environment:
       - ZOHO_ROUTER_PORT=8596
-      - MYSQL_DSN=${MCP_GATEWAY_MYSQL_DSN_READONLY:-${MCP_GATEWAY_MYSQL_DSN}}
-      - ENCRYPTION_KEY=${MCP_GATEWAY_ENCRYPTION_KEY}
+      - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/${GATEWAY_MYSQL_DB:-gateway_db}?parseTime=true
+      - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
       - ZOHO_GATEWAY_TOKEN=${ZOHO_GATEWAY_TOKEN}
       - ZOHO_SELF_URL=${ZOHO_SELF_URL:-http://mcp-zoho-service:8596/mcp}
       - ZOHO_ROUTING_CACHE_TTL=60
