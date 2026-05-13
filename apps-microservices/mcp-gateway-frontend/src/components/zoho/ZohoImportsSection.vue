@@ -14,9 +14,11 @@
         v-if="activeTab === 'admin'"
         :admin="store.admin"
         :test-result="adminTestResult"
+        :discover-result="adminDiscoverResult"
         @create="openAdminEdit(true)"
         @edit="openAdminEdit(false)"
         @test="onTestAdmin"
+        @discover="onDiscoverAdmin"
         @delete="onDeleteAdmin"
       />
 
@@ -28,12 +30,14 @@
         :limit="store.usersLimit"
         :search="store.usersSearch"
         :test-results="userTestResults"
+        :discover-results="userDiscoverResults"
         @search="onSearchUsers"
         @page="(n) => store.fetchUsers({ page: n })"
         @edit="openUserEdit"
         @delete="onDeleteUser"
         @toggle="onToggleUser"
         @test="onTestUser"
+        @discover="onDiscoverUser"
       />
     </PageHeaderTabs>
 
@@ -73,6 +77,8 @@ const editRow = ref<ZohoImportRow | null>(null)
 const editIsCreate = ref(false)
 const adminTestResult = ref<ZohoImportTestResponse | null>(null)
 const userTestResults = ref<Record<string, ZohoImportTestResponse>>({})
+const adminDiscoverResult = ref<{ ok: boolean; tools: number } | null>(null)
+const userDiscoverResults = ref<Record<string, { ok: boolean; tools: number }>>({})
 
 const editTitle = computed(() => {
   if (editIsCreate.value) return 'Configurer le compte admin'
@@ -139,6 +145,16 @@ async function onTestAdmin() {
 async function onTestUser(r: ZohoImportRow) {
   const res = await store.testRow(r.id)
   userTestResults.value = { ...userTestResults.value, [r.id]: res }
+}
+
+async function onDiscoverAdmin() {
+  if (!store.admin) return
+  adminDiscoverResult.value = await store.discoverRow(store.admin.id)
+}
+
+async function onDiscoverUser(r: ZohoImportRow) {
+  const res = await store.discoverRow(r.id)
+  userDiscoverResults.value = { ...userDiscoverResults.value, [r.id]: res }
 }
 
 function onSearchUsers(s: string) {

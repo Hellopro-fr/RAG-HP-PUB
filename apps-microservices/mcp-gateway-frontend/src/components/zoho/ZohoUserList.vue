@@ -61,15 +61,31 @@
           <span class="text-xs text-gray-600 dark:text-gray-300">{{ data.auth_header_keys.join(', ') }}</span>
         </template>
       </Column>
-      <Column header="Actions" header-style="width: 18rem; text-align: right">
+      <Column header="Actions" header-style="width: 22rem; text-align: right">
         <template #body="{ data }">
           <div class="inline-flex items-center gap-2 justify-end w-full">
             <ZohoTestResultBadge :result="testResults[data.id] ?? null" />
+            <span
+              v-if="discoverResults?.[data.id]"
+              class="text-xs px-2 py-0.5 rounded-full font-medium"
+              :class="discoverResults[data.id]!.ok
+                ? 'bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400'
+                : 'bg-error-100 text-error-700 dark:bg-error-500/20 dark:text-error-400'"
+              :title="`${discoverResults[data.id]!.tools} outils`"
+            >
+              {{ discoverResults[data.id]!.tools }} outils
+            </span>
             <button
               class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
               @click="$emit('test', data)"
             >
               Tester
+            </button>
+            <button
+              class="text-xs px-2 py-1 rounded-md border border-brand-300 dark:border-brand-700 text-brand-600 dark:text-brand-400"
+              @click="$emit('discover', data)"
+            >
+              Découvrir
             </button>
             <button
               class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
@@ -110,6 +126,7 @@ const props = defineProps<{
   limit: number
   search: string
   testResults: Record<string, ZohoImportTestResponse>
+  discoverResults?: Record<string, { ok: boolean; tools: number }>
 }>()
 
 const emit = defineEmits<{
@@ -119,6 +136,7 @@ const emit = defineEmits<{
   delete: [r: ZohoImportRow]
   toggle: [r: ZohoImportRow]
   test: [r: ZohoImportRow]
+  discover: [r: ZohoImportRow]
 }>()
 
 const searchLocal = ref(props.search)

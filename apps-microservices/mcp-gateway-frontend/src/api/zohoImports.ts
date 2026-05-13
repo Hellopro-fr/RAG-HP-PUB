@@ -43,6 +43,10 @@ export const zohoImportsApi = {
     return api.post<ZohoImportTestResponse>(`${BASE}/${encodeURIComponent(id)}/test`, {})
   },
 
+  discover(id: string): Promise<{ ok: boolean; tools: number }> {
+    return api.post<{ ok: boolean; tools: number }>(`${BASE}/${encodeURIComponent(id)}/discover`, {})
+  },
+
   getAdmin(): Promise<ZohoImportRow | null> {
     return api.get<ZohoImportRow>(`${BASE}/admin`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) {

@@ -78,6 +78,9 @@ export const useZohoImportsStore = defineStore('zohoImports', {
     async testRow(id: string): Promise<ZohoImportTestResponse> {
       return zohoImportsApi.test(id)
     },
+    async discoverRow(id: string): Promise<{ ok: boolean; tools: number }> {
+      return zohoImportsApi.discover(id)
+    },
     async toggleActive(id: string, active: boolean) {
       return this.updateRow(id, { is_active: active })
     },
