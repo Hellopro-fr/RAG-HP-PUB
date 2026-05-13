@@ -63,17 +63,31 @@ func newServerWith(t *testing.T, runner stubRunner) (*Server, *httptest.Server) 
 	return &Server{Resolver: r, GatewayToken: "secret", UpstreamTimeout: time.Second}, upstream
 }
 
-func TestHandler_MissingEmail400(t *testing.T) {
-	s, up := newServerWith(t, stubRunner{adminRow: &db.ImportRow{ID: "admin-1"}})
-	defer up.Close()
+// TestHandler_MissingEmail_RoutesToAdmin covers the gateway-discovery path:
+// when X-End-User-Email is absent, the handler resolves to the admin Zoho
+// row instead of returning 400. This lets the gateway's transport-probe and
+// health-check loop succeed at boot without per-user context.
+func TestHandler_MissingEmail_RoutesToAdmin(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","result":{"tools":[]},"id":1}`))
+	}))
+	defer upstream.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{}`))
+	s, _ := newServerWith(t, stubRunner{
+		adminRow: &db.ImportRow{ID: "admin-1", URL: upstream.URL, IsAdmin: true},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","method":"initialize","id":1}`))
 	req.Header.Set("X-Admin-Token", "secret")
 	rec := httptest.NewRecorder()
 	s.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (body=%s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"tools":[]`) {
+		t.Fatalf("body did not proxy admin response: %s", rec.Body.String())
 	}
 }
 

@@ -48,9 +48,23 @@ func NewResolver(q QueryRunner, dec Decryptor, ttl time.Duration, stubServerID s
 
 // Resolve returns the upstream URL and decrypted headers for the caller, or
 // one of the sentinel errors above. The cache is consulted first.
+//
+// When email and login are both empty, the caller has no end-user identity
+// — this is the gateway's discovery / health-probe path (POST /mcp with
+// initialize or tools/list at boot, no user context). In that case we route
+// to the admin Zoho row so the gateway sees a real backend instead of a
+// 400. Per-user routing still applies whenever an end-user email is
+// supplied.
 func (r *Resolver) Resolve(ctx context.Context, email, login string) (*Resolution, error) {
 	if email == "" && login == "" {
-		return nil, ErrInvalidIdentity
+		adminRow, aerr := r.q.FindAdminZohoImport(ctx)
+		if aerr != nil {
+			if errors.Is(aerr, sql.ErrNoRows) {
+				return nil, ErrNoAdminZohoConfigured
+			}
+			return nil, fmt.Errorf("find admin row (no end-user): %w", aerr)
+		}
+		return r.buildResolution(adminRow)
 	}
 	key := lower(email)
 	if v, ok := r.cache.get(key); ok {

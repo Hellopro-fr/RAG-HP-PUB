@@ -53,12 +53,12 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// X-End-User-Email is optional: when absent (gateway discovery / health
+	// probe), the resolver routes to the admin Zoho row so initialize and
+	// tools/list succeed without per-user context. When present, per-user
+	// routing takes effect.
 	email := r.Header.Get("X-End-User-Email")
 	login := r.Header.Get("X-End-User-Login")
-	if email == "" {
-		http.Error(w, `{"error":"missing_end_user_email"}`, http.StatusBadRequest)
-		return
-	}
 
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {

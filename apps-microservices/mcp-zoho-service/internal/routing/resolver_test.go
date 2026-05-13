@@ -115,13 +115,34 @@ func TestResolver_NoMatch(t *testing.T) {
 	}
 }
 
-func TestResolver_EmptyEmail(t *testing.T) {
+// TestResolver_EmptyEmail_RoutesToAdminRow covers the gateway-discovery
+// path: when both email and login are empty (initialize / tools/list probes
+// at boot), the resolver routes to the admin Zoho row so the gateway sees a
+// real backend instead of a 400.
+func TestResolver_EmptyEmail_RoutesToAdminRow(t *testing.T) {
+	sr := &stubRunner{
+		adminRow: &db.ImportRow{ID: "admin-1", URL: "http://admin-zoho/mcp", AuthHeaders: []byte(`{"Authorization":"Bearer admin"}`), IsAdmin: true},
+	}
+	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
+
+	got, err := r.Resolve(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got.UpstreamURL != "http://admin-zoho/mcp" {
+		t.Fatalf("upstream = %q, want admin", got.UpstreamURL)
+	}
+}
+
+// TestResolver_EmptyEmail_NoAdminRow ensures the gateway-discovery path
+// fails fast when the operator hasn't registered an admin Zoho row.
+func TestResolver_EmptyEmail_NoAdminRow(t *testing.T) {
 	sr := &stubRunner{}
 	r := NewResolver(sr, fakeDecryptor{}, time.Minute, testStubID)
 
 	_, err := r.Resolve(context.Background(), "", "")
-	if !errors.Is(err, ErrInvalidIdentity) {
-		t.Fatalf("err = %v, want ErrInvalidIdentity", err)
+	if !errors.Is(err, ErrNoAdminZohoConfigured) {
+		t.Fatalf("err = %v, want ErrNoAdminZohoConfigured", err)
 	}
 }
 
