@@ -6,7 +6,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/auth"
+	"api-gateway-go/internal/auth"
 )
 
 func RegisterLogin(r *gin.Engine, j *auth.JWT) {

@@ -128,6 +128,7 @@ export class UpdateChecker {
             const keys = Array.from(urlObj.searchParams.keys());
             for (const param of FORBIDDEN_PARAMS) {
                 if (keys.some(key => key === param || key.startsWith(param))) {
+                    void this.statsManager.increment("filtered_qm");
                     return true;
                 }
             }

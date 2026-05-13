@@ -68,10 +68,32 @@ class Question2aNGenerator:
             self._log(f"Prompt Question2 chargé (ID: {self.PROMPT_QUESTION2_ID})")
 
 
+    def _normalize_bulle_aide(self, raw: Any) -> Dict[str, Any]:
+        """
+        Normalise la bulle d'aide LLM vers la structure attendue par le PHP:
+        {"libelle": str, "explication": List[str], "astuce": str}
+        - Accepte dict (nouveau format) ou string (ancien format -> injectée comme explication unique)
+        - Garantit que "explication" est toujours une liste de strings
+        """
+        if isinstance(raw, dict):
+            explication = raw.get("explication", [])
+            if isinstance(explication, str):
+                explication = [explication]
+            elif not isinstance(explication, list):
+                explication = []
+            return {
+                "libelle": str(raw.get("libelle", "") or ""),
+                "explication": [str(e) for e in explication],
+                "astuce": str(raw.get("astuce", "") or ""),
+            }
+        if isinstance(raw, str) and raw.strip():
+            return {"libelle": "", "explication": [raw], "astuce": ""}
+        return {"libelle": "", "explication": [], "astuce": ""}
+
     def _normalize_question(self, q: Dict[str, Any], default_num: int = 1) -> Dict[str, Any]:
-        numero, intitule, justification, type_question = None, None, None, None
+        numero, intitule, bulle_aide, type_question = None, None, None, None
         reponses = []
-        
+
         for key, val in q.items():
             key_lower = key.lower()
             # Recherche insensitive des champs
@@ -79,8 +101,11 @@ class Question2aNGenerator:
                 numero = val
             elif "intitule" in key_lower and intitule is None:
                 intitule = val
-            elif "justification" in key_lower and justification is None:
-                justification = val                
+            elif "bulle" in key_lower and bulle_aide is None:
+                bulle_aide = val
+            elif "justification" in key_lower and bulle_aide is None:
+                # Rétrocompat: ancien format texte brut -> sera encapsulé en explication
+                bulle_aide = val
             elif "type" in key_lower and type_question is None:
                 type_question = val
             elif "reponse" in key_lower:
@@ -120,14 +145,15 @@ class Question2aNGenerator:
         return {
             "Numero-question": numero if numero is not None else default_num,
             "Intitule-question": intitule or "",
-            "Justification-question": justification or "",
+            "Bulle-aide": self._normalize_bulle_aide(bulle_aide),
             "Type-question": normalized_type,
             "Reponses": [{"Numero-reponse": n, "Reponse": v} for n, v in reponses]
         }
-    
+
     def _normalize_llm_response(self, json_data: Any) -> List[Dict[str, Any]]:
         """
         Normalise les résultats JSON du LLM en format uniforme.
+        Sortie: [{"Numero-question", "Intitule-question", "Bulle-aide": {libelle, explication, astuce}, "Type-question", "Reponses"}]
         """
         if isinstance(json_data, dict):
             return [self._normalize_question(json_data, 1)]

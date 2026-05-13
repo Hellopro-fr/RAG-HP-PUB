@@ -17,7 +17,7 @@ func TestDocsRendersSwaggerUI(t *testing.T) {
 	r.Use(sessions.Sessions("session", cookie.NewStore([]byte("k"))))
 	RegisterDocs(r, DocsDeps{
 		BaseSpec:    map[string]any{"openapi": "3.1.0", "info": map[string]any{"title": "x"}, "paths": map[string]any{}, "components": map[string]any{}},
-		ServiceMap:  map[string]string{},
+		Services:    func() map[string]string { return map[string]string{} },
 		AdminEmails: map[string]struct{}{},
 		AdminKey:    "K",
 	})

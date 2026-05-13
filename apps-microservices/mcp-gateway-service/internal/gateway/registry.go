@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"strings"
 	"sync"
 
 	"mcp-gateway/internal/mcp"
@@ -15,11 +16,33 @@ type BackendServer struct {
 	Name          string
 	Version       string
 	ToolPrefix    string // optional alphanumeric prefix for tool names: {prefix}_{tool_name}
+	// TemplateSlug echoes mcp_servers.template_slug. Non-empty means this
+	// backend was created via the /templates catalog (stdio instance or
+	// http_batch sheet import). Read by the Zoho header injector to decide
+	// whether to fire the auto-filter Step 1 path.
+	TemplateSlug string
+	// CreatedBy echoes mcp_servers.created_by. Used by the Zoho header
+	// injector to populate X-Zoho-Allowed-User on imported Zoho backends.
+	CreatedBy string
+	// Tags echoes mcp_servers.server_tags (one string per row). Used by the
+	// header injector dispatch to identify Zoho backends without depending
+	// on tool_prefix.
+	Tags          []string
 	Capabilities  mcp.ServerCapabilities
 	Tools         []mcp.Tool
 	Resources     []mcp.Resource
 	Prompts       []mcp.Prompt
 	AuthHeaders   map[string]string // extra headers forwarded to this backend
+}
+
+// HasTag returns true when target is in s.Tags (case-insensitive).
+func (s *BackendServer) HasTag(target string) bool {
+	for _, t := range s.Tags {
+		if strings.EqualFold(t, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // PrefixedToolName returns the tool name with the server prefix applied.

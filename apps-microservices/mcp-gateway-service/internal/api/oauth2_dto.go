@@ -14,6 +14,7 @@ type CreateOAuth2ClientRequest struct {
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`    // shares semantics with ScopeToken.LeexiFilter
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"` // shares semantics with ScopeToken.RingoverFilter
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`      // nil = unrestricted (full BDD access)
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // CreateOAuth2ClientResponse is returned once on creation (includes raw client_secret).
@@ -36,6 +37,7 @@ type CreateOAuth2ClientResponse struct {
 	LeexiFilter           *LeexiFilterDTO    `json:"leexi_filter,omitempty"`
 	RingoverFilter        *RingoverFilterDTO `json:"ringover_filter,omitempty"`
 	BDDFilter             *BDDFilterDTO      `json:"bdd_filter,omitempty"`
+	ZohoFilter            *ZohoFilterDTO     `json:"zoho_filter,omitempty"`
 }
 
 // OAuth2ClientResponse is the standard client response (no raw secret).
@@ -60,6 +62,7 @@ type OAuth2ClientResponse struct {
 	LeexiFilter           *LeexiFilterDTO    `json:"leexi_filter,omitempty"`
 	RingoverFilter        *RingoverFilterDTO `json:"ringover_filter,omitempty"`
 	BDDFilter             *BDDFilterDTO      `json:"bdd_filter,omitempty"`
+	ZohoFilter            *ZohoFilterDTO     `json:"zoho_filter,omitempty"`
 }
 
 // UpdateOAuth2ClientRequest is the body for PUT /api/v1/oauth2/clients/{id}.
@@ -74,4 +77,5 @@ type UpdateOAuth2ClientRequest struct {
 	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }

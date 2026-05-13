@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -53,8 +54,9 @@ func (h *Handler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
-	userEmail := auth.UserEmailFromContext(r.Context())
-	tokens, err := h.tokenRepo.ListAll(userEmail)
+	// Admins (role == "admin") bypass the created_by filter and see every
+	// token across the workspace. Non-admins keep the per-creator scope.
+	tokens, err := h.tokenRepo.ListAll(effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -147,6 +149,15 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	// bad payload doesn't leave a half-written token behind.
 	if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := applyZohoFilterToDBRow(
+		req.ZohoFilter,
+		func(m string) { token.ZohoFilterMode = m },
+		func(b json.RawMessage) { token.ZohoAllowedEmails = b },
+	); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -257,6 +268,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		LeexiFilter:    scopeTokenLeexiFilterToDTO(&token),
 		RingoverFilter: scopeTokenRingoverFilterToDTO(&token),
 		BDDFilter:      bddDTO,
+		ZohoFilter:     scopeTokenZohoFilterToDTO(&token),
 	})
 }
 
@@ -335,6 +347,19 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 		updates["ringover_filter_mode"] = mode
 		updates["ringover_allowed_user_ids"] = userIDs
 		updates["ringover_allowed_team_ids"] = teamIDs
+	}
+
+	if req.ZohoFilter != nil {
+		if err := applyZohoFilterToDBRow(
+			req.ZohoFilter,
+			func(m string) { existing.ZohoFilterMode = m },
+			func(b json.RawMessage) { existing.ZohoAllowedEmails = b },
+		); err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+		updates["zoho_filter_mode"] = existing.ZohoFilterMode
+		updates["zoho_allowed_emails"] = existing.ZohoAllowedEmails
 	}
 
 	if len(updates) > 0 {
@@ -486,7 +511,13 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request, id string)
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // isTokenOwner checks if the current user owns the token (or if the token has no owner).
+// Admins (role == "admin") bypass the ownership check and can mutate any
+// token — read, update, revoke, delete — so support flows can fix or remove
+// a token created by another user.
 func (h *Handler) isTokenOwner(r *http.Request, token *db.ScopeToken) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	if token.CreatedBy == "" {
 		return true // legacy tokens with no owner are accessible to everyone
 	}
@@ -581,7 +612,74 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		LeexiFilter:    scopeTokenLeexiFilterToDTO(&t),
 		RingoverFilter: scopeTokenRingoverFilterToDTO(&t),
 		BDDFilter:      scopeTokenBDDFilterToDTO(&t),
+		ZohoFilter:     scopeTokenZohoFilterToDTO(&t),
 	}
+}
+
+// applyZohoFilterToDBRow validates a *ZohoFilterDTO and writes it into the
+// caller-supplied setters. Returns a user-facing error on invalid input.
+func applyZohoFilterToDBRow(dto *ZohoFilterDTO, setMode func(string), setEmails func(json.RawMessage)) error {
+	if dto == nil || dto.Mode == "" || dto.Mode == ZohoFilterModeNone {
+		setMode(ZohoFilterModeNone)
+		setEmails(nil)
+		return nil
+	}
+	switch dto.Mode {
+	case ZohoFilterModeUsers:
+		emails := uniqueTrimmedEmails(dto.AllowedEmails)
+		if len(emails) == 0 {
+			return fmt.Errorf("zoho_filter.allowed_emails: must contain at least one non-empty email when mode is %q", ZohoFilterModeUsers)
+		}
+		raw, err := json.Marshal(emails)
+		if err != nil {
+			return fmt.Errorf("zoho_filter.allowed_emails: failed to encode: %w", err)
+		}
+		setMode(ZohoFilterModeUsers)
+		setEmails(raw)
+		return nil
+	case ZohoFilterModeCreator:
+		setMode(ZohoFilterModeCreator)
+		setEmails(nil)
+		return nil
+	default:
+		return fmt.Errorf("zoho_filter.mode: unknown value %q (expected: none | users | creator)", dto.Mode)
+	}
+}
+
+// uniqueTrimmedEmails strips whitespace, drops empty entries, and removes
+// duplicates while preserving first-seen order.
+func uniqueTrimmedEmails(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, e := range in {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		if _, dup := seen[e]; dup {
+			continue
+		}
+		seen[e] = struct{}{}
+		out = append(out, e)
+	}
+	return out
+}
+
+// scopeTokenZohoFilterToDTO converts the persisted Zoho columns on a
+// ScopeToken row into the wire DTO. Returns nil when no filter is set
+// so the JSON serialisation omits the key (zoho_filter,omitempty).
+func scopeTokenZohoFilterToDTO(t *db.ScopeToken) *ZohoFilterDTO {
+	if t == nil || t.ZohoFilterMode == "" || t.ZohoFilterMode == ZohoFilterModeNone {
+		return nil
+	}
+	dto := &ZohoFilterDTO{Mode: t.ZohoFilterMode}
+	if t.ZohoFilterMode == ZohoFilterModeUsers && len(t.ZohoAllowedEmails) > 0 {
+		_ = json.Unmarshal(t.ZohoAllowedEmails, &dto.AllowedEmails)
+	}
+	if t.ZohoFilterMode == ZohoFilterModeCreator {
+		dto.CreatorEmail = t.CreatedBy
+	}
+	return dto
 }
 
 // validateBDDFilter verifies that every used-table ID referenced by a BDD

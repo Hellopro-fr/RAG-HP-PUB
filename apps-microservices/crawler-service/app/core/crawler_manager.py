@@ -231,6 +231,12 @@ class CrawlerManager:
         try:
             os.makedirs(job_storage_path, exist_ok=True)
             logger.info(f"Using storage for crawl_id '{crawl_id}' at '{job_storage_path}'")
+
+            # Wipe any persistent state from a prior run of this crawl_id before
+            # spawning the new subprocess. Observed bug (crawl 6229 with dropData=true):
+            # old _completion_marker.json survives makedirs, reconciler then declares
+            # the new running crawl finished and skips its success webhook.
+            await self._cleanup_stale_state_for_relaunch(crawl_id, job_storage_path)
         except OSError as e:
             await _rollback_claim(decrement_counter=True)
             logger.error(f"Failed to create/access storage directory for crawl '{crawl_id}': {e}")
@@ -1923,6 +1929,44 @@ class CrawlerManager:
             )
             return None
         return marker
+
+    async def _cleanup_stale_state_for_relaunch(self, crawl_id: str, storage_path: str) -> None:
+        """
+        Wipes any persistent state from a prior run of this crawl_id that
+        would mislead the reconciler or downstream consumers into thinking
+        the new run is in a stale terminal state.
+
+        Called at the top of start_crawl (after makedirs) BEFORE the new
+        subprocess is spawned and BEFORE the new Redis state is written.
+
+        Currently cleans:
+          - {storage_path}/_completion_marker.json (any prior terminal marker:
+            success, OOM-failure, OOM-relaunch-failure, force-finish, or
+            reconciler-stale write — all 5 writers funnel here)
+
+        Future items (deferred — see spec §7):
+          - Stale crawl_lock:{crawl_id} Redis key
+          - Stale local_processes[crawl_id] entry
+          - Audit other persistent files in storage_path
+
+        Fail-open: each cleanup logs and continues on error. A failed cleanup
+        leaves the existing observed symptom (false marker reconciliation) —
+        no regression. The error is surfaced in logs for triage.
+
+        Args:
+            crawl_id: identifier of the crawl being launched.
+            storage_path: absolute path to {CRAWLER_STORAGE_PATH}/{crawl_id}/.
+        """
+        # 1. Completion marker — removes false signal that misleads the
+        #    reconciler's marker-check (sub-problem A) into declaring the
+        #    new running crawl finished and skipping its success webhook.
+        marker_path = os.path.join(storage_path, '_completion_marker.json')
+        if os.path.isfile(marker_path):
+            try:
+                os.unlink(marker_path)
+                logger.info(f"Removed stale completion marker for crawl_id '{crawl_id}' (relaunch)")
+            except OSError as e:
+                logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
 
     async def _reconcile_locked(self):
         """

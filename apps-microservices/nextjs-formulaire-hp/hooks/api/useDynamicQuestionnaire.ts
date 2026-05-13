@@ -163,7 +163,6 @@ interface ApiQuestion {
   id_question: number;
   intitule: string;
   choix: string;              // "1" = multi, "2" = single
-  justification: string | null;
   bulle_aide?: BulleAide | null;
   id_reponse_parent: number | null;
   id_question_parent: number | null;
@@ -182,7 +181,6 @@ interface NormalizedQuestion {
   code: string;
   title: string;
   type: 'single' | 'multi';
-  justification: string | null;
   bulleAide: BulleAide | null;
   answers: NormalizedAnswer[];
 }
@@ -207,7 +205,6 @@ function normalizeQuestion(apiQuestion: ApiQuestion, questionIndex: number): Nor
     code: `Q${questionIndex + 1}`,
     title: apiQuestion.intitule,
     type: apiQuestion.choix === '1' ? 'multi' : 'single',  // "1" = multi, "2" = single
-    justification: apiQuestion.justification,
     bulleAide: apiQuestion.bulle_aide ?? null,
     answers: apiQuestion.reponses.map((r) => ({
       id: String(r.id_reponse),

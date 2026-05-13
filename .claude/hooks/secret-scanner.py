@@ -83,16 +83,21 @@ _CONN_HOST_RE = re.compile(
 )
 
 
-def is_benign_default(line, finding_name):
-    """Skip findings on env-var fallback lines targeting internal hosts.
+_TEMPLATE_PLACEHOLDER_RE = re.compile(r'\$\{[A-Z_][A-Z0-9_]*\}')
 
-    Narrow allowlist: only applies to *Connection String findings, only when
-    the line shows an env-var fallback pattern, and only when the URL host
-    is in the internal-hosts set. Real connection strings to external hosts
-    or with embedded credentials still trigger the scanner.
+
+def is_benign_default(line, finding_name):
+    """Skip findings on env-var fallback lines targeting internal hosts,
+    OR on connection strings that are fully templated (docker-compose
+    style ${VAR} placeholders — no literal credentials at rest).
+
+    Narrow allowlist: only applies to *Connection String findings.
     """
     if 'Connection String' not in finding_name:
         return False
+    # docker-compose: fully templated URL like redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+    if _TEMPLATE_PLACEHOLDER_RE.search(line):
+        return True
     if not any(p.search(line) for p in ENV_FALLBACK_INDICATORS):
         return False
     m = _CONN_HOST_RE.search(line)
