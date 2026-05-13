@@ -6,6 +6,7 @@ import os
 import logging
 import asyncio
 import re
+import tempfile
 import unicodedata
 from datetime import datetime
 from urllib.parse import urlparse
@@ -591,6 +592,208 @@ class Downloader:
         except Exception as e:
             logger.error(f"Could not write manifest for {domain}: {e}")
 
+    async def process_page_image(self, payload: dict) -> Optional[dict]:
+        """
+        Télécharge et traite une image de page (pipeline Chantier D, spec §9.7).
+
+        **Sémantique INSERT-only** (différent du flux FP set-based) :
+        - 1 événement = 1 image (pas de groupement N URLs par produit)
+        - Idempotence : si ``url_source`` + fichier main présent → skip (retourne entrée existante)
+        - Pas d'orphan cleanup (INSERT only, pas de replace-from-source)
+
+        Mapping champ wire → manifest : ``payload["url_image"]`` → ``entry["url_source"]``
+
+        Payload attendu (champs wire du POST /enqueue T4) :
+        ```json
+        {
+            "id_image_isi": <int>,
+            "domaine": "<str>",
+            "url_image": "<str>",
+            "url_page_source": "<str>",
+            "page_type": "<str>",
+            "alt_text": "<str|null>",
+            "contexte_h1": "<str|null>",
+            "contexte_h2": "<str|null>"
+        }
+        ```
+
+        Retourne l'entrée manifest insérée/réutilisée, ou None en cas d'erreur
+        (l'erreur est enregistrée dans errors_pages.json via _append_errors_pages_entry).
+
+        **Limitation MVP — race window sur l'idempotence** :
+        Deux consumers concurrents peuvent passer simultanément le check d'idempotence
+        (étape 1) et télécharger la même image deux fois. Le second write passe par
+        ``replace_idx`` dans ``_append_manifest_pages_entry``, donc pas de corruption
+        du manifest, mais la bande passante est gaspillée. Acceptable à <100 images
+        concurrentes par domaine. Amélioration future : lock per-url_source OU
+        check-inside-lock dans ``_append_manifest_pages_entry``.
+
+        **Divergence shard spec §9.3 vs T3** :
+        - Spec §9.3 : ``pages/{shard}/{shard}/{shard}/{filename}`` (3 niveaux)
+        - Spec §9.5 example : ``pages/1/0/0/...`` (3 niveaux confirmés)
+        - T3 ``process_image_page`` (image_processor.py) : ``pages/{shard1}/{shard2}/{filename}``
+          (2 niveaux — shard1=last char stem, shard2=second-to-last char stem)
+        - T6 délègue le calcul des shards à T3 (``self.image_processor.process_image_page``),
+          donc les paths réels utilisent le schéma 2-niveaux de T3.
+        TODO(T8-ou-post-MVP) : aligner T3 sur spec §9.3 (3 niveaux) OU mettre à jour la spec.
+        Ne pas modifier T3 dans ce commit — concern séparé.
+
+        Args:
+            payload: Dict du message consommé depuis RabbitMQ (voir shape ci-dessus).
+
+        Returns:
+            Dict correspondant à l'entrée ``pages_images[]`` du manifest, ou None.
+        """
+        domain = payload.get("domaine", "unknown")
+        id_image_isi = payload.get("id_image_isi")
+        url_image = payload.get("url_image", "")
+        url_page_source = payload.get("url_page_source", "")
+        page_type = payload.get("page_type", "")
+        alt_text = payload.get("alt_text")
+        # contexte_h1 et contexte_h2 sont extraits du payload mais non écrits dans
+        # manifest_pages.json (délibéré, per spec §9.5 schema) — ils sont déjà persistés
+        # dans la table image_scrapping_ia côté BO (Hellopro PHP).
+
+        # --- Étape 1 : Idempotence — vérification dans manifest_pages.json ---
+        try:
+            manifest = await asyncio.to_thread(_load_manifest_pages_file, domain)
+            existing = next(
+                (e for e in manifest.get("pages_images", []) if e.get("url_source") == url_image),
+                None
+            )
+            if existing:
+                main_abs = os.path.join(_STORAGE_BASE, "images", domain, existing.get("main", ""))
+                if os.path.exists(main_abs):
+                    logger.info(
+                        f"[process_page_image] Idempotence : url_source déjà présente + fichier OK, skip : {url_image[:80]}"
+                    )
+                    return existing
+                logger.warning(
+                    f"[process_page_image] Entrée manifest trouvée pour {url_image[:80]} mais fichier absent — re-téléchargement"
+                )
+        except Exception as e:
+            logger.warning(f"[process_page_image] Erreur lecture manifest_pages pour {domain}: {e}")
+
+        # --- Étape 2 : Téléchargement HTTP (pattern download_and_process) ---
+        retries = 3
+        timeout = aiohttp.ClientTimeout(total=30)
+        content = None
+        last_error_msg = None
+
+        for attempt in range(retries):
+            try:
+                headers = {"User-Agent": random.choice(USER_AGENTS)}
+                async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                    kwargs = {}
+                    if self.proxy_url:
+                        kwargs["proxy"] = self.proxy_url
+
+                    async with session.get(url_image, **kwargs) as response:
+                        logger.info(f"[process_page_image] Download status {url_image}: {response.status}")
+                        if response.status == 200:
+                            content = await response.read()
+                            break  # Téléchargement réussi → sortir de la boucle retry
+                        else:
+                            reason, _cat, _sev = _classify_http_error(response.status)
+                            last_error_msg = reason
+                            logger.warning(f"[process_page_image] {reason}")
+                            # 4xx permanentes → pas de retry
+                            if 400 <= response.status < 500 and response.status != 429:
+                                break
+
+            except Exception as e:
+                reason, _cat, _sev = _classify_network_error(e)
+                last_error_msg = reason
+                logger.warning(f"[process_page_image] {reason} (tentative {attempt + 1}/{retries})")
+                await asyncio.sleep(attempt * 1)
+
+        if content is None:
+            error_entry = {
+                "id_image_isi": id_image_isi,
+                "url_image": url_image,
+                "url_page_source": url_page_source,
+                "page_type": page_type,
+                "error_message": last_error_msg or f"Échec téléchargement après {retries} tentatives",
+                "error_at": datetime.utcnow().isoformat(),
+            }
+            try:
+                await asyncio.to_thread(_append_errors_pages_entry, domain, error_entry)
+            except Exception as err:
+                logger.error(f"[process_page_image] Erreur écriture errors_pages pour {domain}: {err}")
+            return None
+
+        # --- Étape 3 : Construction du filename ---
+        filename = _build_page_filename(page_type, id_image_isi, url_image)
+
+        # --- Étape 4 : Traitement image via ImageProcessor.process_image_page (T3) ---
+        storage_subdir = os.path.join(_STORAGE_BASE, "images", domain)
+        try:
+            result = await asyncio.to_thread(
+                self.image_processor.process_image_page,
+                content,
+                domain,
+                storage_subdir,
+                filename,
+            )
+        except Exception as e:
+            error_entry = {
+                "id_image_isi": id_image_isi,
+                "url_image": url_image,
+                "url_page_source": url_page_source,
+                "page_type": page_type,
+                "error_message": f"Traitement image échoué — {e}",
+                "error_at": datetime.utcnow().isoformat(),
+            }
+            try:
+                await asyncio.to_thread(_append_errors_pages_entry, domain, error_entry)
+            except Exception as err:
+                logger.error(f"[process_page_image] Erreur écriture errors_pages pour {domain}: {err}")
+            return None
+
+        # result keys: main_path, thumb_path, filename, width, height, format, file_size
+        # Le filename peut avoir été corrigé par _process_image_internal (ex: webp→png)
+        resolved_filename = result["filename"]
+
+        # --- Étape 5 : Conversion chemins absolus → relatifs (parité _save_to_manifest) ---
+        main_abs = result["main_path"]
+        thumb_abs = result["thumb_path"]
+
+        domain_prefix = os.path.join(_STORAGE_BASE, "images", domain) + os.sep
+        main_rel = main_abs[len(domain_prefix):] if main_abs.startswith(domain_prefix) else main_abs
+        thumb_rel = thumb_abs[len(domain_prefix):] if thumb_abs.startswith(domain_prefix) else thumb_abs
+
+        # --- Étape 6 : Construction de l'entrée manifest ---
+        manifest_entry = {
+            "id_image_isi": id_image_isi,
+            "url_source": url_image,          # mapping wire url_image → manifest url_source
+            "page_type": page_type,
+            "url_page_source": url_page_source,
+            "alt_text": alt_text,
+            "main": main_rel,
+            "thumb": thumb_rel,
+            "filename": resolved_filename,
+            "width": result["width"],
+            "height": result["height"],
+            "format": result["format"],
+            "file_size": result["file_size"],
+            "downloaded_at": datetime.utcnow().isoformat(),
+        }
+
+        # --- Étape 7 : Écriture atomique dans manifest_pages.json ---
+        try:
+            await asyncio.to_thread(_append_manifest_pages_entry, domain, manifest_entry)
+        except Exception as e:
+            # L'image est sauvée sur disque mais le manifest n'a pas pu être mis à jour.
+            # On loggue l'erreur sans retourner None pour ne pas perdre l'info côté appelant.
+            logger.error(
+                f"[process_page_image] Image téléchargée ({resolved_filename}) mais manifest_pages non mis à jour pour {domain}: {e}"
+            )
+
+        logger.info(
+            f"[process_page_image] OK : {resolved_filename} | {domain} | {result['width']}x{result['height']} | {result['file_size']} bytes"
+        )
+        return manifest_entry
+
 
 # =============================================================================
 # T6 — Chantier D : Pages images helpers (module-level)
@@ -610,6 +813,10 @@ def _detect_ext_from_url(url: str) -> str:
         return '.gif'
     elif url_path.endswith('.webp'):
         return '.webp'
+    elif url_path.endswith('.jpeg'):
+        return '.jpg'
+    elif url_path.endswith('.avif'):
+        return '.jpg'  # MVP : pas de support AVIF natif PIL, fallback jpg
     else:
         return '.jpg'
 
@@ -634,33 +841,12 @@ def _build_page_filename(page_type: str, id_image_isi: int, url_image: str) -> s
     Returns:
         Filename avec extension (ex: "page-savoir_faire-12345-ab12cd34.jpg").
     """
+    # Sanitisation : interdit les caractères non-alphanumériques/tiret-bas pour
+    # éviter les path traversal ou noms de fichier invalides depuis un message RabbitMQ malformé.
+    page_type = re.sub(r'[^a-z0-9_]', '_', page_type.lower())
     hash8 = hashlib.md5(url_image.encode()).hexdigest()[:8]
     ext = _detect_ext_from_url(url_image)
     return f"page-{page_type}-{id_image_isi}-{hash8}{ext}"
-
-
-def _compute_shards(filename: str) -> tuple:
-    """
-    Calcule le couple (shard1, shard2) depuis le stem du filename.
-
-    Schéma identique à process_image_page (T3) :
-    - ``shard1`` = dernier caractère du stem  (ex: "4" pour "page-sf-12345-ab12cd34.jpg")
-    - ``shard2`` = avant-dernier caractère du stem (ex: "3")
-
-    Le stem est paddé à 2 caractères minimum (zfill(2)) pour garantir
-    l'indexation [-1]/[-2] même sur des stems très courts (parité T3).
-
-    Args:
-        filename: Filename AVEC extension (ex: "page-savoir_faire-12345-ab12cd34.jpg").
-
-    Returns:
-        Tuple (shard1, shard2) — deux chaînes de 1 caractère chacune.
-    """
-    base, _ = os.path.splitext(filename)
-    padded = base.zfill(2) if len(base) < 2 else base
-    shard1 = padded[-1]   # dernier caractère — haute entropie pour noms séquentiels
-    shard2 = padded[-2]   # avant-dernier caractère
-    return shard1, shard2
 
 
 # =============================================================================
@@ -704,11 +890,12 @@ def _save_manifest_pages_file(domain: str, manifest: dict) -> None:
     pour l'utiliser depuis un contexte async sans lock, faire
     ``await asyncio.to_thread(_save_manifest_pages_file, domain, manifest)``.
     """
-    import tempfile
     manifest_dir = os.path.join(_STORAGE_BASE, "images", domain)
     manifest_path = os.path.join(manifest_dir, "manifest_pages.json")
     os.makedirs(manifest_dir, exist_ok=True)
 
+    # Copie défensive pour éviter de muter le dict du caller en cas d'exception
+    manifest = dict(manifest)
     manifest["last_updated"] = datetime.utcnow().isoformat()
 
     fd, tmp_path = tempfile.mkstemp(dir=manifest_dir, suffix=".tmp")
@@ -762,8 +949,9 @@ def _append_manifest_pages_entry(domain: str, entry: dict) -> None:
             manifest["pages_images"] = pages
             _save_manifest_pages_file(domain, manifest)
     except Exception as e:
+        # Log + return (pas de re-raise) : le caller (_process_page_image) gère
+        # déjà l'erreur dans son propre try/except — symétrie avec _append_errors_pages_entry.
         logger.error(f"Could not write manifest_pages for {domain}: {e}")
-        raise
 
 
 # =============================================================================
@@ -798,7 +986,6 @@ def _save_errors_pages_file(domain: str, errors: list) -> None:
 
     Note : appelé en synchrone sous lock depuis ``_append_errors_pages_entry``.
     """
-    import tempfile
     errors_dir = os.path.join(_STORAGE_BASE, "images", domain)
     errors_path = os.path.join(errors_dir, "errors_pages.json")
     os.makedirs(errors_dir, exist_ok=True)
@@ -850,198 +1037,3 @@ def _append_errors_pages_entry(domain: str, error_entry: dict) -> None:
         logger.error(f"Could not write errors_pages for {domain}: {e}")
 
 
-# =============================================================================
-# T6 — Chantier D : Downloader.process_page_image (INSERT-only, spec §9.7)
-# =============================================================================
-
-# Extension de la classe Downloader : méthode process_page_image ajoutée en dehors
-# de la définition de classe originale via monkey-patch n'est pas idiomatique ;
-# la méthode est définie directement dans le corps de la classe plus bas.
-# NOTE : En Python, on ne peut pas rouvrir une classe avec "class Downloader:".
-# On ajoute la méthode via affectation directe sur l'objet classe.
-
-async def _process_page_image(self, payload: dict) -> Optional[dict]:
-    """
-    Télécharge et traite une image de page (pipeline Chantier D, spec §9.7).
-
-    **Sémantique INSERT-only** (différent du flux FP set-based) :
-    - 1 événement = 1 image (pas de groupement N URLs par produit)
-    - Idempotence : si ``url_source`` + fichier main présent → skip (retourne entrée existante)
-    - Pas d'orphan cleanup (INSERT only, pas de replace-from-source)
-
-    Mapping champ wire → manifest : ``payload["url_image"]`` → ``entry["url_source"]``
-
-    Payload attendu (champs wire du POST /enqueue T4) :
-    ```json
-    {
-        "id_image_isi": <int>,
-        "domaine": "<str>",
-        "url_image": "<str>",
-        "url_page_source": "<str>",
-        "page_type": "<str>",
-        "alt_text": "<str|null>",
-        "contexte_h1": "<str|null>",
-        "contexte_h2": "<str|null>"
-    }
-    ```
-
-    Retourne l'entrée manifest insérée/réutilisée, ou None en cas d'erreur
-    (l'erreur est enregistrée dans errors_pages.json via _append_errors_pages_entry).
-
-    Args:
-        payload: Dict du message consommé depuis RabbitMQ (voir shape ci-dessus).
-
-    Returns:
-        Dict correspondant à l'entrée ``pages_images[]`` du manifest, ou None.
-    """
-    domain = payload.get("domaine", "unknown")
-    id_image_isi = payload.get("id_image_isi")
-    url_image = payload.get("url_image", "")
-    url_page_source = payload.get("url_page_source", "")
-    page_type = payload.get("page_type", "")
-    alt_text = payload.get("alt_text")
-
-    # --- Étape 1 : Idempotence — vérification dans manifest_pages.json ---
-    try:
-        manifest = await asyncio.to_thread(_load_manifest_pages_file, domain)
-        existing = next(
-            (e for e in manifest.get("pages_images", []) if e.get("url_source") == url_image),
-            None
-        )
-        if existing:
-            main_abs = os.path.join(_STORAGE_BASE, "images", domain, existing.get("main", ""))
-            if os.path.exists(main_abs):
-                logger.info(
-                    f"[process_page_image] Idempotence : url_source déjà présente + fichier OK, skip : {url_image[:80]}"
-                )
-                return existing
-            logger.warning(
-                f"[process_page_image] Entrée manifest trouvée pour {url_image[:80]} mais fichier absent — re-téléchargement"
-            )
-    except Exception as e:
-        logger.warning(f"[process_page_image] Erreur lecture manifest_pages pour {domain}: {e}")
-
-    # --- Étape 2 : Téléchargement HTTP (pattern download_and_process) ---
-    retries = 3
-    timeout = aiohttp.ClientTimeout(total=30)
-    content = None
-    last_error_msg = None
-
-    for attempt in range(retries):
-        try:
-            headers = {"User-Agent": random.choice(USER_AGENTS)}
-            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-                kwargs = {}
-                if self.proxy_url:
-                    kwargs["proxy"] = self.proxy_url
-
-                async with session.get(url_image, **kwargs) as response:
-                    logger.info(f"[process_page_image] Download status {url_image}: {response.status}")
-                    if response.status == 200:
-                        content = await response.read()
-                        break  # Téléchargement réussi → sortir de la boucle retry
-                    else:
-                        reason, _cat, _sev = _classify_http_error(response.status)
-                        last_error_msg = reason
-                        logger.warning(f"[process_page_image] {reason}")
-                        # 4xx permanentes → pas de retry
-                        if 400 <= response.status < 500 and response.status != 429:
-                            break
-
-        except Exception as e:
-            reason, _cat, _sev = _classify_network_error(e)
-            last_error_msg = reason
-            logger.warning(f"[process_page_image] {reason} (tentative {attempt + 1}/{retries})")
-            await asyncio.sleep(attempt * 1)
-
-    if content is None:
-        error_entry = {
-            "id_image_isi": id_image_isi,
-            "url_image": url_image,
-            "url_page_source": url_page_source,
-            "page_type": page_type,
-            "error_message": last_error_msg or f"Échec téléchargement après {retries} tentatives",
-            "error_at": datetime.utcnow().isoformat(),
-        }
-        try:
-            await asyncio.to_thread(_append_errors_pages_entry, domain, error_entry)
-        except Exception as err:
-            logger.error(f"[process_page_image] Erreur écriture errors_pages pour {domain}: {err}")
-        return None
-
-    # --- Étape 3 : Construction du filename ---
-    filename = _build_page_filename(page_type, id_image_isi, url_image)
-
-    # --- Étape 4 : Traitement image via ImageProcessor.process_image_page (T3) ---
-    storage_subdir = os.path.join(_STORAGE_BASE, "images", domain)
-    try:
-        result = await asyncio.to_thread(
-            self.image_processor.process_image_page,
-            content,
-            domain,
-            storage_subdir,
-            filename,
-        )
-    except Exception as e:
-        error_entry = {
-            "id_image_isi": id_image_isi,
-            "url_image": url_image,
-            "url_page_source": url_page_source,
-            "page_type": page_type,
-            "error_message": f"Traitement image échoué — {e}",
-            "error_at": datetime.utcnow().isoformat(),
-        }
-        try:
-            await asyncio.to_thread(_append_errors_pages_entry, domain, error_entry)
-        except Exception as err:
-            logger.error(f"[process_page_image] Erreur écriture errors_pages pour {domain}: {err}")
-        return None
-
-    # result keys: main_path, thumb_path, filename, width, height, format, file_size
-    # Le filename peut avoir été corrigé par _process_image_internal (ex: webp→png)
-    resolved_filename = result["filename"]
-
-    # --- Étape 5 : Conversion chemins absolus → relatifs (parité _save_to_manifest) ---
-    main_abs = result["main_path"]
-    thumb_abs = result["thumb_path"]
-
-    domain_prefix = os.path.join(_STORAGE_BASE, "images", domain) + os.sep
-    main_rel = main_abs[len(domain_prefix):] if main_abs.startswith(domain_prefix) else main_abs
-    thumb_rel = thumb_abs[len(domain_prefix):] if thumb_abs.startswith(domain_prefix) else thumb_abs
-
-    # --- Étape 6 : Construction de l'entrée manifest ---
-    manifest_entry = {
-        "id_image_isi": id_image_isi,
-        "url_source": url_image,          # mapping wire url_image → manifest url_source
-        "page_type": page_type,
-        "url_page_source": url_page_source,
-        "alt_text": alt_text,
-        "main": main_rel,
-        "thumb": thumb_rel,
-        "filename": resolved_filename,
-        "width": result["width"],
-        "height": result["height"],
-        "format": result["format"],
-        "file_size": result["file_size"],
-        "downloaded_at": datetime.utcnow().isoformat(),
-    }
-
-    # --- Étape 7 : Écriture atomique dans manifest_pages.json ---
-    try:
-        await asyncio.to_thread(_append_manifest_pages_entry, domain, manifest_entry)
-    except Exception as e:
-        # L'image est sauvée sur disque mais le manifest n'a pas pu être mis à jour.
-        # On loggue l'erreur sans retourner None pour ne pas perdre l'info côté appelant.
-        logger.error(
-            f"[process_page_image] Image téléchargée ({resolved_filename}) mais manifest_pages non mis à jour pour {domain}: {e}"
-        )
-
-    logger.info(
-        f"[process_page_image] OK : {resolved_filename} | {domain} | {result['width']}x{result['height']} | {result['file_size']} bytes"
-    )
-    return manifest_entry
-
-
-# Attacher la méthode à la classe Downloader (extension additive, T6)
-# Cette approche préserve la définition originale de la classe sans la modifier.
-Downloader.process_page_image = _process_page_image
