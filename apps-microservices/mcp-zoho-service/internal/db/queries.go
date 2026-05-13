@@ -46,7 +46,7 @@ func (q *Queries) IsAdminGranted(ctx context.Context, stubServerID, email string
 	const query = `
 		SELECT 1
 		FROM server_authorizations
-		WHERE mcp_server_id = ?
+		WHERE server_id = ?
 		  AND LOWER(email) = LOWER(?)
 		LIMIT 1
 	`
