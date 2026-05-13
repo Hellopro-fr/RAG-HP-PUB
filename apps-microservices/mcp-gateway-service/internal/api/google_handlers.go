@@ -702,6 +702,50 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 
 	id := uuid.New().String()
 	createdBy := resolveCreatedBy(mapping.CreatedBy, row, colIndex, userEmail)
+
+	// Zoho templates land in the dedicated zoho_imports table consumed by
+	// mcp-zoho-service. detectZohoTemplate is anchored on the catalog slug
+	// (^zoho(-.*)?$) so a future non-Zoho slug never accidentally hits the
+	// Zoho path.
+	if detectZohoTemplate(req.TemplateSlug) {
+		if h.zohoImportRepo == nil {
+			result.Status = "error"
+			result.Message = "zoho imports not configured"
+			return result
+		}
+		authHeadersStr := getVal(mapping.AuthHeaders)
+		var encryptedAuthHeaders []byte
+		if authHeadersStr != "" {
+			if h.encryptor != nil {
+				enc, eerr := h.encryptor.Encrypt([]byte(authHeadersStr))
+				if eerr != nil {
+					result.Status = "error"
+					result.Message = "encrypt auth_headers: " + eerr.Error()
+					return result
+				}
+				encryptedAuthHeaders = enc
+			} else {
+				encryptedAuthHeaders = []byte(authHeadersStr)
+			}
+		}
+		zohoRow := &db.ZohoImport{
+			Name:         name,
+			URL:          strings.TrimRight(serverURL, "/"),
+			AuthHeaders:  encryptedAuthHeaders,
+			CreatedBy:    createdBy,
+			TemplateSlug: req.TemplateSlug,
+			IsAdmin:      false,
+			IsActive:     true,
+		}
+		if cerr := h.zohoImportRepo.CreateUserImport(zohoRow); cerr != nil {
+			result.Status = "error"
+			result.Message = cerr.Error()
+			return result
+		}
+		result.Status = "imported"
+		return result
+	}
+
 	srv := db.MCPServer{
 		ID:                  id,
 		Name:                name,
