@@ -26,11 +26,16 @@ type AuthServer struct {
 	// cookie reuses the SSO identity instead of bouncing through /sso/login.
 	// Nil disables the bridge — falls through to the SSO-redirect path.
 	ssoSessionRepo ssoSessionFinder
-	// zohoFetcher (optional) — when set, the consent screen overrides the
-	// cached admin Zoho tool catalog with the connected user's live catalog.
-	// Nil disables the override and falls back to the cached admin tools.
-	zohoFetcher    ZohoToolsForUser
-	jwtSecret      string
+	// zohoFetcher (optional) — when set, the consent screen partitions
+	// servers into "Configurés"/"Non configurés" using each backend's
+	// per-viewer ZohoServerState.Configured flag.
+	zohoFetcher ZohoStateForUser
+	// docsURL is the absolute URL surfaced in the "Non configurés"
+	// section so viewers know where to learn how to wire their Zoho
+	// import. Computed from GATEWAY_PUBLIC_URL + "/docs/zohocrm" at
+	// boot.
+	docsURL   string
+	jwtSecret string
 	publicURL      string
 	authURL        string // hellopro.fr auth endpoint
 	secureCookie   bool
@@ -45,7 +50,8 @@ type AuthServerConfig struct {
 	RefreshRepo    *repository.RefreshRepo
 	ServerRepo     *repository.ServerRepo
 	SSOSessionRepo ssoSessionFinder // optional, enables gw_session bridge
-	ZohoFetcher    ZohoToolsForUser // optional, enables per-user Zoho consent override
+	ZohoFetcher    ZohoStateForUser // optional, partitions consent screen per viewer
+	DocsURL        string           // optional, populated when GATEWAY_PUBLIC_URL is set
 	JWTSecret      string
 	PublicURL      string
 	AuthURL        string
@@ -63,6 +69,7 @@ func NewAuthServer(cfg AuthServerConfig) *AuthServer {
 		serverRepo:     cfg.ServerRepo,
 		ssoSessionRepo: cfg.SSOSessionRepo,
 		zohoFetcher:    cfg.ZohoFetcher,
+		docsURL:        cfg.DocsURL,
 		jwtSecret:      cfg.JWTSecret,
 		publicURL:      cfg.PublicURL,
 		authURL:        cfg.AuthURL,

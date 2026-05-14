@@ -11,18 +11,16 @@ import (
 
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
-	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/gateway"
 )
 
-// ZohoToolsForUser is the optional dependency that buildServerList uses to
-// override the cached admin Zoho tool catalog with the connected user's own
-// catalog at consent time. Implementations return a map keyed by
-// mcp_servers.id, value = live tools fetched from that backend with the
-// user's identity headers. A nil map (or missing server entry, or any
-// upstream error) leaves the cached admin catalog in place — same fail-open
-// behaviour as the per-request tools/list path.
-type ZohoToolsForUser interface {
-	FetchZohoToolsForUser(ctx context.Context, email string) map[string][]mcp.Tool
+// ZohoStateForUser is the optional dependency that buildServerList uses
+// to render Zoho-tagged servers on the consent screen. Returns the
+// per-backend state keyed by mcp_servers.id. A Configured=false entry
+// means the viewer's zoho_imports row is missing — the consent screen
+// moves the server into the "Non configurés" section with a docs CTA.
+type ZohoStateForUser interface {
+	FetchZohoStateForUser(ctx context.Context, email string) map[string]gateway.ZohoServerState
 }
 
 // ── JSON API DTOs ────────────────────────────────────────────────────────────
@@ -486,7 +484,9 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 		}
 	}
 
-	result = applyZohoUserTools(ctx, result, zohoIDs, s.zohoFetcher, userEmail)
+	// TODO(task-6): apply per-viewer state partition
+	_ = ctx
+	_ = zohoIDs
 	return result
 }
 
@@ -503,47 +503,6 @@ func isZohoServer(srv db.MCPServer) bool {
 		}
 	}
 	return false
-}
-
-// applyZohoUserTools substitutes the cached admin tool catalog with the
-// connected user's live catalog for every Zoho-tagged server in the result.
-// No-ops when the user is anonymous, when the fetcher is not configured,
-// when there are no Zoho servers in scope, or when the fetcher returns no
-// entry for a given server (fail-open: the client never sees an empty Zoho
-// catalog because of an upstream hiccup). Pure function: testable without
-// any AuthServer or repository fakes.
-func applyZohoUserTools(
-	ctx context.Context,
-	servers []authorizeServerDTO,
-	zohoIDs map[string]bool,
-	fetcher ZohoToolsForUser,
-	userEmail string,
-) []authorizeServerDTO {
-	if fetcher == nil || userEmail == "" || len(zohoIDs) == 0 {
-		return servers
-	}
-	live := fetcher.FetchZohoToolsForUser(ctx, userEmail)
-	if len(live) == 0 {
-		return servers
-	}
-	for i, srv := range servers {
-		if !zohoIDs[srv.ID] {
-			continue
-		}
-		userTools, ok := live[srv.ID]
-		if !ok {
-			continue
-		}
-		converted := make([]authorizeToolDTO, 0, len(userTools))
-		for _, t := range userTools {
-			converted = append(converted, authorizeToolDTO{
-				Name:        t.Name,
-				Description: t.Description,
-			})
-		}
-		servers[i].Tools = converted
-	}
-	return servers
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

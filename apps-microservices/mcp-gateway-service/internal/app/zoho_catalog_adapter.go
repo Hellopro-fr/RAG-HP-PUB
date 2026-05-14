@@ -88,23 +88,3 @@ func (a *zohoCatalogAdapter) StateForEmail(_ context.Context, email string) gate
 	return gateway.ZohoCatalogState{Tools: out, Configured: true}
 }
 
-// zohoStateFetcher bridges *gateway.Gateway to the authserver.ZohoToolsForUser
-// interface. Task 2 renamed FetchZohoToolsForUser → FetchZohoStateForUser on
-// the Gateway while authserver.ZohoToolsForUser still carries the old
-// signature. This shim will be removed in Task 4 when the authserver interface
-// is aligned with ZohoServerState.
-type zohoStateFetcher struct {
-	gw *gateway.Gateway
-}
-
-func (z *zohoStateFetcher) FetchZohoToolsForUser(ctx context.Context, email string) map[string][]mcp.Tool {
-	states := z.gw.FetchZohoStateForUser(ctx, email)
-	if len(states) == 0 {
-		return nil
-	}
-	out := make(map[string][]mcp.Tool, len(states))
-	for id, st := range states {
-		out[id] = st.Tools
-	}
-	return out
-}

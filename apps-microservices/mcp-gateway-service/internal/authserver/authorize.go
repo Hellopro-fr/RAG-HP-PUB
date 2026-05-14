@@ -228,9 +228,20 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 
 	// Per-user Zoho catalog override — fetched once before iterating servers
 	// so we can swap admin tools for the user's own tools per Zoho backend.
+	// Task 7 will rewrite this whole helper to partition unconfigured Zoho
+	// servers into a dedicated section; for now we just preserve the existing
+	// swap behaviour against the new state-returning interface.
 	var zohoUserTools map[string][]mcp.Tool
 	if s.zohoFetcher != nil && userEmail != "" && len(zohoIDs) > 0 {
-		zohoUserTools = s.zohoFetcher.FetchZohoToolsForUser(r.Context(), userEmail)
+		state := s.zohoFetcher.FetchZohoStateForUser(r.Context(), userEmail)
+		if len(state) > 0 {
+			zohoUserTools = make(map[string][]mcp.Tool, len(state))
+			for id, st := range state {
+				if st.Configured {
+					zohoUserTools[id] = st.Tools
+				}
+			}
+		}
 	}
 
 	type toolEntry struct {
