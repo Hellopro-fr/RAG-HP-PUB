@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/leexiadmin"
@@ -22,14 +21,14 @@ type BDDTableResolver interface {
 	GetTable(ctx context.Context, id string) (*db.BDDUsedTable, error)
 }
 
-// ZohoUserCatalog returns the persisted upstream tool catalog scoped to a
-// connected user's email. Implementations resolve the email to a per-user
-// zoho_imports row, falling back to the admin row when no user-specific
-// row exists. The interface keeps the gateway free of any direct
-// repository dependency — app.go injects a wrapper around the Zoho
-// imports repo at startup.
+// ZohoUserCatalog returns the per-viewer Zoho tool catalog state. The
+// implementation MUST resolve the viewer's role first (admin vs non-admin)
+// and consult only the appropriate zoho_imports row — there is no admin-row
+// fallback for non-admin viewers. Configured == false means the row is
+// missing (or has no tools); the consent screen renders this as
+// "Non configuré" with a docs CTA.
 type ZohoUserCatalog interface {
-	ToolsForEmail(ctx context.Context, email string) []mcp.Tool
+	StateForEmail(ctx context.Context, email string) ZohoCatalogState
 }
 
 // Gateway routes MCP JSON-RPC requests to the appropriate backend servers.
@@ -42,7 +41,7 @@ type Gateway struct {
 	bddResolver   BDDTableResolver      // optional; nil disables BDD header injection
 	gatewayUsers  gatewayUserFinder     // optional; nil disables auto-self admin fallback
 	serverAuth    serverAuthorizer      // optional; nil disables Step-0 server-authorization bypass
-	zohoCatalog   ZohoUserCatalog       // optional; nil falls back to live HTTP tools/list
+	zohoCatalog   ZohoUserCatalog       // optional; nil marks all Zoho backends unconfigured
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -79,10 +78,11 @@ func (g *Gateway) SetServerAuthorizer(s serverAuthorizer) {
 	g.serverAuth = s
 }
 
-// SetZohoUserCatalog wires the persisted per-user Zoho tool catalog
-// source. When set, FetchZohoToolsForUser reads tools from this catalog
-// instead of making a live tools/list HTTP call. Pass nil to fall back
-// to the live HTTP path.
+// SetZohoUserCatalog wires the persisted per-viewer Zoho catalog source.
+// When set, FetchZohoStateForUser asks the implementation whether the
+// viewer's zoho_imports row resolves and what its tools are. Pass nil
+// to disable per-viewer resolution (every Zoho backend then renders as
+// "Non configuré").
 func (g *Gateway) SetZohoUserCatalog(c ZohoUserCatalog) {
 	g.zohoCatalog = c
 }
@@ -179,14 +179,20 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 	return nil
 }
 
-// FetchZohoToolsForUser returns the per-user Zoho tool catalog keyed by
+// FetchZohoStateForUser returns the per-viewer Zoho state keyed by
 // mcp_servers.id for every registered Zoho-tagged (or zoho-prefixed)
-// backend. When SetZohoUserCatalog has been wired, tools come from the
-// persisted zoho_import_tools table (resolved by email, with admin
-// fallback). Otherwise, falls back to a live HTTP tools/list against the
-// upstream URL. Returns nil when email is empty, no Zoho backend is
-// registered, or the catalog yields no tools.
-func (g *Gateway) FetchZohoToolsForUser(ctx context.Context, email string) map[string][]mcp.Tool {
+// backend. Each entry's Configured flag indicates whether the viewer
+// has a usable zoho_imports row resolved (admin row for admins, user
+// row for non-admins). Returns nil only when email is empty or no
+// Zoho backend is registered.
+//
+// When SetZohoUserCatalog has been wired, state comes from the
+// persisted zoho_import_tools table via the adapter. Otherwise the
+// gateway returns a map where every Zoho backend is marked
+// Configured=false (the live HTTP fallback is intentionally removed
+// from the consent path — the persisted catalog is the only source
+// of truth).
+func (g *Gateway) FetchZohoStateForUser(ctx context.Context, email string) map[string]ZohoServerState {
 	if email == "" {
 		return nil
 	}
@@ -201,39 +207,26 @@ func (g *Gateway) FetchZohoToolsForUser(ctx context.Context, email string) map[s
 		return nil
 	}
 
-	if g.zohoCatalog != nil {
-		tools := g.zohoCatalog.ToolsForEmail(ctx, email)
-		if len(tools) == 0 {
-			log.Printf("[gateway] consent zoho catalog email=%s empty — admin tools shown", email)
-			return nil
-		}
-		log.Printf("[gateway] consent zoho catalog email=%s persisted_count=%d", email, len(tools))
-		out := make(map[string][]mcp.Tool, len(zohoBackends))
+	out := make(map[string]ZohoServerState, len(zohoBackends))
+	if g.zohoCatalog == nil {
 		for _, srv := range zohoBackends {
-			out[srv.ID] = tools
+			out[srv.ID] = ZohoServerState{Configured: false}
 		}
+		log.Printf("[gateway] consent zoho catalog unwired email=%s — marking all backends unconfigured", email)
 		return out
 	}
 
-	// Fallback: live HTTP tools/list when no catalog source is wired (legacy path).
-	out := make(map[string][]mcp.Tool)
+	st := g.zohoCatalog.StateForEmail(ctx, email)
 	for _, srv := range zohoBackends {
-		headers := make(map[string]string, len(srv.AuthHeaders)+2)
-		for k, v := range srv.AuthHeaders {
-			headers[k] = v
+		out[srv.ID] = ZohoServerState{
+			Tools:      st.Tools,
+			Configured: st.Configured,
 		}
-		headers["X-End-User-Email"] = email
-		if at := strings.IndexByte(email, '@'); at > 0 {
-			headers["X-End-User-Login"] = email[:at]
-		}
-		client := transport.NewBackendClientWithEndpoint(srv.MessageURL, headers)
-		tools, err := client.ListTools(ctx)
-		if err != nil {
-			log.Printf("[gateway] consent zoho tools/list backend=%s email=%s err=%v — falling back to cached admin tools", srv.ID, email, err)
-			continue
-		}
-		log.Printf("[gateway] consent zoho tools/list backend=%s email=%s live_count=%d", srv.ID, email, len(tools))
-		out[srv.ID] = tools
+	}
+	if st.Configured {
+		log.Printf("[gateway] consent zoho catalog email=%s configured=true tool_count=%d", email, len(st.Tools))
+	} else {
+		log.Printf("[gateway] consent zoho catalog email=%s configured=false — docs CTA", email)
 	}
 	return out
 }
