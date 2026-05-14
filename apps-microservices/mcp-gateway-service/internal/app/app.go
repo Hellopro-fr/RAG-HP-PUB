@@ -387,7 +387,7 @@ func registerRESTAndOAuthServer(
 	apiHandler.SetEncryptor(dbs.encryptor)
 	zohoImportRepo := repository.NewZohoImportRepo(dbs.database)
 	apiHandler.SetZohoImportRepo(zohoImportRepo)
-	gw.SetZohoUserCatalog(&zohoCatalogAdapter{imports: zohoImportRepo})
+	gw.SetZohoUserCatalog(&zohoCatalogAdapter{imports: zohoImportRepo, users: dbs.userRepo})
 	log.Println("[main] zoho-imports admin REST wired + persisted catalog source attached to gateway")
 
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
