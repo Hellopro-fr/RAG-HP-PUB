@@ -86,6 +86,27 @@
       </div>
       {{end}}
 
+      {{if .UnconfiguredServers}}
+      <p class="text-xs text-gray-500 mt-4 mb-2">Serveurs non configurés :</p>
+      <div class="border border-amber-200 rounded-lg bg-amber-50">
+        {{range .UnconfiguredServers}}
+        <div class="flex items-center justify-between px-3 py-2 border-b border-amber-100 last:border-b-0">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="text-sm font-medium text-gray-800">{{.Name}}</span>
+            <span class="text-xs text-amber-700 px-1.5 py-0.5 rounded bg-amber-100">Non configuré</span>
+          </div>
+          {{if $.DocsURL}}
+          <a href="{{$.DocsURL}}" target="_blank" rel="noopener noreferrer"
+             class="text-xs font-medium text-brand-600 hover:underline">
+            Voir documentation →
+          </a>
+          {{end}}
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+
       <div class="flex gap-3">
         <button type="submit" name="approved" value="true" class="flex-1 py-2.5 px-4 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors">Autoriser</button>
         <button type="submit" name="approved" value="false" class="flex-1 py-2.5 px-4 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">Refuser</button>

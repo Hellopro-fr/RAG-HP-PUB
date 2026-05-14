@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
 	"mcp-gateway/internal/mcp"
 	"mcp-gateway/internal/sso"
 )
@@ -27,6 +28,33 @@ func toServerTools(tools []mcp.Tool) []db.ServerTool {
 		out = append(out, db.ServerTool{Name: t.Name, Description: t.Description})
 	}
 	return out
+}
+
+// decideZohoServerEntry tells the consent renderer how to handle a single
+// server given the per-viewer Zoho state map. Three outcomes:
+//
+//   - server is NOT Zoho-tagged → (false, nil) and the caller uses srv.Tools.
+//   - server IS Zoho-tagged AND state[srvID].Configured == true → (false, tools)
+//     and the caller uses the returned per-user tools.
+//   - server IS Zoho-tagged AND state entry is missing OR !Configured →
+//     (true, nil) and the caller routes the server into the "Non configurés"
+//     section with no tools.
+//
+// Pure function: callers compose it inside renderConsent's main loop;
+// unit tests cover the decision matrix without spinning up AuthServer.
+func decideZohoServerEntry(
+	srvID string,
+	zohoIDs map[string]bool,
+	state map[string]gateway.ZohoServerState,
+) (unconfigured bool, tools []mcp.Tool) {
+	if !zohoIDs[srvID] {
+		return false, nil
+	}
+	st, ok := state[srvID]
+	if !ok || !st.Configured {
+		return true, nil
+	}
+	return false, st.Tools
 }
 
 //go:embed templates/*.html
@@ -226,22 +254,12 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 		}
 	}
 
-	// Per-user Zoho catalog override — fetched once before iterating servers
-	// so we can swap admin tools for the user's own tools per Zoho backend.
-	// Task 7 will rewrite this whole helper to partition unconfigured Zoho
-	// servers into a dedicated section; for now we just preserve the existing
-	// swap behaviour against the new state-returning interface.
-	var zohoUserTools map[string][]mcp.Tool
+	// Per-viewer Zoho state — fetched once before iterating servers so we
+	// can route unconfigured Zoho backends into a dedicated section while
+	// keeping configured ones in the main list.
+	var zohoState map[string]gateway.ZohoServerState
 	if s.zohoFetcher != nil && userEmail != "" && len(zohoIDs) > 0 {
-		state := s.zohoFetcher.FetchZohoStateForUser(r.Context(), userEmail)
-		if len(state) > 0 {
-			zohoUserTools = make(map[string][]mcp.Tool, len(state))
-			for id, st := range state {
-				if st.Configured {
-					zohoUserTools[id] = st.Tools
-				}
-			}
-		}
+		zohoState = s.zohoFetcher.FetchZohoStateForUser(r.Context(), userEmail)
 	}
 
 	type toolEntry struct {
@@ -258,6 +276,7 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 	}
 
 	var entries []serverEntry
+	var unconfigured []serverEntry
 
 	if hasPreConfiguredScope {
 		// Client has admin-assigned scope — show only those servers/tools (read-only)
@@ -280,14 +299,22 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 				Checked: true,
 			}
 			// If specific tools are assigned, list them; otherwise all tools.
-			// For Zoho-tagged servers, swap admin tools for the connected
-			// user's live catalog when the override resolved.
+			// For Zoho-tagged servers, use the helper to decide whether to
+			// show the server in the configured list or route it to the
+			// "Non configurés" section.
 			srvTools := allowedTools[srv.ID]
 			source := srv.Tools
 			if zohoIDs[srv.ID] {
-				if user, ok := zohoUserTools[srv.ID]; ok {
-					source = toServerTools(user)
+				unconf, userTools := decideZohoServerEntry(srv.ID, zohoIDs, zohoState)
+				if unconf {
+					unconfigured = append(unconfigured, serverEntry{
+						ID:        srv.ID,
+						Name:      srv.Name,
+						ToolCount: 0,
+					})
+					continue
 				}
+				source = toServerTools(userTools)
 			}
 			for _, t := range source {
 				if srvTools != nil && !srvTools[t.Name] {
@@ -319,9 +346,16 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 		for _, srv := range servers {
 			source := srv.Tools
 			if zohoIDs[srv.ID] {
-				if user, ok := zohoUserTools[srv.ID]; ok {
-					source = toServerTools(user)
+				unconf, userTools := decideZohoServerEntry(srv.ID, zohoIDs, zohoState)
+				if unconf {
+					unconfigured = append(unconfigured, serverEntry{
+						ID:        srv.ID,
+						Name:      srv.Name,
+						ToolCount: 0,
+					})
+					continue
 				}
+				source = toServerTools(userTools)
 			}
 			entry := serverEntry{
 				ID:        srv.ID,
@@ -360,6 +394,8 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 		"State":               params.State,
 		"CSRFToken":           csrfToken,
 		"Servers":             entries,
+		"UnconfiguredServers": unconfigured,
+		"DocsURL":             s.docsURL,
 		"PreConfigured":       hasPreConfiguredScope,
 	})
 }
