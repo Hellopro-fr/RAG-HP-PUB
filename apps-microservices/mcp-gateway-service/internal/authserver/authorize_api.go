@@ -34,9 +34,11 @@ type authorizeInfoResponse struct {
 }
 
 type authorizeServerDTO struct {
-	ID    string             `json:"id"`
-	Name  string             `json:"name"`
-	Tools []authorizeToolDTO `json:"tools"`
+	ID         string             `json:"id"`
+	Name       string             `json:"name"`
+	Tools      []authorizeToolDTO `json:"tools"`
+	Configured bool               `json:"configured"`
+	DocsURL    string             `json:"docs_url,omitempty"`
 }
 
 type authorizeToolDTO struct {
@@ -484,9 +486,7 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 		}
 	}
 
-	// TODO(task-6): apply per-viewer state partition
-	_ = ctx
-	_ = zohoIDs
+	result = applyZohoUserState(ctx, result, zohoIDs, s.zohoFetcher, userEmail, s.docsURL)
 	return result
 }
 
@@ -503,6 +503,58 @@ func isZohoServer(srv db.MCPServer) bool {
 		}
 	}
 	return false
+}
+
+// applyZohoUserState rewrites each Zoho-tagged server entry in-place using
+// the per-viewer state returned by the fetcher. Configured servers get
+// their Tools replaced with the viewer's tools and Configured=true.
+// Unconfigured servers are emptied of tools, marked Configured=false, and
+// receive the docs CTA URL. Non-Zoho servers and the nil-fetcher / empty
+// email / no-Zoho-id cases are passthroughs. Pure function: testable
+// without any AuthServer plumbing.
+func applyZohoUserState(
+	ctx context.Context,
+	servers []authorizeServerDTO,
+	zohoIDs map[string]bool,
+	fetcher ZohoStateForUser,
+	userEmail string,
+	docsURL string,
+) []authorizeServerDTO {
+	if fetcher == nil || userEmail == "" || len(zohoIDs) == 0 {
+		return servers
+	}
+	state := fetcher.FetchZohoStateForUser(ctx, userEmail)
+	for i, srv := range servers {
+		if !zohoIDs[srv.ID] {
+			continue
+		}
+		st, ok := state[srv.ID]
+		if !ok {
+			// No entry returned: treat as unconfigured (fail-safe — never
+			// leak the cached admin tools onto a non-admin consent screen).
+			servers[i].Tools = nil
+			servers[i].Configured = false
+			servers[i].DocsURL = docsURL
+			continue
+		}
+		if !st.Configured {
+			servers[i].Tools = nil
+			servers[i].Configured = false
+			servers[i].DocsURL = docsURL
+			continue
+		}
+		converted := make([]authorizeToolDTO, 0, len(st.Tools))
+		for _, t := range st.Tools {
+			converted = append(converted, authorizeToolDTO{
+				Name:        t.Name,
+				Description: t.Description,
+			})
+		}
+		servers[i].Tools = converted
+		servers[i].Configured = true
+		servers[i].DocsURL = ""
+	}
+	return servers
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
