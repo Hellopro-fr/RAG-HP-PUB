@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"mcp-gateway/internal/db"
@@ -51,7 +51,70 @@ func newZohoAdapterTestDB(t *testing.T) *gorm.DB {
 	return g
 }
 
-func TestZohoCatalogAdapter_UserRowWins(t *testing.T) {
+// fakeUserFinder satisfies the role-resolution dependency used by the
+// adapter. Returns a *db.GatewayUser whose Role is the configured one
+// for the given email; nil when the email is unknown.
+type fakeUserFinder struct {
+	byEmail map[string]string // email -> role
+}
+
+func (f *fakeUserFinder) GetByEmail(email string) (*db.GatewayUser, error) {
+	if f == nil {
+		return nil, nil
+	}
+	role, ok := f.byEmail[email]
+	if !ok {
+		return nil, nil
+	}
+	return &db.GatewayUser{Email: email, Role: role}, nil
+}
+
+func TestZohoCatalogAdapter_StateForEmail_AdminWithRow(t *testing.T) {
+	gdb := newZohoAdapterTestDB(t)
+	repo := repository.NewZohoImportRepo(gdb)
+	admin := &db.ZohoImport{ID: "admin-1", URL: "https://admin", IsAdmin: true, IsActive: true}
+	if err := gdb.Create(admin).Error; err != nil {
+		t.Fatalf("admin: %v", err)
+	}
+	if _, err := repo.ReplaceTools(admin.ID, []db.ZohoImportTool{
+		{Name: "admin_tool", InputSchema: json.RawMessage(`{}`)},
+	}); err != nil {
+		t.Fatalf("admin tools: %v", err)
+	}
+
+	a := &zohoCatalogAdapter{
+		imports: repo,
+		users:   &fakeUserFinder{byEmail: map[string]string{"admin@hp.fr": "admin"}},
+	}
+	st := a.StateForEmail(context.Background(), "admin@hp.fr")
+
+	if !st.Configured {
+		t.Fatalf("admin with admin row must be Configured")
+	}
+	if len(st.Tools) != 1 || st.Tools[0].Name != "admin_tool" {
+		t.Fatalf("want admin_tool, got %+v", st.Tools)
+	}
+}
+
+func TestZohoCatalogAdapter_StateForEmail_AdminWithoutRow(t *testing.T) {
+	gdb := newZohoAdapterTestDB(t)
+	repo := repository.NewZohoImportRepo(gdb)
+
+	a := &zohoCatalogAdapter{
+		imports: repo,
+		users:   &fakeUserFinder{byEmail: map[string]string{"admin@hp.fr": "admin"}},
+	}
+	st := a.StateForEmail(context.Background(), "admin@hp.fr")
+
+	if st.Configured {
+		t.Fatalf("admin without admin row must be Configured=false")
+	}
+	if len(st.Tools) != 0 {
+		t.Fatalf("unconfigured state must carry no tools")
+	}
+}
+
+func TestZohoCatalogAdapter_StateForEmail_NonAdminWithRow(t *testing.T) {
 	gdb := newZohoAdapterTestDB(t)
 	repo := repository.NewZohoImportRepo(gdb)
 
@@ -59,64 +122,115 @@ func TestZohoCatalogAdapter_UserRowWins(t *testing.T) {
 	if err := gdb.Create(admin).Error; err != nil {
 		t.Fatalf("admin: %v", err)
 	}
-	user := &db.ZohoImport{URL: "https://alice", CreatedBy: "alice@hp.fr", IsActive: true}
-	if err := repo.CreateUserImport(user); err != nil {
-		t.Fatalf("user: %v", err)
-	}
-
 	if _, err := repo.ReplaceTools(admin.ID, []db.ZohoImportTool{
 		{Name: "admin_tool", InputSchema: json.RawMessage(`{}`)},
 	}); err != nil {
 		t.Fatalf("admin tools: %v", err)
 	}
+	user := &db.ZohoImport{URL: "https://alice", CreatedBy: "alice@hp.fr", IsActive: true}
+	if err := repo.CreateUserImport(user); err != nil {
+		t.Fatalf("user: %v", err)
+	}
 	if _, err := repo.ReplaceTools(user.ID, []db.ZohoImportTool{
-		{Name: "user_tool", InputSchema: json.RawMessage(`{}`)},
+		{Name: "alice_tool", InputSchema: json.RawMessage(`{}`)},
 	}); err != nil {
 		t.Fatalf("user tools: %v", err)
 	}
 
-	a := &zohoCatalogAdapter{imports: repo}
-	tools := a.ToolsForEmail(context.Background(), "alice@hp.fr")
-	if len(tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(tools))
+	a := &zohoCatalogAdapter{
+		imports: repo,
+		users:   &fakeUserFinder{byEmail: map[string]string{"alice@hp.fr": "user"}},
 	}
-	if tools[0].Name != "user_tool" {
-		t.Fatalf("expected user_tool, got %q", tools[0].Name)
+	st := a.StateForEmail(context.Background(), "alice@hp.fr")
+
+	if !st.Configured {
+		t.Fatalf("non-admin with user row must be Configured=true")
+	}
+	if len(st.Tools) != 1 || st.Tools[0].Name != "alice_tool" {
+		t.Fatalf("want alice_tool, got %+v", st.Tools)
 	}
 }
 
-func TestZohoCatalogAdapter_FallsBackToAdmin(t *testing.T) {
+func TestZohoCatalogAdapter_StateForEmail_NonAdminWithoutRow_NoAdminFallback(t *testing.T) {
 	gdb := newZohoAdapterTestDB(t)
 	repo := repository.NewZohoImportRepo(gdb)
-	admin := &db.ZohoImport{ID: "admin-2", URL: "https://admin", IsAdmin: true, IsActive: true}
+
+	admin := &db.ZohoImport{ID: "admin-1", URL: "https://admin", IsAdmin: true, IsActive: true}
 	if err := gdb.Create(admin).Error; err != nil {
 		t.Fatalf("admin: %v", err)
 	}
 	if _, err := repo.ReplaceTools(admin.ID, []db.ZohoImportTool{
-		{Name: "admin_only", InputSchema: json.RawMessage(`{}`)},
+		{Name: "admin_tool", InputSchema: json.RawMessage(`{}`)},
 	}); err != nil {
 		t.Fatalf("admin tools: %v", err)
 	}
 
-	a := &zohoCatalogAdapter{imports: repo}
-	tools := a.ToolsForEmail(context.Background(), "stranger@hp.fr")
-	if len(tools) != 1 || tools[0].Name != "admin_only" {
-		t.Fatalf("expected admin_only fallback, got %+v", tools)
+	a := &zohoCatalogAdapter{
+		imports: repo,
+		users:   &fakeUserFinder{byEmail: map[string]string{"bob@hp.fr": "user"}},
+	}
+	st := a.StateForEmail(context.Background(), "bob@hp.fr")
+
+	if st.Configured {
+		t.Fatalf("non-admin without user row must NOT fall back to admin row (got Configured=true)")
+	}
+	if len(st.Tools) != 0 {
+		t.Fatalf("non-admin without user row must NOT see admin tools (got %+v)", st.Tools)
 	}
 }
 
-func TestZohoCatalogAdapter_NoRowsReturnsEmpty(t *testing.T) {
+func TestZohoCatalogAdapter_StateForEmail_UnknownUserTreatedAsNonAdmin(t *testing.T) {
 	gdb := newZohoAdapterTestDB(t)
-	a := &zohoCatalogAdapter{imports: repository.NewZohoImportRepo(gdb)}
-	tools := a.ToolsForEmail(context.Background(), "alice@hp.fr")
-	if len(tools) != 0 {
-		t.Fatalf("expected empty, got %d", len(tools))
+	repo := repository.NewZohoImportRepo(gdb)
+
+	admin := &db.ZohoImport{ID: "admin-1", URL: "https://admin", IsAdmin: true, IsActive: true}
+	if err := gdb.Create(admin).Error; err != nil {
+		t.Fatalf("admin: %v", err)
+	}
+	if _, err := repo.ReplaceTools(admin.ID, []db.ZohoImportTool{
+		{Name: "admin_tool", InputSchema: json.RawMessage(`{}`)},
+	}); err != nil {
+		t.Fatalf("admin tools: %v", err)
+	}
+
+	a := &zohoCatalogAdapter{
+		imports: repo,
+		users:   &fakeUserFinder{}, // no users mapped
+	}
+	st := a.StateForEmail(context.Background(), "stranger@hp.fr")
+
+	if st.Configured {
+		t.Fatalf("unknown user must default to non-admin and NOT fall back to admin (got Configured=true)")
 	}
 }
 
-func TestZohoCatalogAdapter_EmptyEmailNoOp(t *testing.T) {
-	a := &zohoCatalogAdapter{}
-	if got := a.ToolsForEmail(context.Background(), ""); got != nil {
-		t.Fatalf("expected nil, got %v", got)
+func TestZohoCatalogAdapter_StateForEmail_EmptyEmail(t *testing.T) {
+	a := &zohoCatalogAdapter{
+		imports: repository.NewZohoImportRepo(newZohoAdapterTestDB(t)),
+		users:   &fakeUserFinder{},
+	}
+	if st := a.StateForEmail(context.Background(), ""); st.Configured || len(st.Tools) > 0 {
+		t.Fatalf("empty email must return zero state")
+	}
+}
+
+func TestZohoCatalogAdapter_StateForEmail_RowExistsButNoTools(t *testing.T) {
+	gdb := newZohoAdapterTestDB(t)
+	repo := repository.NewZohoImportRepo(gdb)
+
+	user := &db.ZohoImport{URL: "https://alice", CreatedBy: "alice@hp.fr", IsActive: true}
+	if err := repo.CreateUserImport(user); err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	// No ReplaceTools call → no rows in zoho_import_tools.
+
+	a := &zohoCatalogAdapter{
+		imports: repo,
+		users:   &fakeUserFinder{byEmail: map[string]string{"alice@hp.fr": "user"}},
+	}
+	st := a.StateForEmail(context.Background(), "alice@hp.fr")
+
+	if st.Configured {
+		t.Fatalf("row without tools must be Configured=false")
 	}
 }
