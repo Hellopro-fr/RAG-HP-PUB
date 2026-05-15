@@ -371,7 +371,16 @@ def main():
     print(f"=== Termine en {summary['duration_s']}s ===")
     print(f"  Global avg auto_score : {summary['global_avg_auto_score']} /10  (audit Cowork = 6.7)")
     print(f"  Critical (9 kw) avg   : {summary['critical_avg_auto_score']} /10  (audit < 5)")
-    print(f"  Canary (8 kw) avg     : {summary['canary_avg_auto_score']} /10  (audit ~10)  -> seuil regression : {summary['regression_threshold']['canary_min_score']}")
+    # FIX 2026-05-15 : seuil renomme par PR #581 (canary_min_score -> canary_max_drop)
+    # On gere les 2 noms pour retro-compat + on tolere l'absence du champ.
+    rt = summary.get('regression_threshold') or {}
+    if 'canary_max_drop' in rt:
+        seuil_str = f"delta >= -{rt['canary_max_drop']} vs T0"
+    elif 'canary_min_score' in rt:
+        seuil_str = f"score >= {rt['canary_min_score']} (deprecated absolu)"
+    else:
+        seuil_str = "n/a"
+    print(f"  Canary (8 kw) avg     : {summary['canary_avg_auto_score']} /10  (audit ~10)  -> seuil regression : {seuil_str}")
     print(f"  Output JSON : {out_path}")
 
 
