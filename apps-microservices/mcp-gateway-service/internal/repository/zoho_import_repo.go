@@ -99,11 +99,22 @@ func (r *ZohoImportRepo) DeleteAdmin() error {
 }
 
 // FindUserImportByEmail returns the oldest active per-user import whose
-// created_by matches email (case-insensitive). Returns (nil, nil) when not found.
+// created_by matches email (case-insensitive). Mirrors the runtime resolver
+// in mcp-zoho-service: tries exact-email first, then falls back to the
+// login portion (local-part before @) so sheet-imports that stored
+// created_by="alice" still resolve when the caller is alice@hp.fr.
+// Returns (nil, nil) when nothing matches.
 func (r *ZohoImportRepo) FindUserImportByEmail(email string) (*db.ZohoImport, error) {
+	login := email
+	if at := strings.IndexByte(email, '@'); at > 0 {
+		login = email[:at]
+	}
 	var out db.ZohoImport
 	err := r.db.
-		Where("is_admin = ? AND is_active = ? AND LOWER(created_by) = LOWER(?)", false, true, email).
+		Where(
+			"is_admin = ? AND is_active = ? AND (LOWER(created_by) = LOWER(?) OR (? <> '' AND LOWER(created_by) = LOWER(?)))",
+			false, true, email, login, login,
+		).
 		Order("created_at ASC").
 		First(&out).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
