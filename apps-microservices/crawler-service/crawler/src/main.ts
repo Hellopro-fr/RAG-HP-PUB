@@ -44,6 +44,11 @@ import { isBlanketBlock } from "./robotsTxtGuard.js";
 const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
 
+// Crawl start timestamp (module-load = process start), format MySQL DATETIME.
+// Embarqué dans la payload du webhook de fin pour alimenter crawl_metrics.date_start
+// + initial_crawl_history.date_start côté PHP, et calculer duration_seconds.
+const crawlStartTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
 // --- V3 Feature: Standard CLI Argument Parsing ---
 const args: Record<string, string> = {};
 process.argv.slice(2).forEach(arg => {
@@ -1005,6 +1010,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         dropped_cb,
         timeout_individual,
         success_extracted,
+        // Observability — timestamp de début pour calculer duration_seconds côté PHP
+        date_start: crawlStartTime,
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
