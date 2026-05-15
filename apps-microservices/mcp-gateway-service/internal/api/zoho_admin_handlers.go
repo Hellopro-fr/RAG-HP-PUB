@@ -280,6 +280,10 @@ func (h *Handler) handleZohoImportByID(w http.ResponseWriter, r *http.Request) {
 		h.handleZohoImportDiscover(w, r, id)
 		return
 	}
+	if rest == "tools" {
+		h.handleZohoImportTools(w, r, id)
+		return
+	}
 	if rest != "" {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "unknown subroute"})
 		return
@@ -336,6 +340,37 @@ func (h *Handler) handleZohoImportDiscover(w http.ResponseWriter, r *http.Reques
 	}
 	log.Printf("[zoho-discover] import=%s manual refresh tools=%d", row.ID, count)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "tools": count})
+}
+
+// handleZohoImportTools returns the persisted tool catalog for one import row.
+// Read-only — refresh via POST /api/v1/zoho-imports/{id}/discover.
+func (h *Handler) handleZohoImportTools(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	row, err := h.zohoImportRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if row == nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+		return
+	}
+	tools, err := h.zohoImportRepo.ListTools(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	out := ZohoImportToolsResponse{
+		Tools: make([]ZohoImportToolDTO, 0, len(tools)),
+		Total: len(tools),
+	}
+	for i := range tools {
+		out.Tools = append(out.Tools, zohoImportToolToDTO(&tools[i]))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // splitZohoImportPath parses "/api/v1/zoho-imports/{id}" or

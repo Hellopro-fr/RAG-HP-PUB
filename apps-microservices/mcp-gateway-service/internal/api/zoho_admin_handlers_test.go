@@ -565,3 +565,60 @@ func TestHandleZohoUserCreate_RejectsBlockedURL(t *testing.T) {
 		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandleZohoImportTools_Happy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	// Create a user row to attach tools to.
+	body, _ := json.Marshal(map[string]any{
+		"name":       "alice",
+		"url":        "https://alice.example.com",
+		"created_by": "alice@hellopro.fr",
+	})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	createRec := httptest.NewRecorder()
+	h.handleZohoImports(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup row status = %d, want 201; body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created ZohoImportRowDTO
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created row: %v", err)
+	}
+
+	// Seed two tools via the repo directly.
+	if _, err := h.zohoImportRepo.ReplaceTools(created.ID, []db.ZohoImportTool{
+		{Name: "leads_list", Description: "List leads", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "leads_get", Description: "Get one lead", InputSchema: json.RawMessage(`{"type":"object"}`)},
+	}); err != nil {
+		t.Fatalf("seed tools: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/"+created.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp ZohoImportToolsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Total != 2 {
+		t.Fatalf("total = %d, want 2", resp.Total)
+	}
+	names := []string{resp.Tools[0].Name, resp.Tools[1].Name}
+	if !(contains(names, "leads_list") && contains(names, "leads_get")) {
+		t.Fatalf("names = %v, want both leads_list and leads_get", names)
+	}
+}
+
+func contains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
