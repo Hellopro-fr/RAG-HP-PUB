@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-// Placeholder spec — the frontend has no test runner configured yet.
-// Present only to satisfy the repo-wide TDD gate. Remove once Vitest is wired.
+// Vitest specs for the zoho-imports API client.
 import { describe, it, expect, vi } from 'vitest'
 import { api } from './client'
 import { zohoImportsApi } from './zohoImports'
@@ -46,5 +45,27 @@ describe('zohoImportsApi.create', () => {
       created_by: 'alice@hp.fr',
     })
     expect(result).toEqual(row)
+  })
+})
+
+describe('zohoImportsApi.listTools', () => {
+  it('GETs /api/v1/zoho-imports/{id}/tools', async () => {
+    const resp = {
+      tools: [
+        {
+          name: 'leads_list',
+          description: 'List leads',
+          input_schema: '{"type":"object"}',
+          updated_at: '2026-05-15T00:00:00Z',
+        },
+      ],
+      total: 1,
+    }
+    const getSpy = vi.spyOn(api, 'get').mockResolvedValueOnce(resp)
+
+    const result = await zohoImportsApi.listTools('row-id')
+
+    expect(getSpy).toHaveBeenCalledWith('/api/v1/zoho-imports/row-id/tools')
+    expect(result).toEqual(resp)
   })
 })

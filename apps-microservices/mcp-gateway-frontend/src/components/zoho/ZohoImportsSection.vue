@@ -26,6 +26,7 @@
         @test="onTestAdmin"
         @discover="onDiscoverAdmin"
         @delete="onDeleteAdmin"
+        @info="onInfoAdmin"
       />
 
       <ZohoUserList
@@ -44,6 +45,7 @@
         @toggle="onToggleUser"
         @test="onTestUser"
         @discover="onDiscoverUser"
+        @info="onInfoUser"
       />
     </PageHeaderTabs>
 
@@ -114,6 +116,21 @@ function goToAdd() {
     name: 'zoho-import-new',
     params: { slug: props.templateSlug },
     query: { scope: activeTab.value },
+  })
+}
+
+function onInfoAdmin() {
+  if (!store.admin) return
+  router.push({
+    name: 'zoho-import-detail',
+    params: { slug: props.templateSlug, id: store.admin.id },
+  })
+}
+
+function onInfoUser(r: ZohoImportRow) {
+  router.push({
+    name: 'zoho-import-detail',
+    params: { slug: props.templateSlug, id: r.id },
   })
 }
 

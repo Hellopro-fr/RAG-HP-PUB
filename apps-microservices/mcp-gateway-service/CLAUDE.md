@@ -203,6 +203,7 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 - `PATCH /api/v1/zoho-imports/{id}` — partial update. Body fields all optional: `name`, `url`, `auth_headers` (replaces blob; `{}` clears it), `is_active`. Empty body → 400. `is_admin` and `created_by` are not editable here.
 - `DELETE /api/v1/zoho-imports/{id}` — hard delete a per-user row (204). Returns 400 when the target is the singleton admin row (use `/api/v1/zoho-imports/admin` for that).
 - `POST /api/v1/zoho-imports/{id}/test` — server-side `POST tools/list` probe against the row's upstream URL with decrypted headers, 10s timeout. Returns `{ok, status_code?, latency_ms, error?}`. Logs only the row ID + caller email (never the URL or headers).
+- `GET /api/v1/zoho-imports/{id}/tools` — list the persisted tool catalog for one row. Body: `{tools: [{name, description, input_schema, updated_at}], total}`. Returns 200 (empty list when catalog empty), 404 when the row is missing. Read-only — refresh the catalog via `POST /api/v1/zoho-imports/{id}/discover`.
 
 ### Runner Sync (internal, shared-secret auth via `X-Admin-Token`)
 - `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)

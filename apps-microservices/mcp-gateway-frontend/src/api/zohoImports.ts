@@ -7,6 +7,7 @@ import type {
   ZohoImportTestResponse,
   ZohoAdminUpsertRequest,
   ZohoUserCreateRequest,
+  ZohoImportToolsResponse,
 } from '@/types/zoho'
 
 const BASE = '/api/v1/zoho-imports'
@@ -50,6 +51,10 @@ export const zohoImportsApi = {
 
   create(payload: ZohoUserCreateRequest): Promise<ZohoImportRow> {
     return api.post<ZohoImportRow>(BASE, payload)
+  },
+
+  listTools(id: string): Promise<ZohoImportToolsResponse> {
+    return api.get<ZohoImportToolsResponse>(`${BASE}/${encodeURIComponent(id)}/tools`)
   },
 
   getAdmin(): Promise<ZohoImportRow | null> {

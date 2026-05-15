@@ -35,6 +35,7 @@ src/
   components/   # layout/, servers/, tokens/, oauth2/, bdd/, shared/
     bdd/BDDFieldBlock.vue         # single-field block (mirrors InstructionRow pattern)
     common/Paginator.vue          # generic page <-> page navigator
+    ui/IconActionButton.vue           # icon-only action button (neutral/brand/danger)
   router/       # Vue Router with auth guard
   stores/       # Pinia stores (auth, servers)
   types/        # TypeScript interfaces matching Go backend
@@ -42,6 +43,7 @@ src/
     BDDTableAddView.vue           # 3-step add wizard
     BDDTableFieldsView.vue        # fields-edit page (WYSIWYG + import/export + block builder)
     ZohoImportFormView.vue        # 3-step Zoho import form (admin or user scope)
+    ZohoImportDetailView.vue        # per-row Zoho import detail (metadata + tools)
 nginx.conf      # Production reverse proxy config
 Dockerfile      # Multi-stage: node build → nginx serve
 ```
@@ -99,6 +101,16 @@ branches between `store.upsertAdmin` (admin) and `store.createUserImport`
 (users) on submit. On success it routes back to the template detail page
 with `?zoho_tab=<scope>` so the section re-mounts on the correct tab.
 Admin-gated through the global `router.beforeEach` guard.
+
+Per-row detail page: `/admin/templates/:slug/zoho-imports/:id`
+(`ZohoImportDetailView.vue`). Renders row metadata, the persisted tool
+catalog from `GET /api/v1/zoho-imports/{id}/tools`, plus inline Tester
+/ Découvrir actions that refresh the displayed catalog on success.
+Reachable via the `pi pi-info-circle` icon in `ZohoAdminCard` and
+`ZohoUserList`. All row actions (Détails / Tester / Découvrir /
+Activer-Désactiver / Modifier / Supprimer) use the shared
+`components/ui/IconActionButton.vue` (icon-only with native tooltip,
+three tones: neutral / brand / danger).
 
 ## What This Provides to Other Services
 

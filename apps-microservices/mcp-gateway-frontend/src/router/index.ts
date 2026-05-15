@@ -175,6 +175,13 @@ const router = createRouter({
       props: true,
     },
     {
+      path: '/admin/templates/:slug/zoho-imports/:id',
+      name: 'zoho-import-detail',
+      component: () => import('@/views/ZohoImportDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Détails import Zoho', minRole: 'admin' },
+      props: true,
+    },
+    {
       path: '/admin/templates/:slug',
       name: 'template-detail',
       component: () => import('@/views/TemplateDetailView.vue'),

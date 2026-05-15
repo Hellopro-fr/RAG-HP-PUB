@@ -61,7 +61,7 @@
           <span class="text-xs text-gray-600 dark:text-gray-300">{{ data.auth_header_keys.join(', ') }}</span>
         </template>
       </Column>
-      <Column header="Actions" header-style="width: 22rem; text-align: right">
+      <Column header="Actions" header-style="width: 18rem; text-align: right">
         <template #body="{ data }">
           <div class="inline-flex items-center gap-2 justify-end w-full">
             <ZohoTestResultBadge :result="testResults[data.id] ?? null" />
@@ -75,36 +75,38 @@
             >
               {{ discoverResults[data.id]!.tools }} outils
             </span>
-            <button
-              class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+            <IconActionButton
+              icon="pi-info-circle"
+              label="Détails"
+              @click="$emit('info', data)"
+            />
+            <IconActionButton
+              icon="pi-bolt"
+              label="Tester"
               @click="$emit('test', data)"
-            >
-              Tester
-            </button>
-            <button
-              class="text-xs px-2 py-1 rounded-md border border-brand-300 dark:border-brand-700 text-brand-600 dark:text-brand-400"
+            />
+            <IconActionButton
+              icon="pi-sync"
+              label="Découvrir"
+              tone="brand"
               @click="$emit('discover', data)"
-            >
-              Découvrir
-            </button>
-            <button
-              class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+            />
+            <IconActionButton
+              :icon="data.is_active ? 'pi-pause' : 'pi-play'"
+              :label="data.is_active ? 'Désactiver' : 'Activer'"
               @click="$emit('toggle', data)"
-            >
-              {{ data.is_active ? 'Désactiver' : 'Activer' }}
-            </button>
-            <button
-              class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+            />
+            <IconActionButton
+              icon="pi-pencil"
+              label="Modifier"
               @click="$emit('edit', data)"
-            >
-              Modifier
-            </button>
-            <button
-              class="text-xs px-2 py-1 rounded-md border border-error-300 dark:border-error-700 text-error-600"
+            />
+            <IconActionButton
+              icon="pi-trash"
+              label="Supprimer"
+              tone="danger"
               @click="$emit('delete', data)"
-            >
-              Supprimer
-            </button>
+            />
           </div>
         </template>
       </Column>
@@ -117,6 +119,7 @@ import { ref, watch } from 'vue'
 import DataTable, { type DataTablePageEvent } from 'primevue/datatable'
 import Column from 'primevue/column'
 import ZohoTestResultBadge from './ZohoTestResultBadge.vue'
+import IconActionButton from '@/components/ui/IconActionButton.vue'
 import type { ZohoImportRow, ZohoImportTestResponse } from '@/types/zoho'
 
 const props = defineProps<{
@@ -137,6 +140,7 @@ const emit = defineEmits<{
   toggle: [r: ZohoImportRow]
   test: [r: ZohoImportRow]
   discover: [r: ZohoImportRow]
+  info: [r: ZohoImportRow]
 }>()
 
 const searchLocal = ref(props.search)

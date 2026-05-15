@@ -49,3 +49,15 @@ export interface ZohoUserCreateRequest {
   is_active?: boolean
   template_slug?: string
 }
+
+export interface ZohoImportTool {
+  name: string
+  description: string
+  input_schema: string
+  updated_at: string
+}
+
+export interface ZohoImportToolsResponse {
+  tools: ZohoImportTool[]
+  total: number
+}

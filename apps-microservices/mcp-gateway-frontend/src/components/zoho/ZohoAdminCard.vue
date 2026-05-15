@@ -14,30 +14,33 @@
         </div>
       </div>
       <div class="flex gap-2 shrink-0">
-        <button
-          class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+        <IconActionButton
+          icon="pi-info-circle"
+          label="Détails"
+          @click="$emit('info')"
+        />
+        <IconActionButton
+          icon="pi-bolt"
+          label="Tester"
           @click="$emit('test')"
-        >
-          Tester
-        </button>
-        <button
-          class="text-xs px-2 py-1 rounded-md border border-brand-300 dark:border-brand-700 text-brand-600 dark:text-brand-400"
+        />
+        <IconActionButton
+          icon="pi-sync"
+          label="Découvrir"
+          tone="brand"
           @click="$emit('discover')"
-        >
-          Découvrir
-        </button>
-        <button
-          class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+        />
+        <IconActionButton
+          icon="pi-pencil"
+          label="Modifier"
           @click="$emit('edit')"
-        >
-          Modifier
-        </button>
-        <button
-          class="text-xs px-2 py-1 rounded-md border border-error-300 dark:border-error-700 text-error-600"
+        />
+        <IconActionButton
+          icon="pi-trash"
+          label="Supprimer"
+          tone="danger"
           @click="$emit('delete')"
-        >
-          Supprimer
-        </button>
+        />
       </div>
     </div>
 
@@ -68,6 +71,7 @@
 
 <script setup lang="ts">
 import ZohoTestResultBadge from './ZohoTestResultBadge.vue'
+import IconActionButton from '@/components/ui/IconActionButton.vue'
 import type { ZohoImportRow, ZohoImportTestResponse } from '@/types/zoho'
 
 defineProps<{
@@ -82,5 +86,6 @@ defineEmits<{
   discover: []
   delete: []
   create: []
+  info: []
 }>()
 </script>
