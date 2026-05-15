@@ -194,17 +194,28 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 // of truth).
 func (g *Gateway) FetchZohoStateForUser(ctx context.Context, email string) map[string]ZohoServerState {
 	if email == "" {
+		log.Printf("[zoho-diag] gateway.FetchZohoStateForUser: empty email — returning nil")
 		return nil
 	}
 
+	all := g.registry.All()
 	var zohoBackends []*BackendServer
-	for _, srv := range g.registry.All() {
+	for _, srv := range all {
 		if srv.HasTag("zoho") || srv.ToolPrefix == "zoho" {
 			zohoBackends = append(zohoBackends, srv)
 		}
 	}
 	if len(zohoBackends) == 0 {
+		log.Printf("[zoho-diag] gateway.FetchZohoStateForUser email=%s: NO zoho backend in in-memory registry (registry_total=%d). Dumping all registered backends:", email, len(all))
+		for _, srv := range all {
+			log.Printf("[zoho-diag]   registry id=%s name=%q tool_prefix=%q tags=%v", srv.ID, srv.Name, srv.ToolPrefix, srv.Tags)
+		}
+		log.Printf("[zoho-diag] gateway.FetchZohoStateForUser email=%s: registry/DB drift — DB rows that pass isZohoServer() exist but registry has none. Likely a health-check/re-discovery wiped tags, or the server was never registered with the 'zoho' tag.", email)
 		return nil
+	}
+	log.Printf("[zoho-diag] gateway.FetchZohoStateForUser email=%s: found %d zoho backend(s) in registry", email, len(zohoBackends))
+	for _, srv := range zohoBackends {
+		log.Printf("[zoho-diag]   zoho backend id=%s name=%q tool_prefix=%q tags=%v template_slug=%q created_by=%q", srv.ID, srv.Name, srv.ToolPrefix, srv.Tags, srv.TemplateSlug, srv.CreatedBy)
 	}
 
 	out := make(map[string]ZohoServerState, len(zohoBackends))
