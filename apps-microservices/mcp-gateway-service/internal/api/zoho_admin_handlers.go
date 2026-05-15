@@ -121,11 +121,20 @@ func (h *Handler) handleZohoImports(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "zoho imports not configured"})
 		return
 	}
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleZohoUserList(w, r)
+		return
+	case http.MethodPost:
+		h.handleZohoUserCreate(w, r)
+		return
+	default:
 		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
 		return
 	}
+}
 
+func (h *Handler) handleZohoUserList(w http.ResponseWriter, r *http.Request) {
 	filter := repository.ZohoListFilter{
 		Search:    r.URL.Query().Get("search"),
 		CreatedBy: effectiveCreatorFilter(r.Context()),
@@ -153,6 +162,91 @@ func (h *Handler) handleZohoImports(w http.ResponseWriter, r *http.Request) {
 		out.Rows = append(out.Rows, zohoImportToRowDTO(&rows[i], h))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// handleZohoUserCreate inserts a per-user row. CreatedBy must be non-empty
+// and unique. Use POST /api/v1/zoho-imports/admin for the singleton admin row.
+func (h *Handler) handleZohoUserCreate(w http.ResponseWriter, r *http.Request) {
+	var req ZohoUserCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.URL = strings.TrimSpace(req.URL)
+	req.CreatedBy = strings.TrimSpace(req.CreatedBy)
+	req.TemplateSlug = strings.TrimSpace(req.TemplateSlug)
+
+	if req.Name == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "name is required"})
+		return
+	}
+	if req.URL == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "url is required"})
+		return
+	}
+	if req.CreatedBy == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "created_by is required"})
+		return
+	}
+	if !strings.Contains(req.CreatedBy, "@") || strings.HasPrefix(req.CreatedBy, "@") || strings.HasSuffix(req.CreatedBy, "@") {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "created_by must look like an email"})
+		return
+	}
+	if req.TemplateSlug == "" {
+		req.TemplateSlug = "zoho"
+	}
+
+	existing, err := h.zohoImportRepo.FindUserImportByEmail(req.CreatedBy)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if existing != nil {
+		writeJSON(w, http.StatusConflict, ErrorResponse{Error: "a zoho import already exists for this created_by"})
+		return
+	}
+
+	var encrypted []byte
+	if len(req.AuthHeaders) > 0 {
+		raw, mErr := json.Marshal(req.AuthHeaders)
+		if mErr != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "encode auth_headers: " + mErr.Error()})
+			return
+		}
+		if h.encryptor != nil {
+			encrypted, mErr = h.encryptor.Encrypt(raw)
+			if mErr != nil {
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "encrypt auth_headers: " + mErr.Error()})
+				return
+			}
+		} else {
+			encrypted = raw
+		}
+	}
+
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+
+	row := &db.ZohoImport{
+		Name:         req.Name,
+		URL:          req.URL,
+		CreatedBy:    req.CreatedBy,
+		TemplateSlug: req.TemplateSlug,
+		IsActive:     isActive,
+		AuthHeaders:  encrypted,
+	}
+	if err := h.zohoImportRepo.CreateUserImport(row); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	discoverZohoToolsForImport(r.Context(), h.zohoImportRepo, h.encryptor, row)
+
+	writeJSON(w, http.StatusCreated, zohoImportToRowDTO(row, h))
 }
 
 // handleZohoImportByID dispatches GET/PATCH/DELETE on /api/v1/zoho-imports/{id}

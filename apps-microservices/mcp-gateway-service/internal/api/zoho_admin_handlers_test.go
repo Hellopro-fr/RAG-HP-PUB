@@ -452,3 +452,32 @@ func TestZohoImports_Test_404(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
+
+func TestHandleZohoUserCreate_Happy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":          "Alice Zoho",
+		"url":           "https://alice.zoho.example.com",
+		"created_by":    "alice@hellopro.fr",
+		"auth_headers":  map[string]string{"Authorization": "Bearer alice-token"},
+		"template_slug": "zoho",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports?is_admin=false", nil)
+	listRec := httptest.NewRecorder()
+	h.handleZohoImports(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200", listRec.Code)
+	}
+	if !strings.Contains(listRec.Body.String(), "alice@hellopro.fr") {
+		t.Fatalf("created row missing from list: %s", listRec.Body.String())
+	}
+}
