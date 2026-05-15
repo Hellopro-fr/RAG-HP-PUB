@@ -313,6 +313,7 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 			// "Non configurés" section.
 			srvTools := allowedTools[srv.ID]
 			source := srv.Tools
+			zohoOverride := false
 			if zohoIDs[srv.ID] {
 				unconf, userTools := decideZohoServerEntry(srv.ID, zohoIDs, zohoState)
 				if unconf {
@@ -324,9 +325,15 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 					continue
 				}
 				source = toServerTools(userTools)
+				zohoOverride = true
 			}
 			for _, t := range source {
-				if srvTools != nil && !srvTools[t.Name] {
+				// Zoho catalogs are per-viewer and dynamic — the OAuth2 client's
+				// tool allow-list (built against the admin catalog) cannot
+				// represent the user's actual catalog 1:1. Skip the name filter
+				// when the source is a per-user Zoho override so the consent
+				// screen mirrors what buildServerList (JSON API) returns.
+				if !zohoOverride && srvTools != nil && !srvTools[t.Name] {
 					continue
 				}
 				entry.Tools = append(entry.Tools, toolEntry{
