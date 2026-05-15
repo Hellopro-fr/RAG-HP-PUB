@@ -67,6 +67,7 @@ func newTestZohoAdminHandler(t *testing.T) *Handler {
 	}
 	h := &Handler{}
 	h.encryptor = enc
+	h.allowInternalURLs = true
 	h.SetZohoImportRepo(repository.NewZohoImportRepo(gormDB))
 	return h
 }
@@ -545,5 +546,22 @@ func TestHandleZohoUserCreate_InvalidJSON(t *testing.T) {
 	h.handleZohoImports(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandleZohoUserCreate_RejectsBlockedURL(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	h.allowInternalURLs = false
+
+	body, _ := json.Marshal(map[string]any{
+		"name":       "x",
+		"url":        "http://127.0.0.1:8080/internal",
+		"created_by": "alice@hellopro.fr",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
 	}
 }

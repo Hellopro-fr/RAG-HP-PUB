@@ -12,6 +12,7 @@ import (
 
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/urlvalidation"
 )
 
 // handleZohoAdmin dispatches the three verbs on /api/v1/zoho-imports/admin.
@@ -56,6 +57,10 @@ func (h *Handler) handleZohoAdminPost(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "url is required"})
 		return
 	}
+	if err := urlvalidation.ValidateServerURL(req.URL, h.allowInternalURLs); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	var encrypted []byte
 	if len(req.AuthHeaders) > 0 {
@@ -96,7 +101,7 @@ func (h *Handler) handleZohoAdminPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discoverZohoToolsForImport(r.Context(), h.zohoImportRepo, h.encryptor, row)
+	go discoverZohoToolsForImport(context.Background(), h.zohoImportRepo, h.encryptor, row)
 
 	status := http.StatusCreated
 	if existing != nil {
@@ -186,6 +191,10 @@ func (h *Handler) handleZohoUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "url is required"})
 		return
 	}
+	if err := urlvalidation.ValidateServerURL(req.URL, h.allowInternalURLs); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
 	if req.CreatedBy == "" {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "created_by is required"})
 		return
@@ -244,7 +253,7 @@ func (h *Handler) handleZohoUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discoverZohoToolsForImport(r.Context(), h.zohoImportRepo, h.encryptor, row)
+	go discoverZohoToolsForImport(context.Background(), h.zohoImportRepo, h.encryptor, row)
 
 	writeJSON(w, http.StatusCreated, zohoImportToRowDTO(row, h))
 }
