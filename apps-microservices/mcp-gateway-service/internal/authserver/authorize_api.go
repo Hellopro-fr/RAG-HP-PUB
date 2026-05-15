@@ -432,6 +432,7 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 			zohoIDs[srv.ID] = true
 		}
 	}
+	log.Printf("[zoho-diag] buildServerList (JSON API) email=%q client_id=%s pre_configured_scope=%t active_servers=%d zoho_servers=%d zoho_fetcher_wired=%t", userEmail, client.ID, hasPreConfiguredScope, len(servers), len(zohoIDs), s.zohoFetcher != nil)
 
 	var result []authorizeServerDTO
 
@@ -520,29 +521,43 @@ func applyZohoUserState(
 	userEmail string,
 	docsURL string,
 ) []authorizeServerDTO {
-	if fetcher == nil || userEmail == "" || len(zohoIDs) == 0 {
+	if fetcher == nil {
+		log.Printf("[zoho-diag] applyZohoUserState: fetcher is nil — every Zoho server stays as cached admin tools (no per-viewer override)")
 		return servers
 	}
+	if userEmail == "" {
+		log.Printf("[zoho-diag] applyZohoUserState: userEmail is empty — every Zoho server stays as cached admin tools (no per-viewer override)")
+		return servers
+	}
+	if len(zohoIDs) == 0 {
+		log.Printf("[zoho-diag] applyZohoUserState email=%q: no Zoho-tagged servers registered — passthrough", userEmail)
+		return servers
+	}
+	log.Printf("[zoho-diag] applyZohoUserState email=%q zoho_backend_count=%d — fetching per-viewer state", userEmail, len(zohoIDs))
 	state := fetcher.FetchZohoStateForUser(ctx, userEmail)
+	if state == nil {
+		log.Printf("[zoho-diag] applyZohoUserState email=%q: FetchZohoStateForUser returned nil — every Zoho server will fall into unconfigured branch below", userEmail)
+	}
 	for i, srv := range servers {
 		if !zohoIDs[srv.ID] {
 			continue
 		}
 		st, ok := state[srv.ID]
 		if !ok {
-			// No entry returned: treat as unconfigured (fail-safe — never
-			// leak the cached admin tools onto a non-admin consent screen).
+			log.Printf("[zoho-diag] applyZohoUserState email=%q server_id=%s: no state entry returned — marking Configured=false (fail-safe)", userEmail, srv.ID)
 			servers[i].Tools = nil
 			servers[i].Configured = false
 			servers[i].DocsURL = docsURL
 			continue
 		}
 		if !st.Configured {
+			log.Printf("[zoho-diag] applyZohoUserState email=%q server_id=%s: state.Configured=false — marking unconfigured (root cause is in [zoho-diag] StateForEmail logs above)", userEmail, srv.ID)
 			servers[i].Tools = nil
 			servers[i].Configured = false
 			servers[i].DocsURL = docsURL
 			continue
 		}
+		log.Printf("[zoho-diag] applyZohoUserState email=%q server_id=%s: Configured=true tool_count=%d — substituting per-viewer tools", userEmail, srv.ID, len(st.Tools))
 		converted := make([]authorizeToolDTO, 0, len(st.Tools))
 		for _, t := range st.Tools {
 			converted = append(converted, authorizeToolDTO{
