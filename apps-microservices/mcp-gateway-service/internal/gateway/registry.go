@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"log"
+	"strings"
 	"sync"
 
 	"mcp-gateway/internal/mcp"
@@ -22,12 +24,26 @@ type BackendServer struct {
 	TemplateSlug string
 	// CreatedBy echoes mcp_servers.created_by. Used by the Zoho header
 	// injector to populate X-Zoho-Allowed-User on imported Zoho backends.
-	CreatedBy     string
+	CreatedBy string
+	// Tags echoes mcp_servers.server_tags (one string per row). Used by the
+	// header injector dispatch to identify Zoho backends without depending
+	// on tool_prefix.
+	Tags          []string
 	Capabilities  mcp.ServerCapabilities
 	Tools         []mcp.Tool
 	Resources     []mcp.Resource
 	Prompts       []mcp.Prompt
 	AuthHeaders   map[string]string // extra headers forwarded to this backend
+}
+
+// HasTag returns true when target is in s.Tags (case-insensitive).
+func (s *BackendServer) HasTag(target string) bool {
+	for _, t := range s.Tags {
+		if strings.EqualFold(t, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // PrefixedToolName returns the tool name with the server prefix applied.
@@ -92,6 +108,20 @@ func (r *Registry) SetToolPrefix(id, prefix string) {
 	defer r.mu.Unlock()
 	if s, ok := r.servers[id]; ok {
 		s.ToolPrefix = prefix
+	}
+}
+
+// SetTags replaces the tag slice for a registered backend server. Used by
+// the PUT /servers/{id} handler so server_tags edits are reflected in the
+// in-memory registry without waiting for a full re-discovery cycle.
+func (r *Registry) SetTags(id string, tags []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.servers[id]; ok {
+		s.Tags = tags
+		log.Printf("[registry] SetTags id=%s tags=%v", id, tags)
+	} else {
+		log.Printf("[registry] SetTags id=%s tags=%v — backend NOT in registry (not yet discovered or unregistered)", id, tags)
 	}
 }
 

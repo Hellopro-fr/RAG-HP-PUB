@@ -47,8 +47,9 @@ func (h *Handler) handleOAuth2ClientByID(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) listOAuth2Clients(w http.ResponseWriter, r *http.Request) {
-	userEmail := auth.UserEmailFromContext(r.Context())
-	clients, err := h.oauth2Repo.ListAll(userEmail)
+	// Admins (role == "admin") bypass the created_by filter and see every
+	// client across the workspace. Non-admins keep the per-creator scope.
+	clients, err := h.oauth2Repo.ListAll(effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -518,7 +519,13 @@ func oauth2ClientZohoFilterToDTO(c *db.OAuth2Client) *ZohoFilterDTO {
 	return dto
 }
 
+// isOAuth2ClientOwner gates per-row mutations (read, update, revoke, delete).
+// Admins (role == "admin") bypass the ownership check so they can fix or remove
+// a client created by another user.
 func (h *Handler) isOAuth2ClientOwner(r *http.Request, client *db.OAuth2Client) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	if client.CreatedBy == "" {
 		return true
 	}

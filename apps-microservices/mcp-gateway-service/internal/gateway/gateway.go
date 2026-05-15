@@ -21,6 +21,16 @@ type BDDTableResolver interface {
 	GetTable(ctx context.Context, id string) (*db.BDDUsedTable, error)
 }
 
+// ZohoUserCatalog returns the per-viewer Zoho tool catalog state. The
+// implementation MUST resolve the viewer's role first (admin vs non-admin)
+// and consult only the appropriate zoho_imports row — there is no admin-row
+// fallback for non-admin viewers. Configured == false means the row is
+// missing (or has no tools); the consent screen renders this as
+// "Non configuré" with a docs CTA.
+type ZohoUserCatalog interface {
+	StateForEmail(ctx context.Context, email string) ZohoCatalogState
+}
+
 // Gateway routes MCP JSON-RPC requests to the appropriate backend servers.
 type Gateway struct {
 	name          string
@@ -31,6 +41,7 @@ type Gateway struct {
 	bddResolver   BDDTableResolver      // optional; nil disables BDD header injection
 	gatewayUsers  gatewayUserFinder     // optional; nil disables auto-self admin fallback
 	serverAuth    serverAuthorizer      // optional; nil disables Step-0 server-authorization bypass
+	zohoCatalog   ZohoUserCatalog       // optional; nil marks all Zoho backends unconfigured
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -65,6 +76,15 @@ func (g *Gateway) SetGatewayUserFinder(f gatewayUserFinder) {
 // *repository.ServerAuthorizationRepo at boot.
 func (g *Gateway) SetServerAuthorizer(s serverAuthorizer) {
 	g.serverAuth = s
+}
+
+// SetZohoUserCatalog wires the persisted per-viewer Zoho catalog source.
+// When set, FetchZohoStateForUser asks the implementation whether the
+// viewer's zoho_imports row resolves and what its tools are. Pass nil
+// to disable per-viewer resolution (every Zoho backend then renders as
+// "Non configuré").
+func (g *Gateway) SetZohoUserCatalog(c ZohoUserCatalog) {
+	g.zohoCatalog = c
 }
 
 // SetBDDResolver attaches the BDD used-table resolver consumed by
@@ -136,9 +156,90 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 		}
 	}
 
+	// Preserve metadata that lives on the registry but wasn't fetched from
+	// the upstream init result: TemplateSlug, CreatedBy, Tags. Health-checker
+	// re-discovery would otherwise wipe them every probe cycle.
+	if prev := g.registry.FindByID(id); prev != nil {
+		if srv.TemplateSlug == "" {
+			srv.TemplateSlug = prev.TemplateSlug
+		}
+		if srv.CreatedBy == "" {
+			srv.CreatedBy = prev.CreatedBy
+		}
+		if len(srv.Tags) == 0 {
+			srv.Tags = prev.Tags
+		}
+		if srv.ToolPrefix == "" {
+			srv.ToolPrefix = prev.ToolPrefix
+		}
+	}
+
 	g.registry.Register(srv)
-	log.Printf("[gateway] registered backend: %s (%s %s) [%s] id=%s", url, srv.Name, srv.Version, srv.TransportType, id)
+	log.Printf("[gateway] registered backend: %s (%s %s) [%s] id=%s tags=%v", url, srv.Name, srv.Version, srv.TransportType, id, srv.Tags)
 	return nil
+}
+
+// FetchZohoStateForUser returns the per-viewer Zoho state keyed by
+// mcp_servers.id for every registered Zoho-tagged (or zoho-prefixed)
+// backend. Each entry's Configured flag indicates whether the viewer
+// has a usable zoho_imports row resolved (admin row for admins, user
+// row for non-admins). Returns nil only when email is empty or no
+// Zoho backend is registered.
+//
+// When SetZohoUserCatalog has been wired, state comes from the
+// persisted zoho_import_tools table via the adapter. Otherwise the
+// gateway returns a map where every Zoho backend is marked
+// Configured=false (the live HTTP fallback is intentionally removed
+// from the consent path — the persisted catalog is the only source
+// of truth).
+func (g *Gateway) FetchZohoStateForUser(ctx context.Context, email string) map[string]ZohoServerState {
+	if email == "" {
+		log.Printf("[zoho-diag] gateway.FetchZohoStateForUser: empty email — returning nil")
+		return nil
+	}
+
+	all := g.registry.All()
+	var zohoBackends []*BackendServer
+	for _, srv := range all {
+		if srv.HasTag("zoho") || srv.ToolPrefix == "zoho" {
+			zohoBackends = append(zohoBackends, srv)
+		}
+	}
+	if len(zohoBackends) == 0 {
+		log.Printf("[zoho-diag] gateway.FetchZohoStateForUser email=%s: NO zoho backend in in-memory registry (registry_total=%d). Dumping all registered backends:", email, len(all))
+		for _, srv := range all {
+			log.Printf("[zoho-diag]   registry id=%s name=%q tool_prefix=%q tags=%v", srv.ID, srv.Name, srv.ToolPrefix, srv.Tags)
+		}
+		log.Printf("[zoho-diag] gateway.FetchZohoStateForUser email=%s: registry/DB drift — DB rows that pass isZohoServer() exist but registry has none. Likely a health-check/re-discovery wiped tags, or the server was never registered with the 'zoho' tag.", email)
+		return nil
+	}
+	log.Printf("[zoho-diag] gateway.FetchZohoStateForUser email=%s: found %d zoho backend(s) in registry", email, len(zohoBackends))
+	for _, srv := range zohoBackends {
+		log.Printf("[zoho-diag]   zoho backend id=%s name=%q tool_prefix=%q tags=%v template_slug=%q created_by=%q", srv.ID, srv.Name, srv.ToolPrefix, srv.Tags, srv.TemplateSlug, srv.CreatedBy)
+	}
+
+	out := make(map[string]ZohoServerState, len(zohoBackends))
+	if g.zohoCatalog == nil {
+		for _, srv := range zohoBackends {
+			out[srv.ID] = ZohoServerState{Configured: false}
+		}
+		log.Printf("[gateway] consent zoho catalog unwired email=%s — marking all backends unconfigured", email)
+		return out
+	}
+
+	st := g.zohoCatalog.StateForEmail(ctx, email)
+	for _, srv := range zohoBackends {
+		out[srv.ID] = ZohoServerState{
+			Tools:      st.Tools,
+			Configured: st.Configured,
+		}
+	}
+	if st.Configured {
+		log.Printf("[gateway] consent zoho catalog email=%s configured=true tool_count=%d", email, len(st.Tools))
+	} else {
+		log.Printf("[gateway] consent zoho catalog email=%s configured=false — docs CTA", email)
+	}
+	return out
 }
 
 // RegisterFromCache registers a backend from cached DB data (no network call).

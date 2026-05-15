@@ -101,3 +101,26 @@ func TestResolveCreatedBy(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectZohoTemplate(t *testing.T) {
+	cases := []struct {
+		slug string
+		want bool
+	}{
+		{"zoho", true},
+		{"zoho-crm", true},
+		{"zoho-mail", true},
+		{"zohoesque", false},
+		{"ga", false},
+		{"gsc", false},
+		{"", false},
+		{"zoho-", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.slug, func(t *testing.T) {
+			if got := detectZohoTemplate(tc.slug); got != tc.want {
+				t.Fatalf("detectZohoTemplate(%q) = %v, want %v", tc.slug, got, tc.want)
+			}
+		})
+	}
+}

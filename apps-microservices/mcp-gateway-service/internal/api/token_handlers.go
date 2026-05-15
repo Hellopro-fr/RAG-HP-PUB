@@ -54,8 +54,9 @@ func (h *Handler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
-	userEmail := auth.UserEmailFromContext(r.Context())
-	tokens, err := h.tokenRepo.ListAll(userEmail)
+	// Admins (role == "admin") bypass the created_by filter and see every
+	// token across the workspace. Non-admins keep the per-creator scope.
+	tokens, err := h.tokenRepo.ListAll(effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -510,7 +511,13 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request, id string)
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // isTokenOwner checks if the current user owns the token (or if the token has no owner).
+// Admins (role == "admin") bypass the ownership check and can mutate any
+// token — read, update, revoke, delete — so support flows can fix or remove
+// a token created by another user.
 func (h *Handler) isTokenOwner(r *http.Request, token *db.ScopeToken) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	if token.CreatedBy == "" {
 		return true // legacy tokens with no owner are accessible to everyone
 	}

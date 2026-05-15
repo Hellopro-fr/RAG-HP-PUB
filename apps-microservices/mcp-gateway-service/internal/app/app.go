@@ -384,6 +384,12 @@ func registerRESTAndOAuthServer(
 	gw.SetServerAuthorizer(serverAuthRepo)
 	log.Println("[main] server_authorizations wired into Gateway for full-access bypass")
 
+	apiHandler.SetEncryptor(dbs.encryptor)
+	zohoImportRepo := repository.NewZohoImportRepo(dbs.database)
+	apiHandler.SetZohoImportRepo(zohoImportRepo)
+	gw.SetZohoUserCatalog(&zohoCatalogAdapter{imports: zohoImportRepo, users: dbs.userRepo, encryptor: dbs.encryptor})
+	log.Println("[main] zoho-imports admin REST wired + persisted catalog source attached to gateway")
+
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
 		redirectURL := strings.TrimRight(cfg.GatewayPublicURL, "/") + "/api/v1/google/callback"
 		googleOAuth := goGoogle.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, redirectURL)
@@ -413,6 +419,8 @@ func registerRESTAndOAuthServer(
 		RefreshRepo:    refreshRepo,
 		ServerRepo:     dbs.repo,
 		SSOSessionRepo: ssoSessionRepo,
+		ZohoFetcher:    gw,
+		DocsURL:        strings.TrimRight(cfg.GatewayPublicURL, "/") + "/docs/zohocrm",
 		JWTSecret:      cfg.JWTSecret,
 		PublicURL:      cfg.GatewayPublicURL,
 		AuthURL:        cfg.AuthURL,
@@ -515,6 +523,13 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
 				}
+				if len(s.Tags) > 0 {
+					tags := make([]string, 0, len(s.Tags))
+					for _, t := range s.Tags {
+						tags = append(tags, t.Tag)
+					}
+					reg.SetTags(s.ID, tags)
+				}
 				toolStates := make(map[string]bool, len(s.Tools))
 				for _, t := range s.Tools {
 					toolStates[t.Name] = t.IsActive
@@ -529,6 +544,10 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 
 // registerFromDBCache enregistre un serveur depuis les données cachées en base.
 func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
+	tags := make([]string, 0, len(srv.Tags))
+	for _, t := range srv.Tags {
+		tags = append(tags, t.Tag)
+	}
 	backend := &gateway.BackendServer{
 		ID:            srv.ID,
 		URL:           srv.URL,
@@ -539,6 +558,7 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 		ToolPrefix:    srv.ToolPrefix,
 		TemplateSlug:  srv.TemplateSlug,
 		CreatedBy:     srv.CreatedBy,
+		Tags:          tags,
 	}
 	for _, t := range srv.Tools {
 		backend.Tools = append(backend.Tools, mcp.Tool{

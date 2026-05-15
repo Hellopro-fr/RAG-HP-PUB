@@ -338,3 +338,45 @@ func TestRequestHeadersFor_Zoho(t *testing.T) {
 		}
 	})
 }
+
+// TestRequestHeadersFor_Zoho_Identity covers the X-End-User-Email +
+// X-End-User-Login injection added for mcp-zoho-service.
+func TestRequestHeadersFor_Zoho_Identity(t *testing.T) {
+	const emailHeader = "X-End-User-Email"
+	const loginHeader = "X-End-User-Login"
+
+	t.Run("zoho backend + end-user in ctx → both headers", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-a", ToolPrefix: "zoho"}
+		ctx := context.WithValue(context.Background(), scopetoken.EndUserEmailContextKey, "alice@hp.fr")
+		headers := sg.requestHeadersFor(ctx, backend)
+		if got := headers[emailHeader]; got != "alice@hp.fr" {
+			t.Fatalf("%s = %q, want alice@hp.fr", emailHeader, got)
+		}
+		if got := headers[loginHeader]; got != "alice" {
+			t.Fatalf("%s = %q, want alice", loginHeader, got)
+		}
+	})
+
+	t.Run("zoho backend + no end-user → neither header", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-a", ToolPrefix: "zoho"}
+		headers := sg.requestHeadersFor(context.Background(), backend)
+		if _, ok := headers[emailHeader]; ok {
+			t.Fatalf("unexpected %s header", emailHeader)
+		}
+		if _, ok := headers[loginHeader]; ok {
+			t.Fatalf("unexpected %s header", loginHeader)
+		}
+	})
+
+	t.Run("non-zoho backend ignores identity injection", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-l", ToolPrefix: "leexi"}
+		ctx := context.WithValue(context.Background(), scopetoken.EndUserEmailContextKey, "alice@hp.fr")
+		headers := sg.requestHeadersFor(ctx, backend)
+		if _, ok := headers[emailHeader]; ok {
+			t.Fatalf("unexpected %s on non-zoho", emailHeader)
+		}
+	})
+}

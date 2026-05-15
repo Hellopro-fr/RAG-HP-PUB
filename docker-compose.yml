@@ -2414,6 +2414,9 @@ services:
       # Google Templates runner sidecar (dynamic SA-JSON-backed MCP instances)
       - GOOGLE_TEMPLATES_RUNNER_URL=http://mcp-google-templates-runner:8595
       - GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      # Zoho MCP sidecar (per-user credential routing)
+      - ZOHO_INTERNAL_URL=http://mcp-zoho-service:8596
+      - ZOHO_ADMIN_TOKEN=${ZOHO_GATEWAY_TOKEN}
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SLACK_ENV_LABEL=${SLACK_ENV_LABEL:-dev}
       # SSO client (account-service) — when SSO_ENABLED=true the admin UI
@@ -2466,6 +2469,37 @@ services:
       retries: 3
     depends_on:
       - mcp-gateway-service
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  mcp-zoho-service:
+    build:
+      context: ./apps-microservices/mcp-zoho-service
+      dockerfile: Dockerfile
+    container_name: mcp-zoho-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8596:8596"
+    environment:
+      - ZOHO_ROUTER_PORT=8596
+      - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/${GATEWAY_MYSQL_DB:-gateway_db}?parseTime=true
+      - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
+      - ZOHO_GATEWAY_TOKEN=${ZOHO_GATEWAY_TOKEN}
+      - ZOHO_SELF_URL=${ZOHO_SELF_URL:-http://mcp-zoho-service:8596/mcp}
+      - ZOHO_STUB_SERVER_ID=${ZOHO_STUB_SERVER_ID}
+      - ZOHO_ROUTING_CACHE_TTL=60
+      - ZOHO_UPSTREAM_TIMEOUT=30
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8596/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - services-net
     logging: *logging_defaults

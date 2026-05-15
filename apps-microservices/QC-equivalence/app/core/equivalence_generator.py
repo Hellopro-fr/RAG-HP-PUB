@@ -75,16 +75,19 @@ class EquivalenceGenerator:
     ) -> Dict[str, Any]:
         """
         Transforme les données de question pour le prompt
-        
+
         Args:
             question_data: Données normalisées de la question
-            
+
         Returns:
             Dict avec json_question et corres_reponse
         """
+        # Le PHP renvoie désormais la bulle d'aide structurée (libelle/explication/astuce).
+        # Rétrocompat: si l'ancien champ "justification" texte est présent, on le conserve.
+        bulle_aide = question_data.get("bulle_aide") or question_data.get("justification", "")
         data_final = {
             "intitule-question": question_data.get("intitule", ""),
-            "justification-question": question_data.get("justification", ""),
+            "bulle-aide": bulle_aide,
         }
         
         corres_reponse = {}

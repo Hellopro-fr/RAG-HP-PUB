@@ -13,8 +13,49 @@ import (
 	"github.com/google/uuid"
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
+	"mcp-gateway/internal/mcp"
 	"mcp-gateway/internal/sso"
 )
+
+// toServerTools projects a slice of mcp.Tool (live per-user catalog) into
+// the db.ServerTool shape so the consent renderer can iterate it through
+// the same code path as the cached admin catalog. ServerID is left blank —
+// the caller injects the surrounding server context.
+func toServerTools(tools []mcp.Tool) []db.ServerTool {
+	out := make([]db.ServerTool, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, db.ServerTool{Name: t.Name, Description: t.Description})
+	}
+	return out
+}
+
+// decideZohoServerEntry tells the consent renderer how to handle a single
+// server given the per-viewer Zoho state map. Three outcomes:
+//
+//   - server is NOT Zoho-tagged → (false, nil) and the caller uses srv.Tools.
+//   - server IS Zoho-tagged AND state[srvID].Configured == true → (false, tools)
+//     and the caller uses the returned per-user tools.
+//   - server IS Zoho-tagged AND state entry is missing OR !Configured →
+//     (true, nil) and the caller routes the server into the "Non configurés"
+//     section with no tools.
+//
+// Pure function: callers compose it inside renderConsent's main loop;
+// unit tests cover the decision matrix without spinning up AuthServer.
+func decideZohoServerEntry(
+	srvID string,
+	zohoIDs map[string]bool,
+	state map[string]gateway.ZohoServerState,
+) (unconfigured bool, tools []mcp.Tool) {
+	if !zohoIDs[srvID] {
+		return false, nil
+	}
+	st, ok := state[srvID]
+	if !ok || !st.Configured {
+		return true, nil
+	}
+	return false, st.Tools
+}
 
 //go:embed templates/*.html
 var templateFS embed.FS
@@ -121,7 +162,7 @@ func (s *AuthServer) showLoginOrConsent(w http.ResponseWriter, r *http.Request, 
 	session, err := auth.GetSession(r, s.jwtSecret)
 	if err == nil {
 		if _, err := auth.ValidateJWT(session.Token, s.jwtSecret, ""); err == nil {
-			s.renderConsent(w, client, params, session.Email)
+			s.renderConsent(w, r, client, params, session.Email)
 			return
 		}
 	}
@@ -134,7 +175,7 @@ func (s *AuthServer) showLoginOrConsent(w http.ResponseWriter, r *http.Request, 
 			log.Printf("[authserver] bridge mint session: %v", err)
 			// Fall through to tier 3 on failure so the user can still log in.
 		} else {
-			s.renderConsent(w, client, params, email)
+			s.renderConsent(w, r, client, params, email)
 			return
 		}
 	}
@@ -196,16 +237,38 @@ func (s *AuthServer) mintAuthSession(w http.ResponseWriter, email, displayName s
 	}, s.secureCookie)
 }
 
-func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Client, params *authorizeParams, userEmail string) {
+func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, params *authorizeParams, userEmail string) {
 	// Check if the client has pre-configured server/tool scope (admin-assigned)
 	hasPreConfiguredScope := len(client.Servers) > 0
 
 	servers, _ := s.serverRepo.ListActive()
 
-	// Build server lookup for name resolution
+	// Build server lookup for name resolution + identify Zoho-tagged servers
+	// so the per-user catalog override can substitute their tools below.
 	serverMap := make(map[string]db.MCPServer, len(servers))
+	zohoIDs := make(map[string]bool, len(servers))
 	for _, srv := range servers {
 		serverMap[srv.ID] = srv
+		if isZohoServer(srv) {
+			zohoIDs[srv.ID] = true
+		}
+	}
+
+	// Per-viewer Zoho state — fetched once before iterating servers so we
+	// can route unconfigured Zoho backends into a dedicated section while
+	// keeping configured ones in the main list.
+	log.Printf("[zoho-diag] renderConsent (HTML) email=%q client_id=%s pre_configured_scope=%t active_servers=%d zoho_servers=%d zoho_fetcher_wired=%t", userEmail, client.ID, hasPreConfiguredScope, len(servers), len(zohoIDs), s.zohoFetcher != nil)
+	var zohoState map[string]gateway.ZohoServerState
+	switch {
+	case s.zohoFetcher == nil:
+		log.Printf("[zoho-diag] renderConsent email=%q: zoho fetcher not wired — every Zoho server stays as cached admin tools", userEmail)
+	case userEmail == "":
+		log.Printf("[zoho-diag] renderConsent: userEmail is empty — every Zoho server stays as cached admin tools (anonymous browser?)")
+	case len(zohoIDs) == 0:
+		log.Printf("[zoho-diag] renderConsent email=%q: no Zoho-tagged servers registered — skipping fetch", userEmail)
+	default:
+		zohoState = s.zohoFetcher.FetchZohoStateForUser(r.Context(), userEmail)
+		log.Printf("[zoho-diag] renderConsent email=%q: fetched zoho state entries=%d", userEmail, len(zohoState))
 	}
 
 	type toolEntry struct {
@@ -222,6 +285,7 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 	}
 
 	var entries []serverEntry
+	var unconfigured []serverEntry
 
 	if hasPreConfiguredScope {
 		// Client has admin-assigned scope — show only those servers/tools (read-only)
@@ -243,10 +307,33 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 				Name:    srv.Name,
 				Checked: true,
 			}
-			// If specific tools are assigned, list them; otherwise all tools
+			// If specific tools are assigned, list them; otherwise all tools.
+			// For Zoho-tagged servers, use the helper to decide whether to
+			// show the server in the configured list or route it to the
+			// "Non configurés" section.
 			srvTools := allowedTools[srv.ID]
-			for _, t := range srv.Tools {
-				if srvTools != nil && !srvTools[t.Name] {
+			source := srv.Tools
+			zohoOverride := false
+			if zohoIDs[srv.ID] {
+				unconf, userTools := decideZohoServerEntry(srv.ID, zohoIDs, zohoState)
+				if unconf {
+					unconfigured = append(unconfigured, serverEntry{
+						ID:        srv.ID,
+						Name:      srv.Name,
+						ToolCount: 0,
+					})
+					continue
+				}
+				source = toServerTools(userTools)
+				zohoOverride = true
+			}
+			for _, t := range source {
+				// Zoho catalogs are per-viewer and dynamic — the OAuth2 client's
+				// tool allow-list (built against the admin catalog) cannot
+				// represent the user's actual catalog 1:1. Skip the name filter
+				// when the source is a per-user Zoho override so the consent
+				// screen mirrors what buildServerList (JSON API) returns.
+				if !zohoOverride && srvTools != nil && !srvTools[t.Name] {
 					continue
 				}
 				entry.Tools = append(entry.Tools, toolEntry{
@@ -273,13 +360,26 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 		}
 
 		for _, srv := range servers {
+			source := srv.Tools
+			if zohoIDs[srv.ID] {
+				unconf, userTools := decideZohoServerEntry(srv.ID, zohoIDs, zohoState)
+				if unconf {
+					unconfigured = append(unconfigured, serverEntry{
+						ID:        srv.ID,
+						Name:      srv.Name,
+						ToolCount: 0,
+					})
+					continue
+				}
+				source = toServerTools(userTools)
+			}
 			entry := serverEntry{
 				ID:        srv.ID,
 				Name:      srv.Name,
-				ToolCount: len(srv.Tools),
+				ToolCount: len(source),
 				Checked:   checkedIDs[srv.ID],
 			}
-			for _, t := range srv.Tools {
+			for _, t := range source {
 				entry.Tools = append(entry.Tools, toolEntry{
 					Name:        t.Name,
 					Description: t.Description,
@@ -310,6 +410,8 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 		"State":               params.State,
 		"CSRFToken":           csrfToken,
 		"Servers":             entries,
+		"UnconfiguredServers": unconfigured,
+		"DocsURL":             s.docsURL,
 		"PreConfigured":       hasPreConfiguredScope,
 	})
 }

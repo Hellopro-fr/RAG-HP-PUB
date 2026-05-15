@@ -104,12 +104,13 @@ func (h *Handler) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := r.URL.Query().Get("template_slug")
+	creator := effectiveCreatorFilter(r.Context())
 	var instances []db.TemplateInstance
 	var err error
 	if slug != "" {
-		instances, err = h.instanceRepo.ListByTemplate(slug)
+		instances, err = h.instanceRepo.ListByTemplate(slug, creator)
 	} else {
-		instances, err = h.instanceRepo.ListAll()
+		instances, err = h.instanceRepo.ListAll(creator)
 	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
