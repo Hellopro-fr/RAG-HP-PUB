@@ -622,3 +622,65 @@ func contains(s []string, v string) bool {
 	}
 	return false
 }
+
+func TestHandleZohoImportTools_RowNotFound(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/missing/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleZohoImportTools_EmptyCatalog(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":       "no-tools",
+		"url":        "https://no-tools.example.com",
+		"created_by": "empty@hellopro.fr",
+	})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	createRec := httptest.NewRecorder()
+	h.handleZohoImports(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup status = %d, want 201", createRec.Code)
+	}
+	var created ZohoImportRowDTO
+	_ = json.Unmarshal(createRec.Body.Bytes(), &created)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/"+created.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp ZohoImportToolsResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp.Total != 0 || len(resp.Tools) != 0 {
+		t.Fatalf("expected empty tools, got total=%d tools=%v", resp.Total, resp.Tools)
+	}
+}
+
+func TestHandleZohoImportTools_MethodNotAllowed(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":       "x",
+		"url":        "https://x.example.com",
+		"created_by": "x@hellopro.fr",
+	})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	createRec := httptest.NewRecorder()
+	h.handleZohoImports(createRec, createReq)
+	var created ZohoImportRowDTO
+	_ = json.Unmarshal(createRec.Body.Bytes(), &created)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/"+created.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
