@@ -48,3 +48,25 @@ describe('zohoImportsApi.create', () => {
     expect(result).toEqual(row)
   })
 })
+
+describe('zohoImportsApi.listTools', () => {
+  it('GETs /api/v1/zoho-imports/{id}/tools', async () => {
+    const resp = {
+      tools: [
+        {
+          name: 'leads_list',
+          description: 'List leads',
+          input_schema: '{"type":"object"}',
+          updated_at: '2026-05-15T00:00:00Z',
+        },
+      ],
+      total: 1,
+    }
+    const getSpy = vi.spyOn(api, 'get').mockResolvedValueOnce(resp)
+
+    const result = await zohoImportsApi.listTools('row-id')
+
+    expect(getSpy).toHaveBeenCalledWith('/api/v1/zoho-imports/row-id/tools')
+    expect(result).toEqual(resp)
+  })
+})
