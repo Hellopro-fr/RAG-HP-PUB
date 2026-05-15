@@ -237,15 +237,15 @@ func (sg *ScopedGateway) fetchZohoTools(ctx context.Context, b *BackendServer) [
 		return sg.registry.MergedToolsFilteredWithTools(map[string]bool{b.ID: true}, sg.allowedTools)
 	}
 	log.Printf("[scoped] zoho tools/list live-fetch backend=%s live_count=%d", b.ID, len(liveTools))
-	var toolSet map[string]bool
-	if sg.allowedTools != nil {
-		toolSet = sg.allowedTools[b.ID]
-	}
+	// Zoho catalogs are per-viewer and dynamic. The OAuth2 client / scope
+	// token's tool allow-list (sg.allowedTools[b.ID]) was selected against
+	// the admin catalog at issuance time and cannot represent the live
+	// per-user catalog 1:1. Surface every live tool to the MCP client so
+	// they actually see their own catalog — buildServerList (JSON API)
+	// and the consent HTML already do the same. Non-Zoho backends keep
+	// their per-tool filter via MergedToolsFilteredWithTools.
 	out := make([]mcp.Tool, 0, len(liveTools))
 	for _, t := range liveTools {
-		if toolSet != nil && !toolSet[t.Name] {
-			continue
-		}
 		out = append(out, mcp.Tool{
 			Name:        PrefixedToolName(b.ToolPrefix, t.Name),
 			Description: t.Description,
