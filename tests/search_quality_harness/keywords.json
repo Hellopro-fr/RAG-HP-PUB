@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "created_at": "2026-05-15",
+  "source": "audit_moteur_recherche_hellopro_2026-05-13.docx",
+  "url_template": "https://www.hellopro.fr/moteur_recherche/recherche_resultat.php?type_recherche=produit&recherche_active=1&mot_cles={query}&ajax=1&core_v2=1",
+  "regression_threshold": {
+    "canary_min_score": 9.5,
+    "comment": "Si un keyword canary passe sous 9.5 apres une modif -> rollback obligatoire"
+  },
+  "groups": {
+    "critical": [
+      {"query": "mélangeurs coniques",                                                                                       "audit_score": 2.6, "category": "accent_plural"},
+      {"query": "Machine universelle pour manchon electrosoudable Ritmo ELEKTRA XL avec SAV",                                "audit_score": 3.4, "category": "exact_title"},
+      {"query": "Machine pour soudure bout à bout - large gamme et fiches techniques détaillées",                            "audit_score": 3.6, "category": "exact_title"},
+      {"query": "armoire medicale",                                                                                          "audit_score": 3.9, "category": "duplicates_vendor"},
+      {"query": "Machine pour soudure bout a bout Ritmo BASIC 250 315 355",                                                  "audit_score": 4.0, "category": "exact_title"},
+      {"query": "melangeur conique",                                                                                         "audit_score": 4.2, "category": "combinatorial"},
+      {"query": "Machine universelle Ritmo ELEKTRA S - Soudeuse pour manchon électrosoudable avec SAV et maintenance",       "audit_score": 4.4, "category": "exact_title"},
+      {"query": "soudure ritmo",                                                                                             "audit_score": 4.7, "category": "rare_token_brand"},
+      {"query": "Machine universelle pour manchon electrosoudable Ritmo ELEKTRA M avec SAV",                                 "audit_score": 4.8, "category": "exact_title"}
+    ],
+    "canary": [
+      {"query": "fraiseuse",                "audit_score": 10.0, "category": "mono_token"},
+      {"query": "perceuse colonne",         "audit_score": 10.0, "category": "bi_token"},
+      {"query": "machine de decoupe",       "audit_score": 10.0, "category": "tri_token"},
+      {"query": "nettoyage",                "audit_score": 10.0, "category": "mono_token"},
+      {"query": "distributeur automatique", "audit_score": 10.0, "category": "bi_token"},
+      {"query": "compresseur",              "audit_score": 10.0, "category": "mono_token"},
+      {"query": "aspirateur",               "audit_score":  9.9, "category": "mono_token"},
+      {"query": "erp",                      "audit_score":  9.8, "category": "acronym"}
+    ]
+  }
+}
