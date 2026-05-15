@@ -4,6 +4,12 @@
       <template #actions>
         <button
           class="px-3 py-1.5 text-sm rounded-md text-white bg-brand-500 hover:bg-brand-600"
+          @click="goToAdd"
+        >
+          + Ajouter
+        </button>
+        <button
+          class="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5"
           @click="goToImport"
         >
           Importer depuis Sheets
@@ -53,7 +59,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useZohoImportsStore } from '@/stores/zohoImports'
 import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ZohoAdminCard from './ZohoAdminCard.vue'
@@ -64,6 +70,7 @@ import type { ZohoImportRow, ZohoImportTestResponse, ZohoImportUpdateRequest } f
 const props = defineProps<{ templateSlug: string }>()
 
 const router = useRouter()
+const route = useRoute()
 const store = useZohoImportsStore()
 
 const activeTab = ref<'admin' | 'users'>('admin')
@@ -87,6 +94,10 @@ const editTitle = computed(() => {
 })
 
 onMounted(() => {
+  const wanted = route.query.zoho_tab
+  if (wanted === 'admin' || wanted === 'users') {
+    activeTab.value = wanted
+  }
   store.fetchAdmin()
   store.fetchUsers()
 })
@@ -95,6 +106,14 @@ function goToImport() {
   router.push({
     name: 'google-sheets-import',
     query: { from: 'templates', template_slug: props.templateSlug },
+  })
+}
+
+function goToAdd() {
+  router.push({
+    name: 'zoho-import-new',
+    params: { slug: props.templateSlug },
+    query: { scope: activeTab.value },
   })
 }
 

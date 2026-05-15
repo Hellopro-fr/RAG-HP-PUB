@@ -198,6 +198,7 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 ### Zoho Imports Admin (`/api/v1/`)
 - `GET/POST/DELETE /api/v1/zoho-imports/admin` — manage the singleton admin Zoho row consumed by `mcp-zoho-service`. POST upserts (201 on create, 200 on update); GET returns the row with `auth_headers` keys redacted; DELETE clears.
 - `GET /api/v1/zoho-imports` — paginated list of all Zoho rows (admin + users). Query params: `is_admin=true|false`, `search=<substring on name or created_by>`, `page=N`, `limit=M` (default 1/20, max 100). `auth_headers` are redacted to header key names.
+- `POST /api/v1/zoho-imports` — create a per-user import row. Body: `{name, url, created_by, auth_headers?, is_active?, template_slug?}`. Returns 201 + row DTO on success, 400 on missing/malformed fields, 409 when `created_by` already has a row. Singleton admin rows still use `POST /api/v1/zoho-imports/admin`.
 - `GET /api/v1/zoho-imports/{id}` — fetch one row (same DTO shape as list items).
 - `PATCH /api/v1/zoho-imports/{id}` — partial update. Body fields all optional: `name`, `url`, `auth_headers` (replaces blob; `{}` clears it), `is_active`. Empty body → 400. `is_admin` and `created_by` are not editable here.
 - `DELETE /api/v1/zoho-imports/{id}` — hard delete a per-user row (204). Returns 400 when the target is the singleton admin row (use `/api/v1/zoho-imports/admin` for that).
