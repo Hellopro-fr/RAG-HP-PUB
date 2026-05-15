@@ -44,10 +44,15 @@ python3 compare.py results/T0_baseline_2026-05-15.json results/T1_after_low_cert
 cat results/diff_T0_T1.md
 ```
 
-Le verdict du compare.py est :
-- **VALIDE** : critical avg progresse de +0.3 ET aucun canary < 9.5 -> on garde la modif
-- **SANS EFFET** : critical avg pas de progression -> on revert la modif
-- **ROLLBACK OBLIGATOIRE** : un canary chute -> rollback immediat
+Le verdict du compare.py est (seuils RELATIFS au baseline T0, override via CLI) :
+- **VALIDE** : critical avg progresse d'au moins `critical_min_gain` (default 0.3) ET aucun canary n'a chute de plus de `canary_max_drop` (default 0.5) vs T0 -> on garde la modif
+- **SANS EFFET** : critical avg pas de progression suffisante -> on revert la modif
+- **ROLLBACK OBLIGATOIRE** : au moins un canary a chute de plus de `canary_max_drop` vs T0 -> rollback immediat
+
+> **Note 2026-05-15** : seuil canari devenu RELATIF (delta vs T0) au lieu d'absolu.
+> L'ancien seuil `canary_min_score=9.5` etait trop strict : en baseline T0 du 15/05,
+> 5/8 canaris etaient deja sous 9.5 (calibration auto-score plus strict que humain Cowork).
+> Le seuil relatif detecte une vraie regression introduite par la modif, pas la valeur absolue.
 
 ## Options run_audit.py
 
