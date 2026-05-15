@@ -16,50 +16,66 @@ logger = logging.getLogger(__name__)
 
 def _fix_unescaped_quotes(text: str) -> str:
     """
-    Répare les guillemets non-échappés à l'intérieur des valeurs JSON.
-    Ex: "justification": "texte avec ("mot") dedans"
-    Devient: "justification": "texte avec (\"mot\") dedans"
+    Répare les guillemets non-échappés à l'intérieur des valeurs JSON produites par un LLM.
+    Tracke l'état clé/valeur pour distinguer une vraie fin de string d'un faux positif
+    type "il a dit "bonjour", puis...". Normalise les guillemets typographiques en amont.
     """
+    text = text.replace("“", '"').replace("”", '"')
+
     result = []
+    n = len(text)
     i = 0
     in_string = False
-    string_start = -1
-    
-    while i < len(text):
-        char = text[i]
-        
-        if char == '\\' and in_string:
-            # Caractère échappé, on saute le suivant
-            result.append(char)
-            i += 1
-            if i < len(text):
-                result.append(text[i])
-            i += 1
-            continue
-            
-        if char == '"':
-            if not in_string:
-                # Début d'une chaîne
+    expecting_value = False  # True après `:` ou `[` -> on attend une valeur
+
+    while i < n:
+        ch = text[i]
+
+        if not in_string:
+            result.append(ch)
+            if ch == ':':
+                expecting_value = True
+            elif ch == '[':
+                expecting_value = True
+            elif ch in ('{', ','):
+                expecting_value = False
+            elif ch == '"':
                 in_string = True
-                string_start = i
-                result.append(char)
-            else:
-                # On est dans une chaîne, est-ce la vraie fin ?
-                # Regarder ce qui suit (en ignorant les espaces)
-                rest = text[i+1:].lstrip()
-                if not rest or rest[0] in (',', '}', ']', ':'):
-                    # C'est la vraie fin de la chaîne
-                    in_string = False
-                    result.append(char)
-                else:
-                    # C'est un guillemet au milieu de la valeur → échapper
-                    result.append('\\"')
             i += 1
             continue
-        
-        result.append(char)
+
+        if ch == '\\':
+            result.append(ch)
+            i += 1
+            if i < n:
+                result.append(text[i])
+                i += 1
+            continue
+
+        if ch == '"':
+            j = i + 1
+            while j < n and text[j].isspace():
+                j += 1
+            nxt = text[j] if j < n else ''
+
+            if expecting_value:
+                is_end = nxt in (',', '}', ']') or j >= n
+            else:
+                is_end = (nxt == ':')
+
+            if is_end:
+                result.append(ch)
+                in_string = False
+                if expecting_value:
+                    expecting_value = False
+            else:
+                result.append('\\"')
+            i += 1
+            continue
+
+        result.append(ch)
         i += 1
-    
+
     return ''.join(result)
 
 
