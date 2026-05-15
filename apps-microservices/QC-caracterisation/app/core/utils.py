@@ -81,48 +81,55 @@ def _fix_unescaped_quotes(text: str) -> str:
 
 def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     """
-    Extrait et parse JSON d'une chaîne de texte.
-    Tente une réparation des guillemets non-échappés (_fix_unescaped_quotes) en fallback.
-    """
-    # Normaliser les espaces
-    text = re.sub(r'\s+', ' ', text)
+    Extrait et parse le premier JSON valide d'une réponse LLM.
 
+    Tolère :
+      - Fences markdown ```json ... ``` ou ``` ... ```
+      - Texte explicatif avant/après le JSON
+      - Duplications (`"[] [other JSON]"` → retourne le premier)
+      - Guillemets non échappés (fallback _fix_unescaped_quotes)
+      - JSON vide `[]` ou `{}` (cas "aucun résultat")
+
+    Retourne None uniquement si aucun JSON exploitable n'est trouvé.
+    """
+    if not text:
+        return None
+
+    # 1. Strip des fences markdown courantes (```json ... ``` ou ``` ... ```)
+    text = re.sub(r'```(?:json|JSON)?\s*', '', text)
+    text = text.replace('```', '')
+    text = text.strip()
+
+    if not text:
+        return None
+
+    # 2. Tentative directe (cas LLM bien discipliné)
     try:
-        # Tentative de parsing direct
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Recherche de patterns JSON
-    patterns = [
-        r'(\{.*\}|\[.*\])', # Object ou Array
-        r'\[.*\]',  # Array
-        r'\{.*\}',  # Object
-    ]
-
-    for pattern in patterns:
-        matches = re.search(pattern, text, re.DOTALL | re.MULTILINE)
-        if matches:
+    # 3. Balayage : trouve le 1er { ou [, tente raw_decode depuis là.
+    #    Fallback _fix_unescaped_quotes si guillemets non échappés.
+    #    Avance d'un cran si échec et retente.
+    decoder = json.JSONDecoder()
+    n = len(text)
+    for start in range(n):
+        if text[start] in '{[':
+            sub = text[start:]
             try:
-                return json.loads(matches.group(0))
+                obj, _ = decoder.raw_decode(sub)
+                return obj
             except json.JSONDecodeError:
                 try:
-                    fixed = _fix_unescaped_quotes(matches.group(0))
-                    return json.loads(fixed)
+                    fixed = _fix_unescaped_quotes(sub)
+                    obj, _ = decoder.raw_decode(fixed)
+                    return obj
                 except json.JSONDecodeError:
                     continue
 
-    # Dernière tentative: nettoyer le début et la fin
-    trimmed = re.sub(r'^[^{]*|[^}]*$', '', text)
-    try:
-        return json.loads(trimmed)
-    except json.JSONDecodeError:
-        try:
-            fixed = _fix_unescaped_quotes(trimmed)
-            return json.loads(fixed)
-        except json.JSONDecodeError:
-            logger.error(f"Impossible d'extraire JSON de: {text[:200]}")
-            return None
+    logger.error(f"Impossible d'extraire JSON de: {text[:200]}")
+    return None
 
 
 def ensure_directory(path: str) -> bool:
