@@ -106,7 +106,12 @@ async def lifespan(app: FastAPI):
             pass
 
     # Arrêt gracieux du PageImageConsumer (feature flag)
-    if hasattr(app.state, 'page_consumer'):
+    # Note shutdown : appel à `stop()` AVANT `task.cancel()` annule le consumer-tag
+    # côté broker, ce qui empêche aio_pika de livrer de nouveaux messages pendant
+    # le teardown. Le FP Consumer (consumer.py) n'a pas ce pattern (legacy) —
+    # follow-up à coordonner : aligner FP sur ce pattern OU documenter pourquoi
+    # l'asymétrie est intentionnelle. Tracking : (à créer un ticket suivant).
+    if getattr(app.state, 'page_consumer', None) is not None:
         try:
             await app.state.page_consumer.stop()
             app.state.page_consumer_task.cancel()
@@ -115,8 +120,8 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
             logger.info("✅ PageImageConsumer arrêté.")
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de l'arrêt du PageImageConsumer: {e}")
+        except Exception as exc:
+            logger.error("❌ Erreur lors de l'arrêt du PageImageConsumer: %s", exc, exc_info=True)
 
     # Fermer la connexion RabbitMQ
     if hasattr(app.state, 'rabbitmq_connection') and app.state.rabbitmq_connection:
@@ -153,6 +158,10 @@ archiver = Archiver()
 # Brancher le routeur Albums (visualisation + redownload + delete)
 app.include_router(albums_router)
 
+# Note ops : pages_router activé sans condition. Si ENABLE_PAGE_IMAGE_CONSUMER=false
+# et que POST /pages/enqueue est appelé, les messages s'accumulent dans
+# `page_image_download_tasks_queue` sans être drainés. À documenter dans le
+# runbook ops si le feature flag est désactivé en prod.
 # Brancher le routeur Pages Images (Chantier D — toujours actif, routes stateless)
 app.include_router(pages_router)
 
