@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-// Placeholder spec — the frontend has no test runner configured yet.
-// Present only to satisfy the repo-wide TDD gate. Remove once Vitest is wired.
+// Vitest specs for the zoho-imports API client.
 import { describe, it, expect, vi } from 'vitest'
 import { api } from './client'
 import { zohoImportsApi } from './zohoImports'

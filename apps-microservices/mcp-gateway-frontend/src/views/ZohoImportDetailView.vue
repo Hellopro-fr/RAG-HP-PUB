@@ -82,7 +82,7 @@
         <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Test &amp; découverte</h2>
         <div class="flex items-center gap-3 flex-wrap">
           <button
-            class="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 inline-flex items-center gap-2 disabled:opacity-50"
+            :class="NEUTRAL_BUTTON_CLASS"
             :disabled="testing"
             @click="onTest"
           >
@@ -90,7 +90,7 @@
             Tester
           </button>
           <button
-            class="px-3 py-1.5 text-sm rounded-md border border-brand-300 dark:border-brand-700 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10 inline-flex items-center gap-2 disabled:opacity-50"
+            :class="BRAND_BUTTON_CLASS"
             :disabled="discovering"
             @click="onDiscover"
           >
@@ -156,6 +156,9 @@ import { toErrorMessage } from '@/utils/error'
 import type { ZohoImportRow, ZohoImportTool, ZohoImportTestResponse } from '@/types/zoho'
 
 const props = defineProps<{ slug: string; id: string }>()
+
+const NEUTRAL_BUTTON_CLASS = 'px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 inline-flex items-center gap-2 disabled:opacity-50'
+const BRAND_BUTTON_CLASS = 'px-3 py-1.5 text-sm rounded-md border border-brand-300 dark:border-brand-700 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10 inline-flex items-center gap-2 disabled:opacity-50'
 
 const router = useRouter()
 const store = useZohoImportsStore()

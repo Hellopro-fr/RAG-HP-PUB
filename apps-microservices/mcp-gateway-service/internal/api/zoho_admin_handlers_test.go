@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -609,18 +610,9 @@ func TestHandleZohoImportTools_Happy(t *testing.T) {
 		t.Fatalf("total = %d, want 2", resp.Total)
 	}
 	names := []string{resp.Tools[0].Name, resp.Tools[1].Name}
-	if !(contains(names, "leads_list") && contains(names, "leads_get")) {
+	if !(slices.Contains(names, "leads_list") && slices.Contains(names, "leads_get")) {
 		t.Fatalf("names = %v, want both leads_list and leads_get", names)
 	}
-}
-
-func contains(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }
 
 func TestHandleZohoImportTools_RowNotFound(t *testing.T) {
