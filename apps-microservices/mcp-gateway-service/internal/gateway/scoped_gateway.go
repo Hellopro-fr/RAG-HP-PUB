@@ -207,6 +207,31 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
 }
 
+// findZohoFallback returns the in-scope Zoho stub backend that owns the
+// given tool name, along with the unprefixed name to forward upstream.
+// Used by handleToolsCall when the registry lookup misses (the user's
+// per-instance Zoho catalog exposes tools the admin instance doesn't,
+// so they aren't cached in the registry). Matches happen on the
+// (optional) Zoho tool_prefix or, when the stub has no prefix, on every
+// Zoho-tagged backend in scope. Returns (nil, "") when no Zoho backend
+// is in scope.
+func (sg *ScopedGateway) findZohoFallback(name string) (*BackendServer, string) {
+	zohoBackends := sg.zohoBackendsInScope()
+	if len(zohoBackends) == 0 {
+		return nil, ""
+	}
+	for _, b := range zohoBackends {
+		if b.ToolPrefix == "" {
+			return b, name
+		}
+		prefix := b.ToolPrefix + "_"
+		if len(name) > len(prefix) && name[:len(prefix)] == prefix {
+			return b, name[len(prefix):]
+		}
+	}
+	return nil, ""
+}
+
 // zohoBackendsInScope returns the allowed backends carrying the Zoho tag
 // (or the legacy "zoho" tool_prefix). Order is undefined — caller must not
 // rely on it. Empty when no Zoho backend is in scope.
@@ -264,7 +289,23 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 
 	backend, originalName := sg.registry.FindByToolFilteredWithTools(params.Name, sg.allowedIDs, sg.allowedTools)
 	if backend == nil {
-		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
+		// Zoho fallback: the registry only caches the admin tool catalog;
+		// per-user upstreams expose tools the admin instance doesn't have
+		// (see tools/list live-fetch path). When the unknown tool name
+		// targets the Zoho stub (matching prefix, or no prefix and a Zoho
+		// backend is in scope) and the caller carries an end-user identity,
+		// route to that stub so mcp-zoho-service can forward to the user's
+		// upstream where the tool actually lives.
+		if _, hasEmail := scopetoken.EndUserEmailFromContext(ctx); hasEmail {
+			if b, orig := sg.findZohoFallback(params.Name); b != nil {
+				log.Printf("[scoped] tools/call zoho fallback name=%s backend=%s original=%s — registry miss but routing to zoho stub", params.Name, b.ID, orig)
+				backend = b
+				originalName = orig
+			}
+		}
+		if backend == nil {
+			return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
+		}
 	}
 
 	// Compute per-request backend headers, starting from the static auth
