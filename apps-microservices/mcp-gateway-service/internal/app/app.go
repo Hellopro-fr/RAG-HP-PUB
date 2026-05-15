@@ -523,6 +523,13 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
 				}
+				if len(s.Tags) > 0 {
+					tags := make([]string, 0, len(s.Tags))
+					for _, t := range s.Tags {
+						tags = append(tags, t.Tag)
+					}
+					reg.SetTags(s.ID, tags)
+				}
 				toolStates := make(map[string]bool, len(s.Tools))
 				for _, t := range s.Tools {
 					toolStates[t.Name] = t.IsActive
