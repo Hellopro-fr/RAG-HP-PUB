@@ -42,7 +42,7 @@ image-download-service/
 ## API Endpoints (port 8505)
 
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/health` | Health check |
 | GET | `/domains` | List all domains with images |
 | GET | `/domains/recent` | Domains with recent activity |
@@ -148,12 +148,12 @@ PageImageConsumer (feature flag ENABLE_PAGE_IMAGE_CONSUMER)
 ### Composants Python
 
 | Fichier | Rôle | Tâche |
-|---|---|---|
+| --- | --- | --- |
 | `app/core/image_processor.py` | `process_image_page(content, domain, storage_subdir, filename)` — refactor partage `_process_image_internal` avec FP | T3 |
 | `app/routers/pages.py` | POST `/enqueue` + 5 GETs (`/images`, `/status`, `/errors`, `/by-page-type`, `/by-id/{id}`) | T4 |
 | `app/messaging/page_image_consumer.py` | `PageImageConsumer` — topologie RabbitMQ dédiée, MAX_RETRIES=3, RETRY_TTL_MS=30000 | T5 |
 | `app/core/downloader.py` | `Downloader.process_page_image()` INSERT-only + helpers manifest_pages + errors_pages | T6 |
-| `app/main.py` | Wiring conditionnel via `ENABLE_PAGE_IMAGE_CONSUMER` env var | T7 |
+| `app/main.py` | Wiring conditionnel via `ENABLE_PAGE_IMAGE_CONSUMER` env var _(T7 — pas encore fusionné sur cette branche, voir `features/chantier-d-main-wiring`)_ | T7 |
 
 ### Storage layout
 
@@ -170,9 +170,13 @@ PageImageConsumer (feature flag ENABLE_PAGE_IMAGE_CONSUMER)
 
 Sharding (2 niveaux) : `shard1 = last char of filename stem`, `shard2 = 2nd-last char of filename stem`.
 À noter : la spec §9.3 mentionne 3 niveaux ; l'implémentation T3/T6 utilise 2 niveaux
-(divergence documentée dans `downloader.py` docstring `process_page_image`, fix `4f738d27`).
+(divergence documentée dans le docstring de `Downloader.process_page_image` dans `app/core/downloader.py`).
 
 ### Variables d'environnement
+
+> **Note** : ces variables sont lues par `page_image_consumer.py` (T5) et `routers/pages.py` (T4).
+> Le wiring dans `main.py` (T7) **n'est pas encore mergé sur cette branche** — voir
+> `features/chantier-d-main-wiring`. Une fois mergé, le feature flag prendra effet.
 
 ```bash
 ENABLE_PAGE_IMAGE_CONSUMER=false               # default OFF (feature flag)
@@ -184,24 +188,24 @@ PAGE_IMAGE_ROUTING_KEY=new_data.page_image
 ### Endpoints REST
 
 | Method | Path | Description |
-|---|---|---|
-| POST | `/pages/enqueue` | Publie un événement RabbitMQ → PageImageConsumer (Phase 3 Hellopro trigger) |
+| --- | --- | --- |
+| POST | `/pages/enqueue` | Publie un événement RabbitMQ → PageImageConsumer (Phase 3 Hellopro trigger, **HTTP 202 Accepted**) |
 | GET | `/pages/{domain}/images` | Liste images téléchargées (contenu manifest_pages) |
 | GET | `/pages/{domain}/status` | Compteurs (downloaded, error, total) |
 | GET | `/pages/{domain}/errors` | Erreurs téléchargement (errors_pages.json) |
 | GET | `/pages/{domain}/by-page-type` | Groupement par page_type |
 | GET | `/pages/{domain}/by-id/{id_image_isi}` | Lookup direct (Phase 4 retry timeout) |
 
-**Path traversal guard** : tous les endpoints `/pages/{domain}/*` valident `{domain}` via regex `^[A-Za-z0-9._-]+$` (cf. T4 fix `55244309`).
+**Path traversal guard** : tous les endpoints `/pages/{domain}/*` valident `{domain}` via regex `^[A-Za-z0-9._-]+$` (voir `_validate_domain()` dans `app/routers/pages.py`).
 
 ### Sémantique INSERT-only vs FP set-based
 
 | Aspect | FP (`process_product`) | Pages (`process_page_image`) |
-|---|---|---|
+| --- | --- | --- |
 | Granularité événement | Produit (N URLs groupées) | 1 image |
 | Sync logic | Set-based "replace from source" | INSERT-only |
 | URLs disparues | Suppression fichiers main+thumb | Hors scope MVP (orphan cleanup futur) |
-| Idempotence | Réutilisation par url_source dans manifest | Idem (skip si url_source + fichier main présent) |
+| Idempotence | Réutilisation par url_source dans manifest | Idem (skip si `payload.url_image` reçu == `entry.url_source` manifest + fichier main présent — mapping non trivial : payload utilise `url_image`, manifest persiste `url_source`) |
 | Source autorité | `url_images` array message | Hellopro DB `image_scrapping_ia` |
 
 ### Tests
