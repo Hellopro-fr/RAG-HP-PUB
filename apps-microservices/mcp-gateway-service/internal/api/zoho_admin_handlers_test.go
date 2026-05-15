@@ -481,3 +481,69 @@ func TestHandleZohoUserCreate_Happy(t *testing.T) {
 		t.Fatalf("created row missing from list: %s", listRec.Body.String())
 	}
 }
+
+func TestHandleZohoUserCreate_MissingCreatedBy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(map[string]any{
+		"name": "x", "url": "https://x.example.com",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "created_by") {
+		t.Fatalf("error should mention created_by, got %s", rec.Body.String())
+	}
+}
+
+func TestHandleZohoUserCreate_BadEmailShape(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(map[string]any{
+		"name":       "x",
+		"url":        "https://x.example.com",
+		"created_by": "no-at-sign",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleZohoUserCreate_DuplicateCreatedBy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(map[string]any{
+		"name":       "first",
+		"url":        "https://first.example.com",
+		"created_by": "dup@hellopro.fr",
+	})
+	first := httptest.NewRecorder()
+	h.handleZohoImports(first, httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body)))
+	if first.Code != http.StatusCreated {
+		t.Fatalf("setup row status = %d, want 201", first.Code)
+	}
+
+	body, _ = json.Marshal(map[string]any{
+		"name":       "second",
+		"url":        "https://second.example.com",
+		"created_by": "dup@hellopro.fr",
+	})
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body)))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleZohoUserCreate_InvalidJSON(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader([]byte("not json")))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
