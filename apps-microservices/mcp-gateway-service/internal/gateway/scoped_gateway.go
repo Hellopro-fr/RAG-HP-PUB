@@ -107,6 +107,11 @@ type ScopedGateway struct {
 	// requestHeadersFor. When the end-user has a full-access grant for the
 	// target backend, every filter header is skipped. nil disables Step-0.
 	serverAuth serverAuthorizer
+	// zohoCatalog (optional) resolves a viewer's persisted Zoho catalog
+	// state. Consulted on tools/list and tools/call so unconfigured
+	// viewers get no Zoho tools (instead of an admin-catalog fallback).
+	// nil falls back to the legacy behavior (live-fetch + admin fallback).
+	zohoCatalog ZohoUserCatalog
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -126,6 +131,7 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 		bddResolver:   gw.bddResolver,
 		gatewayUsers:  gw.gatewayUsers,
 		serverAuth:    gw.serverAuth,
+		zohoCatalog:   gw.zohoCatalog,
 	}
 }
 
@@ -176,7 +182,7 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	// client sees the user's own Zoho tools instead of the cached admin
 	// catalog. Default flow (no identity, or no Zoho in scope) keeps using
 	// the merged registry cache.
-	_, hasEmail := scopetoken.EndUserEmailFromContext(ctx)
+	email, hasEmail := scopetoken.EndUserEmailFromContext(ctx)
 	zohoBackends := sg.zohoBackendsInScope()
 	if !hasEmail || len(zohoBackends) == 0 {
 		tools := sg.registry.MergedToolsFilteredWithTools(sg.allowedIDs, sg.allowedTools)
@@ -186,18 +192,24 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
 	}
 
-	zohoIDs := make(map[string]bool, len(zohoBackends))
-	for _, b := range zohoBackends {
-		zohoIDs[b.ID] = true
-	}
-	nonZohoAllowed := make(map[string]bool, len(sg.allowedIDs))
-	for id, ok := range sg.allowedIDs {
-		if ok && !zohoIDs[id] {
-			nonZohoAllowed[id] = true
+	// When the viewer is not configured for Zoho (no admin row + no per-user
+	// row), drop every Zoho-tagged backend from the result. Returning the
+	// admin catalog by fallback would leak admin tools onto a non-admin
+	// client and let them issue calls against the admin upstream via the
+	// findZohoFallback path.
+	if sg.zohoCatalog != nil {
+		state := sg.zohoCatalog.StateForEmail(ctx, email)
+		if !state.Configured {
+			log.Printf("[scoped] tools/list email=%s: zoho catalog unconfigured — omitting %d zoho backend(s) from result", email, len(zohoBackends))
+			tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(zohoBackends), sg.allowedTools)
+			if tools == nil {
+				tools = []mcp.Tool{}
+			}
+			return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
 		}
 	}
 
-	tools := sg.registry.MergedToolsFilteredWithTools(nonZohoAllowed, sg.allowedTools)
+	tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(zohoBackends), sg.allowedTools)
 	for _, b := range zohoBackends {
 		tools = append(tools, sg.fetchZohoTools(ctx, b)...)
 	}
@@ -205,6 +217,23 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		tools = []mcp.Tool{}
 	}
 	return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
+}
+
+// nonZohoAllowedIDs returns sg.allowedIDs minus every backend in zohoBackends.
+// Used by handleToolsList to split the merged-from-registry result from the
+// per-user Zoho live-fetch (or the unconfigured-viewer omission).
+func (sg *ScopedGateway) nonZohoAllowedIDs(zohoBackends []*BackendServer) map[string]bool {
+	zohoIDs := make(map[string]bool, len(zohoBackends))
+	for _, b := range zohoBackends {
+		zohoIDs[b.ID] = true
+	}
+	out := make(map[string]bool, len(sg.allowedIDs))
+	for id, ok := range sg.allowedIDs {
+		if ok && !zohoIDs[id] {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // findZohoFallback returns the in-scope Zoho stub backend that owns the
@@ -295,8 +324,17 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		// targets the Zoho stub (matching prefix, or no prefix and a Zoho
 		// backend is in scope) and the caller carries an end-user identity,
 		// route to that stub so mcp-zoho-service can forward to the user's
-		// upstream where the tool actually lives.
-		if _, hasEmail := scopetoken.EndUserEmailFromContext(ctx); hasEmail {
+		// upstream where the tool actually lives. Skip the fallback when
+		// the viewer has no resolved Zoho catalog — calling through to the
+		// stub would surface admin tools to a non-configured user.
+		if email, hasEmail := scopetoken.EndUserEmailFromContext(ctx); hasEmail {
+			if sg.zohoCatalog != nil {
+				state := sg.zohoCatalog.StateForEmail(ctx, email)
+				if !state.Configured {
+					log.Printf("[scoped] tools/call email=%s name=%s: zoho catalog unconfigured — refusing fallback", email, params.Name)
+					return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
+				}
+			}
 			if b, orig := sg.findZohoFallback(params.Name); b != nil {
 				log.Printf("[scoped] tools/call zoho fallback name=%s backend=%s original=%s — registry miss but routing to zoho stub", params.Name, b.ID, orig)
 				backend = b
