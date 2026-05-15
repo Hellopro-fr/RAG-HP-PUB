@@ -78,10 +78,44 @@ def normalize_text(s):
     return " ".join(s.split())
 
 
+def singularize_french(token):
+    """
+    Replique la fonction PHP `conversion_en_singulier_mt` qui canonise les pluriels.
+    Sans cette etape, le harness donnait 2.3 pour "melangeurs coniques" (pluriel)
+    vs 3.9 pour "melangeur conique" (singulier) - meme intention, meme produits cibles.
+
+    Regles (alignees sur le PHP) :
+      1. Mots >= 5 chars finissant par 's' -> strip 's' (armoires -> armoire)
+      2. Mots finissant par 'eaux' -> strip 'x' (bateaux -> bateau)
+      3. Mots finissant par 'aux' -> remplacer par 'al' (medicaux -> medical)
+    """
+    if not token or len(token) < 5:
+        return token
+    # Regle 3 : 'aux' -> 'al' (verifie en premier car 'eaux' est sous-cas de 'aux')
+    if token.endswith("eaux"):
+        # Regle 2 : 'eaux' -> 'eau' (strip 'x')
+        return token[:-1]
+    if token.endswith("aux"):
+        # Regle 3 : 'aux' -> 'al'
+        return token[:-3] + "al"
+    if token.endswith("s"):
+        # Regle 1 : strip 's' (sauf si fait <4 chars apres)
+        if len(token) - 1 >= 4:
+            return token[:-1]
+    return token
+
+
 def tokenize(s):
-    """Renvoie set de tokens normalises (filtres : len >= 2, pas stopwords basiques)."""
+    """Renvoie set de tokens normalises + singularises (filtres : len >= 2, pas stopwords).
+
+    Etapes :
+      1. Lowercase + NFD + strip diacritiques + ponctuation -> espaces (normalize_text)
+      2. Split par espaces
+      3. Filter : len >= 2 ET pas dans STOP
+      4. Singulariser FR (fix 2026-05-15 : pour aligner avec PHP traitement_mot_mt)
+    """
     STOP = {"de", "du", "la", "le", "les", "un", "une", "et", "ou", "a", "au", "aux", "en", "pour", "sur", "avec", "par"}
-    return {t for t in normalize_text(s).split() if len(t) >= 2 and t not in STOP}
+    return {singularize_french(t) for t in normalize_text(s).split() if len(t) >= 2 and t not in STOP}
 
 
 # =============================================================================
