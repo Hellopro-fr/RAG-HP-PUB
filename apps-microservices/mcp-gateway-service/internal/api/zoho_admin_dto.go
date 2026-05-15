@@ -1,5 +1,11 @@
 package api
 
+import (
+	"time"
+
+	"mcp-gateway/internal/db"
+)
+
 // ZohoAdminCreateRequest is the body of POST /api/v1/zoho-imports/admin.
 type ZohoAdminCreateRequest struct {
 	Name        string            `json:"name"`
@@ -71,4 +77,29 @@ type ZohoUserCreateRequest struct {
 	AuthHeaders  map[string]string `json:"auth_headers,omitempty"`
 	IsActive     *bool             `json:"is_active,omitempty"`
 	TemplateSlug string            `json:"template_slug,omitempty"`
+}
+
+// ZohoImportToolDTO is one row of the GET /api/v1/zoho-imports/{id}/tools
+// response. input_schema is returned as the raw JSON string persisted in
+// zoho_import_tools — the client parses it for display.
+type ZohoImportToolDTO struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	InputSchema string `json:"input_schema"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// ZohoImportToolsResponse is the wire shape of GET /{id}/tools.
+type ZohoImportToolsResponse struct {
+	Tools []ZohoImportToolDTO `json:"tools"`
+	Total int                 `json:"total"`
+}
+
+func zohoImportToolToDTO(t *db.ZohoImportTool) ZohoImportToolDTO {
+	return ZohoImportToolDTO{
+		Name:        t.Name,
+		Description: t.Description,
+		InputSchema: string(t.InputSchema),
+		UpdatedAt:   t.UpdatedAt.UTC().Format(time.RFC3339),
+	}
 }
