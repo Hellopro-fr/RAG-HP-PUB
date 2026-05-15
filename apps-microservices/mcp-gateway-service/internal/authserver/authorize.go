@@ -257,9 +257,18 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 	// Per-viewer Zoho state — fetched once before iterating servers so we
 	// can route unconfigured Zoho backends into a dedicated section while
 	// keeping configured ones in the main list.
+	log.Printf("[zoho-diag] renderConsent (HTML) email=%q client_id=%s pre_configured_scope=%t active_servers=%d zoho_servers=%d zoho_fetcher_wired=%t", userEmail, client.ID, hasPreConfiguredScope, len(servers), len(zohoIDs), s.zohoFetcher != nil)
 	var zohoState map[string]gateway.ZohoServerState
-	if s.zohoFetcher != nil && userEmail != "" && len(zohoIDs) > 0 {
+	switch {
+	case s.zohoFetcher == nil:
+		log.Printf("[zoho-diag] renderConsent email=%q: zoho fetcher not wired — every Zoho server stays as cached admin tools", userEmail)
+	case userEmail == "":
+		log.Printf("[zoho-diag] renderConsent: userEmail is empty — every Zoho server stays as cached admin tools (anonymous browser?)")
+	case len(zohoIDs) == 0:
+		log.Printf("[zoho-diag] renderConsent email=%q: no Zoho-tagged servers registered — skipping fetch", userEmail)
+	default:
 		zohoState = s.zohoFetcher.FetchZohoStateForUser(r.Context(), userEmail)
+		log.Printf("[zoho-diag] renderConsent email=%q: fetched zoho state entries=%d", userEmail, len(zohoState))
 	}
 
 	type toolEntry struct {
