@@ -45,9 +45,12 @@ async def metrics_endpoint() -> Response:
 
 
 # ─── Admission control ────────────────────────────────────────────────────────
-# Two independent in-flight counters: one for prod scan endpoints, one for the
-# debug pool. Saturation returns 503+Retry-After instead of queueing, which
-# protects the event loop and Playwright browser pool from overload.
+# Two independent in-flight counters:
+#   - _prod_admission: gated at the route level by _fetch_with_admission
+#     (see app/api/routes.py). Covers /detect and /detect-batch items.
+#   - _debug_admission: gated by the AdmissionMiddleware for /detect-debug only.
+# Saturation returns 503+Retry-After instead of queueing — protects the
+# event loop and Playwright browser pool from overload.
 _admission_enabled = os.getenv("ADMISSION_ENABLED", "true").lower() == "true"
 _prod_admission = AdmissionController(
     max_slots=int(os.getenv("ADMISSION_MAX_SLOTS", "12"))

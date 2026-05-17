@@ -77,13 +77,35 @@ api-detection-langue-fr/
 
 ## Concurrency & Admission Control
 
-Under concurrent load the service applies three layers of protection:
+Under concurrent load the service applies multiple layers of protection.
 
-1. **Admission middleware** rejects with `503 + Retry-After` when in-flight count reaches `ADMISSION_MAX_SLOTS` (default 12). `/detect-debug` has an isolated budget via `ADMISSION_DEBUG_SLOTS` (default 2).
-2. **Inflight URL dedup** coalesces concurrent fetches of the same URL to a single browser launch. Bypassed when `force_refresh=True`.
-3. **Browser semaphore** caps concurrent Camoufox/Chromium instances at `BROWSER_SEMAPHORE_SIZE` (default 10).
+**Layer model (post 2026-05-17 carve-out):**
 
-Prometheus metrics exposed at `/metrics` for all three layers.
+1. **Route-level admission gate** for production paths (`/detect` and `/detect-batch`). The gate is acquired ONLY when an actual `fetch_html` call is required — meaning no `html_content` was provided in the request, no cache HIT short-circuited the request, and the caller is not an inflight-dedup follower riding a leader's future. On saturation:
+   - `POST /detect` → HTTP 503 + `Retry-After` header.
+   - `POST /detect-batch` → per-item `DetectionResponse{method='admission_rejected', ok=False, error='Service temporarily saturated'}` inline; no whole-batch 503. Pass 2 (sequential retry, 2s gap) retries items in `{fetch_failed, challenge_page, admission_rejected}` — admission saturation is transient.
+   - `GET /check-url` → **bypasses admission entirely**. No HTML fetch needed; no slot consumed.
+2. **Debug admission middleware** for `/detect-debug` only — isolated `_debug_admission` controller (`ADMISSION_DEBUG_SLOTS`, default 2) keeps dev traffic from starving production. Returns 503 + `Retry-After` on saturation.
+3. **Inflight URL dedup** coalesces concurrent fetches of the same URL into a single browser launch. The dedup leader acquires the admission slot; followers wait on the leader's future and do NOT acquire their own slot.
+4. **Browser semaphore** caps concurrent Camoufox/Chromium instances at `BROWSER_SEMAPHORE_SIZE` (default 10).
+
+`'admission_rejected'` is in `DomainCache._NEVER_CACHE_METHODS` — service saturation must never be persisted as a domain answer.
+
+**`INFLIGHT_REQUESTS` gauge semantic shift (2026-05-17):** previously "admitted requests in middleware"; now "active fetches at route level". Lower in absolute terms — cache HITs, `html_content` bypass calls, and dedup followers no longer contribute. Grafana panels referencing this gauge need a panel-description update only; data integrity is unchanged.
+
+**`ADMISSION_REJECTED{endpoint}` label cardinality (2026-05-17):**
+| Before | After |
+|---|---|
+| `/api/v1/detect` (middleware) | `/api/v1/detect` (route helper; batch items emit here too) |
+| `/api/v1/detect-batch` (middleware) | _no longer emitted_ — batch items fold into `/api/v1/detect` |
+| `/api/v1/check-url` (middleware) | _no longer emitted_ — `/check-url` bypasses admission entirely |
+| `/api/v1/detect-debug` (middleware) | `/api/v1/detect-debug` (unchanged) |
+
+Grafana panels filtering on `endpoint=~"detect-batch\|check-url"` will go silent. Update PromQL accordingly.
+
+Prometheus metrics exposed at `/metrics` for all layers.
+
+Spec: `docs/superpowers/specs/2026-05-17-detection-langue-fr-crawler-admission-carveout-design.md`.
 
 ### Env vars
 
@@ -98,6 +120,12 @@ Prometheus metrics exposed at `/metrics` for all three layers.
 | `INFLIGHT_DEDUP_ENABLED` | `true` | Kill switch for URL dedup |
 
 Callers MUST use the shared contract: `libs/common-utils/src/common_utils/detection_client.py` (Python) or mirror its env vars (`DETECTION_MAX_CONCURRENCY`, `DETECTION_REQUEST_TIMEOUT_S`, `DETECTION_MAX_RETRIES`, `DETECTION_BACKOFF_BASE_S`) in other languages.
+
+### Method values added by the carve-out
+
+| Method | Where surfaced | Caller action |
+|---|---|---|
+| `admission_rejected` | `/detect-batch` per-item only (single `/detect` translates to HTTP 503) | Retry the affected item after `Retry-After`. Never persist as a domain verdict. |
 
 ## Invalid Page Rejection & Homepage Fallback
 
@@ -139,7 +167,7 @@ When validation rejects, the service tries the domain's homepage once. If the ho
 | `/detect-debug` | Yes (overrides result.ok / result.method / result.error if non-VALID — pipeline trace preserved) | **OFF** (debug shows requested URL's actual pipeline state) |
 | `/check-url` | N/A (no HTML fetch) | N/A |
 
-Batch Pass 2 retry: still `fetch_failed` + `challenge_page` only. New method values are NOT retried.
+Batch Pass 2 retry: `fetch_failed`, `challenge_page`, and `admission_rejected` (admission saturation is transient — slot may free in the 2s inter-retry gap). The validator method values (`http_error`, `soft_404`, `redirected_to_home`) are NOT retried — they are domain properties that should not change between Pass 1 and Pass 2.
 
 ### Metrics
 
