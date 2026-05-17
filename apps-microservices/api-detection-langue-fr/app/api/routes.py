@@ -500,7 +500,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 last_result = result
                 if result.ok:
                     return (_with_group(result, group_key), [])
-                if result.method in ('fetch_failed', 'challenge_page'):
+                if result.method in ('fetch_failed', 'challenge_page', 'admission_rejected'):
                     failed.append(item)
 
             return (_with_group(last_result, group_key), failed)
@@ -533,7 +533,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                         group_results[i] = _with_group(retry_result, group_key)
                         logger.info(f"[BATCH][first_match] Pass 2 OK groupe '{group_key}' via {item.url}")
                         break
-                    if retry_result.method not in ('fetch_failed', 'challenge_page'):
+                    if retry_result.method not in ('fetch_failed', 'challenge_page', 'admission_rejected'):
                         group_results[i] = _with_group(retry_result, group_key)
                         break
                 except Exception as e:
@@ -581,7 +581,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     # Pass 2 : retry séquentiel des fetch_failed et challenge_page
     failed_indices = [
         i for i, r in enumerate(results)
-        if r.method in ('fetch_failed', 'challenge_page')
+        if r.method in ('fetch_failed', 'challenge_page', 'admission_rejected')
     ]
 
     if failed_indices:
@@ -597,7 +597,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             try:
                 async with semaphore:
                     retry_result = await _process_item_core(item)
-                if retry_result.method not in ('fetch_failed', 'challenge_page'):
+                if retry_result.method not in ('fetch_failed', 'challenge_page', 'admission_rejected'):
                     results[idx] = retry_result
                     retry_success += 1
                     logger.info(

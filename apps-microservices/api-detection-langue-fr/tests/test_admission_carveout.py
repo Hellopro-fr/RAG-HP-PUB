@@ -107,3 +107,38 @@ def test_cache_hit_bypasses_admission(saturate_pool, monkeypatch):
     body = resp.json()
     assert body["ok"] is True
     assert body["method"] == "langHtml"
+
+
+def test_batch_pass2_retries_admission_rejected(monkeypatch):
+    """Pass 1 saturated, slot freed before Pass 2 (2s sleep), item succeeds."""
+    from unittest.mock import AsyncMock
+    from app.services.scraper import ScrapeResult
+
+    call_count = {"n": 0}
+
+    async def flaky_acquire():
+        call_count["n"] += 1
+        return call_count["n"] != 1  # first call refuses, subsequent succeed
+
+    async def fake_fetch(url, proxy_url):
+        return ScrapeResult(
+            html="<html lang='fr'><body>Bonjour</body></html>",
+            final_url=url, status_code=200, content_type="text/html",
+        )
+
+    monkeypatch.setattr(_prod_admission, "acquire", flaky_acquire)
+    monkeypatch.setattr("app.api.routes.fetch_html", fake_fetch)
+    # Bypass the 2s sleep so the test runs fast
+    monkeypatch.setattr("app.api.routes.asyncio.sleep", AsyncMock())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/detect-batch",
+            json={"items": [{"url": "https://example.fr"}], "mode": "simple",
+                  "max_concurrency": 1},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    # Pass 1 rejected, Pass 2 promoted
+    assert body["results"][0]["method"] != "admission_rejected"
