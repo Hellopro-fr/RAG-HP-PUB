@@ -6,15 +6,10 @@ Scenarios 1-4 verify route-level admission behavior under saturation:
   3. Batch mixed items (some with html, some without) under saturation
   4. Cache HIT bypasses admission (no fetch needed)
 """
-import asyncio
-from unittest.mock import AsyncMock, patch
-
 import pytest
 from fastapi.testclient import TestClient
 
 from main import app, _prod_admission
-from app.api.routes import _detect_single_url
-from app.services.scraper import ScrapeResult
 
 
 @pytest.fixture(autouse=True)
@@ -33,8 +28,7 @@ def saturate_pool(monkeypatch):
     monkeypatch.setattr(_prod_admission, "acquire", _refuse)
 
 
-@pytest.mark.asyncio
-async def test_detect_html_provided_bypasses_admission(saturate_pool):
+def test_detect_html_provided_bypasses_admission(saturate_pool):
     """With html_content, the route never reaches _fetch_with_admission.
     Acquire is monkey-patched to refuse everything, but the request must
     still complete with a normal DetectionResponse."""
@@ -52,8 +46,7 @@ async def test_detect_html_provided_bypasses_admission(saturate_pool):
     assert body["method"] != "admission_rejected"
 
 
-@pytest.mark.asyncio
-async def test_detect_no_html_503_when_saturated(saturate_pool):
+def test_detect_no_html_503_when_saturated(saturate_pool):
     """Without html_content, saturated pool -> HTTP 503 + Retry-After header."""
     with TestClient(app) as client:
         resp = client.post(
@@ -64,8 +57,7 @@ async def test_detect_no_html_503_when_saturated(saturate_pool):
     assert resp.headers.get("Retry-After") is not None
 
 
-@pytest.mark.asyncio
-async def test_batch_mixed_items_under_saturation(saturate_pool):
+def test_batch_mixed_items_under_saturation(saturate_pool):
     """Items with html_content succeed; items without -> method=admission_rejected.
     No whole-batch 503."""
     items = [
@@ -89,8 +81,7 @@ async def test_batch_mixed_items_under_saturation(saturate_pool):
     assert body["results"][2]["method"] != "admission_rejected"
 
 
-@pytest.mark.asyncio
-async def test_cache_hit_bypasses_admission(saturate_pool, monkeypatch):
+def test_cache_hit_bypasses_admission(saturate_pool, monkeypatch):
     """Cache HIT path does not call _fetch_with_admission. Returns cached
     response even though admission is saturated."""
     from app.core.domain_fr import domain_cache
