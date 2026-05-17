@@ -544,7 +544,10 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
         results = group_results
         success_count = sum(1 for r in results if r.ok)
-        error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
+        error_count = sum(
+            1 for r in results
+            if r.method in ('error', 'fetch_failed', 'challenge_page', 'admission_rejected')
+        )
         failed_count = len(results) - success_count - error_count
         processing_time_ms = (time.time() - start_time) * 1000
 
@@ -617,7 +620,10 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
     # Statistiques finales
     success_count = sum(1 for r in results if r.ok)
-    error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
+    error_count = sum(
+        1 for r in results
+        if r.method in ('error', 'fetch_failed', 'challenge_page', 'admission_rejected')
+    )
     failed_count = len(results) - success_count - error_count
 
     processing_time_ms = (time.time() - start_time) * 1000
