@@ -476,6 +476,17 @@ async def test_dedup_follower_strict_single_loop(monkeypatch):
     async def no_cache_set(input_url, result_url, result, ttl_override=None):
         return None
 
+    callers_at_coalesce = asyncio.Event()
+    coalesce_call_count = {"n": 0}
+    original_coalesce = _inflight_dedup.coalesce
+
+    async def gated_coalesce(key, factory):
+        coalesce_call_count["n"] += 1
+        if coalesce_call_count["n"] == 5:
+            callers_at_coalesce.set()
+        return await original_coalesce(key, factory)
+
+    monkeypatch.setattr(_inflight_dedup, "coalesce", gated_coalesce)
     monkeypatch.setattr(_prod_admission, "acquire", counting_acquire)
     monkeypatch.setattr(_prod_admission, "release", counting_release)
     monkeypatch.setattr("app.api.routes.fetch_html", slow_fetch)
@@ -491,9 +502,11 @@ async def test_dedup_follower_strict_single_loop(monkeypatch):
             )
 
         tasks = [asyncio.create_task(call_detect()) for _ in range(5)]
-        # Let all 5 enter coalesce before the leader's fetch completes.
-        # 0.5s matches the existing ThreadPool dedup test scheduling fence.
-        await asyncio.sleep(0.5)
+        # Deterministic barrier: wait until all 5 callers have entered coalesce
+        # (4 followers + 1 leader). Replaces a wall-clock sleep that was flaky
+        # under load. The leader is still blocked inside coalesce waiting for
+        # fetch_event, so setting fetch_event AFTER the barrier is correct.
+        await callers_at_coalesce.wait()
         fetch_event.set()
         responses = await asyncio.gather(*tasks)
 
