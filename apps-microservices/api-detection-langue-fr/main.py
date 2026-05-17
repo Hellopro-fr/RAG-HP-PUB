@@ -57,7 +57,6 @@ _debug_admission = AdmissionController(
 )
 app.add_middleware(
     AdmissionMiddleware,
-    prod_controller=_prod_admission,
     debug_controller=_debug_admission,
     retry_after_seconds=int(os.getenv("ADMISSION_RETRY_AFTER_SECONDS", "30")),
     enabled=_admission_enabled,
@@ -65,7 +64,7 @@ app.add_middleware(
 logger = logging.getLogger(__name__)
 logger.info(
     f"Admission middleware attached: enabled={_admission_enabled}, "
-    f"prod={_prod_admission.max_slots}, debug={_debug_admission.max_slots}"
+    f"debug={_debug_admission.max_slots} (prod gating moved to route level)"
 )
 
 
