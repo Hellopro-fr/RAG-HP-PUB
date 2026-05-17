@@ -422,3 +422,97 @@ def test_admission_disabled_kill_switch_documents_contract():
     convert this test to an actual assertion."""
     # Stub: no assertion. The docstring is the contract.
     pass
+
+
+@pytest.mark.asyncio
+async def test_dedup_follower_strict_single_loop(monkeypatch):
+    """Strict leader-only dedup verified end-to-end on a single asyncio loop.
+
+    Unlike test_dedup_follower_no_admission_acquire (ThreadPoolExecutor),
+    this test runs all 5 callers on the SAME loop, so the leader's
+    inflight-dedup future is awaitable by every follower. Proves the
+    strict invariant: exactly 1 acquire, exactly 1 release, 4 DEDUP_HITS,
+    identical response bodies across all 5 callers.
+
+    Companion to the existing 2 ThreadPoolExecutor dedup tests, which
+    stay in place as cross-loop sanity checks (a realistic deployment
+    shape uvicorn workers each on their own loop).
+
+    Spec: docs/superpowers/specs/2026-05-17-detection-dedup-test-single-loop-design.md
+    """
+    import asyncio
+    import httpx
+    from httpx import ASGITransport
+    from app.api.routes import _inflight_dedup
+    from app.core.domain_fr import domain_cache
+    from app.core.metrics import DEDUP_HITS
+    from app.services.scraper import ScrapeResult
+
+    _inflight_dedup.reset()
+    dedup_hits_before = DEDUP_HITS._value.get()
+
+    acquire_calls = {"n": 0}
+    release_calls = {"n": 0}
+
+    async def counting_acquire():
+        acquire_calls["n"] += 1
+        return acquire_calls["n"] == 1
+
+    async def counting_release():
+        release_calls["n"] += 1
+
+    fetch_event = asyncio.Event()
+
+    async def slow_fetch(url, proxy_url):
+        await fetch_event.wait()
+        return ScrapeResult(
+            html="<html lang='fr'><body>Bonjour</body></html>",
+            final_url=url, status_code=200, content_type="text/html",
+        )
+
+    async def no_cache(url):
+        return None
+
+    async def no_cache_set(input_url, result_url, result, ttl_override=None):
+        return None
+
+    monkeypatch.setattr(_prod_admission, "acquire", counting_acquire)
+    monkeypatch.setattr(_prod_admission, "release", counting_release)
+    monkeypatch.setattr("app.api.routes.fetch_html", slow_fetch)
+    monkeypatch.setattr(domain_cache, "get", no_cache)
+    monkeypatch.setattr(domain_cache, "set", no_cache_set)
+
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async def call_detect():
+            return await client.post(
+                "/api/v1/detect",
+                json={"url": "https://strict-same-loop.fr", "mode": "simple"},
+            )
+
+        tasks = [asyncio.create_task(call_detect()) for _ in range(5)]
+        # Let all 5 enter coalesce before the leader's fetch completes.
+        # 0.5s matches the existing ThreadPool dedup test scheduling fence.
+        await asyncio.sleep(0.5)
+        fetch_event.set()
+        responses = await asyncio.gather(*tasks)
+
+    # Strict assertions
+    assert all(r.status_code == 200 for r in responses), (
+        f"Not all responses 200: {[r.status_code for r in responses]}"
+    )
+    assert acquire_calls["n"] == 1, (
+        f"Expected exactly 1 acquire (leader only); got {acquire_calls['n']}"
+    )
+    assert release_calls["n"] == 1, (
+        f"Expected exactly 1 release; got {release_calls['n']}"
+    )
+    bodies = [r.text for r in responses]
+    assert len(set(bodies)) == 1, (
+        f"Expected identical bodies (single fetch shared via dedup); "
+        f"got {len(set(bodies))} distinct"
+    )
+    hits_delta = DEDUP_HITS._value.get() - dedup_hits_before
+    assert hits_delta == 4, (
+        f"Expected 4 follower dedup hits; got {hits_delta}"
+    )

@@ -13,6 +13,8 @@ written yet" case.
 import asyncio
 from typing import Awaitable, Callable, TypeVar
 
+from app.core.metrics import DEDUP_HITS
+
 T = TypeVar("T")
 
 
@@ -45,11 +47,18 @@ class InflightDedup:
 
         The factory runs OUTSIDE the lock so unrelated coalesce() calls for
         different keys are not serialized.
+
+        DEDUP_HITS Prometheus counter is incremented by exactly 1 per
+        follower call (i.e., per caller that gets coalesced onto an
+        existing future). This is the correct semantic count and avoids
+        the multi-count race that arises when callers compute a delta
+        against a shared counter snapshot.
         """
         async with self._lock:
             existing = self._inflight.get(key)
             if existing is not None:
                 self._hits += 1
+                DEDUP_HITS.inc()
                 fut = existing
                 is_owner = False
             else:

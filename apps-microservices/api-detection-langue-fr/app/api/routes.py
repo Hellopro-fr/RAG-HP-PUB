@@ -19,7 +19,7 @@ from app.models.schemas import (
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
-from app.core.metrics import DEDUP_HITS, VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS
+from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
 from app.services.page_validator import validate as validate_page, ValidationVerdict
@@ -153,13 +153,10 @@ async def _detect_single_url(
         # on leader's future and do NOT acquire a slot).
         if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
             dedup_key = _normalize_url_for_dedup(url)
-            prev_hits = _inflight_dedup.hits
             fetch_result = await _inflight_dedup.coalesce(
                 dedup_key,
                 lambda: _fetch_with_admission(url, proxy_url, "/api/v1/detect"),
             )
-            if _inflight_dedup.hits > prev_hits:
-                DEDUP_HITS.inc(_inflight_dedup.hits - prev_hits)
         else:
             fetch_result = await _fetch_with_admission(
                 url, proxy_url, "/api/v1/detect"
