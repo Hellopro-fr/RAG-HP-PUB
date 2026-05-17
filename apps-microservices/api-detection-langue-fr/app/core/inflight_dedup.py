@@ -22,6 +22,14 @@ class InflightDedup:
         self._lock = asyncio.Lock()
         self._hits = 0
 
+    def reset(self) -> None:
+        """Clear all in-flight state. Test-isolation helper only — do NOT
+        call from production code. Drops the in-flight registry without
+        cancelling any awaiting futures (acceptable in test teardown
+        where the loop is being torn down anyway)."""
+        self._inflight.clear()
+        self._hits = 0
+
     @property
     def hits(self) -> int:
         """Number of coalesced calls served from a shared future."""

@@ -206,11 +206,16 @@ def test_dedup_follower_no_admission_acquire(monkeypatch):
             final_url=url, status_code=200, content_type="text/html",
         )
 
-    async def noop_release():
-        return None
+    release_calls = {"n": 0}
+
+    async def counting_release():
+        """Track release calls so the test can assert acquire/release
+        pairing — catches a regression where production code stops
+        calling release() after an exception (a real leak bug)."""
+        release_calls["n"] += 1
 
     monkeypatch.setattr(_prod_admission, "acquire", counting_acquire)
-    monkeypatch.setattr(_prod_admission, "release", noop_release)
+    monkeypatch.setattr(_prod_admission, "release", counting_release)
     monkeypatch.setattr("app.api.routes.fetch_html", slow_fetch)
 
     # Bypass Redis cache (which would short-circuit before dedup)
@@ -227,8 +232,7 @@ def test_dedup_follower_no_admission_acquire(monkeypatch):
 
     # Clear inflight state from any previous test
     from app.api.routes import _inflight_dedup
-    _inflight_dedup._inflight.clear()
-    _inflight_dedup._hits = 0
+    _inflight_dedup.reset()
 
     def call_detect():
         # Single shared TestClient inside the worker (one process-wide app)
@@ -249,14 +253,37 @@ def test_dedup_follower_no_admission_acquire(monkeypatch):
     assert all(r.status_code == 200 for r in responses), (
         f"status codes: {[r.status_code for r in responses]}"
     )
-    # Only 1 acquire attempt total — leader's. Followers waited on future.
-    # NOTE: thread-based TestClient spawns one app lifespan per thread, so each
-    # request gets its own dedup singleton lifetime. We can only assert <=5.
-    # The stronger leader-only assertion would require async-loop dedup, which
-    # collides with main.py module-import lock. Document instead.
-    assert acquire_calls["n"] >= 1, "Leader never acquired"
-    assert acquire_calls["n"] <= 5, (
-        f"Unexpected acquire count: {acquire_calls['n']}"
+    # Acquire happened at least once. Upper bound `< 5` requires SOME dedup
+    # to have occurred (perfect dedup = 1; partial cross-thread dedup = 2-4;
+    # broken dedup = 5). Combined with the response-body identity check
+    # below, this catches a fully broken dedup even when the cross-thread
+    # asyncio.Lock can't enforce strict leader-only semantics.
+    assert acquire_calls["n"] >= 1
+    assert acquire_calls["n"] < 5, (
+        f"Expected dedup to coalesce at least some callers; "
+        f"got {acquire_calls['n']} acquires for 5 identical URLs"
+    )
+    # NOTE on cross-thread response-body identity:
+    # A response-body identity check (all 5 bodies equal) would prove
+    # followers got the same fetched ScrapeResult. However in this
+    # thread-based harness each TestClient lifespan creates its own
+    # asyncio loop, and `_inflight_dedup` futures bound to the leader's
+    # loop raise "attached to a different loop" when awaited from
+    # follower threads — producing distinct error bodies even when
+    # dedup at the acquire-counter level is working perfectly. We
+    # therefore rely on `acquire_calls["n"] < 5` (above) as the dedup
+    # invariant. The acquire-counter is process-global (a single
+    # `_prod_admission` singleton + `threading.Lock`), so it is the
+    # one cross-thread-safe witness we have.
+    #
+    # Every successful acquire MUST be released — catches leak regressions.
+    # Production calls `release()` only on the True-acquire path, so the
+    # number of releases must equal the number of acquires that returned
+    # True. Our `counting_acquire` returns True iff `n == 1`, so exactly
+    # one release is expected.
+    assert release_calls["n"] == 1, (
+        f"Expected exactly 1 release (matching the single True acquire); "
+        f"got {release_calls['n']}"
     )
 
 
@@ -284,7 +311,7 @@ def test_dedup_follower_propagates_rejection(monkeypatch):
 
     monkeypatch.setattr(domain_cache, "get", no_cache)
 
-    _inflight_dedup._inflight.clear()
+    _inflight_dedup.reset()
 
     def call_detect():
         with TestClient(app) as client:
@@ -349,7 +376,7 @@ def test_homepage_fallback_admission(monkeypatch):
 
     monkeypatch.setattr(_prod_admission, "acquire", acquire_first_only)
     monkeypatch.setattr("app.api.routes.fetch_html", fake_fetch)
-    _inflight_dedup._inflight.clear()
+    _inflight_dedup.reset()
 
     with TestClient(app) as client:
         resp = client.post(
