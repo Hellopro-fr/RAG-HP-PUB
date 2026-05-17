@@ -19,7 +19,7 @@ from app.models.schemas import (
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
-from app.core.metrics import DEDUP_HITS, VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED
+from app.core.metrics import DEDUP_HITS, VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
 from app.services.page_validator import validate as validate_page, ValidationVerdict
@@ -47,6 +47,7 @@ async def _fetch_with_admission(
 
     Raises _AdmissionRejected when the pool is saturated. Increments
     ADMISSION_REJECTED{endpoint=endpoint_label} on rejection.
+    Increments INFLIGHT_REQUESTS while the fetch is in flight.
 
     Imported lazily from main to avoid a circular import (main imports
     routes via the router include).
@@ -57,9 +58,11 @@ async def _fetch_with_admission(
     if not admitted:
         ADMISSION_REJECTED.labels(endpoint=endpoint_label).inc()
         raise _AdmissionRejected
+    INFLIGHT_REQUESTS.inc()
     try:
         return await fetch_html(url, proxy_url)
     finally:
+        INFLIGHT_REQUESTS.dec()
         await _prod_admission.release()
 
 
