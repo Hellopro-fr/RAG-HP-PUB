@@ -142,3 +142,12 @@ def test_batch_pass2_retries_admission_rejected(monkeypatch):
     assert body["total"] == 1
     # Pass 1 rejected, Pass 2 promoted
     assert body["results"][0]["method"] != "admission_rejected"
+    # Prove Pass 2 actually ran (Pass 1 + Pass 2 = >=2 acquire calls)
+    assert call_count["n"] >= 2, f"Pass 2 did not retry (acquire called {call_count['n']}x)"
+    # Prove the retried path completed end-to-end (method is from the post-admission
+    # pipeline, not an admission-layer rejection). The fixture HTML is too short for
+    # NLP detection to mark ok=True locally without fastText, so we assert the method
+    # belongs to the post-fetch detection layer instead.
+    assert body["results"][0]["method"] not in {
+        "admission_rejected", "fetch_failed", "challenge_page",
+    }, f"Pass 2 did not reach the post-fetch detection layer (method={body['results'][0]['method']})"
