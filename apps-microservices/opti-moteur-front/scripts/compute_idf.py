@@ -22,17 +22,24 @@ Usage alternatif -- depuis l'hote (besoin python3 + requirements.txt) :
   python3 scripts/compute_idf.py
 
   # Options
-  python3 scripts/compute_idf.py --collection produits_scale
-  python3 scripts/compute_idf.py --limit 50000  # echantillon (test rapide)
+  python3 scripts/compute_idf.py --collection produits_prod
+  python3 scripts/compute_idf.py --limit 200000  # echantillon (test rapide, ~1-2 min)
 
 Le fichier de sortie (`app/data/idf_nom_produit.json`) est gitignore (depend
 du catalogue live). Le bind-mount docker-compose `./app/data:/app/app/data`
 garantit que le fichier ecrit dans le container apparait cote hote, et vice-
 versa.
 
+Implementation -- pourquoi STREAMING HTTP :
+  Le SDK typesense-python bufferise toute la reponse `documents.export()` en
+  RAM avant de retourner (KO pour des collections > 1M docs : 1-2 GB RAM peak
+  + risque de timeout silencieux apres ~60s). On streame via
+  `requests.get(stream=True)` + `iter_lines()` pour traiter ligne par ligne.
+
 Couts :
-  Export ~700k docs Typesense (champ nom_produit only) : ~10-30s + ~50-200 MB RAM.
-  Calcul IDF : ~5s. JSON final : ~1-5 MB (selon vocab).
+  Export complet 2M docs Typesense (champ nom_produit only) : ~2-5 min,
+  RAM ~50-100 MB (constant, pas de croissance). JSON final ~3-8 MB.
+  Avec --limit 200000 : ~10-30s, vocab > 95% du complet (loi de Zipf).
 """
 import argparse
 import json
@@ -79,43 +86,69 @@ def tokenize(s: str):
 
 
 # ---------------------------------------------------------------------------
-# Export des nom_produit depuis Typesense
+# Export des nom_produit depuis Typesense via STREAMING HTTP
 # ---------------------------------------------------------------------------
+# On contourne le SDK typesense-python qui bufferise toute la reponse en RAM
+# avant de la retourner (KO pour les collections > 1M docs : RAM peak ~1-2 GB
+# + risque de timeout silencieux). On utilise `requests.get(stream=True)` +
+# `iter_lines()` pour traiter ligne par ligne sans materialiser le blob entier.
+import requests  # noqa: E402  (apres sys.path tweak)
+
+
 def iter_nom_produits(collection: str, limit: int = 0):
     """
-    Streame les nom_produit via /documents/export (JSONL).
+    Streame les nom_produit via /collections/<col>/documents/export (JSONL).
 
     `limit` = 0 -> export complet. Sinon : tronque (utile pour test).
 
-    Note : Typesense renvoie 1 ligne JSON par document. Pour 700k docs c'est
-    ~50-200 MB de string en RAM -- acceptable. Si on doit traiter 10M+ docs,
-    refactoriser en streaming HTTP (requests.get stream=True + iter_lines).
+    Implementation streaming HTTP : ne charge JAMAIS plus d'une ligne en RAM
+    a la fois. Marche pour les collections de plusieurs millions de docs sans
+    risque de saturation.
     """
     t0 = time.time()
-    logger.info("Exporting documents from Typesense collection=%s ...", collection)
-    coll = typesense_client.client.collections[collection]
-    raw = coll.documents.export({"include_fields": "nom_produit"})
-    dt = time.time() - t0
-    n_lines = raw.count("\n") + 1 if raw else 0
-    logger.info("Export terminated in %.1fs (~%d lines, %.1f MB)", dt, n_lines, len(raw) / (1024 * 1024))
+    url = f"{typesense_client.base_url()}/collections/{collection}/documents/export"
+    params = {"include_fields": "nom_produit"}
+    headers = {"X-TYPESENSE-API-KEY": settings.TYPESENSE_API_KEY}
 
-    n = 0
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            doc = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        nom = doc.get("nom_produit") or ""
-        if not nom:
-            continue
-        yield nom
-        n += 1
-        if limit and n >= limit:
-            logger.info("Limit %d reached, stopping export", limit)
-            break
+    logger.info("Streaming export from %s (collection=%s) ...", url, collection)
+
+    # Timeout long pour les gros catalogues. 600s = 10min, suffit pour 5M+ docs
+    # sur un cluster GKE meme avec une connexion 100Mbps.
+    with requests.get(url, params=params, headers=headers, stream=True, timeout=600) as resp:
+        resp.raise_for_status()
+        logger.info("HTTP %d, content-type=%s, transfer-encoding=%s",
+                    resp.status_code,
+                    resp.headers.get("content-type", "?"),
+                    resp.headers.get("transfer-encoding", "none"))
+
+        n = 0
+        last_log = time.time()
+        for raw_line in resp.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            try:
+                doc = json.loads(raw_line)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            nom = doc.get("nom_produit") or ""
+            if not nom:
+                continue
+            yield nom
+            n += 1
+
+            # Heartbeat toutes les 5s pendant l'export
+            if time.time() - last_log > 5:
+                elapsed = time.time() - t0
+                rate = n / elapsed if elapsed > 0 else 0
+                logger.info("Streamed %d docs in %.1fs (%.0f docs/s)", n, elapsed, rate)
+                last_log = time.time()
+
+            if limit and n >= limit:
+                logger.info("Limit %d reached, stopping stream early", limit)
+                break
+
+    dt = time.time() - t0
+    logger.info("Export stream finished in %.1fs (%d docs yielded)", dt, n)
 
 
 # ---------------------------------------------------------------------------
