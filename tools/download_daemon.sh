@@ -15,10 +15,10 @@
 
 # Configuration
 DEFAULT_REQUESTS_DIR="$(dirname "$0")/../apps-microservices/crawler-service/crawler_download_requests"
-REQUESTS_DIR="${DOWNLOAD_REQUESTS_DIR:-$DEFAULT_REQUESTS_DIR}"
+REQUESTS_DIR="${DOWNLOAD_REQUESTS_PATH:-$DEFAULT_REQUESTS_DIR}"
 
 DEFAULT_RESULTS_DIR="$(dirname "$0")/../apps-microservices/crawler-service/crawler_download_results"
-RESULTS_DIR="${DOWNLOAD_RESULTS_DIR:-$DEFAULT_RESULTS_DIR}"
+RESULTS_DIR="${DOWNLOAD_RESULTS_PATH:-$DEFAULT_RESULTS_DIR}"
 
 # Load .env from parent directory
 ENV_FILE="$(dirname "$0")/../.env"
