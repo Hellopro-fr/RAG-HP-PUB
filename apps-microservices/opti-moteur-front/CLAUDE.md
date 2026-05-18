@@ -78,3 +78,41 @@ Respecter `app/{core,services,router,schemas,utils}/` :
 - `services/` : logique metier (detection, rerank, ingestion)
 - `schemas/` : contrats API pydantic
 - `router/` : routes FastAPI thin, deleguent aux services
+- `data/` : fichiers de donnees generes offline (gitignore, cf section IDF)
+
+## IDF tokens rares (A4, 2026-05-18)
+
+Le reranker pondere `name_match` et `cat_match` par l'IDF des tokens query
+(calcule sur l'ensemble des `nom_produit` Typesense). Cela resout les requetes
+combinatoires comme "melangeur conique" ou le token rare devrait peser plus
+que le token commun (audit v3, score 2.6/10 sur cette query).
+
+### Generer / regenerer le dict IDF
+
+Le fichier `app/data/idf_nom_produit.json` est gitignore (depend du catalogue
+live). A regenerer apres chaque ingestion majeure :
+
+```bash
+cd apps-microservices/opti-moteur-front
+python scripts/compute_idf.py
+# Recharge le dict IDF dans le service :
+docker compose restart opti-moteur-front
+```
+
+### Comportement si le fichier IDF est absent
+
+`idf_loader.idf_available()` retourne `False` -> le reranker bascule
+automatiquement sur le ratio simple (= comportement historique, backward-compat).
+Verifier le log au demarrage : `IDF file not found at ... - reranker will
+fallback to flat name_match`.
+
+## Filter_by_category : seuil de fallback adaptatif (A3, 2026-05-18)
+
+Le retry "sans filter_by" si pool < seuil utilise desormais un seuil adaptatif
+selon le nb de tokens query :
+- **1 token**  (compresseur, ERP) : seuil 150 -> evite que le filter etouffe
+  la P2 sur les requetes mono-token generiques (regression v3 audit).
+- **2 tokens** (armoire medicale) : seuil 20 -> conserve le gain v3 (+3.4).
+- **>=3 tokens** (Ritmo ELEKTRA M) : seuil 5 -> comportement strict actuel.
+
+Logique dans `app/services/search_service.py::_filter_fallback_threshold()`.
