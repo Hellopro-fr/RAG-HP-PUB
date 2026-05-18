@@ -50,3 +50,38 @@ async def test_get_status_is_error_none_for_clean_crawl(tmp_path):
     status = await crawler_manager.get_status(job_info)
     assert status is not None
     assert status.is_error is None
+
+
+@pytest.mark.asyncio
+async def test_get_status_uses_snapshot_path_and_enriches_is_error(tmp_path):
+    """Verify the snapshot-path branch of get_status reads _callback_payload.json and populates is_error."""
+    storage_path = str(tmp_path)
+    # Snapshot present + job not running → snapshot branch fires
+    snapshot = {
+        "crawl_id": "test-789",
+        "id_domaine": "test-789",
+        "status": "finished",
+        "domain": "example.com",
+        "start_url": "https://example.com",
+        "start_time": datetime.utcnow().isoformat(),
+        "urls_crawled": 0,
+        "error_urls_crawled": 0,
+        "nfr_urls_crawled": 0,
+    }
+    (tmp_path / '_status_snapshot.json').write_text(json.dumps(snapshot, default=str))
+    (tmp_path / '_callback_payload.json').write_text(
+        json.dumps({'isError': 'limitCrawl'})
+    )
+
+    job_info = {
+        'crawl_id': 'test-789',
+        'storage_path': storage_path,
+        'domain': 'example.com',
+        'start_url': 'https://example.com',
+        'start_time': datetime.utcnow(),
+        'status': 'finished',  # non-running triggers snapshot branch
+    }
+
+    status = await crawler_manager.get_status(job_info)
+    assert status is not None
+    assert status.is_error == 'limitCrawl'
