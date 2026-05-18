@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import SupplierSelectionModal from '@/components/flow/SupplierSelectionModal';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
@@ -9,10 +10,13 @@ import { getAssetPath } from "@/lib/utils";
 import { trackSelectionPageView, setFlowType } from '@/lib/analytics';
 import { hasPriceEstimation } from '@/types/prix';
 import { initDebugMatching } from '@/lib/utils/debug-matching';
+import { parseSelectionVersion } from '@/types/selectionVersion';
 
 export default function SelectionClient() {
   const { userAnswers, flowType, setFlowType: setStoreFlowType, priceEstimation } = useFlowStore();
   const { goToQuestionnaire } = useFlowNavigation();
+  const searchParams = useSearchParams();
+  const version = parseSelectionVersion(searchParams.get('version'));
   const hasTrackedView = useRef(false);
 
   // Initialize debug matching functions (debugInfo, clearDebugInfo)
@@ -54,6 +58,7 @@ export default function SelectionClient() {
     <SupplierSelectionModal
       userAnswers={userAnswers}
       onBackToQuestionnaire={handleBackToQuestionnaire}
+      version={version}
     />
   );
 }

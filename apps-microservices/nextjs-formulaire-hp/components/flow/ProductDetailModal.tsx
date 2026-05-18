@@ -28,6 +28,7 @@ interface ProductDetailProps {
   onProceed?: () => void;
   onRequestSingleQuote?: () => void;
   selectedCount?: number;
+  hideMatchBadge?: boolean;
 }
 
 // Helper to extract YouTube video ID
@@ -42,7 +43,7 @@ const getYouTubeThumbnail = (videoId: string): string => {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 };
 
-const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed, onRequestSingleQuote, selectedCount = 0 }: ProductDetailProps) => {
+const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed, onRequestSingleQuote, selectedCount = 0, hideMatchBadge = false }: ProductDetailProps) => {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -248,7 +249,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
             )}
 
             {/* Match Score Badge */}
-            {product.matchScore >= 60 && (
+            {!hideMatchBadge && product.matchScore >= 60 && (
               <div className="absolute top-3 left-3 z-10">
                 <span className={cn(
                   "rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow-sm",

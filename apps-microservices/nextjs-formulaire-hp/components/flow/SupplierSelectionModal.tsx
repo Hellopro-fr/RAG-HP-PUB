@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { ChevronDown, ChevronUp, RotateCcw, ArrowLeft, Send, Search, LayoutGrid, List, ThumbsUp, ThumbsDown } from "lucide-react";
-import { cn, getAssetPath } from "@/lib/utils";
-import { toast } from "@/hooks/use-toast";
+import { Send, LayoutGrid } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { useFlowNavigation } from "@/hooks/useFlowNavigation";
 import {
@@ -12,8 +11,6 @@ import {
 } from "@/lib/utils/characteristics-helpers";
 import ProgressHeader from "./ProgressHeader";
 import CriteriaTags from "./CriteriaTags";
-import SupplierCard from "./SupplierCard";
-import WarningBanner from "./WarningBanner";
 import ContactForm from "./ContactForm";
 import ModifyCriteriaForm from "./ModifyCriteriaForm";
 import CustomNeedForm, { CustomNeedVariant } from "./CustomNeedForm";
@@ -21,6 +18,8 @@ import ProductDetailModal from "./ProductDetailModal";
 import ProductComparisonModal from "./ProductComparisonModal";
 import CriteriaChangedBanner from "./CriteriaChangedBanner";
 import BudgetEstimate from "./BudgetEstimate";
+import SelectionGridView from "./selection-views/SelectionGridView";
+import SelectionTableViewB from "./selection-views/SelectionTableViewB";
 import {
   trackComparisonModalView,
   trackProductSelectionChange,
@@ -28,10 +27,10 @@ import {
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
+import { SelectionVersion } from "@/types/selectionVersion";
 import { hasPriceEstimation } from "@/types/prix";
 import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
-import { getCategorySelection } from "@/data/category-static-content";
 
 type ViewState = "selection" | "contact" | "modify-criteria" | "custom-need";
 
@@ -43,11 +42,12 @@ const STEPS = [
 interface SupplierSelectionModalProps {
   userAnswers          ?: Record<number, string[]>;
   onBackToQuestionnaire?: () => void;
+  version              ?: SelectionVersion;
 }
 
 
 
-const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierSelectionModalProps) => {
+const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = 'originale' }: SupplierSelectionModalProps) => {
   // Navigation hook
   const { goToProfile } = useFlowNavigation();
 
@@ -105,7 +105,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     return { essentialCriteria: essential, secondaryCriteria: secondary };
   }, [equivalenceCaracteristique, characteristicsMap, removedCritiqueCriteriaIds, removedSecondaireCriteriaIds]);
 
-  const [isExpanded, setIsExpanded] = useState(false);
   const [animatingCount, setAnimatingCount] = useState(false);
   const [viewState, setViewState] = useState<ViewState>("selection");
   const [customNeedVariant, setCustomNeedVariant] = useState<CustomNeedVariant>('initial');
@@ -113,7 +112,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const [searchQuery, setSearchQuery] = useState("");
   const [showComparison, setShowComparison] = useState(false);
   const [criteriaModified, setCriteriaModified] = useState(false);
-  const [mobileViewMode, setMobileViewMode] = useState<"grid" | "list">("list");
   // État pour le devis unique (ne modifie pas la sélection principale)
   const [singleQuoteProductId, setSingleQuoteProductId] = useState<string | null>(null);
 
@@ -235,7 +233,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
   const resetSelection = () => {
     setSelectedSupplierIds(RECOMMENDED.map((s) => s.id));
-    setIsExpanded(false);
   };
 
   const handleViewDetails = (id: string) => {
@@ -296,17 +293,16 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
       <div className="flex-1 overflow-y-auto">
         {viewState === "selection" && (
           <div className="mx-auto max-w-7xl p-6 lg:p-10 space-y-8">
-              {/* Title + View Toggle */}
+              {/* Title + Critères (partagés sur toutes les versions) */}
               <div className="text-center relative">
                 <h2 className="text-2xl font-bold text-foreground">
                   Votre sélection personnalisée
                 </h2>
                 <p className="mt-1 text-muted-foreground">
-                  {selectedCount} fournisseur{selectedCount > 1 ? "s" : ""}{" "}
-                  recommandé{selectedCount > 1 ? "s" : ""} pour vous
+                  {RECOMMENDED.length} fournisseur{RECOMMENDED.length > 1 ? "s" : ""}{" "}
+                  recommandé{RECOMMENDED.length > 1 ? "s" : ""} pour vous
                 </p>
               </div>
-              {/* Criteria Tags - Affiche les caractéristiques matchées depuis equivalenceCaracteristique */}
               <CriteriaTags
                 essentialCriteria={essentialCriteria}
                 secondaryCriteria={secondaryCriteria}
@@ -369,143 +365,28 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                 />
               )}
 
-              {/* Warning Banner (only when expanded and modified) */}
-              {isExpanded && isModified && (
-                <WarningBanner message="En modifiant notre sélection, vous risquez de passer à côté des fournisseurs les plus adaptés à votre besoin." />
-              )}
-
-              {/* Supplier Lists */}
-              <div className="space-y-6">
-                {/* When collapsed: show only selected suppliers */}
-                {!isExpanded && (
-                  <div className={cn(
-                    "grid gap-4 sm:gap-5",
-                    "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-                  )}>
-                    {selectedSuppliersList.map((supplier) => (
-                      <SupplierCard
-                        key={supplier.id}
-                        {...supplier}
-                        isSelected={true}
-                        onToggle={toggleSupplier}
-                        onViewDetails={handleViewDetails}
-                        viewMode={mobileViewMode}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* When expanded: show all with sections */}
-                {isExpanded && (
-                  <>
-                    {/* Selected Section */}
-                    <div className="space-y-4">
-                      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        <span className="h-px flex-1 bg-border" />
-                        Produits sélectionnés ({selectedSuppliersList.length})
-                        <span className="h-px flex-1 bg-border" />
-                      </h3>
-                      {selectedSuppliersList.length > 0 ? (
-                        <div className={cn(
-                          "grid gap-4 sm:gap-5",
-                          "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-                        )}>
-                          {selectedSuppliersList.map((supplier) => (
-                            <SupplierCard
-                              key={supplier.id}
-                              {...supplier}
-                              isSelected={true}
-                              onToggle={toggleSupplier}
-                              onViewDetails={handleViewDetails}
-                              viewMode={mobileViewMode}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <p>Aucun produit sélectionné</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Other Results Section */}
-                    <div className="space-y-4 pt-4">
-                      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        <span className="h-px flex-1 bg-border" />
-                        Autres résultats ({unselectedSuppliersList.length})
-                        <span className="h-px flex-1 bg-border" />
-                      </h3>
-
-
-                      {unselectedSuppliersList.length > 0 ? (
-                        <div className={cn(
-                          "grid gap-4 sm:gap-5",
-                          "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-                        )}>
-                          {unselectedSuppliersList.map((supplier) => (
-                            <SupplierCard
-                              key={supplier.id}
-                              {...supplier}
-                              isSelected={false}
-                              onToggle={toggleSupplier}
-                              onViewDetails={handleViewDetails}
-                              viewMode={mobileViewMode}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          {searchQuery ? (
-                            <p>Aucun résultat pour "{searchQuery}"</p>
-                          ) : (
-                            <p>Tous les produits sont sélectionnés</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Reset link */}
-                    {isModified && (
-                      <button
-                        onClick={resetSelection}
-                        className="flex w-full items-center justify-center gap-2 py-2 text-sm text-primary hover:text-primary/80 transition-colors"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        Revenir à la sélection recommandée
-                      </button>
-                    )}
-                  </>
-                )}
-
-                {/* Expand/Collapse toggle */}
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className={cn(
-                    "flex w-full items-center justify-center gap-2 py-3 text-sm transition-colors rounded-lg border",
-                    isExpanded
-                      ? "text-muted-foreground hover:text-foreground border-transparent"
-                      : "text-foreground font-medium border-border hover:bg-muted"
-                  )}
-                >
-                  {isExpanded ? (
-                    <>
-                      Réduire
-                      <ChevronUp className="h-4 w-4" />
-                    </>
-                  ) : (
-                    <>
-                      {(categoryId && getCategorySelection(categoryId)?.voirPlus) || `Voir plus de ${(categoryName || "produits").toLowerCase()}`}
-                      <ChevronDown className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Bloc réassurance "Recommandé" */}
-              {categoryId && getCategorySelection(categoryId)?.recommandeReassurance && (
-                <div className="mt-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">Idéal</span> = {getCategorySelection(categoryId)!.recommandeReassurance.replace(/xx/g, String(categoryStats?.productsCount ?? ""))}
-                </div>
+              {/* Selection view — switch by version */}
+              {version === 'B' ? (
+                <SelectionTableViewB
+                  selectedSuppliers={selectedSuppliersList}
+                  otherSuppliers={unselectedSuppliersList}
+                  selectedIds={selectedIds}
+                  onToggle={toggleSupplier}
+                  onViewDetails={handleViewDetails}
+                />
+              ) : (
+                <SelectionGridView
+                  selectedSuppliersList={selectedSuppliersList}
+                  unselectedSuppliersList={unselectedSuppliersList}
+                  searchQuery={searchQuery}
+                  isModified={isModified}
+                  resetSelection={resetSelection}
+                  onToggle={toggleSupplier}
+                  onViewDetails={handleViewDetails}
+                  categoryId={categoryId}
+                  categoryName={categoryName}
+                  categoryStats={categoryStats}
+                />
               )}
             </div>
           )}
@@ -608,17 +489,19 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
             {/* Secondary actions */}
             <div className="order-2 lg:order-1 flex flex-wrap items-center gap-2 md:gap-3">
-              <button
-                onClick={() => {
-                  trackComparisonModalView();
-                  setShowComparison(true);
-                  history.pushState({ modal: 'comparison' }, '');
-                }}
-                className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-1.5 md:gap-2"
-              >
-                <LayoutGrid className="h-4 w-4 shrink-0" />
-                Comparer
-              </button>
+              {version === 'originale' && (
+                <button
+                  onClick={() => {
+                    trackComparisonModalView();
+                    setShowComparison(true);
+                    history.pushState({ modal: 'comparison' }, '');
+                  }}
+                  className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-1.5 md:gap-2"
+                >
+                  <LayoutGrid className="h-4 w-4 shrink-0" />
+                  Comparer
+                </button>
+              )}
 
               <button
                 onClick={() => setViewState("modify-criteria")}
@@ -661,6 +544,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
+          hideMatchBadge={version !== 'originale'}
           onProceed={() => {
             setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
             setSelectedProductId(null); // Ferme la modale

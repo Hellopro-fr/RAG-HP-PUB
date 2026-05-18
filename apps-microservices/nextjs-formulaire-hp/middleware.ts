@@ -71,6 +71,7 @@ interface TokenUrlData {
   id_question: number;
   id_reponse: number;
   equivalence: any[];
+  abtest_UX_lead_version?: number;
 }
 
 async function validateTokenInMiddleware(
@@ -203,7 +204,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(INVALID_TOKEN_REDIRECT);
   }
 
-  
+  console.log('[Middleware] 🔓 Données décryptées du token:', {
+    categoryId: result.categoryId,
+    ddc: result.ddc,
+    urlData: result.urlData,
+  });
 
   // Token valide - réécrire vers la route réelle
   const routePrefix = '/' + pathParts[0]; // ex: /questionnaire

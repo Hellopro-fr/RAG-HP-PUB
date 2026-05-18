@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import GeoZoneStep from '@/components/flow/GeoZoneStep';
 import MatchingLoader from '@/components/flow/MatchingLoader';
+import MatchingLoaderV2 from '@/components/flow/MatchingLoaderV2';
+import { parseSelectionVersion } from '@/types/selectionVersion';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
@@ -62,6 +65,7 @@ export default function GeoZoneClient({
   priorityCountries = [],
   otherCountries = []
 }: GeoZoneClientProps) {
+  const searchParams = useSearchParams();
   const { setGeoData, categoryId, dynamicEquivalences, characteristicsMap, setMatchingResults, setEquivalenceCaracteristique } = useFlowStore();
   const [showLoader, setShowLoader] = useState(false);
   const [RedirectGoToSomethingToAdd, setRedirectGoToSomethingToAdd] = useState(false);
@@ -290,9 +294,12 @@ export default function GeoZoneClient({
     window.history.back();
   };
 
-  // Afficher le loader pendant le matching
+  // Afficher le loader pendant le matching — variante par version
   if (showLoader) {
-    return <MatchingLoader onComplete={handleLoaderComplete} duration={5000} />;
+    const version = parseSelectionVersion(searchParams.get('version'));
+    return version === 'originale'
+      ? <MatchingLoader onComplete={handleLoaderComplete} duration={5000} />
+      : <MatchingLoaderV2 onComplete={handleLoaderComplete} duration={5000} />;
   }
 
   return (
