@@ -1,4 +1,5 @@
 import aio_pika
+from typing import Optional
 import json
 import logging
 import os
@@ -33,7 +34,8 @@ class PageImageConsumer:
         """
         self.connection = connection
         self.downloader = Downloader()
-        self._consumer_tag = None
+        self._consumer_tag: Optional[str] = None
+        self._consumer_queue: Optional[aio_pika.abc.AbstractQueue] = None
 
         # Noms des composants RabbitMQ (topologie isolée, miroir du pattern FP)
         self.exchange_name = EXCHANGE_NAME
@@ -254,15 +256,20 @@ class PageImageConsumer:
         queue = await self._setup_queues(channel)
 
         logger.info("PageImageConsumer : en attente de messages pages images...")
+        self._consumer_queue = queue
         self._consumer_tag = await queue.consume(self._on_message_callback)
 
     async def stop(self) -> None:
         """Annule le consumer-tag côté broker. À appeler dans le lifespan shutdown
         avant `task.cancel()` pour éviter qu'aio_pika ne laisse une inscription orpheline.
+
+        Utilise queue.cancel(consumer_tag) — consumer_tag est une str dans aio_pika
+        (retour de queue.consume()), pas un objet avec méthode .cancel().
         """
-        if self._consumer_tag is not None:
+        if self._consumer_tag is not None and self._consumer_queue is not None:
             try:
-                await self._consumer_tag.cancel()
+                await self._consumer_queue.cancel(self._consumer_tag)
             except Exception as exc:
                 logger.warning("PageImageConsumer stop : échec cancel consumer-tag : %s", exc)
             self._consumer_tag = None
+            self._consumer_queue = None
