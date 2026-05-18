@@ -31,7 +31,7 @@ class CaracterisationProduitGenerator:
     PROMPT_REPASSE_ID = "103"
     # PROMPT_CARACTERISATION_ID = "108"
     # PROMPT_REPASSE_ID = "109"
-    DEEPSEEK_MODEL = "deepseek-chat"
+    DEEPSEEK_MODEL = "deepseek-v4-flash"
     
     ETAPE = "7"
 
