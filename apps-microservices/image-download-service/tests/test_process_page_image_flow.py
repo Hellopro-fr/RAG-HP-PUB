@@ -61,7 +61,7 @@ def _stub_process_image_page(tmp_path, domain, filename):
     """
     storage_dir = os.path.join(str(tmp_path), "images", domain)
     main_dir = os.path.join(storage_dir, "pages", "1", "0")
-    thumb_dir = os.path.join(storage_dir, "pages-thumb", "1", "0")
+    thumb_dir = os.path.join(storage_dir, "pages", "thumbs", "1", "0")
     os.makedirs(main_dir, exist_ok=True)
     os.makedirs(thumb_dir, exist_ok=True)
     main_path = os.path.join(main_dir, filename)
@@ -143,6 +143,11 @@ def test_j1_new_image_adds_manifest_entry(tmp_path, monkeypatch):
     pages = data.get("pages_images", [])
     assert len(pages) == 1, f"1 entrée attendue, obtenu {len(pages)}"
     assert pages[0]["url_source"] == "https://f.com/img.jpg"
+
+    # Le chemin thumb doit être sous pages/thumbs/
+    assert "pages" + os.sep + "thumbs" in result["thumb_path"] or "pages/thumbs/" in result["thumb_path"], (
+        f"thumb_path doit être sous pages/thumbs/, obtenu : {result['thumb_path']}"
+    )
 
     # Le fichier main doit être présent sur disque
     assert os.path.exists(image_result["main_path"]), "Le fichier main doit exister sur disque"
