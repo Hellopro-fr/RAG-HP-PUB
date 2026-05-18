@@ -44,7 +44,7 @@ class CaracterisationPrixGenerator:
     # Prompts (chargés depuis action_prompt_chatgpt via l'API BO)
     PROMPT_CARACTERISATION_ID = settings.PROMPT_CARACTERISATION_ID
     PROMPT_REPASSE_ID = settings.PROMPT_REPASSE_ID
-    DEEPSEEK_MODEL = "deepseek-chat"
+    DEEPSEEK_MODEL = "deepseek-v4-flash"
 
     # ID étape prix
     ETAPE = "13"
