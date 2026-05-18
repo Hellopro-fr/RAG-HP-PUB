@@ -315,11 +315,17 @@ class NodeService:
         id_to_raw: Dict[str, int] = dict(zip(full_ids, raw_ids))
 
         # Single index scan + single SET. Same $props applied to every match.
+        # The response only echoes the keys that were actually written
+        # (= keys($props)), with their POST-SET values from the node, so the
+        # caller can confirm what was persisted without paying for the full
+        # node payload.
         query = f"""
         MATCH (n:{label})
         WHERE n.id IN $ids
         SET n += $props
-        RETURN n.id AS id, n
+        WITH n, $props AS props
+        RETURN n.id AS id,
+               [k IN keys(props) | [k, n[k]]] AS changed
         """
 
         params = {"ids": full_ids, "props": properties}
@@ -332,11 +338,15 @@ class NodeService:
             results = await clients.execute_cypher(query, params, read_only=False)
 
             found_full_ids = {r.get("id") for r in results if r.get("id")}
-            found = [
-                {"id": id_to_raw[r["id"]], "node": r.get("n")}
-                for r in results
-                if r.get("id") in id_to_raw
-            ]
+            found = []
+            for r in results:
+                full_id = r.get("id")
+                if full_id not in id_to_raw:
+                    continue
+                changed_pairs = r.get("changed") or []
+                node_dict = {k: v for k, v in changed_pairs}
+                found.append({"id": id_to_raw[full_id], "node": node_dict})
+
             missing = [
                 id_to_raw[fid] for fid in full_ids if fid not in found_full_ids
             ]

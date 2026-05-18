@@ -116,9 +116,10 @@ def test_batch_update_route_invalid_label_returns_400(client):
 
 
 def test_batch_upsert_route_returns_found_and_missing(client):
+    # Service returns only changed keys (not the full node)
     payload = {
         "found": [
-            {"id": 1, "node": {"id": "id_produit_1", "statut": "active"}},
+            {"id": 1, "node": {"statut": "active"}},
         ],
         "missing": [2],
     }

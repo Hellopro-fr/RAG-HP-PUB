@@ -141,8 +141,9 @@ async def test_batch_update_nodes_empty_items():
 
 @pytest.mark.asyncio
 async def test_batch_upsert_nodes_returns_found_and_missing():
+    # Cypher now returns only the keys that were changed (= keys($props))
     fake_results = [
-        {"id": "id_produit_1", "n": {"id": "id_produit_1", "statut": "active"}},
+        {"id": "id_produit_1", "changed": [["statut", "active"]]},
     ]
     with patch(
         "app.services.node_service.clients.execute_cypher",
@@ -152,17 +153,20 @@ async def test_batch_upsert_nodes_returns_found_and_missing():
             "Produit", [1, 2], {"statut": "active"}
         )
 
+    # Only the changed field is echoed back, not the full node
     assert out["found"] == [
-        {"id": 1, "node": {"id": "id_produit_1", "statut": "active"}}
+        {"id": 1, "node": {"statut": "active"}}
     ]
     assert out["missing"] == [2]
 
-    # Single Cypher call — same $props applied to every matched id
+    # Single Cypher call — same $props applied to every matched id,
+    # response projects keys($props) with post-SET values
     assert mock_exec.await_count == 1
     args, kwargs = mock_exec.await_args
     query = args[0]
     assert "WHERE n.id IN $ids" in query
     assert "SET n += $props" in query
+    assert "keys(props)" in query
     assert kwargs.get("read_only") is False
 
 
