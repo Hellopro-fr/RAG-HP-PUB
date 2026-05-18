@@ -132,7 +132,7 @@ class NodeService:
             return []
 
     async def batch_get_nodes(
-        self, label: str, raw_ids: List[str]
+        self, label: str, raw_ids: List[int]
     ) -> Dict[str, Any]:
         """
         Retrieves multiple nodes for a given label in a single Cypher query.
@@ -156,7 +156,7 @@ class NodeService:
 
         # Map full (prefixed) IDs back to the caller's raw IDs for the response
         full_ids: List[str] = [self._format_node_id(label, rid) for rid in raw_ids]
-        id_to_raw: Dict[str, str] = dict(zip(full_ids, raw_ids))
+        id_to_raw: Dict[str, int] = dict(zip(full_ids, raw_ids))
 
         # Single index scan: MATCH + WHERE id IN $ids
         query = f"""
@@ -257,7 +257,7 @@ class NodeService:
     async def batch_upsert_nodes(
         self,
         label: str,
-        raw_ids: List[str],
+        raw_ids: List[int],
         properties: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
@@ -292,7 +292,7 @@ class NodeService:
             return {"found": [], "missing": list(raw_ids)}
 
         full_ids: List[str] = [self._format_node_id(label, rid) for rid in raw_ids]
-        id_to_raw: Dict[str, str] = dict(zip(full_ids, raw_ids))
+        id_to_raw: Dict[str, int] = dict(zip(full_ids, raw_ids))
 
         # Single index scan + single SET. Same $props applied to every match.
         query = f"""

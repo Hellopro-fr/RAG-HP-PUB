@@ -199,11 +199,11 @@ class CypherQueryRequest(BaseModel):
 
 
 class BatchGetRequest(BaseModel):
-    ids: List[str] = Field(
+    ids: List[int] = Field(
         ...,
         min_length=1,
         max_length=500,
-        description="List of raw node IDs (without label prefix). Max 500 per batch.",
+        description="List of raw node IDs (without label prefix), as integers. Max 500 per batch.",
     )
 
 
@@ -225,7 +225,13 @@ class BatchUpdateRequest(BaseModel):
 
 
 class BatchNodeResult(BaseModel):
-    id: str = Field(..., description="Raw node ID as supplied in the request.")
+    id: Union[int, str] = Field(
+        ...,
+        description=(
+            "Raw node ID as supplied in the request. Echoes the caller's type "
+            "(int for GET/UPSERT, str for per-item UPDATE)."
+        ),
+    )
     node: Dict[str, Any] = Field(..., description="Node properties.")
 
 
@@ -233,7 +239,7 @@ class BatchResponse(BaseModel):
     found: List[BatchNodeResult] = Field(
         default_factory=list, description="Nodes that were found / updated."
     )
-    missing: List[str] = Field(
+    missing: List[Union[int, str]] = Field(
         default_factory=list,
         description="Raw IDs from the request that did not match any node.",
     )
@@ -245,11 +251,11 @@ class BatchUpsertRequest(BaseModel):
     (Cypher: `MATCH (n:Label) WHERE n.id IN $ids SET n += $props`).
     """
 
-    ids: List[str] = Field(
+    ids: List[int] = Field(
         ...,
         min_length=1,
         max_length=500,
-        description="Raw node IDs (without label prefix). Max 500 per batch.",
+        description="Raw node IDs (without label prefix), as integers. Max 500 per batch.",
     )
     properties: Dict[str, Any] = Field(
         ...,

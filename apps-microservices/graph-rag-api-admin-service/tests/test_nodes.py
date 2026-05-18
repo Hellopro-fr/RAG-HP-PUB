@@ -29,20 +29,20 @@ def client():
 
 def test_batch_get_route_returns_found_and_missing(client):
     payload = {
-        "found": [{"id": "1", "node": {"id": "id_produit_1", "nom": "A"}}],
-        "missing": ["2"],
+        "found": [{"id": 1, "node": {"id": "id_produit_1", "nom": "A"}}],
+        "missing": [2],
     }
     with patch.object(
         nodes_router.node_service,
         "batch_get_nodes",
         new=AsyncMock(return_value=payload),
     ):
-        resp = client.post("/nodes/Produit/batch/get", json={"ids": ["1", "2"]})
+        resp = client.post("/nodes/Produit/batch/get", json={"ids": [1, 2]})
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["found"] == payload["found"]
-    assert body["missing"] == ["2"]
+    assert body["missing"] == [2]
 
 
 def test_batch_get_route_empty_list_returns_422(client):
@@ -51,7 +51,7 @@ def test_batch_get_route_empty_list_returns_422(client):
 
 
 def test_batch_get_route_over_cap_returns_422(client):
-    ids = [str(i) for i in range(501)]
+    ids = list(range(501))
     resp = client.post("/nodes/Produit/batch/get", json={"ids": ids})
     assert resp.status_code == 422
 
@@ -98,9 +98,9 @@ def test_batch_update_route_invalid_label_returns_400(client):
 def test_batch_upsert_route_returns_found_and_missing(client):
     payload = {
         "found": [
-            {"id": "1", "node": {"id": "id_produit_1", "statut": "active"}},
+            {"id": 1, "node": {"id": "id_produit_1", "statut": "active"}},
         ],
-        "missing": ["2"],
+        "missing": [2],
     }
     with patch.object(
         nodes_router.node_service,
@@ -109,13 +109,13 @@ def test_batch_upsert_route_returns_found_and_missing(client):
     ):
         resp = client.post(
             "/nodes/Produit/batch/upsert",
-            json={"ids": ["1", "2"], "properties": {"statut": "active"}},
+            json={"ids": [1, 2], "properties": {"statut": "active"}},
         )
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["found"] == payload["found"]
-    assert body["missing"] == ["2"]
+    assert body["missing"] == [2]
 
 
 def test_batch_upsert_route_empty_ids_returns_422(client):
@@ -127,7 +127,7 @@ def test_batch_upsert_route_empty_ids_returns_422(client):
 
 
 def test_batch_upsert_route_over_cap_returns_422(client):
-    ids = [str(i) for i in range(501)]
+    ids = list(range(501))
     resp = client.post(
         "/nodes/Produit/batch/upsert",
         json={"ids": ids, "properties": {"x": 1}},

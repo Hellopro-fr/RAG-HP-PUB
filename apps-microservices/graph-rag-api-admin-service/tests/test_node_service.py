@@ -33,12 +33,12 @@ async def test_batch_get_nodes_returns_found_and_missing():
         "app.services.node_service.clients.execute_cypher",
         new=AsyncMock(return_value=fake_results),
     ) as mock_exec:
-        out = await node_service.batch_get_nodes("Produit", ["1", "2"])
+        out = await node_service.batch_get_nodes("Produit", [1, 2])
 
     assert out["found"] == [
-        {"id": "1", "node": {"id": "id_produit_1", "nom": "A"}}
+        {"id": 1, "node": {"id": "id_produit_1", "nom": "A"}}
     ]
-    assert out["missing"] == ["2"]
+    assert out["missing"] == [2]
 
     # Verify the query is a single batch query (not a loop)
     assert mock_exec.await_count == 1
@@ -51,7 +51,7 @@ async def test_batch_get_nodes_returns_found_and_missing():
 @pytest.mark.asyncio
 async def test_batch_get_nodes_invalid_label_raises():
     with pytest.raises(ValueError):
-        await node_service.batch_get_nodes("Bad;Label", ["1"])
+        await node_service.batch_get_nodes("Bad;Label", [1])
 
 
 @pytest.mark.asyncio
@@ -118,13 +118,13 @@ async def test_batch_upsert_nodes_returns_found_and_missing():
         new=AsyncMock(return_value=fake_results),
     ) as mock_exec:
         out = await node_service.batch_upsert_nodes(
-            "Produit", ["1", "2"], {"statut": "active"}
+            "Produit", [1, 2], {"statut": "active"}
         )
 
     assert out["found"] == [
-        {"id": "1", "node": {"id": "id_produit_1", "statut": "active"}}
+        {"id": 1, "node": {"id": "id_produit_1", "statut": "active"}}
     ]
-    assert out["missing"] == ["2"]
+    assert out["missing"] == [2]
 
     # Single Cypher call — same $props applied to every matched id
     assert mock_exec.await_count == 1
@@ -138,7 +138,7 @@ async def test_batch_upsert_nodes_returns_found_and_missing():
 @pytest.mark.asyncio
 async def test_batch_upsert_nodes_invalid_label_raises():
     with pytest.raises(ValueError):
-        await node_service.batch_upsert_nodes("Bad;Label", ["1"], {"x": 1})
+        await node_service.batch_upsert_nodes("Bad;Label", [1], {"x": 1})
 
 
 @pytest.mark.asyncio
@@ -149,5 +149,5 @@ async def test_batch_upsert_nodes_empty_ids():
 
 @pytest.mark.asyncio
 async def test_batch_upsert_nodes_empty_properties_is_noop():
-    out = await node_service.batch_upsert_nodes("Produit", ["1", "2"], {})
-    assert out == {"found": [], "missing": ["1", "2"]}
+    out = await node_service.batch_upsert_nodes("Produit", [1, 2], {})
+    assert out == {"found": [], "missing": [1, 2]}
