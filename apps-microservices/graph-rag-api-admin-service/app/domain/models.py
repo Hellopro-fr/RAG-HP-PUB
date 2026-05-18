@@ -195,6 +195,50 @@ class CypherQueryRequest(BaseModel):
     )
 
 
+# --- Batch Node Models ---
+
+
+class BatchGetRequest(BaseModel):
+    ids: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="List of raw node IDs (without label prefix). Max 500 per batch.",
+    )
+
+
+class BatchUpdateItem(BaseModel):
+    id: str = Field(..., description="Raw node ID (without label prefix).")
+    properties: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Dictionary of properties to merge into the node (SET n += props).",
+    )
+
+
+class BatchUpdateRequest(BaseModel):
+    items: List[BatchUpdateItem] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="List of update items. Max 500 per batch.",
+    )
+
+
+class BatchNodeResult(BaseModel):
+    id: str = Field(..., description="Raw node ID as supplied in the request.")
+    node: Dict[str, Any] = Field(..., description="Node properties.")
+
+
+class BatchResponse(BaseModel):
+    found: List[BatchNodeResult] = Field(
+        default_factory=list, description="Nodes that were found / updated."
+    )
+    missing: List[str] = Field(
+        default_factory=list,
+        description="Raw IDs from the request that did not match any node.",
+    )
+
+
 class CypherQueryResponse(BaseModel):
     results: List[Dict[str, Any]] = Field(
         ..., description="List of records returned by the query."

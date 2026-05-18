@@ -131,6 +131,129 @@ class NodeService:
             # Returning empty list implies no schema found or error.
             return []
 
+    async def batch_get_nodes(
+        self, label: str, raw_ids: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Retrieves multiple nodes for a given label in a single Cypher query.
+
+        Uses `WHERE n.id IN $ids` for a single index scan (no per-id round-trip).
+
+        Args:
+            label (str): The node label (e.g., 'Produit').
+            raw_ids (List[str]): Raw node IDs (without label prefix).
+
+        Returns:
+            Dict[str, Any]: {"found": [{"id": raw_id, "node": {...}}], "missing": [raw_id, ...]}.
+        """
+        # Security check: Ensure label is alphanumeric to prevent Cypher injection
+        if not label.isalnum():
+            logging.warning(f"Invalid label format: {label}")
+            raise ValueError("Invalid node label format. Must be alphanumeric.")
+
+        if not raw_ids:
+            return {"found": [], "missing": []}
+
+        # Map full (prefixed) IDs back to the caller's raw IDs for the response
+        full_ids: List[str] = [self._format_node_id(label, rid) for rid in raw_ids]
+        id_to_raw: Dict[str, str] = dict(zip(full_ids, raw_ids))
+
+        # Single index scan: MATCH + WHERE id IN $ids
+        query = f"""
+        MATCH (n:{label})
+        WHERE n.id IN $ids
+        RETURN n.id AS id, n
+        """
+
+        params = {"ids": full_ids}
+
+        try:
+            logging.info(f"Batch fetching {len(full_ids)} nodes of label {label}")
+            results = await clients.execute_cypher(query, params, read_only=True)
+
+            found_full_ids = {r.get("id") for r in results if r.get("id")}
+            found = [
+                {"id": id_to_raw[r["id"]], "node": r.get("n")}
+                for r in results
+                if r.get("id") in id_to_raw
+            ]
+            missing = [
+                id_to_raw[fid] for fid in full_ids if fid not in found_full_ids
+            ]
+            return {"found": found, "missing": missing}
+
+        except Exception as e:
+            logging.error(
+                f"Error batch fetching nodes for label {label}: {e}", exc_info=True
+            )
+            raise e
+
+    async def batch_update_nodes(
+        self, label: str, items: List[Any]
+    ) -> Dict[str, Any]:
+        """
+        Updates multiple nodes for a given label in a single Cypher transaction.
+
+        Uses UNWIND + indexed MATCH so the whole batch runs as one query in one
+        transaction. Any Cypher-level failure rolls back the entire batch.
+
+        Args:
+            label (str): The node label (e.g., 'Produit').
+            items (List[BatchUpdateItem]): Items with .id (raw) and .properties.
+
+        Returns:
+            Dict[str, Any]: {"found": [{"id": raw_id, "node": {...}}], "missing": [raw_id, ...]}.
+        """
+        # Security check: Ensure label is alphanumeric to prevent Cypher injection
+        if not label.isalnum():
+            logging.warning(f"Invalid label format: {label}")
+            raise ValueError("Invalid node label format. Must be alphanumeric.")
+
+        if not items:
+            return {"found": [], "missing": []}
+
+        updates: List[Dict[str, Any]] = []
+        raw_by_full: Dict[str, str] = {}
+        for it in items:
+            full_id = self._format_node_id(label, it.id)
+            updates.append({"id": full_id, "props": it.properties or {}})
+            raw_by_full[full_id] = it.id
+
+        query = f"""
+        UNWIND $updates AS u
+        MATCH (n:{label} {{id: u.id}})
+        SET n += u.props
+        RETURN n.id AS id, n
+        """
+
+        params = {"updates": updates}
+
+        try:
+            logging.info(
+                f"Batch updating {len(updates)} nodes of label {label} "
+                f"in a single Cypher transaction"
+            )
+            results = await clients.execute_cypher(query, params, read_only=False)
+
+            found_full_ids = {r.get("id") for r in results if r.get("id")}
+            found = [
+                {"id": raw_by_full[r["id"]], "node": r.get("n")}
+                for r in results
+                if r.get("id") in raw_by_full
+            ]
+            missing = [
+                raw_by_full[u["id"]]
+                for u in updates
+                if u["id"] not in found_full_ids
+            ]
+            return {"found": found, "missing": missing}
+
+        except Exception as e:
+            logging.error(
+                f"Error batch updating nodes for label {label}: {e}", exc_info=True
+            )
+            raise e
+
     async def get_node(self, label: str, node_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieves a specific node from the graph database.

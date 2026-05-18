@@ -2,9 +2,71 @@ from fastapi import APIRouter, HTTPException, status
 from typing import Dict, Any, Optional
 import logging
 
+from app.domain.models import (
+    BatchGetRequest,
+    BatchResponse,
+    BatchUpdateRequest,
+)
 from app.services.node_service import node_service
 
 router = APIRouter()
+
+
+@router.post("/{label}/batch/get", response_model=BatchResponse)
+async def batch_get_nodes_route(label: str, body: BatchGetRequest):
+    """
+    Batch get nodes by label.
+
+    Executes a SINGLE Cypher query (`MATCH ... WHERE n.id IN $ids`) — not N
+    queries — so the cost is one index scan, regardless of batch size.
+
+    - **label**: Node label (e.g., 'Produit', 'Fournisseur', 'Categorie')
+    - **body.ids**: Raw IDs (without label prefix), 1..500 items.
+
+    Returns `{"found": [...], "missing": [...]}`. IDs not present in the
+    database appear in `missing`; they do NOT cause the request to fail.
+    """
+    try:
+        return await node_service.batch_get_nodes(label, body.ids)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logging.error(
+            f"Error in POST /nodes/{label}/batch/get: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal error occurred during batch GET.",
+        )
+
+
+@router.post("/{label}/batch/update", response_model=BatchResponse)
+async def batch_update_nodes_route(label: str, body: BatchUpdateRequest):
+    """
+    Batch update nodes by label.
+
+    Executes a SINGLE Cypher query (`UNWIND ... MATCH ... SET n += props`) in
+    a single transaction. Any Cypher-level failure rolls back the entire
+    batch (all-or-nothing).
+
+    - **label**: Node label (e.g., 'Produit', 'Fournisseur', 'Categorie')
+    - **body.items**: List of `{id, properties}` items, 1..500 entries.
+
+    Returns `{"found": [...], "missing": [...]}`. IDs not matched are listed
+    in `missing`; matched nodes have their properties merged (`SET n +=`).
+    """
+    try:
+        return await node_service.batch_update_nodes(label, body.items)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logging.error(
+            f"Error in POST /nodes/{label}/batch/update: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal error occurred during batch UPDATE.",
+        )
 
 
 @router.put("/{label}/{id}", response_model=Dict[str, Any])
