@@ -4,23 +4,23 @@
     {
       "id": 24,
       "subject": "Task 1: Add regression test asserting 3-way path alignment",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Land a failing test that captures the alignment invariant so the next two tasks have a green-bar target.\n\n**Files:**\n- Create: `apps-microservices/crawler-service/tests/test_config_paths.py`\n\n**Acceptance Criteria:**\n- [ ] New test file exists with three test functions.\n- [ ] Running the suite shows all three failing with current code.\n- [ ] Each test has a docstring explaining the failure mode it catches.\n\n**Verify:** `cd apps-microservices/crawler-service && python -m pytest tests/test_config_paths.py -v` -> 3 FAIL.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/tests/test_config_paths.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_config_paths.py -v\", \"acceptanceCriteria\": [\"test file exists with 3 test functions\", \"3 FAIL on current code\", \"each test has docstring\"]}\n```"
     },
     {
       "id": 25,
       "subject": "Task 2: Restore Python container path defaults",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [24],
       "description": "**Goal:** Green the first two assertions by restoring the 1bb288a7 defaults in pydantic_settings.BaseSettings.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/app/core/config.py` (lines 33-35)\n\n**Acceptance Criteria:**\n- [ ] settings.DOWNLOAD_REQUESTS_PATH == '/app/download_requests'.\n- [ ] settings.DOWNLOAD_RESULTS_PATH == '/app/download_results'.\n- [ ] Inline comment documents the contract with docker-compose.yml.\n- [ ] First two regression tests pass; daemon test still red.\n\n**Verify:** `cd apps-microservices/crawler-service && python -m pytest tests/test_config_paths.py -v` -> 2 PASS, 1 FAIL.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/config.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_config_paths.py -v\", \"acceptanceCriteria\": [\"DOWNLOAD_REQUESTS_PATH == /app/download_requests\", \"DOWNLOAD_RESULTS_PATH == /app/download_results\", \"inline comment present\", \"2 PASS 1 FAIL\"]}\n```"
     },
     {
       "id": 26,
       "subject": "Task 3: Rename daemon env var to canonical names",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [25],
       "description": "**Goal:** Green the third assertion by renaming the daemon env var read from *_DIR to *_PATH, unifying with the Python side.\n\n**Files:**\n- Modify: `tools/download_daemon.sh` (lines 17-21)\n\n**Acceptance Criteria:**\n- [ ] Daemon reads DOWNLOAD_REQUESTS_PATH instead of DOWNLOAD_REQUESTS_DIR.\n- [ ] Daemon reads DOWNLOAD_RESULTS_PATH instead of DOWNLOAD_RESULTS_DIR.\n- [ ] Default host paths unchanged.\n- [ ] All three regression tests pass.\n- [ ] git grep finds no remaining legacy references in code.\n\n**Verify:** `cd apps-microservices/crawler-service && python -m pytest tests/test_config_paths.py -v` -> 3 PASS.\n\n```json:metadata\n{\"files\": [\"tools/download_daemon.sh\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_config_paths.py -v\", \"acceptanceCriteria\": [\"daemon reads _PATH names\", \"no _DIR references in code\", \"3 PASS\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-18T00:00:00Z"
+  "lastUpdated": "2026-05-18T14:00:00Z"
 }
