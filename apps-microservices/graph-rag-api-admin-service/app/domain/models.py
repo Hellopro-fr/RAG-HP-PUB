@@ -205,6 +205,14 @@ class BatchGetRequest(BaseModel):
         max_length=500,
         description="List of raw node IDs (without label prefix), as integers. Max 500 per batch.",
     )
+    fields: List[str] = Field(
+        default_factory=lambda: ["id_produit", "id"],
+        description=(
+            "Property names to return per node. Default ['id_produit', 'id'] "
+            "keeps responses minimal. Pass an explicit list to override; "
+            "pass an empty list to receive an empty `node` dict."
+        ),
+    )
 
 
 class BatchUpdateItem(BaseModel):

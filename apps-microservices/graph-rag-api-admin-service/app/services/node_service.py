@@ -132,16 +132,23 @@ class NodeService:
             return []
 
     async def batch_get_nodes(
-        self, label: str, raw_ids: List[int]
+        self,
+        label: str,
+        raw_ids: List[int],
+        fields: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Retrieves multiple nodes for a given label in a single Cypher query.
 
         Uses `WHERE n.id IN $ids` for a single index scan (no per-id round-trip).
+        Projects only the requested `fields` at the database level via a
+        Cypher list comprehension (no APOC needed) to keep response size small.
 
         Args:
             label (str): The node label (e.g., 'Produit').
-            raw_ids (List[str]): Raw node IDs (without label prefix).
+            raw_ids (List[int]): Raw node IDs (without label prefix).
+            fields (Optional[List[str]]): Property names to return per node.
+                Defaults to ['id_produit', 'id'] when None.
 
         Returns:
             Dict[str, Any]: {"found": [{"id": raw_id, "node": {...}}], "missing": [raw_id, ...]}.
@@ -154,29 +161,42 @@ class NodeService:
         if not raw_ids:
             return {"found": [], "missing": []}
 
+        if fields is None:
+            fields = ["id_produit", "id"]
+
         # Map full (prefixed) IDs back to the caller's raw IDs for the response
         full_ids: List[str] = [self._format_node_id(label, rid) for rid in raw_ids]
         id_to_raw: Dict[str, int] = dict(zip(full_ids, raw_ids))
 
-        # Single index scan: MATCH + WHERE id IN $ids
+        # Single index scan + DB-side projection. The list comprehension only
+        # picks keys present in $fields; field names are passed as a parameter
+        # (not interpolated) so this is safe from Cypher injection.
         query = f"""
         MATCH (n:{label})
         WHERE n.id IN $ids
-        RETURN n.id AS id, n
+        RETURN n.id AS id,
+               [k IN keys(n) WHERE k IN $fields | [k, n[k]]] AS props
         """
 
-        params = {"ids": full_ids}
+        params = {"ids": full_ids, "fields": fields}
 
         try:
-            logging.info(f"Batch fetching {len(full_ids)} nodes of label {label}")
+            logging.info(
+                f"Batch fetching {len(full_ids)} nodes of label {label} "
+                f"with fields={fields}"
+            )
             results = await clients.execute_cypher(query, params, read_only=True)
 
             found_full_ids = {r.get("id") for r in results if r.get("id")}
-            found = [
-                {"id": id_to_raw[r["id"]], "node": r.get("n")}
-                for r in results
-                if r.get("id") in id_to_raw
-            ]
+            found = []
+            for r in results:
+                full_id = r.get("id")
+                if full_id not in id_to_raw:
+                    continue
+                props_pairs = r.get("props") or []
+                node_dict = {k: v for k, v in props_pairs}
+                found.append({"id": id_to_raw[full_id], "node": node_dict})
+
             missing = [
                 id_to_raw[fid] for fid in full_ids if fid not in found_full_ids
             ]

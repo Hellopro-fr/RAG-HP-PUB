@@ -26,8 +26,12 @@ from app.services.node_service import node_service  # noqa: E402
 
 @pytest.mark.asyncio
 async def test_batch_get_nodes_returns_found_and_missing():
+    # Cypher now returns `props` as a list of [key, value] pairs (DB-side projection)
     fake_results = [
-        {"id": "id_produit_1", "n": {"id": "id_produit_1", "nom": "A"}},
+        {
+            "id": "id_produit_1",
+            "props": [["id", "id_produit_1"], ["id_produit", "1"]],
+        },
     ]
     with patch(
         "app.services.node_service.clients.execute_cypher",
@@ -36,16 +40,43 @@ async def test_batch_get_nodes_returns_found_and_missing():
         out = await node_service.batch_get_nodes("Produit", [1, 2])
 
     assert out["found"] == [
-        {"id": 1, "node": {"id": "id_produit_1", "nom": "A"}}
+        {"id": 1, "node": {"id": "id_produit_1", "id_produit": "1"}}
     ]
     assert out["missing"] == [2]
 
-    # Verify the query is a single batch query (not a loop)
+    # Verify single batch query + DB-side field projection
     assert mock_exec.await_count == 1
     args, kwargs = mock_exec.await_args
     query = args[0]
+    params = args[1]
     assert "WHERE n.id IN $ids" in query
+    assert "k IN keys(n) WHERE k IN $fields" in query
+    assert params["fields"] == ["id_produit", "id"]  # default
     assert kwargs.get("read_only") is True
+
+
+@pytest.mark.asyncio
+async def test_batch_get_nodes_custom_fields_passed_to_cypher():
+    fake_results = [
+        {
+            "id": "id_produit_1",
+            "props": [["nom_produit", "Widget"], ["prix_ttc", 9.99]],
+        },
+    ]
+    with patch(
+        "app.services.node_service.clients.execute_cypher",
+        new=AsyncMock(return_value=fake_results),
+    ) as mock_exec:
+        out = await node_service.batch_get_nodes(
+            "Produit", [1], fields=["nom_produit", "prix_ttc"]
+        )
+
+    assert out["found"] == [
+        {"id": 1, "node": {"nom_produit": "Widget", "prix_ttc": 9.99}}
+    ]
+    args, _ = mock_exec.await_args
+    params = args[1]
+    assert params["fields"] == ["nom_produit", "prix_ttc"]
 
 
 @pytest.mark.asyncio

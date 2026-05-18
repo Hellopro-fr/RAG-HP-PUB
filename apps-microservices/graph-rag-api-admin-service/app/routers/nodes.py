@@ -28,7 +28,7 @@ async def batch_get_nodes_route(label: str, body: BatchGetRequest):
     database appear in `missing`; they do NOT cause the request to fail.
     """
     try:
-        return await node_service.batch_get_nodes(label, body.ids)
+        return await node_service.batch_get_nodes(label, body.ids, body.fields)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:

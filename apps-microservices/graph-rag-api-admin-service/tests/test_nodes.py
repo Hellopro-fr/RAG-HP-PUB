@@ -29,20 +29,40 @@ def client():
 
 def test_batch_get_route_returns_found_and_missing(client):
     payload = {
-        "found": [{"id": 1, "node": {"id": "id_produit_1", "nom": "A"}}],
+        "found": [{"id": 1, "node": {"id": "id_produit_1", "id_produit": "1"}}],
         "missing": [2],
     }
     with patch.object(
         nodes_router.node_service,
         "batch_get_nodes",
         new=AsyncMock(return_value=payload),
-    ):
+    ) as mock_svc:
         resp = client.post("/nodes/Produit/batch/get", json={"ids": [1, 2]})
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["found"] == payload["found"]
     assert body["missing"] == [2]
+    # Default fields forwarded to service
+    args, _ = mock_svc.await_args
+    assert args[2] == ["id_produit", "id"]
+
+
+def test_batch_get_route_custom_fields_forwarded(client):
+    payload = {"found": [], "missing": [1]}
+    with patch.object(
+        nodes_router.node_service,
+        "batch_get_nodes",
+        new=AsyncMock(return_value=payload),
+    ) as mock_svc:
+        resp = client.post(
+            "/nodes/Produit/batch/get",
+            json={"ids": [1], "fields": ["nom_produit"]},
+        )
+
+    assert resp.status_code == 200
+    args, _ = mock_svc.await_args
+    assert args[2] == ["nom_produit"]
 
 
 def test_batch_get_route_empty_list_returns_422(client):
