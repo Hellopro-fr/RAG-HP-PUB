@@ -254,6 +254,81 @@ class NodeService:
             )
             raise e
 
+    async def batch_upsert_nodes(
+        self,
+        label: str,
+        raw_ids: List[str],
+        properties: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Apply the SAME properties to many existing nodes in a single Cypher query.
+
+        Semantics: match-only (no node creation). Equivalent to
+        `UPDATE n SET props WHERE n.id IN ids` in SQL terms. IDs that don't
+        match an existing node are returned in `missing`.
+
+        Args:
+            label (str): Node label (e.g., 'Produit').
+            raw_ids (List[str]): Raw node IDs (without label prefix).
+            properties (Dict[str, Any]): Properties merged into every matched node.
+
+        Returns:
+            Dict[str, Any]: {"found": [{"id": raw_id, "node": {...}}], "missing": [...]}.
+        """
+        # Security check: Ensure label is alphanumeric to prevent Cypher injection
+        if not label.isalnum():
+            logging.warning(f"Invalid label format: {label}")
+            raise ValueError("Invalid node label format. Must be alphanumeric.")
+
+        if not raw_ids:
+            return {"found": [], "missing": []}
+
+        if not properties:
+            # No-op: nothing to set. Report every id as "missing" so the caller
+            # can detect they sent an empty patch.
+            logging.info(
+                f"No properties supplied for batch_upsert_nodes({label}) — no-op"
+            )
+            return {"found": [], "missing": list(raw_ids)}
+
+        full_ids: List[str] = [self._format_node_id(label, rid) for rid in raw_ids]
+        id_to_raw: Dict[str, str] = dict(zip(full_ids, raw_ids))
+
+        # Single index scan + single SET. Same $props applied to every match.
+        query = f"""
+        MATCH (n:{label})
+        WHERE n.id IN $ids
+        SET n += $props
+        RETURN n.id AS id, n
+        """
+
+        params = {"ids": full_ids, "props": properties}
+
+        try:
+            logging.info(
+                f"Batch upsert {len(full_ids)} nodes of label {label} "
+                f"with {len(properties)} props (uniform)"
+            )
+            results = await clients.execute_cypher(query, params, read_only=False)
+
+            found_full_ids = {r.get("id") for r in results if r.get("id")}
+            found = [
+                {"id": id_to_raw[r["id"]], "node": r.get("n")}
+                for r in results
+                if r.get("id") in id_to_raw
+            ]
+            missing = [
+                id_to_raw[fid] for fid in full_ids if fid not in found_full_ids
+            ]
+            return {"found": found, "missing": missing}
+
+        except Exception as e:
+            logging.error(
+                f"Error batch upserting nodes for label {label}: {e}",
+                exc_info=True,
+            )
+            raise e
+
     async def get_node(self, label: str, node_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieves a specific node from the graph database.

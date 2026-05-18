@@ -93,3 +93,43 @@ def test_batch_update_route_invalid_label_returns_400(client):
             json={"items": [{"id": "1", "properties": {}}]},
         )
     assert resp.status_code == 400
+
+
+def test_batch_upsert_route_returns_found_and_missing(client):
+    payload = {
+        "found": [
+            {"id": "1", "node": {"id": "id_produit_1", "statut": "active"}},
+        ],
+        "missing": ["2"],
+    }
+    with patch.object(
+        nodes_router.node_service,
+        "batch_upsert_nodes",
+        new=AsyncMock(return_value=payload),
+    ):
+        resp = client.post(
+            "/nodes/Produit/batch/upsert",
+            json={"ids": ["1", "2"], "properties": {"statut": "active"}},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["found"] == payload["found"]
+    assert body["missing"] == ["2"]
+
+
+def test_batch_upsert_route_empty_ids_returns_422(client):
+    resp = client.post(
+        "/nodes/Produit/batch/upsert",
+        json={"ids": [], "properties": {"statut": "active"}},
+    )
+    assert resp.status_code == 422
+
+
+def test_batch_upsert_route_over_cap_returns_422(client):
+    ids = [str(i) for i in range(501)]
+    resp = client.post(
+        "/nodes/Produit/batch/upsert",
+        json={"ids": ids, "properties": {"x": 1}},
+    )
+    assert resp.status_code == 422

@@ -6,6 +6,7 @@ from app.domain.models import (
     BatchGetRequest,
     BatchResponse,
     BatchUpdateRequest,
+    BatchUpsertRequest,
 )
 from app.services.node_service import node_service
 
@@ -37,6 +38,38 @@ async def batch_get_nodes_route(label: str, body: BatchGetRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred during batch GET.",
+        )
+
+
+@router.post("/{label}/batch/upsert", response_model=BatchResponse)
+async def batch_upsert_nodes_route(label: str, body: BatchUpsertRequest):
+    """
+    Batch UPSERT: apply the SAME properties to many existing nodes.
+
+    Executes a SINGLE Cypher query (`MATCH ... WHERE n.id IN $ids SET n += $props`)
+    in a single transaction. Match-only (no node creation): IDs that do not
+    exist are returned in `missing`.
+
+    - **label**: Node label (e.g., 'Produit', 'Fournisseur', 'Categorie')
+    - **body.ids**: Raw IDs (without label prefix), 1..500 items.
+    - **body.properties**: Properties merged into every matched node.
+
+    Use this instead of `/batch/update` when every node should receive the
+    same patch (e.g., bulk status change).
+    """
+    try:
+        return await node_service.batch_upsert_nodes(
+            label, body.ids, body.properties
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logging.error(
+            f"Error in POST /nodes/{label}/batch/upsert: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal error occurred during batch UPSERT.",
         )
 
 

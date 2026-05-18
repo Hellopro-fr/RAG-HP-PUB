@@ -239,6 +239,24 @@ class BatchResponse(BaseModel):
     )
 
 
+class BatchUpsertRequest(BaseModel):
+    """
+    Apply the SAME properties to many nodes at once
+    (Cypher: `MATCH (n:Label) WHERE n.id IN $ids SET n += $props`).
+    """
+
+    ids: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Raw node IDs (without label prefix). Max 500 per batch.",
+    )
+    properties: Dict[str, Any] = Field(
+        ...,
+        description="Properties merged into every matched node (SET n += props).",
+    )
+
+
 class CypherQueryResponse(BaseModel):
     results: List[Dict[str, Any]] = Field(
         ..., description="List of records returned by the query."

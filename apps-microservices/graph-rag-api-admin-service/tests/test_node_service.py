@@ -103,3 +103,51 @@ async def test_batch_update_nodes_invalid_label_raises():
 async def test_batch_update_nodes_empty_items():
     out = await node_service.batch_update_nodes("Produit", [])
     assert out == {"found": [], "missing": []}
+
+
+# ---------- batch_upsert_nodes (uniform props applied to many ids) ----------
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_returns_found_and_missing():
+    fake_results = [
+        {"id": "id_produit_1", "n": {"id": "id_produit_1", "statut": "active"}},
+    ]
+    with patch(
+        "app.services.node_service.clients.execute_cypher",
+        new=AsyncMock(return_value=fake_results),
+    ) as mock_exec:
+        out = await node_service.batch_upsert_nodes(
+            "Produit", ["1", "2"], {"statut": "active"}
+        )
+
+    assert out["found"] == [
+        {"id": "1", "node": {"id": "id_produit_1", "statut": "active"}}
+    ]
+    assert out["missing"] == ["2"]
+
+    # Single Cypher call — same $props applied to every matched id
+    assert mock_exec.await_count == 1
+    args, kwargs = mock_exec.await_args
+    query = args[0]
+    assert "WHERE n.id IN $ids" in query
+    assert "SET n += $props" in query
+    assert kwargs.get("read_only") is False
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_invalid_label_raises():
+    with pytest.raises(ValueError):
+        await node_service.batch_upsert_nodes("Bad;Label", ["1"], {"x": 1})
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_empty_ids():
+    out = await node_service.batch_upsert_nodes("Produit", [], {"x": 1})
+    assert out == {"found": [], "missing": []}
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_empty_properties_is_noop():
+    out = await node_service.batch_upsert_nodes("Produit", ["1", "2"], {})
+    assert out == {"found": [], "missing": ["1", "2"]}
