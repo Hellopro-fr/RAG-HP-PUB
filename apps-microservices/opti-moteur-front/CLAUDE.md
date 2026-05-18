@@ -137,3 +137,43 @@ selon le nb de tokens query :
 - **>=3 tokens** (Ritmo ELEKTRA M) : seuil 5 -> comportement strict actuel.
 
 Logique dans `app/services/search_service.py::_filter_fallback_threshold()`.
+
+## Garde-fous P1 Solr V2 (SPEC -- A IMPLEMENTER apres audit v4)
+
+**Validation user 2026-05-18** : a coder apres l'audit v4 qui mesure A3+A4.
+Cf detail complet dans `site/moteur_recherche/PLAN_P1_GUARDRAILS.md`.
+
+### Probleme
+Quand l'utilisateur tape une query mal ecrite (`xyzqzqzq`) ou tres specifique
+sans match, Solr V2 ramene quand meme 40 produits **sans aucun token query
+dans le nom_produit** (bucket LOW du helper `hp_classify_and_alternate_docs`).
+Resultat : 40 produits hors-sujet affiches en page 1.
+
+### Solution validee
+Apres reception des 40 docs Solr V2 + classement HIGH/MID/LOW :
+
+| Regime    | Conditions                              | Affichage P1                              |
+|-----------|-----------------------------------------|-------------------------------------------|
+| ✅ HEALTHY | high >= 50% ET low < 20%                | 40 Solr (no AJAX)                         |
+| 🟡 HYBRID | Entre les deux (HIGH+MID >= 3)          | N Solr (HIGH+MID) + (40-N) Typesense AJAX |
+| 🚨 TRASH  | (high=0 ET mid<3) OU low_ratio >= 90%   | 0 Solr + 40 Typesense AJAX (pas de "0")   |
+
+**Decisions UX** :
+- TRASH n'affiche PAS "0 produit + did you mean" -> on tente Typesense AJAX
+  comme pour P2, et on affiche le resultat en P1 (40 produits Typesense).
+- Pas de bandeau "Aucun match exact, voici les produits proches" -> fallback
+  transparent.
+- A4 reranker penalise deja les faux positifs semantiques (penalty x0.3 si
+  vec<0.2 ET name_match<0.5) -> le rerank trie deja la qualite cote Typesense.
+
+### Implementation prevue (PR a venir)
+1. `fonctions_annuaire_hp.php::hp_classify_and_alternate_docs` -> retourner
+   aussi les stats `{total, high, mid, low}`.
+2. `moteur_recherche.php` -> fonction `hp_decide_p1_regime($stats)` qui
+   retourne `{regime, display_count, ext_target}`.
+3. Vire les LOW (et MID si trash) de `$tab_prod_rub` avant rendu PHP.
+4. Injecte `regime` et `ext_target_count` dans `window.HP_SEARCH_STATE`.
+5. `moteur_recherche_ajax.js::loadExtension(target_count)` -> utilise
+   `STATE.ext_target_count` au lieu de la valeur hardcodee 20.
+
+Aucune modif du Python opti-moteur-front (logique cote PHP front uniquement).
