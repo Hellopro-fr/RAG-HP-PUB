@@ -12,6 +12,7 @@ import (
 
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/urlvalidation"
 )
 
 // handleZohoAdmin dispatches the three verbs on /api/v1/zoho-imports/admin.
@@ -56,6 +57,10 @@ func (h *Handler) handleZohoAdminPost(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "url is required"})
 		return
 	}
+	if err := urlvalidation.ValidateServerURL(req.URL, h.allowInternalURLs); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	var encrypted []byte
 	if len(req.AuthHeaders) > 0 {
@@ -96,6 +101,8 @@ func (h *Handler) handleZohoAdminPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	go discoverZohoToolsForImport(context.Background(), h.zohoImportRepo, h.encryptor, row)
+
 	status := http.StatusCreated
 	if existing != nil {
 		status = http.StatusOK
@@ -119,11 +126,20 @@ func (h *Handler) handleZohoImports(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "zoho imports not configured"})
 		return
 	}
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleZohoUserList(w, r)
+		return
+	case http.MethodPost:
+		h.handleZohoUserCreate(w, r)
+		return
+	default:
 		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
 		return
 	}
+}
 
+func (h *Handler) handleZohoUserList(w http.ResponseWriter, r *http.Request) {
 	filter := repository.ZohoListFilter{
 		Search:    r.URL.Query().Get("search"),
 		CreatedBy: effectiveCreatorFilter(r.Context()),
@@ -153,6 +169,95 @@ func (h *Handler) handleZohoImports(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleZohoUserCreate inserts a per-user row. CreatedBy must be non-empty
+// and unique. Use POST /api/v1/zoho-imports/admin for the singleton admin row.
+func (h *Handler) handleZohoUserCreate(w http.ResponseWriter, r *http.Request) {
+	var req ZohoUserCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.URL = strings.TrimSpace(req.URL)
+	req.CreatedBy = strings.TrimSpace(req.CreatedBy)
+	req.TemplateSlug = strings.TrimSpace(req.TemplateSlug)
+
+	if req.Name == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "name is required"})
+		return
+	}
+	if req.URL == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "url is required"})
+		return
+	}
+	if err := urlvalidation.ValidateServerURL(req.URL, h.allowInternalURLs); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if req.CreatedBy == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "created_by is required"})
+		return
+	}
+	if !strings.Contains(req.CreatedBy, "@") || strings.HasPrefix(req.CreatedBy, "@") || strings.HasSuffix(req.CreatedBy, "@") {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "created_by must look like an email"})
+		return
+	}
+	if req.TemplateSlug == "" {
+		req.TemplateSlug = "zoho"
+	}
+
+	existing, err := h.zohoImportRepo.FindUserImportByEmail(req.CreatedBy)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if existing != nil {
+		writeJSON(w, http.StatusConflict, ErrorResponse{Error: "a zoho import already exists for this created_by"})
+		return
+	}
+
+	var encrypted []byte
+	if len(req.AuthHeaders) > 0 {
+		raw, mErr := json.Marshal(req.AuthHeaders)
+		if mErr != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "encode auth_headers: " + mErr.Error()})
+			return
+		}
+		if h.encryptor != nil {
+			encrypted, mErr = h.encryptor.Encrypt(raw)
+			if mErr != nil {
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "encrypt auth_headers: " + mErr.Error()})
+				return
+			}
+		} else {
+			encrypted = raw
+		}
+	}
+
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+
+	row := &db.ZohoImport{
+		Name:         req.Name,
+		URL:          req.URL,
+		CreatedBy:    req.CreatedBy,
+		TemplateSlug: req.TemplateSlug,
+		IsActive:     isActive,
+		AuthHeaders:  encrypted,
+	}
+	if err := h.zohoImportRepo.CreateUserImport(row); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	go discoverZohoToolsForImport(context.Background(), h.zohoImportRepo, h.encryptor, row)
+
+	writeJSON(w, http.StatusCreated, zohoImportToRowDTO(row, h))
+}
+
 // handleZohoImportByID dispatches GET/PATCH/DELETE on /api/v1/zoho-imports/{id}
 // and POST on /api/v1/zoho-imports/{id}/test (delegated to handleZohoImportTest).
 func (h *Handler) handleZohoImportByID(w http.ResponseWriter, r *http.Request) {
@@ -169,6 +274,14 @@ func (h *Handler) handleZohoImportByID(w http.ResponseWriter, r *http.Request) {
 
 	if rest == "test" {
 		h.handleZohoImportTest(w, r, id)
+		return
+	}
+	if rest == "discover" {
+		h.handleZohoImportDiscover(w, r, id)
+		return
+	}
+	if rest == "tools" {
+		h.handleZohoImportTools(w, r, id)
 		return
 	}
 	if rest != "" {
@@ -195,6 +308,69 @@ func (h *Handler) handleZohoImportByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
 	}
+}
+
+// handleZohoImportDiscover synchronously re-fetches the tool catalog from
+// the row's upstream URL with its decrypted headers and atomically swaps
+// it into zoho_import_tools. Returns the count actually persisted so the
+// operator can confirm at-a-glance.
+func (h *Handler) handleZohoImportDiscover(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	row, err := h.zohoImportRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if row == nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+		return
+	}
+	tools, fetchErr := fetchZohoTools(r.Context(), h.encryptor, row)
+	if fetchErr != nil {
+		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: fetchErr.Error()})
+		return
+	}
+	count, perr := h.zohoImportRepo.ReplaceTools(row.ID, tools)
+	if perr != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: perr.Error()})
+		return
+	}
+	log.Printf("[zoho-discover] import=%s manual refresh tools=%d", row.ID, count)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "tools": count})
+}
+
+// handleZohoImportTools returns the persisted tool catalog for one import row.
+// Read-only — refresh via POST /api/v1/zoho-imports/{id}/discover.
+func (h *Handler) handleZohoImportTools(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	row, err := h.zohoImportRepo.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if row == nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not found"})
+		return
+	}
+	tools, err := h.zohoImportRepo.ListTools(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	out := ZohoImportToolsResponse{
+		Tools: make([]ZohoImportToolDTO, 0, len(tools)),
+		Total: len(tools),
+	}
+	for i := range tools {
+		out.Tools = append(out.Tools, zohoImportToolToDTO(&tools[i]))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // splitZohoImportPath parses "/api/v1/zoho-imports/{id}" or
@@ -386,6 +562,12 @@ func (h *Handler) handleZohoImportTest(w http.ResponseWriter, r *http.Request, i
 
 	out.StatusCode = resp.StatusCode
 	out.OK = resp.StatusCode >= 200 && resp.StatusCode < 400
+	if out.OK {
+		// Reuse the same probe to refresh the persisted catalog for this row.
+		// Fire-and-forget so a downstream decode failure never flips the test
+		// result the operator sees.
+		go discoverZohoToolsForImport(context.Background(), h.zohoImportRepo, h.encryptor, row)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 

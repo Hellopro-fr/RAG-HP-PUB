@@ -36,6 +36,20 @@ func newZohoImportTestDB(t *testing.T) *gorm.DB {
 	if err := gdb.Exec(ddl).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
+	const toolsDDL = `
+		CREATE TABLE zoho_import_tools (
+			id           INTEGER PRIMARY KEY AUTOINCREMENT,
+			import_id    TEXT NOT NULL,
+			name         TEXT NOT NULL,
+			description  TEXT NOT NULL DEFAULT '',
+			input_schema TEXT NOT NULL,
+			created_at   datetime,
+			updated_at   datetime,
+			UNIQUE (import_id, name)
+		);`
+	if err := gdb.Exec(toolsDDL).Error; err != nil {
+		t.Fatalf("create tools table: %v", err)
+	}
 	return gdb
 }
 

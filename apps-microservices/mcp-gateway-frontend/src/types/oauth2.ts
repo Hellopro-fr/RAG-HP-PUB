@@ -60,6 +60,8 @@ export interface AuthorizeServer {
   id: string
   name: string
   tools: AuthorizeTool[]
+  configured?: boolean
+  docs_url?: string
 }
 
 export interface AuthorizeTool {

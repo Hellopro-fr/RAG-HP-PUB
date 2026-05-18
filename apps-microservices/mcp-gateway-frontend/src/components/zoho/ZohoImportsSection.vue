@@ -1,50 +1,53 @@
 <template>
   <div>
-    <div class="flex items-center gap-3 mb-4">
-      <button
-        class="px-3 py-1.5 text-sm rounded-md text-white bg-brand-500 hover:bg-brand-600"
-        @click="goToImport"
-      >
-        Importer depuis Sheets
-      </button>
-    </div>
-
-    <div class="border-b border-gray-200 dark:border-gray-800 mb-4">
-      <nav class="flex gap-4">
-        <button :class="tabBtn(activeTab === 'admin')" @click="activeTab = 'admin'">
-          Admin ({{ store.admin ? 1 : 0 }})
+    <PageHeaderTabs v-model="activeTab" :tabs="tabs">
+      <template #actions>
+        <button
+          class="px-3 py-1.5 text-sm rounded-md text-white bg-brand-500 hover:bg-brand-600"
+          @click="goToAdd"
+        >
+          + Ajouter
         </button>
-        <button :class="tabBtn(activeTab === 'users')" @click="activeTab = 'users'">
-          Utilisateurs ({{ store.usersTotal }})
+        <button
+          class="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5"
+          @click="goToImport"
+        >
+          Importer depuis Sheets
         </button>
-      </nav>
-    </div>
+      </template>
 
-    <ZohoAdminCard
-      v-if="activeTab === 'admin'"
-      :admin="store.admin"
-      :test-result="adminTestResult"
-      @create="openAdminEdit(true)"
-      @edit="openAdminEdit(false)"
-      @test="onTestAdmin"
-      @delete="onDeleteAdmin"
-    />
+      <ZohoAdminCard
+        v-if="activeTab === 'admin'"
+        :admin="store.admin"
+        :test-result="adminTestResult"
+        :discover-result="adminDiscoverResult"
+        @create="openAdminEdit(true)"
+        @edit="openAdminEdit(false)"
+        @test="onTestAdmin"
+        @discover="onDiscoverAdmin"
+        @delete="onDeleteAdmin"
+        @info="onInfoAdmin"
+      />
 
-    <ZohoUserList
-      v-else
-      :rows="store.users"
-      :total="store.usersTotal"
-      :page="store.usersPage"
-      :limit="store.usersLimit"
-      :search="store.usersSearch"
-      :test-results="userTestResults"
-      @search="onSearchUsers"
-      @page="(n) => store.fetchUsers({ page: n })"
-      @edit="openUserEdit"
-      @delete="onDeleteUser"
-      @toggle="onToggleUser"
-      @test="onTestUser"
-    />
+      <ZohoUserList
+        v-else
+        :rows="store.users"
+        :total="store.usersTotal"
+        :page="store.usersPage"
+        :limit="store.usersLimit"
+        :search="store.usersSearch"
+        :test-results="userTestResults"
+        :discover-results="userDiscoverResults"
+        @search="onSearchUsers"
+        @page="(n) => store.fetchUsers({ page: n })"
+        @edit="openUserEdit"
+        @delete="onDeleteUser"
+        @toggle="onToggleUser"
+        @test="onTestUser"
+        @discover="onDiscoverUser"
+        @info="onInfoUser"
+      />
+    </PageHeaderTabs>
 
     <ZohoImportEditModal
       :open="editOpen"
@@ -58,8 +61,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useZohoImportsStore } from '@/stores/zohoImports'
+import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ZohoAdminCard from './ZohoAdminCard.vue'
 import ZohoUserList from './ZohoUserList.vue'
 import ZohoImportEditModal from './ZohoImportEditModal.vue'
@@ -68,14 +72,22 @@ import type { ZohoImportRow, ZohoImportTestResponse, ZohoImportUpdateRequest } f
 const props = defineProps<{ templateSlug: string }>()
 
 const router = useRouter()
+const route = useRoute()
 const store = useZohoImportsStore()
 
 const activeTab = ref<'admin' | 'users'>('admin')
+
+const tabs = computed(() => [
+  { label: 'Admin', value: 'admin', count: store.admin ? 1 : 0 },
+  { label: 'Utilisateurs', value: 'users', count: store.usersTotal },
+])
 const editOpen = ref(false)
 const editRow = ref<ZohoImportRow | null>(null)
 const editIsCreate = ref(false)
 const adminTestResult = ref<ZohoImportTestResponse | null>(null)
 const userTestResults = ref<Record<string, ZohoImportTestResponse>>({})
+const adminDiscoverResult = ref<{ ok: boolean; tools: number } | null>(null)
+const userDiscoverResults = ref<Record<string, { ok: boolean; tools: number }>>({})
 
 const editTitle = computed(() => {
   if (editIsCreate.value) return 'Configurer le compte admin'
@@ -84,23 +96,41 @@ const editTitle = computed(() => {
 })
 
 onMounted(() => {
+  const wanted = route.query.zoho_tab
+  if (wanted === 'admin' || wanted === 'users') {
+    activeTab.value = wanted
+  }
   store.fetchAdmin()
   store.fetchUsers()
 })
-
-function tabBtn(active: boolean) {
-  return [
-    'pb-2 -mb-px text-sm font-medium border-b-2',
-    active
-      ? 'border-brand-500 text-brand-500'
-      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
-  ]
-}
 
 function goToImport() {
   router.push({
     name: 'google-sheets-import',
     query: { from: 'templates', template_slug: props.templateSlug },
+  })
+}
+
+function goToAdd() {
+  router.push({
+    name: 'zoho-import-new',
+    params: { slug: props.templateSlug },
+    query: { scope: activeTab.value },
+  })
+}
+
+function onInfoAdmin() {
+  if (!store.admin) return
+  router.push({
+    name: 'zoho-import-detail',
+    params: { slug: props.templateSlug, id: store.admin.id },
+  })
+}
+
+function onInfoUser(r: ZohoImportRow) {
+  router.push({
+    name: 'zoho-import-detail',
+    params: { slug: props.templateSlug, id: r.id },
   })
 }
 
@@ -151,6 +181,16 @@ async function onTestAdmin() {
 async function onTestUser(r: ZohoImportRow) {
   const res = await store.testRow(r.id)
   userTestResults.value = { ...userTestResults.value, [r.id]: res }
+}
+
+async function onDiscoverAdmin() {
+  if (!store.admin) return
+  adminDiscoverResult.value = await store.discoverRow(store.admin.id)
+}
+
+async function onDiscoverUser(r: ZohoImportRow) {
+  const res = await store.discoverRow(r.id)
+  userDiscoverResults.value = { ...userDiscoverResults.value, [r.id]: res }
 }
 
 function onSearchUsers(s: string) {

@@ -30,11 +30,16 @@ func matchesUserEmail(serverCreatedBy, endUserEmail, endUserLogin string) bool {
 	return false
 }
 
-// loginPart returns the local-part of an email (everything before '@'), or
-// the empty string when the input has no '@' or starts with '@'.
+// loginPart returns the local-part of an email (everything before '@').
+// When the input has no '@', the whole string is treated as the login
+// (matches how imports store bare logins like "haingatiana"). Returns ""
+// only when the input starts with '@' (no local-part).
 func loginPart(email string) string {
 	at := strings.IndexByte(email, '@')
-	if at <= 0 {
+	if at < 0 {
+		return email
+	}
+	if at == 0 {
 		return ""
 	}
 	return email[:at]

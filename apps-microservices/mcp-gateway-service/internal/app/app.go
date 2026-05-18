@@ -385,8 +385,10 @@ func registerRESTAndOAuthServer(
 	log.Println("[main] server_authorizations wired into Gateway for full-access bypass")
 
 	apiHandler.SetEncryptor(dbs.encryptor)
-	apiHandler.SetZohoImportRepo(repository.NewZohoImportRepo(dbs.database))
-	log.Println("[main] zoho-imports admin REST wired")
+	zohoImportRepo := repository.NewZohoImportRepo(dbs.database)
+	apiHandler.SetZohoImportRepo(zohoImportRepo)
+	gw.SetZohoUserCatalog(&zohoCatalogAdapter{imports: zohoImportRepo, users: dbs.userRepo, encryptor: dbs.encryptor})
+	log.Println("[main] zoho-imports admin REST wired + persisted catalog source attached to gateway")
 
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
 		redirectURL := strings.TrimRight(cfg.GatewayPublicURL, "/") + "/api/v1/google/callback"
@@ -417,6 +419,8 @@ func registerRESTAndOAuthServer(
 		RefreshRepo:    refreshRepo,
 		ServerRepo:     dbs.repo,
 		SSOSessionRepo: ssoSessionRepo,
+		ZohoFetcher:    gw,
+		DocsURL:        strings.TrimRight(cfg.GatewayPublicURL, "/") + "/docs/zohocrm",
 		JWTSecret:      cfg.JWTSecret,
 		PublicURL:      cfg.GatewayPublicURL,
 		AuthURL:        cfg.AuthURL,
@@ -518,6 +522,13 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 			} else {
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
+				}
+				if len(s.Tags) > 0 {
+					tags := make([]string, 0, len(s.Tags))
+					for _, t := range s.Tags {
+						tags = append(tags, t.Tag)
+					}
+					reg.SetTags(s.ID, tags)
 				}
 				toolStates := make(map[string]bool, len(s.Tools))
 				for _, t := range s.Tools {

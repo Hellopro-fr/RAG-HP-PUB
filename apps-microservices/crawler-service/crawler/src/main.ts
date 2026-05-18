@@ -44,6 +44,13 @@ import { isBlanketBlock } from "./robotsTxtGuard.js";
 const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
 
+// Crawl start timestamp (déclaré ici pour être accessible depuis le handler de fin de crawl
+// qui construit la payload — ligne ~985). Mais ASSIGNÉ plus tard, juste avant
+// `await startCrawler(...)` (ligne ~1294), pour exclure le temps de bootstrap
+// (init Crawlee, Playwright, consolidate URLs, seeding) du décompte.
+// Format MySQL DATETIME, alimente crawl_metrics.date_start côté PHP.
+let crawlStartTime = '';
+
 // --- V3 Feature: Standard CLI Argument Parsing ---
 const args: Record<string, string> = {};
 process.argv.slice(2).forEach(arg => {
@@ -968,6 +975,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     }
 
 
+    // Timestamp de fin de crawl — capté ici (juste avant le build de la payload) pour refléter
+    // la VRAIE fin du crawl côté crawler-service (et non l'heure où PHP reçoit le webhook,
+    // qui inclurait la latence Python + le retry du webhook). Format MySQL DATETIME.
+    const crawlEndTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
     // Read deperdition counters from StatsManager (defaults to 0 if unavailable)
     async function readStat(metric: string): Promise<number> {
         if (!context.statsManager) return 0;
@@ -1005,6 +1017,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         dropped_cb,
         timeout_individual,
         success_extracted,
+        // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
+        date_start: crawlStartTime,
+        date_end: crawlEndTime,
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
@@ -1276,6 +1291,12 @@ if (typeCrawling == "sitemap") {
         process.on("beforeExit", () => { void finalizeTimingOnce!(); });
     }
     // --- END TIMING INSTRUMENTATION ---
+
+    // Capture du timestamp de démarrage RÉEL du crawl, juste avant l'invocation de
+    // startCrawler() qui appelle crawler.run() (cf functions.ts:755). Tout le setup
+    // précédent (bootstrap modules, init Crawlee, Playwright, consolidate URLs,
+    // two-phase seeding) est EXCLU du décompte de duration_seconds.
+    crawlStartTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     // Launch
     const crawler = await startCrawler(

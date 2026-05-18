@@ -5,6 +5,7 @@ import type {
   ZohoImportUpdateRequest,
   ZohoImportTestResponse,
   ZohoAdminUpsertRequest,
+  ZohoUserCreateRequest,
 } from '@/types/zoho'
 
 interface State {
@@ -58,6 +59,12 @@ export const useZohoImportsStore = defineStore('zohoImports', {
     async upsertAdmin(payload: ZohoAdminUpsertRequest) {
       this.admin = await zohoImportsApi.upsertAdmin(payload)
     },
+    async createUserImport(payload: ZohoUserCreateRequest): Promise<ZohoImportRow> {
+      const row = await zohoImportsApi.create(payload)
+      this.users = [row, ...this.users]
+      this.usersTotal += 1
+      return row
+    },
     async deleteAdmin() {
       await zohoImportsApi.deleteAdmin()
       this.admin = null
@@ -77,6 +84,9 @@ export const useZohoImportsStore = defineStore('zohoImports', {
     },
     async testRow(id: string): Promise<ZohoImportTestResponse> {
       return zohoImportsApi.test(id)
+    },
+    async discoverRow(id: string): Promise<{ ok: boolean; tools: number }> {
+      return zohoImportsApi.discover(id)
     },
     async toggleActive(id: string, active: boolean) {
       return this.updateRow(id, { is_active: active })

@@ -39,3 +39,25 @@ export interface ZohoAdminUpsertRequest {
   url: string
   auth_headers?: Record<string, string>
 }
+
+/** Body of POST /api/v1/zoho-imports — create a per-user import row. */
+export interface ZohoUserCreateRequest {
+  name: string
+  url: string
+  created_by: string
+  auth_headers?: Record<string, string>
+  is_active?: boolean
+  template_slug?: string
+}
+
+export interface ZohoImportTool {
+  name: string
+  description: string
+  input_schema: string
+  updated_at: string
+}
+
+export interface ZohoImportToolsResponse {
+  tools: ZohoImportTool[]
+  total: number
+}

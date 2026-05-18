@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"log"
 	"strings"
 	"sync"
 
@@ -107,6 +108,20 @@ func (r *Registry) SetToolPrefix(id, prefix string) {
 	defer r.mu.Unlock()
 	if s, ok := r.servers[id]; ok {
 		s.ToolPrefix = prefix
+	}
+}
+
+// SetTags replaces the tag slice for a registered backend server. Used by
+// the PUT /servers/{id} handler so server_tags edits are reflected in the
+// in-memory registry without waiting for a full re-discovery cycle.
+func (r *Registry) SetTags(id string, tags []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.servers[id]; ok {
+		s.Tags = tags
+		log.Printf("[registry] SetTags id=%s tags=%v", id, tags)
+	} else {
+		log.Printf("[registry] SetTags id=%s tags=%v — backend NOT in registry (not yet discovered or unregistered)", id, tags)
 	}
 }
 

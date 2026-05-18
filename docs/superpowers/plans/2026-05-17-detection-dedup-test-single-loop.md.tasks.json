@@ -1,0 +1,14 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-17-detection-dedup-test-single-loop.md",
+  "specPath": "docs/superpowers/specs/2026-05-17-detection-dedup-test-single-loop-design.md",
+  "tasks": [
+    {
+      "id": 35,
+      "subject": "Task 1: Add single-loop strict-dedup test",
+      "status": "completed",
+      "blockedBy": [],
+      "description": "**Goal:** Append `test_dedup_follower_strict_single_loop` to `tests/test_admission_carveout.py`. 5 concurrent /detect callers on single asyncio loop via httpx.AsyncClient + ASGITransport + asyncio.gather. Strict assertions: 1 acquire, 1 release, 4 DEDUP_HITS, identical bodies.\n\n**Files:**\n- Modify (append): `apps-microservices/api-detection-langue-fr/tests/test_admission_carveout.py` (~50 lines)\n\n**Verify:** `pytest apps-microservices/api-detection-langue-fr/tests/test_admission_carveout.py -v` → 13/13 PASS\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/tests/test_admission_carveout.py\"], \"verifyCommand\": \"python -m pytest apps-microservices/api-detection-langue-fr/tests/test_admission_carveout.py -v\", \"acceptanceCriteria\": [\"test appended async + pytest.mark.asyncio\", \"httpx.AsyncClient + ASGITransport on single loop\", \"5 strict assertions pass\", \"DEDUP_HITS delta == 4\", \"existing 12 tests unchanged\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-17T14:00:00Z"
+}
