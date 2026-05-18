@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 compute_idf.py
 ==============
@@ -11,17 +12,23 @@ Pourquoi :
   "melangeur conique", le token rare ("conique") devrait peser plus que le
   token commun ("melangeur") -- d'ou la ponderation IDF.
 
-Usage :
-  # 1. Etre sur la VM ou dans un environnement qui peut joindre Typesense
+Usage RECOMMANDE -- dans le container Docker (deps deja la) :
   cd apps-microservices/opti-moteur-front
-  python scripts/compute_idf.py
+  docker compose exec opti-moteur-front python scripts/compute_idf.py
+  docker compose restart opti-moteur-front
+
+Usage alternatif -- depuis l'hote (besoin python3 + requirements.txt) :
+  cd apps-microservices/opti-moteur-front
+  python3 scripts/compute_idf.py
 
   # Options
-  python scripts/compute_idf.py --collection produits_scale --out app/data/idf_nom_produit.json
-  python scripts/compute_idf.py --limit 50000   # echantillon (test rapide)
+  python3 scripts/compute_idf.py --collection produits_scale
+  python3 scripts/compute_idf.py --limit 50000  # echantillon (test rapide)
 
-Le fichier de sortie est gitignore (depend du catalogue live). A relancer
-apres chaque ingestion majeure (sync_typesense_daily + delta consequent).
+Le fichier de sortie (`app/data/idf_nom_produit.json`) est gitignore (depend
+du catalogue live). Le bind-mount docker-compose `./app/data:/app/app/data`
+garantit que le fichier ecrit dans le container apparait cote hote, et vice-
+versa.
 
 Couts :
   Export ~700k docs Typesense (champ nom_produit only) : ~10-30s + ~50-200 MB RAM.
@@ -207,7 +214,11 @@ def main():
         out_path, result["n_tokens"], result["median"], result["n_docs"],
         size_kb, time.time() - t0,
     )
-    logger.info("Restart opti-moteur-front pour que le reranker recharge le nouveau dict IDF.")
+    logger.info(
+        "Done. Pour que le reranker recharge le dict IDF en RAM, executer :\n"
+        "    docker compose restart opti-moteur-front\n"
+        "Puis verifier : docker compose logs --tail 30 opti-moteur-front | grep -i IDF"
+    )
 
 
 if __name__ == "__main__":
