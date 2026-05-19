@@ -8,22 +8,33 @@
 #   ./tools/download_daemon.sh
 #
 # Environment variables:
-#   GCS_BUCKET_NAME        (required)  Source bucket; archives live at gs://$BUCKET/crawls/
-#   DOWNLOAD_REQUESTS_PATH (optional)  Host dir polled for .request markers
-#                                      (default: apps-microservices/crawler-service/crawler_download_requests).
-#                                      Must match the crawler-service host bind source for
-#                                      compose target /app/download_requests; same env var name
-#                                      as Python (app/core/config.py) for cross-layer parity.
-#   DOWNLOAD_RESULTS_PATH  (optional)  Host dir where downloaded archives + .done/.error
-#                                      markers are written (default:
-#                                      apps-microservices/crawler-service/crawler_download_results).
-#                                      Same parity rules as DOWNLOAD_REQUESTS_PATH.
+#   GCS_BUCKET_NAME          (required)  Source bucket.
+#   DOWNLOAD_REQUESTS_PATH   (optional)  Host dir polled for .request markers
+#                                        (default: apps-microservices/crawler-service/crawler_download_requests).
+#                                        Must match the crawler-service host bind source for
+#                                        compose target /app/download_requests; same env var name
+#                                        as Python (app/core/config.py) for cross-layer parity.
+#   DOWNLOAD_RESULTS_PATH    (optional)  Host dir where downloaded archives + .done/.error
+#                                        markers are written (default:
+#                                        apps-microservices/crawler-service/crawler_download_results).
+#                                        Same parity rules as DOWNLOAD_REQUESTS_PATH.
+#   DOWNLOAD_GCS_PREFIX      (optional)  GCS path prefix under the bucket (default: crawls).
+#                                        Set to "stash" for the stash/unstash flow.
+#   DELETE_AFTER_DOWNLOAD    (optional)  Enable 2-phase commit GCS cleanup (default: false).
+#                                        When true, daemon scans for {id}.unstash-confirmed,
+#                                        deletes the GCS source, and writes {id}.unstash-cleanup-done.
 #
-# Flow:
+# Flow (archive download, DELETE_AFTER_DOWNLOAD=false):
 #   1. Service writes {crawl_id}.request to the requests directory
-#   2. This daemon picks it up, downloads gs://{bucket}/crawls/{crawl_id}.tar.gz
+#   2. This daemon picks it up, downloads gs://{bucket}/{prefix}/{crawl_id}.tar.gz
 #   3. Places the archive in the results directory + writes {crawl_id}.done
 #   4. Service detects .done, streams the file to the client, then cleans up
+#
+# Flow (stash unstash, DELETE_AFTER_DOWNLOAD=true):
+#   Steps 1-4 above, then:
+#   5. Service extracts tar successfully, writes {crawl_id}.unstash-confirmed
+#   6. Daemon detects .unstash-confirmed, deletes GCS source, writes .unstash-cleanup-done
+#   7. Service polls .unstash-cleanup-done to clear Redis stash flag
 
 # Configuration
 DEFAULT_REQUESTS_DIR="$(dirname "$0")/../apps-microservices/crawler-service/crawler_download_requests"
@@ -31,6 +42,8 @@ REQUESTS_DIR="${DOWNLOAD_REQUESTS_PATH:-$DEFAULT_REQUESTS_DIR}"
 
 DEFAULT_RESULTS_DIR="$(dirname "$0")/../apps-microservices/crawler-service/crawler_download_results"
 RESULTS_DIR="${DOWNLOAD_RESULTS_PATH:-$DEFAULT_RESULTS_DIR}"
+DOWNLOAD_GCS_PREFIX="${DOWNLOAD_GCS_PREFIX:-crawls}"
+DELETE_AFTER_DOWNLOAD="${DELETE_AFTER_DOWNLOAD:-false}"
 
 # Load .env from parent directory
 ENV_FILE="$(dirname "$0")/../.env"
@@ -54,7 +67,8 @@ mkdir -p "$REQUESTS_DIR" "$RESULTS_DIR"
 echo "Starting Download Daemon..."
 echo "Watching requests: $REQUESTS_DIR"
 echo "Writing results:   $RESULTS_DIR"
-echo "Source Bucket:      gs://$BUCKET_NAME/crawls/"
+echo "Source Bucket:      gs://$BUCKET_NAME/$DOWNLOAD_GCS_PREFIX/"
+echo "Delete after dl:   $DELETE_AFTER_DOWNLOAD"
 echo "Poll interval:      ${CHECK_INTERVAL}s"
 
 while true; do
@@ -62,7 +76,7 @@ while true; do
         crawl_id=$(basename "$request_file" .request)
         echo "[$(date)] Download request received: $crawl_id"
 
-        source_url="gs://$BUCKET_NAME/crawls/$crawl_id.tar.gz"
+        source_url="gs://$BUCKET_NAME/$DOWNLOAD_GCS_PREFIX/$crawl_id.tar.gz"
         target_path="$RESULTS_DIR/$crawl_id.tar.gz"
         done_marker="$RESULTS_DIR/$crawl_id.done"
         error_marker="$RESULTS_DIR/$crawl_id.error"
@@ -83,6 +97,36 @@ while true; do
             rm "$request_file"
         fi
     done
+
+    # Phase 2 (2-phase commit): scan for service-written .unstash-confirmed markers
+    # and delete the GCS source. Only active when DELETE_AFTER_DOWNLOAD=true.
+    # Service writes {id}.unstash-confirmed after successful extract; daemon
+    # responds by deleting the GCS object and writing {id}.unstash-cleanup-done.
+    if [ "$DELETE_AFTER_DOWNLOAD" = "true" ]; then
+        find "$RESULTS_DIR" -maxdepth 1 -name "*.unstash-confirmed" -print0 | while IFS= read -r -d '' confirm_file; do
+            crawl_id=$(basename "$confirm_file" .unstash-confirmed)
+            source_url="gs://$BUCKET_NAME/$DOWNLOAD_GCS_PREFIX/$crawl_id.tar.gz"
+            cleanup_done="$RESULTS_DIR/$crawl_id.unstash-cleanup-done"
+
+            echo "[$(date)] Extract confirmed for $crawl_id, deleting GCS source..."
+            # Capture stderr: gcloud storage rm exits 0 even on auth/network errors
+            # (known gcloud CLI quirk). Checking stderr content guards against silent
+            # failures that would falsely advance to the cleanup-done state.
+            rm_stderr=$(gcloud storage rm "$source_url" 2>&1 >/dev/null)
+            rm_exit=$?
+            if [ $rm_exit -eq 0 ] && [ -z "$rm_stderr" ]; then
+                echo "GCS source deleted: $source_url"
+                touch "$cleanup_done"
+                rm "$confirm_file"
+            else
+                echo "WARNING: gcloud storage rm failed for $source_url (exit=$rm_exit). Leaving .unstash-confirmed for retry on next poll."
+                [ -n "$rm_stderr" ] && echo "  gcloud stderr: $rm_stderr"
+                # Intentionally do NOT touch cleanup_done and do NOT remove confirm_file:
+                # the service will time out and operator can investigate. Next daemon
+                # poll cycle will retry the gcloud rm.
+            fi
+        done
+    fi
 
     sleep $CHECK_INTERVAL
 done
