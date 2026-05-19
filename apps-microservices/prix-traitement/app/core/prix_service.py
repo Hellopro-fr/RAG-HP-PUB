@@ -6,6 +6,7 @@ import time
 import json
 import logging
 import asyncio
+import math
 import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
@@ -1111,6 +1112,159 @@ def _trim_chunks_to_token_budget(
     return chunks[:kept], len(chunks) - kept
 
 
+# =============================================================================
+# Génération des choix budget pour le questionnaire acheteur
+# =============================================================================
+# Stratégie : mix (cible 2-3 tranches centrales + 2 bornes + "Je ne sais pas encore").
+# Pas commerciaux français snappés sur une échelle finie pour rester lisible.
+
+_ECHELLE_COMMERCIALE = [
+    5, 10, 25, 50, 100, 250, 500,
+    1000, 2500, 5000, 10000, 25000, 50000, 100000,
+    250000, 500000, 1000000, 2500000, 5000000, 10000000,
+    25000000, 50000000, 100000000,
+]
+
+# Seuils de tuning pour la génération des choix budget.
+# Tous exprimés en ratio du prix moyen de la fourchette LLM.
+_RATIO_LARGEUR_DEGENEREE = 0.05  # si largeur < ratio*moyenne -> fourchette élargie artificiellement
+_RATIO_LARGEUR_ELARGIE   = 0.20  # nouvelle largeur = ratio*moyenne (cas dégénéré)
+_RATIO_PAS_MIN           = 0.10  # plancher du pas commercial = ratio*moyenne
+
+
+def _snap_to_scale(target: float, scale: List[int]) -> int:
+    """Retourne le pas commercial de `scale` le plus proche de `target`."""
+    return min(scale, key=lambda s: abs(s - target))
+
+
+def _next_in_scale(pas: int, scale: List[int]) -> Optional[int]:
+    """Retourne le pas commercial strictement supérieur (None si déjà au maximum)."""
+    for s in scale:
+        if s > pas:
+            return s
+    return None
+
+
+def _previous_in_scale(pas: int, scale: List[int]) -> Optional[int]:
+    """Retourne le pas commercial strictement inférieur (None si déjà au minimum)."""
+    prev: Optional[int] = None
+    for s in scale:
+        if s >= pas:
+            return prev
+        prev = s
+    return prev
+
+
+def _compute_bornes_tranches(min_p: float, max_p: float, pas: int) -> Tuple[int, int, List[Tuple[int, int]]]:
+    """
+    Calcule (borne_inf, borne_sup, tranches) pour un pas donné.
+    Garantit borne_inf < min_p (strict) et borne_sup > max_p (strict).
+    """
+    borne_inf = int(math.floor(min_p / pas) * pas)
+    if borne_inf >= min_p:
+        borne_inf -= pas
+    if borne_inf < 0:
+        borne_inf = 0
+
+    borne_sup = int(math.ceil(max_p / pas) * pas)
+    if borne_sup <= max_p:
+        borne_sup += pas
+
+    tranches: List[Tuple[int, int]] = []
+    cur = borne_inf
+    while cur < borne_sup:
+        tranches.append((cur, cur + pas))
+        cur += pas
+
+    return borne_inf, borne_sup, tranches
+
+
+def _fmt_price(n: int) -> str:
+    """Formate un entier avec espace milliers (ex: 2500 -> '2 500')."""
+    return f"{int(n):,}".replace(",", " ")
+
+
+def _generate_budget_choices(
+    min_prix: float,
+    max_prix: float,
+    devise: str = "€",
+) -> List[str]:
+    """
+    Génère la liste ordonnée des choix budget pour le questionnaire acheteur.
+
+    Stratégie mix : cible 2-3 tranches centrales (le pas est snappé sur une échelle
+    commerciale française). Forme : ["Moins de X", tranche1, tranche2, ..., "Plus de Y",
+    "Je ne sais pas encore"].
+
+    Args:
+        min_prix: borne basse de la fourchette LLM
+        max_prix: borne haute de la fourchette LLM
+        devise:   symbole/texte de devise à afficher (défaut "€")
+
+    Returns:
+        Liste de strings prêtes à afficher.
+    """
+    # Cas dégénéré : valeurs invalides → fallback minimal
+    if min_prix is None or max_prix is None:
+        return ["Je ne sais pas encore"]
+    try:
+        min_prix = float(min_prix)
+        max_prix = float(max_prix)
+    except (TypeError, ValueError):
+        return ["Je ne sais pas encore"]
+    if max_prix <= 0:
+        return ["Je ne sais pas encore"]
+    if min_prix > max_prix:
+        min_prix, max_prix = max_prix, min_prix
+
+    moyenne = (min_prix + max_prix) / 2.0
+    largeur = max(max_prix - min_prix, 1.0)
+
+    # Cas dégénéré : fourchette LLM quasi-ponctuelle (< _RATIO_LARGEUR_DEGENEREE du prix moyen)
+    # → on élargit artificiellement autour du centre pour produire des tranches
+    # commercialement représentatives plutôt que des micro-bornes.
+    if largeur < moyenne * _RATIO_LARGEUR_DEGENEREE:
+        largeur = moyenne * _RATIO_LARGEUR_ELARGIE
+        min_prix = max(0.0, moyenne - largeur / 2.0)
+        max_prix = moyenne + largeur / 2.0
+
+    # Pas cible : max entre "largeur/2" et "_RATIO_PAS_MIN du prix moyen".
+    # → vise 3 tranches centrales tout en garantissant un pas commercial
+    # sensé même quand la fourchette est resserrée par rapport au prix.
+    target_step = max(largeur / 2.0, moyenne * _RATIO_PAS_MIN)
+    pas = _snap_to_scale(target_step, _ECHELLE_COMMERCIALE)
+
+    borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
+
+    # Rebalancing pour rester dans [2, 3] tranches centrales
+    while len(tranches) > 3:
+        next_pas = _next_in_scale(pas, _ECHELLE_COMMERCIALE)
+        if next_pas is None:
+            break
+        pas = next_pas
+        borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
+
+    while len(tranches) < 2:
+        prev_pas = _previous_in_scale(pas, _ECHELLE_COMMERCIALE)
+        if prev_pas is None:
+            break
+        pas = prev_pas
+        borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
+
+    devise_str = (devise or "€").strip() or "€"
+
+    options: List[str] = []
+    # Garde : "Moins de 0" n'a pas de sens, on l'omet
+    if borne_inf > 0:
+        options.append(f"Moins de {_fmt_price(borne_inf)} {devise_str}")
+    for a, b in tranches:
+        options.append(f"{_fmt_price(a)} {devise_str} – {_fmt_price(b)} {devise_str}")
+    options.append(f"Plus de {_fmt_price(borne_sup)} {devise_str}")
+    options.append("Je ne sais pas encore")
+
+    return options
+
+
 async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
@@ -1522,6 +1676,17 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
                     f"[{adjust_details['borne_basse_apres']}, {adjust_details['borne_haute_apres']}] "
                     f"(min_ex={adjust_details['min_exemple']}, max_ex={adjust_details['max_exemple']})"
                 )
+
+        # Génération des choix budget acheteur à partir de la fourchette finalisée
+        if isinstance(fourchette, dict):
+            try:
+                b_basse = float(fourchette.get("borne_basse"))
+                b_haute = float(fourchette.get("borne_haute"))
+                devise = fourchette.get("devise") or "€"
+                parsed["budget_reponse"] = _generate_budget_choices(b_basse, b_haute, devise=devise)
+            except (TypeError, ValueError):
+                parsed["budget_reponse"] = []
+                logger.warning(f"[{id_categorie}] V2 — budget_reponse fallback (bornes invalides)")
 
         return {
             "success": True,
