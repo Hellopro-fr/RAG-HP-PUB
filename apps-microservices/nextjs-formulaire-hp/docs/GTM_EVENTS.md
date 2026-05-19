@@ -51,6 +51,7 @@ Cet événement unique track toute la progression de l'utilisateur dans le funne
 | `init` | Initialisation du funnel |
 | `question` | Étape de question du questionnaire |
 | `choix-propart` | Choix professionnel/particulier |
+| `prix` | Estimation de prix (page /budget) |
 | `selection` | Sélection des fournisseurs |
 | `contact` | Formulaire de contact |
 | `conversion` | Soumission finale |
@@ -138,6 +139,11 @@ submit-success            ▼
   location: string           // Localisation
 }
 ```
+
+#### Estimation de prix (page /budget)
+| step_name | step_type | Description |
+|-----------|-----------|-------------|
+| `estimation-prix` | `prix` | Affichage de la card d'estimation de prix sur /budget (uniquement si fourchette valide + > 2 exemples produits) |
 
 #### Sélection produits
 | step_name | step_type | Description |
@@ -399,6 +405,7 @@ Sources de trafic (paramètres UTM).
 | `trackProfileView()` | Affichage page profil |
 | `trackProfileTypeSelected(type)` | Sélection type profil |
 | `trackProfileComplete(type, hasCompany, countryId, location)` | Profil complété |
+| `trackBudgetEstimationView()` | Affichage estimation prix (page /budget, si card visible) |
 | `trackSelectionPageView(recommended, total)` | Page sélection |
 | `trackProductCardClick(id, name, score, action)` | Clic produit |
 | `trackProductSelectionChange(id, action, total)` | Sélection changée |
@@ -407,7 +414,7 @@ Sources de trafic (paramètres UTM).
 | `trackContactFieldFilled(name, index)` | Champ rempli |
 | `trackFormSubmitAttempt(valid, missing)` | Tentative soumission |
 | `trackFormValidationErrors(count, errors)` | Erreurs validation |
-| `trackLeadSubmitted(id, count, type)` | Lead soumis |
+| `trackLeadSubmitted(count, profileType, userKnownStatus)` | Lead soumis |
 | `trackLeadSubmissionError(type, message)` | Erreur soumission |
 
 ### Gestion du parcours (flow_type)
@@ -479,13 +486,16 @@ Sources de trafic (paramètres UTM).
 6. trackProfileComplete('professional', true, 1, 'Paris')
    → devis_funnel_formulaire { step_name: 'profile-complete', step_type: 'choix-propart' }
 
-7. trackSelectionPageView(5, 12)
+7. trackBudgetEstimationView()           // uniquement si la card estimation est rendue
+   → devis_funnel_formulaire { step_name: 'estimation-prix', step_type: 'prix' }
+
+8. trackSelectionPageView(5, 12)
    → devis_funnel_formulaire { step_name: 'selection-produits', step_type: 'selection' }
 
-8. trackContactFormView(3)
+9. trackContactFormView(3)
    → devis_funnel_formulaire { step_name: 'formulaire-contact', step_type: 'contact' }
 
-9. trackLeadSubmitted('lead_123', 3, 'professional')
+10. trackLeadSubmitted(3, 'professional', 'unknown')
    → devis_funnel_formulaire { step_name: 'submit-success', step_type: 'conversion', conversion: true }
 ```
 

@@ -24,7 +24,6 @@ import {
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
-import { hasPriceEstimation } from "@/types/prix";
 import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 
@@ -211,7 +210,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setAnimatingCount(true);
 
     // Track add/remove selection (GTM)
-    trackProductSelectionChange(id, isRemoving ? 'retirer' : 'ajouter', newIds.length, hasPriceEstimation(priceEstimation));
+    trackProductSelectionChange(id, isRemoving ? 'retirer' : 'ajouter', newIds.length);
 
     // Track DB
     trackDbEvent('selection', isRemoving ? 'deselect' : 'select', {

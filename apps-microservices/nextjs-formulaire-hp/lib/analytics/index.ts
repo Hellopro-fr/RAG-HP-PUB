@@ -26,6 +26,7 @@ export {
   trackCustomNeedContactView,
   trackComparisonModalView,
   trackProductModalView,
+  trackBudgetEstimationView,
   trackFunnelAbandonment,
   trackFormValidationError,
   trackFormValidationErrors,

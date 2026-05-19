@@ -1,10 +1,12 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 import { cn, getAssetPath } from '@/lib/utils';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
+import { trackBudgetEstimationView } from '@/lib/analytics';
 import BudgetEstimate from '@/components/flow/BudgetEstimate';
 import BudgetQuestionScreen from '@/components/flow/BudgetQuestionScreen';
 import CategoryHeaderBar from '@/components/flow/CategoryHeaderBar';
@@ -47,6 +49,19 @@ const BudgetClient = () => {
     data.fourchette.borne_basse !== 0 &&
     data.fourchette.borne_basse !== data.fourchette.borne_haute &&
     (data.exemples_produits?.length ?? 0) > 2;
+
+  const hasTrackedEstimate = useRef(false);
+
+  useEffect(() => {
+    if (!showEstimate || hasTrackedEstimate.current) return;
+
+    const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    const navType = navEntries.length > 0 ? navEntries[0].type : 'navigate';
+    if (navType === 'back_forward') return;
+
+    hasTrackedEstimate.current = true;
+    trackBudgetEstimationView();
+  }, [showEstimate]);
 
   const priceItems = data
     ? (data.exemples_produits || []).map((ex) => ({

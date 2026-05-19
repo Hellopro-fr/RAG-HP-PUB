@@ -9,7 +9,6 @@ import type { DemandeInfoPayload, StatutAcheteur, ProduitSelection } from '@/typ
 
 // Analytics imports
 import { trackLeadSubmitted, trackLeadSubmissionError } from '@/lib/analytics/gtm';
-import { hasPriceEstimation } from '@/types/prix';
 import { trackGA4LeadSubmitted } from '@/lib/analytics/ga4';
 import { tagHotjarUser, HOTJAR_TAGS } from '@/lib/analytics/hotjar';
 
@@ -238,8 +237,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
         trackLeadSubmitted(
           variables.selectedSupplierIds.length,
           profileType,
-          variables.userKnownStatus,
-          hasPriceEstimation(useFlowStore.getState().priceEstimation)
+          variables.userKnownStatus
         );
         trackGA4LeadSubmitted(
           response.data.leadId,

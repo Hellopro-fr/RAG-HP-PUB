@@ -4,7 +4,7 @@
 // TYPES
 // =============================================================================
 
-type StepType = 'init' | 'question' | 'localisation' | 'choix-propart' | 'selection' | 'contact' | 'conversion';
+type StepType = 'init' | 'question' | 'localisation' | 'choix-propart' | 'selection' | 'contact' | 'conversion' | 'prix';
 
 type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | 'budget_ne_correspond_pas' | null;
 
@@ -291,10 +291,9 @@ export function trackProfileComplete(profileType: string) {
 /**
  * Track l'affichage de la page de sélection produits
  */
-export function trackSelectionPageView(recommendedCount: number, totalCount: number, hasPriceEstimation?: boolean) {
+export function trackSelectionPageView(recommendedCount: number, totalCount: number) {
   currentStepIndex++;
-  const stepName = hasPriceEstimation ? 'selection-produits-prix' : 'selection-produits';
-  trackQuoteFunnel(currentStepIndex, stepName, 'selection', {
+  trackQuoteFunnel(currentStepIndex, 'selection-produits', 'selection', {
     recommended_count: recommendedCount,
     total_count: totalCount,
   });
@@ -306,15 +305,13 @@ export function trackSelectionPageView(recommendedCount: number, totalCount: num
 export function trackProductSelectionChange(
   productId: string,
   action: 'ajouter' | 'retirer',
-  totalSelected: number,
-  hasPriceEstimation?: boolean
+  totalSelected: number
 ) {
   // Vérifier si c'est la première action de ce type pour cet utilisateur dans la session
   const isFirstAdd = action === 'ajouter' && isFirstView('product_selection_ajouter');
   const isFirstRemove = action === 'retirer' && isFirstView('product_selection_retirer');
 
-  const stepName = hasPriceEstimation ? 'product-selection-prix' : 'product-selection';
-  trackQuoteFunnel(currentStepIndex, stepName, 'selection', {
+  trackQuoteFunnel(currentStepIndex, 'product-selection', 'selection', {
     product_id: productId,
     action,
     total_selected: totalSelected,
@@ -323,6 +320,20 @@ export function trackProductSelectionChange(
     // Envoyer is_first_remove uniquement si true (premier retrait)
     ...(isFirstRemove && { is_first_remove: true }),
   });
+}
+
+// =============================================================================
+// ÉTAPE PRIX (page /budget)
+// =============================================================================
+
+/**
+ * Track l'affichage de l'estimation de prix sur la page /budget.
+ * Émis uniquement quand la card BudgetEstimate est effectivement rendue
+ * (fourchette valide + > 2 exemples produits).
+ */
+export function trackBudgetEstimationView() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'estimation-prix', 'prix');
 }
 
 /**
@@ -363,10 +374,9 @@ export function trackFormValidationErrors(
 /**
  * Track la soumission réussie du lead
  */
-export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown', hasPriceEstimation?: boolean) {
+export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown') {
   currentStepIndex++;
-  const stepName = hasPriceEstimation ? 'submit-success-prix' : 'submit-success';
-  trackQuoteFunnel(currentStepIndex, stepName, 'conversion', {
+  trackQuoteFunnel(currentStepIndex, 'submit-success', 'conversion', {
     nombre_fournisseur: suppliersCount,
     profile_type: profileType,
     user_known_status: userKnownStatus,
