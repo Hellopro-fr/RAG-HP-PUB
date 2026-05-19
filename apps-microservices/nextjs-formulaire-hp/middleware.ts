@@ -125,8 +125,10 @@ async function validateTokenInMiddleware(
       return { valid: false, error: 'invalid_payload' };
     }
 
-    // 9. Extraire les données URL optionnelles (réponse Q1 pré-remplie)
-    const urlData = payload.data && payload.data.id_reponse ? payload.data : undefined;
+    // 9. Extraire les données URL optionnelles (réponse Q1 pré-remplie + version A/B)
+    // Avant: filtrait sur payload.data.id_reponse → masquait le cas A/B sans pré-remplissage Q1.
+    // const urlData = payload.data && payload.data.id_reponse ? payload.data : undefined;
+    const urlData = payload.data;
 
     return { valid: true, categoryId: payload.c, urlData, ddc: payload.ddc_is_v };
   } catch (error) {
