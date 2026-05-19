@@ -90,8 +90,11 @@ const QuestionScreen = ({
 
   return (
     <div className="flex flex-col min-h-full">
-      {/* Scrollable content */}
-      <div className="flex-1 pb-32 sm:pb-6">
+      {/* Scrollable content.
+          pb-48 sur mobile : le sticky footer (réassurance + boutons + safe-area)
+          fait ~150px, on ajoute 40px de marge pour que la card explication mobile
+          ne se retrouve pas collée/cachée sous le footer en bas de scroll. */}
+      <div className="flex-1 pb-48 sm:pb-6">
         <div className="px-4 sm:px-6 lg:px-10 pt-5 sm:pt-8">
         <div className={cn(
           "mx-auto grid gap-6 lg:gap-10",
