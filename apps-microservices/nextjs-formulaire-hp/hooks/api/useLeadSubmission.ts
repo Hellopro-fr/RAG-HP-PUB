@@ -4,12 +4,12 @@ import { useMutation } from '@tanstack/react-query';
 import { envoyerDemandes } from '@/lib/api/demande-info';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
+import { isMeaningfulValue } from '@/lib/utils/exclude-chips';
 import type { LeadSubmission, Supplier, ProfileType } from '@/types';
 import type { DemandeInfoPayload, StatutAcheteur, ProduitSelection } from '@/types/demande';
 
 // Analytics imports
 import { trackLeadSubmitted, trackLeadSubmissionError } from '@/lib/analytics/gtm';
-import { hasPriceEstimation } from '@/types/prix';
 import { trackGA4LeadSubmitted } from '@/lib/analytics/ga4';
 import { tagHotjarUser, HOTJAR_TAGS } from '@/lib/analytics/hotjar';
 
@@ -123,6 +123,10 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
 
   const equivalenceCaracteristique = useFlowStore.getState().equivalenceCaracteristique || [];
   const ddc                        = useFlowStore.getState().ddc || '';
+  // Budget choisi sur la page /budget (radio) — fallback quand contact.budget (input texte) est vide.
+  // On exclut les valeurs non-informatives ("Je ne sais pas encore", "Autre", etc.)
+  const rawUserBudgetRange         = useFlowStore.getState().userBudgetRange;
+  const userBudgetRange            = isMeaningfulValue(rawUserBudgetRange) ? rawUserBudgetRange! : '';
 
   return useMutation({
     mutationFn: async (data: LeadSubmission) => {
@@ -150,7 +154,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           type_societe       : data.profile?.type_societe || '',
         },
         message               : data.contact.message || '',
-        budget                : data.contact.budget || '',
+        budget                : data.contact.budget || userBudgetRange,
         produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data): [],
         criteres              : data.answers,
         souhait_devis         : data.source === 2,
@@ -238,8 +242,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
         trackLeadSubmitted(
           variables.selectedSupplierIds.length,
           profileType,
-          variables.userKnownStatus,
-          hasPriceEstimation(useFlowStore.getState().priceEstimation)
+          variables.userKnownStatus
         );
         trackGA4LeadSubmitted(
           response.data.leadId,

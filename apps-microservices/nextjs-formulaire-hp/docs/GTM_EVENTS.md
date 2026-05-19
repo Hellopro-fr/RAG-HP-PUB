@@ -51,6 +51,7 @@ Cet événement unique track toute la progression de l'utilisateur dans le funne
 | `init` | Initialisation du funnel |
 | `question` | Étape de question du questionnaire |
 | `choix-propart` | Choix professionnel/particulier |
+| `prix` | Étape budget (page /budget) |
 | `selection` | Sélection des fournisseurs |
 | `contact` | Formulaire de contact |
 | `conversion` | Soumission finale |
@@ -103,6 +104,8 @@ submit-success            ▼
 | step_name | step_type | Description |
 |-----------|-----------|-------------|
 | `funnel-start` | `init` | Début du funnel |
+| `assurance` | `init` | Affichage de la page Assurance (avant Q1). Émis uniquement au premier passage (`hasSeenAssurance`) et hors variante A/B `2` |
+| `assurance-complete` | `init` | Clic "Continuer" sur la page Assurance |
 
 #### Questionnaire
 | step_name | step_type | Description |
@@ -138,6 +141,13 @@ submit-success            ▼
   location: string           // Localisation
 }
 ```
+
+#### Étape budget (page /budget)
+| step_name | step_type | Description |
+|-----------|-----------|-------------|
+| `budget` | `prix` | Affichage de la page /budget (rendue uniquement quand l'estimation est displayable : fourchette valide + > 2 exemples produits) |
+| `budget-complete` | `prix` | Validation de l'étape budget — clic "Voir ma sélection". Payload : `budget_range` |
+| `budget-retour` | `prix` | Retour au questionnaire depuis /budget — clic "Précédent". Payload : `budget_range` (peut être `null`). N'incrémente pas `step_number` |
 
 #### Sélection produits
 | step_name | step_type | Description |
@@ -393,12 +403,17 @@ Sources de trafic (paramètres UTM).
 | Fonction | Description |
 |----------|-------------|
 | `trackFunnelStart()` | Démarre le funnel |
+| `trackAssuranceView()` | Affichage de la page Assurance (pré-Q1) |
+| `trackAssuranceComplete()` | Clic "Continuer" sur la page Assurance |
 | `trackQuestionView(index, data)` | Affichage d'une question |
 | `trackQuestionAnswered(index, id, title, answers, isMulti)` | Réponse à une question |
 | `trackQuestionnaireComplete(total, time)` | Fin questionnaire |
 | `trackProfileView()` | Affichage page profil |
 | `trackProfileTypeSelected(type)` | Sélection type profil |
 | `trackProfileComplete(type, hasCompany, countryId, location)` | Profil complété |
+| `trackBudgetView()` | Affichage de la page /budget (étape prix) |
+| `trackBudgetComplete(budgetRange)` | Clic "Voir ma sélection" sur /budget |
+| `trackBudgetReturn(budgetRange)` | Clic "Précédent" sur /budget (retour questionnaire) |
 | `trackSelectionPageView(recommended, total)` | Page sélection |
 | `trackProductCardClick(id, name, score, action)` | Clic produit |
 | `trackProductSelectionChange(id, action, total)` | Sélection changée |
@@ -407,7 +422,7 @@ Sources de trafic (paramètres UTM).
 | `trackContactFieldFilled(name, index)` | Champ rempli |
 | `trackFormSubmitAttempt(valid, missing)` | Tentative soumission |
 | `trackFormValidationErrors(count, errors)` | Erreurs validation |
-| `trackLeadSubmitted(id, count, type)` | Lead soumis |
+| `trackLeadSubmitted(count, profileType, userKnownStatus)` | Lead soumis |
 | `trackLeadSubmissionError(type, message)` | Erreur soumission |
 
 ### Gestion du parcours (flow_type)
@@ -464,6 +479,12 @@ Sources de trafic (paramètres UTM).
 1. trackFunnelStart()
    → devis_funnel_formulaire { step_name: 'funnel-start', step_type: 'init' }
 
+1b. trackAssuranceView()                  // variantes 0/1/null, premier passage
+   → devis_funnel_formulaire { step_name: 'assurance', step_type: 'init' }
+
+1c. trackAssuranceComplete()              // clic "Continuer"
+   → devis_funnel_formulaire { step_name: 'assurance-complete', step_type: 'init' }
+
 2. trackQuestionView(0)
    → devis_funnel_formulaire { step_name: '1ere-question', step_type: 'question' }
 
@@ -479,13 +500,19 @@ Sources de trafic (paramètres UTM).
 6. trackProfileComplete('professional', true, 1, 'Paris')
    → devis_funnel_formulaire { step_name: 'profile-complete', step_type: 'choix-propart' }
 
-7. trackSelectionPageView(5, 12)
+7. trackBudgetView()                     // page /budget rendue (estimation displayable)
+   → devis_funnel_formulaire { step_name: 'budget', step_type: 'prix' }
+
+7b. trackBudgetComplete('between_3000_3500')  // clic "Voir ma sélection"
+   → devis_funnel_formulaire { step_name: 'budget-complete', step_type: 'prix', budget_range: 'between_3000_3500' }
+
+8. trackSelectionPageView(5, 12)
    → devis_funnel_formulaire { step_name: 'selection-produits', step_type: 'selection' }
 
-8. trackContactFormView(3)
+9. trackContactFormView(3)
    → devis_funnel_formulaire { step_name: 'formulaire-contact', step_type: 'contact' }
 
-9. trackLeadSubmitted('lead_123', 3, 'professional')
+10. trackLeadSubmitted(3, 'professional', 'unknown')
    → devis_funnel_formulaire { step_name: 'submit-success', step_type: 'conversion', conversion: true }
 ```
 

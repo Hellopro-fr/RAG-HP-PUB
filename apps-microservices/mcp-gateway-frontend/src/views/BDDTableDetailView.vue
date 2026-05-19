@@ -141,11 +141,12 @@
         <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Description
         </h2>
-        <div
+        <p
           v-if="table.description"
-          class="prose prose-sm dark:prose-invert max-w-none text-sm text-gray-700 dark:text-gray-300"
-          v-safe-html="sanitizedDescription"
-        />
+          class="whitespace-pre-line text-sm text-gray-700 dark:text-gray-300"
+        >
+          {{ plainDescription }}
+        </p>
         <p v-else class="text-sm text-gray-400">
           Aucune description.
         </p>
@@ -203,7 +204,7 @@
                   {{ f.field_type || '—' }}
                 </td>
                 <td class="px-3 py-2 text-gray-700 dark:text-gray-300">
-                  <span v-if="f.description">{{ f.description }}</span>
+                  <span v-if="f.description">{{ stripHtml(f.description) }}</span>
                   <span v-else class="text-gray-400">—</span>
                 </td>
               </tr>
@@ -317,12 +318,13 @@ const parsedRelations = computed<ParsedRelation[]>(() => {
   return out;
 });
 
-const sanitizedDescription = computed(() => {
-  // Description was authored through the WYSIWYG editor and stored as
-  // HTML. Rendered as-is here; the gateway controls authorship and the
-  // editor strips scripts on input.
-  return table.value?.description ?? '';
-});
+function stripHtml(html: string): string {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent || div.innerText || '';
+}
+
+const plainDescription = computed(() => stripHtml(table.value?.description ?? ''));
 
 function databaseName(dbId: number): string {
   return HELLOPRO_DATABASES.find((d) => d.id === dbId)?.name || '—';
