@@ -35,8 +35,6 @@
             :required-servers="requiredServersCount"
           />
 
-          <OAuthDetails :client-id="clientId" :redirect-uri="redirectUri" />
-
           <Separator />
 
           <section>
@@ -64,7 +62,6 @@
                 :pre-configured="preConfigured"
                 :expanded="expandedServers.has(server.id)"
                 :selected-tools="selectedTools.get(server.id)"
-                @toggle-server="toggleServerSelection"
                 @toggle-tool="toggleToolSelection"
                 @toggle-expand="toggleServer"
               />
@@ -128,7 +125,6 @@ import { authorizeApi } from '@/api/authorize'
 import type { AuthorizeServer } from '@/types/oauth2'
 import ConsentHeader from '@/components/consent/ConsentHeader.vue'
 import ConsentSummary from '@/components/consent/ConsentSummary.vue'
-import OAuthDetails from '@/components/consent/OAuthDetails.vue'
 import MCPServerCard from '@/components/consent/MCPServerCard.vue'
 import UnconfiguredServersBlock from '@/components/consent/UnconfiguredServersBlock.vue'
 import Separator from '@/components/ui/Separator.vue'
@@ -184,27 +180,9 @@ const requiredServersCount = computed(() =>
   preConfigured.value ? configuredServers.value.length : 0,
 )
 
-function isServerSelected(serverId: string): boolean {
-  const server = servers.value.find((s) => s.id === serverId)
-  if (!server) return false
-  const selected = selectedTools.get(serverId)
-  if (!selected) return false
-  return selected.size === server.tools.length
-}
-
 function toggleServer(serverId: string): void {
   if (expandedServers.has(serverId)) expandedServers.delete(serverId)
   else expandedServers.add(serverId)
-}
-
-function toggleServerSelection(serverId: string): void {
-  const server = servers.value.find((s) => s.id === serverId)
-  if (!server) return
-  if (isServerSelected(serverId)) {
-    selectedTools.set(serverId, new Set())
-  } else {
-    selectedTools.set(serverId, new Set(server.tools.map((t) => t.name)))
-  }
 }
 
 function toggleToolSelection(serverId: string, toolName: string): void {
