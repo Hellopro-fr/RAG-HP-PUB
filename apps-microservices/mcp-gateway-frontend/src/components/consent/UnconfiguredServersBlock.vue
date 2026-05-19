@@ -9,9 +9,12 @@
         :key="server.id"
         class="flex items-center justify-between px-3 py-2"
       >
-        <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-          {{ server.name }}
-        </span>
+        <div class="flex items-center gap-2">
+          <Server class="h-4 w-4 text-amber-700 dark:text-amber-300" />
+          <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {{ server.name }}
+          </span>
+        </div>
         <a
           v-if="server.docs_url"
           :href="server.docs_url"
@@ -27,6 +30,7 @@
 </template>
 
 <script setup lang="ts">
+import { Server } from 'lucide-vue-next'
 import type { AuthorizeServer } from '@/types/oauth2'
 
 defineProps<{

@@ -452,8 +452,9 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 				continue
 			}
 			entry := authorizeServerDTO{
-				ID:   srv.ID,
-				Name: srv.Name,
+				ID:         srv.ID,
+				Name:       srv.Name,
+				Configured: true,
 			}
 			srvTools := allowedTools[srv.ID]
 			for _, t := range srv.Tools {
@@ -471,8 +472,9 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 		// No pre-configured scope — show all active servers
 		for _, srv := range servers {
 			entry := authorizeServerDTO{
-				ID:   srv.ID,
-				Name: srv.Name,
+				ID:         srv.ID,
+				Name:       srv.Name,
+				Configured: true,
 			}
 			for _, t := range srv.Tools {
 				if !t.IsActive {

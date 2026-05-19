@@ -4,31 +4,23 @@
     :class="enabled ? 'border-brand-500/50 shadow-sm' : 'border-gray-200 dark:border-gray-800'"
   >
     <div class="p-5">
-      <div class="flex items-start justify-between gap-4">
-        <div class="flex items-start gap-4">
-          <div
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
-            :class="
-              enabled
-                ? 'bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-            "
-          >
-            <Server class="h-5 w-5" />
-          </div>
-          <div class="space-y-1.5">
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="font-semibold text-gray-900 dark:text-white">{{ server.name }}</h3>
-              <Badge v-if="preConfigured" color="primary" size="sm">Requis</Badge>
-            </div>
+      <div class="flex items-start gap-4">
+        <div
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+          :class="
+            enabled
+              ? 'bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+          "
+        >
+          <Server class="h-5 w-5" />
+        </div>
+        <div class="space-y-1.5 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="font-semibold text-gray-900 dark:text-white">{{ server.name }}</h3>
+            <Badge v-if="preConfigured" color="primary" size="sm">Requis</Badge>
           </div>
         </div>
-        <Switch
-          :model-value="enabled"
-          :disabled="preConfigured"
-          class="shrink-0"
-          @update:model-value="onSwitch"
-        />
       </div>
 
       <button
@@ -86,7 +78,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Server, ChevronDown, ChevronUp, Check } from 'lucide-vue-next'
-import Switch from '@/components/ui/Switch.vue'
 import Badge from '@/components/ui/Badge.vue'
 import type { AuthorizeServer } from '@/types/oauth2'
 
@@ -97,8 +88,7 @@ const props = defineProps<{
   selectedTools: Set<string> | undefined
 }>()
 
-const emit = defineEmits<{
-  'toggle-server': [serverId: string]
+defineEmits<{
   'toggle-tool': [serverId: string, toolName: string]
   'toggle-expand': [serverId: string]
 }>()
@@ -112,10 +102,5 @@ const enabled = computed(() => {
 
 function isToolChecked(toolName: string): boolean {
   return !!props.selectedTools && props.selectedTools.has(toolName)
-}
-
-function onSwitch(_value: boolean) {
-  if (props.preConfigured) return
-  emit('toggle-server', props.server.id)
 }
 </script>
