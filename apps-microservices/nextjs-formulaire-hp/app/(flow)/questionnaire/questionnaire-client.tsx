@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NeedsQuestionnaire from '@/components/flow/NeedsQuestionnaire';
-import MatchingLoader from '@/components/flow/MatchingLoader';
+import MatchingLoaderV2 from '@/components/flow/MatchingLoaderV2';
 import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type MatchingTestParams } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
@@ -15,6 +15,7 @@ interface UrlData {
   id_question: number;
   id_reponse: number;
   equivalence: any[];
+  abtest_UX_lead_version?: number;
 }
 
 interface QuestionnaireClientProps {
@@ -31,8 +32,8 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
-  const { goToSelection, goToSomethingToAdd, goToBudget } = useFlowNavigation();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion } = useFlowStore();
+  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
@@ -168,6 +169,11 @@ export default function QuestionnaireClient({
       const urlDataJson = atob(base64);
       const urlData: UrlData = JSON.parse(urlDataJson);
 
+      // Stocker la version AB-test issue du token (disponible globalement via le store)
+      if (typeof urlData.abtest_UX_lead_version === 'number') {
+        setAbtestUxLeadVersion(urlData.abtest_UX_lead_version);
+      }
+
       // Vérifier que les données sont valides
       if (urlData.id_reponse) {
         // Stocker la réponse Q1 et son équivalence dans le flow store
@@ -206,7 +212,7 @@ export default function QuestionnaireClient({
 
     hasProcessedUrlData.current = true;
     setIsReady(true);
-  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
+  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer, setAbtestUxLeadVersion]);
 
   const handleComplete = async () => {
     // Afficher le loader et lancer matching + prix en parallèle
@@ -253,7 +259,7 @@ export default function QuestionnaireClient({
 
   // Afficher le loader pendant le matching
   if (showLoader) {
-    return <MatchingLoader externalProgress={loaderProgress} />;
+    return <MatchingLoaderV2 externalProgress={loaderProgress} />;
   }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire

@@ -195,6 +195,9 @@ export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
 
+  // Version A/B test piloté par le token URL (champ abtest_UX_lead_version du payload décrypté)
+  abtestUxLeadVersion: number | null;
+
   // Nom de la catégorie (depuis l'API questionnaire)
   categoryName: string | null;
 
@@ -308,6 +311,7 @@ export interface FlowState {
 
   // Actions
   setCategoryId: (id: number) => void;
+  setAbtestUxLeadVersion: (value: number | null) => void;
   setCategoryName: (name: string | null) => void;
   setCategoryStats: (stats: CategoryStats | null) => void;
   setCategoryVignette: (url: string | null) => void;
@@ -345,6 +349,7 @@ export interface FlowState {
 
 const initialState = {
   categoryId: null,
+  abtestUxLeadVersion: null as number | null,
   categoryName: null,
   categoryStats: null,
   categoryVignette: null,
@@ -384,6 +389,8 @@ export const useFlowStore = create<FlowState>()(
       ...initialState,
 
       setCategoryId: (id) => set({ categoryId: id }),
+
+      setAbtestUxLeadVersion: (value) => set({ abtestUxLeadVersion: value }),
 
       setCategoryName: (name) => set({ categoryName: name }),
 
