@@ -109,18 +109,12 @@ while true; do
             cleanup_done="$RESULTS_DIR/$crawl_id.unstash-cleanup-done"
 
             echo "[$(date)] Extract confirmed for $crawl_id, deleting GCS source..."
-            # Capture stderr: gcloud storage rm exits 0 even on auth/network errors
-            # (known gcloud CLI quirk). Checking stderr content guards against silent
-            # failures that would falsely advance to the cleanup-done state.
-            rm_stderr=$(gcloud storage rm "$source_url" 2>&1 >/dev/null)
-            rm_exit=$?
-            if [ $rm_exit -eq 0 ] && [ -z "$rm_stderr" ]; then
+            if gcloud storage rm "$source_url"; then
                 echo "GCS source deleted: $source_url"
                 touch "$cleanup_done"
                 rm "$confirm_file"
             else
-                echo "WARNING: gcloud storage rm failed for $source_url (exit=$rm_exit). Leaving .unstash-confirmed for retry on next poll."
-                [ -n "$rm_stderr" ] && echo "  gcloud stderr: $rm_stderr"
+                echo "WARNING: gcloud storage rm failed for $source_url. Leaving .unstash-confirmed for retry on next poll."
                 # Intentionally do NOT touch cleanup_done and do NOT remove confirm_file:
                 # the service will time out and operator can investigate. Next daemon
                 # poll cycle will retry the gcloud rm.
