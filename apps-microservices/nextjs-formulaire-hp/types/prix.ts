@@ -70,3 +70,17 @@ export interface PriceEstimationState {
 export function hasPriceEstimation(pe: PriceEstimationState | null | undefined): boolean {
   return pe?.data != null && pe.data.fourchette.borne_basse !== 0;
 }
+
+/**
+ * Returns true when the price estimation is rich enough to be displayed on /budget:
+ * non-zero borne_basse, distinct bornes (real range), and more than 2 example products.
+ * When this returns false, the /budget page is skipped at the navigation step
+ * (see questionnaire-client.tsx) — the page is meaningless without a displayable card.
+ */
+export function hasDisplayablePriceEstimation(pe: PriceEstimationState | null | undefined): boolean {
+  const data = pe?.data;
+  if (!data) return false;
+  if (data.fourchette.borne_basse === 0) return false;
+  if (data.fourchette.borne_basse === data.fourchette.borne_haute) return false;
+  return (data.exemples_produits?.length ?? 0) > 2;
+}

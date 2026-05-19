@@ -6,7 +6,8 @@ import Image from 'next/image';
 import { cn, getAssetPath } from '@/lib/utils';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
-import { trackBudgetEstimationView } from '@/lib/analytics';
+import { trackBudgetView, trackBudgetComplete, trackBudgetReturn } from '@/lib/analytics';
+import { hasDisplayablePriceEstimation } from '@/types/prix';
 import BudgetEstimate from '@/components/flow/BudgetEstimate';
 import BudgetQuestionScreen from '@/components/flow/BudgetQuestionScreen';
 import CategoryHeaderBar from '@/components/flow/CategoryHeaderBar';
@@ -44,11 +45,7 @@ const BudgetClient = () => {
     new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' €';
 
   const data = priceEstimation?.data;
-  const showEstimate =
-    !!data &&
-    data.fourchette.borne_basse !== 0 &&
-    data.fourchette.borne_basse !== data.fourchette.borne_haute &&
-    (data.exemples_produits?.length ?? 0) > 2;
+  const showEstimate = hasDisplayablePriceEstimation(priceEstimation);
 
   const hasTrackedEstimate = useRef(false);
 
@@ -60,7 +57,7 @@ const BudgetClient = () => {
     if (navType === 'back_forward') return;
 
     hasTrackedEstimate.current = true;
-    trackBudgetEstimationView();
+    trackBudgetView();
   }, [showEstimate]);
 
   const priceItems = data
@@ -76,7 +73,13 @@ const BudgetClient = () => {
   const hasSelection = userBudgetRange !== null;
   const handleContinue = () => {
     if (!hasSelection) return;
+    trackBudgetComplete(userBudgetRange!);
     goToSelection();
+  };
+
+  const handleBack = () => {
+    trackBudgetReturn(userBudgetRange);
+    goToQuestionnaire();
   };
 
   return (
@@ -119,7 +122,7 @@ const BudgetClient = () => {
               <div className="flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={goToQuestionnaire}
+                  onClick={handleBack}
                   className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-foreground hover:text-foreground/70 transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -157,7 +160,7 @@ const BudgetClient = () => {
         <div className="flex items-center gap-3 p-4">
           <button
             type="button"
-            onClick={goToQuestionnaire}
+            onClick={handleBack}
             aria-label="Précédent"
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >

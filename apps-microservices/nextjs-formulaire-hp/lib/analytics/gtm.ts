@@ -327,13 +327,37 @@ export function trackProductSelectionChange(
 // =============================================================================
 
 /**
- * Track l'affichage de l'estimation de prix sur la page /budget.
- * Émis uniquement quand la card BudgetEstimate est effectivement rendue
- * (fourchette valide + > 2 exemples produits).
+ * Track l'affichage de la page /budget.
+ * Émis au mount uniquement quand la card BudgetEstimate est rendue
+ * (fourchette valide + > 2 exemples produits) — la page elle-même est
+ * skippée sinon par la logique de routage dans questionnaire-client.tsx.
  */
-export function trackBudgetEstimationView() {
+export function trackBudgetView() {
   currentStepIndex++;
-  trackQuoteFunnel(currentStepIndex, 'estimation-prix', 'prix');
+  trackQuoteFunnel(currentStepIndex, 'budget', 'prix');
+}
+
+/**
+ * Track la validation de l'étape budget (clic "Voir ma sélection").
+ * Le bouton est désactivé tant qu'aucune fourchette n'est choisie,
+ * donc budgetRange est toujours défini ici.
+ */
+export function trackBudgetComplete(budgetRange: string) {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'budget-complete', 'prix', {
+    budget_range: budgetRange,
+  });
+}
+
+/**
+ * Track le retour au questionnaire depuis /budget (clic "Précédent").
+ * budgetRange peut être null si l'utilisateur n'avait rien choisi.
+ * Pas d'incrément de step_index : recul dans le funnel.
+ */
+export function trackBudgetReturn(budgetRange: string | null) {
+  trackQuoteFunnel(currentStepIndex, 'budget-retour', 'prix', {
+    budget_range: budgetRange,
+  });
 }
 
 /**

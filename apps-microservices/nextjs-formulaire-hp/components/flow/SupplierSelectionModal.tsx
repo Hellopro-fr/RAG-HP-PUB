@@ -16,11 +16,13 @@ import ModifyCriteriaForm from "./ModifyCriteriaForm";
 import CustomNeedForm, { CustomNeedVariant } from "./CustomNeedForm";
 import ProductDetailModal from "./ProductDetailModal";
 import CriteriaChangedBanner from "./CriteriaChangedBanner";
-import BudgetEstimate from "./BudgetEstimate";
+// COMMENTED: card prix déplacée vers /budget — voir plan
+// import BudgetEstimate from "./BudgetEstimate";
 import SelectionTableViewB from "./selection-views/SelectionTableViewB";
 import {
   trackProductSelectionChange,
-  trackCustomNeedPageView,
+  // COMMENTED: card prix déplacée vers /budget — voir plan
+  // trackCustomNeedPageView,
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
@@ -55,7 +57,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     removedCritiqueCriteriaIds,
     removedSecondaireCriteriaIds,
     priceEstimation,
-    userBudgetRange,
+    // COMMENTED: card prix déplacée vers /budget — voir plan
+    // userBudgetRange,
   } = useFlowStore();
 
   // Utiliser uniquement les résultats dynamiques du matching (pas de fallback statique)
@@ -302,9 +305,11 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                 }}
               />
 
-              {/* Budget Estimate — filet de sécurité : affiché seulement si l'utilisateur
-                  n'est pas passé par la page /budget (sinon il l'a déjà vu là-bas).
-                  Couvre les cas bypass URL / deeplink / migration legacy. */}
+              {/* COMMENTED: card prix déplacée vers /budget — voir plan.
+                  Filet de sécurité initial : affichait la card sur /selection si
+                  l'utilisateur n'était pas passé par /budget. Devenu incohérent
+                  depuis la séparation prix/sélection en deux pages distinctes.
+
               {userBudgetRange === null && priceEstimation?.data && priceEstimation.data.fourchette.borne_basse !== 0 && priceEstimation.data.fourchette.borne_basse !== priceEstimation.data.fourchette.borne_haute && (priceEstimation.data.exemples_produits?.length ?? 0) > 2 && (() => {
                 const { fourchette, exemples_produits, phrase_prix } = priceEstimation.data!;
                 const fmtPrice = (n: number) =>
@@ -334,6 +339,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   />
                 );
               })()}
+              */}
 
               {/* Criteria Changed Banner */}
               {criteriaHaveChanged && selectedSupplierIds.length > 0 && (

@@ -51,7 +51,7 @@ Cet événement unique track toute la progression de l'utilisateur dans le funne
 | `init` | Initialisation du funnel |
 | `question` | Étape de question du questionnaire |
 | `choix-propart` | Choix professionnel/particulier |
-| `prix` | Estimation de prix (page /budget) |
+| `prix` | Étape budget (page /budget) |
 | `selection` | Sélection des fournisseurs |
 | `contact` | Formulaire de contact |
 | `conversion` | Soumission finale |
@@ -140,10 +140,12 @@ submit-success            ▼
 }
 ```
 
-#### Estimation de prix (page /budget)
+#### Étape budget (page /budget)
 | step_name | step_type | Description |
 |-----------|-----------|-------------|
-| `estimation-prix` | `prix` | Affichage de la card d'estimation de prix sur /budget (uniquement si fourchette valide + > 2 exemples produits) |
+| `budget` | `prix` | Affichage de la page /budget (rendue uniquement quand l'estimation est displayable : fourchette valide + > 2 exemples produits) |
+| `budget-complete` | `prix` | Validation de l'étape budget — clic "Voir ma sélection". Payload : `budget_range` |
+| `budget-retour` | `prix` | Retour au questionnaire depuis /budget — clic "Précédent". Payload : `budget_range` (peut être `null`). N'incrémente pas `step_number` |
 
 #### Sélection produits
 | step_name | step_type | Description |
@@ -405,7 +407,9 @@ Sources de trafic (paramètres UTM).
 | `trackProfileView()` | Affichage page profil |
 | `trackProfileTypeSelected(type)` | Sélection type profil |
 | `trackProfileComplete(type, hasCompany, countryId, location)` | Profil complété |
-| `trackBudgetEstimationView()` | Affichage estimation prix (page /budget, si card visible) |
+| `trackBudgetView()` | Affichage de la page /budget (étape prix) |
+| `trackBudgetComplete(budgetRange)` | Clic "Voir ma sélection" sur /budget |
+| `trackBudgetReturn(budgetRange)` | Clic "Précédent" sur /budget (retour questionnaire) |
 | `trackSelectionPageView(recommended, total)` | Page sélection |
 | `trackProductCardClick(id, name, score, action)` | Clic produit |
 | `trackProductSelectionChange(id, action, total)` | Sélection changée |
@@ -486,8 +490,11 @@ Sources de trafic (paramètres UTM).
 6. trackProfileComplete('professional', true, 1, 'Paris')
    → devis_funnel_formulaire { step_name: 'profile-complete', step_type: 'choix-propart' }
 
-7. trackBudgetEstimationView()           // uniquement si la card estimation est rendue
-   → devis_funnel_formulaire { step_name: 'estimation-prix', step_type: 'prix' }
+7. trackBudgetView()                     // page /budget rendue (estimation displayable)
+   → devis_funnel_formulaire { step_name: 'budget', step_type: 'prix' }
+
+7b. trackBudgetComplete('between_3000_3500')  // clic "Voir ma sélection"
+   → devis_funnel_formulaire { step_name: 'budget-complete', step_type: 'prix', budget_range: 'between_3000_3500' }
 
 8. trackSelectionPageView(5, 12)
    → devis_funnel_formulaire { step_name: 'selection-produits', step_type: 'selection' }

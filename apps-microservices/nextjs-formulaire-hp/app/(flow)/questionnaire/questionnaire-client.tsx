@@ -9,6 +9,7 @@ import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
 import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
+import { hasDisplayablePriceEstimation } from '@/types/prix';
 import type { CategoryTokenUrlData as UrlData } from '@/types/category-token';
 
 interface QuestionnaireClientProps {
@@ -249,9 +250,14 @@ export default function QuestionnaireClient({
     // Intercaler la page /budget avant /selection. Le flow alternatif
     // 'something-to-add' reste tel quel (pas de budget si flow dégradé).
     // Variantes A/B 1 & 2 : skip /budget → /selection direct.
+    // Skip /budget aussi quand l'estimation prix n'est pas affichable
+    // (page sans valeur ajoutée — la card prix ne serait pas rendue).
+    const hasDisplayableEstimation = hasDisplayablePriceEstimation(
+      useFlowStore.getState().priceEstimation
+    );
     const finalDestination =
       destination === 'something-to-add' ? destination
-        : skipBudget ? 'selection'
+        : (skipBudget || !hasDisplayableEstimation) ? 'selection'
         : 'budget';
     setRedirectDestination(finalDestination);
   };
