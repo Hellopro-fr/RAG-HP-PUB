@@ -1,0 +1,19 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-19-crawl-status-singular-endpoint-fix.md",
+  "tasks": [
+    {
+      "id": "61",
+      "subject": "Task 1: Heal-on-read setdefault + endpoint 404 guard",
+      "status": "pending",
+      "description": "**Goal:** Single commit: setdefault('crawl_id', crawl_id) in get_job_or_recover early-return + None-check + 404 raise in get_crawl_status.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/router/crawler.py\n\n**Verify:** `python -m py_compile` clean\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/crawler.py\"], \"verifyCommand\": \"python -m py_compile apps-microservices/crawler-service/app/router/crawler.py\", \"acceptanceCriteria\": [\"setdefault('crawl_id', crawl_id)\", \"None-check raises 404\", \"response_model unchanged\", \"disk-recovery branch untouched\", \"plural untouched\", \"py_compile passes\"]}\n```"
+    },
+    {
+      "id": "62",
+      "subject": "Task 2: Manual verification (docker smoke + production retest)",
+      "status": "pending",
+      "blockedBy": ["61"],
+      "description": "**Goal:** Docker smoke + production retest /status/6664.\n\n**Files:** None modified.\n\n**Verify:** curl responses + log evidence per spec §6.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"curl -i https://<crawler-service>/status/6664\", \"acceptanceCriteria\": [\"smoke malformed -> 200 or 404\", \"smoke healthy -> 200\", \"plural still 200\", \"production /status/6664 no 500\", \"no ResponseValidationError 24h\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-19T09:00:00Z"
+}
