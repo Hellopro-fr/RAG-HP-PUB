@@ -3,19 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NeedsQuestionnaire from '@/components/flow/NeedsQuestionnaire';
-import MatchingLoader from '@/components/flow/MatchingLoader';
+import MatchingLoaderV2 from '@/components/flow/MatchingLoaderV2';
 import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type MatchingTestParams } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
 import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
-
-// Interface pour les données URL (réponse Q1 pré-remplie)
-interface UrlData {
-  id_question: number;
-  id_reponse: number;
-  equivalence: any[];
-}
+import { hasDisplayablePriceEstimation } from '@/types/prix';
+import type { CategoryTokenUrlData as UrlData } from '@/types/category-token';
 
 interface QuestionnaireClientProps {
   initialCategoryId?: string;
@@ -31,8 +26,8 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
-  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion, abtestUxLeadVersion } = useFlowStore();
+  const { goToSelection, goToSomethingToAdd, goToBudget } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
@@ -45,7 +40,7 @@ export default function QuestionnaireClient({
   // État pour le loader de matching et la destination après
   const [showLoader, setShowLoader] = useState(false);
   const [loaderProgress, setLoaderProgress] = useState(0);
-  const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
+  const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | 'budget' | null>(null);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
   // Priorité : props du Server Component > searchParams client
@@ -81,7 +76,17 @@ export default function QuestionnaireClient({
       sessionStorage.setItem(FLOW_ORIGINAL_TOKEN_KEY, token);
       //console.log('[QuestionnaireClient] Token saved for redirect:', token.substring(0, 20) + '...');
     }
-  }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc]);
+
+    // TODO: SUPPRIMER AVANT MISE EN PROD - Bypass dev pour tester les variantes A/B
+    // En prod la version vient du payload token (urlData.abtest_UX_lead_version).
+    const devAbtest = searchParams.get('abtest_version');
+    if (devAbtest !== null) {
+      const v = parseInt(devAbtest, 10);
+      if (!isNaN(v)) {
+        setAbtestUxLeadVersion(v);
+      }
+    }
+  }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc, setAbtestUxLeadVersion]);
 
   // Lire les paramètres de test du matching depuis l'URL (pour tests uniquement)
   useEffect(() => {
@@ -168,6 +173,11 @@ export default function QuestionnaireClient({
       const urlDataJson = atob(base64);
       const urlData: UrlData = JSON.parse(urlDataJson);
 
+      // Stocker la version AB-test issue du token (disponible globalement via le store)
+      if (typeof urlData.abtest_UX_lead_version === 'number') {
+        setAbtestUxLeadVersion(urlData.abtest_UX_lead_version);
+      }
+
       // Vérifier que les données sont valides
       if (urlData.id_reponse) {
         // Stocker la réponse Q1 et son équivalence dans le flow store
@@ -206,7 +216,7 @@ export default function QuestionnaireClient({
 
     hasProcessedUrlData.current = true;
     setIsReady(true);
-  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
+  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer, setAbtestUxLeadVersion]);
 
   const handleComplete = async () => {
     // Afficher le loader et lancer matching + prix en parallèle
@@ -215,15 +225,20 @@ export default function QuestionnaireClient({
     // Wrapper monotone : le progress ne recule jamais (protection contre les réponses tardives)
     const safeProgress = (value: number) => setLoaderProgress(prev => Math.max(prev, value));
 
+    // A/B test : variantes 1 & 2 sautent l'étape /budget et l'appel /api/prix (gain perf)
+    const skipBudget = abtestUxLeadVersion === 1 || abtestUxLeadVersion === 2;
+
     // Lancer prix et matching en parallèle
     // Le prix répond plus vite → met à jour le progress à 25%
     // Le matching prend le relais (50→65→75) via safeProgress
-    const prixPromise = fetchPriceEstimation()
-      .then(() => { safeProgress(25); })
-      .catch((err) => {
-        console.error('[Prix] Error (non-blocking):', err);
-        safeProgress(25); // Même en erreur, on avance
-      });
+    const prixPromise = skipBudget
+      ? Promise.resolve().then(() => { safeProgress(25); })
+      : fetchPriceEstimation()
+          .then(() => { safeProgress(25); })
+          .catch((err) => {
+            console.error('[Prix] Error (non-blocking):', err);
+            safeProgress(25); // Même en erreur, on avance
+          });
 
     const matchingPromise = processMatching(safeProgress); // progress interne : 50→65→75
 
@@ -232,7 +247,27 @@ export default function QuestionnaireClient({
     setLoaderProgress(100);
     // Attendre que la barre anime jusqu'à 100% avant de naviguer
     await new Promise(resolve => setTimeout(resolve, 1500));
-    setRedirectDestination(destination);
+
+    // Skip /budget si l'API prix n'a renvoyé aucune option calibrée (budget_reponse vide,
+    // absent ou erreur API), OU si l'estimation prix n'est pas affichable
+    // (card prix vide). Dans ces cas la page n'a rien à afficher → /selection direct.
+    const priceState = useFlowStore.getState().priceEstimation;
+    const hasBudgetOptions =
+      priceState?.data?.budget_reponse !== undefined &&
+      priceState.data.budget_reponse.length > 0 &&
+      !priceState.error;
+    const hasDisplayableEstimation = hasDisplayablePriceEstimation(priceState);
+    const shouldSkipBudget = skipBudget || !hasBudgetOptions || !hasDisplayableEstimation;
+
+    // Intercaler la page /budget avant /selection. Le flow alternatif
+    // 'something-to-add' reste tel quel (pas de budget si flow dégradé).
+    // Variantes A/B 1 & 2 + absence de budget_reponse + estimation non affichable :
+    // skip /budget → /selection direct.
+    const finalDestination =
+      destination === 'something-to-add' ? destination
+        : shouldSkipBudget ? 'selection'
+        : 'budget';
+    setRedirectDestination(finalDestination);
   };
 
   // Navigation dès que les données sont prêtes (matching + prix terminés)
@@ -240,15 +275,17 @@ export default function QuestionnaireClient({
     if (redirectDestination) {
       if (redirectDestination === 'something-to-add') {
         goToSomethingToAdd();
+      } else if (redirectDestination === 'budget') {
+        goToBudget();
       } else {
         goToSelection();
       }
     }
-  }, [redirectDestination, goToSelection, goToSomethingToAdd]);
+  }, [redirectDestination, goToSelection, goToSomethingToAdd, goToBudget]);
 
   // Afficher le loader pendant le matching
   if (showLoader) {
-    return <MatchingLoader externalProgress={loaderProgress} />;
+    return <MatchingLoaderV2 externalProgress={loaderProgress} />;
   }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire

@@ -7,11 +7,10 @@ import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { Supplier } from '@/types';
 import { getAssetPath } from "@/lib/utils";
 import { trackSelectionPageView, setFlowType } from '@/lib/analytics';
-import { hasPriceEstimation } from '@/types/prix';
 import { initDebugMatching } from '@/lib/utils/debug-matching';
 
 export default function SelectionClient() {
-  const { userAnswers, flowType, setFlowType: setStoreFlowType, priceEstimation } = useFlowStore();
+  const { userAnswers, flowType, setFlowType: setStoreFlowType } = useFlowStore();
   const { goToQuestionnaire } = useFlowNavigation();
   const hasTrackedView = useRef(false);
 
@@ -33,7 +32,7 @@ export default function SelectionClient() {
       }
 
       // Valeurs par défaut - seront mises à jour par le composant si nécessaire
-      trackSelectionPageView(4, 12, hasPriceEstimation(priceEstimation));
+      trackSelectionPageView(4, 12);
     }
   }, [flowType, setStoreFlowType]);
 
