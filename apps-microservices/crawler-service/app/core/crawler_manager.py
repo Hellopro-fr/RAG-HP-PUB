@@ -63,6 +63,25 @@ def _count_files_in_dir(path: str) -> int:
 _archive_locks: Dict[str, threading.Lock] = {}
 _archive_locks_guard = threading.Lock()
 
+async def _read_callback_isError(storage_path: str) -> Optional[str]:
+    """
+    Read isError from _callback_payload.json in the crawl storage dir.
+    Returns None if the file is missing, unreadable, or has no isError field.
+    Never raises — failures are logged at debug level and treated as 'no error'.
+    """
+    payload_path = os.path.join(storage_path, '_callback_payload.json')
+    if not os.path.exists(payload_path):
+        return None
+    try:
+        async with aiofiles.open(payload_path, 'r') as f:
+            content = await f.read()
+        data = json.loads(content)
+        is_error = data.get('isError', '')
+        return is_error if isinstance(is_error, str) and is_error else None
+    except Exception as e:
+        logger.debug(f"Failed to read isError from {payload_path}: {e}")
+        return None
+
 class CrawlerManager:
     """
     Manages the lifecycle of crawler subprocesses.
@@ -1053,6 +1072,9 @@ class CrawlerManager:
                     snapshot_data = json.loads(content)
                 # Override status with current Redis value — snapshot was taken before status transition
                 snapshot_data["status"] = job_info["status"]
+                # Enrich snapshot with isError from _callback_payload.json (snapshot may predate it,
+                # and BO reconciliation needs it to route non-success terminal crawls correctly).
+                snapshot_data["is_error"] = await _read_callback_isError(storage_path)
                 logger.info(
                     f"Loaded status from snapshot for crawl '{crawl_id}' (status: {job_info['status']}).")
                 return CrawlStatus(**snapshot_data)
@@ -1097,18 +1119,21 @@ class CrawlerManager:
             except Exception as e:
                 logger.warning(f"Could not read dataset info for '{crawl_id}': {e}")
         
+        is_error = await _read_callback_isError(storage_path)
+
         return CrawlStatus(
             crawl_id=crawl_id,
             id_domaine=crawl_id, # Legacy alias
-            status=job_info["status"], 
+            status=job_info["status"],
             domain=job_info["domain"],
-            start_url=job_info["start_url"], 
+            start_url=job_info["start_url"],
             start_time=job_info["start_time"],
             urls_crawled=urls_crawled,
             error_urls_crawled=error_urls_crawled,
             nfr_urls_crawled=nfr_urls_crawled,
             last_activity=last_url_time,
-            last_heartbeat=job_info.get("last_heartbeat")
+            last_heartbeat=job_info.get("last_heartbeat"),
+            is_error=is_error,
         )
         # --- END: ENHANCED STATS CALCULATION ---
         

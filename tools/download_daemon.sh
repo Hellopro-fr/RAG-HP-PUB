@@ -7,6 +7,18 @@
 # Usage:
 #   ./tools/download_daemon.sh
 #
+# Environment variables:
+#   GCS_BUCKET_NAME        (required)  Source bucket; archives live at gs://$BUCKET/crawls/
+#   DOWNLOAD_REQUESTS_PATH (optional)  Host dir polled for .request markers
+#                                      (default: apps-microservices/crawler-service/crawler_download_requests).
+#                                      Must match the crawler-service host bind source for
+#                                      compose target /app/download_requests; same env var name
+#                                      as Python (app/core/config.py) for cross-layer parity.
+#   DOWNLOAD_RESULTS_PATH  (optional)  Host dir where downloaded archives + .done/.error
+#                                      markers are written (default:
+#                                      apps-microservices/crawler-service/crawler_download_results).
+#                                      Same parity rules as DOWNLOAD_REQUESTS_PATH.
+#
 # Flow:
 #   1. Service writes {crawl_id}.request to the requests directory
 #   2. This daemon picks it up, downloads gs://{bucket}/crawls/{crawl_id}.tar.gz
@@ -15,10 +27,10 @@
 
 # Configuration
 DEFAULT_REQUESTS_DIR="$(dirname "$0")/../apps-microservices/crawler-service/crawler_download_requests"
-REQUESTS_DIR="${DOWNLOAD_REQUESTS_DIR:-$DEFAULT_REQUESTS_DIR}"
+REQUESTS_DIR="${DOWNLOAD_REQUESTS_PATH:-$DEFAULT_REQUESTS_DIR}"
 
 DEFAULT_RESULTS_DIR="$(dirname "$0")/../apps-microservices/crawler-service/crawler_download_results"
-RESULTS_DIR="${DOWNLOAD_RESULTS_DIR:-$DEFAULT_RESULTS_DIR}"
+RESULTS_DIR="${DOWNLOAD_RESULTS_PATH:-$DEFAULT_RESULTS_DIR}"
 
 # Load .env from parent directory
 ENV_FILE="$(dirname "$0")/../.env"
