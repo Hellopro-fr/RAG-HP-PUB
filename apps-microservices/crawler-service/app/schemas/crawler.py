@@ -99,6 +99,26 @@ class ArchiveResponse(BaseModel):
     archive_status: str = Field("pending_upload", description="'pending_upload' = local archive created, awaiting daemon upload to GCS.")
     archive_size_bytes: Optional[int] = Field(None, description="Size of the archive file in bytes.")
 
+class StashResponse(BaseModel):
+    """Response for POST /stash/{crawl_id} — 202 Accepted shape."""
+    crawl_id: str
+    status: str = Field("stashing", description="Always 'stashing' when 202 returned; data is in /app/stash awaiting daemon upload to GCS.")
+    stash_path: str = Field(..., description="Target GCS object path (gs://{bucket}/stash/{id}.tar.gz).")
+    stashed_at: datetime = Field(..., description="ISO 8601 UTC timestamp written to Redis job_data.")
+
+
+class UnstashResponse(BaseModel):
+    """Response for POST /unstash/{crawl_id} — 200 OK shape."""
+    crawl_id: str
+    status: str = Field("unstashed", description="Always 'unstashed' when 200 returned.")
+    restored_to: str = Field(..., description="Local storage path where the archive was extracted.")
+    elapsed_seconds: float = Field(..., description="Total round-trip wall-time (request marker write -> Redis flag clear).")
+    gcs_cleanup_status: Optional[str] = Field(
+        None,
+        description="'cleaned' when the GCS source was deleted within UNSTASH_CLEANUP_GRACE_SECONDS, 'deferred' when the cleanup marker did not arrive in time (an orphan GCS object remains and must be manually cleaned)."
+    )
+
+
 class RetrieveResponse(BaseModel):
     message: str
     crawl_id: str
