@@ -219,10 +219,9 @@ export interface FlowState {
   dynamicEquivalences: Record<string, any[]>;
 
   // Réponse de l'utilisateur à la question budget (page /budget intercalée
-  // entre le loader matching et /selection). Id de l'option choisie dans
-  // data/budget-options.ts, ou null si non répondu. Volontairement typé en
-  // string (pas union littérale) pour faciliter l'arrivée future des options
-  // depuis l'API sans casser le type.
+  // entre le loader matching et /selection). Contient le label de l'option
+  // choisie (les options viennent de /api/prix.budget_reponse), ou null si
+  // non répondu.
   userBudgetRange: string | null;
 
   // État du profil

@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from "@/lib/utils";
-import type { BudgetOption } from "@/data/budget-options";
+import type { BudgetOption } from "@/types/budget";
 
 interface BudgetQuestionScreenProps {
   options: BudgetOption[];
