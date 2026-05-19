@@ -169,6 +169,25 @@
                   </p>
                 </div>
 
+                <!-- Optional: column whose cell value becomes the row's created_by.
+                     Empty cell or no column selected falls back to the connected user. -->
+                <div>
+                  <label for="map-created-by" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Colonne Créateur (optionnel)
+                  </label>
+                  <select
+                    id="map-created-by"
+                    v-model="createdByColumn"
+                    class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                  >
+                    <option value="">Utilisateur connecté (défaut)</option>
+                    <option v-for="h in preview.headers" :key="h" :value="h">{{ h }}</option>
+                  </select>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    Par défaut, l'utilisateur connecté est utilisé. Si vous sélectionnez une colonne, sa valeur (par ligne) remplacera ce défaut quand la cellule est non vide.
+                  </p>
+                </div>
+
                 <!-- Dynamic per-field mappings -->
                 <div
                   v-for="field in template.required_extra_env || []"
@@ -386,6 +405,7 @@ const preview = ref<SheetPreviewType | null>(null)
 const nameColumn = ref('')
 const credentialsColumn = ref('')
 const extraEnvColumns = reactive<Record<string, string>>({})
+const createdByColumn = ref('')
 const namePrefix = ref('')
 const fixedTags = ref('')
 const fixedToolPrefix = ref('')
@@ -509,6 +529,14 @@ function autoDetectMapping() {
     })
     if (match) extraEnvColumns[field.key] = match
   }
+
+  if (!createdByColumn.value) {
+    const match = headers.find(h => {
+      const n = normalize(h)
+      return ['createdby', 'created_by', 'owner', 'email', 'createur', 'auteur'].includes(n)
+    })
+    if (match) createdByColumn.value = match
+  }
 }
 
 function goToStep(step: number) {
@@ -537,7 +565,8 @@ async function handleImport() {
       fixed_tags: fixedTags.value || undefined,
       fixed_tool_prefix: fixedToolPrefix.value || undefined,
       fixed_icon: fixedIcon.value || undefined,
-      auto_discover: autoDiscover.value || undefined
+      auto_discover: autoDiscover.value || undefined,
+      created_by_column: createdByColumn.value || undefined,
     })
     currentStep.value = 2
   } catch (err: unknown) {

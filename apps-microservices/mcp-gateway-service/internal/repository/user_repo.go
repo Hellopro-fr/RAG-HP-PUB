@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/db"
 	"gorm.io/gorm"
 )
 

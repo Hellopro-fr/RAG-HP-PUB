@@ -20,7 +20,9 @@ import AppSidebar from './AppSidebar.vue';
 import AppHeader from './AppHeader.vue';
 import Backdrop from './Backdrop.vue';
 import Toast from 'primevue/toast';
-import { useSidebar } from '@/composables/useSidebar';
+import { useSidebarProvider } from '@/composables/useSidebar';
 
-const { isExpanded, isHovered } = useSidebar();
+// Provide sidebar context here (only authenticated chrome needs it). Drops
+// the resize listener and ref tree on /login, /docs, /privacy, /about.
+const { isExpanded, isHovered } = useSidebarProvider();
 </script>

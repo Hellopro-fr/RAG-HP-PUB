@@ -55,6 +55,7 @@ Dockerfile           # Python 3.10-slim image for DLQ archiver/requeuer
 - DLQ archiver uses batch inserts (size 50, timeout 5s) with individual ACK/NACK.
 - Requeuer marks processed messages with `status: "Re-queued"` in Elasticsearch.
 - GCS daemons use file-based signaling (.request/.done/.error markers).
+- GCS download daemon path env vars: `DOWNLOAD_REQUESTS_PATH` (request markers) and `DOWNLOAD_RESULTS_PATH` (results + .done/.error markers). Same names as the crawler-service Python `Settings` (apps-microservices/crawler-service/app/core/config.py), so a single `.env` entry per direction configures both layers. Defaults point at `apps-microservices/crawler-service/crawler_download_{requests,results}` matching the `docker-compose.yml` bind source for the crawler-service container.
 - `gcs_archive_audit.py` uses `gcloud storage` CLI (no Python GCS library). Run `gcloud auth login` or activate a service account key before invoking.
 
 ## What This Provides to Other Services

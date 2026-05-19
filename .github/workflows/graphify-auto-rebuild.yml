@@ -45,6 +45,7 @@ on:
   #     # trigger CI rebuilds even though the service IS in graph.json.
   #     - 'apps-microservices/crawler-service/**'
   #     - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
+  #     - 'apps-microservices/api-detection-langue-fr/**'
   #     # Scripts that feed the rebuild logic itself
   #     - 'scripts/graphify_rebuild_scoped.py'
   #     # Policy changes that may need a graph refresh

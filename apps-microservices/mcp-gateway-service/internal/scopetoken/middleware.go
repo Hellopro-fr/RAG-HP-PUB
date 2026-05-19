@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/slack"
 )
 
 // notifyUnauthorized alerts Slack (if configured) about a rejected MCP request.
@@ -50,6 +50,13 @@ const LeexiFilterContextKey = "scope_leexi_filter"
 // forwarding a tools/call to a Ringover-tagged backend.
 const RingoverFilterContextKey = "scope_ringover_filter"
 
+// ZohoFilterContextKey carries a *ZohoFilterContext describing the active
+// per-token / per-OAuth2-client Zoho ownership scope. Absence of the key
+// means no admin filter is configured (Step 2 of requestHeadersFor sees
+// nothing and emits no header). When the imported-server Step 1 path
+// fires, this context is ignored.
+const ZohoFilterContextKey = "scope_zoho_filter"
+
 // ScopeNameContextKey carries the human-readable name of the active scope
 // token or OAuth2 client. ScopedGateway reads it to override serverInfo.name
 // on the MCP initialize response so clients see the credential label instead
@@ -80,6 +87,24 @@ func AllowedInstructionsFromContext(ctx context.Context) ([]ResolvedInstruction,
 	return v, ok
 }
 
+// EndUserEmailContextKey carries the authenticated end-user's email captured
+// at OAuth2 login time. Only the bearer-token branch of the OAuth2 middleware
+// sets this value (authorization_code / refresh_token grants); X-MCP-Scope-Token
+// requests and client_credentials grants leave it absent. ScopedGateway reads
+// it to resolve filter mode "self" at request time.
+const EndUserEmailContextKey = "scope_end_user_email"
+
+// EndUserEmailFromContext returns the end-user email captured during OAuth2
+// login, plus a boolean to distinguish "missing" from "explicitly empty". A
+// non-string stored value is treated as missing — defensive in depth.
+func EndUserEmailFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(EndUserEmailContextKey).(string)
+	if !ok || v == "" {
+		return "", false
+	}
+	return v, true
+}
+
 // LeexiFilterContext is the runtime view of the persisted scope.
 type LeexiFilterContext struct {
 	Mode             string
@@ -103,6 +128,21 @@ type RingoverFilterContext struct {
 // RingoverFilterFromContext returns the typed Ringover filter info if any was set.
 func RingoverFilterFromContext(ctx context.Context) (*RingoverFilterContext, bool) {
 	v, ok := ctx.Value(RingoverFilterContextKey).(*RingoverFilterContext)
+	return v, ok
+}
+
+// ZohoFilterContext is the runtime view of the persisted Zoho scope.
+type ZohoFilterContext struct {
+	Mode          string   // "none" | "users" | "creator"
+	AllowedEmails []string // for mode "users"
+	// CreatorEmail is the owning user's email captured at scope-token /
+	// OAuth2-client write time. Used only for mode "creator".
+	CreatorEmail string
+}
+
+// ZohoFilterFromContext returns the typed Zoho filter info if any was set.
+func ZohoFilterFromContext(ctx context.Context) (*ZohoFilterContext, bool) {
+	v, ok := ctx.Value(ZohoFilterContextKey).(*ZohoFilterContext)
 	return v, ok
 }
 
@@ -227,6 +267,15 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					_ = json.Unmarshal(dbToken.RingoverAllowedTeamIDs, &ct.RingoverAllowedTeamIDs)
 				}
 
+				// Decode persisted Zoho filter for runtime header injection.
+				ct.ZohoFilterMode = dbToken.ZohoFilterMode
+				if len(dbToken.ZohoAllowedEmails) > 0 {
+					_ = json.Unmarshal(dbToken.ZohoAllowedEmails, &ct.ZohoAllowedEmails)
+				}
+				if ct.ZohoFilterMode == "creator" {
+					ct.ZohoCreatorEmail = dbToken.CreatedBy
+				}
+
 				// BDD scope: flatten the join rows into a flat slice of IDs.
 				// Empty slice = no restriction; the runtime injector keys off
 				// the presence of the slice (len > 0), see ScopedGateway.
@@ -279,6 +328,13 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 					Mode:           ct.RingoverFilterMode,
 					AllowedUserIDs: ct.RingoverAllowedUserIDs,
 					AllowedTeamIDs: ct.RingoverAllowedTeamIDs,
+				})
+			}
+			if ct.ZohoFilterMode != "" && ct.ZohoFilterMode != "none" {
+				ctx = context.WithValue(ctx, ZohoFilterContextKey, &ZohoFilterContext{
+					Mode:          ct.ZohoFilterMode,
+					AllowedEmails: ct.ZohoAllowedEmails,
+					CreatorEmail:  ct.ZohoCreatorEmail,
 				})
 			}
 			if len(ct.BDDAllowedTableIDs) > 0 {

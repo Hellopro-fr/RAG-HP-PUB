@@ -190,6 +190,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { usersApi } from '@/api/users'
 import { useToast } from '@/composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import FilterPanel from '@/components/shared/FilterPanel.vue'
@@ -276,9 +277,8 @@ async function handleToggleAllowed(user: User) {
     await usersApi.toggleAllowed(user.id, !user.is_allowed)
     user.is_allowed = !user.is_allowed
     toast.success(`${user.email} ${user.is_allowed ? 'autorisé' : 'bloqué'}`)
-  } catch (err: any) {
-    const msg = err?.body?.error || 'Impossible de modifier l\'accès'
-    toast.error(msg)
+  } catch (err: unknown) {
+    toast.error(toErrorMessage(err, 'Impossible de modifier l\'accès'))
   } finally {
     togglingId.value = undefined
   }

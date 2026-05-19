@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/gateway"
-	"github.com/hellopro/mcp-gateway/internal/repository"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
+	"mcp-gateway/internal/repository"
 	"gorm.io/gorm"
 )
 

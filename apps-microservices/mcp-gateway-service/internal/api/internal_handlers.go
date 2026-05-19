@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hellopro/mcp-gateway/internal/runnerclient"
+	"mcp-gateway/internal/runnerclient"
 )
 
 type runnerSyncResponse struct {
@@ -33,7 +33,9 @@ func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	instances, err := h.instanceRepo.ListAll()
+	// Runner sync is a machine-to-machine call; it must see every instance
+	// regardless of creator (pass "" to bypass the user filter).
+	instances, err := h.instanceRepo.ListAll("")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return

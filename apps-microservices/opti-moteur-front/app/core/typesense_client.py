@@ -91,6 +91,12 @@ class TypesenseClient:
                 {"name": "date_maj",        "type": "string", "optional": True, "sort": True},
                 {"name": "chunk_number",    "type": "int32"},
                 {"name": "total_chunks",    "type": "int32"},
+                # 2026-05-07 : ajout url_images pour afficher les vignettes en P2-P4 Typesense.
+                # Avant : Typesense ne stockait pas, on enrichissait via SQL fallback (latence +20-50ms).
+                # Apres : url_images directement dans Typesense -> aucun roundtrip BDD.
+                # Pour les ~1.5M docs deja en Typesense (sans url_images), le SQL fallback PHP reste
+                # actif comme safety net jusqu'au prochain re-ingest complet.
+                {"name": "url_images",      "type": "string", "optional": True, "index": False},
                 {"name": "embedding",       "type": "float[]", "num_dim": settings.EMBEDDING_DIMENSION},
             ],
             "token_separators": ["-", "/"],

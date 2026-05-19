@@ -187,6 +187,8 @@ const leexiBadge = computed<string | null>(() => {
       return `${(f.team_uuids || []).length} team(s)`
     case 'creator':
       return 'creator only'
+    case 'self':
+      return 'connected user (self)'
     default:
       return null
   }

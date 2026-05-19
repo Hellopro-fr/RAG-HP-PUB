@@ -303,6 +303,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { installGuidesAdminApi } from '@/api/install-guides'
 import { useToast } from '@/composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import PageHeaderTabs from '@/components/common/PageHeaderTabs.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
@@ -383,9 +384,9 @@ async function toggleActive(type: 'executor' | 'config', item: InstallExecutor |
   const newValue = !item.is_active
   try {
     if (type === 'executor') {
-      await installGuidesAdminApi.updateExecutor(item.id, { is_active: newValue } as any)
+      await installGuidesAdminApi.updateExecutor(item.id, { is_active: newValue })
     } else {
-      await installGuidesAdminApi.updateConfig(item.id, { is_active: newValue } as any)
+      await installGuidesAdminApi.updateConfig(item.id, { is_active: newValue })
     }
     item.is_active = newValue
     toast.success(`${item.label} ${newValue ? 'active' : 'desactive'}`)
@@ -451,9 +452,11 @@ function handleBatchImport() {
 
 function handleExportAll() {
   // Strip server-managed fields so the export can be re-imported as-is via createExecutor/createConfig.
+  const stripExecutor = ({ id: _id, created_at: _c, updated_at: _u, ...rest }: InstallExecutor) => rest
+  const stripConfig = ({ id: _id, created_at: _c, updated_at: _u, ...rest }: InstallConfig) => rest
   const stripped = {
-    executors: executors.value.map(({ id, created_at, updated_at, ...rest }: any) => rest),
-    configs: configs.value.map(({ id, created_at, updated_at, ...rest }: any) => rest),
+    executors: executors.value.map(stripExecutor),
+    configs: configs.value.map(stripConfig),
     exported_at: new Date().toISOString(),
   }
   const blob = new Blob([JSON.stringify(stripped, null, 2)], { type: 'application/json' })
@@ -503,8 +506,8 @@ async function onFileSelected(e: Event) {
     successMsg.value = `${imported} element(s) importe(s)`
     await loadAll()
     setTimeout(() => { successMsg.value = '' }, 5000)
-  } catch (err: any) {
-    toast.error(err?.body?.error || err?.message || 'Erreur lors de l\'import')
+  } catch (err: unknown) {
+    toast.error(toErrorMessage(err, 'Erreur lors de l\'import'))
   }
   if (fileInput.value) fileInput.value.value = ''
 }

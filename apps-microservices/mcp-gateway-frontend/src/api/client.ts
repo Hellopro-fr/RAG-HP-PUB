@@ -2,9 +2,23 @@ import { ApiError } from '@/types/api'
 import { router } from '@/router'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+// SSO mode (account-service): identity travels in HttpOnly gw_session cookie.
+// In legacy mode we keep sending Authorization: Bearer from localStorage.
+const SSO_MODE = import.meta.env.VITE_SSO_MODE === 'true'
 
 function getAuthToken(): string | null {
+  if (SSO_MODE) return null
   return localStorage.getItem('auth_token')
+}
+
+function on401(): void {
+  if (SSO_MODE) {
+    const target = window.location.pathname + window.location.search
+    window.location.href = '/sso/login?return_to=' + encodeURIComponent(target)
+    return
+  }
+  localStorage.removeItem('auth_token')
+  router.push({ path: '/login', query: { redirect: window.location.pathname } })
 }
 
 async function request<T>(
@@ -33,12 +47,12 @@ async function request<T>(
   const response = await fetch(url, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: SSO_MODE ? 'include' : 'same-origin',
   })
 
   if (response.status === 401) {
-    localStorage.removeItem('auth_token')
-    router.push({ path: '/login', query: { redirect: window.location.pathname } })
+    on401()
     throw new ApiError(401, 'Unauthorized')
   }
 
@@ -65,10 +79,13 @@ async function blobRequest(path: string): Promise<Blob> {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
-  const response = await fetch(url, { method: 'GET', headers })
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+    credentials: SSO_MODE ? 'include' : 'same-origin',
+  })
   if (response.status === 401) {
-    localStorage.removeItem('auth_token')
-    router.push({ path: '/login', query: { redirect: window.location.pathname } })
+    on401()
     throw new ApiError(401, 'Unauthorized')
   }
   if (!response.ok) {
@@ -87,11 +104,15 @@ async function multipartRequest<T>(method: string, path: string, formData: FormD
   }
   // Deliberately no Content-Type — the browser sets the multipart boundary.
 
-  const response = await fetch(url, { method, headers, body: formData })
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: formData,
+    credentials: SSO_MODE ? 'include' : 'same-origin',
+  })
 
   if (response.status === 401) {
-    localStorage.removeItem('auth_token')
-    router.push({ path: '/login', query: { redirect: window.location.pathname } })
+    on401()
     throw new ApiError(401, 'Unauthorized')
   }
 

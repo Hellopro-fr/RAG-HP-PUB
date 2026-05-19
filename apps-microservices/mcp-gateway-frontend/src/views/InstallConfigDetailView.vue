@@ -89,7 +89,7 @@
             </span>
             <div class="pt-0.5 flex-1 min-w-0">
               <p class="font-medium text-gray-900 dark:text-white text-sm">{{ step.title }}</p>
-              <p v-if="step.description" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-html="step.description" />
+              <p v-if="step.description" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-safe-html="step.description" />
 
               <!-- Executor selector (cards) -->
               <div v-if="step.hasExecutorSelector && executors.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
@@ -149,7 +149,7 @@
                   class="mt-3 rounded-lg p-3 text-sm"
                   :class="getExecutorNote(selectedExec).class"
                 >
-                  <strong>{{ getExecutorNote(selectedExec).label }}</strong> <span v-html="getExecutorNote(selectedExec).text" />
+                  <strong>{{ getExecutorNote(selectedExec).label }}</strong> <span v-safe-html="getExecutorNote(selectedExec).text" />
                 </div>
               </div>
 
@@ -191,7 +191,7 @@ import CodeBlock from '@/components/shared/CodeBlock.vue'
 import CrossSectionLink from '@/components/shared/CrossSectionLink.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { installGuidesPublicApi } from '@/api/install-guides'
-import type { InstallExecutor, InstallConfig } from '@/types/install-guide'
+import type { InstallExecutor, InstallConfig, ExecutorElement } from '@/types/install-guide'
 
 const route = useRoute()
 const clipboard = useClipboard()
@@ -227,30 +227,32 @@ function handleCopy(code: string) {
   clipboard.copy(code, 'Commande')
 }
 
-function getExecutorCode(exec: any, field: string): string {
-  if (!exec) return ''
+const TYPE_BY_FIELD: Record<string, ExecutorElement['type']> = {
+  mcp_config: 'mcp-config',
+  cli_add_cmd: 'cli-command',
+}
+
+function getExecutorCode(exec: InstallExecutor | null | undefined, field: string | undefined): string {
+  if (!exec || !field) return ''
   // Prefer dedicated top-level field (authoritative source)
-  if (exec[field]) return exec[field]
+  const top = (exec as unknown as Record<string, string | undefined>)[field]
+  if (top) return top
   // Fall back to page-builder `content` array
   if (Array.isArray(exec.content)) {
-    const typeByField: Record<string, string> = {
-      mcp_config: 'mcp-config',
-      cli_add_cmd: 'cli-command',
-    }
-    const elType = typeByField[field]
+    const elType = TYPE_BY_FIELD[field]
     if (elType) {
-      const el = exec.content.find((e: any) => e?.type === elType)
+      const el = exec.content.find((e) => e?.type === elType)
       if (el?.props?.code) return el.props.code
     }
   }
   return ''
 }
 
-function getExecutorNote(exec: any): { label: string; text: string; class: string } {
+function getExecutorNote(exec: InstallExecutor | null | undefined): { label: string; text: string; class: string } {
   if (!exec) return { label: '', text: '', class: '' }
   // Prefer a `note` element inside content (page-builder source of truth)
   if (Array.isArray(exec.content)) {
-    const noteEl = exec.content.find((e: any) => e?.type === 'note')
+    const noteEl = exec.content.find((e) => e?.type === 'note')
     if (noteEl?.props && (noteEl.props.text || noteEl.props.label)) {
       return {
         label: noteEl.props.label || '',

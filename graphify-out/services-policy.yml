@@ -46,6 +46,9 @@ graphed:
   - path: apps-microservices/graph-rag-api-recherche-rust-service
     added_at: 2026-04-24
     notes: "Rust (Actix-web / tonic). Core retrieval. Unique stack; cross-links to libs/rust-common-utils grpc clients and to Python LLM providers."
+  - path: apps-microservices/api-detection-langue-fr
+    added_at: 2026-05-05
+    notes: "FastAPI server backing crawler's detection-langue-fr client. Promoted from templated_wrapper because the caller-contract / admission-control / inflight-dedup work made cross-service questions (crawler -> backend) routine."
 
 not_graphed:
   # ----------------------------------------------------------------------
@@ -81,6 +84,8 @@ not_graphed:
   # ----------------------------------------------------------------------
   # frontend — Next.js / React, separate toolchain
   # ----------------------------------------------------------------------
+  - path: apps-microservices/account-service-frontend
+    reason: frontend
   - path: apps-microservices/crawler-monitor-frontend
     reason: frontend
   - path: apps-microservices/mcp-gateway-frontend
@@ -202,8 +207,6 @@ not_graphed:
     reason: templated_wrapper
   - path: apps-microservices/api-comparaison-texte
     reason: templated_wrapper
-  - path: apps-microservices/api-detection-langue-fr
-    reason: templated_wrapper
   - path: apps-microservices/api-embedding-service
     reason: templated_wrapper
   - path: apps-microservices/api-question-caracteristique
@@ -257,6 +260,9 @@ not_graphed:
   # Each of these is a larger / more unique service. Promote when a
   # cross-service query surfaces the need.
   # ----------------------------------------------------------------------
+  - path: apps-microservices/account-service-backend
+    reason: candidate_deferred
+    details: "SSO / OAuth2 backend (introduced 2026-05-04). Promote when SSO threads (mcp-gateway-sso-client, account-service-client-integration) start surfacing cross-service architecture questions."
   - path: apps-microservices/api-chat-llm
     reason: candidate_deferred
     details: "Orchestration entry. 16 code files + 3 docs."

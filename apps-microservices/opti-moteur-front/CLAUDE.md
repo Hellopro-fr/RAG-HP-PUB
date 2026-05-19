@@ -78,3 +78,62 @@ Respecter `app/{core,services,router,schemas,utils}/` :
 - `services/` : logique metier (detection, rerank, ingestion)
 - `schemas/` : contrats API pydantic
 - `router/` : routes FastAPI thin, deleguent aux services
+- `data/` : fichiers de donnees generes offline (gitignore, cf section IDF)
+
+## IDF tokens rares (A4, 2026-05-18)
+
+Le reranker pondere `name_match` et `cat_match` par l'IDF des tokens query
+(calcule sur l'ensemble des `nom_produit` Typesense). Cela resout les requetes
+combinatoires comme "melangeur conique" ou le token rare devrait peser plus
+que le token commun (audit v3, score 2.6/10 sur cette query).
+
+### Generer / regenerer le dict IDF
+
+Le fichier `app/data/idf_nom_produit.json` est gitignore (depend du catalogue
+live). A regenerer apres chaque ingestion majeure.
+
+**Methode recommandee : execution dans le container** (toutes les deps sont
+deja la, pas besoin d'installer Python + requirements.txt sur la VM). Le
+bind-mount `./app/data:/app/app/data` (cf docker-compose.yaml) garantit que
+le JSON ecrit dans le container apparait aussi cote hote.
+
+```bash
+cd apps-microservices/opti-moteur-front
+
+# 1. (Une seule fois apres ajout du bind-mount) recreer le container pour
+#    que le volume soit pris en compte. `restart` seul ne suffit pas.
+docker compose up -d --force-recreate opti-moteur-front
+
+# 2. Generer le dict IDF (~10-30s sur ~700k docs)
+docker compose exec opti-moteur-front python scripts/compute_idf.py
+
+# 3. Recharger pour que le reranker charge le nouveau dict IDF en RAM
+docker compose restart opti-moteur-front
+
+# 4. Verifier les logs au demarrage
+docker compose logs --tail 30 opti-moteur-front | grep -i "IDF"
+# Attendu : "IDF loaded from idf_nom_produit.json : NNNN tokens, median=X.XXX, n_docs=YYYYY"
+```
+
+**Methode alternative (hors container)** : si Python 3 + deps installes sur
+la VM, `python3 scripts/compute_idf.py` ecrit directement dans
+`apps-microservices/opti-moteur-front/app/data/` (cote hote), visible par
+le container via le bind-mount.
+
+### Comportement si le fichier IDF est absent
+
+`idf_loader.idf_available()` retourne `False` -> le reranker bascule
+automatiquement sur le ratio simple (= comportement historique, backward-compat).
+Verifier le log au demarrage : `IDF file not found at ... - reranker will
+fallback to flat name_match`.
+
+## Filter_by_category : seuil de fallback adaptatif (A3, 2026-05-18)
+
+Le retry "sans filter_by" si pool < seuil utilise desormais un seuil adaptatif
+selon le nb de tokens query :
+- **1 token**  (compresseur, ERP) : seuil 150 -> evite que le filter etouffe
+  la P2 sur les requetes mono-token generiques (regression v3 audit).
+- **2 tokens** (armoire medicale) : seuil 20 -> conserve le gain v3 (+3.4).
+- **>=3 tokens** (Ritmo ELEKTRA M) : seuil 5 -> comportement strict actuel.
+
+Logique dans `app/services/search_service.py::_filter_fallback_threshold()`.

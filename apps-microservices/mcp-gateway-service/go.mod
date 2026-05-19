@@ -1,4 +1,4 @@
-module github.com/hellopro/mcp-gateway
+module mcp-gateway
 
 go 1.24
 

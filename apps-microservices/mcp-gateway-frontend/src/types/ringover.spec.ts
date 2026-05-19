@@ -20,6 +20,13 @@ describe('Ringover types', () => {
     expect(f.creator_user_id).toBe(42)
   })
 
+  it("self mode resolves at request time and carries no IDs", () => {
+    const f: RingoverFilter = { mode: 'self' }
+    expect(f.mode).toBe('self')
+    expect(f.user_ids).toBeUndefined()
+    expect(f.team_ids).toBeUndefined()
+  })
+
   it('RingoverUser/Team carry numeric identifiers', () => {
     const u: RingoverUser = { user_id: 1, team_id: 2, firstname: 'A' }
     const t: RingoverTeam = { id: 2, name: 'Sales' }

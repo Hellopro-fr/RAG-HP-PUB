@@ -8,21 +8,59 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
+	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/sso"
 )
+
+// toServerTools projects a slice of mcp.Tool (live per-user catalog) into
+// the db.ServerTool shape so the consent renderer can iterate it through
+// the same code path as the cached admin catalog. ServerID is left blank —
+// the caller injects the surrounding server context.
+func toServerTools(tools []mcp.Tool) []db.ServerTool {
+	out := make([]db.ServerTool, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, db.ServerTool{Name: t.Name, Description: t.Description})
+	}
+	return out
+}
+
+// decideZohoServerEntry tells the consent renderer how to handle a single
+// server given the per-viewer Zoho state map. Three outcomes:
+//
+//   - server is NOT Zoho-tagged → (false, nil) and the caller uses srv.Tools.
+//   - server IS Zoho-tagged AND state[srvID].Configured == true → (false, tools)
+//     and the caller uses the returned per-user tools.
+//   - server IS Zoho-tagged AND state entry is missing OR !Configured →
+//     (true, nil) and the caller routes the server into the "Non configurés"
+//     section with no tools.
+//
+// Pure function: callers compose it inside renderConsent's main loop;
+// unit tests cover the decision matrix without spinning up AuthServer.
+func decideZohoServerEntry(
+	srvID string,
+	zohoIDs map[string]bool,
+	state map[string]gateway.ZohoServerState,
+) (unconfigured bool, tools []mcp.Tool) {
+	if !zohoIDs[srvID] {
+		return false, nil
+	}
+	st, ok := state[srvID]
+	if !ok || !st.Configured {
+		return true, nil
+	}
+	return false, st.Tools
+}
 
 //go:embed templates/*.html
 var templateFS embed.FS
 
-var (
-	loginTmpl   = template.Must(template.ParseFS(templateFS, "templates/login.html"))
-	consentTmpl = template.Must(template.ParseFS(templateFS, "templates/consent.html"))
-)
+var consentTmpl = template.Must(template.ParseFS(templateFS, "templates/consent.html"))
 
 type authorizeParams struct {
 	ResponseType        string
@@ -57,8 +95,6 @@ func (s *AuthServer) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		action := r.FormValue("action")
 		switch action {
-		case "login":
-			s.handleLogin(w, r, client, params)
 		case "consent":
 			s.handleConsent(w, r, client, params)
 		default:
@@ -122,89 +158,117 @@ func (s *AuthServer) isRegisteredRedirectURI(client *db.OAuth2Client, uri string
 }
 
 func (s *AuthServer) showLoginOrConsent(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, params *authorizeParams) {
+	// Tier 1: existing OAuth2 authserver session — render consent directly.
 	session, err := auth.GetSession(r, s.jwtSecret)
 	if err == nil {
 		if _, err := auth.ValidateJWT(session.Token, s.jwtSecret, ""); err == nil {
-			s.renderConsent(w, client, params, session.Email)
+			s.renderConsent(w, r, client, params, session.Email)
 			return
 		}
 	}
 
-	loginTmpl.Execute(w, map[string]string{
-		"ClientName":          client.Name,
-		"ClientID":            params.ClientID,
-		"RedirectURI":         params.RedirectURI,
-		"CodeChallenge":       params.CodeChallenge,
-		"CodeChallengeMethod": params.CodeChallengeMethod,
-		"State":               params.State,
-		"Error":               "",
-		"Username":            "",
-	})
-}
-
-func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, params *authorizeParams) {
-	username := strings.TrimSpace(r.FormValue("username"))
-	password := r.FormValue("password")
-
-	if username == "" || password == "" {
-		loginTmpl.Execute(w, map[string]string{
-			"ClientName":          client.Name,
-			"ClientID":            params.ClientID,
-			"RedirectURI":         params.RedirectURI,
-			"CodeChallenge":       params.CodeChallenge,
-			"CodeChallengeMethod": params.CodeChallengeMethod,
-			"State":               params.State,
-			"Error":               "Tous les champs sont obligatoires",
-			"Username":            username,
-		})
-		return
-	}
-
-	authResp, err := auth.AuthenticateHellopro(s.authURL, username, password)
-	if err != nil || !authResp.Success {
-		log.Printf("[authserver] login failed for %s", username)
-		loginTmpl.Execute(w, map[string]string{
-			"ClientName":          client.Name,
-			"ClientID":            params.ClientID,
-			"RedirectURI":         params.RedirectURI,
-			"CodeChallenge":       params.CodeChallenge,
-			"CodeChallengeMethod": params.CodeChallengeMethod,
-			"State":               params.State,
-			"Error":               "Login / Mot de passe invalide",
-			"Username":            username,
-		})
-		return
-	}
-
-	token := authResp.Token
-	if token == "" {
-		claims := auth.Claims{
-			Exp:  time.Now().Add(24 * time.Hour).Unix(),
-			Iat:  time.Now().Unix(),
-			Name: authResp.DisplayName,
+	// Tier 2: bridge from an active admin SSO session if one exists. Mint a
+	// fresh mcp_session so subsequent requests in this OAuth2 flow find the
+	// authserver session via tier 1.
+	if email, ok := s.bridgeFromSSOSession(r); ok {
+		if err := s.mintAuthSession(w, email, ""); err != nil {
+			log.Printf("[authserver] bridge mint session: %v", err)
+			// Fall through to tier 3 on failure so the user can still log in.
+		} else {
+			s.renderConsent(w, r, client, params, email)
+			return
 		}
-		token, _ = auth.SignJWT(s.jwtSecret, claims)
 	}
-	auth.SetSession(w, s.jwtSecret, auth.SessionData{
-		DisplayName: authResp.DisplayName,
-		Email:       authResp.Email,
-		Token:       token,
-	}, s.secureCookie)
 
-	log.Printf("[authserver] user %s logged in for OAuth2 authorize", authResp.Email)
-	s.renderConsent(w, client, params, authResp.Email)
+	// Tier 3: no usable session — redirect to /sso/login with the original
+	// authorize URL preserved so the browser lands back here once the cookie
+	// is set and tier 1 picks up.
+	returnTo := "/authorize?" + r.URL.RawQuery
+	q := url.Values{}
+	q.Set("return_to", returnTo)
+	q.Set("purpose", "oauth2")
+	http.Redirect(w, r, "/sso/login?"+q.Encode(), http.StatusSeeOther)
 }
 
-func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Client, params *authorizeParams, userEmail string) {
+// bridgeFromSSOSession returns the email of an authenticated admin user when
+// the request carries a valid, non-expired gw_session cookie pointing to an
+// sso_sessions row. The boolean distinguishes "no bridge possible" (cookie
+// absent / row missing / expired / repo not configured) from "successful
+// bridge".
+func (s *AuthServer) bridgeFromSSOSession(r *http.Request) (string, bool) {
+	if s.ssoSessionRepo == nil {
+		return "", false
+	}
+	sid, err := sso.GetSessionID(r)
+	if err != nil {
+		return "", false
+	}
+	row, err := s.ssoSessionRepo.FindByID(sid)
+	if err != nil || row == nil {
+		return "", false
+	}
+	if !row.AccessExp.IsZero() && time.Now().After(row.AccessExp) {
+		return "", false
+	}
+	if row.Email == "" {
+		return "", false
+	}
+	return row.Email, true
+}
+
+// mintAuthSession writes the mcp_session cookie used by tier 1. The Token
+// field stashes a freshly-minted JWT so auth.ValidateJWT in subsequent
+// requests passes — the upstream account-service token is not available here,
+// and the consent flow only needs the email + a non-empty session.
+func (s *AuthServer) mintAuthSession(w http.ResponseWriter, email, displayName string) error {
+	claims := auth.Claims{
+		Exp:  time.Now().Add(24 * time.Hour).Unix(),
+		Iat:  time.Now().Unix(),
+		Name: displayName,
+	}
+	tok, err := auth.SignJWT(s.jwtSecret, claims)
+	if err != nil {
+		return err
+	}
+	return auth.SetSession(w, s.jwtSecret, auth.SessionData{
+		DisplayName: displayName,
+		Email:       email,
+		Token:       tok,
+	}, s.secureCookie)
+}
+
+func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, params *authorizeParams, userEmail string) {
 	// Check if the client has pre-configured server/tool scope (admin-assigned)
 	hasPreConfiguredScope := len(client.Servers) > 0
 
 	servers, _ := s.serverRepo.ListActive()
 
-	// Build server lookup for name resolution
+	// Build server lookup for name resolution + identify Zoho-tagged servers
+	// so the per-user catalog override can substitute their tools below.
 	serverMap := make(map[string]db.MCPServer, len(servers))
+	zohoIDs := make(map[string]bool, len(servers))
 	for _, srv := range servers {
 		serverMap[srv.ID] = srv
+		if isZohoServer(srv) {
+			zohoIDs[srv.ID] = true
+		}
+	}
+
+	// Per-viewer Zoho state — fetched once before iterating servers so we
+	// can route unconfigured Zoho backends into a dedicated section while
+	// keeping configured ones in the main list.
+	log.Printf("[zoho-diag] renderConsent (HTML) email=%q client_id=%s pre_configured_scope=%t active_servers=%d zoho_servers=%d zoho_fetcher_wired=%t", userEmail, client.ID, hasPreConfiguredScope, len(servers), len(zohoIDs), s.zohoFetcher != nil)
+	var zohoState map[string]gateway.ZohoServerState
+	switch {
+	case s.zohoFetcher == nil:
+		log.Printf("[zoho-diag] renderConsent email=%q: zoho fetcher not wired — every Zoho server stays as cached admin tools", userEmail)
+	case userEmail == "":
+		log.Printf("[zoho-diag] renderConsent: userEmail is empty — every Zoho server stays as cached admin tools (anonymous browser?)")
+	case len(zohoIDs) == 0:
+		log.Printf("[zoho-diag] renderConsent email=%q: no Zoho-tagged servers registered — skipping fetch", userEmail)
+	default:
+		zohoState = s.zohoFetcher.FetchZohoStateForUser(r.Context(), userEmail)
+		log.Printf("[zoho-diag] renderConsent email=%q: fetched zoho state entries=%d", userEmail, len(zohoState))
 	}
 
 	type toolEntry struct {
@@ -221,6 +285,7 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 	}
 
 	var entries []serverEntry
+	var unconfigured []serverEntry
 
 	if hasPreConfiguredScope {
 		// Client has admin-assigned scope — show only those servers/tools (read-only)
@@ -242,10 +307,33 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 				Name:    srv.Name,
 				Checked: true,
 			}
-			// If specific tools are assigned, list them; otherwise all tools
+			// If specific tools are assigned, list them; otherwise all tools.
+			// For Zoho-tagged servers, use the helper to decide whether to
+			// show the server in the configured list or route it to the
+			// "Non configurés" section.
 			srvTools := allowedTools[srv.ID]
-			for _, t := range srv.Tools {
-				if srvTools != nil && !srvTools[t.Name] {
+			source := srv.Tools
+			zohoOverride := false
+			if zohoIDs[srv.ID] {
+				unconf, userTools := decideZohoServerEntry(srv.ID, zohoIDs, zohoState)
+				if unconf {
+					unconfigured = append(unconfigured, serverEntry{
+						ID:        srv.ID,
+						Name:      srv.Name,
+						ToolCount: 0,
+					})
+					continue
+				}
+				source = toServerTools(userTools)
+				zohoOverride = true
+			}
+			for _, t := range source {
+				// Zoho catalogs are per-viewer and dynamic — the OAuth2 client's
+				// tool allow-list (built against the admin catalog) cannot
+				// represent the user's actual catalog 1:1. Skip the name filter
+				// when the source is a per-user Zoho override so the consent
+				// screen mirrors what buildServerList (JSON API) returns.
+				if !zohoOverride && srvTools != nil && !srvTools[t.Name] {
 					continue
 				}
 				entry.Tools = append(entry.Tools, toolEntry{
@@ -272,13 +360,26 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 		}
 
 		for _, srv := range servers {
+			source := srv.Tools
+			if zohoIDs[srv.ID] {
+				unconf, userTools := decideZohoServerEntry(srv.ID, zohoIDs, zohoState)
+				if unconf {
+					unconfigured = append(unconfigured, serverEntry{
+						ID:        srv.ID,
+						Name:      srv.Name,
+						ToolCount: 0,
+					})
+					continue
+				}
+				source = toServerTools(userTools)
+			}
 			entry := serverEntry{
 				ID:        srv.ID,
 				Name:      srv.Name,
-				ToolCount: len(srv.Tools),
+				ToolCount: len(source),
 				Checked:   checkedIDs[srv.ID],
 			}
-			for _, t := range srv.Tools {
+			for _, t := range source {
 				entry.Tools = append(entry.Tools, toolEntry{
 					Name:        t.Name,
 					Description: t.Description,
@@ -309,6 +410,8 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, client *db.OAuth2Clien
 		"State":               params.State,
 		"CSRFToken":           csrfToken,
 		"Servers":             entries,
+		"UnconfiguredServers": unconfigured,
+		"DocsURL":             s.docsURL,
 		"PreConfigured":       hasPreConfiguredScope,
 	})
 }

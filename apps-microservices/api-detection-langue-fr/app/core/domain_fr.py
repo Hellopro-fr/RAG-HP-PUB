@@ -42,8 +42,8 @@ class DomainCache:
     TTL_NOK = 7 * 24 * 3600          # 7 jours — résultats définitifs négatifs
     TTL_TRANSIENT = 6 * 3600          # 6 heures — échecs transitoires (retry automatique)
 
-    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques)
-    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed'})
+    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques + saturation)
+    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed', 'admission_rejected'})
 
     # Méthodes transitoires : cachées avec TTL court (le site était peut-être temporairement down)
     _TRANSIENT_METHODS = frozenset({
@@ -99,8 +99,23 @@ class DomainCache:
             logger.debug(f"Cache get error ({url}): {e}")
         return None
 
-    async def set(self, input_url: str, result_url: str, result: dict) -> None:
-        """Stocke le résultat pour input_url ET result_url (si redirection)."""
+    async def set(
+        self,
+        input_url: str,
+        result_url: str,
+        result: dict,
+        ttl_override: Optional[int] = None,
+    ) -> None:
+        """Stocke le résultat pour input_url ET result_url (si redirection).
+
+        ttl_override: bypass the method-based TTL logic when provided. Used by
+        the page validator orchestration to set per-verdict TTLs (7d for
+        http_error / redirected_to_home, 6h for soft_404).
+
+        The persisted payload always carries `requested_url = input_url`
+        so cross-URL cache HITs (different path on the same domain) can
+        surface the originating URL via DetectionResponse.analyzed_url.
+        """
         client = await self._get_client()
         if not client:
             return
@@ -112,8 +127,13 @@ class DomainCache:
             if not input_domain:
                 return
 
-            # TTL basé sur la qualité du résultat
-            if method in self._TRANSIENT_METHODS or any(
+            # Persist requested_url for cross-URL HIT awareness.
+            result["requested_url"] = input_url
+
+            # TTL: override > method-based logic.
+            if ttl_override is not None:
+                ttl = ttl_override
+            elif method in self._TRANSIENT_METHODS or any(
                 method.startswith(prefix) for prefix in ('HTTP_',)
             ):
                 ttl = self.TTL_TRANSIENT
@@ -412,7 +432,7 @@ class DomainFR:
             if effective_proxy:
                 result = await scrape_html(url, proxy=effective_proxy)
                 if result:
-                    content, _ = result
+                    content = result.html
                     if content and len(content) > 100:
                         return True
         except Exception:
@@ -1188,7 +1208,8 @@ class DomainFR:
                         fetch_failed_count += 1
                         continue
 
-                    alt_content, alt_final_url = alt_content_result
+                    alt_content = alt_content_result.html
+                    alt_final_url = alt_content_result.final_url
 
                     # Vérifier que ce n'est pas une page de challenge
                     from app.services.language_detector import detect_challenge_page

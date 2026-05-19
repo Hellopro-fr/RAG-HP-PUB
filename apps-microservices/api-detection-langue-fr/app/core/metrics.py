@@ -46,3 +46,17 @@ BROWSER_SEMAPHORE_WAITERS = Gauge(
     "detect_browser_semaphore_waiters",
     "Number of coroutines waiting on the browser semaphore",
 )
+
+# Page-validation outcomes (after fetch, before DomainFR).
+VALIDATION_VERDICTS = Counter(
+    "detection_validation_verdicts_total",
+    "Page validation outcomes (valid, http_error, soft_404, redirected_to_home)",
+    labelnames=("verdict",),
+)
+
+# Homepage fallback triggers and outcomes.
+HOMEPAGE_FALLBACK_TRIGGERED = Counter(
+    "detection_homepage_fallback_triggered_total",
+    "Homepage fallback triggers and their outcomes",
+    labelnames=("outcome",),
+)

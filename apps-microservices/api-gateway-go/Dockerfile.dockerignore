@@ -1,0 +1,26 @@
+# Per-Dockerfile ignore (BuildKit picks this over a context-root .dockerignore
+# when named "<Dockerfile>.dockerignore" next to the target Dockerfile).
+# Patterns are relative to the build context root (monorepo root).
+
+# Exclude everything by default
+**
+
+# Re-include only the service directory (the only path this Dockerfile COPYs from)
+!apps-microservices/api-gateway-go/**
+
+# Trim noise inside the service directory
+apps-microservices/api-gateway-go/.git
+apps-microservices/api-gateway-go/.gitignore
+apps-microservices/api-gateway-go/.idea
+apps-microservices/api-gateway-go/.vscode
+apps-microservices/api-gateway-go/gateway
+apps-microservices/api-gateway-go/*.test
+apps-microservices/api-gateway-go/*.out
+apps-microservices/api-gateway-go/*.exe
+apps-microservices/api-gateway-go/tests/integration/.cache
+apps-microservices/api-gateway-go/CLAUDE.md
+apps-microservices/api-gateway-go/**/*.md
+apps-microservices/api-gateway-go/.env
+apps-microservices/api-gateway-go/.env.*
+apps-microservices/api-gateway-go/Dockerfile
+apps-microservices/api-gateway-go/Dockerfile.dockerignore

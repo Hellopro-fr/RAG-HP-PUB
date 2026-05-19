@@ -63,6 +63,25 @@ def _count_files_in_dir(path: str) -> int:
 _archive_locks: Dict[str, threading.Lock] = {}
 _archive_locks_guard = threading.Lock()
 
+async def _read_callback_isError(storage_path: str) -> Optional[str]:
+    """
+    Read isError from _callback_payload.json in the crawl storage dir.
+    Returns None if the file is missing, unreadable, or has no isError field.
+    Never raises — failures are logged at debug level and treated as 'no error'.
+    """
+    payload_path = os.path.join(storage_path, '_callback_payload.json')
+    if not os.path.exists(payload_path):
+        return None
+    try:
+        async with aiofiles.open(payload_path, 'r') as f:
+            content = await f.read()
+        data = json.loads(content)
+        is_error = data.get('isError', '')
+        return is_error if isinstance(is_error, str) and is_error else None
+    except Exception as e:
+        logger.debug(f"Failed to read isError from {payload_path}: {e}")
+        return None
+
 class CrawlerManager:
     """
     Manages the lifecycle of crawler subprocesses.
@@ -231,6 +250,12 @@ class CrawlerManager:
         try:
             os.makedirs(job_storage_path, exist_ok=True)
             logger.info(f"Using storage for crawl_id '{crawl_id}' at '{job_storage_path}'")
+
+            # Wipe any persistent state from a prior run of this crawl_id before
+            # spawning the new subprocess. Observed bug (crawl 6229 with dropData=true):
+            # old _completion_marker.json survives makedirs, reconciler then declares
+            # the new running crawl finished and skips its success webhook.
+            await self._cleanup_stale_state_for_relaunch(crawl_id, job_storage_path)
         except OSError as e:
             await _rollback_claim(decrement_counter=True)
             logger.error(f"Failed to create/access storage directory for crawl '{crawl_id}': {e}")
@@ -1047,6 +1072,9 @@ class CrawlerManager:
                     snapshot_data = json.loads(content)
                 # Override status with current Redis value — snapshot was taken before status transition
                 snapshot_data["status"] = job_info["status"]
+                # Enrich snapshot with isError from _callback_payload.json (snapshot may predate it,
+                # and BO reconciliation needs it to route non-success terminal crawls correctly).
+                snapshot_data["is_error"] = await _read_callback_isError(storage_path)
                 logger.info(
                     f"Loaded status from snapshot for crawl '{crawl_id}' (status: {job_info['status']}).")
                 return CrawlStatus(**snapshot_data)
@@ -1091,18 +1119,21 @@ class CrawlerManager:
             except Exception as e:
                 logger.warning(f"Could not read dataset info for '{crawl_id}': {e}")
         
+        is_error = await _read_callback_isError(storage_path)
+
         return CrawlStatus(
             crawl_id=crawl_id,
             id_domaine=crawl_id, # Legacy alias
-            status=job_info["status"], 
+            status=job_info["status"],
             domain=job_info["domain"],
-            start_url=job_info["start_url"], 
+            start_url=job_info["start_url"],
             start_time=job_info["start_time"],
             urls_crawled=urls_crawled,
             error_urls_crawled=error_urls_crawled,
             nfr_urls_crawled=nfr_urls_crawled,
             last_activity=last_url_time,
-            last_heartbeat=job_info.get("last_heartbeat")
+            last_heartbeat=job_info.get("last_heartbeat"),
+            is_error=is_error,
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
@@ -1923,6 +1954,44 @@ class CrawlerManager:
             )
             return None
         return marker
+
+    async def _cleanup_stale_state_for_relaunch(self, crawl_id: str, storage_path: str) -> None:
+        """
+        Wipes any persistent state from a prior run of this crawl_id that
+        would mislead the reconciler or downstream consumers into thinking
+        the new run is in a stale terminal state.
+
+        Called at the top of start_crawl (after makedirs) BEFORE the new
+        subprocess is spawned and BEFORE the new Redis state is written.
+
+        Currently cleans:
+          - {storage_path}/_completion_marker.json (any prior terminal marker:
+            success, OOM-failure, OOM-relaunch-failure, force-finish, or
+            reconciler-stale write — all 5 writers funnel here)
+
+        Future items (deferred — see spec §7):
+          - Stale crawl_lock:{crawl_id} Redis key
+          - Stale local_processes[crawl_id] entry
+          - Audit other persistent files in storage_path
+
+        Fail-open: each cleanup logs and continues on error. A failed cleanup
+        leaves the existing observed symptom (false marker reconciliation) —
+        no regression. The error is surfaced in logs for triage.
+
+        Args:
+            crawl_id: identifier of the crawl being launched.
+            storage_path: absolute path to {CRAWLER_STORAGE_PATH}/{crawl_id}/.
+        """
+        # 1. Completion marker — removes false signal that misleads the
+        #    reconciler's marker-check (sub-problem A) into declaring the
+        #    new running crawl finished and skipping its success webhook.
+        marker_path = os.path.join(storage_path, '_completion_marker.json')
+        if os.path.isfile(marker_path):
+            try:
+                os.unlink(marker_path)
+                logger.info(f"Removed stale completion marker for crawl_id '{crawl_id}' (relaunch)")
+            except OSError as e:
+                logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
 
     async def _reconcile_locked(self):
         """

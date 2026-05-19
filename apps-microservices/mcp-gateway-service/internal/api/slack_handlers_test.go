@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hellopro/mcp-gateway/internal/slack"
+	"mcp-gateway/internal/slack"
 )
 
 func TestHandleSlackStatus_Disabled(t *testing.T) {

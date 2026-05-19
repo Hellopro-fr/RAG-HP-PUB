@@ -2,7 +2,7 @@
 // (GET /api/v1/leexi/users, GET /api/v1/leexi/teams). These shapes are also
 // used by the per-token Leexi ownership filter UI.
 
-export type LeexiFilterMode = 'none' | 'users' | 'teams' | 'creator'
+export type LeexiFilterMode = 'none' | 'users' | 'teams' | 'creator' | 'self'
 
 export interface LeexiFilter {
   mode: LeexiFilterMode
@@ -11,6 +11,15 @@ export interface LeexiFilter {
   // Set in responses only — the resolved Leexi user UUID for the token's
   // creator (mode = 'creator'). Read-only on the frontend.
   creator_uuid?: string
+}
+
+// ZohoFilter mirrors the backend ZohoFilterDTO. allowed_emails is
+// meaningful only when mode === 'users'. creator_email is response-only
+// and reflects the row's created_by snapshot when mode === 'creator'.
+export interface ZohoFilter {
+  mode: 'none' | 'users' | 'creator'
+  allowed_emails?: string[]
+  creator_email?: string
 }
 
 export interface LeexiUser {

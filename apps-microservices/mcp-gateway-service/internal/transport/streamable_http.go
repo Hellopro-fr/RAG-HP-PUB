@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/mcp"
 )
 
 // AllowedServersFromContext retrieves the set of allowed server IDs

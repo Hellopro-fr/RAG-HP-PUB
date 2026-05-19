@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     # Browser
     CAMOUFOX_ENABLED: bool = True  # Use Camoufox (stealth Firefox). False = Playwright Chromium fallback.
 
+    # Invalid page rejection (4XX/5XX, soft-404, redirect-to-home)
+    INVALID_PAGE_DETECTION_ENABLED: bool = True
+    HOMEPAGE_FALLBACK_ENABLED: bool = True
+    SOFT_404_TITLE_THIN_THRESHOLD: int = 2000   # Visible-text char limit when title regex matches
+    SOFT_404_H1_THIN_THRESHOLD: int = 1500      # Visible-text char limit when H1 regex matches
+    INVALID_PAGE_TTL_HARD_S: int = 604800       # 7 days — http_error + redirected_to_home
+    INVALID_PAGE_TTL_SOFT_S: int = 21600        # 6 hours — soft_404 (heuristic, give site time to fix)
+
     # Redis cache
     REDIS_URL: Optional[str] = None
 

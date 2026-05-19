@@ -1738,18 +1738,19 @@ class RecommendationService:
                             carac_entry["unite"] = unite
                         filtered_caracs.append(carac_entry)
 
+            raw_desc = re.sub(
+                r"\s+",
+                " ",
+                re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                    "\xa0", " "
+                ),
+            ).strip()
             formatted_product = {
                 "id_produit": str(id_produit),
+                "description": raw_desc if raw_desc else "[AUCUN DESCRIPTIF DISPONIBLE]",
                 "titre": info.get(
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
-                "description": re.sub(
-                    r"\s+",
-                    " ",
-                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
-                        "\xa0", " "
-                    ),
-                ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "type": etat_societe_label,
@@ -1791,8 +1792,8 @@ class RecommendationService:
                 poids_c = carac.poids_caracteristique or "critique"
                 unite = carac.unite or ""
 
-                if poids_c != "critique":
-                    continue
+                # P8 (iter 7 PROD) — Expose secondaire (🟡) en plus de critique (🔴)
+                # au LLM reranker. Le system_prompt distingue déjà critique vs secondaire.
 
                 # Get the name from category definitions, fallback to id
                 cat_def = category_carac_map.get(cid, {})

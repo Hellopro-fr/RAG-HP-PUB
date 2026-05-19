@@ -60,6 +60,10 @@ func Connect(dsn string) (*gorm.DB, error) {
 		&BDDMeta{},
 		&ScopeTokenBDDTable{},
 		&OAuth2ClientBDDTable{},
+		&ServerAuthorization{},
+		&ZohoImport{},
+		&ZohoImportTool{},
+		&SSOSession{},
 	); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}

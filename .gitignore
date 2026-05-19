@@ -127,6 +127,11 @@ secrets/
 # Docker compose override file
 docker-compose.override.yml
 
+# opti-moteur-front : fichiers de donnees generes offline (catalogue-dependants,
+# trop volumineux pour le repo, regenerables via scripts/compute_idf.py).
+apps-microservices/opti-moteur-front/app/data/*.json
+!apps-microservices/opti-moteur-front/app/data/.gitkeep
+
 # Logs folder
 ./logs/
 .claude/settings.local.json

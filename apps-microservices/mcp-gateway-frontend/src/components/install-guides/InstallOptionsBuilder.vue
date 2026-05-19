@@ -98,7 +98,7 @@ import { ref, computed } from 'vue'
 import type { InstallOption } from '@/types/install-guide'
 
 const props = defineProps<{
-  modelValue: Record<string, InstallOption[]>
+  modelValue?: Record<string, InstallOption[]>
 }>()
 
 const emit = defineEmits<{
@@ -106,7 +106,7 @@ const emit = defineEmits<{
 }>()
 
 const install = computed({
-  get: () => props.modelValue,
+  get: () => props.modelValue ?? {},
   set: (val) => emit('update:modelValue', val)
 })
 

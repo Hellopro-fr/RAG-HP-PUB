@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
+	"mcp-gateway/internal/auth"
 )
 
 // Register mounts all REST API routes on the given mux under /api/v1/.
@@ -131,6 +131,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		apiMux.HandleFunc("/api/v1/llm-instructions/", h.handleLLMInstructionByID)
 	}
 
+	// ── Zoho import admin routes ─────────────────────────────────────────────
+	// Admin-only singleton: POST upserts, GET returns, DELETE clears. Always
+	// mounted; handleZohoAdmin returns 503 when the repo is not wired.
+	apiMux.HandleFunc("/api/v1/zoho-imports/admin", h.handleZohoAdmin)
+	// Collection list and per-ID operations. /admin is registered above so
+	// net/http's longer-prefix rule keeps it from falling into the catch-all.
+	apiMux.HandleFunc("/api/v1/zoho-imports", h.handleZohoImports)
+	apiMux.HandleFunc("/api/v1/zoho-imports/", h.handleZohoImportByID)
+
 	// ── Leexi proxy routes (used by token + OAuth2 forms to populate the
 	//    user/team picker). Always mounted; the handlers themselves return
 	//    503 when LEEXI_INTERNAL_URL / LEEXI_ADMIN_TOKEN are unset.
@@ -201,6 +210,31 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	if h.auditRepo != nil {
 		apiMux.HandleFunc("/api/v1/audit-logs", h.handleAuditLogs)
 	}
+
+	// ── Server authorization routes ──────────────────────────────────────────
+	// Admin-only per-server full-access grants. Always mounted; the handlers
+	// themselves return 503 when the repo is not wired so the route stays
+	// stable for partial deployments.
+	apiMux.HandleFunc("/api/v1/server-authorizations", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.handleListServerAuthorizations(w, r)
+		case http.MethodPost:
+			h.handleCreateServerAuthorization(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+
+	apiMux.HandleFunc("/api/v1/server-authorizations/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			w.Header().Set("Allow", "DELETE")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleDeleteServerAuthorization(w, r)
+	})
 
 	// ── Install guide admin routes ────────────────────────────────────────────
 	if h.installGuideRepo != nil {
@@ -530,6 +564,14 @@ func roleCheckMiddleware(next http.Handler) http.Handler {
 
 // isAdminOnly returns true when the path+method combination requires admin role.
 func isAdminOnly(path, method string) bool {
+	// Server-authorizations admin CRUD is always admin-only (read + write).
+	if strings.HasPrefix(path, "/api/v1/server-authorizations") {
+		return true
+	}
+	// All zoho-imports endpoints (admin singleton + collection list + per-ID) are admin-only.
+	if strings.HasPrefix(path, "/api/v1/zoho-imports") {
+		return true
+	}
 	// User, audit, install guide, Google, Slack endpoints always require admin
 	if strings.HasPrefix(path, "/api/v1/users") || strings.HasPrefix(path, "/api/v1/audit-logs") || strings.HasPrefix(path, "/api/v1/install-guides") || strings.HasPrefix(path, "/api/v1/google") || strings.HasPrefix(path, "/api/v1/slack") {
 		return true

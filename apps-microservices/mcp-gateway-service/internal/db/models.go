@@ -234,6 +234,13 @@ type ScopeToken struct {
 	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
 	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
 
+	// Zoho ownership scope — see ZohoFilterMode constants in api/token_dto.go.
+	// "users":   ZohoAllowedEmails is authoritative (JSON array of email strings).
+	// "creator": resolved single email from the token's CreatedBy at write time.
+	// "none":    no filter (default).
+	ZohoFilterMode    string          `gorm:"type:varchar(16);not null;default:'none'" json:"zoho_filter_mode"`
+	ZohoAllowedEmails json.RawMessage `gorm:"type:json" json:"zoho_allowed_emails,omitempty"`
+
 	// Associations
 	Servers      []ScopeTokenServer      `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []ScopeTokenTool        `gorm:"foreignKey:TokenID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
@@ -291,6 +298,10 @@ type OAuth2Client struct {
 	RingoverFilterMode     string          `gorm:"type:varchar(16);not null;default:'none'" json:"ringover_filter_mode"`
 	RingoverAllowedUserIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_user_ids,omitempty"`
 	RingoverAllowedTeamIDs json.RawMessage `gorm:"type:json" json:"ringover_allowed_team_ids,omitempty"`
+
+	// Zoho ownership scope — same semantics as ScopeToken.ZohoFilterMode.
+	ZohoFilterMode    string          `gorm:"type:varchar(16);not null;default:'none'" json:"zoho_filter_mode"`
+	ZohoAllowedEmails json.RawMessage `gorm:"type:json" json:"zoho_allowed_emails,omitempty"`
 
 	// Associations
 	Servers      []OAuth2ClientServer      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
@@ -373,6 +384,27 @@ type GatewayUser struct {
 }
 
 func (GatewayUser) TableName() string { return "gateway_users" }
+
+// SSOSession persists per-browser admin-UI sessions backed by an account-service
+// OAuth2 access+refresh token pair. The opaque session ID lives in the HttpOnly
+// gw_session cookie; access_token and refresh_token are AES-256-GCM ciphertext
+// (encrypted with ENCRYPTION_KEY in internal/sso, never stored in plaintext).
+type SSOSession struct {
+	ID            string    `gorm:"type:varchar(64);primaryKey" json:"id"`
+	UserID        uint64    `gorm:"not null;index:idx_sso_user" json:"user_id"`
+	Sub           string    `gorm:"type:varchar(255);not null;index:idx_sso_sub" json:"sub"`
+	Email         string    `gorm:"type:varchar(255);not null" json:"email"`
+	AccessToken   []byte    `gorm:"type:varbinary(2048);not null" json:"-"`
+	RefreshToken  []byte    `gorm:"type:varbinary(512);not null" json:"-"`
+	AccessExp     time.Time `gorm:"type:datetime(3);not null" json:"access_exp"`
+	RefreshExp    time.Time `gorm:"type:datetime(3);not null;index:idx_sso_refresh_exp" json:"refresh_exp"`
+	CreatedAt     time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	LastSeenAt    time.Time `gorm:"type:datetime(3);not null" json:"last_seen_at"`
+	UserAgent     string    `gorm:"type:varchar(255)" json:"user_agent,omitempty"`
+	ClientIP      string    `gorm:"type:varchar(45)" json:"client_ip,omitempty"`
+}
+
+func (SSOSession) TableName() string { return "sso_sessions" }
 
 // AuditLog records API actions for auditing.
 type AuditLog struct {
@@ -579,3 +611,58 @@ type OAuth2ClientBDDTable struct {
 }
 
 func (OAuth2ClientBDDTable) TableName() string { return "oauth2_client_bdd_tables" }
+
+// ServerAuthorization grants a specific end-user (by email) full unfiltered
+// access to a specific MCP server. When a row exists for (server_id, email),
+// the gateway skips all filter-header injection (Leexi/Ringover/BDD) on
+// outbound requests targeting that server — the backend receives only the
+// static auth headers and treats the call as unrestricted.
+//
+// Primary key is (server_id, email). Insert/delete is the admin-side API.
+type ServerAuthorization struct {
+	ServerID  string    `gorm:"type:char(36);primaryKey" json:"server_id"`
+	Email     string    `gorm:"type:varchar(255);primaryKey" json:"email"`
+	CreatedBy string    `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	CreatedAt time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+}
+
+func (ServerAuthorization) TableName() string { return "server_authorizations" }
+
+// ZohoImport stores per-user and admin Zoho upstream URLs used by
+// mcp-zoho-service for per-call routing. Rows are written by the gateway
+// (sheet-import handler + admin REST endpoint) and read by the service.
+//
+// At most one row may have isAdmin=true AND isActive=true (enforced by the
+// repo layer). Admin rows MUST have empty createdBy.
+type ZohoImport struct {
+	ID           string    `gorm:"type:char(36);primaryKey" json:"id"`
+	Name         string    `gorm:"type:varchar(255);not null;default:''" json:"name"`
+	URL          string    `gorm:"type:varchar(2048);not null" json:"url"`
+	AuthHeaders  []byte    `gorm:"type:blob" json:"-"`
+	CreatedBy    string    `gorm:"type:varchar(255);not null;default:'';index:idx_zoho_created_by" json:"created_by"`
+	IsAdmin      bool      `gorm:"not null;default:false;index:idx_zoho_admin_active,priority:1" json:"is_admin"`
+	IsActive     bool      `gorm:"not null;default:true;index:idx_zoho_admin_active,priority:2;index:idx_zoho_active" json:"is_active"`
+	TemplateSlug string    `gorm:"type:varchar(64);not null;default:''" json:"template_slug"`
+	CreatedAt    time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (ZohoImport) TableName() string { return "zoho_imports" }
+
+// ZohoImportTool persists the per-import upstream tool catalog discovered
+// when the row is created, when its credentials are successfully tested,
+// or when an operator hits the manual refresh endpoint. The OAuth2 consent
+// screen reads this table to render the tool list scoped to the connected
+// user's own Zoho upstream (admin or per-user), avoiding a live tools/list
+// at consent render time.
+type ZohoImportTool struct {
+	ID          uint64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	ImportID    string          `gorm:"type:char(36);not null;uniqueIndex:uq_zoho_import_tool;index:idx_zoho_import_tool_import" json:"import_id"`
+	Name        string          `gorm:"type:varchar(255);not null;uniqueIndex:uq_zoho_import_tool" json:"name"`
+	Description string          `gorm:"type:text" json:"description,omitempty"`
+	InputSchema json.RawMessage `gorm:"type:json;not null" json:"input_schema"`
+	CreatedAt   time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (ZohoImportTool) TableName() string { return "zoho_import_tools" }

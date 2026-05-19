@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/runnerclient"
-	"github.com/hellopro/mcp-gateway/internal/validation"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/runnerclient"
+	"mcp-gateway/internal/validation"
 	"gorm.io/gorm"
 )
 
@@ -104,12 +104,13 @@ func (h *Handler) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := r.URL.Query().Get("template_slug")
+	creator := effectiveCreatorFilter(r.Context())
 	var instances []db.TemplateInstance
 	var err error
 	if slug != "" {
-		instances, err = h.instanceRepo.ListByTemplate(slug)
+		instances, err = h.instanceRepo.ListByTemplate(slug, creator)
 	} else {
-		instances, err = h.instanceRepo.ListAll()
+		instances, err = h.instanceRepo.ListAll(creator)
 	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
