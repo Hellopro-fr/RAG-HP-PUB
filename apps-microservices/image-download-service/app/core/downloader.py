@@ -931,6 +931,12 @@ def _append_manifest_pages_entry(domain: str, entry: dict) -> None:
 
     manifest_path = os.path.join(_STORAGE_BASE, "images", domain, "manifest_pages.json")
 
+    # Fix 2026-05-19 : créer le dossier domain avant d'acquérir le lock NFS.
+    # nfs_lock fait os.mkdir(path+'.nfslock') qui échoue si le parent n'existe pas
+    # (cas d'un domaine traité pour la 1ère fois). Symétrique au fix de
+    # _append_errors_pages_entry — même cause racine.
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+
     try:
         with nfs_lock(manifest_path):
             manifest = _load_manifest_pages_file(domain)
@@ -1027,6 +1033,13 @@ def _append_errors_pages_entry(domain: str, error_entry: dict) -> None:
     from image_download_service.core.nfs_lock import nfs_lock
 
     errors_path = os.path.join(_STORAGE_BASE, "images", domain, "errors_pages.json")
+
+    # Fix 2026-05-19 : créer le dossier domain avant d'acquérir le lock NFS.
+    # nfs_lock fait os.mkdir(path+'.nfslock') qui échoue si le parent n'existe pas
+    # (cas d'un domaine traité pour la 1ère fois). Sans ce makedirs, les workers
+    # loggent "Could not write errors_pages" et perdent silencieusement les erreurs
+    # → Phase 4 BO polling timeout car aucun GET /pages/{domain}/errors ne remonte.
+    os.makedirs(os.path.dirname(errors_path), exist_ok=True)
 
     try:
         with nfs_lock(errors_path):
