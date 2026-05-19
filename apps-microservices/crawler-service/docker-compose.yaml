@@ -30,6 +30,10 @@ services:
     volumes:
       # Mount a volume to persist crawl data outside the container
       - crawler_data:/app/storage
+      # Stash flow shared dirs (mirror archive-flow mounts)
+      - ./crawler_stash:/app/stash
+      - ./crawler_stash_download_requests:/app/gcs-stash-requests
+      - ./crawler_stash_download_results:/app/gcs-stash-downloads
     env_file:
       - .env
     environment:
