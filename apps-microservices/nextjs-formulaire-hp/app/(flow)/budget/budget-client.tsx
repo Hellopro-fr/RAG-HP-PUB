@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 import { cn, getAssetPath } from '@/lib/utils';
@@ -11,7 +11,7 @@ import { hasDisplayablePriceEstimation } from '@/types/prix';
 import BudgetEstimate from '@/components/flow/BudgetEstimate';
 import BudgetQuestionScreen from '@/components/flow/BudgetQuestionScreen';
 import CategoryHeaderBar from '@/components/flow/CategoryHeaderBar';
-import { BUDGET_OPTIONS } from '@/data/budget-options';
+import type { BudgetOption } from '@/types/budget';
 
 const hpLogo = getAssetPath('/images/hp-logo.svg');
 
@@ -70,6 +70,22 @@ const BudgetClient = () => {
       }))
     : [];
 
+  // Options dynamiques calibrées par l'API prix (champ budget_reponse).
+  // id = label pour garantir la persistance déterministe dans userBudgetRange.
+  const dynamicOptions: BudgetOption[] = useMemo(
+    () => data?.budget_reponse?.map((label) => ({ id: label, label })) ?? [],
+    [data?.budget_reponse]
+  );
+
+  // Garde-fou : si l'utilisateur atterrit ici sans options (entrée directe URL,
+  // bug de timing, F5), on rebascule silencieusement vers /selection.
+  // handleComplete dans questionnaire-client filtre déjà ce cas en amont.
+  useEffect(() => {
+    if (dynamicOptions.length === 0) {
+      goToSelection();
+    }
+  }, [dynamicOptions.length, goToSelection]);
+
   const hasSelection = userBudgetRange !== null;
   const handleContinue = () => {
     if (!hasSelection) return;
@@ -110,9 +126,9 @@ const BudgetClient = () => {
               />
             )}
 
-            {/* Question budget */}
+            {/* Question budget — options dynamiques venant de /api/prix.budget_reponse */}
             <BudgetQuestionScreen
-              options={BUDGET_OPTIONS}
+              options={dynamicOptions}
               selectedId={userBudgetRange}
               onSelect={setUserBudgetRange}
             />

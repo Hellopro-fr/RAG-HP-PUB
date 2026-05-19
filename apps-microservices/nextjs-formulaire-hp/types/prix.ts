@@ -48,6 +48,8 @@ export interface PrixReponse {
   phrase_prix: string;
   fourchette: PrixFourchette;
   exemples_produits: PrixExempleProduit[];
+  /** Options de réponse calibrées sur la fourchette pour la question budget (calculées côté backend) */
+  budget_reponse?: string[];
 }
 
 /** Réponse complète de l'API prix */

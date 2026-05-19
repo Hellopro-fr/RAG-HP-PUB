@@ -247,17 +247,25 @@ export default function QuestionnaireClient({
     setLoaderProgress(100);
     // Attendre que la barre anime jusqu'à 100% avant de naviguer
     await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Skip /budget si l'API prix n'a renvoyé aucune option calibrée (budget_reponse vide,
+    // absent ou erreur API), OU si l'estimation prix n'est pas affichable
+    // (card prix vide). Dans ces cas la page n'a rien à afficher → /selection direct.
+    const priceState = useFlowStore.getState().priceEstimation;
+    const hasBudgetOptions =
+      priceState?.data?.budget_reponse !== undefined &&
+      priceState.data.budget_reponse.length > 0 &&
+      !priceState.error;
+    const hasDisplayableEstimation = hasDisplayablePriceEstimation(priceState);
+    const shouldSkipBudget = skipBudget || !hasBudgetOptions || !hasDisplayableEstimation;
+
     // Intercaler la page /budget avant /selection. Le flow alternatif
     // 'something-to-add' reste tel quel (pas de budget si flow dégradé).
-    // Variantes A/B 1 & 2 : skip /budget → /selection direct.
-    // Skip /budget aussi quand l'estimation prix n'est pas affichable
-    // (page sans valeur ajoutée — la card prix ne serait pas rendue).
-    const hasDisplayableEstimation = hasDisplayablePriceEstimation(
-      useFlowStore.getState().priceEstimation
-    );
+    // Variantes A/B 1 & 2 + absence de budget_reponse + estimation non affichable :
+    // skip /budget → /selection direct.
     const finalDestination =
       destination === 'something-to-add' ? destination
-        : (skipBudget || !hasDisplayableEstimation) ? 'selection'
+        : shouldSkipBudget ? 'selection'
         : 'budget';
     setRedirectDestination(finalDestination);
   };
