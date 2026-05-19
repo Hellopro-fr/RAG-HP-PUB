@@ -1184,6 +1184,24 @@ def _fmt_price(n: int) -> str:
     return f"{int(n):,}".replace(",", " ")
 
 
+def _normalize_devise(devise: Optional[str]) -> str:
+    """
+    Convertit un code/texte devise en symbole. Seules 2 devises supportées :
+    euro (défaut) et dollar.
+
+    Exemples : "EUR"/"euro"/"€" -> "€" ; "USD"/"dollar"/"$" -> "$".
+    Toute valeur inconnue ou vide retombe sur "€".
+    """
+    if not devise:
+        return "€"
+    d = str(devise).strip().lower()
+    if not d:
+        return "€"
+    if d in ("$", "usd", "dollar", "dollars", "us$"):
+        return "$"
+    return "€"
+
+
 def _generate_budget_choices(
     min_prix: float,
     max_prix: float,
@@ -1251,11 +1269,17 @@ def _generate_budget_choices(
         pas = prev_pas
         borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
 
-    devise_str = (devise or "€").strip() or "€"
+    devise_str = _normalize_devise(devise)
 
     options: List[str] = []
-    # Garde : "Moins de 0" n'a pas de sens, on l'omet
-    if borne_inf > 0:
+    # Si borne_inf == 0 et qu'on a au moins 3 tranches, la 1ère tranche [0, X] est
+    # sémantiquement équivalente à "Moins de X" — on l'affiche ainsi pour éviter
+    # le faux signal d'un prix possible à 0 (cas borne_basse > 0 mais < 1 pas).
+    if borne_inf == 0 and len(tranches) >= 3:
+        _, first_b = tranches[0]
+        options.append(f"Moins de {_fmt_price(first_b)} {devise_str}")
+        tranches = tranches[1:]
+    elif borne_inf > 0:
         options.append(f"Moins de {_fmt_price(borne_inf)} {devise_str}")
     for a, b in tranches:
         options.append(f"{_fmt_price(a)} {devise_str} – {_fmt_price(b)} {devise_str}")
