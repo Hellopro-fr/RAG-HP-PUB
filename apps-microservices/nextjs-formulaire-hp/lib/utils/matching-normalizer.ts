@@ -44,6 +44,16 @@ function getCharacteristicLabel(
  * Récupère les labels des valeurs pour une caractéristique
  * Gère les types numériques (valeur exacte ou plage min/max + unite) et textuels (id_valeur[])
  */
+function formatNumeric(v: number | string | null | undefined): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+  // Cas string : tenter une normalisation (`"4.0"` → `"4"`, `"4,5"` → `"4.5"`)
+  const trimmed = v.trim();
+  if (!trimmed) return '';
+  const num = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(num) ? String(num) : v;
+}
+
 function getValueLabels(
   characteristicsMap: CharacteristicsMap,
   characteristic: MatchingCharacteristic
@@ -56,7 +66,7 @@ function getValueLabels(
 
     // Cas 1: Valeur exacte
     if (valeur !== null && valeur !== undefined) {
-      return `${valeur}${uniteStr}`;
+      return `${formatNumeric(valeur)}${uniteStr}`;
     }
 
     // Cas 2: Plage min/max
@@ -64,13 +74,13 @@ function getValueLabels(
     const hasMax = valeur_max !== null && valeur_max !== undefined;
 
     if (hasMin && hasMax) {
-      return `${valeur_min} - ${valeur_max}${uniteStr}`;
+      return `${formatNumeric(valeur_min)} - ${formatNumeric(valeur_max)}${uniteStr}`;
     }
     if (hasMin) {
-      return `>= ${valeur_min}${uniteStr}`;
+      return `>= ${formatNumeric(valeur_min)}${uniteStr}`;
     }
     if (hasMax) {
-      return `<= ${valeur_max}${uniteStr}`;
+      return `<= ${formatNumeric(valeur_max)}${uniteStr}`;
     }
 
     return '-';
@@ -123,16 +133,16 @@ function getExpectedValue(
     if (cibles && !Array.isArray(cibles)) {
       const unite = userCriteria.unite || char?.unite || '';
       if (cibles.exact !== undefined) {
-        return `${cibles.exact}${unite}`;
+        return `${formatNumeric(cibles.exact)}${unite}`;
       }
       if (cibles.min !== undefined && cibles.max !== undefined) {
-        return `${cibles.min} - ${cibles.max}${unite}`;
+        return `${formatNumeric(cibles.min)} - ${formatNumeric(cibles.max)}${unite}`;
       }
       if (cibles.min !== undefined) {
-        return `>= ${cibles.min}${unite}`;
+        return `>= ${formatNumeric(cibles.min)}${unite}`;
       }
       if (cibles.max !== undefined) {
-        return `<= ${cibles.max}${unite}`;
+        return `<= ${formatNumeric(cibles.max)}${unite}`;
       }
     }
   }

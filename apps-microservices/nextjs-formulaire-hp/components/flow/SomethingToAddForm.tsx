@@ -7,7 +7,7 @@ import CountryCodeSelect from "./CountryCodeSelect";
 import { useBuyerCheck } from "@/hooks/api";
 import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
 import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
-import { extractChipsFromAnswers } from "@/lib/utils/exclude-chips";
+import { extractChipsFromAnswers, isMeaningfulValue } from "@/lib/utils/exclude-chips";
 import { cn } from "@/lib/utils";
 import { ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
@@ -48,6 +48,7 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
     profileData,
     userAnswers,
     userQuestionAnswers,
+    userBudgetRange,
     selectedSupplierIds,
     categoryId,
     priceEstimation
@@ -431,10 +432,12 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
                     <span className="text-sm font-semibold text-foreground">Voici ce que vous nous avez dit</span>
                   </div>
                   <ul className="space-y-1.5 list-disc list-inside marker:text-muted-foreground">
-                    <li className="text-sm text-foreground">
-                      <span className="text-muted-foreground">Budget : </span>
-                      <span className="font-medium">Moins de 2 500 € (en dessous de l'estimatif marché)</span>
-                    </li>
+                    {isMeaningfulValue(userBudgetRange) && (
+                      <li className="text-sm text-foreground">
+                        <span className="text-muted-foreground">Budget : </span>
+                        <span className="font-medium">{userBudgetRange}</span>
+                      </li>
+                    )}
                     {summaryChips.map((chip, i) => (
                       <li key={`${chip}-${i}`} className="text-sm text-foreground">{chip}</li>
                     ))}
