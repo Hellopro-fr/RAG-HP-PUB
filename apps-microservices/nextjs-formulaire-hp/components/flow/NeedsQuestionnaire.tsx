@@ -43,6 +43,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     categoryVignette,
     hasSeenAssurance,
     setHasSeenAssurance,
+    abtestUxLeadVersion,
   } = useFlowStore();
 
   // Hook pour le questionnaire dynamique
@@ -338,7 +339,8 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
         />
 
         <div className="flex-1 overflow-y-auto">
-          {!hasSeenAssurance ? (
+          {/* A/B test : variante 2 skip l'AssurancePage et passe directement à Q1 */}
+          {!hasSeenAssurance && abtestUxLeadVersion !== 2 ? (
             <AssurancePage
               categoryName={categoryName || ""}
               categoryVignette={categoryVignette}

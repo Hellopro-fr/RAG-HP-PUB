@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import type { CategoryTokenUrlData as TokenUrlData } from '@/types/category-token';
 
 // =============================================================================
 // CONFIGURATION
@@ -66,14 +67,6 @@ function isDateValid(dateStr: string): boolean {
  * Déchiffre un token AES-256-CBC
  * Format du token: Base64URL(IV[16 bytes] + EncryptedData)
  */
-// Interface pour les données URL optionnelles (réponse Q1 pré-remplie)
-interface TokenUrlData {
-  id_question: number;
-  id_reponse: number;
-  equivalence: any[];
-  abtest_UX_lead_version?: number;
-}
-
 async function validateTokenInMiddleware(
   token: string,
   secret: string
