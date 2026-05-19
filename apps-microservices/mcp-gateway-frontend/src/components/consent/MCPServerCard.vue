@@ -62,18 +62,15 @@
             class="mt-0.5 rounded border-gray-300 text-brand-500 dark:border-gray-700"
             @change="$emit('toggle-tool', server.id, tool.name)"
           />
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-0 text-sm">
             <code
               class="text-xs font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-gray-900 dark:text-white"
             >
               {{ tool.name }}
             </code>
-            <p
-              v-if="tool.description"
-              class="text-sm text-gray-600 dark:text-gray-400 mt-1"
-            >
-              {{ tool.description }}
-            </p>
+            <span v-if="tool.description" class="text-gray-600 dark:text-gray-400">
+              -- {{ truncate(tool.description) }}
+            </span>
           </div>
         </div>
       </div>
@@ -108,5 +105,9 @@ const enabled = computed(() => {
 
 function isToolChecked(toolName: string): boolean {
   return !!props.selectedTools && props.selectedTools.has(toolName)
+}
+
+function truncate(text: string): string {
+  return text.length > 150 ? text.slice(0, 150) + '…' : text
 }
 </script>

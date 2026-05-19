@@ -33,6 +33,7 @@
             :total-servers="configuredServers.length"
             :enabled-servers="enabledServersCount"
             :required-servers="requiredServersCount"
+            :server-names="configuredServers.map((s) => s.name)"
           />
 
           <Separator />
