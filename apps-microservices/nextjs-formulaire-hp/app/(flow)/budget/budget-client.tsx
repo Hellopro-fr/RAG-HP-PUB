@@ -41,7 +41,7 @@ const BudgetClient = () => {
     userBudgetRange,
     setUserBudgetRange,
   } = useFlowStore();
-  const { goToQuestionnaire, goToSelection } = useFlowNavigation();
+  const { goToQuestionnaire, goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { trackDbEvent } = useDbTracking();
 
   const fmtPrice = (n: number) =>
@@ -106,12 +106,33 @@ const BudgetClient = () => {
     }
   }, [dynamicOptions.length, goToSelection]);
 
+  // Première option (tranche la plus basse, "en dessous de l'estimatif") → flow
+  // dégradé /something-to-add. Toutes les autres tranches → /selection direct.
+  const isLowestBudgetOption = (id: string): boolean =>
+    dynamicOptions.length > 0 && dynamicOptions[0].id === id;
+
+  const navigateAfterBudget = (id: string) => {
+    trackBudgetComplete(id);
+    trackDbEvent('pricing', 'budget_complete', { budget_range: id }, categoryId, 1);
+    if (isLowestBudgetOption(id)) {
+      goToSomethingToAdd();
+    } else {
+      goToSelection();
+    }
+  };
+
+  // Auto-advance : dès qu'une option est cliquée, on persiste + on navigue.
+  // Le bouton "Voir ma sélection" reste un filet de sécurité (retour back/forward
+  // avec sélection déjà persistée).
+  const handleSelectAndContinue = (id: string) => {
+    setUserBudgetRange(id);
+    navigateAfterBudget(id);
+  };
+
   const hasSelection = userBudgetRange !== null;
   const handleContinue = () => {
     if (!hasSelection) return;
-    trackBudgetComplete(userBudgetRange!);
-    trackDbEvent('pricing', 'budget_complete', { budget_range: userBudgetRange! }, categoryId, 1);
-    goToSelection();
+    navigateAfterBudget(userBudgetRange!);
   };
 
   const handleBack = () => {
@@ -148,11 +169,13 @@ const BudgetClient = () => {
               />
             )}
 
-            {/* Question budget — options dynamiques venant de /api/prix.budget_reponse */}
+            {/* Question budget — options dynamiques venant de /api/prix.budget_reponse
+                Auto-advance : un clic sur une option persiste + navigue.
+                Première option → /something-to-add, autres → /selection. */}
             <BudgetQuestionScreen
               options={dynamicOptions}
               selectedId={userBudgetRange}
-              onSelect={setUserBudgetRange}
+              onSelect={handleSelectAndContinue}
             />
 
             {/* Footer desktop (sm+) — bouton Précédent + Voir ma sélection + rassurance */}
