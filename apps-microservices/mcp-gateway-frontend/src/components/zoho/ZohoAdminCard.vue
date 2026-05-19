@@ -14,29 +14,47 @@
         </div>
       </div>
       <div class="flex gap-2 shrink-0">
-        <button
-          class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+        <IconActionButton
+          icon="pi-info-circle"
+          label="Détails"
+          @click="$emit('info')"
+        />
+        <IconActionButton
+          icon="pi-bolt"
+          label="Tester"
           @click="$emit('test')"
-        >
-          Tester
-        </button>
-        <button
-          class="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+        />
+        <IconActionButton
+          icon="pi-sync"
+          label="Découvrir"
+          tone="brand"
+          @click="$emit('discover')"
+        />
+        <IconActionButton
+          icon="pi-pencil"
+          label="Modifier"
           @click="$emit('edit')"
-        >
-          Modifier
-        </button>
-        <button
-          class="text-xs px-2 py-1 rounded-md border border-error-300 dark:border-error-700 text-error-600"
+        />
+        <IconActionButton
+          icon="pi-trash"
+          label="Supprimer"
+          tone="danger"
           @click="$emit('delete')"
-        >
-          Supprimer
-        </button>
+        />
       </div>
     </div>
 
-    <div v-if="testResult" class="mt-3">
-      <ZohoTestResultBadge :result="testResult" />
+    <div v-if="testResult || discoverResult" class="mt-3 flex items-center gap-2">
+      <ZohoTestResultBadge v-if="testResult" :result="testResult" />
+      <span
+        v-if="discoverResult"
+        class="text-xs px-2 py-0.5 rounded-full font-medium"
+        :class="discoverResult.ok
+          ? 'bg-success-100 text-success-700 dark:bg-success-500/20 dark:text-success-400'
+          : 'bg-error-100 text-error-700 dark:bg-error-500/20 dark:text-error-400'"
+      >
+        Découverte : {{ discoverResult.tools }} outils
+      </span>
     </div>
 
     <div v-if="!admin" class="text-center py-6 text-gray-500 dark:text-gray-400">
@@ -53,17 +71,21 @@
 
 <script setup lang="ts">
 import ZohoTestResultBadge from './ZohoTestResultBadge.vue'
+import IconActionButton from '@/components/ui/IconActionButton.vue'
 import type { ZohoImportRow, ZohoImportTestResponse } from '@/types/zoho'
 
 defineProps<{
   admin: ZohoImportRow | null
   testResult: ZohoImportTestResponse | null
+  discoverResult?: { ok: boolean; tools: number } | null
 }>()
 
 defineEmits<{
   edit: []
   test: []
+  discover: []
   delete: []
   create: []
+  info: []
 }>()
 </script>

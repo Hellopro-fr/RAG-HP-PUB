@@ -280,6 +280,10 @@ export interface FlowState {
   // Résultat de l'estimation de prix
   priceEstimation: PriceEstimationState | null;
 
+  // Indique si la page d'assurance (intercalée avant Q1/Q2) a déjà été vue
+  // dans cette session — pour ne l'afficher qu'une seule fois.
+  hasSeenAssurance: boolean;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
@@ -332,6 +336,7 @@ export interface FlowState {
   toggleSupplier: (supplierId: string) => void;
   setStartTime: (time: number) => void;
   reset: () => void;
+  setHasSeenAssurance: (seen: boolean) => void;
   setEntryUrl: (url: string) => void;
   setFlowType: (flowType: FlowType) => void;
   setCaracteristiquesPrix: (data: any[]) => void;
@@ -370,6 +375,7 @@ const initialState = {
   supplierIdsToSubmit: null,
   caracteristiquesPrix: [],
   priceEstimation: null,
+  hasSeenAssurance: false,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -473,6 +479,8 @@ export const useFlowStore = create<FlowState>()(
       setStartTime: (time) => set({ startTime: time }),
 
       reset: () => set(initialState),
+
+      setHasSeenAssurance: (seen) => set({ hasSeenAssurance: seen }),
 
       setEntryUrl: (url) => set({ entryUrl: url }),     
 

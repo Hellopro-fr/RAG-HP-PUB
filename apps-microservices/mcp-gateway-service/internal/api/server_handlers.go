@@ -324,6 +324,11 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			if req.ToolPrefix != "" {
 				h.registry.SetToolPrefix(id, req.ToolPrefix)
 			}
+			// Mirror tags into the registry so HasTag-driven dispatch
+			// (zoho injector) sees them on first registration.
+			if len(req.Tags) > 0 {
+				h.registry.SetTags(id, req.Tags)
+			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
@@ -512,6 +517,10 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.SaveTags(id, *req.Tags); err != nil {
 			log.Printf("[api] save tags error: %v", err)
 		}
+		// Mirror tags into the in-memory registry so downstream dispatch
+		// (HasTag-driven zoho injector) picks up the change without waiting
+		// for a re-discovery cycle.
+		h.registry.SetTags(id, *req.Tags)
 	}
 
 	// Update tool prefix on the in-memory registry if changed (even without re-discovery)
@@ -529,6 +538,14 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
 			h.registry.SetToolPrefix(id, refreshed.ToolPrefix)
+			// Re-discovery rebuilds the registry entry from the upstream
+			// init result; tags only live in the DB so we have to push
+			// them back into the registry after every re-discover.
+			refreshedTags := make([]string, 0, len(refreshed.Tags))
+			for _, t := range refreshed.Tags {
+				refreshedTags = append(refreshedTags, t.Tag)
+			}
+			h.registry.SetTags(id, refreshedTags)
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
 			}

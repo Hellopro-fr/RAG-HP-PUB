@@ -46,7 +46,7 @@ func (q *Queries) IsAdminGranted(ctx context.Context, stubServerID, email string
 	const query = `
 		SELECT 1
 		FROM server_authorizations
-		WHERE mcp_server_id = ?
+		WHERE server_id = ?
 		  AND LOWER(email) = LOWER(?)
 		LIMIT 1
 	`
@@ -77,12 +77,13 @@ func (q *Queries) FindUserZohoImport(ctx context.Context, email, login string) (
 		WHERE is_admin = 0 AND is_active = 1
 		  AND (
 		        LOWER(created_by) = ?
+		     OR (? <> '' AND LOWER(created_by) = ?)
 		     OR (? <> '' AND LOWER(created_by) LIKE CONCAT(?, '@%'))
 		  )
 		ORDER BY created_at ASC
 		LIMIT 1
 	`
-	row := q.db.QueryRowContext(ctx, query, emailLower, loginLower, loginLower)
+	row := q.db.QueryRowContext(ctx, query, emailLower, loginLower, loginLower, loginLower, loginLower)
 	out := &ImportRow{}
 	if err := row.Scan(&out.ID, &out.URL, &out.AuthHeaders, &out.CreatedBy, &out.IsAdmin); err != nil {
 		return nil, err

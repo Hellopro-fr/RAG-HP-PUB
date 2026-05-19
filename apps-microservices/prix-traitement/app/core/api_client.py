@@ -477,7 +477,7 @@ class HelloProAPIClient:
         
         Args:
             type_ia: 2 pour DeepSeek, 3 pour Gemini
-            model: Nom du modèle (ex: gemini-2.0-flash, deepseek-chat)
+            model: Nom du modèle (ex: gemini-2.0-flash, deepseek-v4-flash)
             input_token: Nombre de tokens d'entrée
             output_token: Nombre de tokens de sortie
             id_process: ID de la catégorie ou du processus

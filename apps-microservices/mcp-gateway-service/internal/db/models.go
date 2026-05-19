@@ -648,3 +648,21 @@ type ZohoImport struct {
 }
 
 func (ZohoImport) TableName() string { return "zoho_imports" }
+
+// ZohoImportTool persists the per-import upstream tool catalog discovered
+// when the row is created, when its credentials are successfully tested,
+// or when an operator hits the manual refresh endpoint. The OAuth2 consent
+// screen reads this table to render the tool list scoped to the connected
+// user's own Zoho upstream (admin or per-user), avoiding a live tools/list
+// at consent render time.
+type ZohoImportTool struct {
+	ID          uint64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	ImportID    string          `gorm:"type:char(36);not null;uniqueIndex:uq_zoho_import_tool;index:idx_zoho_import_tool_import" json:"import_id"`
+	Name        string          `gorm:"type:varchar(255);not null;uniqueIndex:uq_zoho_import_tool" json:"name"`
+	Description string          `gorm:"type:text" json:"description,omitempty"`
+	InputSchema json.RawMessage `gorm:"type:json;not null" json:"input_schema"`
+	CreatedAt   time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+}
+
+func (ZohoImportTool) TableName() string { return "zoho_import_tools" }

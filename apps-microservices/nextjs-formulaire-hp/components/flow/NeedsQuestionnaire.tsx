@@ -6,6 +6,7 @@ import Image from "next/image";
 // import ProgressHeader from "./ProgressHeader";
 import QuestionnaireProgressBar from "./QuestionnaireProgressBar";
 import QuestionScreen from "./QuestionScreen";
+import AssurancePage from "./AssurancePage";
 import { getAssetPath } from "@/lib/utils";
 
 const hpLogo = getAssetPath("/images/hp-logo.svg");
@@ -39,6 +40,9 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     setStartTime,
     startTime,
     categoryName,
+    categoryVignette,
+    hasSeenAssurance,
+    setHasSeenAssurance,
   } = useFlowStore();
 
   // Hook pour le questionnaire dynamique
@@ -334,19 +338,28 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
         />
 
         <div className="flex-1 overflow-y-auto">
-          <QuestionScreen
-            question={adaptedQuestion}
-            currentIndex={currentIndex}
-            totalQuestions={progress.total}
-            selectedAnswers={dynamicAnswers[questionCode] || []}
-            otherText=""
-            onSelectAnswer={handleDynamicSelectAnswer}
-            onOtherTextChange={() => {}}
-            onNext={handleDynamicNext}
-            onBack={goBack}
-            isFirst={!canGoBack}
-            isLast={currentIndex === progress.total - 1}
-          />
+          {!hasSeenAssurance ? (
+            <AssurancePage
+              categoryName={categoryName || ""}
+              categoryVignette={categoryVignette}
+              totalQuestions={progress.total}
+              onContinue={() => setHasSeenAssurance(true)}
+            />
+          ) : (
+            <QuestionScreen
+              question={adaptedQuestion}
+              currentIndex={currentIndex}
+              totalQuestions={progress.total}
+              selectedAnswers={dynamicAnswers[questionCode] || []}
+              otherText=""
+              onSelectAnswer={handleDynamicSelectAnswer}
+              onOtherTextChange={() => {}}
+              onNext={handleDynamicNext}
+              onBack={goBack}
+              isFirst={!canGoBack}
+              isLast={currentIndex === progress.total - 1}
+            />
+          )}
         </div>
       </div>
     );

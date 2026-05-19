@@ -85,7 +85,7 @@
         <!-- Server list -->
         <div class="space-y-2 mb-6 max-h-80 overflow-y-auto">
           <div
-            v-for="server in servers"
+            v-for="server in configuredServers"
             :key="server.id"
             class="border border-gray-200 dark:border-gray-800 rounded-md"
           >
@@ -153,6 +153,38 @@
           </div>
         </div>
 
+        <!-- Unconfigured servers (Zoho without user row) -->
+        <div v-if="unconfiguredServers.length > 0" class="mt-4 mb-6">
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Serveurs non configur&eacute;s :
+          </p>
+          <div class="border border-amber-200 dark:border-amber-700 rounded-md bg-amber-50 dark:bg-amber-900/20 divide-y divide-amber-100 dark:divide-amber-800">
+            <div
+              v-for="server in unconfiguredServers"
+              :key="server.id"
+              class="flex items-center justify-between px-3 py-2"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">
+                  {{ server.name }}
+                </span>
+                <span class="text-xs text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40">
+                  Non configur&eacute;
+                </span>
+              </div>
+              <a
+                v-if="server.docs_url"
+                :href="server.docs_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-xs font-medium text-brand-600 hover:underline"
+              >
+                Voir documentation &rarr;
+              </a>
+            </div>
+          </div>
+        </div>
+
         <!-- Action buttons -->
         <div class="flex gap-3">
           <button
@@ -203,6 +235,14 @@ const fatalError = ref('')
 // Data
 const clientName = ref('')
 const servers = ref<AuthorizeServer[]>([])
+
+const configuredServers = computed(() =>
+  servers.value.filter((s) => s.configured !== false),
+)
+
+const unconfiguredServers = computed(() =>
+  servers.value.filter((s) => s.configured === false),
+)
 const csrfToken = ref('')
 const preConfigured = ref(false)
 

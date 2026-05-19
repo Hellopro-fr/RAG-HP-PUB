@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,6 +42,20 @@ func newZohoAdminTestDB(t *testing.T) *gorm.DB {
 	`).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
+	if err := gormDB.Exec(`
+		CREATE TABLE zoho_import_tools (
+			id           INTEGER PRIMARY KEY AUTOINCREMENT,
+			import_id    TEXT NOT NULL,
+			name         TEXT NOT NULL,
+			description  TEXT NOT NULL DEFAULT '',
+			input_schema TEXT NOT NULL,
+			created_at   DATETIME NOT NULL,
+			updated_at   DATETIME NOT NULL,
+			UNIQUE (import_id, name)
+		)
+	`).Error; err != nil {
+		t.Fatalf("create tools table: %v", err)
+	}
 	return gormDB
 }
 
@@ -53,6 +68,7 @@ func newTestZohoAdminHandler(t *testing.T) *Handler {
 	}
 	h := &Handler{}
 	h.encryptor = enc
+	h.allowInternalURLs = true
 	h.SetZohoImportRepo(repository.NewZohoImportRepo(gormDB))
 	return h
 }
@@ -436,5 +452,227 @@ func TestZohoImports_Test_404(t *testing.T) {
 	h.handleZohoImportByID(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestHandleZohoUserCreate_Happy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":          "Alice Zoho",
+		"url":           "https://alice.zoho.example.com",
+		"created_by":    "alice@hellopro.fr",
+		"auth_headers":  map[string]string{"Authorization": "Bearer alice-token"},
+		"template_slug": "zoho",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports?is_admin=false", nil)
+	listRec := httptest.NewRecorder()
+	h.handleZohoImports(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200", listRec.Code)
+	}
+	if !strings.Contains(listRec.Body.String(), "alice@hellopro.fr") {
+		t.Fatalf("created row missing from list: %s", listRec.Body.String())
+	}
+}
+
+func TestHandleZohoUserCreate_MissingCreatedBy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(map[string]any{
+		"name": "x", "url": "https://x.example.com",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "created_by") {
+		t.Fatalf("error should mention created_by, got %s", rec.Body.String())
+	}
+}
+
+func TestHandleZohoUserCreate_BadEmailShape(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(map[string]any{
+		"name":       "x",
+		"url":        "https://x.example.com",
+		"created_by": "no-at-sign",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleZohoUserCreate_DuplicateCreatedBy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	body, _ := json.Marshal(map[string]any{
+		"name":       "first",
+		"url":        "https://first.example.com",
+		"created_by": "dup@hellopro.fr",
+	})
+	first := httptest.NewRecorder()
+	h.handleZohoImports(first, httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body)))
+	if first.Code != http.StatusCreated {
+		t.Fatalf("setup row status = %d, want 201", first.Code)
+	}
+
+	body, _ = json.Marshal(map[string]any{
+		"name":       "second",
+		"url":        "https://second.example.com",
+		"created_by": "dup@hellopro.fr",
+	})
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body)))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleZohoUserCreate_InvalidJSON(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader([]byte("not json")))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandleZohoUserCreate_RejectsBlockedURL(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	h.allowInternalURLs = false
+
+	body, _ := json.Marshal(map[string]any{
+		"name":       "x",
+		"url":        "http://127.0.0.1:8080/internal",
+		"created_by": "alice@hellopro.fr",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleZohoImports(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleZohoImportTools_Happy(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	// Create a user row to attach tools to.
+	body, _ := json.Marshal(map[string]any{
+		"name":       "alice",
+		"url":        "https://alice.example.com",
+		"created_by": "alice@hellopro.fr",
+	})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	createRec := httptest.NewRecorder()
+	h.handleZohoImports(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup row status = %d, want 201; body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created ZohoImportRowDTO
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created row: %v", err)
+	}
+
+	// Seed two tools via the repo directly.
+	if _, err := h.zohoImportRepo.ReplaceTools(created.ID, []db.ZohoImportTool{
+		{Name: "leads_list", Description: "List leads", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "leads_get", Description: "Get one lead", InputSchema: json.RawMessage(`{"type":"object"}`)},
+	}); err != nil {
+		t.Fatalf("seed tools: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/"+created.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp ZohoImportToolsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Total != 2 {
+		t.Fatalf("total = %d, want 2", resp.Total)
+	}
+	names := []string{resp.Tools[0].Name, resp.Tools[1].Name}
+	if !(slices.Contains(names, "leads_list") && slices.Contains(names, "leads_get")) {
+		t.Fatalf("names = %v, want both leads_list and leads_get", names)
+	}
+}
+
+func TestHandleZohoImportTools_RowNotFound(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/missing/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleZohoImportTools_EmptyCatalog(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":       "no-tools",
+		"url":        "https://no-tools.example.com",
+		"created_by": "empty@hellopro.fr",
+	})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	createRec := httptest.NewRecorder()
+	h.handleZohoImports(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup status = %d, want 201", createRec.Code)
+	}
+	var created ZohoImportRowDTO
+	_ = json.Unmarshal(createRec.Body.Bytes(), &created)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/zoho-imports/"+created.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp ZohoImportToolsResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp.Total != 0 || len(resp.Tools) != 0 {
+		t.Fatalf("expected empty tools, got total=%d tools=%v", resp.Total, resp.Tools)
+	}
+}
+
+func TestHandleZohoImportTools_MethodNotAllowed(t *testing.T) {
+	h := newTestZohoAdminHandler(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"name":       "x",
+		"url":        "https://x.example.com",
+		"created_by": "x@hellopro.fr",
+	})
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports", bytes.NewReader(body))
+	createRec := httptest.NewRecorder()
+	h.handleZohoImports(createRec, createReq)
+	var created ZohoImportRowDTO
+	_ = json.Unmarshal(createRec.Body.Bytes(), &created)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/zoho-imports/"+created.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	h.handleZohoImportByID(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
 	}
 }
