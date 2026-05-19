@@ -33,7 +33,7 @@ export default function QuestionnaireClient({
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
   const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion } = useFlowStore();
-  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
+  const { goToSelection, goToSomethingToAdd, goToBudget } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
