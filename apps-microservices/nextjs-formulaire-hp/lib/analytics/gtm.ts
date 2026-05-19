@@ -229,6 +229,28 @@ export function trackFunnelStart(context?: FunnelContext) {
   trackQuoteFunnel(currentStepIndex, 'funnel-start', 'init');
 }
 
+// =============================================================================
+// ÉTAPE ASSURANCE (page avant Q1)
+// =============================================================================
+
+/**
+ * Track l'affichage de la page Assurance (avant Q1).
+ * Rendue uniquement au premier passage (`hasSeenAssurance` flag) et hors
+ * variante A/B 2 — donc l'event ne fire que pour les cohortes 0/1/null.
+ */
+export function trackAssuranceView() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'assurance', 'init');
+}
+
+/**
+ * Track la validation de la page Assurance (clic "Continuer").
+ */
+export function trackAssuranceComplete() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'assurance-complete', 'init');
+}
+
 /**
  * Track l'affichage d'une question
  */

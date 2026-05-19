@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect, useRef } from "react";
 import { ListChecks, Sparkles, Target, ArrowRight, Lock, type LucideIcon } from "lucide-react";
+import { trackAssuranceView, trackAssuranceComplete } from "@/lib/analytics";
 
 interface AssurancePageProps {
   categoryName: string;
@@ -64,6 +66,24 @@ const STEPS: AssuranceStep[] = [
 
 const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
   const safeCategoryName = (categoryName || "produit").toLowerCase();
+
+  const hasTrackedView = useRef(false);
+
+  useEffect(() => {
+    if (hasTrackedView.current) return;
+
+    const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    const navType = navEntries.length > 0 ? navEntries[0].type : 'navigate';
+    if (navType === 'back_forward') return;
+
+    hasTrackedView.current = true;
+    trackAssuranceView();
+  }, []);
+
+  const handleContinue = () => {
+    trackAssuranceComplete();
+    onContinue();
+  };
 
   return (
     <div
@@ -147,7 +167,7 @@ const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
           {/* CTA desktop (sm+) — Lovable : flex flex-col items-center gap-3 pt-2 */}
           <div className="hidden sm:flex flex-col items-center gap-3 pt-2">
             <button
-              onClick={onContinue}
+              onClick={handleContinue}
               className="inline-flex items-center gap-2 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 px-6 py-3 text-sm sm:text-base font-semibold transition-all"
             >
               C'est parti
@@ -167,7 +187,7 @@ const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
         style={{ fontFamily: SYSTEM_FONT_STACK }}
       >
         <button
-          onClick={onContinue}
+          onClick={handleContinue}
           className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-accent text-accent-foreground shadow-lg shadow-accent/25 px-6 py-3 text-base font-semibold transition-all"
         >
           C'est parti

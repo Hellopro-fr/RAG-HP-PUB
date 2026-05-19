@@ -104,6 +104,8 @@ submit-success            ▼
 | step_name | step_type | Description |
 |-----------|-----------|-------------|
 | `funnel-start` | `init` | Début du funnel |
+| `assurance` | `init` | Affichage de la page Assurance (avant Q1). Émis uniquement au premier passage (`hasSeenAssurance`) et hors variante A/B `2` |
+| `assurance-complete` | `init` | Clic "Continuer" sur la page Assurance |
 
 #### Questionnaire
 | step_name | step_type | Description |
@@ -401,6 +403,8 @@ Sources de trafic (paramètres UTM).
 | Fonction | Description |
 |----------|-------------|
 | `trackFunnelStart()` | Démarre le funnel |
+| `trackAssuranceView()` | Affichage de la page Assurance (pré-Q1) |
+| `trackAssuranceComplete()` | Clic "Continuer" sur la page Assurance |
 | `trackQuestionView(index, data)` | Affichage d'une question |
 | `trackQuestionAnswered(index, id, title, answers, isMulti)` | Réponse à une question |
 | `trackQuestionnaireComplete(total, time)` | Fin questionnaire |
@@ -474,6 +478,12 @@ Sources de trafic (paramètres UTM).
 ```
 1. trackFunnelStart()
    → devis_funnel_formulaire { step_name: 'funnel-start', step_type: 'init' }
+
+1b. trackAssuranceView()                  // variantes 0/1/null, premier passage
+   → devis_funnel_formulaire { step_name: 'assurance', step_type: 'init' }
+
+1c. trackAssuranceComplete()              // clic "Continuer"
+   → devis_funnel_formulaire { step_name: 'assurance-complete', step_type: 'init' }
 
 2. trackQuestionView(0)
    → devis_funnel_formulaire { step_name: '1ere-question', step_type: 'question' }

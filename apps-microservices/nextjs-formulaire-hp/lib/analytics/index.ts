@@ -7,6 +7,8 @@ export {
   getFlowType,
   trackQuoteFunnel,
   trackFunnelStart as trackGTMFunnelStart,
+  trackAssuranceView,
+  trackAssuranceComplete,
   trackQuestionView,
   trackQuestionNavigation,
   trackQuestionnaireComplete as trackGTMQuestionnaireComplete,
