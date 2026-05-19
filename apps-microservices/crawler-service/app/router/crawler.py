@@ -31,6 +31,14 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     job_info = await cache_service.get_json(job_key)
 
     if job_info:
+        # Heal legacy / partial blobs missing crawl_id. Mirrors get_all_statuses
+        # setdefault pattern (commit 508de256). Without this, downstream
+        # get_status() returns None on the malformed-blob guard and the
+        # singular /status/{crawl_id} endpoint's Pydantic response_model
+        # fails with 500 (observed on crawl 6664 — blob had 'id' but not
+        # 'crawl_id', likely written by an older code version or an
+        # external resource-monitor service).
+        job_info.setdefault('crawl_id', crawl_id)
         return job_info
 
     # --- Job not in Redis, attempt recovery from disk ---
@@ -275,8 +283,18 @@ async def get_all_crawl_statuses(
 async def get_crawl_status(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
     Gets the detailed status of a specific crawl job. Recovers from storage if missing from Redis.
+
+    Raises 404 when get_status() returns None (malformed blob beyond heal-on-read —
+    e.g. missing storage_path as well as crawl_id). Without this guard, Pydantic
+    response_model validation would surface a 500 on the None response.
     """
-    return await crawler_manager.get_status(job_info)
+    status_data = await crawler_manager.get_status(job_info)
+    if status_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Crawl job '{crawl_id}' state is malformed (missing required fields).",
+        )
+    return status_data
 
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
