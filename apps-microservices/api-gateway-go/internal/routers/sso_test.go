@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Hellopro-fr/rag-hp-pub/apps-microservices/api-gateway-go/internal/sso"
+	"api-gateway-go/internal/sso"
 )
 
 func newSSORouter(t *testing.T, accountBase string) *gin.Engine {

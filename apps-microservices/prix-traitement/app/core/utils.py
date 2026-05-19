@@ -48,41 +48,115 @@ def write_log(filepath: str, message: str) -> None:
         logger.error(f"Erreur écriture log {filepath}: {e}")
 
 
+def _fix_unescaped_quotes(text: str) -> str:
+    """
+    Répare les guillemets non-échappés à l'intérieur des valeurs JSON produites par un LLM.
+    Tracke l'état clé/valeur pour distinguer une vraie fin de string d'un faux positif
+    type "il a dit "bonjour", puis...". Normalise les guillemets typographiques en amont.
+    """
+    text = text.replace("“", '"').replace("”", '"')
+
+    result = []
+    n = len(text)
+    i = 0
+    in_string = False
+    expecting_value = False  # True après `:` ou `[` -> on attend une valeur
+
+    while i < n:
+        ch = text[i]
+
+        if not in_string:
+            result.append(ch)
+            if ch == ':':
+                expecting_value = True
+            elif ch == '[':
+                expecting_value = True
+            elif ch in ('{', ','):
+                expecting_value = False
+            elif ch == '"':
+                in_string = True
+            i += 1
+            continue
+
+        if ch == '\\':
+            result.append(ch)
+            i += 1
+            if i < n:
+                result.append(text[i])
+                i += 1
+            continue
+
+        if ch == '"':
+            j = i + 1
+            while j < n and text[j].isspace():
+                j += 1
+            nxt = text[j] if j < n else ''
+
+            if expecting_value:
+                is_end = nxt in (',', '}', ']') or j >= n
+            else:
+                is_end = (nxt == ':')
+
+            if is_end:
+                result.append(ch)
+                in_string = False
+                if expecting_value:
+                    expecting_value = False
+            else:
+                result.append('\\"')
+            i += 1
+            continue
+
+        result.append(ch)
+        i += 1
+
+    return ''.join(result)
+
+
 def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     """
-    Extrait et parse JSON d'une chaîne de texte
+    Extrait et parse JSON d'une chaîne de texte.
+    Tente une réparation des guillemets non-échappés (_fix_unescaped_quotes) en fallback.
     """
     # Normaliser les espaces
     text = re.sub(r'\s+', ' ', text)
-    
+
     try:
         # Tentative de parsing direct
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    
+
     # Recherche de patterns JSON
     patterns = [
         r'(\{.*\}|\[.*\])', # Object ou Array
         r'\[.*\]',  # Array
         r'\{.*\}',  # Object
     ]
-    
+
     for pattern in patterns:
         matches = re.search(pattern, text, re.DOTALL | re.MULTILINE)
         if matches:
             try:
                 return json.loads(matches.group(0))
             except json.JSONDecodeError:
-                continue
-    
+                try:
+                    fixed = _fix_unescaped_quotes(matches.group(0))
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    continue
+
     # Dernière tentative: nettoyer le début et la fin
     trimmed = re.sub(r'^[^{]*|[^}]*$', '', text)
     try:
         return json.loads(trimmed)
     except json.JSONDecodeError:
-        logger.error(f"Impossible d'extraire JSON de: {text[:200]}")
-        return None
+        try:
+            fixed = _fix_unescaped_quotes(trimmed)
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            logger.error(f"Impossible d'extraire JSON de: {text[:200]}")
+            return None
 
 
 async def get_prompt(id_prompt: str) -> Dict[str, Any]:

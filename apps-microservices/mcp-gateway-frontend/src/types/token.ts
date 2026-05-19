@@ -1,4 +1,4 @@
-import type { LeexiFilter } from './leexi'
+import type { LeexiFilter, ZohoFilter } from './leexi'
 import type { RingoverFilter } from './ringover'
 import type { BDDFilter } from './bdd'
 
@@ -25,6 +25,7 @@ export interface ScopeToken {
   updated_at: string
   expires_at?: string
   leexi_filter?: LeexiFilter
+  zoho_filter?: ZohoFilter
   ringover_filter?: RingoverFilter
   bdd_filter?: BDDFilter
 }
@@ -44,6 +45,7 @@ export interface CreateTokenRequest {
   expires_at?: string
   allow_http?: boolean
   leexi_filter?: LeexiFilter
+  zoho_filter?: ZohoFilter
   ringover_filter?: RingoverFilter
   bdd_filter?: BDDFilter
 }

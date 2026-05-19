@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.gitignore
+.env*.local
+.DS_Store
+coverage
+__tests__
+*.log

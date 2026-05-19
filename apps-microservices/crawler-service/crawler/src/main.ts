@@ -44,6 +44,13 @@ import { isBlanketBlock } from "./robotsTxtGuard.js";
 const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
 
+// Crawl start timestamp (déclaré ici pour être accessible depuis le handler de fin de crawl
+// qui construit la payload — ligne ~985). Mais ASSIGNÉ plus tard, juste avant
+// `await startCrawler(...)` (ligne ~1294), pour exclure le temps de bootstrap
+// (init Crawlee, Playwright, consolidate URLs, seeding) du décompte.
+// Format MySQL DATETIME, alimente crawl_metrics.date_start côté PHP.
+let crawlStartTime = '';
+
 // --- V3 Feature: Standard CLI Argument Parsing ---
 const args: Record<string, string> = {};
 process.argv.slice(2).forEach(arg => {
@@ -743,6 +750,10 @@ if (crawlMode === 'update') {
     const totalConsolidated = remainingUrls.length + 1; // +1 for homepage
     console.log(`Consolidated ${totalConsolidated} URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
 
+    if (context.statsManager && consolidationCounts.duplicatesRemoved > 0) {
+        await context.statsManager.increment("filtered_duplicate", consolidationCounts.duplicatesRemoved);
+    }
+
     // Safety net: update mode with 0 URLs means previous crawl data was unavailable
     if (totalConsolidated <= 1) {
         console.error(`❌ Update mode produced 0 URLs from previous crawl '${previousCrawlId}'. No data to compare against. Aborting.`);
@@ -964,6 +975,25 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     }
 
 
+    // Timestamp de fin de crawl — capté ici (juste avant le build de la payload) pour refléter
+    // la VRAIE fin du crawl côté crawler-service (et non l'heure où PHP reçoit le webhook,
+    // qui inclurait la latence Python + le retry du webhook). Format MySQL DATETIME.
+    const crawlEndTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    // Read deperdition counters from StatsManager (defaults to 0 if unavailable)
+    async function readStat(metric: string): Promise<number> {
+        if (!context.statsManager) return 0;
+        try { return await context.statsManager.getValue(metric); } catch { return 0; }
+    }
+    const filtered_qm = await readStat("filtered_qm");
+    const filtered_hash = await readStat("filtered_hash");
+    const filtered_ext = await readStat("filtered_ext");
+    const filtered_nonfr = await readStat("filtered_nonfr");
+    const filtered_duplicate = await readStat("filtered_duplicate");
+    const dropped_cb = await readStat("dropped_cb");
+    const timeout_individual = await readStat("timeout_individual");
+    const success_extracted = await readStat("success");
+
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
@@ -978,6 +1008,18 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         camoufox_used: context.camoufoxEnabled,
         diezDecisionMode: getDiezDecisionMode(isError),
         questionMarkDecisionMode: getQuestionMarkDecisionMode(isError),
+        // Observability — deperdition counters (StatsManager / Redis-backed)
+        filtered_qm,
+        filtered_hash,
+        filtered_ext,
+        filtered_nonfr,
+        filtered_duplicate,
+        dropped_cb,
+        timeout_individual,
+        success_extracted,
+        // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
+        date_start: crawlStartTime,
+        date_end: crawlEndTime,
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
@@ -1249,6 +1291,12 @@ if (typeCrawling == "sitemap") {
         process.on("beforeExit", () => { void finalizeTimingOnce!(); });
     }
     // --- END TIMING INSTRUMENTATION ---
+
+    // Capture du timestamp de démarrage RÉEL du crawl, juste avant l'invocation de
+    // startCrawler() qui appelle crawler.run() (cf functions.ts:755). Tout le setup
+    // précédent (bootstrap modules, init Crawlee, Playwright, consolidate URLs,
+    // two-phase seeding) est EXCLU du décompte de duration_seconds.
+    crawlStartTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     // Launch
     const crawler = await startCrawler(

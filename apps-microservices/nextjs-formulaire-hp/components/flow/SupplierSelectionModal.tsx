@@ -55,7 +55,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     criteriaHaveChanged,
     removedCritiqueCriteriaIds,
     removedSecondaireCriteriaIds,
-    priceEstimation
+    priceEstimation,
+    userBudgetRange,
   } = useFlowStore();
 
   // Utiliser uniquement les résultats dynamiques du matching (pas de fallback statique)
@@ -302,8 +303,10 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                 }}
               />
 
-              {/* Budget Estimate — affiché seulement si données prix valides */}
-              {priceEstimation?.data && priceEstimation.data.fourchette.borne_basse !== 0 && priceEstimation.data.fourchette.borne_basse !== priceEstimation.data.fourchette.borne_haute && (priceEstimation.data.exemples_produits?.length ?? 0) > 2 && (() => {
+              {/* Budget Estimate — filet de sécurité : affiché seulement si l'utilisateur
+                  n'est pas passé par la page /budget (sinon il l'a déjà vu là-bas).
+                  Couvre les cas bypass URL / deeplink / migration legacy. */}
+              {userBudgetRange === null && priceEstimation?.data && priceEstimation.data.fourchette.borne_basse !== 0 && priceEstimation.data.fourchette.borne_basse !== priceEstimation.data.fourchette.borne_haute && (priceEstimation.data.exemples_produits?.length ?? 0) > 2 && (() => {
                 const { fourchette, exemples_produits, phrase_prix } = priceEstimation.data!;
                 const fmtPrice = (n: number) =>
                   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";

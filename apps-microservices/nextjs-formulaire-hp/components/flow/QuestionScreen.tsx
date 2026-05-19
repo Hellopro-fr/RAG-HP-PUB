@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, Info, Check, Package, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Question } from "@/types";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { getCategoryQuestion } from "@/data/category-static-content";
+import { getQuestionExplanation } from "@/data/question-explanations";
+import QuestionExplanationPanel from "@/components/flow/QuestionExplanationPanel";
 
 interface QuestionScreenProps {
   question: Question;
@@ -35,7 +37,6 @@ const QuestionScreen = ({
   isLast,
 }: QuestionScreenProps) => {
   const { categoryName, categoryStats, categoryId } = useFlowStore();
-  const [showJustification, setShowJustification] = useState(false);
 
   // Animation slide-fade : exit vers la gauche, enter depuis la droite
   const [isExiting, setIsExiting] = useState(false);
@@ -77,6 +78,10 @@ const QuestionScreen = ({
   const isOtherSelected = selectedAnswers.includes("other");
   const hasSelection = selectedAnswers.length > 0;
 
+  // Panneau d'aide latéral : exclusivement alimenté par `bulle_aide` API.
+  // Si la donnée est absente ou malformée, le panneau est masqué (layout mono-colonne).
+  const explanation = getQuestionExplanation(displayedQuestion.bulleAide);
+
   const handleAnswerClick = (answerId: string) => {
     // For single select, auto-advance after selection - except for "other" which needs text input
     const shouldAutoAdvance = !displayedQuestion.multiSelect && answerId !== "other";
@@ -86,42 +91,23 @@ const QuestionScreen = ({
   return (
     <div className="flex flex-col min-h-full">
       {/* Scrollable content */}
-      <div className="flex-1 pb-32 sm:pb-6 transition-all duration-300">
+      <div className="flex-1 pb-32 sm:pb-6">
+        <div className="px-4 sm:px-6 lg:px-10 pt-5 sm:pt-8">
         <div className={cn(
-          "px-4 sm:px-6 lg:px-10 pt-5 sm:pt-8 transition-all duration-300",
-          isExiting ? "opacity-0 -translate-x-5" : "opacity-100 translate-x-0"
+          "mx-auto grid gap-6 lg:gap-10",
+          explanation
+            ? "max-w-5xl grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]"
+            : "max-w-2xl grid-cols-1",
         )}>
-        <div className="mx-auto max-w-2xl space-y-5">
-          {/* Question counter — DISABLED: remplacé par QuestionnaireProgressBar dans le header
-          <div className="text-center">
-            <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-1.5 text-sm font-medium text-secondary-foreground">
-              {totalQuestions == 1 ? "Question 1" : `Question ${currentIndex + 1} sur ${totalQuestions}`}
-            </span>
-          </div>
-          */}
-
+        <div className={cn(
+          "mx-auto w-full max-w-2xl space-y-5 lg:mx-0 lg:max-w-none transition-all duration-300",
+          isExiting ? "opacity-0 -translate-x-5" : "opacity-100 translate-x-0",
+        )}>
           {/* Question title */}
-          <div className="text-center space-y-3 sm:space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground leading-tight">
               {displayedQuestion.title}
             </h2>
-            
-            {/* Justification toggle - temporairement masqué
-            <button
-              onClick={() => setShowJustification(!showJustification)}
-              className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
-            >
-              <Info className="h-4 w-4" />
-              {showJustification ? "Masquer l'explication" : "Pourquoi cette question ?"}
-            </button>
-
-
-            {showJustification && (
-              <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 text-sm text-muted-foreground text-left">
-                {question.justification}
-              </div>
-            )}
-            */}
           </div>
 
           {/* Answer options */}
@@ -138,7 +124,7 @@ const QuestionScreen = ({
                     key={answer.id}
                     onClick={() => handleAnswerClick(answer.id)}
                     className={cn(
-                      "w-full text-left rounded-xl border-2 p-4 transition-all",
+                      "w-full text-left rounded-xl border-2 px-4 py-3 transition-all",
                       "hover:border-primary/50 hover:bg-primary/5",
                       isSelected
                         ? "border-primary bg-primary/10"
@@ -180,7 +166,7 @@ const QuestionScreen = ({
             {showOtherOption && (
               <div
                 className={cn(
-                  "w-full text-left rounded-xl border-2 p-4 transition-all",
+                  "w-full text-left rounded-xl border-2 px-4 py-3 transition-all",
                   isOtherSelected
                     ? "border-primary bg-primary/10"
                     : "border-border bg-background hover:border-primary/50 hover:bg-primary/5"
@@ -240,6 +226,15 @@ const QuestionScreen = ({
             )}
           </div>
 
+          {/* Mobile / tablet explanation card — visible sous lg, le panneau desktop est rendu à droite */}
+          {explanation && (
+            <QuestionExplanationPanel
+              explanation={explanation}
+              isExiting={isExiting}
+              variant="mobile"
+              className="lg:hidden"
+            />
+          )}
 
           {/* Desktop navigation with reassurance - hidden on mobile */}
           <div className="hidden sm:block pt-4 space-y-3">
@@ -285,6 +280,18 @@ const QuestionScreen = ({
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Panneau d'explication latéral — desktop only (lg+) */}
+        {explanation && (
+          <div className="hidden lg:block">
+            <QuestionExplanationPanel
+              explanation={explanation}
+              isExiting={isExiting}
+              variant="desktop"
+            />
+          </div>
+        )}
         </div>
         </div>
       </div>

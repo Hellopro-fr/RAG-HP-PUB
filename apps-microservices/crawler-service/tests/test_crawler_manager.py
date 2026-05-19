@@ -924,3 +924,43 @@ class TestGetStatusMalformedBlob:
         assert "def-456" not in statuses
         assert "ghi-789" in statuses
         assert len(statuses) == 2
+
+
+class TestCleanupStaleStateForRelaunch:
+    """
+    Verifies _cleanup_stale_state_for_relaunch wipes any prior-run
+    _completion_marker.json on crawl relaunch. Used by start_crawl
+    to prevent the reconciler's marker-check (sub-problem A) from
+    falsely declaring the new running crawl finished.
+    """
+
+    @pytest.mark.asyncio
+    async def test_existing_marker_is_unlinked(self, tmp_path):
+        marker = tmp_path / "_completion_marker.json"
+        marker.write_text('{"final_status": "finished", "exit_code": 0}')
+        assert marker.exists()
+        from app.core.crawler_manager import CrawlerManager
+        manager = CrawlerManager()
+        await manager._cleanup_stale_state_for_relaunch("test-123", str(tmp_path))
+        assert not marker.exists()
+
+    @pytest.mark.asyncio
+    async def test_missing_marker_is_noop(self, tmp_path):
+        from app.core.crawler_manager import CrawlerManager
+        manager = CrawlerManager()
+        await manager._cleanup_stale_state_for_relaunch("test-456", str(tmp_path))
+
+    @pytest.mark.asyncio
+    async def test_permission_error_logged_not_raised(self, tmp_path, caplog):
+        marker = tmp_path / "_completion_marker.json"
+        marker.write_text("{}")
+        from unittest.mock import patch
+        from app.core.crawler_manager import CrawlerManager
+        manager = CrawlerManager()
+        with patch("os.unlink", side_effect=PermissionError("denied")):
+            with caplog.at_level("WARNING"):
+                await manager._cleanup_stale_state_for_relaunch("test-789", str(tmp_path))
+        assert any(
+            "Could not remove stale completion marker" in r.message
+            for r in caplog.records
+        )

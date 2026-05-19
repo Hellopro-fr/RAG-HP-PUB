@@ -1,5 +1,5 @@
 import type { ServerToolScope } from './token'
-import type { LeexiFilter } from './leexi'
+import type { LeexiFilter, ZohoFilter } from './leexi'
 import type { RingoverFilter } from './ringover'
 import type { BDDFilter } from './bdd'
 
@@ -22,6 +22,7 @@ export interface OAuth2Client {
   grant_types?: string[]
   dynamically_registered: boolean
   leexi_filter?: LeexiFilter
+  zoho_filter?: ZohoFilter
   ringover_filter?: RingoverFilter
   bdd_filter?: BDDFilter
 }
@@ -40,6 +41,7 @@ export interface CreateOAuth2ClientRequest {
   access_token_ttl?: number
   expires_at?: string
   leexi_filter?: LeexiFilter
+  zoho_filter?: ZohoFilter
   ringover_filter?: RingoverFilter
   bdd_filter?: BDDFilter
 }
@@ -58,6 +60,8 @@ export interface AuthorizeServer {
   id: string
   name: string
   tools: AuthorizeTool[]
+  configured?: boolean
+  docs_url?: string
 }
 
 export interface AuthorizeTool {

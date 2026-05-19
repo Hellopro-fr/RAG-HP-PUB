@@ -344,7 +344,10 @@ router.addDefaultHandler(
 
                 if (abortReason) {
                     log.warning(`🛑 Circuit breaker triggered: ${abortReason}`);
-                    context.stopReason = "circuitBreaker"; 
+                    context.stopReason = "circuitBreaker";
+                    if (context.statsManager) {
+                        await context.statsManager.increment("dropped_cb");
+                    }
                     await stopCrawler(crawler, `Circuit breaker: ${abortReason}`);
                     return;
                 }
