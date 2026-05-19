@@ -11,10 +11,7 @@
           Récapitulatif de l'autorisation
         </h3>
         <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mt-0.5">
-          Vous autorisez l'accès à {{ enabledServers }} serveur(s) sur {{ totalServers }}.
-          <span v-if="requiredServers > 0" class="block mt-1">
-            {{ requiredServers }} requis pour cette application.
-          </span>
+          Connecter {{ articleAndNames }} via MCP
         </p>
       </div>
     </div>
@@ -48,11 +45,20 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Shield, Server } from 'lucide-vue-next'
 
-defineProps<{
+const props = defineProps<{
   totalServers: number
   enabledServers: number
   requiredServers: number
+  serverNames: string[]
 }>()
+
+const articleAndNames = computed(() => {
+  const names = props.serverNames
+  if (names.length === 0) return 'les serveurs MCP'
+  if (names.length === 1) return `le ${names[0]}`
+  return names.join(', ')
+})
 </script>
