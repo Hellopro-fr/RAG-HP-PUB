@@ -407,6 +407,8 @@ export function enrichSuppliersWithProductInfo(
       image: mainImage,
       images: images,
       logo: vendeur.logo || undefined,
+      // Vendeur "certifié" = vendeur dont l'affichage est complet (donnée fournisseur vérifiée)
+      isCertified: vendeur.affichage_complet === true,
       supplier: {
         id: vendeur.id,
         name: supplierName,

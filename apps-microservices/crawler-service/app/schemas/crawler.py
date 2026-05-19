@@ -129,3 +129,10 @@ class CrawlStatus(BaseModel):
     nfr_urls_crawled: int = Field(0, description="Number of URLs that were skipped for not being in French.")
     last_activity: Optional[datetime] = Field(None, description="Timestamp of the last saved URL.")
     last_heartbeat: Optional[datetime] = Field(None, description="Timestamp of the last monitor heartbeat for a running job.")
+    is_error: Optional[str] = Field(
+        None,
+        description="Error category from _callback_payload.json "
+                    "(e.g., 'stoppedManually', 'insufficientData', 'limitCrawl'). "
+                    "Empty/null for successful crawls. Used by BO reconciliation "
+                    "to route to the correct error branch."
+    )

@@ -9,14 +9,7 @@ import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
 import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
-
-// Interface pour les données URL (réponse Q1 pré-remplie)
-interface UrlData {
-  id_question: number;
-  id_reponse: number;
-  equivalence: any[];
-  abtest_UX_lead_version?: number;
-}
+import type { CategoryTokenUrlData as UrlData } from '@/types/category-token';
 
 interface QuestionnaireClientProps {
   initialCategoryId?: string;
@@ -32,7 +25,7 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion } = useFlowStore();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion, abtestUxLeadVersion } = useFlowStore();
   const { goToSelection, goToSomethingToAdd, goToBudget } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const { fetchPriceEstimation } = usePriceEstimation();
@@ -82,7 +75,17 @@ export default function QuestionnaireClient({
       sessionStorage.setItem(FLOW_ORIGINAL_TOKEN_KEY, token);
       //console.log('[QuestionnaireClient] Token saved for redirect:', token.substring(0, 20) + '...');
     }
-  }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc]);
+
+    // TODO: SUPPRIMER AVANT MISE EN PROD - Bypass dev pour tester les variantes A/B
+    // En prod la version vient du payload token (urlData.abtest_UX_lead_version).
+    const devAbtest = searchParams.get('abtest_version');
+    if (devAbtest !== null) {
+      const v = parseInt(devAbtest, 10);
+      if (!isNaN(v)) {
+        setAbtestUxLeadVersion(v);
+      }
+    }
+  }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc, setAbtestUxLeadVersion]);
 
   // Lire les paramètres de test du matching depuis l'URL (pour tests uniquement)
   useEffect(() => {
@@ -221,15 +224,20 @@ export default function QuestionnaireClient({
     // Wrapper monotone : le progress ne recule jamais (protection contre les réponses tardives)
     const safeProgress = (value: number) => setLoaderProgress(prev => Math.max(prev, value));
 
+    // A/B test : variantes 1 & 2 sautent l'étape /budget et l'appel /api/prix (gain perf)
+    const skipBudget = abtestUxLeadVersion === 1 || abtestUxLeadVersion === 2;
+
     // Lancer prix et matching en parallèle
     // Le prix répond plus vite → met à jour le progress à 25%
     // Le matching prend le relais (50→65→75) via safeProgress
-    const prixPromise = fetchPriceEstimation()
-      .then(() => { safeProgress(25); })
-      .catch((err) => {
-        console.error('[Prix] Error (non-blocking):', err);
-        safeProgress(25); // Même en erreur, on avance
-      });
+    const prixPromise = skipBudget
+      ? Promise.resolve().then(() => { safeProgress(25); })
+      : fetchPriceEstimation()
+          .then(() => { safeProgress(25); })
+          .catch((err) => {
+            console.error('[Prix] Error (non-blocking):', err);
+            safeProgress(25); // Même en erreur, on avance
+          });
 
     const matchingPromise = processMatching(safeProgress); // progress interne : 50→65→75
 
@@ -240,7 +248,11 @@ export default function QuestionnaireClient({
     await new Promise(resolve => setTimeout(resolve, 1500));
     // Intercaler la page /budget avant /selection. Le flow alternatif
     // 'something-to-add' reste tel quel (pas de budget si flow dégradé).
-    const finalDestination = destination === 'something-to-add' ? destination : 'budget';
+    // Variantes A/B 1 & 2 : skip /budget → /selection direct.
+    const finalDestination =
+      destination === 'something-to-add' ? destination
+        : skipBudget ? 'selection'
+        : 'budget';
     setRedirectDestination(finalDestination);
   };
 
