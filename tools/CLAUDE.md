@@ -54,8 +54,11 @@ Dockerfile           # Python 3.10-slim image for DLQ archiver/requeuer
 - Environment variables for all connection strings: `RABBITMQ_URL`, `ELASTICSEARCH_URL`, `GCS_BUCKET_NAME`.
 - DLQ archiver uses batch inserts (size 50, timeout 5s) with individual ACK/NACK.
 - Requeuer marks processed messages with `status: "Re-queued"` in Elasticsearch.
-- GCS daemons use file-based signaling (.request/.done/.error markers).
-- GCS download daemon path env vars: `DOWNLOAD_REQUESTS_PATH` (request markers) and `DOWNLOAD_RESULTS_PATH` (results + .done/.error markers). Same names as the crawler-service Python `Settings` (apps-microservices/crawler-service/app/core/config.py), so a single `.env` entry per direction configures both layers. Defaults point at `apps-microservices/crawler-service/crawler_download_{requests,results}` matching the `docker-compose.yml` bind source for the crawler-service container.
+- GCS daemons use file-based signaling (.request/.done/.error markers, plus .unstash-confirmed/.unstash-cleanup-done for the 2-phase commit on the stash flow).
+- Daemon env vars (defaults preserve current archive-flow behavior):
+  - Upload: `UPLOAD_WATCH_DIR` (default `crawler_archives/`), `UPLOAD_GCS_PREFIX` (default `crawls`), `UPLOAD_DEAD_LETTER_SUBDIR` (default `dead_letter`).
+  - Download: `DOWNLOAD_REQUESTS_PATH`, `DOWNLOAD_RESULTS_PATH`, `DOWNLOAD_GCS_PREFIX` (default `crawls`), `DELETE_AFTER_DOWNLOAD` (default `false`, set `true` for the stash unstash flow).
+- Same env var names align with the crawler-service Python `Settings` (`apps-microservices/crawler-service/app/core/config.py`), so a single `.env` entry per direction configures both layers. Defaults point at `apps-microservices/crawler-service/crawler_download_{requests,results}` matching the `docker-compose.yml` bind source for the crawler-service container.
 - `gcs_archive_audit.py` uses `gcloud storage` CLI (no Python GCS library). Run `gcloud auth login` or activate a service account key before invoking.
 
 ## What This Provides to Other Services

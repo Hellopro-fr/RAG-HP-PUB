@@ -96,6 +96,16 @@ The full API documentation is available via Swagger UI at `http://localhost:8503
 
 ### Administrative Endpoints
 
+#### Stash a Crawl (Free Disk)
+-   `POST /stash/{crawl_id}` (mounted at `/crawler/stash/{crawl_id}`)
+-   **Description:** Move a terminal crawl's storage to GCS under `stash/` and delete local data. Use for crawls under investigation that occupy disk space. The crawl must be in `failed`/`stopped`/`finished` status and not already stashed/archived.
+-   **Response:** 202 Accepted with `StashResponse` (`crawl_id`, `status="stashing"`, `stash_path`, `stashed_at`).
+
+#### Unstash a Crawl
+-   `POST /crawler/unstash/{crawl_id}`
+-   **Description:** Restore a stashed crawl's data from GCS to local storage. Synchronous — waits for download daemon, extracts, and triggers 2-phase commit GCS cleanup. Bounded by `UNSTASH_TIMEOUT_SECONDS` (default 300s).
+-   **Response:** 200 OK with `UnstashResponse` (`crawl_id`, `status="unstashed"`, `restored_to`, `elapsed_seconds`, `gcs_cleanup_status` = `"cleaned"` or `"deferred"`).
+
 #### Check Service Capacity
 -   `GET /crawler/capacity`
 -   **Description:** A lightweight endpoint that returns the current number of running jobs across all replicas and the configured global maximum. Useful for schedulers to check before attempting to start a new job.
