@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/lib/stores/flow-store';
+import { extractChipsFromAnswers } from '@/lib/utils/exclude-chips';
 
 interface MatchingLoaderV2Props {
   /** Progression externe (0-100) pilotée par les appels API */
@@ -20,11 +21,6 @@ const STEP_LABELS = [
   'Sélection des fournisseurs',
   'Finalisation',
 ];
-
-// Réponses non-informatives à exclure des chips (case-insensitive)
-// Match si le label COMMENCE par l'une de ces formules, quelle que soit la suite
-// (ex. "Je ne sais pas / Souhaite être conseillé", "Autre besoin", "Autres options").
-const EXCLUDED_CHIP_RE = /^\s*(autres?\b|je ne sais pas\b|souhaite (être|etre) conseill)/i;
 
 export default function MatchingLoaderV2({
   externalProgress,
@@ -80,19 +76,7 @@ export default function MatchingLoaderV2({
   }, [duration, onComplete, useExternal]);
 
   const userQuestionAnswers = useFlowStore((s) => s.userQuestionAnswers);
-  const chips = useMemo(
-    () =>
-      userQuestionAnswers
-        .flatMap((a) =>
-          Array.isArray(a.answerLabel)
-            ? a.answerLabel
-            : a.answerLabel
-              ? [a.answerLabel]
-              : []
-        )
-        .filter((label): label is string => Boolean(label) && !EXCLUDED_CHIP_RE.test(label)),
-    [userQuestionAnswers]
-  );
+  const chips = useMemo(() => extractChipsFromAnswers(userQuestionAnswers), [userQuestionAnswers]);
 
   return (
     <div className="min-h-screen bg-muted/30">
