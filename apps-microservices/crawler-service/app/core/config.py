@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     DOWNLOAD_REQUESTS_PATH: str = "/app/download_requests"
     DOWNLOAD_RESULTS_PATH: str = "/app/download_results"
 
+    # Stash flow paths (mirror download paths; bind targets must match docker-compose.yaml)
+    STASH_SHARED_PATH: str = "/app/stash"
+    STASH_DOWNLOAD_REQUESTS_PATH: str = "/app/gcs-stash-requests"
+    STASH_DOWNLOAD_RESULTS_PATH: str = "/app/gcs-stash-downloads"
+
+    # Stash flow Redis lock TTLs and timeouts (seconds)
+    STASH_LOCK_TTL_SECONDS: int = 600
+    UNSTASH_LOCK_TTL_SECONDS: int = 600
+    UNSTASH_TIMEOUT_SECONDS: int = 300
+    UNSTASH_CLEANUP_GRACE_SECONDS: int = 30
+
     # GCS download timeout in seconds
     GCS_DOWNLOAD_TIMEOUT_SECONDS: int = 300
 
