@@ -84,8 +84,16 @@ const BudgetClient = () => {
 
   // Options dynamiques calibrées par l'API prix (champ budget_reponse).
   // id = label pour garantir la persistance déterministe dans userBudgetRange.
+  // La première option (tranche la plus basse) reçoit une description rassurante
+  // pour signaler à l'utilisateur qu'un budget en dessous de l'estimatif est OK.
   const dynamicOptions: BudgetOption[] = useMemo(
-    () => data?.budget_reponse?.map((label) => ({ id: label, label })) ?? [],
+    () =>
+      data?.budget_reponse?.map((label, idx) => ({
+        id: label,
+        label,
+        description:
+          idx === 0 ? "Mon budget est nettement en dessous de l'estimatif" : undefined,
+      })) ?? [],
     [data?.budget_reponse]
   );
 
