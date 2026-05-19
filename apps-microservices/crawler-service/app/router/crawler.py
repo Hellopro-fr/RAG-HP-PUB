@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY
 from common_utils.redis import cache_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse, PendingCallbacksResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse, PendingCallbacksResponse, StashResponse, UnstashResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -359,6 +359,43 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
     except Exception as e:
         logger.error(f"Error archiving crawl '{crawl_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred during archiving.")
+
+@router.post("/stash/{crawl_id}", response_model=StashResponse, status_code=status.HTTP_202_ACCEPTED)
+async def stash_crawl_endpoint(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
+    """
+    Stash a terminal crawl's storage to GCS (gs://{bucket}/stash/) to free local disk.
+    The crawl must be in failed/stopped/finished status and not already stashed/archived.
+    Local data is deleted only AFTER the Redis stashed_at flag is set; the upload daemon
+    handles GCS upload asynchronously. Use POST /unstash/{crawl_id} to restore.
+    """
+    try:
+        result = await crawler_manager.stash_crawl(job_info)
+        return StashResponse(**result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error stashing crawl '{crawl_id}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred during stash.")
+
+
+@router.post("/unstash/{crawl_id}", response_model=UnstashResponse)
+async def unstash_crawl_endpoint(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
+    """
+    Restore a stashed crawl's data from GCS to local storage. Synchronous: waits for
+    daemon download + extract + 2-phase GCS cleanup. Bounded by UNSTASH_TIMEOUT_SECONDS
+    (default 300s). On success, stashed_at is cleared. If the GCS-rm cleanup-done
+    marker does not arrive within the grace window, returns 200 with
+    gcs_cleanup_status='deferred' (orphan GCS object — manual cleanup required).
+    """
+    try:
+        result = await crawler_manager.unstash_crawl(job_info)
+        return UnstashResponse(**result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unstashing crawl '{crawl_id}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred during unstash.")
+
 
 @router.post("/reconcile-jobs")
 async def reconcile_jobs():
