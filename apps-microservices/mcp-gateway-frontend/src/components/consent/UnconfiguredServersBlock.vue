@@ -10,7 +10,13 @@
         class="flex items-center justify-between px-3 py-2"
       >
         <div class="flex items-center gap-2">
-          <Server class="h-4 w-4 text-amber-700 dark:text-amber-300" />
+          <img
+            v-if="server.icon"
+            :src="server.icon"
+            :alt="server.name"
+            class="h-5 w-5 object-contain"
+          />
+          <Server v-else class="h-4 w-4 text-amber-700 dark:text-amber-300" />
           <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
             {{ server.name }}
           </span>

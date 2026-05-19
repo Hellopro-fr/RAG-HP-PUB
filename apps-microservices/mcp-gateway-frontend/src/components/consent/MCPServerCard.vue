@@ -6,14 +6,20 @@
     <div class="p-5">
       <div class="flex items-start gap-4">
         <div
-          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg overflow-hidden"
           :class="
             enabled
               ? 'bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
           "
         >
-          <Server class="h-5 w-5" />
+          <img
+            v-if="server.icon"
+            :src="server.icon"
+            :alt="server.name"
+            class="h-7 w-7 object-contain"
+          />
+          <Server v-else class="h-5 w-5" />
         </div>
         <div class="space-y-1.5 flex-1">
           <div class="flex flex-wrap items-center gap-2">

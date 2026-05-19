@@ -59,6 +59,7 @@ export interface AuthorizeInfo {
 export interface AuthorizeServer {
   id: string
   name: string
+  icon?: string
   tools: AuthorizeTool[]
   configured?: boolean
   docs_url?: string
