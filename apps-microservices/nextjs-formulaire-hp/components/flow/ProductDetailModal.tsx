@@ -28,7 +28,6 @@ interface ProductDetailProps {
   onProceed?: () => void;
   onRequestSingleQuote?: () => void;
   selectedCount?: number;
-  hideMatchBadge?: boolean;
 }
 
 // Helper to extract YouTube video ID
@@ -43,7 +42,7 @@ const getYouTubeThumbnail = (videoId: string): string => {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 };
 
-const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed, onRequestSingleQuote, selectedCount = 0, hideMatchBadge = false }: ProductDetailProps) => {
+const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed, onRequestSingleQuote, selectedCount = 0 }: ProductDetailProps) => {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -164,12 +163,6 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
     setCurrentMediaIndex((prev) => (prev - 1 + mediaItems.length) % mediaItems.length);
   };
 
-  const getMatchColor = () => {
-    if (product.matchScore >= 80) return "text-match-high";
-    if (product.matchScore >= 60) return "text-match-medium";
-    return "text-match-low";
-  };
-
   const currentMedia = mediaItems[currentMediaIndex];
   const isVideo = currentMedia?.type === "video";
   const youtubeId = isVideo ? getYouTubeId(currentMedia.url) : null;
@@ -246,18 +239,6 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                   </div>
                 </div>
               </button>
-            )}
-
-            {/* Match Score Badge */}
-            {!hideMatchBadge && product.matchScore >= 60 && (
-              <div className="absolute top-3 left-3 z-10">
-                <span className={cn(
-                  "rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow-sm",
-                  product.matchScore >= 80 ? "bg-match-high" : "bg-match-medium"
-                )}>
-                  {product.matchScore >= 80 ? "Idéal" : "À considérer"}
-                </span>
-              </div>
             )}
 
             {/* Navigation arrows */}

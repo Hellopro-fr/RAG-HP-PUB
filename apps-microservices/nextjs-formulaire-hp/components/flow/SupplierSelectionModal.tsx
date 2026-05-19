@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Send, LayoutGrid } from "lucide-react";
+import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { useFlowNavigation } from "@/hooks/useFlowNavigation";
@@ -15,19 +15,15 @@ import ContactForm from "./ContactForm";
 import ModifyCriteriaForm from "./ModifyCriteriaForm";
 import CustomNeedForm, { CustomNeedVariant } from "./CustomNeedForm";
 import ProductDetailModal from "./ProductDetailModal";
-import ProductComparisonModal from "./ProductComparisonModal";
 import CriteriaChangedBanner from "./CriteriaChangedBanner";
 import BudgetEstimate from "./BudgetEstimate";
-import SelectionGridView from "./selection-views/SelectionGridView";
 import SelectionTableViewB from "./selection-views/SelectionTableViewB";
 import {
-  trackComparisonModalView,
   trackProductSelectionChange,
   trackCustomNeedPageView,
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
-import { SelectionVersion } from "@/types/selectionVersion";
 import { hasPriceEstimation } from "@/types/prix";
 import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
@@ -42,12 +38,11 @@ const STEPS = [
 interface SupplierSelectionModalProps {
   userAnswers          ?: Record<number, string[]>;
   onBackToQuestionnaire?: () => void;
-  version              ?: SelectionVersion;
 }
 
 
 
-const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = 'originale' }: SupplierSelectionModalProps) => {
+const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierSelectionModalProps) => {
   // Navigation hook
   const { goToProfile } = useFlowNavigation();
 
@@ -110,7 +105,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
   const [customNeedVariant, setCustomNeedVariant] = useState<CustomNeedVariant>('initial');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showComparison, setShowComparison] = useState(false);
   const [criteriaModified, setCriteriaModified] = useState(false);
   // État pour le devis unique (ne modifie pas la sélection principale)
   const [singleQuoteProductId, setSingleQuoteProductId] = useState<string | null>(null);
@@ -133,11 +127,9 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
 
   // Refs pour éviter les stale closures dans le handler popstate
   const selectedProductIdRef = useRef<string | null>(null);
-  const showComparisonRef = useRef<boolean>(false);
   const viewStateRef = useRef<ViewState>('selection');
 
   useEffect(() => { selectedProductIdRef.current = selectedProductId; }, [selectedProductId]);
-  useEffect(() => { showComparisonRef.current = showComparison; }, [showComparison]);
   useEffect(() => { viewStateRef.current = viewState; }, [viewState]);
 
   // Push une entrée dans l'historique quand on quitte la vue "selection"
@@ -152,8 +144,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
     const handlePopState = () => {
       if (selectedProductIdRef.current !== null) {
         setSelectedProductId(null);
-      } else if (showComparisonRef.current) {
-        setShowComparison(false);
       } else if (viewStateRef.current !== 'selection') {
         setSingleQuoteProductId(null); // Réinitialiser le devis unique au retour
         setSupplierIdsToSubmit(null); // Réinitialiser les IDs à soumettre
@@ -293,7 +283,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
       <div className="flex-1 overflow-y-auto">
         {viewState === "selection" && (
           <div className="mx-auto max-w-7xl p-6 lg:p-10 space-y-8">
-              {/* Title + Critères (partagés sur toutes les versions) */}
+              {/* Title + Critères */}
               <div className="text-center relative">
                 <h2 className="text-2xl font-bold text-foreground">
                   Votre sélection personnalisée
@@ -365,29 +355,14 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
                 />
               )}
 
-              {/* Selection view — switch by version */}
-              {version === 'B' ? (
-                <SelectionTableViewB
-                  selectedSuppliers={selectedSuppliersList}
-                  otherSuppliers={unselectedSuppliersList}
-                  selectedIds={selectedIds}
-                  onToggle={toggleSupplier}
-                  onViewDetails={handleViewDetails}
-                />
-              ) : (
-                <SelectionGridView
-                  selectedSuppliersList={selectedSuppliersList}
-                  unselectedSuppliersList={unselectedSuppliersList}
-                  searchQuery={searchQuery}
-                  isModified={isModified}
-                  resetSelection={resetSelection}
-                  onToggle={toggleSupplier}
-                  onViewDetails={handleViewDetails}
-                  categoryId={categoryId}
-                  categoryName={categoryName}
-                  categoryStats={categoryStats}
-                />
-              )}
+              {/* Selection view (B uniquement) */}
+              <SelectionTableViewB
+                selectedSuppliers={selectedSuppliersList}
+                otherSuppliers={unselectedSuppliersList}
+                selectedIds={selectedIds}
+                onToggle={toggleSupplier}
+                onViewDetails={handleViewDetails}
+              />
             </div>
           )}
 
@@ -489,20 +464,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
 
             {/* Secondary actions */}
             <div className="order-2 lg:order-1 flex flex-wrap items-center gap-2 md:gap-3">
-              {version === 'originale' && (
-                <button
-                  onClick={() => {
-                    trackComparisonModalView();
-                    setShowComparison(true);
-                    history.pushState({ modal: 'comparison' }, '');
-                  }}
-                  className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-1.5 md:gap-2"
-                >
-                  <LayoutGrid className="h-4 w-4 shrink-0" />
-                  Comparer
-                </button>
-              )}
-
               <button
                 onClick={() => setViewState("modify-criteria")}
                 className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
@@ -544,7 +505,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
           onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
-          hideMatchBadge={version !== 'originale'}
           onProceed={() => {
             setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
             setSelectedProductId(null); // Ferme la modale
@@ -557,15 +517,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire, version = '
             setViewState("contact");
           }}
           selectedCount={selectedCount}
-        />
-      )}
-      {/* Comparison Modal */}
-      {showComparison && (
-        <ProductComparisonModal
-          products={ALL_SUPPLIERS}
-          selectedIds={selectedIds}
-          onToggle={toggleSupplier}
-          onClose={() => history.back()}
         />
       )}
     </div>

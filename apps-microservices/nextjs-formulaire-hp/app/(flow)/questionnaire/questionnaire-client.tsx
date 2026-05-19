@@ -3,9 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NeedsQuestionnaire from '@/components/flow/NeedsQuestionnaire';
-import MatchingLoader from '@/components/flow/MatchingLoader';
 import MatchingLoaderV2 from '@/components/flow/MatchingLoaderV2';
-import { parseSelectionVersion } from '@/types/selectionVersion';
 import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type MatchingTestParams } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
@@ -254,12 +252,9 @@ export default function QuestionnaireClient({
     }
   }, [redirectDestination, goToSelection, goToSomethingToAdd]);
 
-  // Afficher le loader pendant le matching — variante par version
+  // Afficher le loader pendant le matching
   if (showLoader) {
-    const version = parseSelectionVersion(searchParams.get('version'));
-    return version === 'originale'
-      ? <MatchingLoader externalProgress={loaderProgress} />
-      : <MatchingLoaderV2 externalProgress={loaderProgress} />;
+    return <MatchingLoaderV2 externalProgress={loaderProgress} />;
   }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire
