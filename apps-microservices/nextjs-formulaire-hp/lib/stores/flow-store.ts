@@ -215,6 +215,13 @@ export interface FlowState {
   dynamicAnswers: Record<string, string[]>;
   dynamicEquivalences: Record<string, any[]>;
 
+  // Réponse de l'utilisateur à la question budget (page /budget intercalée
+  // entre le loader matching et /selection). Id de l'option choisie dans
+  // data/budget-options.ts, ou null si non répondu. Volontairement typé en
+  // string (pas union littérale) pour faciliter l'arrivée future des options
+  // depuis l'API sans casser le type.
+  userBudgetRange: string | null;
+
   // État du profil
   profileData: ProfileData | null;
 
@@ -312,10 +319,12 @@ export interface FlowState {
   // setDynamicAnswer: (questionCode: string, answerCodes: string[]) => void;
   // Dans votre flow-store.ts (aperçu conceptuel)
   setDynamicAnswer: (
-    questionCode: string, 
-    codes: string[], 
+    questionCode: string,
+    codes: string[],
     equivalences?: any[]
   ) => void;
+
+  setUserBudgetRange: (range: string | null) => void;
 
   setEquivalenceCaracteristique: (equivalences: any[]) => void;
 
@@ -344,6 +353,7 @@ const initialState = {
   otherTexts: {},
   dynamicAnswers: {},
   dynamicEquivalences: {},
+  userBudgetRange: null,
   profileData: null,
   geoData: null,
   contactData: null,
@@ -423,6 +433,8 @@ export const useFlowStore = create<FlowState>()(
             [questionCode]: equivalences,
           },
         })),
+
+      setUserBudgetRange: (range) => set({ userBudgetRange: range }),
 
       setEquivalenceCaracteristique: (data) => set({ equivalenceCaracteristique: data }),
 
