@@ -82,7 +82,8 @@
       "id": 9,
       "nativeTaskId": 10,
       "subject": "Task 9: Write unit tests for stash/unstash",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "94bea27e",
       "blockedBy": [5, 6, 7, 8],
       "description": "**Goal:** 15 unit tests covering all branches.\n\n**Files:**\n- Create: apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\n\n**Verify:** `pytest tests/test_crawler_manager_stash.py -v` → all pass.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager_stash.py -v\",\"acceptanceCriteria\":[\"15 tests covering spec Section 8\",\"AsyncMock fixtures for Redis\",\"tmp_path for filesystem\",\"All pass\"]}\n```"
     },
@@ -90,7 +91,8 @@
       "id": 10,
       "nativeTaskId": 11,
       "subject": "Task 10: Write integration + daemon tests",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "a83cdf7b",
       "blockedBy": [1, 2, 5, 6, 7],
       "description": "**Goal:** 3 bash scripts: hermetic daemon parametrization + E2E GCS round-trip + dead-letter verification.\n\n**Files:**\n- Create: apps-microservices/crawler-service/tests/test_daemon_parametrization.sh\n- Create: apps-microservices/crawler-service/tests/integration/test_stash_unstash_e2e.sh\n- Create: apps-microservices/crawler-service/tests/integration/test_stash_dead_letter.sh\n\n**Verify:** `bash tests/test_daemon_parametrization.sh` passes (hermetic). E2E + dead-letter run manually with GCS auth.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/tests/test_daemon_parametrization.sh\",\"apps-microservices/crawler-service/tests/integration/test_stash_unstash_e2e.sh\",\"apps-microservices/crawler-service/tests/integration/test_stash_dead_letter.sh\"],\"verifyCommand\":\"bash apps-microservices/crawler-service/tests/test_daemon_parametrization.sh\",\"acceptanceCriteria\":[\"Daemon parametrization hermetic + passes locally\",\"E2E round-trip stash + unstash works\",\"Dead-letter triggered after 3 retries\"]}\n```"
     },
@@ -98,10 +100,11 @@
       "id": 11,
       "nativeTaskId": 12,
       "subject": "Task 11: Update documentation",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "0e86a807",
       "blockedBy": [1, 2, 5, 6, 7, 8],
       "description": "**Goal:** Reflect new endpoints + daemon variants across 4 doc files.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/CLAUDE.md\n- Modify: apps-microservices/crawler-service/README.md\n- Modify: docs/daemon_guide.md\n- Modify: tools/CLAUDE.md\n\n**Verify:** `grep -c 'POST /stash' apps-microservices/crawler-service/CLAUDE.md docs/daemon_guide.md` ≥ 3.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/CLAUDE.md\",\"apps-microservices/crawler-service/README.md\",\"docs/daemon_guide.md\",\"tools/CLAUDE.md\"],\"verifyCommand\":\"grep -c 'POST /stash' apps-microservices/crawler-service/CLAUDE.md docs/daemon_guide.md\",\"acceptanceCriteria\":[\"crawler-service CLAUDE.md: API entries + Stash section + cleanup note\",\"README.md: stash entries in Administrative section\",\"daemon_guide.md: 3 new Shared Dirs rows + systemd examples + orphan troubleshooting\",\"tools/CLAUDE.md: new env vars listed\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-19T16:55:00Z"
+  "lastUpdated": "2026-05-19T19:00:00Z"
 }
