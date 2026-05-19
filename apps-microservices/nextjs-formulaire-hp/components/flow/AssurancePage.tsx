@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import { ListChecks, Sparkles, Target, ArrowRight, Lock, type LucideIcon } from "lucide-react";
 import { trackAssuranceView, trackAssuranceComplete } from "@/lib/analytics";
+import { useDbTracking } from "@/hooks/tracking/useDbTracking";
+import { useFlowStore } from "@/lib/stores/flow-store";
 
 interface AssurancePageProps {
   categoryName: string;
@@ -67,6 +69,9 @@ const STEPS: AssuranceStep[] = [
 const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
   const safeCategoryName = (categoryName || "produit").toLowerCase();
 
+  const { trackDbEvent } = useDbTracking();
+  const { categoryId } = useFlowStore();
+
   const hasTrackedView = useRef(false);
 
   useEffect(() => {
@@ -78,10 +83,12 @@ const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
 
     hasTrackedView.current = true;
     trackAssuranceView();
+    trackDbEvent('questionnaire', 'assurance_view', {}, categoryId, 1);
   }, []);
 
   const handleContinue = () => {
     trackAssuranceComplete();
+    trackDbEvent('questionnaire', 'assurance_complete', {}, categoryId, 1);
     onContinue();
   };
 

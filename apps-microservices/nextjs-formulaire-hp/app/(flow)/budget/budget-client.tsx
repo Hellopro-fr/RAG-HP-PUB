@@ -7,6 +7,7 @@ import { cn, getAssetPath } from '@/lib/utils';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { trackBudgetView, trackBudgetComplete, trackBudgetReturn } from '@/lib/analytics';
+import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { hasDisplayablePriceEstimation } from '@/types/prix';
 import BudgetEstimate from '@/components/flow/BudgetEstimate';
 import BudgetQuestionScreen from '@/components/flow/BudgetQuestionScreen';
@@ -33,6 +34,7 @@ const hpLogo = getAssetPath('/images/hp-logo.svg');
  */
 const BudgetClient = () => {
   const {
+    categoryId,
     categoryName,
     categoryVignette,
     priceEstimation,
@@ -40,12 +42,21 @@ const BudgetClient = () => {
     setUserBudgetRange,
   } = useFlowStore();
   const { goToQuestionnaire, goToSelection } = useFlowNavigation();
+  const { trackDbEvent } = useDbTracking();
 
   const fmtPrice = (n: number) =>
     new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' €';
 
   const data = priceEstimation?.data;
   const showEstimate = hasDisplayablePriceEstimation(priceEstimation);
+
+  const budgetSnapshot = data
+    ? {
+        borne_basse: data.fourchette.borne_basse,
+        borne_haute: data.fourchette.borne_haute,
+        exemples_count: data.exemples_produits?.length ?? 0,
+      }
+    : {};
 
   const hasTrackedEstimate = useRef(false);
 
@@ -58,6 +69,7 @@ const BudgetClient = () => {
 
     hasTrackedEstimate.current = true;
     trackBudgetView();
+    trackDbEvent('pricing', 'budget_view', budgetSnapshot, categoryId, 1);
   }, [showEstimate]);
 
   const priceItems = data
@@ -74,11 +86,13 @@ const BudgetClient = () => {
   const handleContinue = () => {
     if (!hasSelection) return;
     trackBudgetComplete(userBudgetRange!);
+    trackDbEvent('pricing', 'budget_complete', { budget_range: userBudgetRange! }, categoryId, 1);
     goToSelection();
   };
 
   const handleBack = () => {
     trackBudgetReturn(userBudgetRange);
+    trackDbEvent('pricing', 'budget_return', { budget_range: userBudgetRange }, categoryId, 1);
     goToQuestionnaire();
   };
 
