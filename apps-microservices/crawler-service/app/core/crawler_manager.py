@@ -2609,10 +2609,13 @@ class CrawlerManager:
                 logger.error(f"Error listing archives directory during cleanup: {e}")
                 errors += 1
 
-            # Also clean up stale GCS download artifacts
+            # Also clean up stale GCS download artifacts (both archive + stash flows)
             for dir_path, file_suffixes in [
                 (settings.DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error')),
                 (settings.DOWNLOAD_REQUESTS_PATH, ('.request',)),
+                # Stash flow markers (2-phase commit) — daemon-owned /app/stash NOT cleaned here
+                (settings.STASH_DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error', '.unstash-confirmed', '.unstash-cleanup-done')),
+                (settings.STASH_DOWNLOAD_REQUESTS_PATH, ('.request',)),
             ]:
                 if not os.path.exists(dir_path):
                     continue
