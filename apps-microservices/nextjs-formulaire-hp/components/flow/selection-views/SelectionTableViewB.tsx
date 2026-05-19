@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Loader2,
   Plus,
   ShieldCheck,
   X,
@@ -27,6 +28,68 @@ interface SelectionTableViewBProps {
 
 const VISIBLE_SPECS_DEFAULT = 5;
 const DESKTOP_COLUMN_WIDTH = 220;
+
+/**
+ * Vignette produit avec lazy-load horizontal (IntersectionObserver scoped au
+ * conteneur scrollable passé en `scrollRootRef`) + spinner pendant le chargement
+ * + fade-in opacity à l'arrivée + fallback silencieux sur erreur d'URL.
+ *
+ * Se positionne en `absolute inset-0` dans un conteneur parent positionné.
+ */
+function LazyThumbnail({
+  src,
+  alt,
+  className,
+  scrollRootRef,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  scrollRootRef?: RefObject<HTMLDivElement | null>;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (inView || !wrapperRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { root: scrollRootRef?.current ?? null, rootMargin: '200px' }
+    );
+    observer.observe(wrapperRef.current);
+    return () => observer.disconnect();
+  }, [inView, scrollRootRef]);
+
+  return (
+    <div ref={wrapperRef} className="absolute inset-0">
+      {inView && !error && (
+        <img
+          src={src}
+          alt={alt}
+          className={cn(
+            'h-full w-full object-contain transition-opacity duration-300',
+            loaded ? 'opacity-100' : 'opacity-0',
+            className
+          )}
+          onLoad={() => setLoaded(true)}
+          onError={() => setError(true)}
+        />
+      )}
+      {(!inView || (inView && !loaded && !error)) && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatPrice(supplier: Supplier): { prefix?: string; value: string } | null {
   if (supplier.priceLabel) {
@@ -253,11 +316,10 @@ export default function SelectionTableViewB({
                     onClick={() => onViewDetails(product.id)}
                     className="relative w-full h-20 overflow-hidden rounded-md bg-muted"
                   >
-                    <img
+                    <LazyThumbnail
                       src={getProductImageUrl(product.image)}
                       alt={product.productName}
-                      loading="lazy"
-                      className="h-full w-full object-contain p-1"
+                      className="p-1"
                     />
                   </button>
                   <button
@@ -421,11 +483,11 @@ export default function SelectionTableViewB({
                           onClick={() => onViewDetails(product.id)}
                           className="relative w-full h-40 overflow-hidden rounded-lg bg-muted group"
                         >
-                          <img
+                          <LazyThumbnail
                             src={getProductImageUrl(product.image)}
                             alt={product.productName}
-                            loading="lazy"
-                            className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                            className="p-2 transition-transform duration-300 group-hover:scale-105"
+                            scrollRootRef={tableScrollRef}
                           />
                         </button>
                         <button
