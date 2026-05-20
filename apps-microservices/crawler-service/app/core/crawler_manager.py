@@ -1981,25 +1981,33 @@ class CrawlerManager:
             target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
             job_storage_path = job_info["storage_path"]
 
-            # --- Pre-flight disk space check ---
-            baseline_state = self._get_archives_disk_state(stash_dir)
-            logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
-            required_bytes = self._estimate_archive_required_bytes(job_storage_path)
-            required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+            # --- Pre-flight disk space check (fail-open per spec §5.1) ---
+            try:
+                baseline_state = self._get_archives_disk_state(stash_dir)
+                logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
+                required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+                required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
 
-            if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                    logger.warning(
+                        f"Rejecting stash '{crawl_id}': insufficient disk space. "
+                        f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "error_code": "INSUFFICIENT_DISK_SPACE",
+                            "required_bytes": required_bytes,
+                            "available_bytes": baseline_state["free_bytes"],
+                            "disk_state": baseline_state,
+                        },
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
                 logger.warning(
-                    f"Rejecting stash '{crawl_id}': insufficient disk space. "
-                    f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "error_code": "INSUFFICIENT_DISK_SPACE",
-                        "required_bytes": required_bytes,
-                        "available_bytes": baseline_state["free_bytes"],
-                        "disk_state": baseline_state,
-                    },
+                    f"Stash pre-flight measurement failed for '{crawl_id}': {e}. "
+                    f"Proceeding without disk-space check (fail-open)."
                 )
 
             # --- Tar via staging dir + atomic move (mirror archive flow) ---

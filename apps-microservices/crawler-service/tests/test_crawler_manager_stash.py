@@ -504,3 +504,29 @@ async def test_unstash_tar_filter_blocks_path_traversal(cm_instance, stashed_job
     assert exc.value.detail["error_code"] == "EXTRACT_FAILED"
     # Confirm the escape file did NOT land outside storage_root
     assert not (tmp_path / "escape.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_stash_preflight_failopen_on_measurement_exception(cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path):
+    """Per spec §5.1: a measurement-helper exception must not escalate to 500.
+    Stash proceeds without the disk-space check (fail-open)."""
+    stash_dir = tmp_path / "stash"
+    stash_dir.mkdir()
+    monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
+    monkeypatch.setattr(cm_module.settings, "GCS_BUCKET_NAME", "test-bucket")
+
+    # _get_archives_disk_state raises a generic Exception
+    def boom(d):
+        raise RuntimeError("simulated filesystem error")
+    monkeypatch.setattr(cm_instance, "_get_archives_disk_state", boom)
+
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
+
+    result = await cm_instance.stash_crawl(base_job_info)
+    assert result["status"] == "stashing"
+    assert result["crawl_id"] == "test_id"
+    # Tar still created — measurement skip did not block the stash
+    assert (stash_dir / "test_id.tar.gz").exists()
