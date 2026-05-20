@@ -43,6 +43,11 @@ CRAWL_UPDATES_CHANNEL = "crawl_updates"
 WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
 FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
 
+# Replica identity for ownership-safe Redis locks. Generated once per process.
+# Used by stash/unstash to avoid clobbering a new acquirer's lock after TTL expiry.
+import socket as _socket
+REPLICA_ID = f"{_socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory, excluding Crawlee metadata."""
     if not os.path.isdir(path):
@@ -101,6 +106,25 @@ def _flatten_params_for_php(params: Any, parent_key: str = "") -> List[Tuple[str
 # Thread-safe locks for concurrent archive generation (keyed by archive path)
 _archive_locks: Dict[str, threading.Lock] = {}
 _archive_locks_guard = threading.Lock()
+
+async def _read_callback_isError(storage_path: str) -> Optional[str]:
+    """
+    Read isError from _callback_payload.json in the crawl storage dir.
+    Returns None if the file is missing, unreadable, or has no isError field.
+    Never raises — failures are logged at debug level and treated as 'no error'.
+    """
+    payload_path = os.path.join(storage_path, '_callback_payload.json')
+    if not os.path.exists(payload_path):
+        return None
+    try:
+        async with aiofiles.open(payload_path, 'r') as f:
+            content = await f.read()
+        data = json.loads(content)
+        is_error = data.get('isError', '')
+        return is_error if isinstance(is_error, str) and is_error else None
+    except Exception as e:
+        logger.debug(f"Failed to read isError from {payload_path}: {e}")
+        return None
 
 class CrawlerManager:
     """
@@ -1096,6 +1120,9 @@ class CrawlerManager:
                     snapshot_data = json.loads(content)
                 # Override status with current Redis value — snapshot was taken before status transition
                 snapshot_data["status"] = job_info["status"]
+                # Enrich snapshot with isError from _callback_payload.json (snapshot may predate it,
+                # and BO reconciliation needs it to route non-success terminal crawls correctly).
+                snapshot_data["is_error"] = await _read_callback_isError(storage_path)
                 logger.info(
                     f"Loaded status from snapshot for crawl '{crawl_id}' (status: {job_info['status']}).")
                 return CrawlStatus(**snapshot_data)
@@ -1140,18 +1167,21 @@ class CrawlerManager:
             except Exception as e:
                 logger.warning(f"Could not read dataset info for '{crawl_id}': {e}")
         
+        is_error = await _read_callback_isError(storage_path)
+
         return CrawlStatus(
             crawl_id=crawl_id,
             id_domaine=crawl_id, # Legacy alias
-            status=job_info["status"], 
+            status=job_info["status"],
             domain=job_info["domain"],
-            start_url=job_info["start_url"], 
+            start_url=job_info["start_url"],
             start_time=job_info["start_time"],
             urls_crawled=urls_crawled,
             error_urls_crawled=error_urls_crawled,
             nfr_urls_crawled=nfr_urls_crawled,
             last_activity=last_url_time,
-            last_heartbeat=job_info.get("last_heartbeat")
+            last_heartbeat=job_info.get("last_heartbeat"),
+            is_error=is_error,
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
@@ -1876,6 +1906,346 @@ class CrawlerManager:
             except OSError as e:
                 logger.warning(f"Failed to clean up temp file '{path}': {e}")
 
+    async def _acquire_ownership_lock(self, lock_key: str, ttl_seconds: int) -> Optional[str]:
+        """Acquire a Redis lock with TTL, value = REPLICA_ID. Returns the value on
+        success, None on failure. Pairs with _release_ownership_lock for atomic
+        compare-and-delete (Lua script) to prevent clobbering a new acquirer
+        after TTL expiry."""
+        acquired = await cache_service.redis_client.set(lock_key, REPLICA_ID, nx=True, ex=ttl_seconds)
+        return REPLICA_ID if acquired else None
+
+    async def _release_ownership_lock(self, lock_key: str, expected_value: str) -> bool:
+        """Atomic compare-and-delete via Lua script. Returns True if the lock was
+        deleted (we owned it), False otherwise. Safe to call even if the lock
+        already expired or was acquired by another replica."""
+        if expected_value is None:
+            return False
+        # Atomic CAS via Lua — avoids race between GET and DEL
+        lua = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
+        try:
+            result = await cache_service.redis_client.eval(lua, 1, lock_key, expected_value)
+            return bool(result)
+        except Exception as e:
+            logger.warning(f"Ownership-safe lock release failed for '{lock_key}': {e}")
+            return False
+
+    async def stash_crawl(self, job_info: dict) -> dict:
+        """
+        Stash a terminal crawl's storage dir to GCS (under gs://{bucket}/stash/) to free
+        local disk. Only crawls in failed/stopped/finished status WITHOUT an existing
+        `stashed_at` or `archived` status can be stashed.
+
+        Sets job_data["stashed_at"] = ISO timestamp BEFORE deleting local data.
+        The upload daemon (configured with UPLOAD_GCS_PREFIX=stash) picks up the tar
+        from /app/stash/ asynchronously.
+
+        Returns a dict with crawl_id, status='stashing', stash_path, stashed_at.
+        """
+        crawl_id = job_info['crawl_id']
+        job_status = job_info.get('status')
+
+        # --- Pre-condition checks ---
+        if job_status in ("running", "restarting_oom", "stopping"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": job_status}
+            )
+        if job_status == "archived":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_ARCHIVED"}
+            )
+        if job_info.get("stashed_at"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_STASHED", "stashed_at": job_info["stashed_at"]}
+            )
+
+        # --- Acquire ownership-safe lock ---
+        stash_lock_key = f"stash_lock:{crawl_id}"
+        unstash_lock_key = f"unstash_lock:{crawl_id}"
+        if await cache_service.redis_client.exists(unstash_lock_key):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"}
+            )
+        lock_value = await self._acquire_ownership_lock(stash_lock_key, settings.STASH_LOCK_TTL_SECONDS)
+        if lock_value is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "stash"}
+            )
+
+        try:
+            stash_dir = settings.STASH_SHARED_PATH
+            target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
+            job_storage_path = job_info["storage_path"]
+
+            # --- Pre-flight disk space check ---
+            baseline_state = self._get_archives_disk_state(stash_dir)
+            logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
+            required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+            required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+
+            if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                logger.warning(
+                    f"Rejecting stash '{crawl_id}': insufficient disk space. "
+                    f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error_code": "INSUFFICIENT_DISK_SPACE",
+                        "required_bytes": required_bytes,
+                        "available_bytes": baseline_state["free_bytes"],
+                        "disk_state": baseline_state,
+                    },
+                )
+
+            # --- Tar via staging dir + atomic move (mirror archive flow) ---
+            def _create_stash_archive():
+                staging_dir = os.path.join(stash_dir, ".staging")
+                os.makedirs(staging_dir, exist_ok=True)
+                os.makedirs(stash_dir, exist_ok=True)
+                staging_base = os.path.join(staging_dir, crawl_id)
+                staging_path = None
+                try:
+                    staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
+                    if os.path.getsize(staging_path) == 0:
+                        raise RuntimeError(f"Stash archive at '{staging_path}' is empty (0 bytes).")
+                    # Integrity check
+                    with tarfile.open(staging_path, 'r:gz') as t:
+                        t.getnames()
+                    os.rename(staging_path, target_tar)
+                    staging_path = None  # transferred ownership
+                    return target_tar, os.path.getsize(target_tar)
+                finally:
+                    if staging_path and os.path.exists(staging_path):
+                        try:
+                            os.remove(staging_path)
+                        except OSError:
+                            pass
+
+            try:
+                final_path, archive_size = await anyio.to_thread.run_sync(_create_stash_archive)
+                logger.info(f"Stashed crawl '{crawl_id}' ({archive_size} bytes) -> {final_path}")
+            except Exception as e:
+                logger.error(f"Failed to create stash archive for '{crawl_id}': {e}", exc_info=True)
+                try:
+                    post_failure_state = self._get_archives_disk_state(stash_dir)
+                    logger.error(f"Stash disk state at failure for '{crawl_id}': {post_failure_state}")
+                except Exception:
+                    pass
+                raise HTTPException(status_code=500, detail=f"Stash archive creation failed: {str(e)}")
+
+            # --- Mark as stashed in Redis (BEFORE deleting local data) ---
+            stashed_at = datetime.utcnow().isoformat() + "Z"
+            job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+            fresh_job_info = await cache_service.get_json(job_key)
+            if not fresh_job_info:
+                logger.error(f"Cannot mark '{crawl_id}' as stashed: job not found in Redis after stash tar created.")
+                raise HTTPException(status_code=500, detail="Job vanished from Redis during stash.")
+            fresh_job_info["stashed_at"] = stashed_at
+            await cache_service.set_json(job_key, fresh_job_info)
+            logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
+
+            # --- Delete local crawl storage dir (safe to fail — data is in the tar) ---
+            try:
+                def _delete_local():
+                    if os.path.isdir(job_storage_path):
+                        shutil.rmtree(job_storage_path)
+                await anyio.to_thread.run_sync(_delete_local)
+                logger.info(f"Deleted local storage for stashed crawl '{crawl_id}'.")
+            except Exception as e:
+                logger.warning(f"Local cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
+
+            return {
+                "crawl_id": crawl_id,
+                "status": "stashing",
+                "stash_path": f"gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz",
+                "stashed_at": stashed_at,
+            }
+
+        finally:
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+
+    async def unstash_crawl(self, job_info: dict) -> dict:
+        """
+        Restore a stashed crawl from GCS back to local storage.
+        Synchronous: writes .request marker, polls .done/.error, extracts archive,
+        writes .unstash-confirmed for the daemon to delete the GCS source, polls
+        .unstash-cleanup-done within a grace window, then clears stashed_at.
+
+        Returns a dict with crawl_id, status='unstashed', restored_to,
+        elapsed_seconds, gcs_cleanup_status ('cleaned' | 'deferred').
+        """
+        crawl_id = job_info['crawl_id']
+        start_time = time.monotonic()
+
+        # --- Pre-condition checks ---
+        if not job_info.get("stashed_at"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "NOT_STASHED"}
+            )
+
+        unstash_lock_key = f"unstash_lock:{crawl_id}"
+        stash_lock_key = f"stash_lock:{crawl_id}"
+        if await cache_service.redis_client.exists(stash_lock_key):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "stash"}
+            )
+        lock_value = await self._acquire_ownership_lock(unstash_lock_key, settings.UNSTASH_LOCK_TTL_SECONDS)
+        if lock_value is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"}
+            )
+
+        requests_dir = settings.STASH_DOWNLOAD_REQUESTS_PATH
+        results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
+        request_path = os.path.join(requests_dir, f"{crawl_id}.request")
+        download_path = os.path.join(results_dir, f"{crawl_id}.tar.gz")
+        done_path = os.path.join(results_dir, f"{crawl_id}.done")
+        error_path = os.path.join(results_dir, f"{crawl_id}.error")
+        confirm_path = os.path.join(results_dir, f"{crawl_id}.unstash-confirmed")
+        cleanup_done_path = os.path.join(results_dir, f"{crawl_id}.unstash-cleanup-done")
+
+        try:
+            # --- Submit download request ---
+            os.makedirs(requests_dir, exist_ok=True)
+            os.makedirs(results_dir, exist_ok=True)
+            async with aiofiles.open(request_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.info(f"Unstash request submitted for '{crawl_id}'. Waiting for daemon...")
+
+            # --- Poll for .done / .error ---
+            deadline = time.monotonic() + settings.UNSTASH_TIMEOUT_SECONDS
+            done_found = False
+            while time.monotonic() < deadline:
+                if os.path.exists(error_path):
+                    error_msg = "Download failed"
+                    try:
+                        async with aiofiles.open(error_path, 'r') as f:
+                            error_msg = (await f.read()).strip()
+                    except Exception:
+                        pass
+                    try:
+                        os.remove(error_path)
+                    except OSError:
+                        pass
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail={"error_code": "GCS_DOWNLOAD_FAILED", "marker_content": error_msg}
+                    )
+                if os.path.exists(done_path) and os.path.exists(download_path):
+                    done_found = True
+                    break
+                await asyncio.sleep(1)
+
+            if not done_found:
+                # Timeout
+                try:
+                    if os.path.exists(request_path):
+                        os.remove(request_path)
+                except OSError:
+                    pass
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail={"error_code": "UNSTASH_TIMEOUT", "elapsed_seconds": settings.UNSTASH_TIMEOUT_SECONDS}
+                )
+
+            # --- Disk pre-flight for extract (size of tar × 2 + 500MB floor) ---
+            try:
+                tar_size = os.path.getsize(download_path)
+                required_bytes = max(int(tar_size * 2), 500 * 1024 * 1024)
+                baseline_state = self._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH)
+                if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "error_code": "INSUFFICIENT_DISK_SPACE",
+                            "required_bytes": required_bytes,
+                            "available_bytes": baseline_state["free_bytes"],
+                            "disk_state": baseline_state,
+                        },
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"Disk pre-flight skipped for unstash '{crawl_id}': {e}")
+
+            # --- Extract archive (failure preserves stashed_at, no .unstash-confirmed) ---
+            target_storage = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
+            try:
+                def _extract():
+                    os.makedirs(target_storage, exist_ok=True)
+                    with tarfile.open(download_path, 'r:gz') as tar:
+                        tar.extractall(path=target_storage, filter="data")
+                await anyio.to_thread.run_sync(_extract)
+                logger.info(f"Extracted unstash archive for '{crawl_id}' to '{target_storage}'.")
+            except Exception as e:
+                logger.error(f"Extract failed for unstash '{crawl_id}': {e}", exc_info=True)
+                # Cleanup partial extract; do NOT write .unstash-confirmed; preserve stashed_at
+                try:
+                    if os.path.isdir(target_storage):
+                        shutil.rmtree(target_storage)
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail={"error_code": "EXTRACT_FAILED", "exception": str(e)}
+                )
+
+            # --- Phase 2: write .unstash-confirmed; daemon will delete GCS + write cleanup-done ---
+            async with aiofiles.open(confirm_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.info(f"Wrote .unstash-confirmed for '{crawl_id}'. Waiting for daemon GCS cleanup...")
+
+            cleanup_deadline = time.monotonic() + settings.UNSTASH_CLEANUP_GRACE_SECONDS
+            gcs_cleanup_status = "deferred"
+            while time.monotonic() < cleanup_deadline:
+                if os.path.exists(cleanup_done_path):
+                    gcs_cleanup_status = "cleaned"
+                    break
+                await asyncio.sleep(1)
+
+            if gcs_cleanup_status == "deferred":
+                logger.warning(
+                    f"Unstash cleanup-done marker not arrived within "
+                    f"{settings.UNSTASH_CLEANUP_GRACE_SECONDS}s for '{crawl_id}'. "
+                    f"GCS object may be orphaned at gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz."
+                )
+
+            # --- Clear stashed_at in Redis ---
+            job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+            fresh_job_info = await cache_service.get_json(job_key)
+            if fresh_job_info and "stashed_at" in fresh_job_info:
+                fresh_job_info.pop("stashed_at", None)
+                await cache_service.set_json(job_key, fresh_job_info)
+            logger.info(f"Cleared stashed_at for '{crawl_id}'.")
+
+            # --- Cleanup markers + downloaded tar ---
+            for path in (request_path, done_path, error_path, confirm_path, cleanup_done_path, download_path):
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except OSError as e:
+                    logger.warning(f"Failed to clean marker '{path}': {e}")
+
+            elapsed = round(time.monotonic() - start_time, 2)
+            return {
+                "crawl_id": crawl_id,
+                "status": "unstashed",
+                "restored_to": target_storage,
+                "elapsed_seconds": elapsed,
+                "gcs_cleanup_status": gcs_cleanup_status,
+            }
+
+        finally:
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
+
     async def get_pending_callbacks(self) -> list:
         """Returns all failed webhook callbacks stored in Redis."""
         raw_entries = await cache_service.redis_client.lrange(FAILED_CALLBACKS_KEY, 0, -1)
@@ -2282,10 +2652,13 @@ class CrawlerManager:
                 logger.error(f"Error listing archives directory during cleanup: {e}")
                 errors += 1
 
-            # Also clean up stale GCS download artifacts
+            # Also clean up stale GCS download artifacts (both archive + stash flows)
             for dir_path, file_suffixes in [
                 (settings.DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error')),
                 (settings.DOWNLOAD_REQUESTS_PATH, ('.request',)),
+                # Stash flow markers (2-phase commit) — daemon-owned /app/stash NOT cleaned here
+                (settings.STASH_DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error', '.unstash-confirmed', '.unstash-cleanup-done')),
+                (settings.STASH_DOWNLOAD_REQUESTS_PATH, ('.request',)),
             ]:
                 if not os.path.exists(dir_path):
                     continue

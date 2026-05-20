@@ -195,6 +195,9 @@ export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
 
+  // Version A/B test piloté par le token URL (champ abtest_UX_lead_version du payload décrypté)
+  abtestUxLeadVersion: number | null;
+
   // Nom de la catégorie (depuis l'API questionnaire)
   categoryName: string | null;
 
@@ -214,6 +217,12 @@ export interface FlowState {
   // État du questionnaire dynamique
   dynamicAnswers: Record<string, string[]>;
   dynamicEquivalences: Record<string, any[]>;
+
+  // Réponse de l'utilisateur à la question budget (page /budget intercalée
+  // entre le loader matching et /selection). Contient le label de l'option
+  // choisie (les options viennent de /api/prix.budget_reponse), ou null si
+  // non répondu.
+  userBudgetRange: string | null;
 
   // État du profil
   profileData: ProfileData | null;
@@ -273,6 +282,10 @@ export interface FlowState {
   // Résultat de l'estimation de prix
   priceEstimation: PriceEstimationState | null;
 
+  // Indique si la page d'assurance (intercalée avant Q1/Q2) a déjà été vue
+  // dans cette session — pour ne l'afficher qu'une seule fois.
+  hasSeenAssurance: boolean;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
@@ -297,6 +310,7 @@ export interface FlowState {
 
   // Actions
   setCategoryId: (id: number) => void;
+  setAbtestUxLeadVersion: (value: number | null) => void;
   setCategoryName: (name: string | null) => void;
   setCategoryStats: (stats: CategoryStats | null) => void;
   setCategoryVignette: (url: string | null) => void;
@@ -308,10 +322,12 @@ export interface FlowState {
   // setDynamicAnswer: (questionCode: string, answerCodes: string[]) => void;
   // Dans votre flow-store.ts (aperçu conceptuel)
   setDynamicAnswer: (
-    questionCode: string, 
-    codes: string[], 
+    questionCode: string,
+    codes: string[],
     equivalences?: any[]
   ) => void;
+
+  setUserBudgetRange: (range: string | null) => void;
 
   setEquivalenceCaracteristique: (equivalences: any[]) => void;
 
@@ -323,6 +339,7 @@ export interface FlowState {
   toggleSupplier: (supplierId: string) => void;
   setStartTime: (time: number) => void;
   reset: () => void;
+  setHasSeenAssurance: (seen: boolean) => void;
   setEntryUrl: (url: string) => void;
   setFlowType: (flowType: FlowType) => void;
   setCaracteristiquesPrix: (data: any[]) => void;
@@ -331,6 +348,7 @@ export interface FlowState {
 
 const initialState = {
   categoryId: null,
+  abtestUxLeadVersion: null as number | null,
   categoryName: null,
   categoryStats: null,
   categoryVignette: null,
@@ -339,6 +357,7 @@ const initialState = {
   otherTexts: {},
   dynamicAnswers: {},
   dynamicEquivalences: {},
+  userBudgetRange: null,
   profileData: null,
   geoData: null,
   contactData: null,
@@ -360,6 +379,7 @@ const initialState = {
   supplierIdsToSubmit: null,
   caracteristiquesPrix: [],
   priceEstimation: null,
+  hasSeenAssurance: false,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -368,6 +388,8 @@ export const useFlowStore = create<FlowState>()(
       ...initialState,
 
       setCategoryId: (id) => set({ categoryId: id }),
+
+      setAbtestUxLeadVersion: (value) => set({ abtestUxLeadVersion: value }),
 
       setCategoryName: (name) => set({ categoryName: name }),
 
@@ -418,6 +440,8 @@ export const useFlowStore = create<FlowState>()(
           },
         })),
 
+      setUserBudgetRange: (range) => set({ userBudgetRange: range }),
+
       setEquivalenceCaracteristique: (data) => set({ equivalenceCaracteristique: data }),
 
       // resetDynamicAnswers: () => set({ dynamicAnswers: {} }),
@@ -461,6 +485,8 @@ export const useFlowStore = create<FlowState>()(
       setStartTime: (time) => set({ startTime: time }),
 
       reset: () => set(initialState),
+
+      setHasSeenAssurance: (seen) => set({ hasSeenAssurance: seen }),
 
       setEntryUrl: (url) => set({ entryUrl: url }),     
 

@@ -57,6 +57,13 @@ export function useFlowNavigation() {
   }, [navigateTo]);
 
   /**
+   * Navigation vers la page budget (intercalée entre /questionnaire et /selection)
+   */
+  const goToBudget = useCallback(() => {
+    navigateTo('/budget');
+  }, [navigateTo]);
+
+  /**
    * Navigation vers le choix
    */
   const goToChoice = useCallback(() => {
@@ -90,6 +97,7 @@ export function useFlowNavigation() {
     goToGeoZone,
     goToProfile,
     goToSelection,
+    goToBudget,
     goToChoice,
     goToSomethingToAdd,
     goToContactSimple,

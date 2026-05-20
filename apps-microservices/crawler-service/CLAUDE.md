@@ -66,6 +66,8 @@ requirements.txt
 - `GET /results/{crawl_id}` -- Download crawl results archive
 - `GET /capacity` -- Current running/max capacity
 - `POST /archive/{crawl_id}` -- Archive finished job to GCS
+- `POST /stash/{crawl_id}` -- Stash a terminal crawl to GCS under stash/ (frees local disk)
+- `POST /unstash/{crawl_id}` -- Restore a stashed crawl from GCS to local storage
 - `POST /reindex-storage` -- Re-index orphaned jobs from disk
 - `POST /reconcile-jobs` -- Fix counter drift
 - `POST /prune-archives` -- Clean up old archives
@@ -134,6 +136,38 @@ Before creating a new archive, `archive_crawl` measures the source directory (`o
 Every archive attempt also logs a baseline disk state (`info`) and, on failure, a second disk state (`error`) so operational logs show the buffer pressure at both checkpoints.
 
 Spec: `docs/superpowers/specs/2026-04-18-archive-disk-space-preflight-design.md`.
+
+## Stash — Free Disk Investigation Workflow
+
+Distinct from archiving. Use stash to **temporarily free local disk** for crawls that failed or were stopped and still need investigation. The data is parked in `gs://{bucket}/stash/` and can be retrieved later via `POST /unstash/{crawl_id}`.
+
+**Status modeling:** No new status enum. A single field `job_data["stashed_at"]` (ISO 8601 UTC) is set when data is in GCS, cleared when restored. This is **orthogonal** to status — a stashed crawl keeps its original terminal status (`failed`/`stopped`/`finished`).
+
+**Conflict matrix (POST /stash):**
+- 409 `CRAWL_IS_ACTIVE` if status is running/restarting_oom/stopping
+- 409 `ALREADY_ARCHIVED` if status is `archived`
+- 409 `ALREADY_STASHED` if `stashed_at` already set
+- 409 `OPERATION_IN_PROGRESS` if `stash_lock:{id}` or `unstash_lock:{id}` held
+- 503 `INSUFFICIENT_DISK_SPACE` if pre-flight fails (mirror archive shape)
+
+**Two-phase commit for unstash:** Naïve "delete GCS after download" loses data if extract fails. Instead:
+1. Daemon downloads → writes `.done`
+2. Service extracts tar.gz to original storage path
+3. Service writes `.unstash-confirmed` marker (signals extract success)
+4. Daemon polls `.unstash-confirmed` → `gcloud storage rm` → writes `.unstash-cleanup-done`
+5. Service polls `.unstash-cleanup-done` within `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s)
+6. On marker arrival: clear `stashed_at`, return 200 with `gcs_cleanup_status='cleaned'`
+7. On grace expired: clear `stashed_at`, return 200 with `gcs_cleanup_status='deferred'`. Orphan GCS object is logged as `UNSTASH_GCS_ORPHAN crawl_id=… elapsed_seconds=… reason=cleanup_grace_expired gcs_path=…` for operator grep (no Prometheus counter — operational observability is log-based).
+
+**Daemons:** A separate instance of the existing `upload_daemon.sh` and `download_daemon.sh` runs for stash flow, configured via env vars:
+- Upload: `UPLOAD_WATCH_DIR=…/crawler_stash UPLOAD_GCS_PREFIX=stash`
+- Download: `DOWNLOAD_REQUESTS_PATH=…/crawler_stash_download_requests DOWNLOAD_RESULTS_PATH=…/crawler_stash_download_results DOWNLOAD_GCS_PREFIX=stash DELETE_AFTER_DOWNLOAD=true`
+
+**Locks:** `stash_lock:{id}` + `unstash_lock:{id}` (Redis SET NX, ownership-safe DEL via Lua compare-and-delete to avoid clobbering a new acquirer after TTL expiry). Mirrors the `reconcile_leader_lock` pattern.
+
+**Background cleanup:** `cleanup_archives` also sweeps stale stash download artifacts (`.tar.gz`, `.done`, `.error`, `.unstash-confirmed`, `.unstash-cleanup-done` in `/app/gcs-stash-downloads/` + `.request` in `/app/gcs-stash-requests/`). `/app/stash/` itself is NOT cleaned — the upload daemon owns its lifecycle.
+
+Spec: `docs/superpowers/specs/2026-05-19-stash-unstash-gcs-design.md`.
 
 ## robots.txt Blanket Block Bypass
 

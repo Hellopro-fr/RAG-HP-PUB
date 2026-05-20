@@ -29,6 +29,9 @@ The daemons communicate with the crawler service via shared directories (Docker 
 | `crawler-service/crawler_archives/` | `/app/archives` | `ARCHIVES_SHARED_PATH` | Upload staging: service writes `.tar.gz`, daemon uploads to GCS |
 | `crawler-service/crawler_download_requests/` | `/app/gcs-requests` | `DOWNLOAD_REQUESTS_PATH` | Download requests: service writes `.request`, daemon picks up |
 | `crawler-service/crawler_download_results/` | `/app/gcs-downloads` | `DOWNLOAD_RESULTS_PATH` | Download results: daemon writes `.tar.gz` + `.done`, service reads |
+| `crawler-service/crawler_stash/` | `/app/stash` | `STASH_SHARED_PATH` | Stash staging: service writes `.tar.gz`, stash-upload daemon uploads to GCS |
+| `crawler-service/crawler_stash_download_requests/` | `/app/gcs-stash-requests` | `STASH_DOWNLOAD_REQUESTS_PATH` | Stash download requests: service writes `.request`, stash-download daemon picks up |
+| `crawler-service/crawler_stash_download_results/` | `/app/gcs-stash-downloads` | `STASH_DOWNLOAD_RESULTS_PATH` | Stash download results: daemon writes `.tar.gz` + `.done`, service writes `.unstash-confirmed`, daemon writes `.unstash-cleanup-done` |
 
 ### Volume Mounts (docker-compose.yml)
 
@@ -38,6 +41,9 @@ crawler-service:
     - ./crawler_archives:/app/archives
     - ./crawler_download_requests:/app/gcs-requests
     - ./crawler_download_results:/app/gcs-downloads
+    - ./crawler_stash:/app/stash
+    - ./crawler_stash_download_requests:/app/gcs-stash-requests
+    - ./crawler_stash_download_results:/app/gcs-stash-downloads
 ```
 
 ---
@@ -112,6 +118,30 @@ screen -S upload_daemon
     systemctl --user enable --now crawler-upload
     ```
 
+### Stash Upload Daemon Variant
+
+The same `tools/upload_daemon.sh` script runs as a second systemd instance for the stash flow:
+
+```ini
+# ~/.config/systemd/user/crawler-upload-stash.service
+[Unit]
+Description=Crawler Stash Upload Daemon
+
+[Service]
+Environment="UPLOAD_WATCH_DIR=%h/workspaces/RAG-HP-PUB/apps-microservices/crawler-service/crawler_stash"
+Environment="UPLOAD_GCS_PREFIX=stash"
+ExecStart=%h/workspaces/RAG-HP-PUB/tools/upload_daemon.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:%h/workspaces/RAG-HP-PUB/logs/upload_daemon_stash.log
+StandardError=append:%h/workspaces/RAG-HP-PUB/logs/upload_daemon_stash.log
+
+[Install]
+WantedBy=default.target
+```
+
+Enable: `systemctl --user enable --now crawler-upload-stash`.
+
 ---
 
 ## Download Daemon (`download_daemon.sh`)
@@ -163,6 +193,38 @@ screen -S download_daemon
     systemctl --user enable --now crawler-download
     ```
 
+### Stash Download Daemon Variant
+
+A second instance of `tools/download_daemon.sh` runs for the stash unstash flow, using `DELETE_AFTER_DOWNLOAD=true` to trigger the 2-phase commit cleanup branch:
+
+```ini
+# ~/.config/systemd/user/crawler-download-stash.service
+[Unit]
+Description=Crawler Stash Download Daemon (2-phase commit)
+
+[Service]
+Environment="DOWNLOAD_REQUESTS_PATH=%h/workspaces/RAG-HP-PUB/apps-microservices/crawler-service/crawler_stash_download_requests"
+Environment="DOWNLOAD_RESULTS_PATH=%h/workspaces/RAG-HP-PUB/apps-microservices/crawler-service/crawler_stash_download_results"
+Environment="DOWNLOAD_GCS_PREFIX=stash"
+Environment="DELETE_AFTER_DOWNLOAD=true"
+ExecStart=%h/workspaces/RAG-HP-PUB/tools/download_daemon.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:%h/workspaces/RAG-HP-PUB/logs/download_daemon_stash.log
+StandardError=append:%h/workspaces/RAG-HP-PUB/logs/download_daemon_stash.log
+
+[Install]
+WantedBy=default.target
+```
+
+Enable: `systemctl --user enable --now crawler-download-stash`.
+
+**2-phase commit semantics** (triggered by `POST /stash/{crawl_id}` and `POST /unstash/{crawl_id}` on the crawler service):
+- After the service extracts the downloaded tar.gz, it writes `{crawl_id}.unstash-confirmed`.
+- This daemon polls `.unstash-confirmed`, runs `gcloud storage rm` on the GCS object, and on success writes `{crawl_id}.unstash-cleanup-done`.
+- On `gcloud rm` failure the daemon retains the `.unstash-confirmed` marker for retry on the next iteration + logs a WARNING.
+- The service polls for `.unstash-cleanup-done` within `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s). Past the grace window, the service returns `gcs_cleanup_status="deferred"` and logs `UNSTASH_GCS_ORPHAN` (grep prefix) in `crawler.log` (no Prometheus counter — operational observability is log-based).
+
 ---
 
 ## Monitoring & Troubleshooting
@@ -199,6 +261,13 @@ If `GET /results/{crawl_id}` returns a 504 timeout for archived crawls, check th
 2. Review upload daemon logs for GCS error messages
 3. Verify GCS bucket exists and credentials have write permission
 4. Retry manually with `gcloud storage cp` then remove from `dead_letter/`
+
+**Orphan GCS objects (stash flow):**
+If `POST /unstash/{crawl_id}` returns `gcs_cleanup_status="deferred"`, the local data was restored but the GCS source object was not deleted within `UNSTASH_CLEANUP_GRACE_SECONDS`. The service logs `UNSTASH_GCS_ORPHAN crawl_id=… elapsed_seconds=… reason=cleanup_grace_expired gcs_path=…` in `crawler.log`. Grep that prefix to inventory orphans. To investigate:
+1. Check the stash-download daemon is alive (`systemctl --user status crawler-download-stash`)
+2. Look for WARNING messages in `logs/download_daemon_stash.log` about `gcloud rm` failures
+3. List orphans: `gcloud storage ls gs://{bucket}/stash/` and cross-reference with Redis `crawl_job:*` keys that no longer have `stashed_at`
+4. Delete confirmed orphans manually: `gcloud storage rm gs://{bucket}/stash/{crawl_id}.tar.gz`
 
 ---
 

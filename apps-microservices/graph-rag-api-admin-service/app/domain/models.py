@@ -195,6 +195,82 @@ class CypherQueryRequest(BaseModel):
     )
 
 
+# --- Batch Node Models ---
+
+
+class BatchGetRequest(BaseModel):
+    ids: List[int] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="List of raw node IDs (without label prefix), as integers. Max 500 per batch.",
+    )
+    fields: List[str] = Field(
+        default_factory=lambda: ["id_produit", "id"],
+        description=(
+            "Property names to return per node. Default ['id_produit', 'id'] "
+            "keeps responses minimal. Pass an explicit list to override; "
+            "pass an empty list to receive an empty `node` dict."
+        ),
+    )
+
+
+class BatchUpdateItem(BaseModel):
+    id: str = Field(..., description="Raw node ID (without label prefix).")
+    properties: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Dictionary of properties to merge into the node (SET n += props).",
+    )
+
+
+class BatchUpdateRequest(BaseModel):
+    items: List[BatchUpdateItem] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="List of update items. Max 500 per batch.",
+    )
+
+
+class BatchNodeResult(BaseModel):
+    id: Union[int, str] = Field(
+        ...,
+        description=(
+            "Raw node ID as supplied in the request. Echoes the caller's type "
+            "(int for GET/UPSERT, str for per-item UPDATE)."
+        ),
+    )
+    node: Dict[str, Any] = Field(..., description="Node properties.")
+
+
+class BatchResponse(BaseModel):
+    found: List[BatchNodeResult] = Field(
+        default_factory=list, description="Nodes that were found / updated."
+    )
+    missing: List[Union[int, str]] = Field(
+        default_factory=list,
+        description="Raw IDs from the request that did not match any node.",
+    )
+
+
+class BatchUpsertRequest(BaseModel):
+    """
+    Apply the SAME properties to many nodes at once
+    (Cypher: `MATCH (n:Label) WHERE n.id IN $ids SET n += $props`).
+    """
+
+    ids: List[int] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Raw node IDs (without label prefix), as integers. Max 500 per batch.",
+    )
+    properties: Dict[str, Any] = Field(
+        ...,
+        description="Properties merged into every matched node (SET n += props).",
+    )
+
+
 class CypherQueryResponse(BaseModel):
     results: List[Dict[str, Any]] = Field(
         ..., description="List of records returned by the query."

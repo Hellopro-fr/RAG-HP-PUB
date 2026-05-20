@@ -42,8 +42,8 @@ class DomainCache:
     TTL_NOK = 7 * 24 * 3600          # 7 jours — résultats définitifs négatifs
     TTL_TRANSIENT = 6 * 3600          # 6 heures — échecs transitoires (retry automatique)
 
-    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques)
-    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed'})
+    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques + saturation)
+    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed', 'admission_rejected'})
 
     # Méthodes transitoires : cachées avec TTL court (le site était peut-être temporairement down)
     _TRANSIENT_METHODS = frozenset({

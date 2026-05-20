@@ -14,6 +14,7 @@ import (
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/bddcatalog"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
 	"mcp-gateway/internal/repository"
 )
 
@@ -1483,7 +1484,7 @@ func (h *Handler) handleBDDPublicSchemaDoc(w http.ResponseWriter, r *http.Reques
 	for _, t := range rows {
 		cols := make(map[string]BDDDocColumn, len(t.Fields))
 		for _, f := range t.Fields {
-			cols[f.FieldName] = BDDDocColumn{Type: f.FieldType, Desc: f.Description}
+			cols[f.FieldName] = BDDDocColumn{Type: f.FieldType, Desc: gateway.HTMLToMarkdown(f.Description)}
 		}
 		var pkPtr *string
 		if t.PrimaryKey != "" {
@@ -1500,7 +1501,7 @@ func (h *Handler) handleBDDPublicSchemaDoc(w http.ResponseWriter, r *http.Reques
 			relations = json.RawMessage(`[]`)
 		}
 		tables[t.Name] = BDDDocTable{
-			Description:    t.Description,
+			Description:    gateway.HTMLToMarkdown(t.Description),
 			Rows:           t.Rows,
 			PrimaryKey:     pkPtr,
 			DefaultOrderBy: orderPtr,
@@ -1516,8 +1517,8 @@ func (h *Handler) handleBDDPublicSchemaDoc(w http.ResponseWriter, r *http.Reques
 	enc.SetIndent("", "  ")
 	combined := map[string]interface{}{
 		"_meta": BDDDocMeta{
-			Description: meta.Description,
-			Usage:       meta.Usage,
+			Description: gateway.HTMLToMarkdown(meta.Description),
+			Usage:       gateway.HTMLToMarkdown(meta.Usage),
 			LastUpdated: formatBDDLastUpdated(latest),
 		},
 	}

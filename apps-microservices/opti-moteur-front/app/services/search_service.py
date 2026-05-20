@@ -13,8 +13,32 @@ from app.core.credentials import settings
 from app.core.typesense_client import typesense_client
 from app.services.category_detector import detect_categories
 from app.services.reranker import rerank_candidates
+from app.utils.text import tokenize
 
 logger = logging.getLogger(__name__)
+
+
+# A3 (2026-05-18) -- Seuil de fallback adaptatif selon longueur de la query.
+# Probleme observe (audit v3) : 12 mots-cles sur 24 perdent leur P2 a cause du
+# filter_by_category trop restrictif quand la categorie detectee est correcte
+# mais le catalogue large (ex. "compresseur", "ERP", "distributeur automatique").
+# Le pool filter < seuil declenche un retry sans filter -> P2 reapparait.
+#
+# Seuils calibres :
+#   1 token  : 150 -> requete mono-token generique, on veut un large pool si la
+#              categorie filtre exagerement (cas "compresseur" -> pool < 150).
+#   2 tokens : 20  -> requete cible specifique (ex. "armoire medicale"), on conserve
+#              le filter quand il marche (gain +3.4 en v3). Retry seulement si pool
+#              vraiment trop petit.
+#   >=3      : 5   -> requete tres specifique, on garde le comportement strict
+#              actuel (eviter de polluer "Ritmo ELEKTRA M" avec du hors-marque).
+def _filter_fallback_threshold(query: str) -> int:
+    n = len(tokenize(query))
+    if n <= 1:
+        return 150
+    if n == 2:
+        return 20
+    return 5
 
 
 def search(
@@ -55,11 +79,13 @@ def search(
     )
     groups = ts_result.get("grouped_hits", [])
 
-    # Fallback : si filter_by trop restrictif (< 5 resultats), retry sans filtre
-    if filter_cats and len(groups) < 5:
+    # Fallback : si filter_by trop restrictif, retry sans filtre.
+    # A3 (2026-05-18) : seuil adaptatif selon nb de tokens query (cf doc plus haut).
+    fallback_threshold = _filter_fallback_threshold(query)
+    if filter_cats and len(groups) < fallback_threshold:
         logger.info(
-            "filter_by trop restrictif (%d res) pour query=%r, fallback sans filtre",
-            len(groups), query,
+            "filter_by trop restrictif (%d res < seuil %d) pour query=%r, fallback sans filtre",
+            len(groups), fallback_threshold, query,
         )
         ts_result = _hybrid_typesense_search(
             query, query_vector, collection, candidates, filter_cats=None,
