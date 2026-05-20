@@ -5,13 +5,15 @@
     {
       "id": 30,
       "subject": "Task 1: Drop Prometheus counter claim from docs + spec",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "301570cf",
       "description": "**Goal:** Stop false advertising. Replace counter promise with UNSTASH_GCS_ORPHAN log-prefix.\n\n**Files:** apps-microservices/crawler-service/CLAUDE.md, docs/daemon_guide.md, docs/superpowers/specs/2026-05-19-stash-unstash-gcs-design.md\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/CLAUDE.md\",\"docs/daemon_guide.md\",\"docs/superpowers/specs/2026-05-19-stash-unstash-gcs-design.md\"],\"verifyCommand\":\"git -C 'C:/Users/randr/Documents/Workspaces/RAG-HP-PUB' grep -nE 'unstash_gcs_orphan_total' -- apps-microservices/crawler-service/CLAUDE.md docs/daemon_guide.md\",\"acceptanceCriteria\":[\"No unstash_gcs_orphan_total\",\"UNSTASH_GCS_ORPHAN prefix mentioned\",\"Amendment 2026-05-19 section in original spec\"]}\n```"
     },
     {
       "id": 31,
       "subject": "Task 2: Add tarfile.extractall(filter=\"data\")",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "db9df6f9",
       "description": "**Goal:** PEP 706 filter for CVE-2007-4559 + Python 3.14 compat. Regression test.\n\n**Files:** crawler_manager.py:2142, test_crawler_manager_stash.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_stash.py -v -k tar_filter\",\"acceptanceCriteria\":[\"filter='data' applied\",\"test rejects ../escape.txt\",\"EXTRACT_FAILED 502\"]}\n```"
     },
     {
@@ -46,5 +48,5 @@
       "description": "**Goal:** Replace timeout-only assertion with async polling helper.\n\n**Files:** test_crawler_manager_stash.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_stash.py::test_unstash_writes_request_marker -v\",\"acceptanceCriteria\":[\"Async polling helper captures marker\",\"Assert filename test_id.request\",\"Assert content test_id\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-20T08:00:00Z"
+  "lastUpdated": "2026-05-20T09:00:00Z"
 }
