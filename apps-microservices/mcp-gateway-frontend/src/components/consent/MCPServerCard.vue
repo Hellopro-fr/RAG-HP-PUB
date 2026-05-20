@@ -22,7 +22,6 @@
 
       <div class="flex-1 min-w-0 flex items-center gap-2">
         <span class="font-medium text-gray-900 dark:text-white truncate">{{ server.name }}</span>
-        <Badge v-if="preConfigured" color="primary" size="sm">Requis</Badge>
         <span class="text-xs text-gray-500 dark:text-gray-400">
           ({{ (server.tools || []).length }} outil{{ (server.tools || []).length !== 1 ? 's' : '' }})
         </span>
@@ -71,7 +70,6 @@
 
 <script setup lang="ts">
 import { Server, ChevronDown, ChevronUp, Check } from 'lucide-vue-next'
-import Badge from '@/components/ui/Badge.vue'
 import type { AuthorizeServer } from '@/types/oauth2'
 
 const props = defineProps<{

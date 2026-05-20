@@ -35,12 +35,7 @@
     <!-- Consent -->
     <main v-else class="mx-auto max-w-3xl w-full px-4 py-8 flex-1">
       <div class="space-y-6">
-        <ConsentSummary
-          :total-servers="configuredServers.length"
-          :enabled-servers="enabledServersCount"
-          :required-servers="requiredServersCount"
-          :client-name="clientName"
-        />
+        <ConsentSummary :client-name="clientName" />
 
         <Separator />
 
@@ -85,16 +80,6 @@
 
         <Separator />
 
-        <div class="rounded-lg bg-gray-100 dark:bg-gray-800/50 p-4">
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-            Informations de sécurité
-          </h3>
-          <ul class="space-y-1.5 text-sm text-gray-600 dark:text-gray-400">
-            <li>Vous pouvez révoquer cet accès à tout moment depuis vos paramètres.</li>
-            <li>Tous les appels d'API sont journalisés et auditables.</li>
-          </ul>
-        </div>
-
         <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
@@ -115,16 +100,6 @@
           </button>
         </div>
 
-        <p class="text-center text-xs text-gray-600 dark:text-gray-400">
-          En autorisant, vous acceptez la
-          <RouterLink
-            to="/privacy"
-            class="underline underline-offset-2 hover:text-gray-900 dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded"
-          >
-            politique de confidentialité
-          </RouterLink>
-          .
-        </p>
       </div>
     </main>
   </div>
@@ -132,7 +107,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { Loader2, AlertTriangle } from 'lucide-vue-next'
 import { authorizeApi } from '@/api/authorize'
 import type { AuthorizeServer } from '@/types/oauth2'
@@ -189,9 +164,6 @@ const selectedToolIds = computed(() => {
 })
 
 const enabledServersCount = computed(() => selectedServerIds.value.length)
-const requiredServersCount = computed(() =>
-  preConfigured.value ? configuredServers.value.length : 0,
-)
 
 function toggleServer(serverId: string): void {
   if (expandedServers.has(serverId)) expandedServers.delete(serverId)

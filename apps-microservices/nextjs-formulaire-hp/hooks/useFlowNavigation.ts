@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+import { FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
 
 /**
  * Hook pour la navigation dans le flow avec conservation des paramètres GET.
@@ -29,10 +30,20 @@ export function useFlowNavigation() {
   }, [router, buildUrl]);
 
   /**
-   * Navigation vers le questionnaire
+   * Navigation vers le questionnaire.
+   *
+   * Le token de catégorie est transporté dans le PATH (`/questionnaire/<TOKEN>`),
+   * pas en query string — donc `navigateTo('/questionnaire')` produirait une 404
+   * (route dynamique [token] manquante). On relit le token sauvegardé dans
+   * sessionStorage (posé par questionnaire-client.tsx au premier rendu) pour
+   * reconstruire l'URL complète. Fallback sans token uniquement si aucun token
+   * n'a été enregistré (parcours direct hors funnel — rare).
    */
   const goToQuestionnaire = useCallback(() => {
-    navigateTo('/questionnaire');
+    const originalToken = typeof window !== 'undefined'
+      ? sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY)
+      : null;
+    navigateTo(originalToken ? `/questionnaire/${originalToken}` : '/questionnaire');
   }, [navigateTo]);
 
   /**
