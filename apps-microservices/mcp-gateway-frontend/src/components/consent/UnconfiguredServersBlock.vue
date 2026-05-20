@@ -14,9 +14,11 @@
             v-if="server.icon"
             :src="server.icon"
             :alt="server.name"
+            width="20"
+            height="20"
             class="h-5 w-5 object-contain"
           />
-          <Server v-else class="h-4 w-4 text-amber-700 dark:text-amber-300" />
+          <Server v-else class="h-4 w-4 text-amber-700 dark:text-amber-300" aria-hidden="true" />
           <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
             {{ server.name }}
           </span>
@@ -26,7 +28,7 @@
           :href="server.docs_url"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-xs font-medium text-brand-600 hover:underline"
+          class="text-xs font-medium text-brand-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded px-1 py-0.5"
         >
           Voir documentation &rarr;
         </a>

@@ -64,6 +64,45 @@ def _count_files_in_dir(path: str) -> int:
     except OSError:
         return 0
 
+
+def _flatten_params_for_php(params: Any, parent_key: str = "") -> List[Tuple[str, Any]]:
+    """Flatten a dict/list payload into a list of (key, value) tuples using
+    PHP-style bracket notation, so PHP's $_GET can parse it as a nested array.
+
+    Background:
+        httpx's GET ``params=dict`` serializes nested dict values via ``str()``,
+        producing e.g. ``metrics={'processed': 100}`` (Python dict-str). PHP
+        then sees ``$_GET['metrics']`` as a string instead of an array, and
+        subscripting it silently returns ``0`` because
+        ``(int)$_GET['metrics']['processed']`` evaluates to ``(int)'{'``.
+
+    Examples:
+        {"metrics": {"processed": 100}}     -> [("metrics[processed]", 100)]
+        {"jsonl": ["a.jsonl", "b.jsonl"]}   -> [("jsonl[0]", "a.jsonl"),
+                                                 ("jsonl[1]", "b.jsonl")]
+        {"deep": {"a": {"b": 1}}}           -> [("deep[a][b]", 1)]
+
+    ``None`` values are emitted as empty strings to preserve the previous
+    httpx behavior (``None`` -> ``""`` in the query string).
+    """
+    items: List[Tuple[str, Any]] = []
+
+    if isinstance(params, dict):
+        for k, v in params.items():
+            new_key = f"{parent_key}[{k}]" if parent_key else str(k)
+            items.extend(_flatten_params_for_php(v, new_key))
+    elif isinstance(params, list):
+        for idx, v in enumerate(params):
+            new_key = f"{parent_key}[{idx}]"
+            items.extend(_flatten_params_for_php(v, new_key))
+    elif params is None:
+        items.append((parent_key, ""))
+    else:
+        items.append((parent_key, params))
+
+    return items
+
+
 # Thread-safe locks for concurrent archive generation (keyed by archive path)
 _archive_locks: Dict[str, threading.Lock] = {}
 _archive_locks_guard = threading.Lock()
@@ -502,9 +541,11 @@ class CrawlerManager:
         NOT store in FAILED_CALLBACKS_KEY on failure — reconciliation will replay
         using the same request_id from job_info, and PHP dedupes.
         """
+        # Flatten nested dicts/lists into PHP bracket notation so $_GET parses them as arrays.
+        flat_params = _flatten_params_for_php(params)
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, timeout=timeout)
+                response = await client.get(url, params=flat_params, timeout=timeout)
                 if 200 <= response.status_code < 300:
                     logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (shutdown). Status: {response.status_code}")
                     return True
@@ -519,11 +560,13 @@ class CrawlerManager:
         Sends an HTTP GET webhook with exponential backoff retry.
         On exhaustion, stores the failed callback in Redis for manual replay.
         """
+        # Flatten nested dicts/lists into PHP bracket notation so $_GET parses them as arrays.
+        flat_params = _flatten_params_for_php(params)
         last_error = None
         for attempt, delay in enumerate(WEBHOOK_RETRY_DELAYS):
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await client.get(url, params=params, timeout=30.0)
+                    response = await client.get(url, params=flat_params, timeout=30.0)
                     if 200 <= response.status_code < 300:
                         logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (attempt {attempt + 1}). Status: {response.status_code}")
                         return True
