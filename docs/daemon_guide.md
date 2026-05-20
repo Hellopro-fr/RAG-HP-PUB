@@ -287,11 +287,18 @@ The `dead_letter/` directory is **never** auto-cleaned — it requires manual in
 
 Returned by `POST /stash/{id}` or `POST /unstash/{id}` when one of the
 stash bind-mounts (`/app/stash`, `/app/gcs-stash-requests`,
-`/app/gcs-stash-downloads`) is not a real mount point. Indicates the
-running container was started BEFORE `docker-compose.yaml` declared
-those mounts (commit `14a02524`). Docker-compose only applies new volume
-declarations at **container creation** — a plain `docker-compose up -d`
-after editing the file does not bridge them.
+`/app/gcs-stash-downloads`) is not a real mount point. Two common causes:
+
+1. **Host directories missing.** Docker creates bind-source dirs as
+   root with no automatic permission for the host user — the upload /
+   download daemons (running as `$USER`) then can't read/write them.
+   See the prerequisite mkdir + chown block below.
+2. **Container started before compose declared the mounts.** The root
+   `docker-compose.yml` had the stash bind-mounts added in commit
+   `545e9e0f` (which superseded the earlier wrong-file edit
+   `14a02524`). Docker-compose only applies new volume declarations
+   at **container creation** — a plain `docker-compose up -d` after
+   editing the file does not bridge them.
 
 **Response body:**
 
@@ -310,10 +317,24 @@ after editing the file does not bridge them.
 ### Fix
 
 ```bash
+# 0. Pre-create the 3 host bind-source dirs (compose will mount them in)
+#    and chown them to the host user so the upload/download daemons
+#    (running as $USER, not root) can read/write. Mirrors the existing
+#    archive-flow setup pattern in tools/upload_daemon.sh:30-37.
+mkdir -p apps-microservices/crawler-service/crawler_stash
+mkdir -p apps-microservices/crawler-service/crawler_stash_download_requests
+mkdir -p apps-microservices/crawler-service/crawler_stash_download_results
+sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_stash
+sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_stash_download_requests
+sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_stash_download_results
+
 # 1. Stop the service
 docker-compose --profile crawling stop crawler-service
 
-# 2. Recreate (rebuilds container with the latest compose mounts)
+# 2. Recreate (rebuilds container with the latest compose mounts).
+#    Uses the ROOT docker-compose.yml under the "crawling" profile —
+#    not the previously-existing subdir compose, which was deleted in
+#    commit 5b33a9a1 because it duplicated and confused the deploy.
 docker-compose --profile crawling up -d --force-recreate crawler-service
 
 # 3. Verify all three stash mounts are bridged
@@ -331,7 +352,8 @@ Expected output:
 ```
 
 If any line is missing, the recreate did not apply the latest compose
-file. Verify the commit `14a02524` is pulled and re-run.
+file. Verify the commit `545e9e0f` (stash mounts in root compose) is
+pulled and re-run.
 
 
 ## Recovery: stash tars trapped in pre-fix ephemeral container
