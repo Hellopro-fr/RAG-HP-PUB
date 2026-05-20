@@ -223,7 +223,7 @@ Enable: `systemctl --user enable --now crawler-download-stash`.
 - After the service extracts the downloaded tar.gz, it writes `{crawl_id}.unstash-confirmed`.
 - This daemon polls `.unstash-confirmed`, runs `gcloud storage rm` on the GCS object, and on success writes `{crawl_id}.unstash-cleanup-done`.
 - On `gcloud rm` failure the daemon retains the `.unstash-confirmed` marker for retry on the next iteration + logs a WARNING.
-- The service polls for `.unstash-cleanup-done` within `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s). Past the grace window, the service returns `gcs_cleanup_status="deferred"` and increments the Prometheus `unstash_gcs_orphan_total` counter.
+- The service polls for `.unstash-cleanup-done` within `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s). Past the grace window, the service returns `gcs_cleanup_status="deferred"` and logs `UNSTASH_GCS_ORPHAN` (grep prefix) in `crawler.log` (no Prometheus counter — operational observability is log-based).
 
 ---
 
@@ -263,7 +263,7 @@ If `GET /results/{crawl_id}` returns a 504 timeout for archived crawls, check th
 4. Retry manually with `gcloud storage cp` then remove from `dead_letter/`
 
 **Orphan GCS objects (stash flow):**
-If `POST /unstash/{crawl_id}` returns `gcs_cleanup_status="deferred"`, the local data was restored but the GCS source object was not deleted within `UNSTASH_CLEANUP_GRACE_SECONDS`. Prometheus counter `unstash_gcs_orphan_total` is incremented. To investigate:
+If `POST /unstash/{crawl_id}` returns `gcs_cleanup_status="deferred"`, the local data was restored but the GCS source object was not deleted within `UNSTASH_CLEANUP_GRACE_SECONDS`. The service logs `UNSTASH_GCS_ORPHAN crawl_id=… elapsed_seconds=… reason=cleanup_grace_expired gcs_path=…` in `crawler.log`. Grep that prefix to inventory orphans. To investigate:
 1. Check the stash-download daemon is alive (`systemctl --user status crawler-download-stash`)
 2. Look for WARNING messages in `logs/download_daemon_stash.log` about `gcloud rm` failures
 3. List orphans: `gcloud storage ls gs://{bucket}/stash/` and cross-reference with Redis `crawl_job:*` keys that no longer have `stashed_at`

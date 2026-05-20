@@ -395,7 +395,7 @@ WantedBy=default.target
 (a) Service times out → 504 → operator manually fixes. *Data restored but Redis says still stashed.*
 (b) Service waits short for `.unstash-cleanup-done`, falls back to 200 with a warning field. *Redis cleared, GCS orphan flagged for cleanup.*
 
-**Decision:** option (b). After polling `.unstash-cleanup-done` for `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s), if absent, return 200 with `gcs_cleanup_status: "deferred"` field and emit Prometheus counter `unstash_gcs_orphan_total`. Caller gets success, ops dashboard surfaces orphans.
+**Decision:** option (b). After polling `.unstash-cleanup-done` for `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s), if absent, return 200 with `gcs_cleanup_status: "deferred"` field and emit Prometheus counter `unstash_gcs_orphan_total` (scoped out — see Amendment 2026-05-19). Caller gets success, ops dashboard surfaces orphans.
 
 ### 6. Concurrent stash + unstash race
 
@@ -506,7 +506,7 @@ Update env var list to include new optional vars (`UPLOAD_WATCH_DIR`, `UPLOAD_GC
 |---|---|
 | Daemon parametrization regresses existing archive flow | Env var defaults preserve current behavior; integration tests verify default-env produces identical output |
 | Two-phase commit adds 5-second daemon poll latency to unstash | Acceptable for ops workflow (investigation is non-time-critical); poll interval inherited from existing download daemon |
-| Orphan GCS objects accumulate when extract fails or GCS-rm fails | Prometheus counter `unstash_gcs_orphan_total` + warning logs surface to ops; manual cleanup via `gcloud storage rm` |
+| Orphan GCS objects accumulate when extract fails or GCS-rm fails | Prometheus counter `unstash_gcs_orphan_total` (scoped out — see Amendment 2026-05-19) + warning logs surface to ops; manual cleanup via `gcloud storage rm` |
 | Disk fills during unstash extract | Pre-flight check rejects with 503 before extract attempt |
 | Local stash tar.gz lost during service restart before upload | `/app/stash/` is a persisted Docker volume (add to docker-compose) |
 | Operator confusion between `archived` and `stashed` flows | CLAUDE.md section explicitly contrasts the two; status table makes orthogonality clear |
@@ -517,3 +517,17 @@ Update env var list to include new optional vars (`UPLOAD_WATCH_DIR`, `UPLOAD_GC
 - **Batch stash endpoint:** `POST /stash-batch?status=failed&older_than_days=7` for cleanup days. Deferred — implement when manual one-by-one becomes painful.
 - **Direct transition `archived` → `stashed`:** would require moving GCS object between prefixes. Deferred — operator can unarchive then stash via two calls.
 - **Stash compression tuning:** investigate `.tar.zst` for better ratio if `.tar.gz` sizes are problematic. Deferred until storage cost data justifies.
+
+---
+
+## Amendment 2026-05-19
+
+Final code review (`superpowers-extended-cc:code-reviewer`) of commits `21bf809f..7ebbb0c8` identified 6 blockers, addressed by follow-up spec `docs/superpowers/specs/2026-05-19-stash-unstash-followup-fixes-design.md`. Summary of contract changes:
+
+- **§2.10 + §10 Prometheus counters** (`stash_total`, `unstash_total`, `unstash_duration_seconds`, `unstash_gcs_orphan_total`): **scoped out**. Replaced by structured `logger.warning` lines with grep-friendly prefixes (e.g., `UNSTASH_GCS_ORPHAN`). Rationale: `crawler-service` has no existing `prometheus_client` usage; adding the dependency + `/metrics` endpoint wiring is out of scope for this fix cycle. Operators rely on `crawler.log` grep until a dedicated observability spec ships.
+- **§5.1 pre-flight fail-open**: clarified — `stash_crawl` now wraps the measurement helpers in `try/except` matching the `archive_crawl` pattern (was: implicit; now: explicit).
+- **§7.2 unstash extract path**: `tarfile.extractall` now uses `filter="data"` per PEP 706 (CVE-2007-4559 hardening + Python 3.14 forward compat).
+- **§5 stash + unstash pre-condition checks**: post-lock re-validation against fresh Redis blob added to close a 2-replica TOCTOU race window between caller's `job_info` snapshot and ownership lock acquisition.
+- **§8 test_unstash_writes_request_marker**: replaced timeout-only assertion with concrete marker file path + content capture via `asyncio` polling helper.
+
+See follow-up spec for full rationale and implementation details.

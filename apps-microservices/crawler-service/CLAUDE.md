@@ -157,7 +157,7 @@ Distinct from archiving. Use stash to **temporarily free local disk** for crawls
 4. Daemon polls `.unstash-confirmed` → `gcloud storage rm` → writes `.unstash-cleanup-done`
 5. Service polls `.unstash-cleanup-done` within `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s)
 6. On marker arrival: clear `stashed_at`, return 200 with `gcs_cleanup_status='cleaned'`
-7. On grace expired: clear `stashed_at`, return 200 with `gcs_cleanup_status='deferred'` (orphan GCS object — `unstash_gcs_orphan_total` Prometheus counter incremented)
+7. On grace expired: clear `stashed_at`, return 200 with `gcs_cleanup_status='deferred'`. Orphan GCS object is logged as `UNSTASH_GCS_ORPHAN crawl_id=… elapsed_seconds=… reason=cleanup_grace_expired gcs_path=…` for operator grep (no Prometheus counter — operational observability is log-based).
 
 **Daemons:** A separate instance of the existing `upload_daemon.sh` and `download_daemon.sh` runs for stash flow, configured via env vars:
 - Upload: `UPLOAD_WATCH_DIR=…/crawler_stash UPLOAD_GCS_PREFIX=stash`
