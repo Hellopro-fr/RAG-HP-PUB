@@ -96,6 +96,8 @@ async def test_stash_disk_space_pre_flight_fails(cm_instance, base_job_info, moc
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
     mock_cache_service.redis_client.set = AsyncMock(return_value=True)
     mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    # Post-lock TOCTOU re-validation reads fresh blob — return the same valid job
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
     monkeypatch.setattr(
         cm_instance,
         "_get_archives_disk_state",
@@ -159,6 +161,8 @@ async def test_stash_tar_failure_cleans_staging(cm_instance, base_job_info, mock
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
     mock_cache_service.redis_client.set = AsyncMock(return_value=True)
     mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    # Post-lock TOCTOU re-validation reads fresh blob — return the same valid job
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
 
     # Make shutil.make_archive raise
     def boom(*a, **k):
@@ -530,3 +534,29 @@ async def test_stash_preflight_failopen_on_measurement_exception(cm_instance, ba
     assert result["crawl_id"] == "test_id"
     # Tar still created — measurement skip did not block the stash
     assert (stash_dir / "test_id.tar.gz").exists()
+
+
+@pytest.mark.asyncio
+async def test_stash_toctou_revalidation_blocks_concurrent_winner(cm_instance, base_job_info, mock_cache_service, monkeypatch):
+    """Spec follow-up §4.2: 2-replica TOCTOU race.
+
+    Caller-passed job_info has no stashed_at; SET NX succeeds. Fresh Redis
+    read inside stash_crawl returns the same crawl with stashed_at populated
+    by a concurrent winner. stash_crawl must raise 409 ALREADY_STASHED and
+    release the lock instead of proceeding to overwrite GCS.
+    """
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+
+    stashed_blob = dict(base_job_info)
+    stashed_blob["stashed_at"] = "2026-05-19T10:00:00Z"
+    mock_cache_service.get_json = AsyncMock(return_value=stashed_blob)
+
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(base_job_info)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error_code"] == "ALREADY_STASHED"
+    assert exc.value.detail["stashed_at"] == "2026-05-19T10:00:00Z"
+    # Lock release (Lua eval) was called for compare-and-delete
+    assert mock_cache_service.redis_client.eval.call_count >= 1

@@ -1976,6 +1976,45 @@ class CrawlerManager:
                 detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "stash"}
             )
 
+        # --- Post-lock TOCTOU re-validation (spec follow-up §4.2) ---
+        # Another replica may have completed the operation between the caller's
+        # job_info snapshot and our lock acquire. Re-fetch and re-validate against
+        # the same pre-conditions; on mismatch, release the lock and raise the
+        # canonical 409.
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh_job_info = await cache_service.get_json(job_key)
+        if fresh_job_info is None:
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job '{crawl_id}' vanished from Redis during stash claim."
+            )
+        fresh_status = fresh_job_info.get("status")
+        if fresh_status in ("running", "restarting_oom", "stopping"):
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": fresh_status},
+            )
+        if fresh_status == "archived":
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_ARCHIVED"},
+            )
+        if fresh_job_info.get("stashed_at"):
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_STASHED", "stashed_at": fresh_job_info["stashed_at"]},
+            )
+        # Use the fresh blob from here on.
+        job_info = fresh_job_info
+
         try:
             stash_dir = settings.STASH_SHARED_PATH
             target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
