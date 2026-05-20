@@ -5,6 +5,7 @@ to stay hermetic — integration tests in tests/integration/ exercise the real
 GCS round-trip.
 """
 import asyncio
+import io
 import json
 import os
 import tarfile
@@ -453,3 +454,53 @@ async def test_cleanup_includes_stash_dirs(cm_instance, monkeypatch, tmp_path):
 
     deleted, _, _ = await cm_instance.cleanup_archives(max_age_hours=1)
     assert deleted >= 4, f"Expected >=4 stash markers deleted, got {deleted}"
+
+
+@pytest.mark.asyncio
+async def test_unstash_tar_filter_blocks_path_traversal(cm_instance, stashed_job_info, mock_cache_service, monkeypatch, tmp_path):
+    """Verify tarfile.extractall(filter='data') rejects path-traversal members.
+
+    Build a malicious tar.gz with a member named '../escape.txt'. The PEP 706
+    safe filter must reject it; the unstash branch then returns 502
+    EXTRACT_FAILED and preserves stashed_at in Redis.
+    """
+    req_dir = tmp_path / "stash-req"
+    res_dir = tmp_path / "stash-res"
+    storage_root = tmp_path / "storage"
+    req_dir.mkdir()
+    res_dir.mkdir()
+    storage_root.mkdir()
+
+    # Build a tar.gz with a path-traversal member.
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.txt").write_text("legit")
+    tar_path = res_dir / "test_id.tar.gz"
+    with tarfile.open(tar_path, 'w:gz') as t:
+        # Legit member
+        t.add(str(src / "ok.txt"), arcname="ok.txt")
+        # Path-traversal member
+        info = tarfile.TarInfo(name="../escape.txt")
+        info.size = 5
+        t.addfile(info, io.BytesIO(b"boom!"))
+    (res_dir / "test_id.done").touch()
+
+    monkeypatch.setattr(cm_module.settings, "STASH_DOWNLOAD_REQUESTS_PATH", str(req_dir))
+    monkeypatch.setattr(cm_module.settings, "STASH_DOWNLOAD_RESULTS_PATH", str(res_dir))
+    monkeypatch.setattr(cm_module.settings, "CRAWLER_STORAGE_PATH", str(storage_root))
+    monkeypatch.setattr(cm_module.settings, "UNSTASH_TIMEOUT_SECONDS", 5)
+    monkeypatch.setattr(
+        cm_instance,
+        "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0, "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.unstash_crawl(stashed_job_info)
+    assert exc.value.status_code == 502
+    assert exc.value.detail["error_code"] == "EXTRACT_FAILED"
+    # Confirm the escape file did NOT land outside storage_root
+    assert not (tmp_path / "escape.txt").exists()

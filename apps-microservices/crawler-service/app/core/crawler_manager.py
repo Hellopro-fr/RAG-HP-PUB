@@ -2139,7 +2139,7 @@ class CrawlerManager:
                 def _extract():
                     os.makedirs(target_storage, exist_ok=True)
                     with tarfile.open(download_path, 'r:gz') as tar:
-                        tar.extractall(path=target_storage)
+                        tar.extractall(path=target_storage, filter="data")
                 await anyio.to_thread.run_sync(_extract)
                 logger.info(f"Extracted unstash archive for '{crawl_id}' to '{target_storage}'.")
             except Exception as e:
