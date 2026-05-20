@@ -1235,6 +1235,10 @@ def _generate_budget_choices(
     if min_prix > max_prix:
         min_prix, max_prix = max_prix, min_prix
 
+    # Mémorisé avant tout élargissement : sert plus bas à garantir que
+    # "Moins de X" reste strictement inférieur à la borne basse réelle.
+    min_prix_original = min_prix
+
     moyenne = (min_prix + max_prix) / 2.0
     largeur = max(max_prix - min_prix, 1.0)
 
@@ -1268,6 +1272,19 @@ def _generate_budget_choices(
             break
         pas = prev_pas
         borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
+
+    # Garantir que "Moins de X" reste strictement < min_prix_original.
+    # Si borne_inf == 0 alors que la fourchette commence > 0, on descend d'un cran
+    # dans l'échelle pour obtenir une borne_inf positive. On accepte d'avoir
+    # jusqu'à 5 tranches dans ce cas (cas où la fourchette tombe mal sur les pas
+    # commerciaux) plutôt que de violer la sémantique de "Moins de".
+    if borne_inf == 0 and min_prix_original > 0:
+        prev_pas = _previous_in_scale(pas, _ECHELLE_COMMERCIALE)
+        if prev_pas is not None:
+            nv_bi, nv_bs, nv_tr = _compute_bornes_tranches(min_prix, max_prix, prev_pas)
+            if nv_bi > 0 and len(nv_tr) <= 5:
+                pas = prev_pas
+                borne_inf, borne_sup, tranches = nv_bi, nv_bs, nv_tr
 
     devise_str = _normalize_devise(devise)
 
