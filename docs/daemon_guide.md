@@ -50,6 +50,8 @@ crawler-service:
 
 ## Upload Daemon (`upload_daemon.sh`)
 
+> **Tip:** Prefer `tools/start-crawler-daemon.sh` over manual screen setup. See § One-shot launcher.
+
 Automatically uploads archived crawl jobs to GCS. The crawler service places `.tar.gz` archives in the shared `crawler_archives/` directory, and this daemon uploads them to `gs://{bucket}/crawls/` then deletes the local file.
 
 ### Retry & Dead Letter
@@ -145,6 +147,8 @@ Enable: `systemctl --user enable --now crawler-upload-stash`.
 ---
 
 ## Download Daemon (`download_daemon.sh`)
+
+> **Tip:** Prefer `tools/start-crawler-daemon.sh` over manual screen setup. See § One-shot launcher.
 
 Downloads archived crawl data from GCS on demand. When a user requests results for an archived crawl (via `GET /results/{crawl_id}`), the crawler service writes a `.request` file to the shared `crawler_download_requests/` directory. This daemon picks it up, downloads the archive from GCS, and places it in `crawler_download_results/` with a `.done` marker. The service then streams the file to the client and cleans up.
 
@@ -281,6 +285,64 @@ The crawler service automatically cleans up stale files across all shared direct
 - **Manual trigger**: `POST /prune-archives?max_age_hours=24` (or `delete_all=true`)
 
 The `dead_letter/` directory is **never** auto-cleaned — it requires manual investigation.
+
+
+## One-shot launcher: `tools/start-crawler-daemon.sh`
+
+The codebase ships a single interactive script that manages all 4
+daemon variants (archive + stash, upload + download). Use it instead
+of opening 4 manual screen sessions with env vars.
+
+### What it does
+
+For each of the 4 daemons it:
+1. Detects if a screen session with the standard name already exists
+2. Prompts per-daemon:
+   - **Running**: `(s)kip / (r)estart / (q)uit` [default: skip]
+   - **Not running**: `(s)tart / (n)o / (q)uit` [default: no]
+3. On `r` or `s`(tart): launches via `screen -dmS` with env vars baked
+   in + logs to `logs/<screen-name>.log`
+
+### Screen session names
+
+| Daemon | Screen name | Watches | Uploads to / downloads from |
+|---|---|---|---|
+| Archive Upload | `crawler-upload-archive` | `crawler_archives/` | `gs://$BUCKET/crawls/` |
+| Stash Upload | `crawler-upload-stash` | `crawler_stash/` | `gs://$BUCKET/stash/` |
+| Archive Download | `crawler-download-archive` | `crawler_download_requests/` | `gs://$BUCKET/crawls/` |
+| Stash Download | `crawler-download-stash` | `crawler_stash_download_requests/` | `gs://$BUCKET/stash/` + GCS delete after extract |
+
+### Usage
+
+```bash
+cd /home/devhp/RAG-HP-PUB
+bash tools/start-crawler-daemon.sh
+```
+
+Walk through the 4 prompts. Default ENTER is safe
+(skip-when-running, no-when-stopped). Type `q` at any prompt to abort.
+
+### Inspecting / attaching / stopping
+
+```bash
+# List sessions
+screen -ls
+
+# Attach to a specific daemon (Ctrl+A then D to detach)
+screen -r crawler-upload-stash
+
+# Tail a daemon's log without attaching
+tail -f logs/crawler-upload-stash.log
+
+# Stop a specific daemon
+screen -X -S crawler-upload-stash quit
+```
+
+### Prerequisites
+
+The script does NOT pre-create host bind-source dirs. Do that once
+during initial setup (see `## Troubleshooting: 503 BIND_MOUNT_MISSING`
+section below for the `mkdir + sudo chown` block).
 
 
 ## Troubleshooting: 503 `BIND_MOUNT_MISSING`
