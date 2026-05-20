@@ -35,10 +35,26 @@ def cm_instance(mock_cache_service):
     return CrawlerManager()
 
 
+@pytest.fixture(autouse=True)
+def mock_bind_mounts_present(monkeypatch):
+    """Default for this test module: os.path.ismount returns True.
+
+    Without this, every test that exercises stash_crawl / unstash_crawl
+    would hit the new _verify_bind_mount 503 check because tmp_path is
+    not a real mount point. Tests that WANT to assert the 503 path can
+    override with monkeypatch.setattr(os.path, "ismount", lambda p: False)
+    inside the test body — local monkeypatch wins over autouse.
+    """
+    monkeypatch.setattr(os.path, "ismount", lambda p: True)
+
+
 @pytest.fixture
 def base_job_info(tmp_path):
     storage = tmp_path / "crawl_data"
     storage.mkdir()
+    # Seed both a kept file (log) and a data file so cleanup-keep-logs
+    # behavior is exercised by every test using this fixture.
+    (storage / "crawler.log").write_text("log content")
     (storage / "dataset.json").write_text('{"records": [1,2,3]}')
     return {
         "crawl_id": "test_id",
@@ -81,6 +97,32 @@ async def test_stash_blocks_already_stashed(cm_instance, base_job_info):
 
 
 @pytest.mark.asyncio
+async def test_stash_crawl_rejects_when_stash_dir_not_mount(
+    cm_instance, base_job_info, mock_cache_service, monkeypatch
+):
+    """Spec 2026-05-20 §4: bind-mount preflight rejects with 503 when
+    STASH_SHARED_PATH is not a real mount point. Lock must be released
+    by the existing finally block."""
+    # All Redis mocks pass TOCTOU successfully
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
+
+    # Override autouse fixture: ismount returns False (no bind-mount)
+    monkeypatch.setattr(os.path, "ismount", lambda p: False)
+
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(base_job_info)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+    assert exc.value.detail["label"] == "stash upload"
+    # Lock released by finally (Lua eval invoked at least once)
+    assert mock_cache_service.redis_client.eval.call_count >= 1
+
+
+@pytest.mark.asyncio
 async def test_stash_blocks_lock_held(cm_instance, base_job_info, mock_cache_service):
     # unstash_lock NOT held, but our stash_lock SET NX returns False
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
@@ -110,7 +152,11 @@ async def test_stash_disk_space_pre_flight_fails(cm_instance, base_job_info, moc
 
 
 @pytest.mark.asyncio
-async def test_stash_success_sets_timestamp_and_deletes_local(cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path):
+async def test_stash_success_sets_timestamp_and_keeps_logs(cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path):
+    """Happy-path stash: tar created in stash dir, Redis stashed_at set,
+    DATA files deleted from storage but LOG files kept (spec 2026-05-20 §5)."""
+    from pathlib import Path
+
     stash_dir = tmp_path / "stash"
     stash_dir.mkdir()
     monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
@@ -133,16 +179,21 @@ async def test_stash_success_sets_timestamp_and_deletes_local(cm_instance, base_
     assert result["stash_path"] == "gs://test-bucket/stash/test_id.tar.gz"
     assert "stashed_at" in result
 
-    # Verify tar created in /app/stash + integrity
+    # Tar present in stash dir, contains both seeded files
     final_tar = stash_dir / "test_id.tar.gz"
     assert final_tar.exists(), "Tar should exist in stash dir"
     with tarfile.open(final_tar, 'r:gz') as t:
-        assert any("dataset.json" in n for n in t.getnames())
+        names = t.getnames()
+        assert any("dataset.json" in n for n in names)
+        assert any("crawler.log" in n for n in names)
 
-    # Verify local storage deleted
-    assert not os.path.exists(base_job_info["storage_path"])
+    # Keep-logs behavior: storage dir still exists, log kept, data gone
+    storage_path = base_job_info["storage_path"]
+    assert os.path.isdir(storage_path), "storage dir should remain (kept files inside)"
+    assert (Path(storage_path) / "crawler.log").exists(), "crawler.log should be kept"
+    assert not (Path(storage_path) / "dataset.json").exists(), "dataset.json should be deleted"
 
-    # Verify Redis HSET (stashed_at set on Redis blob)
+    # Redis HSET wrote stashed_at
     last_call = mock_cache_service.set_json.call_args
     written = last_call[0][1]
     assert "stashed_at" in written
@@ -213,6 +264,34 @@ async def test_unstash_blocks_not_stashed(cm_instance, base_job_info, mock_cache
         await cm_instance.unstash_crawl(base_job_info)
     assert exc.value.status_code == 409
     assert exc.value.detail["error_code"] == "NOT_STASHED"
+
+
+@pytest.mark.asyncio
+async def test_unstash_crawl_rejects_when_dir_not_mount(
+    cm_instance, stashed_job_info, mock_cache_service, monkeypatch
+):
+    """Spec 2026-05-20 §4: bind-mount preflight rejects with 503 when
+    either STASH_DOWNLOAD_REQUESTS_PATH or STASH_DOWNLOAD_RESULTS_PATH is
+    not a real mount point. Lock must be released by the existing
+    finally block. The first call site is the requests dir — that's the
+    label expected in the 503 detail."""
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(stashed_job_info))
+
+    # Override autouse fixture: ismount returns False
+    monkeypatch.setattr(os.path, "ismount", lambda p: False)
+
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.unstash_crawl(stashed_job_info)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+    # First call site short-circuits — that's the requests dir
+    assert exc.value.detail["label"] == "unstash requests"
+    # Lock released
+    assert mock_cache_service.redis_client.eval.call_count >= 1
 
 
 @pytest.mark.asyncio
@@ -624,3 +703,59 @@ async def test_unstash_toctou_revalidation_blocks_concurrent_winner(cm_instance,
     assert exc.value.status_code == 409
     assert exc.value.detail["error_code"] == "NOT_STASHED"
     assert mock_cache_service.redis_client.eval.call_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_stash_keeps_logs_and_markers_on_cleanup(
+    cm_instance, mock_cache_service, monkeypatch, tmp_path
+):
+    """Dedicated cleanup-scope test: a richer storage tree with multiple
+    kept-class files (log + completion marker) AND data files (root +
+    nested subdir) exercises the full files_to_keep set + os.walk
+    bottom-up subdir rmdir."""
+    stash_dir = tmp_path / "stash"
+    stash_dir.mkdir()
+
+    storage = tmp_path / "crawl_data"
+    storage.mkdir()
+    # 2 kept files at root
+    (storage / "crawler.log").write_text("log content")
+    (storage / "_completion_marker.json").write_text('{"final_status":"finished"}')
+    # 1 data file at root
+    (storage / "dataset.json").write_text('{"records":[1,2,3]}')
+    # 1 data file in nested subdir
+    sub = storage / "storage" / "datasets"
+    sub.mkdir(parents=True)
+    (sub / "000001.json").write_text("data")
+
+    job_info = {
+        "crawl_id": "rich_test_id",
+        "status": "failed",
+        "storage_path": str(storage),
+        "domain": "example.com",
+    }
+
+    monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
+    monkeypatch.setattr(cm_module.settings, "GCS_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        cm_instance,
+        "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0, "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(job_info))
+
+    await cm_instance.stash_crawl(job_info)
+
+    # Kept
+    assert (storage / "crawler.log").exists()
+    assert (storage / "_completion_marker.json").exists()
+    # Deleted (root-level data file)
+    assert not (storage / "dataset.json").exists()
+    # Deleted (nested data file + its empty subdirs)
+    assert not (sub / "000001.json").exists()
+    assert not sub.exists(), "empty data subdir should be rmdir'd"
+    # Root storage dir kept (contains 2 kept files)
+    assert storage.exists()

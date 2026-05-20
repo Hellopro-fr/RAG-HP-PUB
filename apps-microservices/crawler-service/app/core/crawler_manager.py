@@ -1928,6 +1928,31 @@ class CrawlerManager:
             except OSError as e:
                 logger.warning(f"Failed to clean up temp file '{path}': {e}")
 
+    def _verify_bind_mount(self, path: str, label: str) -> None:
+        """Raise 503 BIND_MOUNT_MISSING if path is not a real mount point.
+
+        Detects the silent-data-loss case where docker-compose volumes
+        were added but the container was not recreated. Without this guard
+        Python's os.makedirs creates an ephemeral in-container dir; data
+        written there is invisible to host-side daemons and lost on
+        container recreate.
+
+        Detection: os.path.ismount(p) returns True only for bind-mounts
+        and named volumes — False for ordinary dirs (or non-existent
+        paths).
+        """
+        if not os.path.ismount(path):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_code": "BIND_MOUNT_MISSING",
+                    "path": path,
+                    "label": label,
+                    "ops_action": "docker-compose --profile crawling up -d --force-recreate crawler-service",
+                    "hint": "Container was started before compose mount declaration; recreate required.",
+                },
+            )
+
     async def _acquire_ownership_lock(self, lock_key: str, ttl_seconds: int) -> Optional[str]:
         """Acquire a Redis lock with TTL, value = REPLICA_ID. Returns the value on
         success, None on failure. Pairs with _release_ownership_lock for atomic
@@ -2038,6 +2063,13 @@ class CrawlerManager:
         job_info = fresh_job_info
 
         try:
+            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+            # Rejects with 503 BIND_MOUNT_MISSING if /app/stash is not a real
+            # bind-mount. Without this guard os.makedirs would create an
+            # ephemeral in-container dir; tar would land in container overlay
+            # FS, invisible to the host upload daemon (incident: crawl 1958).
+            self._verify_bind_mount(settings.STASH_SHARED_PATH, "stash upload")
+
             stash_dir = settings.STASH_SHARED_PATH
             target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
             job_storage_path = job_info["storage_path"]
@@ -2122,15 +2154,39 @@ class CrawlerManager:
             await cache_service.set_json(job_key, fresh_job_info)
             logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
 
-            # --- Delete local crawl storage dir (safe to fail — data is in the tar) ---
+            # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
+            # Mirrors archive_crawl._cleanup_local_data so operator UX is
+            # consistent: ops can peek at logs locally without restoring via
+            # unstash. The tar contains everything; unstash restore is
+            # idempotent over kept files.
             try:
-                def _delete_local():
-                    if os.path.isdir(job_storage_path):
-                        shutil.rmtree(job_storage_path)
-                await anyio.to_thread.run_sync(_delete_local)
-                logger.info(f"Deleted local storage for stashed crawl '{crawl_id}'.")
+                def _cleanup_data_keep_logs():
+                    files_to_keep = {
+                        'crawler.log', '_callback_payload.json',
+                        '_completion_marker.json', '_status_snapshot.json',
+                        '_exit_reason.json', '_update_report.json',
+                        'update_stats.json',
+                        'timing.jsonl', 'timing-summary.json',
+                    }
+                    if not os.path.isdir(job_storage_path):
+                        return
+                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                        for name in files:
+                            if name not in files_to_keep:
+                                try:
+                                    os.remove(os.path.join(root, name))
+                                except OSError:
+                                    pass
+                        for name in dirs:
+                            try:
+                                os.rmdir(os.path.join(root, name))
+                            except OSError:
+                                pass  # non-empty (kept file inside) → leave dir
+
+                await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
+                logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
             except Exception as e:
-                logger.warning(f"Local cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
+                logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
 
             return {
                 "crawl_id": crawl_id,
@@ -2209,6 +2265,15 @@ class CrawlerManager:
         cleanup_done_path = os.path.join(results_dir, f"{crawl_id}.unstash-cleanup-done")
 
         try:
+            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+            # Rejects with 503 BIND_MOUNT_MISSING if either stash download dir
+            # is not a real bind-mount. Without these guards os.makedirs would
+            # create ephemeral in-container dirs; .request marker would never
+            # reach the host daemon and unstash would hang until UNSTASH_TIMEOUT.
+            # Inside try-block so finally releases the unstash_lock on the 503 path.
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_REQUESTS_PATH, "unstash requests")
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_RESULTS_PATH, "unstash results")
+
             # --- Submit download request ---
             os.makedirs(requests_dir, exist_ok=True)
             os.makedirs(results_dir, exist_ok=True)
