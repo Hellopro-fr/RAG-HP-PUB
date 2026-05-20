@@ -43,8 +43,7 @@ export function getProductImageUrl(imagePath: string): string {
   if (!imagePath) return '';
   const encoded = encodeImagePath(imagePath);
   const apiBase = basePath || '';
-  // DEV ONLY — hardcode du host prod pour éviter le proxy local cassé (CDN Docker injoignable). À retirer avant merge.
-  return `https://www.hellopro.fr${apiBase}/api/images/${encoded}`;
+  return `${apiBase}/api/images/${encoded}`;
 }
 
 /**
