@@ -62,7 +62,9 @@
             {{ errorMessage }}
           </div>
 
-          <div class="space-y-4">
+          <div
+            class="rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-200 dark:divide-gray-800 overflow-hidden bg-white dark:bg-gray-900"
+          >
             <MCPServerCard
               v-for="server in configuredServers"
               :key="server.id"
