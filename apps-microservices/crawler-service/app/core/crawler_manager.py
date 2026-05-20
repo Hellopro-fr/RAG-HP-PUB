@@ -2154,15 +2154,39 @@ class CrawlerManager:
             await cache_service.set_json(job_key, fresh_job_info)
             logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
 
-            # --- Delete local crawl storage dir (safe to fail — data is in the tar) ---
+            # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
+            # Mirrors archive_crawl._cleanup_local_data so operator UX is
+            # consistent: ops can peek at logs locally without restoring via
+            # unstash. The tar contains everything; unstash restore is
+            # idempotent over kept files.
             try:
-                def _delete_local():
-                    if os.path.isdir(job_storage_path):
-                        shutil.rmtree(job_storage_path)
-                await anyio.to_thread.run_sync(_delete_local)
-                logger.info(f"Deleted local storage for stashed crawl '{crawl_id}'.")
+                def _cleanup_data_keep_logs():
+                    files_to_keep = {
+                        'crawler.log', '_callback_payload.json',
+                        '_completion_marker.json', '_status_snapshot.json',
+                        '_exit_reason.json', '_update_report.json',
+                        'update_stats.json',
+                        'timing.jsonl', 'timing-summary.json',
+                    }
+                    if not os.path.isdir(job_storage_path):
+                        return
+                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                        for name in files:
+                            if name not in files_to_keep:
+                                try:
+                                    os.remove(os.path.join(root, name))
+                                except OSError:
+                                    pass
+                        for name in dirs:
+                            try:
+                                os.rmdir(os.path.join(root, name))
+                            except OSError:
+                                pass  # non-empty (kept file inside) → leave dir
+
+                await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
+                logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
             except Exception as e:
-                logger.warning(f"Local cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
+                logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
 
             return {
                 "crawl_id": crawl_id,
