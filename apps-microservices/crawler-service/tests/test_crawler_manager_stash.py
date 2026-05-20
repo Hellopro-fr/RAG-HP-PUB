@@ -217,6 +217,13 @@ async def test_unstash_blocks_not_stashed(cm_instance, base_job_info, mock_cache
 
 @pytest.mark.asyncio
 async def test_unstash_writes_request_marker(cm_instance, stashed_job_info, mock_cache_service, monkeypatch, tmp_path):
+    """Concrete capture: assert the marker file path + content actually written
+    by unstash_crawl before the polling loop times out.
+
+    Prior version asserted only the 504 timeout — passed even if the marker
+    write was a no-op. Spec §8 (and follow-up §4.4) require the write itself
+    to be verified.
+    """
     req_dir = tmp_path / "stash-req"
     res_dir = tmp_path / "stash-res"
     req_dir.mkdir()
@@ -228,15 +235,40 @@ async def test_unstash_writes_request_marker(cm_instance, stashed_job_info, mock
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
     mock_cache_service.redis_client.set = AsyncMock(return_value=True)
     mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    # Post-lock TOCTOU re-validation in unstash_crawl reads fresh blob — return
+    # the still-stashed one so the path proceeds to the request-marker write.
+    mock_cache_service.get_json = AsyncMock(return_value=dict(stashed_job_info))
 
-    with pytest.raises(HTTPException):  # will timeout (no .done written)
+    captured = {"name": None, "content": None}
+
+    async def _capture_marker():
+        # Poll req_dir for any *.request file. The marker exists between the
+        # write and the timeout-cleanup at the end of unstash_crawl, so we
+        # snapshot its content the moment it appears.
+        for _ in range(50):
+            await asyncio.sleep(0.05)
+            files = list(req_dir.glob("*.request"))
+            if files:
+                captured["name"] = files[0].name
+                captured["content"] = files[0].read_text()
+                return
+
+    capture_task = asyncio.create_task(_capture_marker())
+
+    with pytest.raises(HTTPException) as exc:
         await cm_instance.unstash_crawl(stashed_job_info)
+    # The polling loop expired — 504 is expected
+    assert exc.value.status_code == 504
 
-    # Request marker must have been written
-    # (cleaned up on timeout, so check via Redis exists / mock_set_json calls)
-    # — alternative: spy on aiofiles.open
-    # Here we rely on the timeout path removing it; verify timeout raised 504
-    # The actual write is verified by reaching the polling loop without error.
+    # Wait for the capture task to finish (it may have already captured)
+    await capture_task
+
+    assert captured["name"] == "test_id.request", (
+        f"Marker file path mismatch: got {captured['name']!r}"
+    )
+    assert captured["content"] == "test_id", (
+        f"Marker file content mismatch: got {captured['content']!r}"
+    )
 
 
 @pytest.mark.asyncio
