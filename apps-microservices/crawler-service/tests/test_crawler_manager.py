@@ -964,3 +964,84 @@ class TestCleanupStaleStateForRelaunch:
             "Could not remove stale completion marker" in r.message
             for r in caplog.records
         )
+
+
+class TestParseIsoNaiveUtc:
+    """Regression: reconcile_jobs raised TypeError when a Redis blob
+    contained a tz-aware ISO datetime in last_heartbeat/start_time, because
+    fromisoformat() returned an aware datetime that could not subtract
+    against naive datetime.utcnow(). Helper normalizes both shapes.
+    """
+
+    def test_naive_input_passes_through(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_naive_with_microseconds_passes_through(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01.123456")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1, 123456)
+
+    def test_z_suffix_stripped_to_naive_utc(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01Z")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_zero_offset_stripped_to_naive_utc(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01+00:00")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_positive_offset_converted_to_utc(self):
+        """+05:00 wall-clock 08:24 = 03:24 UTC."""
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01+05:00")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 3, 24, 1)
+
+    def test_result_subtracts_safely_against_utcnow(self):
+        """The whole point: no TypeError when used in reconcile_jobs."""
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        # Tz-aware input that previously broke reconcile
+        parsed = _parse_iso_naive_utc("2026-05-20T08:24:01Z")
+        # Must subtract without TypeError
+        delta = datetime.utcnow() - parsed
+        assert delta.total_seconds() >= 0  # parsed is in the past
+
+
+class TestStashedAtFormat:
+    """Regression: stash_crawl previously wrote `stashed_at = utcnow().isoformat() + "Z"`,
+    which would cause reconcile (and any future fromisoformat consumer) to
+    return a tz-aware datetime that can't subtract from naive utcnow().
+    Convention-fix: drop the Z suffix to match archived_at/last_heartbeat.
+    """
+
+    def test_stash_crawl_stashed_at_format_is_naive(self):
+        """Inspect the stash_crawl source to confirm no `+ "Z"` suffix is appended."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        src = inspect.getsource(cm.CrawlerManager.stash_crawl)
+        assert "isoformat() + \"Z\"" not in src, (
+            "stash_crawl must not append 'Z' to stashed_at; "
+            "convention is naive UTC ISO string."
+        )
+        # And the assignment must still produce an ISO string
+        assert "stashed_at = datetime.utcnow().isoformat()" in src

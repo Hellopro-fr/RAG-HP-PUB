@@ -12,7 +12,7 @@ import uuid
 import anyio
 import tarfile
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Any, List, Tuple
 
 import aiofiles
@@ -47,6 +47,28 @@ FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
 # Used by stash/unstash to avoid clobbering a new acquirer's lock after TTL expiry.
 import socket as _socket
 REPLICA_ID = f"{_socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+
+def _parse_iso_naive_utc(value: str) -> datetime:
+    """Parse an ISO 8601 datetime string and return a NAIVE UTC datetime.
+
+    Handles both naive (``2026-05-20T08:24:01``) and tz-aware
+    (``2026-05-20T08:24:01Z``, ``+00:00``, ``+05:00``) inputs. tz-aware values
+    are converted to UTC then stripped of tzinfo so they subtract safely
+    against ``datetime.utcnow()`` used elsewhere in this module.
+
+    Why: ``datetime.fromisoformat()`` on Python 3.11+ returns tz-aware
+    datetimes when the input carries a ``Z`` or offset suffix. Subtracting
+    a tz-aware datetime from naive ``utcnow()`` raises
+    ``TypeError: can't subtract offset-naive and offset-aware datetimes``.
+    External writers (legacy PHP, migration scripts) sometimes emit
+    Z-suffixed strings into ``last_heartbeat`` / ``start_time`` Redis fields
+    even though this codebase's convention is naive UTC.
+    """
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
 
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory, excluding Crawlee metadata."""
@@ -2086,7 +2108,11 @@ class CrawlerManager:
                 raise HTTPException(status_code=500, detail=f"Stash archive creation failed: {str(e)}")
 
             # --- Mark as stashed in Redis (BEFORE deleting local data) ---
-            stashed_at = datetime.utcnow().isoformat() + "Z"
+            # Naive UTC ISO string — matches codebase convention (archived_at,
+            # last_heartbeat, etc). Adding a 'Z' suffix would cause
+            # fromisoformat() to return a tz-aware datetime on Python 3.11+,
+            # breaking subtraction against naive utcnow() in reconcile_jobs.
+            stashed_at = datetime.utcnow().isoformat()
             job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
             fresh_job_info = await cache_service.get_json(job_key)
             if not fresh_job_info:
@@ -2529,9 +2555,9 @@ class CrawlerManager:
 
                     last_activity_time = None
                     if last_heartbeat_str:
-                        last_activity_time = datetime.fromisoformat(str(last_heartbeat_str))
+                        last_activity_time = _parse_iso_naive_utc(str(last_heartbeat_str))
                     elif start_time_str:
-                        last_activity_time = datetime.fromisoformat(str(start_time_str))
+                        last_activity_time = _parse_iso_naive_utc(str(start_time_str))
 
                     # --- Ownership-aware stale detection ---
                     job_replica_id = job_data.get("replica_id")
