@@ -2221,9 +2221,10 @@ class CrawlerManager:
 
             if gcs_cleanup_status == "deferred":
                 logger.warning(
-                    f"Unstash cleanup-done marker not arrived within "
-                    f"{settings.UNSTASH_CLEANUP_GRACE_SECONDS}s for '{crawl_id}'. "
-                    f"GCS object may be orphaned at gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz."
+                    f"UNSTASH_GCS_ORPHAN crawl_id={crawl_id} "
+                    f"elapsed_seconds={settings.UNSTASH_CLEANUP_GRACE_SECONDS} "
+                    f"reason=cleanup_grace_expired "
+                    f"gcs_path=gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz"
                 )
 
             # --- Clear stashed_at in Redis ---
