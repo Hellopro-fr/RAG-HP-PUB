@@ -11,7 +11,7 @@
           Récapitulatif de l'autorisation
         </h3>
         <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mt-0.5">
-          Connecter {{ articleAndNames }} via MCP
+          Connecter avec le MCP {{ clientName }}
         </p>
       </div>
     </div>
@@ -45,20 +45,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { Shield, Server } from 'lucide-vue-next'
 
-const props = defineProps<{
+defineProps<{
   totalServers: number
   enabledServers: number
   requiredServers: number
-  serverNames: string[]
+  clientName: string
 }>()
-
-const articleAndNames = computed(() => {
-  const names = props.serverNames
-  if (names.length === 0) return 'les serveurs MCP'
-  if (names.length === 1) return `le ${names[0]}`
-  return names.join(', ')
-})
 </script>
