@@ -281,3 +281,84 @@ The crawler service automatically cleans up stale files across all shared direct
 - **Manual trigger**: `POST /prune-archives?max_age_hours=24` (or `delete_all=true`)
 
 The `dead_letter/` directory is **never** auto-cleaned — it requires manual investigation.
+
+
+## Troubleshooting: 503 `BIND_MOUNT_MISSING`
+
+Returned by `POST /stash/{id}` or `POST /unstash/{id}` when one of the
+stash bind-mounts (`/app/stash`, `/app/gcs-stash-requests`,
+`/app/gcs-stash-downloads`) is not a real mount point. Indicates the
+running container was started BEFORE `docker-compose.yaml` declared
+those mounts (commit `14a02524`). Docker-compose only applies new volume
+declarations at **container creation** — a plain `docker-compose up -d`
+after editing the file does not bridge them.
+
+**Response body:**
+
+```json
+{
+  "detail": {
+    "error_code": "BIND_MOUNT_MISSING",
+    "path": "/app/stash",
+    "label": "stash upload",
+    "ops_action": "docker-compose --profile crawling up -d --force-recreate crawler-service",
+    "hint": "Container was started before compose mount declaration; recreate required."
+  }
+}
+```
+
+### Fix
+
+```bash
+# 1. Stop the service
+docker-compose --profile crawling stop crawler-service
+
+# 2. Recreate (rebuilds container with the latest compose mounts)
+docker-compose --profile crawling up -d --force-recreate crawler-service
+
+# 3. Verify all three stash mounts are bridged
+docker inspect $(docker ps -qf name=crawler-service | head -1) \
+  --format='{{range .Mounts}}{{.Destination}} ({{.Type}}){{println}}{{end}}' \
+  | grep -E "stash|gcs-stash"
+```
+
+Expected output:
+
+```
+/app/stash (bind)
+/app/gcs-stash-requests (bind)
+/app/gcs-stash-downloads (bind)
+```
+
+If any line is missing, the recreate did not apply the latest compose
+file. Verify the commit `14a02524` is pulled and re-run.
+
+
+## Recovery: stash tars trapped in pre-fix ephemeral container
+
+If `POST /stash/{id}` returned 202 BEFORE the recreate above, the tar
+lives in the container's overlay filesystem at `/app/stash/{id}.tar.gz`
+instead of on the host bind-mount. Rescue it BEFORE recreating (which
+would destroy the layer):
+
+```bash
+CONTAINER=$(docker ps -qf name=crawler-service | head -1)
+
+# Confirm the tar is in the ephemeral /app/stash
+docker exec "$CONTAINER" ls -la /app/stash/
+
+# Rescue to the host (replace {id} with the actual crawl_id)
+docker cp "$CONTAINER":/app/stash/{id}.tar.gz ./recovered_{id}.tar.gz
+
+# Now recreate the container (Troubleshooting section above)
+
+# After recreate, copy back into the bind-mount source dir
+cp ./recovered_{id}.tar.gz \
+   ./apps-microservices/crawler-service/crawler_stash/{id}.tar.gz
+
+# The upload daemon picks it up within CHECK_INTERVAL (60s). Verify:
+gcloud storage ls "gs://${GCS_BUCKET_NAME}/stash/{id}.tar.gz"
+```
+
+Redis `stashed_at` was set by the original `POST /stash/{id}` call, so
+`POST /unstash/{id}` will succeed once the tar reaches GCS.
