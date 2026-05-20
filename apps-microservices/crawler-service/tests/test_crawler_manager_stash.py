@@ -255,6 +255,34 @@ async def test_unstash_blocks_not_stashed(cm_instance, base_job_info, mock_cache
 
 
 @pytest.mark.asyncio
+async def test_unstash_crawl_rejects_when_dir_not_mount(
+    cm_instance, stashed_job_info, mock_cache_service, monkeypatch
+):
+    """Spec 2026-05-20 §4: bind-mount preflight rejects with 503 when
+    either STASH_DOWNLOAD_REQUESTS_PATH or STASH_DOWNLOAD_RESULTS_PATH is
+    not a real mount point. Lock must be released by the existing
+    finally block. The first call site is the requests dir — that's the
+    label expected in the 503 detail."""
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(stashed_job_info))
+
+    # Override autouse fixture: ismount returns False
+    monkeypatch.setattr(os.path, "ismount", lambda p: False)
+
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.unstash_crawl(stashed_job_info)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+    # First call site short-circuits — that's the requests dir
+    assert exc.value.detail["label"] == "unstash requests"
+    # Lock released
+    assert mock_cache_service.redis_client.eval.call_count >= 1
+
+
+@pytest.mark.asyncio
 async def test_unstash_writes_request_marker(cm_instance, stashed_job_info, mock_cache_service, monkeypatch, tmp_path):
     """Concrete capture: assert the marker file path + content actually written
     by unstash_crawl before the polling loop times out.

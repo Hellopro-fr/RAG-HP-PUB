@@ -2241,6 +2241,15 @@ class CrawlerManager:
         cleanup_done_path = os.path.join(results_dir, f"{crawl_id}.unstash-cleanup-done")
 
         try:
+            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+            # Rejects with 503 BIND_MOUNT_MISSING if either stash download dir
+            # is not a real bind-mount. Without these guards os.makedirs would
+            # create ephemeral in-container dirs; .request marker would never
+            # reach the host daemon and unstash would hang until UNSTASH_TIMEOUT.
+            # Inside try-block so finally releases the unstash_lock on the 503 path.
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_REQUESTS_PATH, "unstash requests")
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_RESULTS_PATH, "unstash results")
+
             # --- Submit download request ---
             os.makedirs(requests_dir, exist_ok=True)
             os.makedirs(results_dir, exist_ok=True)
