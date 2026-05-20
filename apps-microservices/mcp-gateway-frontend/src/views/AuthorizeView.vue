@@ -35,12 +35,7 @@
     <!-- Consent -->
     <main v-else class="mx-auto max-w-3xl w-full px-4 py-8 flex-1">
       <div class="space-y-6">
-        <ConsentSummary
-          :total-servers="configuredServers.length"
-          :enabled-servers="enabledServersCount"
-          :required-servers="requiredServersCount"
-          :client-name="clientName"
-        />
+        <ConsentSummary :client-name="clientName" />
 
         <Separator />
 
@@ -189,9 +184,6 @@ const selectedToolIds = computed(() => {
 })
 
 const enabledServersCount = computed(() => selectedServerIds.value.length)
-const requiredServersCount = computed(() =>
-  preConfigured.value ? configuredServers.value.length : 0,
-)
 
 function toggleServer(serverId: string): void {
   if (expandedServers.has(serverId)) expandedServers.delete(serverId)
