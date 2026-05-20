@@ -307,9 +307,17 @@ export default function SelectionTableViewB({
                   )}
                 >
                   {isSelected && (
-                    <div className="absolute top-1 right-1 z-10 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggle(product.id);
+                      }}
+                      aria-label={`Désélectionner ${product.productName}`}
+                      className="absolute top-1 right-1 z-10 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow cursor-pointer hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+                    >
                       <Check className="h-3 w-3" />
-                    </div>
+                    </button>
                   )}
                   <button
                     type="button"
@@ -518,9 +526,17 @@ export default function SelectionTableViewB({
                       )}
                     >
                       {isSelected && (
-                        <div className="absolute top-1 right-2 z-10 h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle(product.id);
+                          }}
+                          aria-label={`Désélectionner ${product.productName}`}
+                          className="absolute top-1 right-2 z-10 h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow cursor-pointer hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+                        >
                           <Check className="h-3.5 w-3.5" />
-                        </div>
+                        </button>
                       )}
                       <div className="flex flex-col">
                         <p className="text-xs text-muted-foreground truncate h-4 mt-1">
