@@ -28,21 +28,22 @@ Exemple "melangeur conique" :
   Produit "Saleuse a cuve conique" (matche conique, pas melangeur) :
     name_match_simple = 1/2 = 0.50
     name_match_idf    = 3.0 / (3.0 + 1.5) = 0.67
-  Produit "Mixeur peinture" (matche aucun token, mais titre semantique proche) :
-    name_match_simple = 0/2 = 0.00
-    name_match_idf    = 0.00 (inchange)
 
-Effet : les produits qui contiennent les tokens rares de la query remontent
-au-dessus de ceux qui ne contiennent que les tokens communs.
+A6 (2026-05-20) -- Support synonymes dans le matching
+------------------------------------------------------
+Un token query est considere "couvert" par le doc si lui-meme OU un de ses
+synonymes Typesense apparait dans nom_produit / categorie. Resout les cas
+multilingues comme "crane" -> "Grue XCMG" (le synonyme manual-grue contient
+"crane" + "grue" + "grues" + ...).
 
-Si le fichier IDF n'est pas charge (idf_available()=False, ex. fresh deploy
-sans avoir lance compute_idf.py), on bascule automatiquement sur le ratio
-simple : aucune regression possible vs le comportement actuel.
+Sans synonymes (Typesense indisponible ou pas configure) : fallback sur le
+matching strict (= comportement A4). Aucune regression possible.
 """
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any, Set, Optional
 
 from app.core.credentials import settings
 from app.services.idf_loader import get_idf, idf_available
+from app.services.synonyms_loader import get_synonyms_map
 from app.utils.text import tokenize
 
 
@@ -53,31 +54,54 @@ _W_NAME_NOVEC   = 0.60
 _W_CAT_NOVEC    = 0.20
 
 
-def _idf_weighted_match(q_tokens: Set[str], doc_tokens: Set[str]) -> float:
+def _idf_weighted_match(
+    q_tokens: Set[str],
+    doc_tokens: Set[str],
+    syn_map: Optional[Dict[str, Set[str]]] = None,
+) -> float:
     """
-    Ratio de match pondere par IDF entre q_tokens et doc_tokens.
-    Si l'IDF n'est pas disponible -> fallback ratio simple
-    (= comportement historique, aucune regression).
+    Ratio de match pondere par IDF, avec support synonymes optionnel.
 
-    Resultat entre 0.0 (aucun match) et 1.0 (tous les tokens query matches).
+    Logique :
+      - Pour chaque token query, on verifie s'il est "couvert" par le doc.
+        Un token est couvert si lui-meme OU un de ses synonymes est dans doc_tokens.
+      - Score = somme des IDF des tokens couverts / somme des IDF de TOUS les tokens query.
+
+    Si IDF non disponible -> fallback ratio simple (= comportement historique).
+    Si syn_map non fourni -> matching strict (comportement A4 sans A6).
+
+    Resultat entre 0.0 (aucun token couvert) et 1.0 (tous couverts).
     """
     if not q_tokens:
         return 0.0
 
-    if not idf_available():
-        # Fallback : ratio simple historique
-        return len(q_tokens & doc_tokens) / len(q_tokens)
+    use_idf = idf_available()
+    sum_total = 0.0
+    sum_matched = 0.0
+    n_matched = 0
 
-    matched = q_tokens & doc_tokens
-    if not matched:
-        return 0.0
+    for t in q_tokens:
+        weight = get_idf(t) if use_idf else 1.0
+        sum_total += weight
 
-    sum_matched = sum(get_idf(t) for t in matched)
-    sum_total = sum(get_idf(t) for t in q_tokens)
+        # Direct match (token litteral dans le doc)
+        if t in doc_tokens:
+            sum_matched += weight
+            n_matched += 1
+            continue
+
+        # Synonym match (un equivalent du token est dans le doc)
+        if syn_map is not None:
+            equivs = syn_map.get(t)
+            if equivs and not equivs.isdisjoint(doc_tokens):
+                sum_matched += weight
+                n_matched += 1
+                continue
+
     if sum_total <= 0:
-        # Garde-fou : tous les tokens query ont idf=0 (theoriquement impossible
-        # avec idf lisse log((N+1)/(df+1))+1 >= 1) -> ratio simple
-        return len(matched) / len(q_tokens)
+        # Garde-fou (theoriquement impossible avec idf lisse >= 1)
+        return n_matched / len(q_tokens)
+
     return sum_matched / sum_total
 
 
@@ -97,6 +121,9 @@ def rerank_candidates(
     q_tokens = tokenize(query)
     if not q_tokens or not groups:
         return []
+
+    # A6 : charge le mapping synonymes (lazy + cache). {} si non disponible.
+    syn_map = get_synonyms_map() or None
 
     # Choix des poids
     if use_vector:
@@ -123,12 +150,12 @@ def rerank_candidates(
         vec_score = 1 - min(vec_dist or 1.0, 1.0) if use_vector else 0.0
         tm_raw = hit.get("text_match", 0) or 0
 
-        # A4 : name_match et cat_match desormais ponderes par IDF (si dispo).
+        # A4+A6 : name_match et cat_match ponderes par IDF + expansion synonymes.
         name_tokens = tokenize(doc.get("nom_produit", ""))
-        name_match = _idf_weighted_match(q_tokens, name_tokens)
+        name_match = _idf_weighted_match(q_tokens, name_tokens, syn_map=syn_map)
 
         cat_tokens = tokenize(doc.get("categorie", ""))
-        cat_match = _idf_weighted_match(q_tokens, cat_tokens)
+        cat_match = _idf_weighted_match(q_tokens, cat_tokens, syn_map=syn_map)
 
         raw.append({
             "doc": doc,
