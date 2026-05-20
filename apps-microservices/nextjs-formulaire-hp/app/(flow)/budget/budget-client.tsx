@@ -50,14 +50,6 @@ const BudgetClient = () => {
   const data = priceEstimation?.data;
   const showEstimate = hasDisplayablePriceEstimation(priceEstimation);
 
-  const budgetSnapshot = data
-    ? {
-        borne_basse: data.fourchette.borne_basse,
-        borne_haute: data.fourchette.borne_haute,
-        exemples_count: data.exemples_produits?.length ?? 0,
-      }
-    : {};
-
   const hasTrackedEstimate = useRef(false);
 
   useEffect(() => {
@@ -69,7 +61,6 @@ const BudgetClient = () => {
 
     hasTrackedEstimate.current = true;
     trackBudgetView();
-    trackDbEvent('pricing', 'budget_view', budgetSnapshot, categoryId, 1);
   }, [showEstimate]);
 
   const priceItems = data
@@ -113,7 +104,6 @@ const BudgetClient = () => {
 
   const navigateAfterBudget = (id: string) => {
     trackBudgetComplete(id);
-    trackDbEvent('pricing', 'budget_complete', { budget_range: id }, categoryId, 1);
     if (isLowestBudgetOption(id)) {
       goToSomethingToAdd();
     } else {
