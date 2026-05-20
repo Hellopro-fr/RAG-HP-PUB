@@ -2150,6 +2150,29 @@ class CrawlerManager:
                 detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"}
             )
 
+        # --- Post-lock TOCTOU re-validation (spec follow-up §4.2) ---
+        # Another replica may have completed unstash between caller's job_info
+        # snapshot and our lock acquire. Re-fetch and verify stashed_at is still
+        # populated; on mismatch, release the lock and raise 409 NOT_STASHED.
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh_job_info = await cache_service.get_json(job_key)
+        if fresh_job_info is None:
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job '{crawl_id}' vanished from Redis during unstash claim."
+            )
+        if not fresh_job_info.get("stashed_at"):
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "NOT_STASHED"},
+            )
+        # Use the fresh blob from here on.
+        job_info = fresh_job_info
+
         requests_dir = settings.STASH_DOWNLOAD_REQUESTS_PATH
         results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
         request_path = os.path.join(requests_dir, f"{crawl_id}.request")

@@ -252,6 +252,8 @@ async def test_unstash_timeout_when_no_done_marker(cm_instance, stashed_job_info
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
     mock_cache_service.redis_client.set = AsyncMock(return_value=True)
     mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    # Post-lock TOCTOU re-validation reads fresh blob — return the still-stashed one
+    mock_cache_service.get_json = AsyncMock(return_value=dict(stashed_job_info))
 
     with pytest.raises(HTTPException) as exc:
         await cm_instance.unstash_crawl(stashed_job_info)
@@ -275,6 +277,8 @@ async def test_unstash_error_marker_returns_502(cm_instance, stashed_job_info, m
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
     mock_cache_service.redis_client.set = AsyncMock(return_value=True)
     mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    # Post-lock TOCTOU re-validation reads fresh blob — return the still-stashed one
+    mock_cache_service.get_json = AsyncMock(return_value=dict(stashed_job_info))
 
     with pytest.raises(HTTPException) as exc:
         await cm_instance.unstash_crawl(stashed_job_info)
@@ -373,6 +377,8 @@ async def test_unstash_extract_failure_preserves_stash(cm_instance, stashed_job_
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
     mock_cache_service.redis_client.set = AsyncMock(return_value=True)
     mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    # Post-lock TOCTOU re-validation reads fresh blob — return the still-stashed one
+    mock_cache_service.get_json = AsyncMock(return_value=dict(stashed_job_info))
 
     with pytest.raises(HTTPException) as exc:
         await cm_instance.unstash_crawl(stashed_job_info)
@@ -501,6 +507,8 @@ async def test_unstash_tar_filter_blocks_path_traversal(cm_instance, stashed_job
     mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
     mock_cache_service.redis_client.set = AsyncMock(return_value=True)
     mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    # Post-lock TOCTOU re-validation reads fresh blob — return the still-stashed one
+    mock_cache_service.get_json = AsyncMock(return_value=dict(stashed_job_info))
 
     with pytest.raises(HTTPException) as exc:
         await cm_instance.unstash_crawl(stashed_job_info)
@@ -559,4 +567,28 @@ async def test_stash_toctou_revalidation_blocks_concurrent_winner(cm_instance, b
     assert exc.value.detail["error_code"] == "ALREADY_STASHED"
     assert exc.value.detail["stashed_at"] == "2026-05-19T10:00:00Z"
     # Lock release (Lua eval) was called for compare-and-delete
+    assert mock_cache_service.redis_client.eval.call_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_unstash_toctou_revalidation_blocks_concurrent_winner(cm_instance, stashed_job_info, mock_cache_service, monkeypatch):
+    """Spec follow-up §4.2: symmetric to the stash TOCTOU test.
+
+    Caller-passed job_info has stashed_at set; lock acquire succeeds. Fresh
+    Redis read returns the same crawl with stashed_at popped by a concurrent
+    winning unstash. unstash_crawl must raise 409 NOT_STASHED and release
+    the lock instead of proceeding to download/extract.
+    """
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+
+    unstashed_blob = dict(stashed_job_info)
+    unstashed_blob.pop("stashed_at", None)
+    mock_cache_service.get_json = AsyncMock(return_value=unstashed_blob)
+
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.unstash_crawl(stashed_job_info)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error_code"] == "NOT_STASHED"
     assert mock_cache_service.redis_client.eval.call_count >= 1
