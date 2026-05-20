@@ -2063,6 +2063,13 @@ class CrawlerManager:
         job_info = fresh_job_info
 
         try:
+            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+            # Rejects with 503 BIND_MOUNT_MISSING if /app/stash is not a real
+            # bind-mount. Without this guard os.makedirs would create an
+            # ephemeral in-container dir; tar would land in container overlay
+            # FS, invisible to the host upload daemon (incident: crawl 1958).
+            self._verify_bind_mount(settings.STASH_SHARED_PATH, "stash upload")
+
             stash_dir = settings.STASH_SHARED_PATH
             target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
             job_storage_path = job_info["storage_path"]

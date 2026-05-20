@@ -35,6 +35,19 @@ def cm_instance(mock_cache_service):
     return CrawlerManager()
 
 
+@pytest.fixture(autouse=True)
+def mock_bind_mounts_present(monkeypatch):
+    """Default for this test module: os.path.ismount returns True.
+
+    Without this, every test that exercises stash_crawl / unstash_crawl
+    would hit the new _verify_bind_mount 503 check because tmp_path is
+    not a real mount point. Tests that WANT to assert the 503 path can
+    override with monkeypatch.setattr(os.path, "ismount", lambda p: False)
+    inside the test body — local monkeypatch wins over autouse.
+    """
+    monkeypatch.setattr(os.path, "ismount", lambda p: True)
+
+
 @pytest.fixture
 def base_job_info(tmp_path):
     storage = tmp_path / "crawl_data"
@@ -78,6 +91,32 @@ async def test_stash_blocks_already_stashed(cm_instance, base_job_info):
         await cm_instance.stash_crawl(base_job_info)
     assert exc.value.status_code == 409
     assert exc.value.detail["error_code"] == "ALREADY_STASHED"
+
+
+@pytest.mark.asyncio
+async def test_stash_crawl_rejects_when_stash_dir_not_mount(
+    cm_instance, base_job_info, mock_cache_service, monkeypatch
+):
+    """Spec 2026-05-20 §4: bind-mount preflight rejects with 503 when
+    STASH_SHARED_PATH is not a real mount point. Lock must be released
+    by the existing finally block."""
+    # All Redis mocks pass TOCTOU successfully
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
+
+    # Override autouse fixture: ismount returns False (no bind-mount)
+    monkeypatch.setattr(os.path, "ismount", lambda p: False)
+
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(base_job_info)
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+    assert exc.value.detail["label"] == "stash upload"
+    # Lock released by finally (Lua eval invoked at least once)
+    assert mock_cache_service.redis_client.eval.call_count >= 1
 
 
 @pytest.mark.asyncio
