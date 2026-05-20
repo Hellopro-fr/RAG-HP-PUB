@@ -1045,3 +1045,55 @@ class TestStashedAtFormat:
         )
         # And the assignment must still produce an ISO string
         assert "stashed_at = datetime.utcnow().isoformat()" in src
+
+
+class TestVerifyBindMount:
+    """Defensive helper: raises 503 BIND_MOUNT_MISSING when stash/unstash
+    target paths are not real bind-mounts. Catches the silent-data-loss
+    case where docker-compose volumes were declared but the container was
+    not recreated to pick them up (incident 2026-05-20 crawl 1958)."""
+
+    def test_raises_503_when_path_is_ordinary_dir(self, tmp_path):
+        from fastapi import HTTPException
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        ordinary = tmp_path / "ephemeral"
+        ordinary.mkdir()  # plain dir, NOT a mount
+
+        with pytest.raises(HTTPException) as exc:
+            cm._verify_bind_mount(str(ordinary), "test-label")
+
+        assert exc.value.status_code == 503
+        assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+        assert exc.value.detail["path"] == str(ordinary)
+        assert exc.value.detail["label"] == "test-label"
+        assert "force-recreate" in exc.value.detail["ops_action"]
+        assert "hint" in exc.value.detail
+
+    def test_raises_503_when_path_does_not_exist(self, tmp_path):
+        from fastapi import HTTPException
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        missing = tmp_path / "nonexistent"  # never created
+
+        with pytest.raises(HTTPException) as exc:
+            cm._verify_bind_mount(str(missing), "test-label")
+
+        assert exc.value.status_code == 503
+        assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+
+    def test_returns_none_when_ismount_true(self, tmp_path, monkeypatch):
+        """Simulate a real mount point by mocking os.path.ismount."""
+        import os
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        fake_mount = tmp_path / "mounted"
+        fake_mount.mkdir()
+        monkeypatch.setattr(os.path, "ismount", lambda p: str(p) == str(fake_mount))
+
+        # Must not raise
+        result = cm._verify_bind_mount(str(fake_mount), "test-label")
+        assert result is None

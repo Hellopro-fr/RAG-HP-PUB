@@ -1928,6 +1928,31 @@ class CrawlerManager:
             except OSError as e:
                 logger.warning(f"Failed to clean up temp file '{path}': {e}")
 
+    def _verify_bind_mount(self, path: str, label: str) -> None:
+        """Raise 503 BIND_MOUNT_MISSING if path is not a real mount point.
+
+        Detects the silent-data-loss case where docker-compose volumes
+        were added but the container was not recreated. Without this guard
+        Python's os.makedirs creates an ephemeral in-container dir; data
+        written there is invisible to host-side daemons and lost on
+        container recreate.
+
+        Detection: os.path.ismount(p) returns True only for bind-mounts
+        and named volumes — False for ordinary dirs (or non-existent
+        paths).
+        """
+        if not os.path.ismount(path):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_code": "BIND_MOUNT_MISSING",
+                    "path": path,
+                    "label": label,
+                    "ops_action": "docker-compose --profile crawling up -d --force-recreate crawler-service",
+                    "hint": "Container was started before compose mount declaration; recreate required.",
+                },
+            )
+
     async def _acquire_ownership_lock(self, lock_key: str, ttl_seconds: int) -> Optional[str]:
         """Acquire a Redis lock with TTL, value = REPLICA_ID. Returns the value on
         success, None on failure. Pairs with _release_ownership_lock for atomic
