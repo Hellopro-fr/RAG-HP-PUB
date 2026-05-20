@@ -1119,40 +1119,18 @@ def _trim_chunks_to_token_budget(
 # Pas commerciaux français snappés sur une échelle finie pour rester lisible.
 
 _ECHELLE_COMMERCIALE = [
-    5, 10, 25, 50, 100, 250, 500,
-    1000, 2500, 5000, 10000, 25000, 50000, 100000,
-    250000, 500000, 1000000, 2500000, 5000000, 10000000,
-    25000000, 50000000, 100000000,
+    5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 750,
+    1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7500,
+    10000, 15000, 20000, 25000, 30000, 40000, 50000, 75000,
+    100000, 150000, 200000, 250000, 300000, 500000, 750000,
+    1000000, 1500000, 2000000, 2500000, 5000000, 7500000, 10000000,
+    15000000, 25000000, 50000000, 100000000,
 ]
 
 # Seuils de tuning pour la génération des choix budget.
 # Tous exprimés en ratio du prix moyen de la fourchette LLM.
 _RATIO_LARGEUR_DEGENEREE = 0.05  # si largeur < ratio*moyenne -> fourchette élargie artificiellement
 _RATIO_LARGEUR_ELARGIE   = 0.20  # nouvelle largeur = ratio*moyenne (cas dégénéré)
-_RATIO_PAS_MIN           = 0.10  # plancher du pas commercial = ratio*moyenne
-
-
-def _snap_to_scale(target: float, scale: List[int]) -> int:
-    """Retourne le pas commercial de `scale` le plus proche de `target`."""
-    return min(scale, key=lambda s: abs(s - target))
-
-
-def _next_in_scale(pas: int, scale: List[int]) -> Optional[int]:
-    """Retourne le pas commercial strictement supérieur (None si déjà au maximum)."""
-    for s in scale:
-        if s > pas:
-            return s
-    return None
-
-
-def _previous_in_scale(pas: int, scale: List[int]) -> Optional[int]:
-    """Retourne le pas commercial strictement inférieur (None si déjà au minimum)."""
-    prev: Optional[int] = None
-    for s in scale:
-        if s >= pas:
-            return prev
-        prev = s
-    return prev
 
 
 def _compute_bornes_tranches(min_p: float, max_p: float, pas: int) -> Tuple[int, int, List[Tuple[int, int]]]:
@@ -1173,6 +1151,12 @@ def _compute_bornes_tranches(min_p: float, max_p: float, pas: int) -> Tuple[int,
     tranches: List[Tuple[int, int]] = []
     cur = borne_inf
     while cur < borne_sup:
+        # Garde défensive : un pas très petit relativement à la fourchette
+        # (cas pathologique d'un LLM renvoyant des bornes aberrantes) pourrait
+        # générer des millions de tranches → OOM. _select_best_choice écartera
+        # ce candidat (n > 5) si on retourne une liste vide.
+        if len(tranches) > 100:
+            return borne_inf, borne_sup, []
         tranches.append((cur, cur + pas))
         cur += pas
 
@@ -1182,6 +1166,65 @@ def _compute_bornes_tranches(min_p: float, max_p: float, pas: int) -> Tuple[int,
 def _fmt_price(n: int) -> str:
     """Formate un entier avec espace milliers (ex: 2500 -> '2 500')."""
     return f"{int(n):,}".replace(",", " ")
+
+
+def _select_best_choice(
+    min_prix: float,
+    max_prix: float,
+    min_prix_original: float,
+) -> Optional[Tuple[int, int, int, List[Tuple[int, int]]]]:
+    """
+    Sélectionne le meilleur (pas, borne_inf, borne_sup, tranches) parmi tous les
+    pas de _ECHELLE_COMMERCIALE, en suivant les priorités strictes ci-dessous.
+    Retourne None si aucun pas valide trouvé.
+
+    Priorités (par ordre de préférence) :
+      P1 : 3 tranches uniformes, borne_inf > 0 et < min_prix_original (idéal)
+      P2 : 2 tranches uniformes, borne_inf > 0 et < min_prix_original
+      P3 : 3 tranches, borne_inf == 0 et 1ère tranche [0, X] avec X <= min_prix_original
+           (la 1ère sera affichée "Moins de X", sémantique préservée)
+      P4 : 4 tranches uniformes, borne_inf > 0 et < min_prix_original (fallback granularité)
+      P5 : 2 tranches, borne_inf == 0 et 1ère tranche valide pour "Moins de"
+      P6 : last resort - best effort (préférer nb_tranches proche de 3, puis plus grand pas)
+
+    Au sein d'une priorité, on prend le pas le plus grand (tranches plus larges = lisibles).
+    """
+    by_prio: Dict[int, List[Tuple[int, int, int, List[Tuple[int, int]]]]] = {
+        1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
+    }
+
+    for pas in _ECHELLE_COMMERCIALE:
+        bi, bs, tr = _compute_bornes_tranches(min_prix, max_prix, pas)
+        n = len(tr)
+        bi_strict = bi > 0 and bi < min_prix_original
+        # first_b valide pour "Moins de" : la borne sup de la 1ère tranche
+        # doit rester <= min_prix_original (sinon "Moins de X" englobe la fourchette LLM).
+        # Exception : si min_prix_original == 0, on accepte toujours.
+        fb_ok = (n > 0 and tr[0][1] <= min_prix_original) or min_prix_original == 0
+
+        if n == 3 and bi_strict:
+            by_prio[1].append((pas, bi, bs, tr))
+        elif n == 2 and bi_strict:
+            by_prio[2].append((pas, bi, bs, tr))
+        elif n == 3 and bi == 0 and fb_ok:
+            by_prio[3].append((pas, bi, bs, tr))
+        elif n == 4 and bi_strict:
+            by_prio[4].append((pas, bi, bs, tr))
+        elif n == 2 and bi == 0 and fb_ok:
+            by_prio[5].append((pas, bi, bs, tr))
+        elif 2 <= n <= 5:
+            by_prio[6].append((pas, bi, bs, tr))
+
+    # Priorités strictes : on prend le plus grand pas
+    for prio in (1, 2, 3, 4, 5):
+        if by_prio[prio]:
+            return max(by_prio[prio], key=lambda c: c[0])
+
+    # Last resort : préférer nb_tranches proche de 3, puis plus grand pas
+    if by_prio[6]:
+        return min(by_prio[6], key=lambda c: (abs(len(c[3]) - 3), -c[0]))
+
+    return None
 
 
 def _normalize_devise(devise: Optional[str]) -> str:
@@ -1250,49 +1293,18 @@ def _generate_budget_choices(
         min_prix = max(0.0, moyenne - largeur / 2.0)
         max_prix = moyenne + largeur / 2.0
 
-    # Pas cible : max entre "largeur/2" et "_RATIO_PAS_MIN du prix moyen".
-    # → vise 3 tranches centrales tout en garantissant un pas commercial
-    # sensé même quand la fourchette est resserrée par rapport au prix.
-    target_step = max(largeur / 2.0, moyenne * _RATIO_PAS_MIN)
-    pas = _snap_to_scale(target_step, _ECHELLE_COMMERCIALE)
-
-    borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
-
-    # Rebalancing pour rester dans [2, 3] tranches centrales
-    while len(tranches) > 3:
-        next_pas = _next_in_scale(pas, _ECHELLE_COMMERCIALE)
-        if next_pas is None:
-            break
-        pas = next_pas
-        borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
-
-    while len(tranches) < 2:
-        prev_pas = _previous_in_scale(pas, _ECHELLE_COMMERCIALE)
-        if prev_pas is None:
-            break
-        pas = prev_pas
-        borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
-
-    # Garantir que "Moins de X" reste strictement < min_prix_original.
-    # Si borne_inf == 0 alors que la fourchette commence > 0, on descend d'un cran
-    # dans l'échelle pour obtenir une borne_inf positive. On accepte d'avoir
-    # jusqu'à 5 tranches dans ce cas (cas où la fourchette tombe mal sur les pas
-    # commerciaux) plutôt que de violer la sémantique de "Moins de".
-    if borne_inf == 0 and min_prix_original > 0:
-        prev_pas = _previous_in_scale(pas, _ECHELLE_COMMERCIALE)
-        if prev_pas is not None:
-            nv_bi, nv_bs, nv_tr = _compute_bornes_tranches(min_prix, max_prix, prev_pas)
-            if nv_bi > 0 and len(nv_tr) <= 5:
-                pas = prev_pas
-                borne_inf, borne_sup, tranches = nv_bi, nv_bs, nv_tr
+    # Sélection du meilleur pas commercial via les priorités strictes.
+    choice = _select_best_choice(min_prix, max_prix, min_prix_original)
+    if choice is None:
+        return ["Je ne sais pas encore"]
+    _, borne_inf, borne_sup, tranches = choice
 
     devise_str = _normalize_devise(devise)
 
     options: List[str] = []
-    # Si borne_inf == 0 et qu'on a au moins 3 tranches, la 1ère tranche [0, X] est
-    # sémantiquement équivalente à "Moins de X" — on l'affiche ainsi pour éviter
-    # le faux signal d'un prix possible à 0 (cas borne_basse > 0 mais < 1 pas).
-    if borne_inf == 0 and len(tranches) >= 3:
+    # Si borne_inf == 0, la 1ère tranche [0, X] est sémantiquement équivalente à
+    # "Moins de X" — on l'affiche ainsi pour éviter le faux signal d'un prix possible à 0.
+    if borne_inf == 0 and len(tranches) >= 2:
         _, first_b = tranches[0]
         options.append(f"Moins de {_fmt_price(first_b)} {devise_str}")
         tranches = tranches[1:]

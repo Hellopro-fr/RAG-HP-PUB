@@ -137,3 +137,43 @@ selon le nb de tokens query :
 - **>=3 tokens** (Ritmo ELEKTRA M) : seuil 5 -> comportement strict actuel.
 
 Logique dans `app/services/search_service.py::_filter_fallback_threshold()`.
+
+## Synonymes dans le reranker (A6, 2026-05-20)
+
+Le reranker considere desormais les synonymes Typesense pour le matching
+name/cat. Resout le cas multilingue ("crane" anglais -> "Grue" francais) et
+toutes les variantes (medical/medicale, electrique/electric, etc.).
+
+### Probleme avant
+Typesense applique deja les synonymes au niveau de la recherche (le multi_search
+retourne les Grues XCMG quand la query est "crane"). Mais le reranker Python
+recalculait `name_match` en mode texte strict :
+  query="crane", doc="Grue XCMG QY50KA"
+  tokens_query = {"crane"}, doc_tokens = {"grue","xcmg",...}
+  intersection vide -> name_match = 0 -> reranker remontait d'autres produits.
+
+### Fix
+`app/services/synonyms_loader.py` charge le mapping Typesense au runtime
+(GET /collections/<col>/synonyms) et expose `get_synonyms_map() -> {token: Set}`.
+Le reranker (`_idf_weighted_match`) considere un token query "couvert" si
+lui-meme OU un de ses synonymes apparait dans le doc.
+
+### Comportement si Typesense KO
+`get_synonyms_map()` retourne {} -> matching strict (= comportement A4 sans A6).
+Aucune regression possible.
+
+### Pour ajouter de nouveaux synonymes en prod
+1. Editer `site/fichiers_communs_bo_front/hellopro_fr/typesense_synonyms_manual.json`
+2. Push direct via curl PUT sur Typesense (ou via le script sync_synonyms_daily.php)
+3. Restart opti-moteur-front -> reload du cache
+
+Exemple :
+```bash
+TS_KEY=$(grep '^TYPESENSE_API_KEY=' .env | cut -d= -f2-)
+curl -X PUT "http://10.0.130.66:8108/collections/produits_prod/synonyms/manual-grue" \
+  -H "X-TYPESENSE-API-KEY: $TS_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"synonyms":["grue","grues","grutier","crane","cranes","e-crane"]}'
+
+docker compose restart opti-moteur-front
+```
