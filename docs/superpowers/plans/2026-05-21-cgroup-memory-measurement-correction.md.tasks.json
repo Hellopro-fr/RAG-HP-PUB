@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-21-cgroup-memory-measurement-correction.md",
+  "tasks": [
+    {
+      "id": 40,
+      "subject": "Task 1: Add cgroupMemory module (parseMemoryStat + readUsableMemory) + 4 parser fixture tests",
+      "status": "pending",
+      "description": "**Goal:** Introduce side-effect-free cgroupMemory.ts module + pure parser tests. Additive only.\n\n**Files:**\n- Create: `apps-microservices/crawler-service/crawler/src/cgroupMemory.ts`\n- Create: `apps-microservices/crawler-service/crawler/src/tests/cgroupMemory.test.ts`\n\n**Verify:** `cd apps-microservices/crawler-service/crawler && npm test && npm run build`\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/cgroupMemory.ts\", \"apps-microservices/crawler-service/crawler/src/tests/cgroupMemory.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm test && npm run build\", \"acceptanceCriteria\": [\"parseMemoryStat handles v2 file + v1 cache + missing key + malformed lines\", \"readUsableMemory exported with UsableMemory interface\", \"lookup order v2 -> v1 -> host fallback -> null\", \"4 unit tests pass\", \"npm test green (58)\", \"npm run build green\", \"main.ts callsites unchanged\"]}\n```"
+    },
+    {
+      "id": 41,
+      "subject": "Task 2: Refactor main.ts pre-flight + readContainerMemory to use readUsableMemory; dual log format",
+      "status": "pending",
+      "blockedBy": [40],
+      "description": "**Goal:** Replace inline cgroup-reading with readUsableMemory() calls. Dual log format. Watchdog adapter preserves shape.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/crawler/src/main.ts`\n\n**Verify:** `cd apps-microservices/crawler-service/crawler && grep -nE '/sys/fs/cgroup' src/main.ts ; npm test && npm run build`\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/main.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && grep -nE '/sys/fs/cgroup' src/main.ts ; npm test && npm run build\", \"acceptanceCriteria\": [\"readUsableMemory import added\", \"pre-flight uses helper + dual log + usablePercent>80 threshold\", \"readContainerMemory adapter shape unchanged\", \"containerMemoryMb preserved\", \"Tier 1/2 handler log strings unchanged in T2\", \"no /sys/fs/cgroup paths in main.ts\", \"npm test green\", \"npm run build green\"]}\n```"
+    },
+    {
+      "id": 42,
+      "subject": "Task 3: Update Tier 1 + Tier 2 handler log strings to \"% usable\" suffix",
+      "status": "pending",
+      "blockedBy": [41],
+      "description": "**Goal:** Append `% usable` suffix to 3 log strings in Tier 1 + Tier 2 entry + Phase B retry. After T2 the memPercent reflects usable%.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/crawler/src/main.ts`\n\n**Verify:** `cd apps-microservices/crawler-service/crawler && grep -nE '% usable\\\\)' src/main.ts ; npm test && npm run build`\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/main.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && grep -nE '% usable\\\\)' src/main.ts ; npm test && npm run build\", \"acceptanceCriteria\": [\"Tier 1 entry says % usable\", \"Tier 2 entry says % usable\", \"Phase B retry says % usable\", \"grep returns 3 matches\", \"Phase A recovery flow unchanged\", \"npm test green\", \"npm run build green\", \"operator smoke documented\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-21T15:00:00Z"
+}
