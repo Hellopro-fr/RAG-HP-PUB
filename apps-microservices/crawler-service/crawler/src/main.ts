@@ -320,11 +320,9 @@ const handleCriticalMemory = async (memPercent: number) => {
         console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}%). Initiating Phase A Recovery...`);
         criticalRecoveryAttempted = true;
 
-        // 1. Kill Chrome processes (Forcefully release external memory)
-        try {
-            console.log("   -> [Phase A] Killing all Chrome/Playwright processes");
-            await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true');
-        } catch (e) { /* ignore */ }
+        // 1. Kill all browser processes (forcefully release external memory)
+        console.log("   -> [Phase A] Killing all browser processes");
+        await killBrowserProcesses();
 
         // 2. Emergency Persist (Save data before potential crash)
         console.log("   -> [Phase A] Emergency state persistence");
