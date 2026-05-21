@@ -148,6 +148,100 @@ async def _read_callback_isError(storage_path: str) -> Optional[str]:
         logger.debug(f"Failed to read isError from {payload_path}: {e}")
         return None
 
+class _LockHeartbeat:
+    """
+    Async context manager that renews a Redis lock TTL while a long-running
+    operation holds the lock. Ownership-safe: only refreshes if the lock
+    value still matches our expected_value, preventing accidental refresh
+    of a lock taken over after our TTL lapsed.
+
+    Bounded by max_duration_seconds: past this cap the heartbeat stops
+    renewing, letting TTL expire so a truly hung op cannot indefinitely
+    hold the lock.
+
+    Usage:
+        lock_value = await self._acquire_ownership_lock(key, ttl)
+        try:
+            async with _LockHeartbeat(self, key, lock_value, ttl, interval, max_duration):
+                await long_running_op()
+        finally:
+            await self._release_ownership_lock(key, lock_value)
+    """
+
+    # Lua script: only EXPIRE if current value still matches expected.
+    # Returns 1 on success, 0 on value mismatch (lock taken over).
+    _LUA_REFRESH = (
+        "if redis.call('get', KEYS[1]) == ARGV[1] then "
+        "return redis.call('expire', KEYS[1], ARGV[2]) "
+        "else return 0 end"
+    )
+
+    def __init__(
+        self,
+        cm,
+        lock_key: str,
+        lock_value: str,
+        ttl_seconds: int,
+        interval_seconds: int,
+        max_duration_seconds: int,
+    ):
+        self._cm = cm
+        self._lock_key = lock_key
+        self._lock_value = lock_value
+        self._ttl = ttl_seconds
+        self._interval = interval_seconds
+        self._max_duration = max_duration_seconds
+        self._task: Optional[asyncio.Task] = None
+        self._started_at: float = 0.0
+
+    async def __aenter__(self) -> "_LockHeartbeat":
+        self._started_at = time.monotonic()
+        self._task = asyncio.create_task(
+            self._run(), name=f"lock-heartbeat:{self._lock_key}"
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._task and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    async def _run(self) -> None:
+        """Heartbeat loop: renew lock TTL via Lua CAS until stopped or cancelled."""
+        try:
+            while True:
+                await asyncio.sleep(self._interval)
+                elapsed = time.monotonic() - self._started_at
+                if elapsed > self._max_duration:
+                    logger.error(
+                        f"Lock heartbeat for '{self._lock_key}' exceeded "
+                        f"max_duration_seconds={self._max_duration}; "
+                        f"stopping renewals."
+                    )
+                    return
+                try:
+                    result = await cache_service.redis_client.eval(
+                        self._LUA_REFRESH, 1,
+                        self._lock_key, self._lock_value, str(self._ttl),
+                    )
+                    if result == 0:
+                        logger.warning(
+                            f"Lock '{self._lock_key}' no longer owned by us "
+                            f"(value mismatch). Stopping heartbeat."
+                        )
+                        return
+                except Exception as e:
+                    logger.warning(
+                        f"Lock heartbeat refresh failed for "
+                        f"'{self._lock_key}': {e}"
+                    )
+        except asyncio.CancelledError:
+            return
+
+
 class CrawlerManager:
     """
     Manages the lifecycle of crawler subprocesses.
