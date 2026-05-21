@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -17,33 +18,98 @@ R = TypeVar("R")
 # Global Redis client instance
 redis_client: redis.Redis | None = None
 
+DEFAULT_MAX_CONNECTIONS = 20
+DEFAULT_SOCKET_TIMEOUT_S = 10
+DEFAULT_SOCKET_CONNECT_TIMEOUT_S = 5
+DEFAULT_HEALTH_CHECK_INTERVAL_S = 30
+
+
+def _replica_name() -> str:
+    # Container hostname is per-replica (docker compose --scale gives unique names).
+    return os.getenv("HOSTNAME") or f"pid-{os.getpid()}"
+
+
+async def _ping_safe(client: "redis.Redis") -> bool:
+    try:
+        return await client.ping()
+    except Exception:
+        return False
+
+
+def _read_positive_int_env(name: str, default: int) -> int:
+    """Reads env var as int, falls back to default on empty/missing/invalid. Clamped to >=1."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return max(1, default)
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return max(1, default)
+
+
+def _read_positive_float_env(name: str, default: float) -> float:
+    """Reads env var as float, falls back to default on empty/missing/invalid. Clamped to >=1.0."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return max(1.0, default)
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return max(1.0, default)
+
+
 async def init_redis_pool():
     """
-    Initializes the Redis connection pool.
-    Connects to Redis using the URL from environment variables.
+    Initializes the Redis connection pool with a bounded client + proactive
+    health check. See spec docs/superpowers/specs/2026-05-21-redis-connection-leak-fix-design.md.
     """
     global redis_client
-    if redis_client and await redis_client.ping():
+    if redis_client and await _ping_safe(redis_client):
         logger.info("Redis pool already initialized and connected.")
         return
-        
+
     redis_url = os.getenv("REDIS_URL")
     if not redis_url:
         logger.critical("REDIS_URL environment variable not set. Caching and state management will be unavailable.")
         redis_client = None
         return
-        
+
+    max_conn = _read_positive_int_env("REDIS_MAX_CONNECTIONS", DEFAULT_MAX_CONNECTIONS)
+    sock_to = _read_positive_float_env("REDIS_SOCKET_TIMEOUT_S", DEFAULT_SOCKET_TIMEOUT_S)
+    sock_conn_to = _read_positive_float_env("REDIS_SOCKET_CONNECT_TIMEOUT_S", DEFAULT_SOCKET_CONNECT_TIMEOUT_S)
+    health_iv = _read_positive_int_env("REDIS_HEALTH_CHECK_INTERVAL_S", DEFAULT_HEALTH_CHECK_INTERVAL_S)
+    client_name = f"crawler-py-{_replica_name()}"
+
     try:
-        logging.info(f"Connecting to Redis at {redis_url.split('@')[-1]}...") # Avoid logging password
-        redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+        logger.info(
+            f"Connecting to Redis at {redis_url.split('@')[-1]} "
+            f"(max_conn={max_conn}, name={client_name})"
+        )
+        redis_client = redis.from_url(
+            redis_url,
+            encoding="utf-8",
+            decode_responses=True,
+            max_connections=max_conn,
+            socket_keepalive=True,
+            socket_connect_timeout=sock_conn_to,
+            socket_timeout=sock_to,
+            health_check_interval=health_iv,
+            client_name=client_name,
+        )
         await redis_client.ping()
         # Register Lua scripts for EVALSHA-based execution (avoids sending raw Lua on every call)
         global _safe_decr_script, _delete_if_terminal_script
         _safe_decr_script = redis_client.register_script(_SAFE_DECR_LUA)
         _delete_if_terminal_script = redis_client.register_script(_DELETE_IF_TERMINAL_LUA)
         logger.info("Successfully connected to Redis.")
-    except redis.RedisError as e:
+    except (redis.RedisError, OSError, asyncio.TimeoutError) as e:
         logger.warning(f"Could not connect to Redis: {e}. Caching will be unavailable.")
+        # Best-effort close on half-built client; ignore secondary failures.
+        if redis_client is not None:
+            try:
+                await redis_client.close()
+            except Exception:
+                pass
         redis_client = None
 
 async def close_redis_pool():
