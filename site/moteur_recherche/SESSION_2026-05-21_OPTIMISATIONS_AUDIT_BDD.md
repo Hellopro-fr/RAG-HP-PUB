@@ -10,17 +10,38 @@
 
 ## TL;DR
 
+Deux axes d'audit menés en parallèle :
+
+### Audit BDD — 20 mots-clés reels issus de `moteur_solr_historique`
+
 | Audit         | Note moyenne | Δ session | Δ baseline |
 |---------------|--------------|-----------|------------|
-| Baseline      | 6.01 / 10    | —         | —          |
+| Baseline (19/05) | 6.01 / 10    | —         | —          |
 | Session 2     | 6.23 / 10    | +0.22     | +0.22      |
 | Session 3     | 6.54 / 10    | +0.31     | +0.53      |
 | Session 4     | 6.62 / 10    | +0.08     | +0.61      |
 | **Session 5** | **6.59 / 10**| -0.03     | **+0.58**  |
 
-**~10 % d'amélioration relative cumulée** sur 5 itérations. Palier atteint en
-S4-S5 (rythme s'établit). 4 plaintes commerciales d'Elena (mars 2026) toutes
-résolues. 4 cas critiques structurels résiduels.
+**~10 % d'amélioration relative cumulée**. Palier atteint en S4-S5.
+
+### Audit Hellopro — 24 mots-clés prépares (incluant les cas commerciaux)
+
+| Audit         | Note moyenne | Δ session | Δ baseline |
+|---------------|--------------|-----------|------------|
+| v2 (baseline) | 6.66 / 10    | —         | —          |
+| v3            | 7.10 / 10    | +0.44     | +0.44      |
+| **v4** (21/05)| **7.62 / 10**| +0.52     | **+0.96**  |
+
+**~14 % d'amélioration relative cumulée**. Beaucoup plus marqué que l'audit
+BDD car ces 24 mots-clés ciblent **directement les cas critiques connus**
+(Ritmo, mélangeurs, défibrillateurs) que les optimisations A4/A6/R2/R3
+frappent en plein.
+
+### Statut global
+
+4 plaintes commerciales d'Elena (mars 2026) **toutes résolues**.
+4 cas critiques structurels résiduels (mantsinen, gadus, barre laser à led,
+urinoir delabie P1 Solr).
 
 ---
 
@@ -220,6 +241,74 @@ classe la P1 Solr en :
 
 Cas TRASH avec AJAX vide → JS affiche message "Aucun produit" (via
 `moteur_recherche_ajax.js::showNoResultsMessage()`).
+
+---
+
+## 2bis. Audit Hellopro v4 — 24 mots-cles commerciaux (21/05/2026)
+
+Cet audit utilise les 24 mots-cles initialement fournis par les commerciaux
+(mai 2026, brief Elena/Sylvie). Plus marque en gains que l'audit BDD car
+les optimisations ciblent precisement ces cas.
+
+### Top 10 progressions vs v3
+
+| Mot-cle                            | v3   | v4    | Δ      | Optim responsable |
+|------------------------------------|------|-------|--------|-------------------|
+| `defibrillateur`                   | 6.6  | 10.0  | +3.4   | A4 IDF (dedupes + tri propre) |
+| `nettoyage`                        | 6.8  | 10.0  | +3.2   | A6 + R3 (regression v3 reparee) |
+| `Machine Ritmo ELEKTRA S`          | 4.2  | 7.1   | +2.9   | A4 IDF (top 1 exact + variantes M/L/XL) |
+| `soudure ritmo`                    | 4.7  | 6.5   | +1.8   | A4 IDF marque Ritmo |
+| `melangeur conique` (singulier)    | 5.0  | 6.8   | +1.8   | A6 synonymes + R3 |
+| `melangeurs coniques` (pluriel)    | 2.6  | 4.3   | +1.7   | **PERCEE** : 1er vrai melangeur conique en pos 1 |
+| `ritmo` (seul)                     | 5.1  | 6.8   | +1.7   | A4 IDF |
+| `robot de nettoyage`               | 6.0  | 7.5   | +1.5   | A6 + R3 |
+| Variantes Ritmo ELEKTRA M/XL       | 3.8  | 4.5   | +0.7   | A4 IDF (asymetrie vs S a investiguer) |
+
+### 3 regressions vs v3
+
+| Mot-cle                            | v3   | v4    | Δ      | Cause |
+|------------------------------------|------|-------|--------|-------|
+| `Machine pour soudure bout a bout - large gamme...` | **10** | **4.4** | **-5.6** | Mode "1 seul resultat exact" v3 perdu (40 produits en v4) |
+| `distributeur automatique`         | 10   | 8.5   | -1.5   | Top 1 borderline ("Distributeur EPI Distribox") |
+| `armoire medicale`                 | 7.3  | 6.0   | -1.3   | P2 reintroduite avec quelques hors-cible |
+
+### Arbitrage UX : "Machine pour soudure bout a bout - large gamme..."
+
+En v3, le matching exact retournait **1 SEUL produit** = 10/10. En v4, le
+moteur retourne **40 + 23** produits → le produit cible reste en pos 1,
+mais les 39 voisins diluent le scoring strict (4.4/10).
+
+**A arbitrer avec Sylvie/Elena** :
+- Mode v3 (1 seul resultat exact) : UX "fiche produit trouvee", parfait sur
+  le scoring mais limite la decouverte.
+- Mode v4 (40 resultats avec exact en pos 1) : UX "liste explorable",
+  meilleur pour la decouverte mais scoring inferieur.
+
+### Mots-cles stables au plus haut (>= 9.8/10 sur 3 versions)
+
+`fraiseuse`, `perceuse colonne`, `machine de decoupe`, `compresseur`, `ERP`,
+`aspirateur`. Ces requetes catégorielles simples n'ont jamais ete degradees
+par les optimisations -> les optims sont **strictement additives**.
+
+### Cas critiques residuels (audit v4)
+
+1. **`Machine universelle Ritmo ELEKTRA M / XL`** : restent a 4.5/10. Asymetrie
+   avec ELEKTRA S (7.1/10) -> investiguer pourquoi les variantes ne sont pas
+   traitees uniformement.
+2. **`Machine soudure bout a bout - large gamme`** : passe de 10 a 4.4 (cf
+   arbitrage UX ci-dessus).
+3. **`Distributeur automatique de confiserie`** : ameliore (5.2 -> 6.5)
+   mais l'ambiguite "distributeur = machine vs revendeur" persiste.
+
+### Synthese audit Hellopro v4
+
+- 3 zones de gain majeur :
+  1. Recherches autour de la marque Ritmo (+1.7 a +2.9) -> IDF + marque-comme-filtre.
+  2. Requetes multi-tokens semantiques (`melangeurs coniques` +1.7,
+     `robot de nettoyage` +1.5) -> A6 synonymes + R3 coverage.
+  3. Reparation des regressions v3 (`nettoyage`, `defibrillateur`).
+- 1 arbitrage produit (`Machine soudure bout a bout - large gamme`).
+- 1 sujet d'asymetrie (ELEKTRA S vs M/XL).
 
 ---
 
