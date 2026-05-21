@@ -273,6 +273,7 @@ const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: numbe
 let lastWarningActionTime = 0;
 let lastMemPercent = 0; // Track global memory state for persistence guard
 let persistenceInterval: ReturnType<typeof setInterval> | undefined;
+let progressMonitor: ProgressMonitor | undefined;
 let isPersisting = false; // Mutex flag to prevent concurrent updateUrlsCrawledStreaming calls
 const handleWarningMemory = async (memPercent: number) => {
     const now = Date.now();
@@ -521,6 +522,7 @@ try {
     console.error('Failed to connect to Redis for Heartbeat:', err);
     redisMonitor.onError('heartbeat', err);
     // FAIL-FAST: do not run a crawl with broken Redis from start.
+    redisMonitor.stop(); // Prevent 5s poll from firing during exit.
     process.exit(5);
 }
 // ---------------------------
@@ -580,10 +582,17 @@ if (fs.existsSync(stopperFile)) {
 }
 
 // Init Managers
-context.dedupManager = new DedupManager(redisUrl, id);
+context.dedupManager = new DedupManager(redisUrl, id, undefined, redisMonitor);
 context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
 
-await context.dedupManager.connect();
+try {
+    await context.dedupManager.connect();
+} catch (err) {
+    console.error('Failed to connect DedupManager to Redis:', err);
+    redisMonitor.onError('dedup', err);
+    redisMonitor.stop(); // Prevent 5s poll from firing during exit.
+    process.exit(5);
+}
 await context.statsManager.connect();
 
 let isHistorised = false;
@@ -595,12 +604,19 @@ if (dropData) {
     await dropDataset(domain);
     await dropDataset(`error-${domain}`);
     await dropDataset(`nfr-${domain}`);
-    
+
     // Also clean managers
     await context.dedupManager.cleanup();
     await context.statsManager.cleanup();
     // Reconnect after cleanup
-    await context.dedupManager.connect();
+    try {
+        await context.dedupManager.connect();
+    } catch (err) {
+        console.error('Failed to reconnect DedupManager after dropData:', err);
+        redisMonitor.onError('dedup', err);
+        redisMonitor.stop(); // Prevent 5s poll from firing during exit.
+        process.exit(5);
+    }
     await context.statsManager.connect();
 
     isHistorised = true;
@@ -928,6 +944,10 @@ let finalizeTimingOnce: (() => Promise<void>) | null = null;
 const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+
+    // Stop health monitors first so they cannot fire mid-shutdown.
+    try { redisMonitor?.stop(); } catch (e) { /* ignore */ }
+    try { progressMonitor?.stop(); } catch (e) { /* ignore */ }
 
     // Timing instrumentation: stop sampler + flush JSONL/summary before exit.
     // Synchronous-ish: finalize() is fast and fire-and-await before any exit.
@@ -1316,6 +1336,21 @@ if (typeCrawling == "sitemap") {
     // précédent (bootstrap modules, init Crawlee, Playwright, consolidate URLs,
     // two-phase seeding) est EXCLU du décompte de duration_seconds.
     crawlStartTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    // Progress stall monitor — fires gracefulShutdown(exit 6) if requestsFinished
+    // does not advance for PROGRESS_STALL_THRESHOLD_MS (default 10 min).
+    const progressStallThresholdMs = Number(process.env.PROGRESS_STALL_THRESHOLD_MS ?? 600_000);
+    progressMonitor = new ProgressMonitor(
+        () => (context.crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0,
+        progressStallThresholdMs,
+        (reason) => {
+            console.error(`[fatal] progress_stalled: ${reason}`);
+            console.error(JSON.stringify({ event: 'progress_stalled', reason }));
+            void gracefulShutdown('PROGRESS_STALL', 6);
+        },
+        30_000,
+    );
+    progressMonitor.start();
 
     // Launch
     const crawler = await startCrawler(
