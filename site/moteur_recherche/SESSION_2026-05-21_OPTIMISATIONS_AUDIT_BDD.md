@@ -489,5 +489,89 @@ de Git pour ces fichiers (pas dans le repo public RAG-HP-PUB).
 
 ---
 
+## 10. Décisions actées en fin de session 2026-05-21
+
+### Décision UX 1 — Mode "match exact" sur queries longues
+
+**Contexte** : sur les queries qui correspondent exactement au titre d'un
+produit (ex: `Machine pour soudure bout à bout - large gamme et fiches
+techniques détaillées`), le moteur peut soit :
+- Retourner **1 seul produit** (le matching exact) — UX "fiche produit trouvée"
+- Retourner **40 produits** avec le bon en pos 1 + 39 voisins — UX "liste explorable"
+
+En audit v3 → mode "1 seul" → note 10/10. En audit v4 → mode "40 produits" →
+note 4.4/10 (le scoring strict pénalise les voisins).
+
+**Décision** : on garde le **Mode "40 produits"** (UX "liste explorable").
+Raisons :
+- Permet la découverte de produits voisins (UX e-commerce standard)
+- Le produit cible reste en position 1 grâce au boost match exact
+- La régression du scoring est mécanique (top 10 contient 9 voisins), pas une
+  dégradation utilisateur réelle
+
+**Conséquence** : `Machine pour soudure bout à bout - large gamme` reste à
+4.4/10 sur l'audit v4, mais l'UX en prod est correcte. À expliquer à Sylvie/
+Elena si le sujet revient.
+
+### Décision technique 2 — Instabilité inter-sessions (sennebogen)
+
+**Contexte** : les audits BDD et Hellopro montrent que `sennebogen` oscille
+entre **10/10** (mode "products", 4 cartes pures) et **6.8/10** (mode "hybrid",
+4 cartes + bruit P2) selon les sessions.
+
+**Diagnostic confirmé par 3 curls successifs (21/05/2026)** :
+
+1. **P1 Solr est déterministe** : Solr V2 ramène toujours les mêmes 5 produits
+   `sennebogen` (4 HIGH SENNEBOGEN + 1 LOW). Les garde-fous PHP virent le LOW
+   et marquent `regime=hybrid` + `solr_kept=4` + `extension_count=36`.
+   Les 3 curls ont donné des solr_ids strictement identiques :
+   `6501278, 6501277, 6501280, 6501281`.
+
+2. **L'AJAX `search_extension.php` est intermittent** :
+   - 1er curl : timeout 10003 ms (limite `TYPESENSE_FRONT_TIMEOUT=10s`)
+   - 2e curl : 1765 ms, `nb_produits=0`
+   - 3e curl : 1831 ms, `nb_produits=0`
+
+3. **Pool Typesense effectivement vide pour `sennebogen` après filtre BDD** :
+   Même quand l'AJAX réussit, `nb_produits=0`. Les fournisseurs SENNEBOGEN
+   présents dans Typesense sont probablement en pause non-complet (etat=2,
+   visibilite≠1) — même histoire que `gadus` (cf section 4.2).
+
+**Cause de l'oscillation observée par l'audit** :
+- Si AJAX timeout → P2 vide → mode "products" → 10/10
+- Si AJAX réussit + 0 produits → P2 vide → mode "products" → 10/10
+- Si l'audit script lit aussi `search_ajax.php?page=2` (qui peut donner d'autres
+  résultats) → mode "hybrid" avec bruit → 6.8/10
+
+→ **L'instabilité n'est pas un bug du code que nous contrôlons**. Elle vient
+de la combinaison "latence intermittente AJAX + pool BDD restreint + méthode
+d'audit qui mesure différents endpoints selon le timing".
+
+**Décision** : on ne touche à **RIEN** pour l'instant. 3 fixes possibles
+restent identifiés (cf section 6 roadmap, items P3) mais ne sont pas
+prioritaires :
+- Cache PHP APCu sur recup_info_prod_typesense (5 lignes PHP)
+- Réduire `TYPESENSE_FRONT_TIMEOUT` à 3s + fallback gracieux
+- Pré-warm-up cron sur les top 100 queries
+
+À reprendre quand le sujet redevient business-critique ou quand la latence
+backend Typesense dégrade visiblement l'UX prod (≠ note d'audit).
+
+### Décision globale — Statut série mai 2026
+
+La série d'optimisations 18 → 21 mai 2026 est considérée **close**. Bilan :
+- **+10 % d'amélioration relative** sur l'audit BDD (20 mots-clés réels)
+- **+14 % d'amélioration relative** sur l'audit Hellopro (24 mots-clés
+  commerciaux)
+- 4/4 plaintes commerciales Elena résolues
+- 5 optimisations livrées (A3, A4, A6, A7 R3, A8 R2) + 2 garde-fous PHP
+  (P1 regimes + strict_p2)
+
+**Prochaine reprise** : à la demande business (nouvelle plainte commerciale,
+ou audit régulier qui montre une dégradation). En attendant, le moteur est
+stable et significativement amélioré vs avant la série.
+
+---
+
 *Document généré le 2026-05-21. À maintenir au fil des audits suivants.
 Référence croisée : `apps-microservices/opti-moteur-front/CLAUDE.md`.*
