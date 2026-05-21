@@ -326,7 +326,7 @@ setInterval(async () => {
     } else {
         // Reset Phase A flag if we dropped below critical
         if (criticalRecoveryAttempted) {
-             console.log(`✅ Memory recovered to ${memPercent.toFixed(1)}%. Resetting Tier 2 Phase A flag.`);
+             console.log(`✅ Memory recovered to ${memPercent.toFixed(1)}% usable. Resetting Tier 2 Phase A flag.`);
              criticalRecoveryAttempted = false;
         }
 
@@ -641,7 +641,7 @@ persistenceInterval = setInterval(async () => {
     try {
         // Guard: Skip persistence if memory is already high (>85%) to prevent OOM
         if (lastMemPercent > 85) {
-            console.warn(`⚠️ Skipping periodic persistence due to high memory (${lastMemPercent.toFixed(1)}%)`);
+            console.warn(`⚠️ Skipping periodic persistence due to high memory (${lastMemPercent.toFixed(1)}% usable)`);
             return;
         }
 
