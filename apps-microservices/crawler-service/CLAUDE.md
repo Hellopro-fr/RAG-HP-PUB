@@ -137,6 +137,21 @@ Every archive attempt also logs a baseline disk state (`info`) and, on failure, 
 
 Spec: `docs/superpowers/specs/2026-04-18-archive-disk-space-preflight-design.md`.
 
+### Lock heartbeat (stash + archive)
+
+Both `stash_crawl` and `archive_crawl` acquire a Redis lock (`stash_lock:{id}` / `archive_lock:{id}`) via the ownership-safe `_acquire_ownership_lock` / `_release_ownership_lock` pair (replica-id-tagged value + Lua CAS DEL). The tar + cleanup block is wrapped in `_LockHeartbeat`, a background asyncio task that re-runs `EXPIRE` on the lock every `LOCK_HEARTBEAT_INTERVAL_SECONDS` via Lua compare-and-set so the TTL never lapses mid-op.
+
+Tunable settings (`app/core/config.py`):
+- `STASH_LOCK_TTL_SECONDS` — default `1800`
+- `ARCHIVE_LOCK_TTL_SECONDS` — default `1800`
+- `UNSTASH_LOCK_TTL_SECONDS` — default `600` (unstash is time-bounded by `UNSTASH_TIMEOUT_SECONDS`)
+- `LOCK_HEARTBEAT_INTERVAL_SECONDS` — default `300` (TTL / 6 → 5 missed renewals before TTL expiry)
+- `LOCK_HEARTBEAT_MAX_DURATION_SECONDS` — default `14400` (4 h hard cap; past this the heartbeat stops renewing so a hung op cannot indefinitely hold the lock)
+
+The matching nginx regex location at `apps-microservices/api-gateway-go/nginx.conf` (and the parity copy at `apps-microservices/api-gateway/nginx.conf`) sets `proxy_next_upstream off` on `/crawler/(stash|unstash|archive)/` to prevent POST retry fan-out across replicas. PHP client is the only retry layer (currently 503-only, see `3_archive_eligible_domains.php`).
+
+Spec: `docs/superpowers/specs/2026-05-21-stash-archive-lock-heartbeat-design.md`. Incident reference: crawl 6250 on 2026-05-20.
+
 ## Stash — Free Disk Investigation Workflow
 
 Distinct from archiving. Use stash to **temporarily free local disk** for crawls that failed or were stopped and still need investigation. The data is parked in `gs://{bucket}/stash/` and can be retrieved later via `POST /unstash/{crawl_id}`.
@@ -163,7 +178,7 @@ Distinct from archiving. Use stash to **temporarily free local disk** for crawls
 - Upload: `UPLOAD_WATCH_DIR=…/crawler_stash UPLOAD_GCS_PREFIX=stash`
 - Download: `DOWNLOAD_REQUESTS_PATH=…/crawler_stash_download_requests DOWNLOAD_RESULTS_PATH=…/crawler_stash_download_results DOWNLOAD_GCS_PREFIX=stash DELETE_AFTER_DOWNLOAD=true`
 
-**Locks:** `stash_lock:{id}` + `unstash_lock:{id}` (Redis SET NX, ownership-safe DEL via Lua compare-and-delete to avoid clobbering a new acquirer after TTL expiry). Mirrors the `reconcile_leader_lock` pattern.
+**Locks:** `stash_lock:{id}` + `unstash_lock:{id}` (Redis SET NX, ownership-safe DEL via Lua compare-and-delete to avoid clobbering a new acquirer after TTL expiry). Mirrors the `reconcile_leader_lock` pattern. The stash tar is wrapped in `_LockHeartbeat` so the TTL is refreshed mid-op — see "Lock heartbeat (stash + archive)" under the Archiving section for tunables.
 
 **Background cleanup:** `cleanup_archives` also sweeps stale stash download artifacts (`.tar.gz`, `.done`, `.error`, `.unstash-confirmed`, `.unstash-cleanup-done` in `/app/gcs-stash-downloads/` + `.request` in `/app/gcs-stash-requests/`). `/app/stash/` itself is NOT cleaned — the upload daemon owns its lifecycle.
 
