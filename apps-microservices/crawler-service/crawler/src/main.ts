@@ -2,7 +2,6 @@ import { RequestQueue, RobotsFile, Dataset, Configuration } from "crawlee";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
-import { createClient } from 'redis';
 import os from 'os';
 import { router } from "./routes.js";
 import {
@@ -42,6 +41,7 @@ import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMod
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
+import { createSharedRedisClient } from "./redisClient.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -353,21 +353,16 @@ const redisMonitor = new RedisHealthMonitor(
         void gracefulShutdown('REDIS_LOST', 5);
     },
 );
-redisMonitor.attach('heartbeat');
-redisMonitor.attach('dedup');
+// Single client identity — heartbeat + dedup multiplex on sharedRedis.
+redisMonitor.attach('shared');
 redisMonitor.start();
 
-// --- Heartbeat Mechanism ---
-const redisClient = createClient({ url: redisUrl });
-redisClient.on('error', (err) => {
-    console.error('Redis Heartbeat Error:', err);
-    redisMonitor.onError('heartbeat', err);
-});
-
+// --- Shared Redis client (heartbeat + dedup multiplex) ---
+const sharedRedis = createSharedRedisClient(redisUrl, { crawlId: id, monitor: redisMonitor });
 try {
-    await redisClient.connect();
-    redisMonitor.onSuccess('heartbeat');
-    console.log('Connected to Redis for Heartbeat');
+    await sharedRedis.connect();
+    redisMonitor.onSuccess('shared');
+    console.log('Connected to Redis (shared client for heartbeat + dedup)');
 
     const hostname = os.hostname();
     const numCpus = os.cpus().length;
@@ -378,14 +373,13 @@ try {
     const getTopProcesses = async (): Promise<Array<{ name: string, ram: number }>> => {
         try {
             const { execSync } = await import('child_process');
-            // Get top 3 processes by RSS (Linux/Mac compatible)
             const output = execSync('ps aux --sort=-rss | head -n 4 | tail -n 3', { encoding: 'utf-8' });
             const lines = output.trim().split('\n');
             return lines.map(line => {
                 const parts = line.trim().split(/\s+/);
                 const ramKB = parseInt(parts[5]) || 0;
                 const command = parts.slice(10).join(' ').substring(0, 30);
-                return { name: command, ram: ramKB * 1024 }; // Convert to bytes
+                return { name: command, ram: ramKB * 1024 };
             });
         } catch (e) {
             return [];
@@ -395,36 +389,26 @@ try {
     // Helper to read container-level memory usage from cgroups
     const getContainerMemoryUsage = async (): Promise<number> => {
         try {
-            // cgroups v2
             const v2 = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
             if (v2) return parseInt(v2.trim());
-
-            // cgroups v1
             const v1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
             if (v1) return parseInt(v1.trim());
         } catch (e) { /* fallback below */ }
-
-        // Fallback: Node.js process RSS (inaccurate but better than 0)
         return process.memoryUsage().rss;
     };
 
     // Helper to read container-level CPU usage from cgroups
-    // Returns cumulative CPU microseconds used by the entire container
     const getContainerCpuUsec = async (): Promise<number | null> => {
         try {
-            // cgroups v2: cpu.stat has "usage_usec <value>" line
             const v2 = await fsPromises.readFile('/sys/fs/cgroup/cpu.stat', 'utf-8').catch(() => null);
             if (v2) {
                 const match = v2.match(/usage_usec\s+(\d+)/);
                 if (match) return parseInt(match[1]);
             }
-
-            // cgroups v1: cpuacct.usage is in nanoseconds
             const v1 = await fsPromises.readFile('/sys/fs/cgroup/cpuacct/cpuacct.usage', 'utf-8').catch(() => null);
-            if (v1) return parseInt(v1.trim()) / 1000; // Convert ns to us
+            if (v1) return parseInt(v1.trim()) / 1000;
         } catch (e) { /* fallback below */ }
-
-        return null; // No cgroup CPU available
+        return null;
     };
 
     let lastContainerCpuUsec = await getContainerCpuUsec();
@@ -432,7 +416,6 @@ try {
 
     setInterval(async () => {
         try {
-            // Container-level CPU from cgroups
             let cpuPercent: number;
             const currentContainerCpuUsec = await getContainerCpuUsec();
             const currentTime = Date.now();
@@ -444,7 +427,6 @@ try {
                 lastContainerCpuUsec = currentContainerCpuUsec;
                 lastContainerCpuTime = currentTime;
             } else {
-                // Fallback to process-level CPU
                 const currentCpuUsage = process.cpuUsage(lastCpuUsage);
                 const elapsedTime = (currentTime - lastTime) * 1000;
                 cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
@@ -452,7 +434,6 @@ try {
                 lastTime = currentTime;
             }
 
-            // Container-level RAM from cgroups
             const containerRam = await getContainerMemoryUsage();
             const topProcesses = await getTopProcesses();
 
@@ -461,7 +442,7 @@ try {
                 replicaId: hostname,
                 jobId: id,
                 domain: domain,
-                cpu: Math.min(Math.max(cpuPercent, 0), 1), // Clamp 0-1
+                cpu: Math.min(Math.max(cpuPercent, 0), 1),
                 ram: containerRam,
                 totalRam: totalMem,
                 topProcesses: topProcesses,
@@ -469,10 +450,10 @@ try {
                 status: 'running'
             };
             try {
-                await redisClient.publish('crawler:heartbeat', JSON.stringify(heartbeat));
-                redisMonitor.onSuccess('heartbeat');
+                await sharedRedis.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+                redisMonitor.onSuccess('shared');
             } catch (e) {
-                redisMonitor.onError('heartbeat', e);
+                redisMonitor.onError('shared', e);
                 console.error('Failed to send heartbeat:', e);
             }
         } catch (e) {
@@ -480,10 +461,9 @@ try {
         }
     }, 2000);
 } catch (err) {
-    console.error('Failed to connect to Redis for Heartbeat:', err);
-    redisMonitor.onError('heartbeat', err);
-    // FAIL-FAST: do not run a crawl with broken Redis from start.
-    redisMonitor.stop(); // Prevent 5s poll from firing during exit.
+    console.error('Failed to connect shared Redis client:', err);
+    redisMonitor.onError('shared', err);
+    redisMonitor.stop();
     process.exit(5);
 }
 // ---------------------------
@@ -542,18 +522,10 @@ if (fs.existsSync(stopperFile)) {
     } catch (e) {}
 }
 
-// Init Managers
-context.dedupManager = new DedupManager(redisUrl, id, undefined, redisMonitor);
+// Init Managers — DedupManager reuses the shared Redis client.
+context.dedupManager = new DedupManager(sharedRedis, id, undefined, redisMonitor);
 context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
-
-try {
-    await context.dedupManager.connect();
-} catch (err) {
-    console.error('Failed to connect DedupManager to Redis:', err);
-    redisMonitor.onError('dedup', err);
-    redisMonitor.stop(); // Prevent 5s poll from firing during exit.
-    process.exit(5);
-}
+// No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
 
 let isHistorised = false;
@@ -569,15 +541,8 @@ if (dropData) {
     // Also clean managers
     await context.dedupManager.cleanup();
     await context.statsManager.cleanup();
-    // Reconnect after cleanup
-    try {
-        await context.dedupManager.connect();
-    } catch (err) {
-        console.error('Failed to reconnect DedupManager after dropData:', err);
-        redisMonitor.onError('dedup', err);
-        redisMonitor.stop(); // Prevent 5s poll from firing during exit.
-        process.exit(5);
-    }
+    // Shared client survives dedup.cleanup (ownsClient=false), so no reconnect
+    // needed for dedupManager. StatsManager still owns its own client.
     await context.statsManager.connect();
 
     isHistorised = true;
@@ -1114,6 +1079,14 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
+
+    // Disconnect the shared Redis client (heartbeat + dedup multiplexed on it).
+    // Owner-managed — DedupManager.cleanup() left this open by design.
+    try {
+        if (sharedRedis && sharedRedis.isOpen) await sharedRedis.disconnect();
+    } catch (e) {
+        console.error('Shared Redis disconnect error:', e);
+    }
 
     console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
     process.exit(exitCode);
