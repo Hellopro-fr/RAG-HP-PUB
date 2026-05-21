@@ -41,6 +41,7 @@ import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from ".
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
+import { readUsableMemory } from './cgroupMemory.js';
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -183,49 +184,30 @@ await killBrowserProcesses();
 await new Promise((r) => setTimeout(r, 2000));
 
 // 2. Check available memory (Docker container limits, not host VM)
+// Page cache is subtracted from used because Linux reclaims it on demand
+// before invoking the OOM-killer (Spec-B 2026-05-21).
+const gb = (n: number) => (n / 1024 / 1024 / 1024).toFixed(2);
 let totalMem: number;
-let freeMem: number;
 
-try {
-    // Try to read Docker container memory limit from cgroups v2
-    const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-    const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
-
-    if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
-        totalMem = parseInt(cgroupMemMax.trim());
-        const usedMem = parseInt(cgroupMemCurrent.trim());
-        freeMem = totalMem - usedMem;
-    } else {
-        // Try cgroups v1 (older Docker versions)
-        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
-
-        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
-            totalMem = parseInt(cgroupMemLimitV1.trim());
-            const usedMem = parseInt(cgroupMemUsageV1.trim());
-            freeMem = totalMem - usedMem;
-        } else {
-            // Fallback to host memory (not in Docker or cgroups not available)
-            totalMem = os.totalmem();
-            freeMem = os.freemem();
-        }
-    }
-} catch (e) {
-    // Fallback to host memory if cgroup reading fails
+const mem = await readUsableMemory();
+if (!mem) {
+    // Cannot measure memory. Skip pre-flight — assume OK rather than block startup.
+    console.warn('⚠️  Pre-flight: readUsableMemory() returned null. Skipping threshold check.');
     totalMem = os.totalmem();
-    freeMem = os.freemem();
-}
-
-const usedMem = totalMem - freeMem;
-const memPercent = (usedMem / totalMem) * 100;
-
-console.log(`💾 Memory status: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)}GB / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)}GB (${memPercent.toFixed(1)}% used)`);
-
-if (memPercent > 80) {
-    console.error(`❌ Memory critically low: ${memPercent.toFixed(1)}% used. Aborting to prevent OOM.`);
-    console.error(`   Free memory: ${(freeMem / 1024 / 1024 / 1024).toFixed(2)}GB`);
-    console.error(`🔄 Pre-flight OOM: exiting with code 3 (OOM_RELAUNCH) to trigger Python-side auto-restart.`);
-    process.exit(3); // OOM_RELAUNCH: trigger Python-side auto-restart
+} else {
+    totalMem = mem.totalMem;
+    const usablePercent = (mem.usableUsed / mem.totalMem) * 100;
+    const rawPercent = (mem.rawCurrent / mem.totalMem) * 100;
+    console.log(
+        `💾 Memory status: ${gb(mem.usableUsed)}GB usable / ${gb(mem.rawCurrent)}GB raw / ` +
+        `${gb(mem.totalMem)}GB limit ` +
+        `(${usablePercent.toFixed(1)}% usable, ${rawPercent.toFixed(1)}% raw, ${gb(mem.pageCache)}GB page cache).`
+    );
+    if (usablePercent > 80) {
+        console.error(`❌ Memory critically low: ${usablePercent.toFixed(1)}% usable used. Aborting to prevent OOM.`);
+        console.error(`🔄 Pre-flight OOM: exiting with code 3 (OOM_RELAUNCH) to trigger Python-side auto-restart.`);
+        process.exit(3);
+    }
 }
 
 console.log('✅ Pre-flight checks passed. Starting crawler...');
@@ -236,37 +218,13 @@ console.log('✅ Pre-flight checks passed. Starting crawler...');
 // Does NOT stop the crawl — purely diagnostic to capture OOM evidence in log files.
 const containerMemoryMb = Math.floor(totalMem / 1024 / 1024);
 
+// Adapter over readUsableMemory(): preserves the {usedMem, totalMem} shape
+// expected by Tier 1/2 handlers while shifting `usedMem` semantics from raw
+// memory.current to usable used (= memory.current - page cache).
 const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: number } | null> => {
-    try {
-        const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-        const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
-
-        if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
-            return {
-                totalMem: parseInt(cgroupMemMax.trim()),
-                usedMem: parseInt(cgroupMemCurrent.trim())
-            };
-        }
-
-        // Fallback to cgroups v1
-        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
-
-        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
-            return {
-                totalMem: parseInt(cgroupMemLimitV1.trim()),
-                usedMem: parseInt(cgroupMemUsageV1.trim())
-            };
-        }
-
-        // Fallback to OS-level
-        return {
-            totalMem: os.totalmem(),
-            usedMem: os.totalmem() - os.freemem()
-        };
-    } catch (e) {
-        return null;
-    }
+    const mem = await readUsableMemory();
+    if (!mem) return null;
+    return { usedMem: mem.usableUsed, totalMem: mem.totalMem };
 };
 
 // --- Tier 1 Recovery Handler (85-92%) ---
