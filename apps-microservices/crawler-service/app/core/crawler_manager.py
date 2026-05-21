@@ -2157,137 +2157,145 @@ class CrawlerManager:
         job_info = fresh_job_info
 
         try:
-            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
-            # Rejects with 503 BIND_MOUNT_MISSING if /app/stash is not a real
-            # bind-mount. Without this guard os.makedirs would create an
-            # ephemeral in-container dir; tar would land in container overlay
-            # FS, invisible to the host upload daemon (incident: crawl 1958).
-            self._verify_bind_mount(settings.STASH_SHARED_PATH, "stash upload")
+            async with _LockHeartbeat(
+                self,
+                stash_lock_key,
+                lock_value,
+                ttl_seconds=settings.STASH_LOCK_TTL_SECONDS,
+                interval_seconds=settings.LOCK_HEARTBEAT_INTERVAL_SECONDS,
+                max_duration_seconds=settings.LOCK_HEARTBEAT_MAX_DURATION_SECONDS,
+            ):
+                # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+                # Rejects with 503 BIND_MOUNT_MISSING if /app/stash is not a real
+                # bind-mount. Without this guard os.makedirs would create an
+                # ephemeral in-container dir; tar would land in container overlay
+                # FS, invisible to the host upload daemon (incident: crawl 1958).
+                self._verify_bind_mount(settings.STASH_SHARED_PATH, "stash upload")
 
-            stash_dir = settings.STASH_SHARED_PATH
-            target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
-            job_storage_path = job_info["storage_path"]
+                stash_dir = settings.STASH_SHARED_PATH
+                target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
+                job_storage_path = job_info["storage_path"]
 
-            # --- Pre-flight disk space check (fail-open per spec §5.1) ---
-            try:
-                baseline_state = self._get_archives_disk_state(stash_dir)
-                logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
-                required_bytes = self._estimate_archive_required_bytes(job_storage_path)
-                required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+                # --- Pre-flight disk space check (fail-open per spec §5.1) ---
+                try:
+                    baseline_state = self._get_archives_disk_state(stash_dir)
+                    logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
+                    required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+                    required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
 
-                if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                    if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                        logger.warning(
+                            f"Rejecting stash '{crawl_id}': insufficient disk space. "
+                            f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
+                        )
+                        raise HTTPException(
+                            status_code=503,
+                            detail={
+                                "error_code": "INSUFFICIENT_DISK_SPACE",
+                                "required_bytes": required_bytes,
+                                "available_bytes": baseline_state["free_bytes"],
+                                "disk_state": baseline_state,
+                            },
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
                     logger.warning(
-                        f"Rejecting stash '{crawl_id}': insufficient disk space. "
-                        f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
+                        f"Stash pre-flight measurement failed for '{crawl_id}': {e}. "
+                        f"Proceeding without disk-space check (fail-open)."
                     )
-                    raise HTTPException(
-                        status_code=503,
-                        detail={
-                            "error_code": "INSUFFICIENT_DISK_SPACE",
-                            "required_bytes": required_bytes,
-                            "available_bytes": baseline_state["free_bytes"],
-                            "disk_state": baseline_state,
-                        },
-                    )
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.warning(
-                    f"Stash pre-flight measurement failed for '{crawl_id}': {e}. "
-                    f"Proceeding without disk-space check (fail-open)."
-                )
 
-            # --- Tar via staging dir + atomic move (mirror archive flow) ---
-            def _create_stash_archive():
-                staging_dir = os.path.join(stash_dir, ".staging")
-                os.makedirs(staging_dir, exist_ok=True)
-                os.makedirs(stash_dir, exist_ok=True)
-                staging_base = os.path.join(staging_dir, crawl_id)
-                staging_path = None
-                try:
-                    staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
-                    if os.path.getsize(staging_path) == 0:
-                        raise RuntimeError(f"Stash archive at '{staging_path}' is empty (0 bytes).")
-                    # Integrity check
-                    with tarfile.open(staging_path, 'r:gz') as t:
-                        t.getnames()
-                    os.rename(staging_path, target_tar)
-                    staging_path = None  # transferred ownership
-                    return target_tar, os.path.getsize(target_tar)
-                finally:
-                    if staging_path and os.path.exists(staging_path):
-                        try:
-                            os.remove(staging_path)
-                        except OSError:
-                            pass
-
-            try:
-                final_path, archive_size = await anyio.to_thread.run_sync(_create_stash_archive)
-                logger.info(f"Stashed crawl '{crawl_id}' ({archive_size} bytes) -> {final_path}")
-            except Exception as e:
-                logger.error(f"Failed to create stash archive for '{crawl_id}': {e}", exc_info=True)
-                try:
-                    post_failure_state = self._get_archives_disk_state(stash_dir)
-                    logger.error(f"Stash disk state at failure for '{crawl_id}': {post_failure_state}")
-                except Exception:
-                    pass
-                raise HTTPException(status_code=500, detail=f"Stash archive creation failed: {str(e)}")
-
-            # --- Mark as stashed in Redis (BEFORE deleting local data) ---
-            # Naive UTC ISO string — matches codebase convention (archived_at,
-            # last_heartbeat, etc). Adding a 'Z' suffix would cause
-            # fromisoformat() to return a tz-aware datetime on Python 3.11+,
-            # breaking subtraction against naive utcnow() in reconcile_jobs.
-            stashed_at = datetime.utcnow().isoformat()
-            job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
-            fresh_job_info = await cache_service.get_json(job_key)
-            if not fresh_job_info:
-                logger.error(f"Cannot mark '{crawl_id}' as stashed: job not found in Redis after stash tar created.")
-                raise HTTPException(status_code=500, detail="Job vanished from Redis during stash.")
-            fresh_job_info["stashed_at"] = stashed_at
-            await cache_service.set_json(job_key, fresh_job_info)
-            logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
-
-            # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
-            # Mirrors archive_crawl._cleanup_local_data so operator UX is
-            # consistent: ops can peek at logs locally without restoring via
-            # unstash. The tar contains everything; unstash restore is
-            # idempotent over kept files.
-            try:
-                def _cleanup_data_keep_logs():
-                    files_to_keep = {
-                        'crawler.log', '_callback_payload.json',
-                        '_completion_marker.json', '_status_snapshot.json',
-                        '_exit_reason.json', '_update_report.json',
-                        'update_stats.json',
-                        'timing.jsonl', 'timing-summary.json',
-                    }
-                    if not os.path.isdir(job_storage_path):
-                        return
-                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                        for name in files:
-                            if name not in files_to_keep:
-                                try:
-                                    os.remove(os.path.join(root, name))
-                                except OSError:
-                                    pass
-                        for name in dirs:
+                # --- Tar via staging dir + atomic move (mirror archive flow) ---
+                def _create_stash_archive():
+                    staging_dir = os.path.join(stash_dir, ".staging")
+                    os.makedirs(staging_dir, exist_ok=True)
+                    os.makedirs(stash_dir, exist_ok=True)
+                    staging_base = os.path.join(staging_dir, crawl_id)
+                    staging_path = None
+                    try:
+                        staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
+                        if os.path.getsize(staging_path) == 0:
+                            raise RuntimeError(f"Stash archive at '{staging_path}' is empty (0 bytes).")
+                        # Integrity check
+                        with tarfile.open(staging_path, 'r:gz') as t:
+                            t.getnames()
+                        os.rename(staging_path, target_tar)
+                        staging_path = None  # transferred ownership
+                        return target_tar, os.path.getsize(target_tar)
+                    finally:
+                        if staging_path and os.path.exists(staging_path):
                             try:
-                                os.rmdir(os.path.join(root, name))
+                                os.remove(staging_path)
                             except OSError:
-                                pass  # non-empty (kept file inside) → leave dir
+                                pass
 
-                await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
-                logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
-            except Exception as e:
-                logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
+                try:
+                    final_path, archive_size = await anyio.to_thread.run_sync(_create_stash_archive)
+                    logger.info(f"Stashed crawl '{crawl_id}' ({archive_size} bytes) -> {final_path}")
+                except Exception as e:
+                    logger.error(f"Failed to create stash archive for '{crawl_id}': {e}", exc_info=True)
+                    try:
+                        post_failure_state = self._get_archives_disk_state(stash_dir)
+                        logger.error(f"Stash disk state at failure for '{crawl_id}': {post_failure_state}")
+                    except Exception:
+                        pass
+                    raise HTTPException(status_code=500, detail=f"Stash archive creation failed: {str(e)}")
 
-            return {
-                "crawl_id": crawl_id,
-                "status": "stashing",
-                "stash_path": f"gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz",
-                "stashed_at": stashed_at,
-            }
+                # --- Mark as stashed in Redis (BEFORE deleting local data) ---
+                # Naive UTC ISO string — matches codebase convention (archived_at,
+                # last_heartbeat, etc). Adding a 'Z' suffix would cause
+                # fromisoformat() to return a tz-aware datetime on Python 3.11+,
+                # breaking subtraction against naive utcnow() in reconcile_jobs.
+                stashed_at = datetime.utcnow().isoformat()
+                job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+                fresh_job_info = await cache_service.get_json(job_key)
+                if not fresh_job_info:
+                    logger.error(f"Cannot mark '{crawl_id}' as stashed: job not found in Redis after stash tar created.")
+                    raise HTTPException(status_code=500, detail="Job vanished from Redis during stash.")
+                fresh_job_info["stashed_at"] = stashed_at
+                await cache_service.set_json(job_key, fresh_job_info)
+                logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
+
+                # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
+                # Mirrors archive_crawl._cleanup_local_data so operator UX is
+                # consistent: ops can peek at logs locally without restoring via
+                # unstash. The tar contains everything; unstash restore is
+                # idempotent over kept files.
+                try:
+                    def _cleanup_data_keep_logs():
+                        files_to_keep = {
+                            'crawler.log', '_callback_payload.json',
+                            '_completion_marker.json', '_status_snapshot.json',
+                            '_exit_reason.json', '_update_report.json',
+                            'update_stats.json',
+                            'timing.jsonl', 'timing-summary.json',
+                        }
+                        if not os.path.isdir(job_storage_path):
+                            return
+                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                            for name in files:
+                                if name not in files_to_keep:
+                                    try:
+                                        os.remove(os.path.join(root, name))
+                                    except OSError:
+                                        pass
+                            for name in dirs:
+                                try:
+                                    os.rmdir(os.path.join(root, name))
+                                except OSError:
+                                    pass  # non-empty (kept file inside) → leave dir
+
+                    await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
+                    logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
+                except Exception as e:
+                    logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
+
+                return {
+                    "crawl_id": crawl_id,
+                    "status": "stashing",
+                    "stash_path": f"gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz",
+                    "stashed_at": stashed_at,
+                }
 
         finally:
             await self._release_ownership_lock(stash_lock_key, lock_value)

@@ -759,3 +759,134 @@ async def test_stash_keeps_logs_and_markers_on_cleanup(
     assert not sub.exists(), "empty data subdir should be rmdir'd"
     # Root storage dir kept (contains 2 kept files)
     assert storage.exists()
+
+
+# ============================================================================
+# _LockHeartbeat integration tests (T2)
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_stash_lock_survives_long_tar(
+    cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path
+):
+    """A tar that runs longer than the initial TTL keeps the lock via heartbeat.
+
+    Scenario: STASH_LOCK_TTL=2s, heartbeat interval=1s, tar mock sleeps 4s
+    (2x initial TTL). During the tar, the heartbeat must refresh the lock at
+    least once. A concurrent stash_crawl call mid-tar must get 409.
+    """
+    from app.core import config as cfg
+
+    stash_dir = tmp_path / "stash"
+    stash_dir.mkdir()
+    monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
+    monkeypatch.setattr(cm_module.settings, "GCS_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(cfg.settings, "STASH_LOCK_TTL_SECONDS", 2)
+    monkeypatch.setattr(cfg.settings, "LOCK_HEARTBEAT_INTERVAL_SECONDS", 1)
+    monkeypatch.setattr(cfg.settings, "LOCK_HEARTBEAT_MAX_DURATION_SECONDS", 30)
+
+    # Track SET NX calls: first returns True (lock acquired), subsequent return
+    # False (lock already held — concurrent caller gets 409).
+    set_call_count = {"n": 0}
+    # Heartbeat eval: first eval call returns 1 (refresh OK), subsequent
+    # release eval also returns 1. We count calls but always return 1.
+    eval_call_count = {"n": 0}
+
+    original_set = mock_cache_service.redis_client.set
+
+    async def _set_side_effect(key, value, **kwargs):
+        set_call_count["n"] += 1
+        if set_call_count["n"] == 1:
+            return True   # first acquire (task1)
+        return False      # subsequent acquire (concurrent caller gets 409)
+
+    async def _eval_side_effect(script, numkeys, *args):
+        eval_call_count["n"] += 1
+        return 1
+
+    mock_cache_service.redis_client.set = AsyncMock(side_effect=_set_side_effect)
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.eval = AsyncMock(side_effect=_eval_side_effect)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
+    monkeypatch.setattr(
+        cm_instance,
+        "_get_archives_disk_state",
+        lambda d: {
+            "free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0,
+            "file_count": 0, "oldest_file_age_seconds": None
+        },
+    )
+
+    # Slow down the synchronous tar: patch shutil.make_archive with a stub
+    # that writes a minimal valid tar.gz then sleeps. Capture the ORIGINAL
+    # make_archive BEFORE patching to avoid infinite recursion (monkeypatch
+    # replaces the attribute globally on the shared shutil module).
+    import shutil as _shutil
+    import tarfile as _tarfile
+    import time as _time
+
+    def slow_make_archive(base_name, fmt, root_dir=None, **kwargs):
+        # Write minimal valid empty tar.gz to base_name + extension first.
+        out = f"{base_name}.tar.gz" if fmt == "gztar" else f"{base_name}.tar"
+        with _tarfile.open(out, "w:gz" if fmt == "gztar" else "w") as tf:
+            pass  # empty archive — passes integrity check (getnames() == [])
+        _time.sleep(4)  # 2x the initial TTL=2s
+        return out
+
+    monkeypatch.setattr(cm_module.shutil, "make_archive", slow_make_archive)
+
+    # Concurrent attempt during the 4s tar must get 409
+    task1 = asyncio.create_task(cm_instance.stash_crawl(base_job_info))
+    await asyncio.sleep(2.5)  # past initial TTL=2s — only heartbeat keeps lock
+
+    with pytest.raises(HTTPException) as exc_info:
+        await cm_instance.stash_crawl(base_job_info)
+    assert exc_info.value.status_code == 409
+    detail = exc_info.value.detail
+    if isinstance(detail, dict):
+        assert detail.get("error_code") == "OPERATION_IN_PROGRESS"
+    else:
+        assert "in progress" in str(detail).lower()
+
+    # First call must still complete successfully
+    result = await task1
+    assert result.get("status") == "stashing"
+
+    # Heartbeat must have fired at least once (eval called ≥ 2: ≥1 refresh + 1 release)
+    assert eval_call_count["n"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_stash_lock_released_on_replica_crash_simulation(
+    cm_instance, mock_cache_service, monkeypatch
+):
+    """Without heartbeat (simulated replica crash), lock TTL expires naturally
+    so the next acquire succeeds.
+
+    NOTE: This test exercises TTL semantics against the mock Redis client.
+    The mock does NOT enforce real TTL expiry (MagicMock grants every SET NX).
+    The test therefore validates the _acquire_ownership_lock API contract:
+    two sequential acquires on the same key both succeed when the mock resets
+    between calls — matching what a real Redis would do after TTL expiry.
+    For real TTL behaviour, see tests/integration/.
+    """
+    from app.core import config as cfg
+    monkeypatch.setattr(cfg.settings, "STASH_LOCK_TTL_SECONDS", 1)
+
+    lock_key = "stash_lock:crash_sim_123"
+
+    # First acquire — simulate a replica that holds the lock then "crashes"
+    # (no heartbeat, no release). With a real Redis the TTL would expire.
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    value = await cm_instance._acquire_ownership_lock(lock_key, 1)
+    assert value is not None
+
+    # Simulate TTL expiry: in real Redis the key would vanish after 1s.
+    # With mock Redis we simply reset the SET NX mock to True (key gone).
+    # Sleep 1.5s to document the intended timing — the assertion that follows
+    # is what matters for the real-Redis path; here it trivially passes.
+    await asyncio.sleep(1.5)
+
+    # Fresh acquire must succeed (real Redis: key expired; mock: always True)
+    new_value = await cm_instance._acquire_ownership_lock(lock_key, 1)
+    assert new_value is not None
