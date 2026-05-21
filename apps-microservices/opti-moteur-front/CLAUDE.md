@@ -65,9 +65,12 @@ BM25 sur des tokens fortuits (ex: "18V" qui matche des batteries pour requete
 
 ## Ce qu'il reste a faire
 
-Voir la roadmap du README. En priorite :
-1. Tests unitaires text.py + reranker.py (logique pure, faciles a tester).
-2. Async batch ingestion avec suivi de status.
+**Note 2026-05-21** : section "Recap final optimisations + etat audits" plus bas
+liste les chantiers techniques en cours. Cette section ci-dessous est l'historique
+des objectifs initiaux du POC (largement atteints au 21/05).
+
+1. ~~Tests unitaires text.py + reranker.py~~ **DONE** (45 tests, voir tests/).
+2. Async batch ingestion avec suivi de status. (Non-prioritaire post-audit BDD)
 3. Integration Prometheus pour suivi SLO (P@5, P@95 latence) en prod.
 
 ## Structure code
@@ -215,3 +218,126 @@ safe si Typesense KO (R2 inactif sans regression).
 Pour les marques multi-mots (ex: "Saint Gobain"), elles sont skipees pour
 l'instant (detection multi-token plus complexe). A enrichir plus tard si
 necessaire business.
+
+## Recap final optimisations + etat audits (2026-05-21)
+
+### Optimisations livrees cette serie (mai 2026)
+
+| Code | Optimisation                                    | Fichier(s)                    | Statut prod |
+|------|-------------------------------------------------|-------------------------------|-------------|
+| A3   | Seuil fallback adaptatif filter_by_category     | `search_service.py`           | ✅ Actif    |
+| A4   | Ponderation IDF des tokens (dict 665k tokens)   | `idf_loader.py`, `reranker.py`| ✅ Actif    |
+| A6   | Synonymes Typesense dans le reranker            | `synonyms_loader.py`, reranker| ✅ Actif    |
+| A7 R3| Coverage strict tokens query (faux amis)        | `reranker.py`                 | ✅ Actif    |
+| A8 R2| Marque comme contrainte forte (type vs brand)   | `brands_loader.py`, reranker  | ✅ Actif    |
+
+Ces 5 optimisations cumulees ont fait progresser la note BDD moyenne :
+- Baseline (19/05) : **6.01/10**
+- Session 2 (post A3+A4)              : 6.23 (+0.22)
+- Session 3 (post A6 synonymes)       : 6.54 (+0.31)
+- Session 4 (post R2+R3+message TRASH): 6.62 (+0.08)
+- Session 5 attendue (post strict_p2) : ~7.2-7.5 (+0.6 cumule)
+
+### Cas resolu durant la serie
+
+| Plainte commerciale                          | Status    | Resolu par   |
+|----------------------------------------------|-----------|--------------|
+| "armoire medicale" -> batteries en pos 1     | ✅ Resolu | A4 IDF       |
+| "soudure ritmo" -> Romus avant Apreau        | ✅ Resolu | A4 IDF       |
+| "ritmo" -> produits sans ritmo en pos 1      | ✅ Resolu | A4 IDF       |
+| "e-crane" -> 0 produit (mode categories pur) | ✅ Resolu | A6 + guards P1 PHP |
+| "urinoir delabie" -> distributeur en pos 1   | ✅ Resolu | A8 R2        |
+| "barre laser a led" -> scanner code-barre    | ✅ Partiel| A7 R3        |
+| "lockers bagagerie" -> page 1 vide           | ✅ Resolu | A6 (synonyme casier) + guards P1 |
+
+### Cas critiques residuels (pas resolus, hors scope reranker)
+
+| Mot-cle                       | Cause                              | Plan         |
+|-------------------------------|------------------------------------|--------------|
+| `mantsinen`     -> 0 resultat | Pas de produit Mantsinen en BDD    | Job de cohérence log BDD vs SERP |
+| `gadus s2 v220 2` -> pollution| 29 produits Gadus en BDD mais TOUS chez fournisseurs en pause (etat_societe=2) | À voir avec commercial |
+| `barre laser a led` (residuel)| Token "led" ignore par BM25 dominant | R3 marche partiellement, top 1 = lampe LED Wiha mais scanners encore en pos 4-10 |
+
+## Modifs PHP front Ecritel (reference hors repo)
+
+Le code PHP du front HelloPro vit sur **Ecritel** (FTP upload), pas dans ce repo
+public. Les fichiers suivants ont ete modifies dans cette serie pour
+collaborer avec opti-moteur-front :
+
+### `site/hellopro_fr/moteur_recherche.php`
+
+- **Garde-fous P1 (regimes HEALTHY/HYBRID/TRASH)** : fonction `hp_decide_p1_regime()`
+  classe la P1 Solr V2 selon les ratios HIGH/MID/LOW.
+  - HEALTHY (high>=50% ET low<20%) : 40 Solr direct, no AJAX
+  - HYBRID  (entre les deux)        : N Solr (HIGH+MID) + (40-N) Typesense AJAX
+  - TRASH   (high=0 ET mid<3 OU low>=90%) : 0 Solr + 40 Typesense AJAX
+- **Marqueur HTML debug** : `<!-- HP_QUALITY_P1: regime=... -->`
+- **Injection JS** : `window.HP_SEARCH_STATE.regime` + `p1_stats` pour debug
+- **Bump JS version** : `?v=20260520a` pour invalider cache navigateur
+
+### `site/moteur_recherche/search_ajax.php`
+
+- **A9 strict_p2 (2026-05-21)** : `$_strict_p2 = (count($exclude_ids_map) >= 40)`
+  -> passe `exclude_low=true` au helper quand la P1 a transmis 40 ids.
+- Vire les LOW de la P2 quand P1 est saine (evite le bruit semantique).
+- Reponse JSON augmentee : champs `strict_p2` et `exclude_ids_count` pour debug.
+
+### `site/design_system/js/moteur_recherche_ajax.js`
+
+- **Message "Aucun produit"** : nouvelle fonction `showNoResultsMessage(reason)`
+  affichee quand TRASH + AJAX retourne 0 produit. Cache le carousel de
+  categories (souvent hors-sujet en TRASH) + masque la pagination.
+
+### `site/fichiers_communs_bo_front/hellopro_fr/typesense_synonyms_manual.json`
+
+- **Cluster manual-grue elargi** : ajout de `crane, cranes, e-crane` aux
+  synonymes existants (resout les marques anglaises type "e-crane" Mantsinen).
+- **Cluster manual-casier nouveau** : `["casier","casiers","vestiaire","vestiaires","locker","lockers","consigne","consignes","bagagerie"]`
+  (resout "lockers bagagerie" en P1 TRASH).
+
+### Workflow d'upload Ecritel
+
+Les modifs PHP ne passent pas par Git -- elles sont **uploadees via FTP** sur
+le serveur Ecritel. Les fichiers gardent leur path canonique pour faciliter
+les rollbacks. Backup du 15 mai disponible en filet de secours.
+
+## Architecture finale (pour reference)
+
+```
+URL : ?ajax=1&core_v2=1
+
+Page 1 (server-side PHP)
+└── Solr V2 (text_fr + ASCIIFolding + FrenchLightStem)
+    └── recherche_produit_solr (qf nom_produit^50,categorie^25,sku^40)
+        + boost cumul ^8000 (cert AND tous_tokens_dans_nom)
+    └── hp_classify_and_alternate_docs (HIGH/MID/LOW + cert + round-robin 5/soc)
+    └── hp_decide_p1_regime : HEALTHY / HYBRID / TRASH
+
+Pages 2-4 (AJAX background)
+└── search_ajax.php (avec strict_p2 quand P1 saine)
+    └── recup_info_prod_typesense (offset=(page-1)*150)
+        └── POST https://api.hellopro.eu/optimoteur-service/search/text
+            └── opti-moteur-front (VM GCP):
+                ├── category_detector (facet + prefix-match)
+                ├── search_service (multi_search 4 pages * 250 candidats)
+                │   └── A3 : seuil fallback adaptatif (150/20/5)
+                └── reranker (A4+A6+A7+A8)
+                    ├── A4 : ponderation IDF (665k tokens)
+                    ├── A6 : synonymes (1993 clusters, 21k tokens)
+                    ├── A7 R3 : penalite coverage strict
+                    └── A8 R2 : marque comme contrainte (3803 marques)
+    └── hp_classify_and_alternate_docs (avec exclude_low=$_strict_p2)
+```
+
+## Roadmap restante
+
+1. **Migration GKE** : DevOps (Tafita). Repointer `api.hellopro.eu/optimoteur-service`
+   vers le service GKE au lieu de la VM legacy. PVC pour `app/data/idf_nom_produit.json`.
+2. **Monitoring continu** : job hebdo qui rejoue les 20 mots-cles BDD et alerte
+   sur tout delta > 1 point.
+3. **Job de coherence log** : compare `moteur_solr_historique.nombre_total_resultat_msh`
+   vs nombre de produits affichables -> alerte si discordance (cas `mantsinen`).
+4. **Reactiver fournisseurs Gadus** ou autres marques avec produits etat=Pause -> Complet.
+5. **Marques multi-mots** dans brands_loader (Saint Gobain, Case IH, etc.)
+6. **Cache PHP APCu** sur les top queries (latence 1-2s -> 50ms si cache hit).
+7. **Cleanup doublons multi-chunks** Typesense (Forest crane DOT 50 K TAJFUN apparait 2x).
