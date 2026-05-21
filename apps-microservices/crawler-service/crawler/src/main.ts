@@ -238,7 +238,7 @@ const handleWarningMemory = async (memPercent: number) => {
     if (now - lastWarningActionTime < 30000) return; // Debounce 30s
     lastWarningActionTime = now;
 
-    console.warn(`⚠️  [Tier 1] Memory Warning (${memPercent.toFixed(1)}%). executing proactive recovery...`);
+    console.warn(`⚠️  [Tier 1] Memory Warning (${memPercent.toFixed(1)}% usable). executing proactive recovery...`);
 
     // 1. Force GC
     if ((global as any).gc) {
@@ -275,7 +275,7 @@ let criticalRecoveryAttempted = false;
 const handleCriticalMemory = async (memPercent: number) => {
     if (!criticalRecoveryAttempted) {
         // Phase A: Aggressive Recovery
-        console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}%). Initiating Phase A Recovery...`);
+        console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}% usable). Initiating Phase A Recovery...`);
         criticalRecoveryAttempted = true;
 
         // 1. Kill all browser processes (forcefully release external memory)
@@ -307,7 +307,7 @@ const handleCriticalMemory = async (memPercent: number) => {
     }
 
     // Phase B: Graceful Shutdown (Recovery failed)
-    console.error(`❌ [Tier 2] Memory STILL CRITICAL (${memPercent.toFixed(1)}%) after recovery. Initiating Phase B: Auto-Relaunch...`);
+    console.error(`❌ [Tier 2] Memory STILL CRITICAL (${memPercent.toFixed(1)}% usable) after recovery. Initiating Phase B: Auto-Relaunch...`);
     await gracefulShutdown('OOM_RELAUNCH', 3); // Exit code 3 triggers auto-relaunch in Python
 };
 
