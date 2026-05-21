@@ -4,8 +4,6 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import { createClient } from 'redis';
 import os from 'os';
-import { exec } from "child_process";
-import { promisify } from "util";
 import { router } from "./routes.js";
 import {
     getPathAfterDomain,
@@ -42,7 +40,6 @@ import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMod
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 
-const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
 
 // Crawl start timestamp (déclaré ici pour être accessible depuis le handler de fin de crawl
