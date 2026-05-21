@@ -27,6 +27,8 @@ import {
     getApifyProxyUrl,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
+import { RedisHealthMonitor } from "./class/RedisHealthMonitor.js";
+import { ProgressMonitor } from "./class/ProgressMonitor.js";
 import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
@@ -376,13 +378,33 @@ setInterval(async () => {
 }, 2000); // Poll every 2s (Optimized from 5s)
 // --- END MEMORY WATCHDOG ---
 
-// --- Heartbeat Mechanism ---
+// --- Redis Health + Progress Monitors ---
 const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+const redisLossThresholdMs = Number(process.env.REDIS_LOSS_THRESHOLD_MS ?? 60_000);
+const redisMonitor = new RedisHealthMonitor(
+    redisLossThresholdMs,
+    (reason) => {
+        console.error(`[fatal] redis_lost: ${reason}`);
+        console.error(JSON.stringify({ event: 'redis_lost', reason, snapshot: redisMonitor.snapshot() }));
+        // gracefulShutdown is declared later in the file; safe to forward-reference
+        // via the top-level `gracefulShutdown` const because we only call it at fire-time.
+        void gracefulShutdown('REDIS_LOST', 5);
+    },
+);
+redisMonitor.attach('heartbeat');
+redisMonitor.attach('dedup');
+redisMonitor.start();
+
+// --- Heartbeat Mechanism ---
 const redisClient = createClient({ url: redisUrl });
-redisClient.on('error', (err) => console.error('Redis Heartbeat Error:', err));
+redisClient.on('error', (err) => {
+    console.error('Redis Heartbeat Error:', err);
+    redisMonitor.onError('heartbeat', err);
+});
 
 try {
     await redisClient.connect();
+    redisMonitor.onSuccess('heartbeat');
     console.log('Connected to Redis for Heartbeat');
 
     const hostname = os.hostname();
@@ -484,13 +506,22 @@ try {
                 timestamp: Date.now(),
                 status: 'running'
             };
-            await redisClient.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+            try {
+                await redisClient.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+                redisMonitor.onSuccess('heartbeat');
+            } catch (e) {
+                redisMonitor.onError('heartbeat', e);
+                console.error('Failed to send heartbeat:', e);
+            }
         } catch (e) {
-            console.error('Failed to send heartbeat:', e);
+            console.error('Heartbeat interval error:', e);
         }
     }, 2000);
 } catch (err) {
     console.error('Failed to connect to Redis for Heartbeat:', err);
+    redisMonitor.onError('heartbeat', err);
+    // FAIL-FAST: do not run a crawl with broken Redis from start.
+    process.exit(5);
 }
 // ---------------------------
 
