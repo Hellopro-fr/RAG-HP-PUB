@@ -22,7 +22,10 @@ export async function killBrowserProcesses(timeoutMs = 5000): Promise<void> {
     try {
         await execAsync(
             `pkill -9 -f "${BROWSER_KILL_PATTERN}" 2>/dev/null || true`,
-            { timeout: timeoutMs },
+            // killSignal aligns with `pkill -9` semantics: if exec's own timeout fires,
+            // send SIGKILL rather than Node's default SIGTERM, keeping the suppression
+            // list (ETIMEDOUT, SIGKILL) correct.
+            { timeout: timeoutMs, killSignal: 'SIGKILL' },
         );
     } catch (e: any) {
         if (e.code !== 'ETIMEDOUT' && e.signal !== 'SIGKILL') {
