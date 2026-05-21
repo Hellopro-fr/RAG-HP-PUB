@@ -18,6 +18,7 @@ from typing import Dict, Optional, Any, List, Tuple
 import aiofiles
 import httpx
 from fastapi import HTTPException, status
+from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 
 from app.core.config import settings
 from common_utils.redis import cache_service
@@ -43,10 +44,39 @@ CRAWL_UPDATES_CHANNEL = "crawl_updates"
 WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
 FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
 
+# Capacity short-circuit + Redis retry (Spec 2026-05-22).
+# See docs/superpowers/specs/2026-05-22-start-crawl-capacity-short-circuit-design.md
+REPLICA_CAP_RETRY_AFTER_S = 5
+GLOBAL_CAP_RETRY_AFTER_S = 15
+_REDIS_RETRY_ATTEMPTS = 2  # 2 retries = 3 total attempts
+_REDIS_RETRY_BACKOFF_MS = 50
+
 # Replica identity for ownership-safe Redis locks. Generated once per process.
 # Used by stash/unstash to avoid clobbering a new acquirer's lock after TTL expiry.
 import socket as _socket
 REPLICA_ID = f"{_socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+
+
+async def _with_retry(callable_coro, *args, **kwargs):
+    """Run a Redis call with bounded retry on transient connection errors.
+
+    Wraps `cache_service.*` async helpers. On (RedisConnectionError, RedisTimeoutError,
+    OSError) retries up to _REDIS_RETRY_ATTEMPTS times with _REDIS_RETRY_BACKOFF_MS ms
+    backoff between attempts. Other exceptions propagate immediately.
+
+    Spec: docs/superpowers/specs/2026-05-22-start-crawl-capacity-short-circuit-design.md
+    """
+    for attempt in range(_REDIS_RETRY_ATTEMPTS + 1):
+        try:
+            return await callable_coro(*args, **kwargs)
+        except (RedisConnectionError, RedisTimeoutError, OSError) as e:
+            if attempt >= _REDIS_RETRY_ATTEMPTS:
+                raise
+            logger.warning(
+                f"Redis transient error on attempt {attempt + 1}/{_REDIS_RETRY_ATTEMPTS + 1}: {e}. Retrying."
+            )
+            await asyncio.sleep(_REDIS_RETRY_BACKOFF_MS / 1000.0)
+
 
 def _parse_iso_naive_utc(value: str) -> datetime:
     """Parse an ISO 8601 datetime string and return a NAIVE UTC datetime.
