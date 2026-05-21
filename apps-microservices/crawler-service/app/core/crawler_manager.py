@@ -1769,180 +1769,193 @@ class CrawlerManager:
         archives_dir = settings.ARCHIVES_SHARED_PATH
         target_archive_path = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
 
-        # Acquire a Redis lock to prevent concurrent archiving of the same crawl
-        lock_key = f"archive_lock:{crawl_id}"
-        # 30 min TTL: large crawls can take >5 min to archive via shutil.make_archive
-        lock_acquired = await cache_service.redis_client.set(lock_key, "1", nx=True, ex=1800)
-        if not lock_acquired:
+        # Acquire ownership-safe Redis lock (replica-id-tagged value).
+        # ARCHIVE_LOCK_TTL_SECONDS=1800; _LockHeartbeat refreshes mid-op so
+        # the TTL never expires during a long tar.
+        archive_lock_key = f"archive_lock:{crawl_id}"
+        lock_value = await self._acquire_ownership_lock(
+            archive_lock_key, settings.ARCHIVE_LOCK_TTL_SECONDS
+        )
+        if lock_value is None:
+            # Exact string preserved — 3_archive_eligible_domains.php matches
+            # this in its 409 success-signal logic. Do not modify.
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Archiving for crawl '{crawl_id}' is already in progress."
             )
 
         try:
-            # Cleanup orphaned temp file from a previous failed attempt
-            tmp_archive_path = os.path.join(archives_dir, f"{crawl_id}.tmp.tar.gz")
-            if os.path.exists(tmp_archive_path):
-                os.remove(tmp_archive_path)
-                logger.info(f"Removed orphaned temp archive for '{crawl_id}'.")
+            async with _LockHeartbeat(
+                self,
+                archive_lock_key,
+                lock_value,
+                ttl_seconds=settings.ARCHIVE_LOCK_TTL_SECONDS,
+                interval_seconds=settings.LOCK_HEARTBEAT_INTERVAL_SECONDS,
+                max_duration_seconds=settings.LOCK_HEARTBEAT_MAX_DURATION_SECONDS,
+            ):
+                # Cleanup orphaned temp file from a previous failed attempt
+                tmp_archive_path = os.path.join(archives_dir, f"{crawl_id}.tmp.tar.gz")
+                if os.path.exists(tmp_archive_path):
+                    os.remove(tmp_archive_path)
+                    logger.info(f"Removed orphaned temp archive for '{crawl_id}'.")
 
-            # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
-            if os.path.exists(target_archive_path):
-                archive_size = os.path.getsize(target_archive_path)
-                logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
-                await self._mark_as_archived(crawl_id)
-                return {
-                    "crawl_id": crawl_id,
-                    "archive_status": "pending_upload",
-                    "archive_size_bytes": archive_size,
-                }
+                # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
+                if os.path.exists(target_archive_path):
+                    archive_size = os.path.getsize(target_archive_path)
+                    logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
+                    await self._mark_as_archived(crawl_id)
+                    return {
+                        "crawl_id": crawl_id,
+                        "archive_status": "pending_upload",
+                        "archive_size_bytes": archive_size,
+                    }
 
-            # GCS fallback: if local archive is gone, check if it was already uploaded to GCS.
-            # This handles legacy crawls stuck at 'finished' due to a previous bug where
-            # _mark_as_archived was never called, but the archive was created and uploaded.
-            try:
-                download_path = await self._retrieve_from_gcs_daemon(crawl_id)
-                # Archive exists in GCS — this crawl was already archived. Just fix the status.
-                archive_size = os.path.getsize(download_path) if os.path.exists(download_path) else None
-                self.cleanup_temp_download(crawl_id)
-                await self._mark_as_archived(crawl_id)
-                logger.info(f"Archive for '{crawl_id}' found in GCS. Status corrected to 'archived'.")
-                return {
-                    "crawl_id": crawl_id,
-                    "archive_status": "already_in_gcs",
-                    "archive_size_bytes": archive_size,
-                }
-            except HTTPException:
-                # Archive not in GCS (502/504) — proceed with normal archiving
-                logger.info(f"Archive for '{crawl_id}' not found in GCS. Proceeding with fresh archiving.")
-
-            # --- PRE-FLIGHT DISK SPACE CHECK ---
-            # Measure the source directory, check free space on /app/archives/, reject
-            # with 503 if insufficient. Fail-open if measurement itself fails.
-            baseline_state = self._get_archives_disk_state(archives_dir)
-            logger.info(f"Archive disk state for '{crawl_id}': {baseline_state}")
-
-            required_bytes = self._estimate_archive_required_bytes(job_storage_path)
-            required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
-
-            if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
-                logger.warning(
-                    f"Rejecting archive '{crawl_id}': insufficient disk space. "
-                    f"Required: {required_bytes} bytes, Available: {baseline_state['free_bytes']} bytes. "
-                    f"Disk state: {baseline_state}"
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "error_code": "INSUFFICIENT_DISK_SPACE",
-                        "required_bytes": required_bytes,
-                        "available_bytes": baseline_state["free_bytes"],
-                        "disk_state": baseline_state,
-                    },
-                )
-
-            # Save current status snapshot before archiving (critical: dataset files will be deleted)
-            try:
-                current_status = await self.get_status(job_info)
-                snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
-                snapshot_data = current_status.model_dump(mode='json')
-
-                async with aiofiles.open(snapshot_path, 'w') as f:
-                    await f.write(json.dumps(snapshot_data, indent=2, default=str))
-
-                logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
-            except Exception as e:
-                logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
-
-            logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
-
-            try:
-                def _create_archive():
-                    """Create tar.gz archive in a staging subdirectory, then atomically
-                    move to the final location. The upload daemon uses `find -maxdepth 1`,
-                    so it never sees the staging dir — preventing the race where the
-                    daemon uploads (and deletes) a partial tmp file."""
-                    staging_dir = os.path.join(archives_dir, ".staging")
-                    os.makedirs(staging_dir, exist_ok=True)
-                    os.makedirs(archives_dir, exist_ok=True)
-
-                    staging_base = os.path.join(staging_dir, crawl_id)
-                    final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
-                    staging_path = None
-
-                    try:
-                        # Create archive in staging dir (hidden from daemon)
-                        staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
-                        archive_size = os.path.getsize(staging_path)
-                        if archive_size == 0:
-                            raise RuntimeError(f"Archive at '{staging_path}' is empty (0 bytes).")
-
-                        # Verify archive is readable
-                        with tarfile.open(staging_path, 'r:gz') as t:
-                            t.getnames()  # Force read of the archive index
-
-                        # Atomic rename to final path — same filesystem, always atomic
-                        os.rename(staging_path, final_target)
-                        staging_path = None  # Successfully moved; skip cleanup
-
-                        return final_target, archive_size
-                    finally:
-                        # Clean up staging file on any failure (disk full, corrupt, 0 bytes, etc.)
-                        if staging_path and os.path.exists(staging_path):
-                            try:
-                                os.remove(staging_path)
-                            except OSError:
-                                pass
-
-                def _cleanup_local_data():
-                    """Remove crawl data files, keeping only logs and markers."""
-                    files_to_keep = {'crawler.log', '_callback_payload.json',
-                                     '_completion_marker.json', '_status_snapshot.json',
-                                     '_exit_reason.json', '_update_report.json',
-                                     'update_stats.json',
-                                     'timing.jsonl', 'timing-summary.json'}
-                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                        for name in files:
-                            if name not in files_to_keep:
-                                os.remove(os.path.join(root, name))
-                        for name in dirs:
-                            try:
-                                os.rmdir(os.path.join(root, name))
-                            except OSError:
-                                pass
-
-                # Step 1: Create archive
-                final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
-                logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
-
-                # Step 2: Mark as archived (must succeed before cleanup)
-                await self._mark_as_archived(crawl_id)
-
-                # Step 3: Cleanup (safe to fail — data is in the archive)
+                # GCS fallback: if local archive is gone, check if it was already uploaded to GCS.
+                # This handles legacy crawls stuck at 'finished' due to a previous bug where
+                # _mark_as_archived was never called, but the archive was created and uploaded.
                 try:
-                    await anyio.to_thread.run_sync(_cleanup_local_data)
-                    logger.info(f"Cleaned up local storage for '{crawl_id}'.")
+                    download_path = await self._retrieve_from_gcs_daemon(crawl_id)
+                    # Archive exists in GCS — this crawl was already archived. Just fix the status.
+                    archive_size = os.path.getsize(download_path) if os.path.exists(download_path) else None
+                    self.cleanup_temp_download(crawl_id)
+                    await self._mark_as_archived(crawl_id)
+                    logger.info(f"Archive for '{crawl_id}' found in GCS. Status corrected to 'archived'.")
+                    return {
+                        "crawl_id": crawl_id,
+                        "archive_status": "already_in_gcs",
+                        "archive_size_bytes": archive_size,
+                    }
+                except HTTPException:
+                    # Archive not in GCS (502/504) — proceed with normal archiving
+                    logger.info(f"Archive for '{crawl_id}' not found in GCS. Proceeding with fresh archiving.")
+
+                # --- PRE-FLIGHT DISK SPACE CHECK ---
+                # Measure the source directory, check free space on /app/archives/, reject
+                # with 503 if insufficient. Fail-open if measurement itself fails.
+                baseline_state = self._get_archives_disk_state(archives_dir)
+                logger.info(f"Archive disk state for '{crawl_id}': {baseline_state}")
+
+                required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+                required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+
+                if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                    logger.warning(
+                        f"Rejecting archive '{crawl_id}': insufficient disk space. "
+                        f"Required: {required_bytes} bytes, Available: {baseline_state['free_bytes']} bytes. "
+                        f"Disk state: {baseline_state}"
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "error_code": "INSUFFICIENT_DISK_SPACE",
+                            "required_bytes": required_bytes,
+                            "available_bytes": baseline_state["free_bytes"],
+                            "disk_state": baseline_state,
+                        },
+                    )
+
+                # Save current status snapshot before archiving (critical: dataset files will be deleted)
+                try:
+                    current_status = await self.get_status(job_info)
+                    snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
+                    snapshot_data = current_status.model_dump(mode='json')
+
+                    async with aiofiles.open(snapshot_path, 'w') as f:
+                        await f.write(json.dumps(snapshot_data, indent=2, default=str))
+
+                    logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
                 except Exception as e:
-                    logger.warning(f"Local cleanup failed for '{crawl_id}' (archive is safe): {e}")
+                    logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
 
-                return {
-                    "crawl_id": crawl_id,
-                    "archive_status": "pending_upload",
-                    "archive_size_bytes": archive_size,
-                }
+                logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
 
-            except Exception as e:
-                logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
-                # Log disk state at failure so we can correlate with the baseline log
                 try:
-                    post_failure_state = self._get_archives_disk_state(archives_dir)
-                    logger.error(f"Archive disk state at failure for '{crawl_id}': {post_failure_state}")
-                except Exception:
-                    pass
-                raise HTTPException(
-                    status_code=500, detail=f"Archiving failed: {str(e)}")
+                    def _create_archive():
+                        """Create tar.gz archive in a staging subdirectory, then atomically
+                        move to the final location. The upload daemon uses `find -maxdepth 1`,
+                        so it never sees the staging dir — preventing the race where the
+                        daemon uploads (and deletes) a partial tmp file."""
+                        staging_dir = os.path.join(archives_dir, ".staging")
+                        os.makedirs(staging_dir, exist_ok=True)
+                        os.makedirs(archives_dir, exist_ok=True)
+
+                        staging_base = os.path.join(staging_dir, crawl_id)
+                        final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
+                        staging_path = None
+
+                        try:
+                            # Create archive in staging dir (hidden from daemon)
+                            staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
+                            archive_size = os.path.getsize(staging_path)
+                            if archive_size == 0:
+                                raise RuntimeError(f"Archive at '{staging_path}' is empty (0 bytes).")
+
+                            # Verify archive is readable
+                            with tarfile.open(staging_path, 'r:gz') as t:
+                                t.getnames()  # Force read of the archive index
+
+                            # Atomic rename to final path — same filesystem, always atomic
+                            os.rename(staging_path, final_target)
+                            staging_path = None  # Successfully moved; skip cleanup
+
+                            return final_target, archive_size
+                        finally:
+                            # Clean up staging file on any failure (disk full, corrupt, 0 bytes, etc.)
+                            if staging_path and os.path.exists(staging_path):
+                                try:
+                                    os.remove(staging_path)
+                                except OSError:
+                                    pass
+
+                    def _cleanup_local_data():
+                        """Remove crawl data files, keeping only logs and markers."""
+                        files_to_keep = {'crawler.log', '_callback_payload.json',
+                                         '_completion_marker.json', '_status_snapshot.json',
+                                         '_exit_reason.json', '_update_report.json',
+                                         'update_stats.json',
+                                         'timing.jsonl', 'timing-summary.json'}
+                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                            for name in files:
+                                if name not in files_to_keep:
+                                    os.remove(os.path.join(root, name))
+                            for name in dirs:
+                                try:
+                                    os.rmdir(os.path.join(root, name))
+                                except OSError:
+                                    pass
+
+                    # Step 1: Create archive
+                    final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
+                    logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
+
+                    # Step 2: Mark as archived (must succeed before cleanup)
+                    await self._mark_as_archived(crawl_id)
+
+                    # Step 3: Cleanup (safe to fail — data is in the archive)
+                    try:
+                        await anyio.to_thread.run_sync(_cleanup_local_data)
+                        logger.info(f"Cleaned up local storage for '{crawl_id}'.")
+                    except Exception as e:
+                        logger.warning(f"Local cleanup failed for '{crawl_id}' (archive is safe): {e}")
+
+                    return {
+                        "crawl_id": crawl_id,
+                        "archive_status": "pending_upload",
+                        "archive_size_bytes": archive_size,
+                    }
+
+                except Exception as e:
+                    logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+                    # Log disk state at failure so we can correlate with the baseline log
+                    try:
+                        post_failure_state = self._get_archives_disk_state(archives_dir)
+                        logger.error(f"Archive disk state at failure for '{crawl_id}': {post_failure_state}")
+                    except Exception:
+                        pass
+                    raise HTTPException(
+                        status_code=500, detail=f"Archiving failed: {str(e)}")
         finally:
-            await cache_service.redis_client.delete(lock_key)
+            await self._release_ownership_lock(archive_lock_key, lock_value)
 
     async def _mark_as_archived(self, crawl_id: str):
         """Updates job status to 'archived' in Redis to prevent double-archiving.

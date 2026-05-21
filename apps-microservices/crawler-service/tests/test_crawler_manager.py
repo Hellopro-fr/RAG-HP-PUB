@@ -1097,3 +1097,172 @@ class TestVerifyBindMount:
         # Must not raise
         result = cm._verify_bind_mount(str(fake_mount), "test-label")
         assert result is None
+
+
+# ============================================================================
+# Archive lock heartbeat tests (T3)
+# ============================================================================
+
+import asyncio as _asyncio
+
+from app.core import crawler_manager as cm_module
+from app.core.crawler_manager import CrawlerManager
+from fastapi import HTTPException
+
+
+@pytest.fixture
+def _mock_cache_service_archive(monkeypatch):
+    """Module-level cache_service mock for archive heartbeat tests.
+    Has redis_client as AsyncMock so set/eval/delete can be stubbed per test.
+    """
+    mock = MagicMock()
+    mock.redis_client = AsyncMock()
+    mock.get_json = AsyncMock(return_value=None)
+    mock.set_json = AsyncMock()
+    monkeypatch.setattr(cm_module, "cache_service", mock)
+    return mock
+
+
+@pytest.fixture
+def _cm_instance_archive(_mock_cache_service_archive):
+    return CrawlerManager()
+
+
+@pytest.fixture
+def archive_job_info(tmp_path):
+    storage = tmp_path / "crawl_data"
+    storage.mkdir()
+    (storage / "crawler.log").write_text("log content")
+    (storage / "dataset.json").write_text('{"records": [1,2,3]}')
+    return {
+        "crawl_id": "archive_test_id",
+        "status": "finished",
+        "storage_path": str(storage),
+        "domain": "example.com",
+    }
+
+
+@pytest.mark.asyncio
+async def test_archive_lock_holds_during_long_tar(
+    _cm_instance_archive, archive_job_info, _mock_cache_service_archive, monkeypatch, tmp_path
+):
+    """Tar that runs past initial TTL keeps lock via heartbeat; concurrent
+    attempt gets 409.
+
+    Mirror of test_stash_lock_survives_long_tar at apps-microservices/crawler-
+    service/tests/test_crawler_manager_stash.py (commit 1427b494).
+    """
+    from app.core import config as cfg
+
+    monkeypatch.setattr(cfg.settings, "ARCHIVE_LOCK_TTL_SECONDS", 2)
+    monkeypatch.setattr(cfg.settings, "LOCK_HEARTBEAT_INTERVAL_SECONDS", 1)
+    monkeypatch.setattr(cfg.settings, "LOCK_HEARTBEAT_MAX_DURATION_SECONDS", 30)
+
+    archives_dir = tmp_path / "archives"
+    archives_dir.mkdir()
+    monkeypatch.setattr(cm_module.settings, "ARCHIVES_SHARED_PATH", str(archives_dir))
+
+    # Track SET NX: first acquire wins, subsequent fail (concurrent caller 409).
+    set_call_count = {"n": 0}
+    eval_call_count = {"n": 0}
+
+    async def _set_side_effect(key, value, **kwargs):
+        set_call_count["n"] += 1
+        return set_call_count["n"] == 1
+
+    async def _eval_side_effect(script, numkeys, *args):
+        eval_call_count["n"] += 1
+        return 1
+
+    _mock_cache_service_archive.redis_client.set = AsyncMock(side_effect=_set_side_effect)
+    _mock_cache_service_archive.redis_client.eval = AsyncMock(side_effect=_eval_side_effect)
+    _mock_cache_service_archive.redis_client.delete = AsyncMock(return_value=1)
+
+    # Stub helpers to skip GCS fallback and pass disk pre-flight.
+    async def _gcs_404(*args, **kwargs):
+        raise HTTPException(status_code=502, detail="not in GCS")
+
+    monkeypatch.setattr(_cm_instance_archive, "_retrieve_from_gcs_daemon", _gcs_404)
+    monkeypatch.setattr(
+        _cm_instance_archive, "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0,
+                   "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    monkeypatch.setattr(
+        _cm_instance_archive, "_estimate_archive_required_bytes", lambda p: 1024,
+    )
+    monkeypatch.setattr(_cm_instance_archive, "_mark_as_archived", AsyncMock(return_value=None))
+
+    # Stub get_status so the snapshot step doesn't fail (snapshot creation is wrapped in try/except,
+    # so a failure there is non-fatal, but stubbing avoids noise).
+    from unittest.mock import MagicMock as _MagicMock
+    mock_status = _MagicMock()
+    mock_status.model_dump = _MagicMock(return_value={})
+    monkeypatch.setattr(_cm_instance_archive, "get_status", AsyncMock(return_value=mock_status))
+
+    # Slow tar: capture shutil/tarfile from local import BEFORE patching to avoid recursion.
+    import shutil as _shutil
+    import tarfile as _tarfile
+    import time as _time
+
+    def slow_make_archive(base_name, fmt, root_dir=None, **kwargs):
+        out = f"{base_name}.tar.gz" if fmt == "gztar" else f"{base_name}.tar"
+        with _tarfile.open(out, "w:gz" if fmt == "gztar" else "w") as tf:
+            pass  # empty archive — passes integrity check
+        _time.sleep(4)  # 2x initial TTL=2s
+        return out
+
+    monkeypatch.setattr(cm_module.shutil, "make_archive", slow_make_archive)
+
+    task1 = _asyncio.create_task(_cm_instance_archive.archive_crawl(archive_job_info))
+    await _asyncio.sleep(2.5)  # past initial TTL — only heartbeat keeps lock
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _cm_instance_archive.archive_crawl(archive_job_info)
+    assert exc_info.value.status_code == 409
+    assert "already in progress" in str(exc_info.value.detail).lower()
+
+    result = await task1
+    assert "archive_status" in result
+
+    # Heartbeat fired during the 4s tar (≥ 1 refresh expected)
+    assert eval_call_count["n"] >= 2
+
+
+def test_archive_409_body_strings_unchanged():
+    """The PHP cron at 3_archive_eligible_domains.php line 375 matches
+    'already been archived' via stripos. Both 409 detail strings are
+    caller-contract surface. Asserting their literal presence in source."""
+    import inspect
+    src = inspect.getsource(cm_module.CrawlerManager.archive_crawl)
+    assert "already been archived" in src, (
+        "PHP cron substring 'already been archived' missing — do not change."
+    )
+    assert "is already in progress" in src, (
+        "Lock-held 409 substring 'is already in progress' missing — caller "
+        "contract."
+    )
+
+
+@pytest.mark.asyncio
+async def test_archive_lock_release_is_ownership_safe(
+    _cm_instance_archive, _mock_cache_service_archive
+):
+    """A different replica's value cannot DEL our lock."""
+    lock_key = "archive_lock:ownership_test"
+
+    # Force _acquire_ownership_lock to return a value for our acquire
+    _mock_cache_service_archive.redis_client.set = AsyncMock(return_value=True)
+    _mock_cache_service_archive.redis_client.eval = AsyncMock(side_effect=[
+        0,  # first release: wrong value → CAS returns 0
+        1,  # second release: correct value → CAS returns 1
+    ])
+
+    our_value = await _cm_instance_archive._acquire_ownership_lock(lock_key, 60)
+    assert our_value is not None
+
+    released = await _cm_instance_archive._release_ownership_lock(lock_key, "wrong-replica-id")
+    assert released is False
+
+    released = await _cm_instance_archive._release_ownership_lock(lock_key, our_value)
+    assert released is True
