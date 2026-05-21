@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     STALE_JOB_THRESHOLD_LOCAL: int = 180   # Local jobs: PID check + 3 min heartbeat gap
     STALE_JOB_THRESHOLD_REMOTE: int = 600  # Remote jobs: 10 min grace period for owning replica
 
+    # Node-side monitor thresholds (informational; actual values passed via env to crawler subprocess)
+    REDIS_LOSS_THRESHOLD_MS: int = 60_000
+    PROGRESS_STALL_THRESHOLD_MS: int = 600_000
+
     model_config = {
         "env_file": ".env",
         "extra": "ignore",

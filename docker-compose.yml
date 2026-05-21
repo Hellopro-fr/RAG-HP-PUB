@@ -1359,6 +1359,8 @@ services:
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - DETECTION_LANGUE_API_URL=http://api-detection-langue-fr-service:8999
+      - REDIS_LOSS_THRESHOLD_MS=${REDIS_LOSS_THRESHOLD_MS:-60000}
+      - PROGRESS_STALL_THRESHOLD_MS=${PROGRESS_STALL_THRESHOLD_MS:-600000}
     deploy:
       replicas: 1
       resources:
