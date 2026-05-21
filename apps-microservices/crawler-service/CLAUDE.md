@@ -301,6 +301,65 @@ For `progress_stalled` testing: set `PROGRESS_STALL_THRESHOLD_MS=120000` (2 min)
 Spec: `docs/superpowers/specs/2026-05-21-redis-loss-progress-stall-detection-design.md`.
 Plan: `docs/superpowers/plans/2026-05-21-redis-loss-progress-stall-detection.md`.
 
+## Redis Connection Leak Prevention
+
+Three client-side prongs + one operator-side step prevent the connection-cap exhaustion that recurred until each crawler-service restart.
+
+### Python side (`libs/common-utils` cache_service)
+
+`init_redis_pool()` now builds a bounded, keepalive-protected client with proactive health checks. All connections are named per-replica for `CLIENT LIST` attribution.
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `REDIS_MAX_CONNECTIONS` | `20` | Pool cap per replica |
+| `REDIS_SOCKET_TIMEOUT_S` | `10` | Per-command timeout |
+| `REDIS_SOCKET_CONNECT_TIMEOUT_S` | `5` | Connect handshake timeout |
+| `REDIS_HEALTH_CHECK_INTERVAL_S` | `30` | Proactive ping cadence |
+
+`max_connections=0` is clamped to 1. When the pool is exhausted, `redis-py` raises `ConnectionError("Too many connections")` — surfaces as a 500 to the API caller, points us at the leak source rather than silently growing.
+
+Client name: `crawler-py-{HOSTNAME or pid-N}`.
+
+### Node side (crawler subprocess)
+
+Heartbeat publishes and `DedupManager` operations now multiplex on a single shared Redis client created via `createSharedRedisClient(redisUrl, { crawlId, monitor })` in `crawler/src/redisClient.ts`. Halves per-crawl conn count (2 → 1) and halves the orphan blast radius when the process is OOM-killed.
+
+`DedupManager` accepts `RedisClientType | string` — the URL form is preserved for backward compat (tests + legacy callers). When a shared client is injected, the owner attaches the `error` listener; `monitor.onError('dedup', …)` is not invoked on that path.
+
+Client name: `crawler-node-{crawlId}`. Monitor attached as `'shared'`.
+
+Note: `StatsManager` still opens its own Redis client. Deferred follow-up — see spec § Deferred follow-ups.
+
+### Server-side idle reap
+
+`./redis_diagnose.sh --apply-timeout` (run once from the deploy host) sets:
+
+- `CONFIG SET timeout 300` — server reaps idle conns after 5 min.
+- `CONFIG SET tcp-keepalive 60` — TCP-level keepalive every 60s.
+- `CONFIG REWRITE` — persists to `redis.conf` so the setting survives restart.
+
+These complement the client-side keepalive — TCP-half-open conns left behind by SIGKILL'd Node processes are reaped automatically.
+
+### Diagnostic tools
+
+| Tool | View | Use |
+|------|------|-----|
+| `./redis_diagnose.sh` (repo root) | Server-side global | All conns Redis sees, names + addrs, config |
+| `GET /admin/redis-debug` | Per-replica local | This replica's pool stats + global CLIENT LIST aggregation |
+
+The endpoint is authenticated via existing `verify_api_key` (`X-API-Key` header). Sampled `CLIENT LIST` entries are projected to a whitelisted field set (`name/addr/age/idle/cmd/fd`) so future redis-py additions cannot silently widen the leak surface.
+
+### Rollout (post-deploy)
+
+1. Run `./redis_diagnose.sh` baseline → record `connected_clients`, name distribution.
+2. Run `./redis_diagnose.sh --apply-timeout` once.
+3. Deploy code (Python pool + Node shared client + admin endpoint together).
+4. Run `./redis_diagnose.sh` again → expect `crawler-node-*` count = active crawls (not 2× active crawls); `timeout=300`; orphan count drops within 5 min.
+5. Curl `/admin/redis-debug` per replica → expect `pool_stats.in_use` well below `max_connections`.
+
+Spec: `docs/superpowers/specs/2026-05-21-redis-connection-leak-fix-design.md`.
+Plan: `docs/superpowers/plans/2026-05-21-redis-connection-leak-fix.md`.
+
 ## Capacity Counter Invariants
 
 The global capacity counter (Redis key `crawl_jobs:running_count`) is authoritative for capacity gating. Every state transition that changes whether a job is "holding a slot" must keep the counter in sync.
