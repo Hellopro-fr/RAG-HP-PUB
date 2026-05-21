@@ -1,0 +1,19 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-21-cache-service-client-name-fix.md",
+  "tasks": [
+    {
+      "id": 50,
+      "subject": "Task 1: SERVICE_NAME-driven Redis client_name + 2 unit tests",
+      "status": "pending",
+      "description": "**Goal:** Replace hardcoded client_name with _client_name() helper reading SERVICE_NAME (fallback crawler-py). 2 unit tests.\n\n**Files:**\n- Modify: `libs/common-utils/src/common_utils/redis/cache_service.py`\n- Modify: `libs/common-utils/tests/test_cache_service.py`\n\n**Verify:** `cd libs/common-utils && pytest tests/test_cache_service.py -v` -> 10 passed\n\n```json:metadata\n{\"files\":[\"libs/common-utils/src/common_utils/redis/cache_service.py\",\"libs/common-utils/tests/test_cache_service.py\"],\"verifyCommand\":\"cd libs/common-utils && pytest tests/test_cache_service.py -v\",\"acceptanceCriteria\":[\"_client_name() helper added\",\"reads SERVICE_NAME env (fallback crawler-py)\",\"callsite swapped in init_redis_pool\",\"2 new unit tests + 8 existing all green\"]}\n```"
+    },
+    {
+      "id": 51,
+      "subject": "Task 2: SERVICE_NAME=crawler-service env line in docker-compose",
+      "status": "pending",
+      "blockedBy": [50],
+      "description": "**Goal:** Set SERVICE_NAME=crawler-service in crawler-service compose env so CLIENT LIST reports correct ownership.\n\n**Files:**\n- Modify: `docker-compose.yml`\n\n**Verify:** `python -c \"import yaml; yaml.safe_load(open('docker-compose.yml')); print('YAML valid')\" && grep -nE 'SERVICE_NAME=crawler-service' docker-compose.yml`\n\n```json:metadata\n{\"files\":[\"docker-compose.yml\"],\"verifyCommand\":\"python -c 'import yaml; yaml.safe_load(open(\\\"docker-compose.yml\\\")); print(\\\"YAML valid\\\")' && grep -nE 'SERVICE_NAME=crawler-service' docker-compose.yml\",\"acceptanceCriteria\":[\"SERVICE_NAME=crawler-service appended to crawler-service env\",\"YAML valid\",\"grep finds the line\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-21T22:30:00Z"
+}
