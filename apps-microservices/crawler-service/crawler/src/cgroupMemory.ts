@@ -12,8 +12,8 @@
 // top-level execution that fires on import, breaking direct test imports —
 // same constraint that drove browserKill.ts extraction in Spec-A).
 
-import fsPromises from "node:fs/promises";
-import os from "node:os";
+import fsPromises from 'node:fs/promises';
+import os from 'node:os';
 
 export interface UsableMemory {
     /** memory.current - file (v2) or memory.usage_in_bytes - cache (v1). */
@@ -34,15 +34,16 @@ export interface UsableMemory {
  */
 export function parseMemoryStat(content: string): { file: number } {
     let file = 0;
-    for (const line of content.split("\n")) {
+    for (const line of content.split('\n')) {
         const trimmed = line.trim();
         if (!trimmed) continue;
         const parts = trimmed.split(/\s+/);
         if (parts.length < 2) continue;
         const [key, rawValue] = parts;
-        if (key !== "file" && key !== "cache") continue;
+        if (key !== 'file' && key !== 'cache') continue;
         const value = parseInt(rawValue, 10);
-        if (!Number.isFinite(value) || Number.isNaN(value)) continue;
+        // Number.isFinite returns false for NaN, so one check covers both.
+        if (!Number.isFinite(value)) continue;
         file = value;
     }
     return { file };
@@ -50,7 +51,7 @@ export function parseMemoryStat(content: string): { file: number } {
 
 async function readFileOrNull(path: string): Promise<string | null> {
     try {
-        return await fsPromises.readFile(path, "utf-8");
+        return await fsPromises.readFile(path, 'utf-8');
     } catch {
         return null;
     }
@@ -63,10 +64,10 @@ async function readFileOrNull(path: string): Promise<string | null> {
  */
 export async function readUsableMemory(): Promise<UsableMemory | null> {
     // cgroup v2
-    const v2Max = await readFileOrNull("/sys/fs/cgroup/memory.max");
-    const v2Current = await readFileOrNull("/sys/fs/cgroup/memory.current");
-    const v2Stat = await readFileOrNull("/sys/fs/cgroup/memory.stat");
-    if (v2Max && v2Current && v2Stat && v2Max.trim() !== "max") {
+    const v2Max = await readFileOrNull('/sys/fs/cgroup/memory.max');
+    const v2Current = await readFileOrNull('/sys/fs/cgroup/memory.current');
+    const v2Stat = await readFileOrNull('/sys/fs/cgroup/memory.stat');
+    if (v2Max && v2Current && v2Stat && v2Max.trim() !== 'max') {
         const totalMem = parseInt(v2Max.trim(), 10);
         const rawCurrent = parseInt(v2Current.trim(), 10);
         const { file: pageCache } = parseMemoryStat(v2Stat);
@@ -74,9 +75,9 @@ export async function readUsableMemory(): Promise<UsableMemory | null> {
     }
 
     // cgroup v1
-    const v1Limit = await readFileOrNull("/sys/fs/cgroup/memory/memory.limit_in_bytes");
-    const v1Usage = await readFileOrNull("/sys/fs/cgroup/memory/memory.usage_in_bytes");
-    const v1Stat = await readFileOrNull("/sys/fs/cgroup/memory/memory.stat");
+    const v1Limit = await readFileOrNull('/sys/fs/cgroup/memory/memory.limit_in_bytes');
+    const v1Usage = await readFileOrNull('/sys/fs/cgroup/memory/memory.usage_in_bytes');
+    const v1Stat = await readFileOrNull('/sys/fs/cgroup/memory/memory.stat');
     if (v1Limit && v1Usage && v1Stat) {
         const totalMem = parseInt(v1Limit.trim(), 10);
         const rawCurrent = parseInt(v1Usage.trim(), 10);
