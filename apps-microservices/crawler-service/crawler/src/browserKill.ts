@@ -27,6 +27,9 @@ export async function killBrowserProcesses(timeoutMs = 5000): Promise<void> {
             // list (ETIMEDOUT, SIGKILL) correct.
             { timeout: timeoutMs, killSignal: 'SIGKILL' },
         );
+        // Engine list derived from the constant so it never drifts.
+        const engines = BROWSER_KILL_PATTERN.replace(/\|/g, "/");
+        console.log(`✅ Orphan browser processes cleaned (engines: ${engines}).`);
     } catch (e: any) {
         if (e.code !== 'ETIMEDOUT' && e.signal !== 'SIGKILL') {
             console.warn('⚠️  killBrowserProcesses warning:', e.message);

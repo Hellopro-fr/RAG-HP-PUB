@@ -40,7 +40,7 @@ import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
-import { killBrowserProcesses } from './browserKill.js';
+import { killBrowserProcesses } from "./browserKill.js";
 
 const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
@@ -182,7 +182,6 @@ await killBrowserProcesses();
 // 2s is empirically sufficient on Linux 5.x+ to flush the post-kill cgroup
 // state before the threshold check below reads /sys/fs/cgroup/memory.current.
 await new Promise((r) => setTimeout(r, 2000));
-console.log('✅ Orphan browser processes cleaned (engines: chrome/chromium/firefox/camoufox/playwright/headless_shell).');
 
 // 2. Check available memory (Docker container limits, not host VM)
 let totalMem: number;
