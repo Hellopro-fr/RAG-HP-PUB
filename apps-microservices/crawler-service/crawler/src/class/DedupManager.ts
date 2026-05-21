@@ -34,7 +34,13 @@ export class DedupManager {
 
     async disconnect() {
         if (this.redis.isOpen) {
-            await this.redis.disconnect();
+            try {
+                await this.redis.disconnect();
+                this.monitor?.onSuccess('dedup');
+            } catch (e) {
+                this.monitor?.onError('dedup', e);
+                throw e;
+            }
         }
     }
 
@@ -44,7 +50,7 @@ export class DedupManager {
         try {
             await this.redis.expire(this.key, this.ttl);
             await this.redis.expire(this.blockedKey, this.ttl);
-            this.monitor?.onSuccess('dedup');
+            // No onSuccess here — outer public method reports.
         } catch (e) {
             this.ttlSet = false;
             this.monitor?.onError('dedup', e);
@@ -192,7 +198,6 @@ export class DedupManager {
             if (chunk.length > 0) {
                 try {
                     await this.redis.sAdd(this.key, chunk);
-                    this.monitor?.onSuccess('dedup');
                 } catch (e) {
                     this.monitor?.onError('dedup', e);
                     throw e;
@@ -200,6 +205,7 @@ export class DedupManager {
             }
         }
         await this.ensureTtl();
+        this.monitor?.onSuccess('dedup');
         console.log(`Loaded ${urls.length} URLs into deduplication set.`);
     }
 
@@ -219,7 +225,6 @@ export class DedupManager {
             if (buffer.length >= chunkSize) {
                 try {
                     await this.redis.sAdd(this.key, buffer);
-                    this.monitor?.onSuccess('dedup');
                 } catch (e) {
                     this.monitor?.onError('dedup', e);
                     throw e;
@@ -231,7 +236,6 @@ export class DedupManager {
         if (buffer.length > 0) {
             try {
                 await this.redis.sAdd(this.key, buffer);
-                this.monitor?.onSuccess('dedup');
             } catch (e) {
                 this.monitor?.onError('dedup', e);
                 throw e;
@@ -239,6 +243,7 @@ export class DedupManager {
         }
 
         await this.ensureTtl();
+        this.monitor?.onSuccess('dedup');
         console.log(`Loaded ${totalCount} URLs into deduplication set (streaming).`);
         return totalCount;
     }
