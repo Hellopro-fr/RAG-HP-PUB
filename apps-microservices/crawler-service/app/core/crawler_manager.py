@@ -595,6 +595,7 @@ class CrawlerManager:
                     -1, # Special exit code for max restart fail
                     job_info.get("crawl_mode", "standard"),
                     request_id=request_id,
+                    failure_cause="oom_max_restarts",
                 ))
             return
 
@@ -625,6 +626,7 @@ class CrawlerManager:
             # Mark job as failed
             job_info["status"] = "failed"
             job_info["isError"] = "OOM_RELAUNCH_FAILED"
+            job_info["failure_cause"] = "oom_relaunch_failed"
 
             # Write completion marker before deleting key (for disk recovery)
             marker_path = os.path.join(job_info.get("storage_path", ""), '_completion_marker.json')
@@ -656,6 +658,7 @@ class CrawlerManager:
                     -1,
                     job_info.get("crawl_mode", "standard"),
                     request_id=request_id,
+                    failure_cause="oom_relaunch_failed",
                 ))
 
     def _get_or_create_failure_request_id(self, job_info: dict) -> str:
@@ -844,19 +847,22 @@ class CrawlerManager:
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int,
                                     crawl_mode: str = "standard",
                                     request_id: Optional[str] = None,
-                                    shutdown: bool = False):
+                                    shutdown: bool = False,
+                                    failure_cause: Optional[str] = None):
         # We process failures for both standard and update modes now
         # Determine message_erreur_crawling and failure_cause from exit code
-        classified_message, failure_cause = self._classify_exit_code(exit_code)
+        classified_message, classified_cause = self._classify_exit_code(exit_code)
         error_message = classified_message if classified_message is not None else ""
+        # Caller override: explicit failure_cause kwarg trumps classifier.
+        final_failure_cause = failure_cause if failure_cause is not None else classified_cause
 
         params = {
             "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
             "timestamp": datetime.utcnow().isoformat(),
             "message_erreur_crawling": error_message
         }
-        if failure_cause is not None:
-            params["failure_cause"] = failure_cause
+        if final_failure_cause is not None:
+            params["failure_cause"] = final_failure_cause
         if request_id:
             params["request_id"] = request_id
 
@@ -1177,6 +1183,8 @@ class CrawlerManager:
             logger.warning(f"Could not write completion marker for force-finish: {e}")
 
         # Release distributed lock, update state document, and notify
+        if target_status == "failed":
+            job_info["failure_cause"] = "force_finished"
         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, target_status)
@@ -1192,6 +1200,7 @@ class CrawlerManager:
                 -1,  # Force-finish exit code
                 job_info.get("crawl_mode", "standard"),
                 request_id=request_id,
+                failure_cause="force_finished",
             ))
         else:
             asyncio.create_task(self._send_stop_webhook(job_info, target_status))
@@ -1632,6 +1641,7 @@ class CrawlerManager:
             if job_info and job_info.get("status") in ("running", "restarting_oom"):
                 job_info["status"] = "failed"
                 job_info["shutdown_reason"] = "Service instance terminated" # V3 Logic
+                job_info["failure_cause"] = "service_shutdown"
                 if "last_heartbeat" in job_info:
                     del job_info["last_heartbeat"]
 
@@ -1668,6 +1678,7 @@ class CrawlerManager:
                         job_info.get("crawl_mode", "standard"),
                         request_id=failure_request_id,
                         shutdown=True,
+                        failure_cause="service_shutdown",
                     )
             else:
                  logger.warning(f"Could not find job '{crawl_id}' in Redis during shutdown or it was not in 'running' state.")
@@ -2828,6 +2839,8 @@ class CrawlerManager:
 
                         job_data["status"] = final_status
                         job_data["shutdown_reason"] = "Stop cleanup (stale)" if is_stopping else "Stale job detected (missing heartbeat)"
+                        if not is_stopping:
+                            job_data["failure_cause"] = "stale_detected"
                         if "last_heartbeat" in job_data:
                             del job_data["last_heartbeat"]
 
@@ -2868,6 +2881,7 @@ class CrawlerManager:
                                 -1,
                                 job_data.get("crawl_mode", "standard"),
                                 request_id=reconcile_request_id,
+                                failure_cause="stale_detected",
                             ))
 
                         stale_jobs_count += 1

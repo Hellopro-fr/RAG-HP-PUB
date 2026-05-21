@@ -1266,3 +1266,234 @@ async def test_archive_lock_release_is_ownership_safe(
 
     released = await _cm_instance_archive._release_ownership_lock(lock_key, our_value)
     assert released is True
+
+
+# ============================================================================
+# Task 7: exit-code dispatch + failure_cause kwarg override
+# ============================================================================
+
+
+class TestClassifyExitCode:
+    """_classify_exit_code maps every exit code to the correct (message, cause) tuple."""
+
+    @pytest.mark.parametrize("exit_code, expected_cause", [
+        (0,    None),
+        (2,    None),
+        (-1,   "oom_max_restarts"),
+        (3,    "oom_relaunch"),
+        (4,    "update_mode_no_data"),
+        (5,    "redis_lost"),
+        (6,    "progress_stalled"),
+        (137,  "killed_oom_system"),
+        (-9,   "killed_oom_system"),
+        (-15,  "signal_killed"),
+        (99,   "unknown"),
+    ])
+    def test_cause_for_exit_code(self, exit_code, expected_cause):
+        from app.core.crawler_manager import CrawlerManager
+        _, cause = CrawlerManager._classify_exit_code(exit_code)
+        assert cause == expected_cause
+
+    @pytest.mark.parametrize("exit_code", [0, 2])
+    def test_success_codes_return_none_none(self, exit_code):
+        from app.core.crawler_manager import CrawlerManager
+        msg, cause = CrawlerManager._classify_exit_code(exit_code)
+        assert msg is None
+        assert cause is None
+
+    def test_exit_code_minus1_message_is_oom(self):
+        from app.core.crawler_manager import CrawlerManager
+        msg, _ = CrawlerManager._classify_exit_code(-1)
+        assert msg == "Out Of Memory"
+
+    def test_exit_code_5_message_mentions_redis(self):
+        from app.core.crawler_manager import CrawlerManager
+        msg, _ = CrawlerManager._classify_exit_code(5)
+        assert msg is not None
+        assert "Redis" in msg or "redis" in msg.lower()
+
+    def test_exit_code_6_message_mentions_progression(self):
+        from app.core.crawler_manager import CrawlerManager
+        msg, _ = CrawlerManager._classify_exit_code(6)
+        assert msg is not None
+        assert len(msg) > 0
+
+
+class TestSendFailureWebhookFailureCauseKwarg:
+    """
+    _send_failure_webhook: explicit failure_cause kwarg overrides _classify_exit_code.
+
+    exit_code=-1 normally resolves to "oom_max_restarts" via the classifier.
+    Callers that pass a different explicit cause (service_shutdown, force_finished,
+    stale_detected, oom_relaunch_failed) must override that default.
+    """
+
+    def _manager(self):
+        from app.core.crawler_manager import CrawlerManager
+        return CrawlerManager.__new__(CrawlerManager)
+
+    def test_signature_has_failure_cause_kwarg(self):
+        import inspect
+        from app.core.crawler_manager import CrawlerManager
+        sig = inspect.signature(CrawlerManager._send_failure_webhook)
+        assert "failure_cause" in sig.parameters
+        assert sig.parameters["failure_cause"].default is None
+
+    def test_explicit_cause_overrides_classifier_in_source(self):
+        """Source inspection: the method body must prefer the explicit kwarg."""
+        import inspect
+        from app.core import crawler_manager as cm
+        source = inspect.getsource(cm.CrawlerManager._send_failure_webhook)
+        # The override pattern must be present
+        assert "failure_cause if failure_cause is not None" in source, (
+            "_send_failure_webhook must override classifier output with explicit failure_cause kwarg"
+        )
+
+    @pytest.mark.asyncio
+    async def test_explicit_cause_wins_over_classifier_for_exit_minus1(self):
+        """
+        exit_code=-1 → classifier says 'oom_max_restarts'.
+        Explicit failure_cause='service_shutdown' must override it in the params sent.
+        """
+        import asyncio
+        mgr = self._manager()
+
+        captured_params = {}
+
+        async def _fake_send_with_retry(url, params, crawl_id, webhook_type):
+            captured_params.update(params)
+            return True
+
+        async def _fake_send_once(url, params, crawl_id, webhook_type, timeout=5.0):
+            captured_params.update(params)
+            return True
+
+        mgr._send_webhook_with_retry = _fake_send_with_retry
+        mgr._send_webhook_once = _fake_send_once
+
+        await mgr._send_failure_webhook(
+            url="http://example.test/cb",
+            crawl_id="test-001",
+            domain="example.com",
+            exit_code=-1,
+            failure_cause="service_shutdown",
+        )
+
+        assert captured_params.get("failure_cause") == "service_shutdown", (
+            "Explicit failure_cause='service_shutdown' must override the classifier's "
+            "'oom_max_restarts' for exit_code=-1"
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_explicit_cause_uses_classifier_for_exit_minus1(self):
+        """Without an explicit kwarg, classifier default 'oom_max_restarts' is used."""
+        import asyncio
+        mgr = self._manager()
+
+        captured_params = {}
+
+        async def _fake_send_with_retry(url, params, crawl_id, webhook_type):
+            captured_params.update(params)
+            return True
+
+        mgr._send_webhook_with_retry = _fake_send_with_retry
+
+        await mgr._send_failure_webhook(
+            url="http://example.test/cb",
+            crawl_id="test-002",
+            domain="example.com",
+            exit_code=-1,
+            # No explicit failure_cause → classifier kicks in
+        )
+
+        assert captured_params.get("failure_cause") == "oom_max_restarts"
+
+    @pytest.mark.parametrize("explicit_cause", [
+        "service_shutdown",
+        "force_finished",
+        "stale_detected",
+        "oom_relaunch_failed",
+        "oom_max_restarts",
+    ])
+    @pytest.mark.asyncio
+    async def test_all_sentinel_callers_override_cause(self, explicit_cause):
+        """Every exit_code=-1 caller passes its own explicit cause correctly."""
+        mgr = self._manager()
+
+        captured_params = {}
+
+        async def _fake_send_with_retry(url, params, crawl_id, webhook_type):
+            captured_params.update(params)
+            return True
+
+        async def _fake_send_once(url, params, crawl_id, webhook_type, timeout=5.0):
+            captured_params.update(params)
+            return True
+
+        mgr._send_webhook_with_retry = _fake_send_with_retry
+        mgr._send_webhook_once = _fake_send_once
+
+        await mgr._send_failure_webhook(
+            url="http://example.test/cb",
+            crawl_id="test-003",
+            domain="example.com",
+            exit_code=-1,
+            failure_cause=explicit_cause,
+        )
+
+        assert captured_params.get("failure_cause") == explicit_cause
+
+
+class TestOomMaxRestartsWebhookCause:
+    """
+    _relaunch_oom_crawl's max-restarts branch must pass failure_cause="oom_max_restarts"
+    to _send_failure_webhook (not rely on the default for exit_code=-1).
+    Source inspection verifies the explicit kwarg is present.
+    """
+
+    def test_max_restarts_branch_passes_oom_max_restarts_cause(self):
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._relaunch_oom_crawl)
+        # Both webhook calls must carry explicit failure_cause kwargs.
+        # The simplest assertion: the string appears at least twice
+        # (once for max-restarts, once for relaunch-failed).
+        assert source.count('failure_cause="oom_max_restarts"') >= 1, (
+            "_relaunch_oom_crawl max-restarts branch must pass "
+            'failure_cause="oom_max_restarts" to _send_failure_webhook'
+        )
+
+    def test_relaunch_failed_branch_passes_oom_relaunch_failed_cause(self):
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._relaunch_oom_crawl)
+        assert 'failure_cause="oom_relaunch_failed"' in source, (
+            "_relaunch_oom_crawl relaunch-failed branch must pass "
+            'failure_cause="oom_relaunch_failed" to _send_failure_webhook'
+        )
+
+
+class TestAllExitMinus1CallersPassExplicitCause:
+    """
+    Source-level contract: every call to _send_failure_webhook with exit_code=-1
+    must supply an explicit failure_cause kwarg so the classifier's default
+    'oom_max_restarts' label is never applied to non-OOM failure paths.
+    """
+
+    @pytest.mark.parametrize("method_name, expected_cause", [
+        ("_cleanup_running_job",  "service_shutdown"),
+        ("force_finish_crawl",    "force_finished"),
+        ("_reconcile_locked",     "stale_detected"),
+    ])
+    def test_caller_has_explicit_failure_cause(self, method_name, expected_cause):
+        import inspect
+        from app.core import crawler_manager as cm
+
+        method = getattr(cm.CrawlerManager, method_name)
+        source = inspect.getsource(method)
+        assert f'failure_cause="{expected_cause}"' in source, (
+            f"{method_name} must pass failure_cause=\"{expected_cause}\" "
+            "to _send_failure_webhook when exit_code=-1"
+        )
