@@ -246,7 +246,60 @@ Spec: `docs/superpowers/specs/2026-04-18-webhook-idempotency-design.md`.
 | 2 | Partial success | Status: `finished`, success webhook |
 | 3 | OOM relaunch | Status: `restarting_oom`, auto-relaunch (up to `MAX_OOM_RESTARTS`) |
 | 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
+| 5 | Redis connection lost (Node-side sustained loss) | Status: `failed`, failure webhook with `failure_cause=redis_lost` |
+| 6 | Progress stall (no URL progress for threshold) | Status: `failed`, failure webhook with `failure_cause=progress_stalled` |
 | Other | Failure | Status: `failed`, failure webhook |
+
+## Redis Loss / Progress Stall Detection
+
+The Node crawler runs two monitors that detect failure modes invisible to Python's existing stale detection:
+
+| Monitor | Trigger | Exit code | Threshold env var |
+|---------|---------|-----------|--------------------|
+| `RedisHealthMonitor` (`crawler/src/class/RedisHealthMonitor.ts`) | Sustained Redis loss across all clients (heartbeat + dedup) | 5 | `REDIS_LOSS_THRESHOLD_MS` (default 60000) |
+| `ProgressMonitor` (`crawler/src/class/ProgressMonitor.ts`) | No `requestsFinished` delta across stall window | 6 | `PROGRESS_STALL_THRESHOLD_MS` (default 600000) |
+
+Both monitors call `gracefulShutdown(reason, exitCode)` on fire. Python `_monitor_process` maps the exit codes to `status=failed` and persists `failure_cause` in `job_data` via the shared `_classify_exit_code` helper. The failure webhook payload to Marketplace BO carries the same `failure_cause` field.
+
+### `failure_cause` vocabulary
+
+This is a cross-language contract between Python orchestrator and Marketplace BO PHP (`fonctions_scrapping.php:handle_crawler_webhook`).
+
+| Exit code | `failure_cause` | Origin |
+|-----------|-----------------|--------|
+| -1 | `oom_max_restarts` | OOM restart budget exhausted by `_relaunch_oom_crawl` |
+| 3 | `oom_relaunch` | Node OOM, before max-restarts reached |
+| 4 | `update_mode_no_data` | Update-mode crawl produced 0 URLs |
+| 5 | `redis_lost` | `RedisHealthMonitor` fired |
+| 6 | `progress_stalled` | `ProgressMonitor` fired |
+| 137 / -9 | `killed_oom_system` | Process killed by OOM killer (SIGKILL) |
+| other negative | `signal_killed` | Killed by signal (non-OOM) |
+| other positive | `unknown` | Unexpected exit code |
+| (none — not from exit code) | `service_shutdown` | Orchestrator graceful shutdown |
+| (none — not from exit code) | `force_finished` | Operator-triggered force-finish |
+| (none — not from exit code) | `stale_detected` | Reconciliation stale detection |
+| (none — not from exit code) | `oom_relaunch_failed` | `start_crawl` raised during OOM relaunch |
+
+**Why this exists (root cause of the bug this addresses):** Python's `last_heartbeat` is a process-liveness proxy (PID alive ⇒ heartbeat fresh), not a crawl-progress proxy. Node-side Redis failures were silently swallowed at `main.ts:382` and `DedupManager.ts:13` — heartbeat publishes kept failing forever while reconciliation never fired because Python kept refreshing `last_heartbeat`. These monitors close that gap by exiting the Node process deterministically.
+
+### Troubleshooting false positives
+
+- `progress_stalled` on a legitimately slow domain → raise `PROGRESS_STALL_THRESHOLD_MS` per-deployment via env (e.g. `1200000` for 20 min).
+- `redis_lost` during a Redis maintenance window → preferred behavior; restart the crawl after maintenance completes.
+- Both thresholds validate against `NaN` and non-positive values; invalid env strings fall back to the defaults.
+
+### Manual smoke-test playbook
+
+1. Trigger a crawl on a test domain.
+2. After 30s: `docker pause <redis-container>` (or block port 6379 outbound from the crawler container with `iptables`).
+3. Watch `crawler-service` logs — expect `event: redis_lost` JSON line within ~60s.
+4. Process exits 5; verify Marketplace BO `crawl_events` row has `failure_cause=redis_lost`.
+5. `docker unpause <redis-container>` and trigger a fresh crawl — verify normal completion (regression check).
+
+For `progress_stalled` testing: set `PROGRESS_STALL_THRESHOLD_MS=120000` (2 min) in compose env for the test deployment, trigger a crawl on a hanging URL, wait 2 min, expect exit code 6.
+
+Spec: `docs/superpowers/specs/2026-05-21-redis-loss-progress-stall-detection-design.md`.
+Plan: `docs/superpowers/plans/2026-05-21-redis-loss-progress-stall-detection.md`.
 
 ## Capacity Counter Invariants
 
