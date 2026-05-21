@@ -1398,8 +1398,11 @@ services:
     profiles: ["crawling", "comparison"]
     ports:
       - "8050:8050"
+    # CUTOVER 2026-05-07: mount the api-gateway-go config (Go is the active
+    # gateway since the Python api-gateway cutover). The api-gateway/nginx.conf
+    # is kept in byte-parity for rollback only — see comment at api-gateway-service.
     volumes:
-      - ./apps-microservices/api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./apps-microservices/api-gateway-go/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
       - services-net
     logging: *logging_defaults
