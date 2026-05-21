@@ -1,4 +1,4 @@
-type ClientName = 'heartbeat' | 'dedup' | string;
+type ClientName = 'heartbeat' | 'dedup';
 
 export class RedisHealthMonitor {
     private lastSuccessAt: Map<ClientName, number> = new Map();
@@ -64,7 +64,12 @@ export class RedisHealthMonitor {
     private fire(reason: string): void {
         this.fired = true;
         this.stop();
-        this.onLost(reason);
+        try {
+            this.onLost(reason);
+        } catch (e) {
+            // Caller's onLost should not break the monitor; log and swallow.
+            console.error('[RedisHealthMonitor] onLost callback threw:', e);
+        }
     }
 
     snapshot() {
