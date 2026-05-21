@@ -853,7 +853,7 @@ class CrawlerManager:
             "timestamp": datetime.utcnow().isoformat(),
             "message_erreur_crawling": error_message
         }
-        if failure_cause:
+        if failure_cause is not None:
             params["failure_cause"] = failure_cause
         if request_id:
             params["request_id"] = request_id
