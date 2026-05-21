@@ -40,6 +40,7 @@ import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
+import { killBrowserProcesses } from './browserKill.js';
 
 const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
@@ -174,21 +175,14 @@ console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
 
 // --- PRE-FLIGHT CHECKS ---
-// 1. Kill orphan processes from previous runs
+// 1. Kill orphan browser processes from previous runs
 console.log('🧹 Checking for orphan browser processes...');
-try {
-    // Kill Chrome/Chromium processes (ignore errors if no processes found)
-    await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true', { timeout: 5000 });
-    await execAsync('pkill -9 -f "playwright" 2>/dev/null || true', { timeout: 5000 });
-    console.log('✅ Orphan processes cleaned.');
-} catch (e: any) {
-    // Ignore expected errors (no processes found, timeout, SIGKILL)
-    if (e.code !== 'ETIMEDOUT' && e.signal !== 'SIGKILL') {
-        console.warn('⚠️  Could not clean orphan processes:', e.message);
-    } else {
-        console.log('✅ No orphan processes found.');
-    }
-}
+await killBrowserProcesses();
+// Reap delay: kernel reclaims anon pages from killed children asynchronously.
+// 2s is empirically sufficient on Linux 5.x+ to flush the post-kill cgroup
+// state before the threshold check below reads /sys/fs/cgroup/memory.current.
+await new Promise((r) => setTimeout(r, 2000));
+console.log('✅ Orphan browser processes cleaned (engines: chrome/chromium/firefox/camoufox/playwright/headless_shell).');
 
 // 2. Check available memory (Docker container limits, not host VM)
 let totalMem: number;
