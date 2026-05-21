@@ -397,11 +397,63 @@ class CrawlerManager:
             "replica_id": os.uname().nodename
         }
 
-        # --- DISTRIBUTED LOCK via SET NX (separate from state document) ---
+        # --- CAPACITY SHORT-CIRCUITS (Spec 2026-05-22) ---
+        # A. LOCAL capacity check — in-memory, ZERO Redis ops.
+        # Runs BEFORE any Redis op so a saturated replica costs nothing on Redis.
+        if not is_restart:
+            active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
+            if active_local >= settings.MAX_CONCURRENT_CRAWLS:
+                logger.warning(
+                    f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'. "
+                    f"No Redis ops performed."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Retry-After": str(REPLICA_CAP_RETRY_AFTER_S)},
+                    detail={
+                        "error_code": "REPLICA_CAPACITY_EXCEEDED",
+                        "message": "This service instance is at its maximum capacity.",
+                        "replica_capacity": settings.MAX_CONCURRENT_CRAWLS,
+                        "rejected_request": {"crawl_id": crawl_id, "domain": domain},
+                    },
+                )
+
+        # B. GLOBAL capacity READ probe — 2 non-mutating Redis ops.
+        # If full, return 503 BEFORE the mutating lock SET / state write / INCR.
+        # Probe is best-effort (non-atomic across the 2 reads); the race-safe
+        # INCR backstop below (section C) is the final authority on capacity.
+        # `current_max_global` initialized here so section C has a value to compare
+        # against even on is_restart=True (where the probe + backstop are skipped).
+        current_max_global = settings.DEFAULT_MAX_GLOBAL_CRAWLS
+        if not is_restart:
+            redis_max_global_str = await _with_retry(cache_service.get_key, CRAWL_MAX_GLOBAL_KEY)
+            current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
+            current_running_str = await _with_retry(cache_service.get_key, CRAWL_RUNNING_COUNT_KEY)
+            current_running = int(current_running_str) if current_running_str else 0
+            if current_running >= current_max_global:
+                logger.warning(
+                    f"Global capacity probe shows full ({current_running}/{current_max_global}). "
+                    f"Rejecting '{crawl_id}'. No mutating Redis ops performed."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Retry-After": str(GLOBAL_CAP_RETRY_AFTER_S)},
+                    detail={
+                        "error_code": "GLOBAL_CAPACITY_EXCEEDED",
+                        "message": "The service has reached its global concurrency limit.",
+                        "global_limit": current_max_global,
+                        "current_running": current_running,
+                    },
+                )
+
+        # --- DISTRIBUTED LOCK via SET NX (mutating; runs only after capacity probes passed) ---
         # Lock key: crawl_lock:{id} with TTL — prevents duplicate crawl_ids across replicas.
         # State key: crawl_job:{id} — persists for observability, no locking semantics.
         if not is_restart:
-            claimed = await cache_service.redis_client.set(lock_key, crawl_id, nx=True, ex=CRAWL_LOCK_TTL_SECONDS)
+            claimed = await _with_retry(
+                cache_service.redis_client.set,
+                lock_key, crawl_id, nx=True, ex=CRAWL_LOCK_TTL_SECONDS,
+            )
             if not claimed:
                 logger.warning(f"Crawl job '{crawl_id}' is already running globally (lock NX failed). Request rejected.")
                 raise HTTPException(
@@ -410,34 +462,35 @@ class CrawlerManager:
                 )
 
         # Write the state document (always, for both normal starts and OOM restarts)
-        await cache_service.set_json(job_key, job_data)
+        await _with_retry(cache_service.set_json, job_key, job_data)
 
-        # --- CAPACITY CHECKS (with cleanup on rejection) ---
+        # --- CAPACITY RACE-SAFE BACKSTOP (last line of defense) ---
         # Helper to rollback both lock claim and counter on rejection.
         # INVARIANT: OOM restarts (is_restart=True) bypass both lock claim and capacity checks,
         # so rollback is never needed. If capacity checks are ever added for restarts,
         # this guard must be updated to also handle the restart path.
         async def _rollback_claim(decrement_counter: bool = False):
             if not is_restart:
-                await cache_service.delete_key(lock_key)
-                await cache_service.delete_key(job_key)
+                await _with_retry(cache_service.delete_key, lock_key)
+                await _with_retry(cache_service.delete_key, job_key)
                 if decrement_counter:
-                    await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                    await _with_retry(cache_service.safe_decrement_key, CRAWL_RUNNING_COUNT_KEY)
 
-        # Check dynamic global limit
+        # Atomic global INCR with race-safe rollback. Probe (section B) may have been
+        # stale by the time we get here (another replica raced ahead); INCR + check
+        # is the final authority.
         if not is_restart:
-            redis_max_global_str = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)
-            current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
-
-            new_count = await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
-
+            new_count = await _with_retry(cache_service.increment_key, CRAWL_RUNNING_COUNT_KEY)
             if new_count > current_max_global:
-                await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
-                await cache_service.delete_key(lock_key)
-                await cache_service.delete_key(job_key)
-                logger.warning(f"Global concurrency limit reached ({new_count - 1}/{current_max_global}). Rejecting '{crawl_id}'.")
+                # Single-source rollback: counter decrement + lock del + state del.
+                await _rollback_claim(decrement_counter=True)
+                logger.warning(
+                    f"Global concurrency limit reached after INCR race ({new_count - 1}/{current_max_global}). "
+                    f"Rejecting '{crawl_id}'."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Retry-After": str(GLOBAL_CAP_RETRY_AFTER_S)},
                     detail={
                         "error_code": "GLOBAL_CAPACITY_EXCEEDED",
                         "message": "The service has reached its global concurrency limit.",
@@ -445,21 +498,6 @@ class CrawlerManager:
                         "current_running": new_count - 1
                     }
                 )
-
-        # Local concurrency check for this replica
-        active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
-        if not is_restart and active_local >= settings.MAX_CONCURRENT_CRAWLS:
-            await _rollback_claim(decrement_counter=True)
-            logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'. Global counter rolled back.")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "error_code": "REPLICA_CAPACITY_EXCEEDED",
-                    "message": "This service instance is at its maximum capacity.",
-                    "replica_capacity": settings.MAX_CONCURRENT_CRAWLS,
-                    "rejected_request": {"crawl_id": crawl_id, "domain": domain}
-                }
-            )
 
         # --- STORAGE SETUP ---
         try:
