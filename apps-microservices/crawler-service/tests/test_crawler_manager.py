@@ -964,3 +964,136 @@ class TestCleanupStaleStateForRelaunch:
             "Could not remove stale completion marker" in r.message
             for r in caplog.records
         )
+
+
+class TestParseIsoNaiveUtc:
+    """Regression: reconcile_jobs raised TypeError when a Redis blob
+    contained a tz-aware ISO datetime in last_heartbeat/start_time, because
+    fromisoformat() returned an aware datetime that could not subtract
+    against naive datetime.utcnow(). Helper normalizes both shapes.
+    """
+
+    def test_naive_input_passes_through(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_naive_with_microseconds_passes_through(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01.123456")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1, 123456)
+
+    def test_z_suffix_stripped_to_naive_utc(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01Z")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_zero_offset_stripped_to_naive_utc(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01+00:00")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_positive_offset_converted_to_utc(self):
+        """+05:00 wall-clock 08:24 = 03:24 UTC."""
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01+05:00")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 3, 24, 1)
+
+    def test_result_subtracts_safely_against_utcnow(self):
+        """The whole point: no TypeError when used in reconcile_jobs."""
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        # Tz-aware input that previously broke reconcile
+        parsed = _parse_iso_naive_utc("2026-05-20T08:24:01Z")
+        # Must subtract without TypeError
+        delta = datetime.utcnow() - parsed
+        assert delta.total_seconds() >= 0  # parsed is in the past
+
+
+class TestStashedAtFormat:
+    """Regression: stash_crawl previously wrote `stashed_at = utcnow().isoformat() + "Z"`,
+    which would cause reconcile (and any future fromisoformat consumer) to
+    return a tz-aware datetime that can't subtract from naive utcnow().
+    Convention-fix: drop the Z suffix to match archived_at/last_heartbeat.
+    """
+
+    def test_stash_crawl_stashed_at_format_is_naive(self):
+        """Inspect the stash_crawl source to confirm no `+ "Z"` suffix is appended."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        src = inspect.getsource(cm.CrawlerManager.stash_crawl)
+        assert "isoformat() + \"Z\"" not in src, (
+            "stash_crawl must not append 'Z' to stashed_at; "
+            "convention is naive UTC ISO string."
+        )
+        # And the assignment must still produce an ISO string
+        assert "stashed_at = datetime.utcnow().isoformat()" in src
+
+
+class TestVerifyBindMount:
+    """Defensive helper: raises 503 BIND_MOUNT_MISSING when stash/unstash
+    target paths are not real bind-mounts. Catches the silent-data-loss
+    case where docker-compose volumes were declared but the container was
+    not recreated to pick them up (incident 2026-05-20 crawl 1958)."""
+
+    def test_raises_503_when_path_is_ordinary_dir(self, tmp_path):
+        from fastapi import HTTPException
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        ordinary = tmp_path / "ephemeral"
+        ordinary.mkdir()  # plain dir, NOT a mount
+
+        with pytest.raises(HTTPException) as exc:
+            cm._verify_bind_mount(str(ordinary), "test-label")
+
+        assert exc.value.status_code == 503
+        assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+        assert exc.value.detail["path"] == str(ordinary)
+        assert exc.value.detail["label"] == "test-label"
+        assert "force-recreate" in exc.value.detail["ops_action"]
+        assert "hint" in exc.value.detail
+
+    def test_raises_503_when_path_does_not_exist(self, tmp_path):
+        from fastapi import HTTPException
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        missing = tmp_path / "nonexistent"  # never created
+
+        with pytest.raises(HTTPException) as exc:
+            cm._verify_bind_mount(str(missing), "test-label")
+
+        assert exc.value.status_code == 503
+        assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+
+    def test_returns_none_when_ismount_true(self, tmp_path, monkeypatch):
+        """Simulate a real mount point by mocking os.path.ismount."""
+        import os
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        fake_mount = tmp_path / "mounted"
+        fake_mount.mkdir()
+        monkeypatch.setattr(os.path, "ismount", lambda p: str(p) == str(fake_mount))
+
+        # Must not raise
+        result = cm._verify_bind_mount(str(fake_mount), "test-label")
+        assert result is None

@@ -11,7 +11,8 @@
           Récapitulatif de l'autorisation
         </h3>
         <p class="text-base text-gray-600 dark:text-gray-400 leading-relaxed mt-0.5">
-          Connecter avec le MCP {{ clientName }}
+          Connecter avec le MCP
+          <span class="font-semibold text-brand-600 dark:text-brand-400">{{ clientName }}</span>
         </p>
       </div>
     </div>

@@ -50,6 +50,14 @@ const BudgetClient = () => {
   const data = priceEstimation?.data;
   const showEstimate = hasDisplayablePriceEstimation(priceEstimation);
 
+  const budgetSnapshot = data
+    ? {
+        borne_basse: data.fourchette.borne_basse,
+        borne_haute: data.fourchette.borne_haute,
+        exemples_count: data.exemples_produits?.length ?? 0,
+      }
+    : {};
+
   const hasTrackedEstimate = useRef(false);
 
   useEffect(() => {
@@ -61,6 +69,13 @@ const BudgetClient = () => {
 
     hasTrackedEstimate.current = true;
     trackBudgetView();
+
+    // Guard sessionStorage : 1 seul fire DB par session (survit aux remounts).
+    // Cle nettoyee au F5 par resetTrackingState() (prefixe hp_viewed_).
+    if (typeof window !== 'undefined' && !sessionStorage.getItem('hp_viewed_db_budget_view')) {
+      sessionStorage.setItem('hp_viewed_db_budget_view', 'true');
+      trackDbEvent('pricing', 'budget_view', budgetSnapshot, categoryId, 1);
+    }
   }, [showEstimate]);
 
   const priceItems = data

@@ -19,34 +19,40 @@
     {
       "id": 32,
       "subject": "Task 3: Wrap stash_crawl pre-flight in fail-open try/except",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "3a89e348",
       "description": "**Goal:** Measurement exception logs warning + proceeds. Mirror archive_crawl pattern.\n\n**Files:** crawler_manager.py:1941-1960, test_crawler_manager_stash.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_stash.py -v -k preflight_failopen\",\"acceptanceCriteria\":[\"try/except wraps pre-flight\",\"HTTPException re-raised\",\"Generic exception logged + skipped\"]}\n```"
     },
     {
       "id": 33,
       "subject": "Task 4: Rewrite orphan log line to UNSTASH_GCS_ORPHAN prefix",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "443debf5",
       "blockedBy": [30],
       "description": "**Goal:** Restructure free-form warning with grep-friendly key=value format.\n\n**Files:** crawler_manager.py:2171-2176\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_stash.py::test_unstash_gcs_cleanup_deferred_returns_200_with_warning -v\",\"acceptanceCriteria\":[\"Log starts with UNSTASH_GCS_ORPHAN\",\"key=value fields\",\"Existing deferred test passes\"]}\n```"
     },
     {
       "id": 34,
       "subject": "Task 5: Close stash_crawl TOCTOU race",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "d120f388",
       "description": "**Goal:** Post-lock fresh Redis read + re-validate. Release lock + 409 on mismatch.\n\n**Files:** crawler_manager.py (stash_crawl after _acquire_ownership_lock), test_crawler_manager_stash.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_stash.py -v -k 'toctou and stash'\",\"acceptanceCriteria\":[\"Fresh get_json after lock\",\"Re-validate status + stashed_at\",\"Lock released on mismatch\",\"Test asserts 409 ALREADY_STASHED + eval called\"]}\n```"
     },
     {
       "id": 35,
       "subject": "Task 6: Close unstash_crawl TOCTOU race",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "ec12b61f",
+      "lockReleaseFixSha": "d120f388",
       "description": "**Goal:** Symmetric to T5. Verify stashed_at still populated.\n\n**Files:** crawler_manager.py (unstash_crawl after _acquire_ownership_lock), test_crawler_manager_stash.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_stash.py -v -k 'toctou and unstash'\",\"acceptanceCriteria\":[\"Fresh get_json after lock\",\"stashed_at still populated check\",\"Lock released on mismatch\",\"Test asserts 409 NOT_STASHED + eval called\"]}\n```"
     },
     {
       "id": 36,
       "subject": "Task 7: Rewrite test_unstash_writes_request_marker with concrete capture",
-      "status": "pending",
+      "status": "completed",
+      "commitSha": "fb6c2661",
       "description": "**Goal:** Replace timeout-only assertion with async polling helper.\n\n**Files:** test_crawler_manager_stash.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_stash.py::test_unstash_writes_request_marker -v\",\"acceptanceCriteria\":[\"Async polling helper captures marker\",\"Assert filename test_id.request\",\"Assert content test_id\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-20T09:00:00Z"
+  "lastUpdated": "2026-05-20T12:35:00Z"
 }

@@ -1347,6 +1347,10 @@ services:
       - ./apps-microservices/crawler-service/crawler_archives:/app/archives
       - ./apps-microservices/crawler-service/crawler_download_requests:/app/download_requests
       - ./apps-microservices/crawler-service/crawler_download_results:/app/download_results
+      # Stash flow shared dirs (mirror archive-flow mounts)
+      - ./apps-microservices/crawler-service/crawler_stash:/app/stash
+      - ./apps-microservices/crawler-service/crawler_stash_download_requests:/app/gcs-stash-requests
+      - ./apps-microservices/crawler-service/crawler_stash_download_results:/app/gcs-stash-downloads
     env_file:
       - .env
     environment:

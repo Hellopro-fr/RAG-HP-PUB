@@ -14,7 +14,7 @@ This project is a high-concurrency, stateful web crawling service built with Fas
     -   `router/`: API endpoint definitions.
     -   `schemas/`: Pydantic data models.
 -   `crawler/`: The Node.js/TypeScript web crawler engine.
--   `docker-compose.yaml`: For running the service and its reverse proxy.
+-   _(Compose definition lives in the root `docker-compose.yml` under the `crawling` profile, not in this subdir.)_
 -   `Dockerfile`: Defines the multi-stage container image for production.
 -   `nginx.conf`: Nginx configuration file that acts as a reverse proxy and load balancer for the crawler service replicas.
 -   `scale_crawlers.sh`: A helper script for correctly scaling the number of crawler service instances.

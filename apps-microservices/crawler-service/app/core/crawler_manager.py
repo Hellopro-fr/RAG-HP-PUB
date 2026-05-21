@@ -12,7 +12,7 @@ import uuid
 import anyio
 import tarfile
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Any, List, Tuple
 
 import aiofiles
@@ -47,6 +47,28 @@ FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
 # Used by stash/unstash to avoid clobbering a new acquirer's lock after TTL expiry.
 import socket as _socket
 REPLICA_ID = f"{_socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+
+def _parse_iso_naive_utc(value: str) -> datetime:
+    """Parse an ISO 8601 datetime string and return a NAIVE UTC datetime.
+
+    Handles both naive (``2026-05-20T08:24:01``) and tz-aware
+    (``2026-05-20T08:24:01Z``, ``+00:00``, ``+05:00``) inputs. tz-aware values
+    are converted to UTC then stripped of tzinfo so they subtract safely
+    against ``datetime.utcnow()`` used elsewhere in this module.
+
+    Why: ``datetime.fromisoformat()`` on Python 3.11+ returns tz-aware
+    datetimes when the input carries a ``Z`` or offset suffix. Subtracting
+    a tz-aware datetime from naive ``utcnow()`` raises
+    ``TypeError: can't subtract offset-naive and offset-aware datetimes``.
+    External writers (legacy PHP, migration scripts) sometimes emit
+    Z-suffixed strings into ``last_heartbeat`` / ``start_time`` Redis fields
+    even though this codebase's convention is naive UTC.
+    """
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
 
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory, excluding Crawlee metadata."""
@@ -1906,6 +1928,31 @@ class CrawlerManager:
             except OSError as e:
                 logger.warning(f"Failed to clean up temp file '{path}': {e}")
 
+    def _verify_bind_mount(self, path: str, label: str) -> None:
+        """Raise 503 BIND_MOUNT_MISSING if path is not a real mount point.
+
+        Detects the silent-data-loss case where docker-compose volumes
+        were added but the container was not recreated. Without this guard
+        Python's os.makedirs creates an ephemeral in-container dir; data
+        written there is invisible to host-side daemons and lost on
+        container recreate.
+
+        Detection: os.path.ismount(p) returns True only for bind-mounts
+        and named volumes — False for ordinary dirs (or non-existent
+        paths).
+        """
+        if not os.path.ismount(path):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_code": "BIND_MOUNT_MISSING",
+                    "path": path,
+                    "label": label,
+                    "ops_action": "docker-compose --profile crawling up -d --force-recreate crawler-service",
+                    "hint": "Container was started before compose mount declaration; recreate required.",
+                },
+            )
+
     async def _acquire_ownership_lock(self, lock_key: str, ttl_seconds: int) -> Optional[str]:
         """Acquire a Redis lock with TTL, value = REPLICA_ID. Returns the value on
         success, None on failure. Pairs with _release_ownership_lock for atomic
@@ -1976,30 +2023,84 @@ class CrawlerManager:
                 detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "stash"}
             )
 
+        # --- Post-lock TOCTOU re-validation (spec follow-up §4.2) ---
+        # Another replica may have completed the operation between the caller's
+        # job_info snapshot and our lock acquire. Re-fetch and re-validate against
+        # the same pre-conditions; on mismatch, release the lock and raise the
+        # canonical 409.
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh_job_info = await cache_service.get_json(job_key)
+        if fresh_job_info is None:
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job '{crawl_id}' vanished from Redis during stash claim."
+            )
+        fresh_status = fresh_job_info.get("status")
+        if fresh_status in ("running", "restarting_oom", "stopping"):
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": fresh_status},
+            )
+        if fresh_status == "archived":
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_ARCHIVED"},
+            )
+        if fresh_job_info.get("stashed_at"):
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_STASHED", "stashed_at": fresh_job_info["stashed_at"]},
+            )
+        # Use the fresh blob from here on.
+        job_info = fresh_job_info
+
         try:
+            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+            # Rejects with 503 BIND_MOUNT_MISSING if /app/stash is not a real
+            # bind-mount. Without this guard os.makedirs would create an
+            # ephemeral in-container dir; tar would land in container overlay
+            # FS, invisible to the host upload daemon (incident: crawl 1958).
+            self._verify_bind_mount(settings.STASH_SHARED_PATH, "stash upload")
+
             stash_dir = settings.STASH_SHARED_PATH
             target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
             job_storage_path = job_info["storage_path"]
 
-            # --- Pre-flight disk space check ---
-            baseline_state = self._get_archives_disk_state(stash_dir)
-            logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
-            required_bytes = self._estimate_archive_required_bytes(job_storage_path)
-            required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+            # --- Pre-flight disk space check (fail-open per spec §5.1) ---
+            try:
+                baseline_state = self._get_archives_disk_state(stash_dir)
+                logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
+                required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+                required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
 
-            if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                    logger.warning(
+                        f"Rejecting stash '{crawl_id}': insufficient disk space. "
+                        f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "error_code": "INSUFFICIENT_DISK_SPACE",
+                            "required_bytes": required_bytes,
+                            "available_bytes": baseline_state["free_bytes"],
+                            "disk_state": baseline_state,
+                        },
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
                 logger.warning(
-                    f"Rejecting stash '{crawl_id}': insufficient disk space. "
-                    f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "error_code": "INSUFFICIENT_DISK_SPACE",
-                        "required_bytes": required_bytes,
-                        "available_bytes": baseline_state["free_bytes"],
-                        "disk_state": baseline_state,
-                    },
+                    f"Stash pre-flight measurement failed for '{crawl_id}': {e}. "
+                    f"Proceeding without disk-space check (fail-open)."
                 )
 
             # --- Tar via staging dir + atomic move (mirror archive flow) ---
@@ -2039,7 +2140,11 @@ class CrawlerManager:
                 raise HTTPException(status_code=500, detail=f"Stash archive creation failed: {str(e)}")
 
             # --- Mark as stashed in Redis (BEFORE deleting local data) ---
-            stashed_at = datetime.utcnow().isoformat() + "Z"
+            # Naive UTC ISO string — matches codebase convention (archived_at,
+            # last_heartbeat, etc). Adding a 'Z' suffix would cause
+            # fromisoformat() to return a tz-aware datetime on Python 3.11+,
+            # breaking subtraction against naive utcnow() in reconcile_jobs.
+            stashed_at = datetime.utcnow().isoformat()
             job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
             fresh_job_info = await cache_service.get_json(job_key)
             if not fresh_job_info:
@@ -2049,15 +2154,39 @@ class CrawlerManager:
             await cache_service.set_json(job_key, fresh_job_info)
             logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
 
-            # --- Delete local crawl storage dir (safe to fail — data is in the tar) ---
+            # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
+            # Mirrors archive_crawl._cleanup_local_data so operator UX is
+            # consistent: ops can peek at logs locally without restoring via
+            # unstash. The tar contains everything; unstash restore is
+            # idempotent over kept files.
             try:
-                def _delete_local():
-                    if os.path.isdir(job_storage_path):
-                        shutil.rmtree(job_storage_path)
-                await anyio.to_thread.run_sync(_delete_local)
-                logger.info(f"Deleted local storage for stashed crawl '{crawl_id}'.")
+                def _cleanup_data_keep_logs():
+                    files_to_keep = {
+                        'crawler.log', '_callback_payload.json',
+                        '_completion_marker.json', '_status_snapshot.json',
+                        '_exit_reason.json', '_update_report.json',
+                        'update_stats.json',
+                        'timing.jsonl', 'timing-summary.json',
+                    }
+                    if not os.path.isdir(job_storage_path):
+                        return
+                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                        for name in files:
+                            if name not in files_to_keep:
+                                try:
+                                    os.remove(os.path.join(root, name))
+                                except OSError:
+                                    pass
+                        for name in dirs:
+                            try:
+                                os.rmdir(os.path.join(root, name))
+                            except OSError:
+                                pass  # non-empty (kept file inside) → leave dir
+
+                await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
+                logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
             except Exception as e:
-                logger.warning(f"Local cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
+                logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
 
             return {
                 "crawl_id": crawl_id,
@@ -2103,6 +2232,29 @@ class CrawlerManager:
                 detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"}
             )
 
+        # --- Post-lock TOCTOU re-validation (spec follow-up §4.2) ---
+        # Another replica may have completed unstash between caller's job_info
+        # snapshot and our lock acquire. Re-fetch and verify stashed_at is still
+        # populated; on mismatch, release the lock and raise 409 NOT_STASHED.
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh_job_info = await cache_service.get_json(job_key)
+        if fresh_job_info is None:
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job '{crawl_id}' vanished from Redis during unstash claim."
+            )
+        if not fresh_job_info.get("stashed_at"):
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "NOT_STASHED"},
+            )
+        # Use the fresh blob from here on.
+        job_info = fresh_job_info
+
         requests_dir = settings.STASH_DOWNLOAD_REQUESTS_PATH
         results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
         request_path = os.path.join(requests_dir, f"{crawl_id}.request")
@@ -2113,6 +2265,15 @@ class CrawlerManager:
         cleanup_done_path = os.path.join(results_dir, f"{crawl_id}.unstash-cleanup-done")
 
         try:
+            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+            # Rejects with 503 BIND_MOUNT_MISSING if either stash download dir
+            # is not a real bind-mount. Without these guards os.makedirs would
+            # create ephemeral in-container dirs; .request marker would never
+            # reach the host daemon and unstash would hang until UNSTASH_TIMEOUT.
+            # Inside try-block so finally releases the unstash_lock on the 503 path.
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_REQUESTS_PATH, "unstash requests")
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_RESULTS_PATH, "unstash results")
+
             # --- Submit download request ---
             os.makedirs(requests_dir, exist_ok=True)
             os.makedirs(results_dir, exist_ok=True)
@@ -2213,9 +2374,10 @@ class CrawlerManager:
 
             if gcs_cleanup_status == "deferred":
                 logger.warning(
-                    f"Unstash cleanup-done marker not arrived within "
-                    f"{settings.UNSTASH_CLEANUP_GRACE_SECONDS}s for '{crawl_id}'. "
-                    f"GCS object may be orphaned at gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz."
+                    f"UNSTASH_GCS_ORPHAN crawl_id={crawl_id} "
+                    f"elapsed_seconds={settings.UNSTASH_CLEANUP_GRACE_SECONDS} "
+                    f"reason=cleanup_grace_expired "
+                    f"gcs_path=gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz"
                 )
 
             # --- Clear stashed_at in Redis ---
@@ -2458,9 +2620,9 @@ class CrawlerManager:
 
                     last_activity_time = None
                     if last_heartbeat_str:
-                        last_activity_time = datetime.fromisoformat(str(last_heartbeat_str))
+                        last_activity_time = _parse_iso_naive_utc(str(last_heartbeat_str))
                     elif start_time_str:
-                        last_activity_time = datetime.fromisoformat(str(start_time_str))
+                        last_activity_time = _parse_iso_naive_utc(str(start_time_str))
 
                     # --- Ownership-aware stale detection ---
                     job_replica_id = job_data.get("replica_id")
