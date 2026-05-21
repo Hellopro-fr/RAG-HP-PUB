@@ -37,9 +37,17 @@ export class ProgressMonitor {
         const windowAge = now - oldest.at;
         if (windowAge < this.stallThresholdMs) return;
         if (finished === oldest.finished) {
-            this.fired = true;
-            this.stop();
-            this.onStalled(`No URL progress for ${Math.round(windowAge / 1000)}s (stuck at ${finished} finished)`);
+            this.fire(`No URL progress for ${Math.round(windowAge / 1000)}s (stuck at ${finished} finished)`);
+        }
+    }
+
+    private fire(reason: string): void {
+        this.fired = true;
+        this.stop();
+        try {
+            this.onStalled(reason);
+        } catch (e) {
+            console.error('[ProgressMonitor] onStalled callback threw:', e);
         }
     }
 }
