@@ -1,4 +1,4 @@
-type ClientName = 'heartbeat' | 'dedup';
+type ClientName = 'heartbeat' | 'dedup' | 'shared';
 
 export class RedisHealthMonitor {
     private lastSuccessAt: Map<ClientName, number> = new Map();
