@@ -381,7 +381,10 @@ setInterval(async () => {
 
 // --- Redis Health + Progress Monitors ---
 const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-const redisLossThresholdMs = Number(process.env.REDIS_LOSS_THRESHOLD_MS ?? 60_000);
+const parsedRedisLossMs = Number(process.env.REDIS_LOSS_THRESHOLD_MS);
+const redisLossThresholdMs = Number.isFinite(parsedRedisLossMs) && parsedRedisLossMs > 0
+    ? parsedRedisLossMs
+    : 60_000;
 const redisMonitor = new RedisHealthMonitor(
     redisLossThresholdMs,
     (reason) => {
@@ -1339,7 +1342,10 @@ if (typeCrawling == "sitemap") {
 
     // Progress stall monitor — fires gracefulShutdown(exit 6) if requestsFinished
     // does not advance for PROGRESS_STALL_THRESHOLD_MS (default 10 min).
-    const progressStallThresholdMs = Number(process.env.PROGRESS_STALL_THRESHOLD_MS ?? 600_000);
+    const parsedProgressStallMs = Number(process.env.PROGRESS_STALL_THRESHOLD_MS);
+    const progressStallThresholdMs = Number.isFinite(parsedProgressStallMs) && parsedProgressStallMs > 0
+        ? parsedProgressStallMs
+        : 600_000;
     progressMonitor = new ProgressMonitor(
         () => (context.crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0,
         progressStallThresholdMs,
