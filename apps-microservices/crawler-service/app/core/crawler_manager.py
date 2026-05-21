@@ -1038,6 +1038,19 @@ class CrawlerManager:
 
                  return # EXIT FUNCTION EARLY - NO WEBHOOKS
 
+            # Non-OOM path: re-read current status before touching counter or status.
+            # Stale detection / force-finish may have already transitioned the job to a
+            # terminal state and decremented the counter.  If so, skip the entire
+            # finalization block to avoid double-decrement and status clobber.
+            current_for_nooom = await cache_service.get_json(job_key)
+            current_status_nooom = current_for_nooom.get("status") if current_for_nooom else None
+            if current_status_nooom in ("failed", "stopped", "finished"):
+                logger.info(
+                    f"Skipping non-OOM finalization for '{crawl_id}': status is already "
+                    f"'{current_status_nooom}' (stale detection or force-finish ran first)."
+                )
+                return
+
             # Non-OOM path: release the global counter slot and distributed lock
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")

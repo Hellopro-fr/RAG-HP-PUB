@@ -1497,3 +1497,89 @@ class TestAllExitMinus1CallersPassExplicitCause:
             f"{method_name} must pass failure_cause=\"{expected_cause}\" "
             "to _send_failure_webhook when exit_code=-1"
         )
+
+
+# ============================================================================
+# Task 7 AC1-AC3: _monitor_process failure_cause + terminal-status invariant
+# ============================================================================
+
+
+class TestMonitorProcessFailureCausePersistence:
+    """T7 AC1-AC3: _monitor_process behavior for exit codes 5/6 and terminal-status invariant.
+
+    Spec: docs/superpowers/specs/2026-05-21-redis-loss-progress-stall-detection-design.md
+
+    Approach: source inspection — matches the existing T7 style (TestOomMaxRestartsWebhookCause,
+    TestAllExitMinus1CallersPassExplicitCause) because _monitor_process is tightly coupled to
+    aiofiles, asyncio.subprocess, and a module-level cache_service singleton, making full
+    behavior mocking more invasive than warranted for structural assertions.
+    """
+
+    def test_exit_code_5_persists_redis_lost_in_job_data(self):
+        """AC1: _monitor_process must call _classify_exit_code and conditionally set
+        job_info['failure_cause'] — so exit code 5 persists 'redis_lost' to Redis."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._monitor_process)
+
+        # The classifier result must be unpacked into failure_cause
+        assert "_classify_exit_code(exit_code)" in source, (
+            "_monitor_process must call _classify_exit_code(exit_code) to derive failure_cause"
+        )
+        # The cause must be conditionally written into job_info
+        assert 'job_info["failure_cause"] = failure_cause' in source, (
+            '_monitor_process must set job_info["failure_cause"] = failure_cause '
+            "so exit code 5 ('redis_lost') is persisted to Redis"
+        )
+        # The write is guarded (not unconditional) — prevents overwriting with None
+        assert "if failure_cause is not None" in source, (
+            "_monitor_process must guard the failure_cause write with "
+            "'if failure_cause is not None' to avoid clobbering success jobs"
+        )
+
+    def test_exit_code_6_persists_progress_stalled_in_job_data(self):
+        """AC2: same path as AC1 — same source assertions cover exit code 6 ('progress_stalled').
+        Separate test for traceability against the spec table row for exit code 6."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        # Confirm the classifier maps 6 → 'progress_stalled'
+        _, cause = cm.CrawlerManager._classify_exit_code(6)
+        assert cause == "progress_stalled", (
+            "_classify_exit_code(6) must return cause='progress_stalled'"
+        )
+
+        # Confirm the persistence path exists in _monitor_process (same lines as AC1)
+        source = inspect.getsource(cm.CrawlerManager._monitor_process)
+        assert 'job_info["failure_cause"] = failure_cause' in source, (
+            "_monitor_process must persist failure_cause so exit code 6 "
+            "('progress_stalled') flows through to Redis"
+        )
+
+    def test_exit_code_5_does_not_clobber_terminal_status(self):
+        """AC3: if job is already in a terminal status when the process exits with code 5,
+        _monitor_process must NOT overwrite the status to 'failed'.
+
+        Verifies the non-OOM terminal-status re-read guard added alongside Fix 4
+        (the OOM variant). The guard reads current status from Redis after process exit;
+        if already terminal it returns early, preventing:
+          - double-decrement of the capacity counter
+          - status clobber (e.g. 'stopped' → 'failed')
+        """
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._monitor_process)
+
+        # A second get_json call must exist in the non-OOM finalization path
+        # (the first is the initial read at function entry; the second is the re-read guard)
+        assert source.count("cache_service.get_json(job_key)") >= 2, (
+            "_monitor_process must re-read job status from Redis before the non-OOM "
+            "finalization block (terminal-status guard), not just at function entry"
+        )
+        # The terminal statuses sentinel must be checked in the non-OOM guard
+        assert 'current_status_nooom in ("failed", "stopped", "finished")' in source, (
+            '_monitor_process non-OOM path must check current_status_nooom in '
+            '("failed", "stopped", "finished") before overwriting status'
+        )
