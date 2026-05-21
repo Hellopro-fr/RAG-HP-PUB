@@ -41,7 +41,7 @@ import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from ".
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
-import { readUsableMemory } from './cgroupMemory.js';
+import { readUsableMemory } from "./cgroupMemory.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
