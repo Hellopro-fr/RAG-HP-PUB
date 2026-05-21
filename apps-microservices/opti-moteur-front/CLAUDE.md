@@ -177,3 +177,41 @@ curl -X PUT "http://10.0.130.66:8108/collections/produits_prod/synonyms/manual-g
 
 docker compose restart opti-moteur-front
 ```
+
+## A7 R3 -- Coverage strict des tokens query (2026-05-21)
+
+Si la majorite des tokens query ne sont pas couverts par le doc (ni en
+direct ni via synonyme), penalite progressive sur le score final :
+- coverage < 50% : score * 0.5  (penalty `low_coverage_50`)
+- coverage < 70% : score * 0.75 (penalty `low_coverage_70`)
+
+Resout les faux amis semantiques type `barre laser a led` -> scanner code-barre
+(la query a 3 tokens, le scanner n'en matche que 2/3 -> penalite). Le produit
+qui matche les 3 tokens passe devant.
+
+Logique dans `_is_covered()` et `rerank_candidates()` (reranker.py).
+
+## A8 R2 -- Marque comme contrainte forte (2026-05-21)
+
+Quand une query contient une marque connue + un autre token (type produit),
+le doc doit egalement couvrir le type. Sinon penalite forte (score * 0.3,
+penalty `missing_type_with_brand`).
+
+Resout `urinoir delabie` -> Distributeur Delabie en pos 1 (le distributeur
+matche "delabie" mais pas "urinoir" -> penalite).
+
+### Source des marques
+
+`app/services/brands_loader.py` charge la liste des marques mono-token via
+facets Typesense (`marque` + `fournisseur`). Lazy + cache singleton, fallback
+safe si Typesense KO (R2 inactif sans regression).
+
+### Comportement
+
+- Query "delabie" seule (juste une marque) -> R2 inactif (pas de type token)
+- Query "urinoir delabie" -> brand={delabie}, type={urinoir} -> R2 actif
+- Query "armoire medicale" (pas de marque) -> R2 inactif
+
+Pour les marques multi-mots (ex: "Saint Gobain"), elles sont skipees pour
+l'instant (detection multi-token plus complexe). A enrichir plus tard si
+necessaire business.
