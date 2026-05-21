@@ -275,6 +275,31 @@ class CrawlerManager:
             msg = f"Erreur inconnue : {is_error}"
         return msg[:250]  # Truncate for VARCHAR(250)
 
+    @staticmethod
+    def _classify_exit_code(exit_code: Optional[int]) -> Tuple[Optional[str], Optional[str]]:
+        """Returns (error_message, failure_cause) for a subprocess exit code.
+
+        Returns (None, None) for success codes (0, 2) and any other "no-failure" inputs.
+        """
+        if exit_code == -1:
+            return ("Out Of Memory", "oom_max_restarts")
+        elif exit_code == 3:
+            return ("Out Of Memory", "oom_relaunch")
+        elif exit_code == 4:
+            return ("Update crawl failed: previous crawl data was empty or unavailable", "update_mode_no_data")
+        elif exit_code == 5:
+            return ("Connexion Redis perdue (crawl bloqué)", "redis_lost")
+        elif exit_code == 6:
+            return ("Crawl bloqué — aucune progression URL", "progress_stalled")
+        elif exit_code in (137, -9):
+            return ("Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé", "killed_oom_system")
+        elif exit_code is not None and exit_code < 0:
+            return (f"Processus terminé par signal {abs(exit_code)}", "signal_killed")
+        elif exit_code is not None and exit_code not in (0, 2, 3, 4, 5, 6, -1, 137):
+            return (f"Erreur inattendue (code de sortie: {exit_code})", "unknown")
+        else:
+            return (None, None)
+
     def __init__(self):
         # This dictionary ONLY tracks processes running on THIS replica.
         # The global state is in Redis.
@@ -537,6 +562,7 @@ class CrawlerManager:
 
             job_info["status"] = "failed"
             job_info["isError"] = "OOM_MAX_RESTARTS"
+            job_info["failure_cause"] = "oom_max_restarts"
 
             # Write completion marker before deleting key (for disk recovery)
             marker_path = os.path.join(job_info.get("storage_path", ""), '_completion_marker.json')
@@ -820,33 +846,9 @@ class CrawlerManager:
                                     request_id: Optional[str] = None,
                                     shutdown: bool = False):
         # We process failures for both standard and update modes now
-        # Determine message_erreur_crawling from context
-        error_message = ""
-        failure_cause: Optional[str] = None
-        if exit_code == -1:
-            error_message = "Out Of Memory"  # Special exit code for OOM max restarts or shutdown
-            failure_cause = "oom_max_restarts"
-        elif exit_code == 3:
-            error_message = "Out Of Memory"  # OOM_RELAUNCH exit code
-            failure_cause = "oom_relaunch"
-        elif exit_code == 4:
-            error_message = "Update crawl failed: previous crawl data was empty or unavailable"
-            failure_cause = "update_mode_no_data"
-        elif exit_code == 5:
-            error_message = "Connexion Redis perdue (crawl bloqué)"
-            failure_cause = "redis_lost"
-        elif exit_code == 6:
-            error_message = "Crawl bloqué — aucune progression URL"
-            failure_cause = "progress_stalled"
-        elif exit_code in (137, -9):
-            error_message = "Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé"
-            failure_cause = "killed_oom_system"
-        elif exit_code is not None and exit_code < 0:
-            error_message = f"Processus terminé par signal {abs(exit_code)}"  # Signal-killed
-            failure_cause = "signal_killed"
-        elif exit_code not in (0, 2, 3, 4, 5, 6, -1, 137):
-            error_message = f"Erreur inattendue (code de sortie: {exit_code})"
-            failure_cause = "unknown"
+        # Determine message_erreur_crawling and failure_cause from exit code
+        classified_message, failure_cause = self._classify_exit_code(exit_code)
+        error_message = classified_message if classified_message is not None else ""
 
         params = {
             "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
@@ -1039,6 +1041,9 @@ class CrawlerManager:
             job_info["pid"] = None
             if "last_heartbeat" in job_info:
                 del job_info["last_heartbeat"]
+            _, failure_cause = self._classify_exit_code(exit_code)
+            if failure_cause is not None:
+                job_info["failure_cause"] = failure_cause
             await cache_service.set_json(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. Lock released. Counter decremented.")
 
