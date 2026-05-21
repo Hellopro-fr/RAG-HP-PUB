@@ -16,7 +16,7 @@ import { promisify } from 'node:util';
 const execAsync = promisify(exec);
 
 export const BROWSER_KILL_PATTERN =
-    "chrome|chromium|firefox|camoufox|playwright|headless_shell";
+    "/chrome|/chromium|/firefox|/camoufox|/playwright|/headless_shell";
 
 export async function killBrowserProcesses(timeoutMs = 5000): Promise<void> {
     try {
