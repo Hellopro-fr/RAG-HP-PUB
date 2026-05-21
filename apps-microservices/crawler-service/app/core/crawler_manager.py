@@ -822,24 +822,39 @@ class CrawlerManager:
         # We process failures for both standard and update modes now
         # Determine message_erreur_crawling from context
         error_message = ""
+        failure_cause: Optional[str] = None
         if exit_code == -1:
             error_message = "Out Of Memory"  # Special exit code for OOM max restarts or shutdown
+            failure_cause = "oom_max_restarts"
         elif exit_code == 3:
             error_message = "Out Of Memory"  # OOM_RELAUNCH exit code
+            failure_cause = "oom_relaunch"
         elif exit_code == 4:
             error_message = "Update crawl failed: previous crawl data was empty or unavailable"
+            failure_cause = "update_mode_no_data"
+        elif exit_code == 5:
+            error_message = "Connexion Redis perdue (crawl bloqué)"
+            failure_cause = "redis_lost"
+        elif exit_code == 6:
+            error_message = "Crawl bloqué — aucune progression URL"
+            failure_cause = "progress_stalled"
         elif exit_code in (137, -9):
             error_message = "Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé"
+            failure_cause = "killed_oom_system"
         elif exit_code is not None and exit_code < 0:
             error_message = f"Processus terminé par signal {abs(exit_code)}"  # Signal-killed
-        elif exit_code not in (0, 2, 3, 4, -1, 137):
+            failure_cause = "signal_killed"
+        elif exit_code not in (0, 2, 3, 4, 5, 6, -1, 137):
             error_message = f"Erreur inattendue (code de sortie: {exit_code})"
+            failure_cause = "unknown"
 
         params = {
             "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
             "timestamp": datetime.utcnow().isoformat(),
             "message_erreur_crawling": error_message
         }
+        if failure_cause:
+            params["failure_cause"] = failure_cause
         if request_id:
             params["request_id"] = request_id
 
