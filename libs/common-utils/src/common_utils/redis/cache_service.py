@@ -29,6 +29,22 @@ def _replica_name() -> str:
     return os.getenv("HOSTNAME") or f"pid-{os.getpid()}"
 
 
+def _client_name() -> str:
+    """
+    Build the Redis CLIENT SETNAME value used by init_redis_pool.
+
+    Reads SERVICE_NAME env var (the same convention used by
+    common_utils.sso.credentials for OAuth2 client identity) and prefixes
+    the per-replica hostname. Falls back to the literal 'crawler-py' when
+    SERVICE_NAME is unset, empty, or whitespace — preserves the pre-fix
+    naming so deploys that don't set the env var don't change behavior.
+
+    See docs/superpowers/specs/2026-05-21-cache-service-client-name-fix-design.md
+    """
+    service = (os.getenv("SERVICE_NAME") or "").strip() or "crawler-py"
+    return f"{service}-{_replica_name()}"
+
+
 async def _ping_safe(client: "redis.Redis") -> bool:
     try:
         return await client.ping()
@@ -78,7 +94,7 @@ async def init_redis_pool():
     sock_to = _read_positive_float_env("REDIS_SOCKET_TIMEOUT_S", DEFAULT_SOCKET_TIMEOUT_S)
     sock_conn_to = _read_positive_float_env("REDIS_SOCKET_CONNECT_TIMEOUT_S", DEFAULT_SOCKET_CONNECT_TIMEOUT_S)
     health_iv = _read_positive_int_env("REDIS_HEALTH_CHECK_INTERVAL_S", DEFAULT_HEALTH_CHECK_INTERVAL_S)
-    client_name = f"crawler-py-{_replica_name()}"
+    client_name = _client_name()
 
     try:
         logger.info(

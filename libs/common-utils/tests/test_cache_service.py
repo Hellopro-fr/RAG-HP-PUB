@@ -13,6 +13,7 @@ def _isolate_env(monkeypatch):
         "REDIS_SOCKET_CONNECT_TIMEOUT_S",
         "REDIS_HEALTH_CHECK_INTERVAL_S",
         "HOSTNAME",
+        "SERVICE_NAME",
     ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("REDIS_URL", "redis://:secret@10.0.0.1:6379")
@@ -140,3 +141,77 @@ async def test_init_falls_back_to_pid_when_hostname_unset(reset_cache_service, m
 
     _, kwargs = from_url.call_args
     assert kwargs["client_name"].startswith("crawler-py-pid-")
+
+
+@pytest.mark.asyncio
+async def test_client_name_uses_service_name_env_when_set(reset_cache_service, monkeypatch):
+    monkeypatch.setenv("SERVICE_NAME", "api-gateway")
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+    mock_client.register_script = MagicMock(return_value=MagicMock())
+
+    with patch("redis.asyncio.from_url", return_value=mock_client) as from_url:
+        await reset_cache_service.init_redis_pool()
+
+    _, kwargs = from_url.call_args
+    # HOSTNAME is set to "crawler-service-test" by the autouse fixture.
+    assert kwargs["client_name"] == "api-gateway-crawler-service-test"
+
+
+@pytest.mark.asyncio
+async def test_client_name_falls_back_to_crawler_py_when_unset(reset_cache_service, monkeypatch):
+    # SERVICE_NAME is deleted by the autouse fixture; belt-and-suspenders explicit:
+    monkeypatch.delenv("SERVICE_NAME", raising=False)
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+    mock_client.register_script = MagicMock(return_value=MagicMock())
+
+    with patch("redis.asyncio.from_url", return_value=mock_client) as from_url:
+        await reset_cache_service.init_redis_pool()
+
+    _, kwargs = from_url.call_args
+    assert kwargs["client_name"] == "crawler-py-crawler-service-test"
+
+
+@pytest.mark.asyncio
+async def test_client_name_falls_back_when_service_name_empty(reset_cache_service, monkeypatch):
+    monkeypatch.setenv("SERVICE_NAME", "")
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+    mock_client.register_script = MagicMock(return_value=MagicMock())
+
+    with patch("redis.asyncio.from_url", return_value=mock_client) as from_url:
+        await reset_cache_service.init_redis_pool()
+
+    _, kwargs = from_url.call_args
+    assert kwargs["client_name"] == "crawler-py-crawler-service-test"
+
+
+@pytest.mark.asyncio
+async def test_client_name_falls_back_when_service_name_whitespace(reset_cache_service, monkeypatch):
+    monkeypatch.setenv("SERVICE_NAME", "   ")
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+    mock_client.register_script = MagicMock(return_value=MagicMock())
+
+    with patch("redis.asyncio.from_url", return_value=mock_client) as from_url:
+        await reset_cache_service.init_redis_pool()
+
+    _, kwargs = from_url.call_args
+    assert kwargs["client_name"] == "crawler-py-crawler-service-test"
+
+
+@pytest.mark.asyncio
+async def test_client_name_strips_surrounding_whitespace_from_service_name(reset_cache_service, monkeypatch):
+    # Trailing/leading whitespace must not embed into the Redis CLIENT SETNAME value
+    # (Redis rejects spaces in client names — would fail at runtime).
+    monkeypatch.setenv("SERVICE_NAME", "  api-gateway  ")
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+    mock_client.register_script = MagicMock(return_value=MagicMock())
+
+    with patch("redis.asyncio.from_url", return_value=mock_client) as from_url:
+        await reset_cache_service.init_redis_pool()
+
+    _, kwargs = from_url.call_args
+    assert kwargs["client_name"] == "api-gateway-crawler-service-test"
