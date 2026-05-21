@@ -8,21 +8,48 @@ export class DedupManager {
     private ttl: number;
     private ttlSet: boolean = false;
     private blockedKey: string;
+    private ownsClient: boolean;
 
-    constructor(redisUrl: string, crawlId: string, ttlSeconds: number = 7 * 24 * 3600,
-                monitor?: RedisHealthMonitor) {
-        this.redis = createClient({ url: redisUrl });
+    /**
+     * Constructor accepts either a URL (legacy: creates + owns the client) or a
+     * pre-built shared RedisClientType (injected: lifecycle managed by owner).
+     *
+     * When a shared client is injected, the OWNER is responsible for attaching
+     * the 'error' listener — DedupManager does not double-register one. As a
+     * consequence, `monitor.onError('dedup', …)` is only invoked on the legacy
+     * URL path; on the injected path, the owner's error handler reports under
+     * its own client identity (e.g. 'shared').
+     */
+    constructor(
+        clientOrUrl: RedisClientType | string,
+        crawlId: string,
+        ttlSeconds: number = 7 * 24 * 3600,
+        monitor?: RedisHealthMonitor,
+    ) {
+        // Assign primitive fields first so the error handler closure below
+        // never observes undefined `this.monitor` even on synchronous emits.
         this.monitor = monitor;
-        this.redis.on('error', (err) => {
-            console.error('Redis Dedup Error:', err);
-            this.monitor?.onError('dedup', err);
-        });
         this.key = `dedup:${crawlId}`;
         this.blockedKey = `blocked_log:${crawlId}`;
         this.ttl = ttlSeconds;
+
+        if (typeof clientOrUrl === 'string') {
+            // Backward-compatible URL form — DedupManager creates + owns the client.
+            this.redis = createClient({ url: clientOrUrl });
+            this.ownsClient = true;
+            this.redis.on('error', (err) => {
+                console.error('Redis Dedup Error:', err);
+                this.monitor?.onError('dedup', err);
+            });
+        } else {
+            // Injected shared client — DedupManager does NOT connect/disconnect.
+            this.redis = clientOrUrl;
+            this.ownsClient = false;
+        }
     }
 
     async connect() {
+        if (!this.ownsClient) return;   // shared client connected by owner
         try {
             await this.redis.connect();
             this.monitor?.onSuccess('dedup');
@@ -33,6 +60,7 @@ export class DedupManager {
     }
 
     async disconnect() {
+        if (!this.ownsClient) return;   // shared client closed by owner
         if (this.redis.isOpen) {
             try {
                 await this.redis.disconnect();
