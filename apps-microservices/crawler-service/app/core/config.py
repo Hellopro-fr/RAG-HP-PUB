@@ -40,11 +40,28 @@ class Settings(BaseSettings):
     STASH_DOWNLOAD_REQUESTS_PATH: str = "/app/gcs-stash-requests"
     STASH_DOWNLOAD_RESULTS_PATH: str = "/app/gcs-stash-downloads"
 
-    # Stash flow Redis lock TTLs and timeouts (seconds)
-    STASH_LOCK_TTL_SECONDS: int = 600
+    # Stash flow Redis lock TTLs and timeouts (seconds).
+    # STASH_LOCK_TTL is bumped to 1800s (was 600s) so it exceeds nginx
+    # proxy_read_timeout (600s on /crawler/ default location) and survives
+    # any single nginx retry window; the heartbeat below renews TTL
+    # mid-operation to handle larger crawls.
+    STASH_LOCK_TTL_SECONDS: int = 1800
     UNSTASH_LOCK_TTL_SECONDS: int = 600
     UNSTASH_TIMEOUT_SECONDS: int = 300
     UNSTASH_CLEANUP_GRACE_SECONDS: int = 30
+
+    # Archive flow Redis lock TTL (seconds). Previously hardcoded in
+    # crawler_manager.archive_crawl; surfaced here for parity with stash
+    # and for tunability.
+    ARCHIVE_LOCK_TTL_SECONDS: int = 1800
+
+    # Long-running lock heartbeat (used by stash + archive).
+    # INTERVAL = TTL / 6 → up to 5 missed renewals before TTL expires
+    # (defense against transient Redis latency).
+    # MAX_DURATION = 4h hard cap; past this, heartbeat stops renewing so
+    # a truly hung op cannot indefinitely hold the lock.
+    LOCK_HEARTBEAT_INTERVAL_SECONDS: int = 300
+    LOCK_HEARTBEAT_MAX_DURATION_SECONDS: int = 14400
 
     # GCS download timeout in seconds
     GCS_DOWNLOAD_TIMEOUT_SECONDS: int = 300
