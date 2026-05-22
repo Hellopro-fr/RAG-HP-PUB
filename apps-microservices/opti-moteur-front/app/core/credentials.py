@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # --- Service ---
     SERVICE_PORT: int = 8570
 
+    # --- Admin (routes d'administration sensibles : compute-idf, etc.) ---
+    # Token jetable en header X-Admin-Token. A changer en prod via env var.
+    ADMIN_TOKEN: str = "hp_admin_2026_05_22_xZ7q"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

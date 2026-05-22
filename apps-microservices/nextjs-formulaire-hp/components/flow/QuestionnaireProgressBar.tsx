@@ -2,7 +2,6 @@
 
 import { getAssetPath } from "@/lib/utils";
 import { useFlowStore } from "@/lib/stores/flow-store";
-import { getCategoryQuestion } from "@/data/category-static-content";
 
 const categoryPlaceholder = getAssetPath("/images/product-lift-1.jpg");
 
@@ -13,11 +12,7 @@ interface QuestionnaireProgressBarProps {
 }
 
 const QuestionnaireProgressBar = ({ categoryName, currentIndex, totalQuestions }: QuestionnaireProgressBarProps) => {
-  const { categoryId, categoryVignette } = useFlowStore();
-
-  // Texte header depuis categoryStaticContent si disponible, sinon fallback générique
-  const staticContent = categoryId ? getCategoryQuestion(categoryId) : undefined;
-  const headerText = staticContent?.header || `1 minute pour trouver votre ${(categoryName || "produit").toLowerCase()}`;
+  const { categoryVignette } = useFlowStore();
 
   // Q1 (index 0) → 0%, Q2 (index 1) → (1/total)*100, ... Qn → ((n-1)/total)*100
   const progressPercent = totalQuestions > 0 ? (currentIndex / totalQuestions) * 100 : 0;
@@ -33,9 +28,12 @@ const QuestionnaireProgressBar = ({ categoryName, currentIndex, totalQuestions }
           className="h-11 w-11 rounded-lg object-cover shrink-0 ring-1 ring-border"
         />
         <div className="flex-1 min-w-0">
-          <div>
+          <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-base font-semibold text-foreground">
-              {headerText}
+              {categoryName || "Catégorie"}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              (1 min max.)
             </span>
           </div>
           <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">

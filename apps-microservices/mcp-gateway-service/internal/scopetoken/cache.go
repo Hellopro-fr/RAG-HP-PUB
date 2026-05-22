@@ -44,6 +44,11 @@ type CachedToken struct {
 	// Resolution to (database_id, table_name) pairs happens at request time
 	// in the gateway header injector so deletions propagate immediately.
 	BDDAllowedTableIDs []string
+
+	// Zoho ownership scope (echoed from the DB row). See db.ScopeToken.ZohoFilterMode.
+	ZohoFilterMode    string   // "none" | "users" | "creator"
+	ZohoAllowedEmails []string // for mode "users"
+	ZohoCreatorEmail  string   // for mode "creator" — snapshot of CreatedBy at write time
 }
 
 // Cache provides an in-memory TTL cache for scope token lookups.

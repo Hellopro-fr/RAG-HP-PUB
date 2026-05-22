@@ -30,3 +30,97 @@ func TestHandleImportInstancesFromSheet_NilDeps_Returns503(t *testing.T) {
 		t.Fatalf("expected 503, got %d (body=%s)", rec.Code, rec.Body.String())
 	}
 }
+
+// TestResolveCreatedBy verifies the row-level created_by resolution rule
+// shared between handleSheetImport and handleImportInstancesFromSheet.
+//
+// Contract:
+//   - column header empty               -> fallback (connected user)
+//   - column header set, header missing -> fallback (handler responsibility
+//                                          to pre-flight when desired; the
+//                                          resolver itself does not error)
+//   - column header set, cell empty     -> fallback
+//   - column header set, cell non-empty -> trimmed cell
+func TestResolveCreatedBy(t *testing.T) {
+	headers := []string{"Name", "Credentials", "Owner"}
+	colIndex := map[string]int{}
+	for i, h := range headers {
+		colIndex[h] = i
+	}
+
+	cases := []struct {
+		name     string
+		column   string
+		row      []string
+		fallback string
+		want     string
+	}{
+		{
+			name:     "empty column -> fallback",
+			column:   "",
+			row:      []string{"srv-1", "{}", "ignored@example.com"},
+			fallback: "me@hellopro.fr",
+			want:     "me@hellopro.fr",
+		},
+		{
+			name:     "header missing -> fallback",
+			column:   "Doesnotexist",
+			row:      []string{"srv-1", "{}", "ignored@example.com"},
+			fallback: "me@hellopro.fr",
+			want:     "me@hellopro.fr",
+		},
+		{
+			name:     "cell empty -> fallback",
+			column:   "Owner",
+			row:      []string{"srv-1", "{}", "   "},
+			fallback: "me@hellopro.fr",
+			want:     "me@hellopro.fr",
+		},
+		{
+			name:     "cell non-empty -> trimmed cell",
+			column:   "Owner",
+			row:      []string{"srv-1", "{}", "  alice@hellopro.fr  "},
+			fallback: "me@hellopro.fr",
+			want:     "alice@hellopro.fr",
+		},
+		{
+			name:     "row shorter than colIndex -> fallback",
+			column:   "Owner",
+			row:      []string{"srv-1", "{}"}, // missing Owner cell
+			fallback: "me@hellopro.fr",
+			want:     "me@hellopro.fr",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveCreatedBy(tc.column, tc.row, colIndex, tc.fallback)
+			if got != tc.want {
+				t.Fatalf("resolveCreatedBy(%q) = %q, want %q", tc.column, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDetectZohoTemplate(t *testing.T) {
+	cases := []struct {
+		slug string
+		want bool
+	}{
+		{"zoho", true},
+		{"zoho-crm", true},
+		{"zoho-mail", true},
+		{"zohoesque", false},
+		{"ga", false},
+		{"gsc", false},
+		{"", false},
+		{"zoho-", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.slug, func(t *testing.T) {
+			if got := detectZohoTemplate(tc.slug); got != tc.want {
+				t.Fatalf("detectZohoTemplate(%q) = %v, want %v", tc.slug, got, tc.want)
+			}
+		})
+	}
+}

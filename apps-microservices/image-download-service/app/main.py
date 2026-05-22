@@ -10,8 +10,10 @@ from contextlib import asynccontextmanager
 
 # Importer les modules locaux
 from image_download_service.messaging.consumer import Consumer
+from image_download_service.messaging.page_image_consumer import PageImageConsumer
 from image_download_service.core.archiver import Archiver
 from image_download_service.routers.albums import router as albums_router
+from image_download_service.routers.pages import router as pages_router
 
 # Configuration du logging uniforme
 logging.basicConfig(
@@ -76,7 +78,16 @@ async def lifespan(app: FastAPI):
         # Démarrer le consumer en tâche de fond
         app.state.consumer_task = asyncio.create_task(app.state.consumer.start_consuming())
         logger.info("✅ Consumer démarré en tâche de fond.")
-        
+
+        # Consumer pages images — activé via feature flag ENABLE_PAGE_IMAGE_CONSUMER
+        if os.environ.get("ENABLE_PAGE_IMAGE_CONSUMER", "false").lower() == "true":
+            logger.info("🔄 ENABLE_PAGE_IMAGE_CONSUMER=true — démarrage du PageImageConsumer...")
+            app.state.page_consumer = PageImageConsumer(app.state.rabbitmq_connection)
+            app.state.page_consumer_task = asyncio.create_task(app.state.page_consumer.start_consuming())
+            logger.info("✅ PageImageConsumer démarré en tâche de fond.")
+        else:
+            logger.info("ℹ️  ENABLE_PAGE_IMAGE_CONSUMER=false — PageImageConsumer non démarré.")
+
     except Exception as e:
         logger.error(f"❌ Erreur lors du démarrage: {e}")
         # Continue sans RabbitMQ - l'API REST fonctionnera toujours
@@ -93,7 +104,25 @@ async def lifespan(app: FastAPI):
             await app.state.consumer_task
         except asyncio.CancelledError:
             pass
-    
+
+    # Arrêt gracieux du PageImageConsumer (feature flag)
+    # Note shutdown : appel à `stop()` AVANT `task.cancel()` annule le consumer-tag
+    # côté broker, ce qui empêche aio_pika de livrer de nouveaux messages pendant
+    # le teardown. Le FP Consumer (consumer.py) n'a pas ce pattern (legacy) —
+    # follow-up à coordonner : aligner FP sur ce pattern OU documenter pourquoi
+    # l'asymétrie est intentionnelle. Tracking : (à créer un ticket suivant).
+    if getattr(app.state, 'page_consumer', None) is not None:
+        try:
+            await app.state.page_consumer.stop()
+            app.state.page_consumer_task.cancel()
+            try:
+                await app.state.page_consumer_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("✅ PageImageConsumer arrêté.")
+        except Exception as exc:
+            logger.error("❌ Erreur lors de l'arrêt du PageImageConsumer: %s", exc, exc_info=True)
+
     # Fermer la connexion RabbitMQ
     if hasattr(app.state, 'rabbitmq_connection') and app.state.rabbitmq_connection:
         await app.state.rabbitmq_connection.close()
@@ -128,6 +157,13 @@ archiver = Archiver()
 
 # Brancher le routeur Albums (visualisation + redownload + delete)
 app.include_router(albums_router)
+
+# Note ops : pages_router activé sans condition. Si ENABLE_PAGE_IMAGE_CONSUMER=false
+# et que POST /pages/enqueue est appelé, les messages s'accumulent dans
+# `page_image_download_tasks_queue` sans être drainés. À documenter dans le
+# runbook ops si le feature flag est désactivé en prod.
+# Brancher le routeur Pages Images (Chantier D — toujours actif, routes stateless)
+app.include_router(pages_router)
 
 # =============================================================================
 # HEALTH

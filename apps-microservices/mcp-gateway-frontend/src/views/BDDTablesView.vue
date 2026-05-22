@@ -209,7 +209,7 @@
         <Column header="Description">
           <template #body="{ data }">
             <span v-if="data.description" class="text-gray-700 dark:text-gray-300 line-clamp-1">
-              {{ data.description }}
+              {{ stripHtml(data.description) }}
             </span>
             <span v-else class="text-gray-400">—</span>
           </template>
@@ -606,6 +606,12 @@ function formatDate(d?: string): string {
   } catch {
     return d;
   }
+}
+
+function stripHtml(html: string): string {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent || div.innerText || '';
 }
 
 async function loadTables() {

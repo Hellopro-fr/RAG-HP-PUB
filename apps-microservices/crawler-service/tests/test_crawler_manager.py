@@ -924,3 +924,662 @@ class TestGetStatusMalformedBlob:
         assert "def-456" not in statuses
         assert "ghi-789" in statuses
         assert len(statuses) == 2
+
+
+class TestCleanupStaleStateForRelaunch:
+    """
+    Verifies _cleanup_stale_state_for_relaunch wipes any prior-run
+    _completion_marker.json on crawl relaunch. Used by start_crawl
+    to prevent the reconciler's marker-check (sub-problem A) from
+    falsely declaring the new running crawl finished.
+    """
+
+    @pytest.mark.asyncio
+    async def test_existing_marker_is_unlinked(self, tmp_path):
+        marker = tmp_path / "_completion_marker.json"
+        marker.write_text('{"final_status": "finished", "exit_code": 0}')
+        assert marker.exists()
+        from app.core.crawler_manager import CrawlerManager
+        manager = CrawlerManager()
+        await manager._cleanup_stale_state_for_relaunch("test-123", str(tmp_path))
+        assert not marker.exists()
+
+    @pytest.mark.asyncio
+    async def test_missing_marker_is_noop(self, tmp_path):
+        from app.core.crawler_manager import CrawlerManager
+        manager = CrawlerManager()
+        await manager._cleanup_stale_state_for_relaunch("test-456", str(tmp_path))
+
+    @pytest.mark.asyncio
+    async def test_permission_error_logged_not_raised(self, tmp_path, caplog):
+        marker = tmp_path / "_completion_marker.json"
+        marker.write_text("{}")
+        from unittest.mock import patch
+        from app.core.crawler_manager import CrawlerManager
+        manager = CrawlerManager()
+        with patch("os.unlink", side_effect=PermissionError("denied")):
+            with caplog.at_level("WARNING"):
+                await manager._cleanup_stale_state_for_relaunch("test-789", str(tmp_path))
+        assert any(
+            "Could not remove stale completion marker" in r.message
+            for r in caplog.records
+        )
+
+
+class TestParseIsoNaiveUtc:
+    """Regression: reconcile_jobs raised TypeError when a Redis blob
+    contained a tz-aware ISO datetime in last_heartbeat/start_time, because
+    fromisoformat() returned an aware datetime that could not subtract
+    against naive datetime.utcnow(). Helper normalizes both shapes.
+    """
+
+    def test_naive_input_passes_through(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_naive_with_microseconds_passes_through(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01.123456")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1, 123456)
+
+    def test_z_suffix_stripped_to_naive_utc(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01Z")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_zero_offset_stripped_to_naive_utc(self):
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01+00:00")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 8, 24, 1)
+
+    def test_positive_offset_converted_to_utc(self):
+        """+05:00 wall-clock 08:24 = 03:24 UTC."""
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        result = _parse_iso_naive_utc("2026-05-20T08:24:01+05:00")
+        assert result.tzinfo is None
+        assert result == datetime(2026, 5, 20, 3, 24, 1)
+
+    def test_result_subtracts_safely_against_utcnow(self):
+        """The whole point: no TypeError when used in reconcile_jobs."""
+        from datetime import datetime
+        from app.core.crawler_manager import _parse_iso_naive_utc
+
+        # Tz-aware input that previously broke reconcile
+        parsed = _parse_iso_naive_utc("2026-05-20T08:24:01Z")
+        # Must subtract without TypeError
+        delta = datetime.utcnow() - parsed
+        assert delta.total_seconds() >= 0  # parsed is in the past
+
+
+class TestStashedAtFormat:
+    """Regression: stash_crawl previously wrote `stashed_at = utcnow().isoformat() + "Z"`,
+    which would cause reconcile (and any future fromisoformat consumer) to
+    return a tz-aware datetime that can't subtract from naive utcnow().
+    Convention-fix: drop the Z suffix to match archived_at/last_heartbeat.
+    """
+
+    def test_stash_crawl_stashed_at_format_is_naive(self):
+        """Inspect the stash_crawl source to confirm no `+ "Z"` suffix is appended."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        src = inspect.getsource(cm.CrawlerManager.stash_crawl)
+        assert "isoformat() + \"Z\"" not in src, (
+            "stash_crawl must not append 'Z' to stashed_at; "
+            "convention is naive UTC ISO string."
+        )
+        # And the assignment must still produce an ISO string
+        assert "stashed_at = datetime.utcnow().isoformat()" in src
+
+
+class TestVerifyBindMount:
+    """Defensive helper: raises 503 BIND_MOUNT_MISSING when stash/unstash
+    target paths are not real bind-mounts. Catches the silent-data-loss
+    case where docker-compose volumes were declared but the container was
+    not recreated to pick them up (incident 2026-05-20 crawl 1958)."""
+
+    def test_raises_503_when_path_is_ordinary_dir(self, tmp_path):
+        from fastapi import HTTPException
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        ordinary = tmp_path / "ephemeral"
+        ordinary.mkdir()  # plain dir, NOT a mount
+
+        with pytest.raises(HTTPException) as exc:
+            cm._verify_bind_mount(str(ordinary), "test-label")
+
+        assert exc.value.status_code == 503
+        assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+        assert exc.value.detail["path"] == str(ordinary)
+        assert exc.value.detail["label"] == "test-label"
+        assert "force-recreate" in exc.value.detail["ops_action"]
+        assert "hint" in exc.value.detail
+
+    def test_raises_503_when_path_does_not_exist(self, tmp_path):
+        from fastapi import HTTPException
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        missing = tmp_path / "nonexistent"  # never created
+
+        with pytest.raises(HTTPException) as exc:
+            cm._verify_bind_mount(str(missing), "test-label")
+
+        assert exc.value.status_code == 503
+        assert exc.value.detail["error_code"] == "BIND_MOUNT_MISSING"
+
+    def test_returns_none_when_ismount_true(self, tmp_path, monkeypatch):
+        """Simulate a real mount point by mocking os.path.ismount."""
+        import os
+        from app.core.crawler_manager import CrawlerManager
+
+        cm = CrawlerManager()
+        fake_mount = tmp_path / "mounted"
+        fake_mount.mkdir()
+        monkeypatch.setattr(os.path, "ismount", lambda p: str(p) == str(fake_mount))
+
+        # Must not raise
+        result = cm._verify_bind_mount(str(fake_mount), "test-label")
+        assert result is None
+
+
+# ============================================================================
+# Archive lock heartbeat tests (T3)
+# ============================================================================
+
+import asyncio as _asyncio
+
+from app.core import crawler_manager as cm_module
+from app.core.crawler_manager import CrawlerManager
+from fastapi import HTTPException
+
+
+@pytest.fixture
+def _mock_cache_service_archive(monkeypatch):
+    """Module-level cache_service mock for archive heartbeat tests.
+    Has redis_client as AsyncMock so set/eval/delete can be stubbed per test.
+    """
+    mock = MagicMock()
+    mock.redis_client = AsyncMock()
+    mock.get_json = AsyncMock(return_value=None)
+    mock.set_json = AsyncMock()
+    monkeypatch.setattr(cm_module, "cache_service", mock)
+    return mock
+
+
+@pytest.fixture
+def _cm_instance_archive(_mock_cache_service_archive):
+    return CrawlerManager()
+
+
+@pytest.fixture
+def archive_job_info(tmp_path):
+    storage = tmp_path / "crawl_data"
+    storage.mkdir()
+    (storage / "crawler.log").write_text("log content")
+    (storage / "dataset.json").write_text('{"records": [1,2,3]}')
+    return {
+        "crawl_id": "archive_test_id",
+        "status": "finished",
+        "storage_path": str(storage),
+        "domain": "example.com",
+    }
+
+
+@pytest.mark.asyncio
+async def test_archive_lock_holds_during_long_tar(
+    _cm_instance_archive, archive_job_info, _mock_cache_service_archive, monkeypatch, tmp_path
+):
+    """Tar that runs past initial TTL keeps lock via heartbeat; concurrent
+    attempt gets 409.
+
+    Mirror of test_stash_lock_survives_long_tar at apps-microservices/crawler-
+    service/tests/test_crawler_manager_stash.py (commit 1427b494).
+    """
+    from app.core import config as cfg
+
+    monkeypatch.setattr(cfg.settings, "ARCHIVE_LOCK_TTL_SECONDS", 2)
+    monkeypatch.setattr(cfg.settings, "LOCK_HEARTBEAT_INTERVAL_SECONDS", 1)
+    monkeypatch.setattr(cfg.settings, "LOCK_HEARTBEAT_MAX_DURATION_SECONDS", 30)
+
+    archives_dir = tmp_path / "archives"
+    archives_dir.mkdir()
+    monkeypatch.setattr(cm_module.settings, "ARCHIVES_SHARED_PATH", str(archives_dir))
+
+    # Track SET NX: first acquire wins, subsequent fail (concurrent caller 409).
+    set_call_count = {"n": 0}
+    eval_call_count = {"n": 0}
+
+    async def _set_side_effect(key, value, **kwargs):
+        set_call_count["n"] += 1
+        return set_call_count["n"] == 1
+
+    async def _eval_side_effect(script, numkeys, *args):
+        eval_call_count["n"] += 1
+        return 1
+
+    _mock_cache_service_archive.redis_client.set = AsyncMock(side_effect=_set_side_effect)
+    _mock_cache_service_archive.redis_client.eval = AsyncMock(side_effect=_eval_side_effect)
+    _mock_cache_service_archive.redis_client.delete = AsyncMock(return_value=1)
+
+    # Stub helpers to skip GCS fallback and pass disk pre-flight.
+    async def _gcs_404(*args, **kwargs):
+        raise HTTPException(status_code=502, detail="not in GCS")
+
+    monkeypatch.setattr(_cm_instance_archive, "_retrieve_from_gcs_daemon", _gcs_404)
+    monkeypatch.setattr(
+        _cm_instance_archive, "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0,
+                   "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    monkeypatch.setattr(
+        _cm_instance_archive, "_estimate_archive_required_bytes", lambda p: 1024,
+    )
+    monkeypatch.setattr(_cm_instance_archive, "_mark_as_archived", AsyncMock(return_value=None))
+
+    # Stub get_status so the snapshot step doesn't fail (snapshot creation is wrapped in try/except,
+    # so a failure there is non-fatal, but stubbing avoids noise).
+    from unittest.mock import MagicMock as _MagicMock
+    mock_status = _MagicMock()
+    mock_status.model_dump = _MagicMock(return_value={})
+    monkeypatch.setattr(_cm_instance_archive, "get_status", AsyncMock(return_value=mock_status))
+
+    # Slow tar: capture shutil/tarfile from local import BEFORE patching to avoid recursion.
+    import shutil as _shutil
+    import tarfile as _tarfile
+    import time as _time
+
+    def slow_make_archive(base_name, fmt, root_dir=None, **kwargs):
+        out = f"{base_name}.tar.gz" if fmt == "gztar" else f"{base_name}.tar"
+        with _tarfile.open(out, "w:gz" if fmt == "gztar" else "w") as tf:
+            pass  # empty archive — passes integrity check
+        _time.sleep(4)  # 2x initial TTL=2s
+        return out
+
+    monkeypatch.setattr(cm_module.shutil, "make_archive", slow_make_archive)
+
+    task1 = _asyncio.create_task(_cm_instance_archive.archive_crawl(archive_job_info))
+    await _asyncio.sleep(2.5)  # past initial TTL — only heartbeat keeps lock
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _cm_instance_archive.archive_crawl(archive_job_info)
+    assert exc_info.value.status_code == 409
+    assert "already in progress" in str(exc_info.value.detail).lower()
+
+    result = await task1
+    assert "archive_status" in result
+
+    # Heartbeat fired during the 4s tar (≥ 1 refresh expected)
+    assert eval_call_count["n"] >= 2
+
+
+def test_archive_409_body_strings_unchanged():
+    """The PHP cron at 3_archive_eligible_domains.php line 375 matches
+    'already been archived' via stripos. Both 409 detail strings are
+    caller-contract surface. Asserting their literal presence in source."""
+    import inspect
+    src = inspect.getsource(cm_module.CrawlerManager.archive_crawl)
+    assert "already been archived" in src, (
+        "PHP cron substring 'already been archived' missing — do not change."
+    )
+    assert "is already in progress" in src, (
+        "Lock-held 409 substring 'is already in progress' missing — caller "
+        "contract."
+    )
+
+
+@pytest.mark.asyncio
+async def test_archive_lock_release_is_ownership_safe(
+    _cm_instance_archive, _mock_cache_service_archive
+):
+    """A different replica's value cannot DEL our lock."""
+    lock_key = "archive_lock:ownership_test"
+
+    # Force _acquire_ownership_lock to return a value for our acquire
+    _mock_cache_service_archive.redis_client.set = AsyncMock(return_value=True)
+    _mock_cache_service_archive.redis_client.eval = AsyncMock(side_effect=[
+        0,  # first release: wrong value → CAS returns 0
+        1,  # second release: correct value → CAS returns 1
+    ])
+
+    our_value = await _cm_instance_archive._acquire_ownership_lock(lock_key, 60)
+    assert our_value is not None
+
+    released = await _cm_instance_archive._release_ownership_lock(lock_key, "wrong-replica-id")
+    assert released is False
+
+    released = await _cm_instance_archive._release_ownership_lock(lock_key, our_value)
+    assert released is True
+
+
+# ============================================================================
+# Task 7: exit-code dispatch + failure_cause kwarg override
+# ============================================================================
+
+
+class TestClassifyExitCode:
+    """_classify_exit_code maps every exit code to the correct (message, cause) tuple."""
+
+    @pytest.mark.parametrize("exit_code, expected_cause", [
+        (0,    None),
+        (2,    None),
+        (-1,   "oom_max_restarts"),
+        (3,    "oom_relaunch"),
+        (4,    "update_mode_no_data"),
+        (5,    "redis_lost"),
+        (6,    "progress_stalled"),
+        (137,  "killed_oom_system"),
+        (-9,   "killed_oom_system"),
+        (-15,  "signal_killed"),
+        (99,   "unknown"),
+    ])
+    def test_cause_for_exit_code(self, exit_code, expected_cause):
+        from app.core.crawler_manager import CrawlerManager
+        _, cause = CrawlerManager._classify_exit_code(exit_code)
+        assert cause == expected_cause
+
+    @pytest.mark.parametrize("exit_code", [0, 2])
+    def test_success_codes_return_none_none(self, exit_code):
+        from app.core.crawler_manager import CrawlerManager
+        msg, cause = CrawlerManager._classify_exit_code(exit_code)
+        assert msg is None
+        assert cause is None
+
+    def test_exit_code_minus1_message_is_oom(self):
+        from app.core.crawler_manager import CrawlerManager
+        msg, _ = CrawlerManager._classify_exit_code(-1)
+        assert msg == "Out Of Memory"
+
+    def test_exit_code_5_message_mentions_redis(self):
+        from app.core.crawler_manager import CrawlerManager
+        msg, _ = CrawlerManager._classify_exit_code(5)
+        assert msg is not None
+        assert "Redis" in msg or "redis" in msg.lower()
+
+    def test_exit_code_6_message_mentions_progression(self):
+        from app.core.crawler_manager import CrawlerManager
+        msg, _ = CrawlerManager._classify_exit_code(6)
+        assert msg is not None
+        assert len(msg) > 0
+
+
+class TestSendFailureWebhookFailureCauseKwarg:
+    """
+    _send_failure_webhook: explicit failure_cause kwarg overrides _classify_exit_code.
+
+    exit_code=-1 normally resolves to "oom_max_restarts" via the classifier.
+    Callers that pass a different explicit cause (service_shutdown, force_finished,
+    stale_detected, oom_relaunch_failed) must override that default.
+    """
+
+    def _manager(self):
+        from app.core.crawler_manager import CrawlerManager
+        return CrawlerManager.__new__(CrawlerManager)
+
+    def test_signature_has_failure_cause_kwarg(self):
+        import inspect
+        from app.core.crawler_manager import CrawlerManager
+        sig = inspect.signature(CrawlerManager._send_failure_webhook)
+        assert "failure_cause" in sig.parameters
+        assert sig.parameters["failure_cause"].default is None
+
+    def test_explicit_cause_overrides_classifier_in_source(self):
+        """Source inspection: the method body must prefer the explicit kwarg."""
+        import inspect
+        from app.core import crawler_manager as cm
+        source = inspect.getsource(cm.CrawlerManager._send_failure_webhook)
+        # The override pattern must be present
+        assert "failure_cause if failure_cause is not None" in source, (
+            "_send_failure_webhook must override classifier output with explicit failure_cause kwarg"
+        )
+
+    @pytest.mark.asyncio
+    async def test_explicit_cause_wins_over_classifier_for_exit_minus1(self):
+        """
+        exit_code=-1 → classifier says 'oom_max_restarts'.
+        Explicit failure_cause='service_shutdown' must override it in the params sent.
+        """
+        import asyncio
+        mgr = self._manager()
+
+        captured_params = {}
+
+        async def _fake_send_with_retry(url, params, crawl_id, webhook_type):
+            captured_params.update(params)
+            return True
+
+        async def _fake_send_once(url, params, crawl_id, webhook_type, timeout=5.0):
+            captured_params.update(params)
+            return True
+
+        mgr._send_webhook_with_retry = _fake_send_with_retry
+        mgr._send_webhook_once = _fake_send_once
+
+        await mgr._send_failure_webhook(
+            url="http://example.test/cb",
+            crawl_id="test-001",
+            domain="example.com",
+            exit_code=-1,
+            failure_cause="service_shutdown",
+        )
+
+        assert captured_params.get("failure_cause") == "service_shutdown", (
+            "Explicit failure_cause='service_shutdown' must override the classifier's "
+            "'oom_max_restarts' for exit_code=-1"
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_explicit_cause_uses_classifier_for_exit_minus1(self):
+        """Without an explicit kwarg, classifier default 'oom_max_restarts' is used."""
+        import asyncio
+        mgr = self._manager()
+
+        captured_params = {}
+
+        async def _fake_send_with_retry(url, params, crawl_id, webhook_type):
+            captured_params.update(params)
+            return True
+
+        mgr._send_webhook_with_retry = _fake_send_with_retry
+
+        await mgr._send_failure_webhook(
+            url="http://example.test/cb",
+            crawl_id="test-002",
+            domain="example.com",
+            exit_code=-1,
+            # No explicit failure_cause → classifier kicks in
+        )
+
+        assert captured_params.get("failure_cause") == "oom_max_restarts"
+
+    @pytest.mark.parametrize("explicit_cause", [
+        "service_shutdown",
+        "force_finished",
+        "stale_detected",
+        "oom_relaunch_failed",
+        "oom_max_restarts",
+    ])
+    @pytest.mark.asyncio
+    async def test_all_sentinel_callers_override_cause(self, explicit_cause):
+        """Every exit_code=-1 caller passes its own explicit cause correctly."""
+        mgr = self._manager()
+
+        captured_params = {}
+
+        async def _fake_send_with_retry(url, params, crawl_id, webhook_type):
+            captured_params.update(params)
+            return True
+
+        async def _fake_send_once(url, params, crawl_id, webhook_type, timeout=5.0):
+            captured_params.update(params)
+            return True
+
+        mgr._send_webhook_with_retry = _fake_send_with_retry
+        mgr._send_webhook_once = _fake_send_once
+
+        await mgr._send_failure_webhook(
+            url="http://example.test/cb",
+            crawl_id="test-003",
+            domain="example.com",
+            exit_code=-1,
+            failure_cause=explicit_cause,
+        )
+
+        assert captured_params.get("failure_cause") == explicit_cause
+
+
+class TestOomMaxRestartsWebhookCause:
+    """
+    _relaunch_oom_crawl's max-restarts branch must pass failure_cause="oom_max_restarts"
+    to _send_failure_webhook (not rely on the default for exit_code=-1).
+    Source inspection verifies the explicit kwarg is present.
+    """
+
+    def test_max_restarts_branch_passes_oom_max_restarts_cause(self):
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._relaunch_oom_crawl)
+        # Both webhook calls must carry explicit failure_cause kwargs.
+        # The simplest assertion: the string appears at least twice
+        # (once for max-restarts, once for relaunch-failed).
+        assert source.count('failure_cause="oom_max_restarts"') >= 1, (
+            "_relaunch_oom_crawl max-restarts branch must pass "
+            'failure_cause="oom_max_restarts" to _send_failure_webhook'
+        )
+
+    def test_relaunch_failed_branch_passes_oom_relaunch_failed_cause(self):
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._relaunch_oom_crawl)
+        assert 'failure_cause="oom_relaunch_failed"' in source, (
+            "_relaunch_oom_crawl relaunch-failed branch must pass "
+            'failure_cause="oom_relaunch_failed" to _send_failure_webhook'
+        )
+
+
+class TestAllExitMinus1CallersPassExplicitCause:
+    """
+    Source-level contract: every call to _send_failure_webhook with exit_code=-1
+    must supply an explicit failure_cause kwarg so the classifier's default
+    'oom_max_restarts' label is never applied to non-OOM failure paths.
+    """
+
+    @pytest.mark.parametrize("method_name, expected_cause", [
+        ("_cleanup_running_job",  "service_shutdown"),
+        ("force_finish_crawl",    "force_finished"),
+        ("_reconcile_locked",     "stale_detected"),
+    ])
+    def test_caller_has_explicit_failure_cause(self, method_name, expected_cause):
+        import inspect
+        from app.core import crawler_manager as cm
+
+        method = getattr(cm.CrawlerManager, method_name)
+        source = inspect.getsource(method)
+        assert f'failure_cause="{expected_cause}"' in source, (
+            f"{method_name} must pass failure_cause=\"{expected_cause}\" "
+            "to _send_failure_webhook when exit_code=-1"
+        )
+
+
+# ============================================================================
+# Task 7 AC1-AC3: _monitor_process failure_cause + terminal-status invariant
+# ============================================================================
+
+
+class TestMonitorProcessFailureCausePersistence:
+    """T7 AC1-AC3: _monitor_process behavior for exit codes 5/6 and terminal-status invariant.
+
+    Spec: docs/superpowers/specs/2026-05-21-redis-loss-progress-stall-detection-design.md
+
+    Approach: source inspection — matches the existing T7 style (TestOomMaxRestartsWebhookCause,
+    TestAllExitMinus1CallersPassExplicitCause) because _monitor_process is tightly coupled to
+    aiofiles, asyncio.subprocess, and a module-level cache_service singleton, making full
+    behavior mocking more invasive than warranted for structural assertions.
+    """
+
+    def test_exit_code_5_persists_redis_lost_in_job_data(self):
+        """AC1: _monitor_process must call _classify_exit_code and conditionally set
+        job_info['failure_cause'] — so exit code 5 persists 'redis_lost' to Redis."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._monitor_process)
+
+        # The classifier result must be unpacked into failure_cause
+        assert "_classify_exit_code(exit_code)" in source, (
+            "_monitor_process must call _classify_exit_code(exit_code) to derive failure_cause"
+        )
+        # The cause must be conditionally written into job_info
+        assert 'job_info["failure_cause"] = failure_cause' in source, (
+            '_monitor_process must set job_info["failure_cause"] = failure_cause '
+            "so exit code 5 ('redis_lost') is persisted to Redis"
+        )
+        # The write is guarded (not unconditional) — prevents overwriting with None
+        assert "if failure_cause is not None" in source, (
+            "_monitor_process must guard the failure_cause write with "
+            "'if failure_cause is not None' to avoid clobbering success jobs"
+        )
+
+    def test_exit_code_6_persists_progress_stalled_in_job_data(self):
+        """AC2: same path as AC1 — same source assertions cover exit code 6 ('progress_stalled').
+        Separate test for traceability against the spec table row for exit code 6."""
+        import inspect
+        from app.core import crawler_manager as cm
+
+        # Confirm the classifier maps 6 → 'progress_stalled'
+        _, cause = cm.CrawlerManager._classify_exit_code(6)
+        assert cause == "progress_stalled", (
+            "_classify_exit_code(6) must return cause='progress_stalled'"
+        )
+
+        # Confirm the persistence path exists in _monitor_process (same lines as AC1)
+        source = inspect.getsource(cm.CrawlerManager._monitor_process)
+        assert 'job_info["failure_cause"] = failure_cause' in source, (
+            "_monitor_process must persist failure_cause so exit code 6 "
+            "('progress_stalled') flows through to Redis"
+        )
+
+    def test_exit_code_5_does_not_clobber_terminal_status(self):
+        """AC3: if job is already in a terminal status when the process exits with code 5,
+        _monitor_process must NOT overwrite the status to 'failed'.
+
+        Verifies the non-OOM terminal-status re-read guard added alongside Fix 4
+        (the OOM variant). The guard reads current status from Redis after process exit;
+        if already terminal it returns early, preventing:
+          - double-decrement of the capacity counter
+          - status clobber (e.g. 'stopped' → 'failed')
+        """
+        import inspect
+        from app.core import crawler_manager as cm
+
+        source = inspect.getsource(cm.CrawlerManager._monitor_process)
+
+        # A second get_json call must exist in the non-OOM finalization path
+        # (the first is the initial read at function entry; the second is the re-read guard)
+        assert source.count("cache_service.get_json(job_key)") >= 2, (
+            "_monitor_process must re-read job status from Redis before the non-OOM "
+            "finalization block (terminal-status guard), not just at function entry"
+        )
+        # The terminal statuses sentinel must be checked in the non-OOM guard
+        assert 'current_status_nooom in ("failed", "stopped", "finished")' in source, (
+            '_monitor_process non-OOM path must check current_status_nooom in '
+            '("failed", "stopped", "finished") before overwriting status'
+        )

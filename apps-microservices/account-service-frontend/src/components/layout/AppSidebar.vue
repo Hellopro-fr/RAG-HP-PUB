@@ -207,6 +207,7 @@ import { useRoute } from "vue-router";
 
 import {
   GridIcon,
+  BoxIcon,
   UserCircleIcon,
   ChevronDownIcon,
   HorizontalDots,
@@ -228,6 +229,7 @@ const menuGroups = computed(() => {
       title: "Espace de travail",
       items: [
         { icon: GridIcon, name: "Services", path: "/admin/services" },
+        { icon: BoxIcon, name: "API", path: "/admin/api" },
         { icon: PlugInIcon, name: "Paramètres", path: "/admin/parameters" },
       ],
     },

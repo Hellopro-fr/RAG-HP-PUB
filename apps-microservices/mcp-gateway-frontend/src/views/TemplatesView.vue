@@ -163,15 +163,23 @@ onMounted(() => {
   templatesStore.fetchTemplates()
 })
 
+// isZohoSlug returns true for any Zoho template slug so that those cards
+// always route to the template-detail view (which renders ZohoImportsSection)
+// rather than being redirected straight to the Google Sheets import wizard.
+function isZohoSlug(slug: string): boolean {
+  return slug === 'zoho' || slug.startsWith('zoho-')
+}
+
 // templateTarget routes a catalog card based on its kind:
-//   - stdio       → the usual per-template detail view (instance list / create)
-//   - http_batch  → the existing generic Google Sheets server-import flow,
-//                   with ?from=templates so the import view's back-link
-//                   returns here rather than to /servers, and
-//                   ?template_slug=<slug> so the import request stamps every
-//                   created mcp_servers row with the originating template.
+//   - http_batch + Zoho slug → template-detail (Zoho branch with ZohoImportsSection)
+//   - http_batch (non-Zoho)  → the existing Google Sheets server-import flow,
+//                              with ?from=templates so the import view's back-link
+//                              returns here rather than to /servers, and
+//                              ?template_slug=<slug> so the import request stamps
+//                              every created mcp_servers row with the originating template.
+//   - stdio                  → the usual per-template detail view (instance list / create)
 function templateTarget(template: Template): RouteLocationRaw {
-  if (template.kind === 'http_batch') {
+  if (template.kind === 'http_batch' && !isZohoSlug(template.slug)) {
     return {
       name: 'google-sheets-import',
       query: { from: 'templates', template_slug: template.slug },

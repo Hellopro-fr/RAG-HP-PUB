@@ -62,12 +62,12 @@ func getConverter() *md.Converter {
 	return converter
 }
 
-// htmlToMarkdown converts a single WYSIWYG HTML fragment to GitHub-Flavored
+// HTMLToMarkdown converts a single WYSIWYG HTML fragment to GitHub-Flavored
 // Markdown. Inputs without any HTML tags are returned verbatim (trimmed) so
 // plain-text legacy bodies don't get their underscores / asterisks escaped.
 // On conversion failure falls back to the raw input so a malformed row never
 // silently disappears.
-func htmlToMarkdown(html string) string {
+func HTMLToMarkdown(html string) string {
 	html = strings.TrimSpace(html)
 	if html == "" {
 		return ""
@@ -97,7 +97,7 @@ func ComposeInstructions(instructions []InstructionView, scopeLabel string) stri
 
 	blocks := make([]string, 0, len(instructions))
 	for _, ins := range instructions {
-		body := htmlToMarkdown(ins.Body)
+		body := HTMLToMarkdown(ins.Body)
 		if body == "" {
 			continue
 		}

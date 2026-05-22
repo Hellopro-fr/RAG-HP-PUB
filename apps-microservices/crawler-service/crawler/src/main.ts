@@ -2,10 +2,7 @@ import { RequestQueue, RobotsFile, Dataset, Configuration } from "crawlee";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
-import { createClient } from 'redis';
 import os from 'os';
-import { exec } from "child_process";
-import { promisify } from "util";
 import { router } from "./routes.js";
 import {
     getPathAfterDomain,
@@ -29,6 +26,8 @@ import {
     getApifyProxyUrl,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
+import { RedisHealthMonitor } from "./class/RedisHealthMonitor.js";
+import { ProgressMonitor } from "./class/ProgressMonitor.js";
 import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
@@ -40,9 +39,18 @@ import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
+import { killBrowserProcesses } from "./browserKill.js";
+import { readUsableMemory } from "./cgroupMemory.js";
+import { createSharedRedisClient } from "./redisClient.js";
 
-const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
+
+// Crawl start timestamp (déclaré ici pour être accessible depuis le handler de fin de crawl
+// qui construit la payload — ligne ~985). Mais ASSIGNÉ plus tard, juste avant
+// `await startCrawler(...)` (ligne ~1294), pour exclure le temps de bootstrap
+// (init Crawlee, Playwright, consolidate URLs, seeding) du décompte.
+// Format MySQL DATETIME, alimente crawl_metrics.date_start côté PHP.
+let crawlStartTime = '';
 
 // --- V3 Feature: Standard CLI Argument Parsing ---
 const args: Record<string, string> = {};
@@ -167,66 +175,39 @@ console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
 
 // --- PRE-FLIGHT CHECKS ---
-// 1. Kill orphan processes from previous runs
+// 1. Kill orphan browser processes from previous runs
 console.log('🧹 Checking for orphan browser processes...');
-try {
-    // Kill Chrome/Chromium processes (ignore errors if no processes found)
-    await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true', { timeout: 5000 });
-    await execAsync('pkill -9 -f "playwright" 2>/dev/null || true', { timeout: 5000 });
-    console.log('✅ Orphan processes cleaned.');
-} catch (e: any) {
-    // Ignore expected errors (no processes found, timeout, SIGKILL)
-    if (e.code !== 'ETIMEDOUT' && e.signal !== 'SIGKILL') {
-        console.warn('⚠️  Could not clean orphan processes:', e.message);
-    } else {
-        console.log('✅ No orphan processes found.');
-    }
-}
+await killBrowserProcesses();
+// Reap delay: kernel reclaims anon pages from killed children asynchronously.
+// 2s is empirically sufficient on Linux 5.x+ to flush the post-kill cgroup
+// state before the threshold check below reads /sys/fs/cgroup/memory.current.
+await new Promise((r) => setTimeout(r, 2000));
 
 // 2. Check available memory (Docker container limits, not host VM)
+// Page cache is subtracted from used because Linux reclaims it on demand
+// before invoking the OOM-killer (Spec-B 2026-05-21).
+const gb = (n: number) => (n / 1024 / 1024 / 1024).toFixed(2);
 let totalMem: number;
-let freeMem: number;
 
-try {
-    // Try to read Docker container memory limit from cgroups v2
-    const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-    const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
-
-    if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
-        totalMem = parseInt(cgroupMemMax.trim());
-        const usedMem = parseInt(cgroupMemCurrent.trim());
-        freeMem = totalMem - usedMem;
-    } else {
-        // Try cgroups v1 (older Docker versions)
-        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
-
-        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
-            totalMem = parseInt(cgroupMemLimitV1.trim());
-            const usedMem = parseInt(cgroupMemUsageV1.trim());
-            freeMem = totalMem - usedMem;
-        } else {
-            // Fallback to host memory (not in Docker or cgroups not available)
-            totalMem = os.totalmem();
-            freeMem = os.freemem();
-        }
-    }
-} catch (e) {
-    // Fallback to host memory if cgroup reading fails
+const mem = await readUsableMemory();
+if (!mem) {
+    // Cannot measure memory. Skip pre-flight — assume OK rather than block startup.
+    console.warn('⚠️  Pre-flight: readUsableMemory() returned null. Skipping threshold check.');
     totalMem = os.totalmem();
-    freeMem = os.freemem();
-}
-
-const usedMem = totalMem - freeMem;
-const memPercent = (usedMem / totalMem) * 100;
-
-console.log(`💾 Memory status: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)}GB / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)}GB (${memPercent.toFixed(1)}% used)`);
-
-if (memPercent > 80) {
-    console.error(`❌ Memory critically low: ${memPercent.toFixed(1)}% used. Aborting to prevent OOM.`);
-    console.error(`   Free memory: ${(freeMem / 1024 / 1024 / 1024).toFixed(2)}GB`);
-    console.error(`🔄 Pre-flight OOM: exiting with code 3 (OOM_RELAUNCH) to trigger Python-side auto-restart.`);
-    process.exit(3); // OOM_RELAUNCH: trigger Python-side auto-restart
+} else {
+    totalMem = mem.totalMem;
+    const usablePercent = (mem.usableUsed / mem.totalMem) * 100;
+    const rawPercent = (mem.rawCurrent / mem.totalMem) * 100;
+    console.log(
+        `💾 Memory status: ${gb(mem.usableUsed)}GB usable / ${gb(mem.rawCurrent)}GB raw / ` +
+        `${gb(mem.totalMem)}GB limit ` +
+        `(${usablePercent.toFixed(1)}% usable, ${rawPercent.toFixed(1)}% raw, ${gb(mem.pageCache)}GB page cache).`
+    );
+    if (usablePercent > 80) {
+        console.error(`❌ Memory critically low: ${usablePercent.toFixed(1)}% usable used. Aborting to prevent OOM.`);
+        console.error(`🔄 Pre-flight OOM: exiting with code 3 (OOM_RELAUNCH) to trigger Python-side auto-restart.`);
+        process.exit(3);
+    }
 }
 
 console.log('✅ Pre-flight checks passed. Starting crawler...');
@@ -237,50 +218,27 @@ console.log('✅ Pre-flight checks passed. Starting crawler...');
 // Does NOT stop the crawl — purely diagnostic to capture OOM evidence in log files.
 const containerMemoryMb = Math.floor(totalMem / 1024 / 1024);
 
+// Adapter over readUsableMemory(): preserves the {usedMem, totalMem} shape
+// expected by Tier 1/2 handlers while shifting `usedMem` semantics from raw
+// memory.current to usable used (= memory.current - page cache).
 const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: number } | null> => {
-    try {
-        const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-        const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
-
-        if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
-            return {
-                totalMem: parseInt(cgroupMemMax.trim()),
-                usedMem: parseInt(cgroupMemCurrent.trim())
-            };
-        }
-
-        // Fallback to cgroups v1
-        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
-
-        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
-            return {
-                totalMem: parseInt(cgroupMemLimitV1.trim()),
-                usedMem: parseInt(cgroupMemUsageV1.trim())
-            };
-        }
-
-        // Fallback to OS-level
-        return {
-            totalMem: os.totalmem(),
-            usedMem: os.totalmem() - os.freemem()
-        };
-    } catch (e) {
-        return null;
-    }
+    const mem = await readUsableMemory();
+    if (!mem) return null;
+    return { usedMem: mem.usableUsed, totalMem: mem.totalMem };
 };
 
 // --- Tier 1 Recovery Handler (85-92%) ---
 let lastWarningActionTime = 0;
 let lastMemPercent = 0; // Track global memory state for persistence guard
 let persistenceInterval: ReturnType<typeof setInterval> | undefined;
+let progressMonitor: ProgressMonitor | undefined;
 let isPersisting = false; // Mutex flag to prevent concurrent updateUrlsCrawledStreaming calls
 const handleWarningMemory = async (memPercent: number) => {
     const now = Date.now();
     if (now - lastWarningActionTime < 30000) return; // Debounce 30s
     lastWarningActionTime = now;
 
-    console.warn(`⚠️  [Tier 1] Memory Warning (${memPercent.toFixed(1)}%). executing proactive recovery...`);
+    console.warn(`⚠️  [Tier 1] Memory Warning (${memPercent.toFixed(1)}% usable). executing proactive recovery...`);
 
     // 1. Force GC
     if ((global as any).gc) {
@@ -317,14 +275,12 @@ let criticalRecoveryAttempted = false;
 const handleCriticalMemory = async (memPercent: number) => {
     if (!criticalRecoveryAttempted) {
         // Phase A: Aggressive Recovery
-        console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}%). Initiating Phase A Recovery...`);
+        console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}% usable). Initiating Phase A Recovery...`);
         criticalRecoveryAttempted = true;
 
-        // 1. Kill Chrome processes (Forcefully release external memory)
-        try {
-            console.log("   -> [Phase A] Killing all Chrome/Playwright processes");
-            await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true');
-        } catch (e) { /* ignore */ }
+        // 1. Kill all browser processes (forcefully release external memory)
+        console.log("   -> [Phase A] Killing all browser processes");
+        await killBrowserProcesses();
 
         // 2. Emergency Persist (Save data before potential crash)
         console.log("   -> [Phase A] Emergency state persistence");
@@ -351,7 +307,7 @@ const handleCriticalMemory = async (memPercent: number) => {
     }
 
     // Phase B: Graceful Shutdown (Recovery failed)
-    console.error(`❌ [Tier 2] Memory STILL CRITICAL (${memPercent.toFixed(1)}%) after recovery. Initiating Phase B: Auto-Relaunch...`);
+    console.error(`❌ [Tier 2] Memory STILL CRITICAL (${memPercent.toFixed(1)}% usable) after recovery. Initiating Phase B: Auto-Relaunch...`);
     await gracefulShutdown('OOM_RELAUNCH', 3); // Exit code 3 triggers auto-relaunch in Python
 };
 
@@ -370,7 +326,7 @@ setInterval(async () => {
     } else {
         // Reset Phase A flag if we dropped below critical
         if (criticalRecoveryAttempted) {
-             console.log(`✅ Memory recovered to ${memPercent.toFixed(1)}%. Resetting Tier 2 Phase A flag.`);
+             console.log(`✅ Memory recovered to ${memPercent.toFixed(1)}% usable. Resetting Tier 2 Phase A flag.`);
              criticalRecoveryAttempted = false;
         }
 
@@ -381,14 +337,32 @@ setInterval(async () => {
 }, 2000); // Poll every 2s (Optimized from 5s)
 // --- END MEMORY WATCHDOG ---
 
-// --- Heartbeat Mechanism ---
+// --- Redis Health + Progress Monitors ---
 const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-const redisClient = createClient({ url: redisUrl });
-redisClient.on('error', (err) => console.error('Redis Heartbeat Error:', err));
+const parsedRedisLossMs = Number(process.env.REDIS_LOSS_THRESHOLD_MS);
+const redisLossThresholdMs = Number.isFinite(parsedRedisLossMs) && parsedRedisLossMs > 0
+    ? parsedRedisLossMs
+    : 60_000;
+const redisMonitor = new RedisHealthMonitor(
+    redisLossThresholdMs,
+    (reason) => {
+        console.error(`[fatal] redis_lost: ${reason}`);
+        console.error(JSON.stringify({ event: 'redis_lost', reason, snapshot: redisMonitor.snapshot() }));
+        // gracefulShutdown is declared later in the file; safe to forward-reference
+        // via the top-level `gracefulShutdown` const because we only call it at fire-time.
+        void gracefulShutdown('REDIS_LOST', 5);
+    },
+);
+// Single client identity — heartbeat + dedup multiplex on sharedRedis.
+redisMonitor.attach('shared');
+redisMonitor.start();
 
+// --- Shared Redis client (heartbeat + dedup multiplex) ---
+const sharedRedis = createSharedRedisClient(redisUrl, { crawlId: id, monitor: redisMonitor });
 try {
-    await redisClient.connect();
-    console.log('Connected to Redis for Heartbeat');
+    await sharedRedis.connect();
+    redisMonitor.onSuccess('shared');
+    console.log('Connected to Redis (shared client for heartbeat + dedup)');
 
     const hostname = os.hostname();
     const numCpus = os.cpus().length;
@@ -399,14 +373,13 @@ try {
     const getTopProcesses = async (): Promise<Array<{ name: string, ram: number }>> => {
         try {
             const { execSync } = await import('child_process');
-            // Get top 3 processes by RSS (Linux/Mac compatible)
             const output = execSync('ps aux --sort=-rss | head -n 4 | tail -n 3', { encoding: 'utf-8' });
             const lines = output.trim().split('\n');
             return lines.map(line => {
                 const parts = line.trim().split(/\s+/);
                 const ramKB = parseInt(parts[5]) || 0;
                 const command = parts.slice(10).join(' ').substring(0, 30);
-                return { name: command, ram: ramKB * 1024 }; // Convert to bytes
+                return { name: command, ram: ramKB * 1024 };
             });
         } catch (e) {
             return [];
@@ -416,36 +389,26 @@ try {
     // Helper to read container-level memory usage from cgroups
     const getContainerMemoryUsage = async (): Promise<number> => {
         try {
-            // cgroups v2
             const v2 = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
             if (v2) return parseInt(v2.trim());
-
-            // cgroups v1
             const v1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
             if (v1) return parseInt(v1.trim());
         } catch (e) { /* fallback below */ }
-
-        // Fallback: Node.js process RSS (inaccurate but better than 0)
         return process.memoryUsage().rss;
     };
 
     // Helper to read container-level CPU usage from cgroups
-    // Returns cumulative CPU microseconds used by the entire container
     const getContainerCpuUsec = async (): Promise<number | null> => {
         try {
-            // cgroups v2: cpu.stat has "usage_usec <value>" line
             const v2 = await fsPromises.readFile('/sys/fs/cgroup/cpu.stat', 'utf-8').catch(() => null);
             if (v2) {
                 const match = v2.match(/usage_usec\s+(\d+)/);
                 if (match) return parseInt(match[1]);
             }
-
-            // cgroups v1: cpuacct.usage is in nanoseconds
             const v1 = await fsPromises.readFile('/sys/fs/cgroup/cpuacct/cpuacct.usage', 'utf-8').catch(() => null);
-            if (v1) return parseInt(v1.trim()) / 1000; // Convert ns to us
+            if (v1) return parseInt(v1.trim()) / 1000;
         } catch (e) { /* fallback below */ }
-
-        return null; // No cgroup CPU available
+        return null;
     };
 
     let lastContainerCpuUsec = await getContainerCpuUsec();
@@ -453,7 +416,6 @@ try {
 
     setInterval(async () => {
         try {
-            // Container-level CPU from cgroups
             let cpuPercent: number;
             const currentContainerCpuUsec = await getContainerCpuUsec();
             const currentTime = Date.now();
@@ -465,7 +427,6 @@ try {
                 lastContainerCpuUsec = currentContainerCpuUsec;
                 lastContainerCpuTime = currentTime;
             } else {
-                // Fallback to process-level CPU
                 const currentCpuUsage = process.cpuUsage(lastCpuUsage);
                 const elapsedTime = (currentTime - lastTime) * 1000;
                 cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
@@ -473,7 +434,6 @@ try {
                 lastTime = currentTime;
             }
 
-            // Container-level RAM from cgroups
             const containerRam = await getContainerMemoryUsage();
             const topProcesses = await getTopProcesses();
 
@@ -482,20 +442,29 @@ try {
                 replicaId: hostname,
                 jobId: id,
                 domain: domain,
-                cpu: Math.min(Math.max(cpuPercent, 0), 1), // Clamp 0-1
+                cpu: Math.min(Math.max(cpuPercent, 0), 1),
                 ram: containerRam,
                 totalRam: totalMem,
                 topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'
             };
-            await redisClient.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+            try {
+                await sharedRedis.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+                redisMonitor.onSuccess('shared');
+            } catch (e) {
+                redisMonitor.onError('shared', e);
+                console.error('Failed to send heartbeat:', e);
+            }
         } catch (e) {
-            console.error('Failed to send heartbeat:', e);
+            console.error('Heartbeat interval error:', e);
         }
     }, 2000);
 } catch (err) {
-    console.error('Failed to connect to Redis for Heartbeat:', err);
+    console.error('Failed to connect shared Redis client:', err);
+    redisMonitor.onError('shared', err);
+    redisMonitor.stop();
+    process.exit(5);
 }
 // ---------------------------
 
@@ -553,11 +522,10 @@ if (fs.existsSync(stopperFile)) {
     } catch (e) {}
 }
 
-// Init Managers
-context.dedupManager = new DedupManager(redisUrl, id);
+// Init Managers — DedupManager reuses the shared Redis client.
+context.dedupManager = new DedupManager(sharedRedis, id, undefined, redisMonitor);
 context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
-
-await context.dedupManager.connect();
+// No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
 
 let isHistorised = false;
@@ -569,12 +537,12 @@ if (dropData) {
     await dropDataset(domain);
     await dropDataset(`error-${domain}`);
     await dropDataset(`nfr-${domain}`);
-    
+
     // Also clean managers
     await context.dedupManager.cleanup();
     await context.statsManager.cleanup();
-    // Reconnect after cleanup
-    await context.dedupManager.connect();
+    // Shared client survives dedup.cleanup (ownsClient=false), so no reconnect
+    // needed for dedupManager. StatsManager still owns its own client.
     await context.statsManager.connect();
 
     isHistorised = true;
@@ -638,7 +606,7 @@ persistenceInterval = setInterval(async () => {
     try {
         // Guard: Skip persistence if memory is already high (>85%) to prevent OOM
         if (lastMemPercent > 85) {
-            console.warn(`⚠️ Skipping periodic persistence due to high memory (${lastMemPercent.toFixed(1)}%)`);
+            console.warn(`⚠️ Skipping periodic persistence due to high memory (${lastMemPercent.toFixed(1)}% usable)`);
             return;
         }
 
@@ -742,6 +710,10 @@ if (crawlMode === 'update') {
 
     const totalConsolidated = remainingUrls.length + 1; // +1 for homepage
     console.log(`Consolidated ${totalConsolidated} URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
+
+    if (context.statsManager && consolidationCounts.duplicatesRemoved > 0) {
+        await context.statsManager.increment("filtered_duplicate", consolidationCounts.duplicatesRemoved);
+    }
 
     // Safety net: update mode with 0 URLs means previous crawl data was unavailable
     if (totalConsolidated <= 1) {
@@ -899,6 +871,10 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
 
+    // Stop health monitors first so they cannot fire mid-shutdown.
+    try { redisMonitor?.stop(); } catch (e) { /* ignore */ }
+    try { progressMonitor?.stop(); } catch (e) { /* ignore */ }
+
     // Timing instrumentation: stop sampler + flush JSONL/summary before exit.
     // Synchronous-ish: finalize() is fast and fire-and-await before any exit.
     if (typeof finalizeTimingOnce === 'function') {
@@ -964,6 +940,25 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     }
 
 
+    // Timestamp de fin de crawl — capté ici (juste avant le build de la payload) pour refléter
+    // la VRAIE fin du crawl côté crawler-service (et non l'heure où PHP reçoit le webhook,
+    // qui inclurait la latence Python + le retry du webhook). Format MySQL DATETIME.
+    const crawlEndTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    // Read deperdition counters from StatsManager (defaults to 0 if unavailable)
+    async function readStat(metric: string): Promise<number> {
+        if (!context.statsManager) return 0;
+        try { return await context.statsManager.getValue(metric); } catch { return 0; }
+    }
+    const filtered_qm = await readStat("filtered_qm");
+    const filtered_hash = await readStat("filtered_hash");
+    const filtered_ext = await readStat("filtered_ext");
+    const filtered_nonfr = await readStat("filtered_nonfr");
+    const filtered_duplicate = await readStat("filtered_duplicate");
+    const dropped_cb = await readStat("dropped_cb");
+    const timeout_individual = await readStat("timeout_individual");
+    const success_extracted = await readStat("success");
+
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
@@ -978,6 +973,18 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         camoufox_used: context.camoufoxEnabled,
         diezDecisionMode: getDiezDecisionMode(isError),
         questionMarkDecisionMode: getQuestionMarkDecisionMode(isError),
+        // Observability — deperdition counters (StatsManager / Redis-backed)
+        filtered_qm,
+        filtered_hash,
+        filtered_ext,
+        filtered_nonfr,
+        filtered_duplicate,
+        dropped_cb,
+        timeout_individual,
+        success_extracted,
+        // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
+        date_start: crawlStartTime,
+        date_end: crawlEndTime,
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
@@ -1072,6 +1079,14 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
+
+    // Disconnect the shared Redis client (heartbeat + dedup multiplexed on it).
+    // Owner-managed — DedupManager.cleanup() left this open by design.
+    try {
+        if (sharedRedis && sharedRedis.isOpen) await sharedRedis.disconnect();
+    } catch (e) {
+        console.error('Shared Redis disconnect error:', e);
+    }
 
     console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
     process.exit(exitCode);
@@ -1249,6 +1264,30 @@ if (typeCrawling == "sitemap") {
         process.on("beforeExit", () => { void finalizeTimingOnce!(); });
     }
     // --- END TIMING INSTRUMENTATION ---
+
+    // Capture du timestamp de démarrage RÉEL du crawl, juste avant l'invocation de
+    // startCrawler() qui appelle crawler.run() (cf functions.ts:755). Tout le setup
+    // précédent (bootstrap modules, init Crawlee, Playwright, consolidate URLs,
+    // two-phase seeding) est EXCLU du décompte de duration_seconds.
+    crawlStartTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    // Progress stall monitor — fires gracefulShutdown(exit 6) if requestsFinished
+    // does not advance for PROGRESS_STALL_THRESHOLD_MS (default 10 min).
+    const parsedProgressStallMs = Number(process.env.PROGRESS_STALL_THRESHOLD_MS);
+    const progressStallThresholdMs = Number.isFinite(parsedProgressStallMs) && parsedProgressStallMs > 0
+        ? parsedProgressStallMs
+        : 600_000;
+    progressMonitor = new ProgressMonitor(
+        () => (context.crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0,
+        progressStallThresholdMs,
+        (reason) => {
+            console.error(`[fatal] progress_stalled: ${reason}`);
+            console.error(JSON.stringify({ event: 'progress_stalled', reason }));
+            void gracefulShutdown('PROGRESS_STALL', 6);
+        },
+        30_000,
+    );
+    progressMonitor.start();
 
     // Launch
     const crawler = await startCrawler(

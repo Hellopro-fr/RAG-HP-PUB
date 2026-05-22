@@ -1,39 +1,87 @@
 import { createClient, RedisClientType } from 'redis';
+import type { RedisHealthMonitor } from './RedisHealthMonitor.js';
 
 export class DedupManager {
     private redis: RedisClientType;
+    private monitor?: RedisHealthMonitor;
     private key: string;
     private ttl: number;
     private ttlSet: boolean = false;
-
     private blockedKey: string;
+    private ownsClient: boolean;
 
-    constructor(redisUrl: string, crawlId: string, ttlSeconds: number = 7 * 24 * 3600) {
-        this.redis = createClient({ url: redisUrl });
-        this.redis.on('error', (err) => console.error('Redis Dedup Error:', err));
+    /**
+     * Constructor accepts either a URL (legacy: creates + owns the client) or a
+     * pre-built shared RedisClientType (injected: lifecycle managed by owner).
+     *
+     * When a shared client is injected, the OWNER is responsible for attaching
+     * the 'error' listener — DedupManager does not double-register one. As a
+     * consequence, `monitor.onError('dedup', …)` is only invoked on the legacy
+     * URL path; on the injected path, the owner's error handler reports under
+     * its own client identity (e.g. 'shared').
+     */
+    constructor(
+        clientOrUrl: RedisClientType | string,
+        crawlId: string,
+        ttlSeconds: number = 7 * 24 * 3600,
+        monitor?: RedisHealthMonitor,
+    ) {
+        // Assign primitive fields first so the error handler closure below
+        // never observes undefined `this.monitor` even on synchronous emits.
+        this.monitor = monitor;
         this.key = `dedup:${crawlId}`;
         this.blockedKey = `blocked_log:${crawlId}`;
         this.ttl = ttlSeconds;
+
+        if (typeof clientOrUrl === 'string') {
+            // Backward-compatible URL form — DedupManager creates + owns the client.
+            this.redis = createClient({ url: clientOrUrl });
+            this.ownsClient = true;
+            this.redis.on('error', (err) => {
+                console.error('Redis Dedup Error:', err);
+                this.monitor?.onError('dedup', err);
+            });
+        } else {
+            // Injected shared client — DedupManager does NOT connect/disconnect.
+            this.redis = clientOrUrl;
+            this.ownsClient = false;
+        }
     }
 
     async connect() {
-        await this.redis.connect();
+        if (!this.ownsClient) return;   // shared client connected by owner
+        try {
+            await this.redis.connect();
+            this.monitor?.onSuccess('dedup');
+        } catch (e) {
+            this.monitor?.onError('dedup', e);
+            throw e;
+        }
     }
 
     async disconnect() {
+        if (!this.ownsClient) return;   // shared client closed by owner
         if (this.redis.isOpen) {
-            await this.redis.disconnect();
+            try {
+                await this.redis.disconnect();
+                this.monitor?.onSuccess('dedup');
+            } catch (e) {
+                this.monitor?.onError('dedup', e);
+                throw e;
+            }
         }
     }
 
     private async ensureTtl() {
         if (this.ttlSet) return;
-        this.ttlSet = true; // Set immediately to prevent concurrent calls
+        this.ttlSet = true;
         try {
             await this.redis.expire(this.key, this.ttl);
             await this.redis.expire(this.blockedKey, this.ttl);
+            // No onSuccess here — outer public method reports.
         } catch (e) {
-            this.ttlSet = false; // Reset on failure so it retries
+            this.ttlSet = false;
+            this.monitor?.onError('dedup', e);
             console.warn(`Failed to set TTL: ${e}`);
         }
     }
@@ -42,17 +90,22 @@ export class DedupManager {
         try {
             const isNew = await this.redis.sAdd(this.key, url);
             await this.ensureTtl();
-            return isNew === 1; // 1 if added, 0 if existed
+            this.monitor?.onSuccess('dedup');
+            return isNew === 1;
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             console.error(`Dedup Add Error: ${e}`);
-            return true; // Default to true (process it) on error to be safe
+            return true;
         }
     }
 
     async isKnown(url: string): Promise<boolean> {
         try {
-            return await this.redis.sIsMember(this.key, url);
+            const result = await this.redis.sIsMember(this.key, url);
+            this.monitor?.onSuccess('dedup');
+            return result;
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             return false;
         }
     }
@@ -67,20 +120,16 @@ export class DedupManager {
     async isKnownBatch(urls: string[]): Promise<Set<string>> {
         const knownSet = new Set<string>();
         if (urls.length === 0) return knownSet;
-
         try {
-            // SMISMEMBER returns an array of 0/1 for each member
             const results = await this.redis.smIsMember(this.key, urls);
             for (let i = 0; i < urls.length; i++) {
-                if (results[i]) {
-                    knownSet.add(urls[i]);
-                }
+                if (results[i]) knownSet.add(urls[i]);
             }
+            this.monitor?.onSuccess('dedup');
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             console.error(`Dedup Batch Check Error: ${e}`);
-            // On error, return empty set (process all URLs to be safe)
         }
-
         return knownSet;
     }
 
@@ -92,30 +141,25 @@ export class DedupManager {
      */
     async filterNewBlockedBatch(urls: string[]): Promise<string[]> {
         if (urls.length === 0) return [];
-        const uniqueUrls = [...new Set(urls)]; // Local dedup first logic
+        const uniqueUrls = [...new Set(urls)];
         const newToLog: string[] = [];
-
         try {
-            // 1. Check existing
             const results = await this.redis.smIsMember(this.blockedKey, uniqueUrls);
             const toAdd: string[] = [];
-
             for (let i = 0; i < uniqueUrls.length; i++) {
-                if (!results[i]) { // false means NOT member (new)
-                     newToLog.push(uniqueUrls[i]);
-                     toAdd.push(uniqueUrls[i]);
+                if (!results[i]) {
+                    newToLog.push(uniqueUrls[i]);
+                    toAdd.push(uniqueUrls[i]);
                 }
             }
-
-            // 2. Add new ones
             if (toAdd.length > 0) {
-                 await this.redis.sAdd(this.blockedKey, toAdd);
-                 await this.ensureTtl();
+                await this.redis.sAdd(this.blockedKey, toAdd);
+                await this.ensureTtl();
             }
-
+            this.monitor?.onSuccess('dedup');
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             console.error(`Blocked Log Batch Error: ${e}`);
-            // On error, log everything to be safe
             return uniqueUrls;
         }
         return newToLog;
@@ -126,8 +170,11 @@ export class DedupManager {
      */
     async getCount(): Promise<number> {
         try {
-            return await this.redis.sCard(this.key);
+            const c = await this.redis.sCard(this.key);
+            this.monitor?.onSuccess('dedup');
+            return c;
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             console.error(`Dedup Count Error: ${e}`);
             return 0;
         }
@@ -139,8 +186,11 @@ export class DedupManager {
      */
     async getAllUrls(): Promise<string[]> {
         try {
-            return await this.redis.sMembers(this.key);
+            const r = await this.redis.sMembers(this.key);
+            this.monitor?.onSuccess('dedup');
+            return r;
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             console.error(`Dedup Get All Error: ${e}`);
             return [];
         }
@@ -154,15 +204,13 @@ export class DedupManager {
         try {
             let cursor = 0;
             do {
-                // Reduced batch size to preventing OOM during persistence
-                // Node Redis client buffers the response, so 1000 items might be too large for 100s of simultaneous writes
                 const result = await this.redis.sScan(this.key, cursor, { COUNT: 200 });
                 cursor = result.cursor;
-                for (const member of result.members) {
-                    yield member;
-                }
+                for (const member of result.members) yield member;
             } while (cursor !== 0);
+            this.monitor?.onSuccess('dedup');
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             console.error(`Dedup Scan Error: ${e}`);
         }
     }
@@ -172,16 +220,20 @@ export class DedupManager {
      */
     async loadFromList(urls: string[]) {
         if (!urls.length) return;
-        
-        // Chunking to avoid blocking Redis with huge payloads
         const chunkSize = 1000;
         for (let i = 0; i < urls.length; i += chunkSize) {
             const chunk = urls.slice(i, i + chunkSize);
             if (chunk.length > 0) {
-                await this.redis.sAdd(this.key, chunk);
+                try {
+                    await this.redis.sAdd(this.key, chunk);
+                } catch (e) {
+                    this.monitor?.onError('dedup', e);
+                    throw e;
+                }
             }
         }
         await this.ensureTtl();
+        this.monitor?.onSuccess('dedup');
         console.log(`Loaded ${urls.length} URLs into deduplication set.`);
     }
 
@@ -199,17 +251,27 @@ export class DedupManager {
             totalCount++;
 
             if (buffer.length >= chunkSize) {
-                await this.redis.sAdd(this.key, buffer);
+                try {
+                    await this.redis.sAdd(this.key, buffer);
+                } catch (e) {
+                    this.monitor?.onError('dedup', e);
+                    throw e;
+                }
                 buffer = [];
             }
         }
 
-        // Flush remaining buffer
         if (buffer.length > 0) {
-            await this.redis.sAdd(this.key, buffer);
+            try {
+                await this.redis.sAdd(this.key, buffer);
+            } catch (e) {
+                this.monitor?.onError('dedup', e);
+                throw e;
+            }
         }
 
         await this.ensureTtl();
+        this.monitor?.onSuccess('dedup');
         console.log(`Loaded ${totalCount} URLs into deduplication set (streaming).`);
         return totalCount;
     }
@@ -219,8 +281,10 @@ export class DedupManager {
             await this.redis.del(this.key);
             await this.redis.del(this.blockedKey);
             await this.disconnect();
+            this.monitor?.onSuccess('dedup');
             console.log(`Cleaned up deduplication set for ${this.key}`);
         } catch (e) {
+            this.monitor?.onError('dedup', e);
             console.error(`Dedup Cleanup Error: ${e}`);
         }
     }

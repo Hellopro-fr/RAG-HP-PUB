@@ -21,7 +21,9 @@ var clientUpgrader = websocket.Upgrader{
 // NewWSHandler returns a Gin handler that upgrades WebSocket requests and relays
 // frames bidirectionally to a downstream service. Non-WebSocket requests fall
 // through to subsequent handlers via c.Next().
-func NewWSHandler(serviceMap map[string]string) gin.HandlerFunc {
+// services is a snapshot getter so live route updates from the catalog
+// refresher are picked up per request without rebuilding the handler.
+func NewWSHandler(services func() map[string]string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !websocket.IsWebSocketUpgrade(c.Request) {
 			c.Next()
@@ -29,7 +31,7 @@ func NewWSHandler(serviceMap map[string]string) gin.HandlerFunc {
 		}
 		service := c.Param("service")
 		path := strings.TrimPrefix(c.Param("path"), "/")
-		base, ok := serviceMap["/"+service]
+		base, ok := services()["/"+service]
 		if !ok {
 			log.Printf("[ws] service %s unknown", service)
 			http.Error(c.Writer, "service unknown", http.StatusNotFound)

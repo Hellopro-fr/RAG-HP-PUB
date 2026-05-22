@@ -1,6 +1,7 @@
 package authserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,7 +11,17 @@ import (
 
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
 )
+
+// ZohoStateForUser is the optional dependency that buildServerList uses
+// to render Zoho-tagged servers on the consent screen. Returns the
+// per-backend state keyed by mcp_servers.id. A Configured=false entry
+// means the viewer's zoho_imports row is missing — the consent screen
+// moves the server into the "Non configurés" section with a docs CTA.
+type ZohoStateForUser interface {
+	FetchZohoStateForUser(ctx context.Context, email string) map[string]gateway.ZohoServerState
+}
 
 // ── JSON API DTOs ────────────────────────────────────────────────────────────
 
@@ -23,9 +34,12 @@ type authorizeInfoResponse struct {
 }
 
 type authorizeServerDTO struct {
-	ID    string             `json:"id"`
-	Name  string             `json:"name"`
-	Tools []authorizeToolDTO `json:"tools"`
+	ID         string             `json:"id"`
+	Name       string             `json:"name"`
+	Icon       string             `json:"icon,omitempty"`
+	Tools      []authorizeToolDTO `json:"tools"`
+	Configured bool               `json:"configured"`
+	DocsURL    string             `json:"docs_url,omitempty"`
 }
 
 type authorizeToolDTO struct {
@@ -135,7 +149,7 @@ func (s *AuthServer) handleAuthorizeInfo(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Build server list
-	servers := s.buildServerList(client)
+	servers := s.buildServerList(r.Context(), client, userEmail)
 
 	resp := authorizeInfoResponse{
 		ClientName: client.Name,
@@ -246,7 +260,7 @@ func (s *AuthServer) handleAuthorizeLogin(w http.ResponseWriter, r *http.Request
 		Secure:   s.secureCookie,
 	})
 
-	servers := s.buildServerList(client)
+	servers := s.buildServerList(r.Context(), client, authResp.Email)
 
 	writeJSON(w, http.StatusOK, authorizeLoginResponse{
 		Success:    true,
@@ -407,14 +421,19 @@ func (s *AuthServer) handleAuthorizeConsent(w http.ResponseWriter, r *http.Reque
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-func (s *AuthServer) buildServerList(client *db.OAuth2Client) []authorizeServerDTO {
+func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Client, userEmail string) []authorizeServerDTO {
 	hasPreConfiguredScope := len(client.Servers) > 0
 
 	servers, _ := s.serverRepo.ListActive()
 	serverMap := make(map[string]db.MCPServer, len(servers))
+	zohoIDs := make(map[string]bool, len(servers))
 	for _, srv := range servers {
 		serverMap[srv.ID] = srv
+		if isZohoServer(srv) {
+			zohoIDs[srv.ID] = true
+		}
 	}
+	log.Printf("[zoho-diag] buildServerList (JSON API) email=%q client_id=%s pre_configured_scope=%t active_servers=%d zoho_servers=%d zoho_fetcher_wired=%t", userEmail, client.ID, hasPreConfiguredScope, len(servers), len(zohoIDs), s.zohoFetcher != nil)
 
 	var result []authorizeServerDTO
 
@@ -434,8 +453,10 @@ func (s *AuthServer) buildServerList(client *db.OAuth2Client) []authorizeServerD
 				continue
 			}
 			entry := authorizeServerDTO{
-				ID:   srv.ID,
-				Name: srv.Name,
+				ID:         srv.ID,
+				Name:       srv.Name,
+				Icon:       srv.Icon,
+				Configured: true,
 			}
 			srvTools := allowedTools[srv.ID]
 			for _, t := range srv.Tools {
@@ -453,8 +474,10 @@ func (s *AuthServer) buildServerList(client *db.OAuth2Client) []authorizeServerD
 		// No pre-configured scope — show all active servers
 		for _, srv := range servers {
 			entry := authorizeServerDTO{
-				ID:   srv.ID,
-				Name: srv.Name,
+				ID:         srv.ID,
+				Name:       srv.Name,
+				Icon:       srv.Icon,
+				Configured: true,
 			}
 			for _, t := range srv.Tools {
 				if !t.IsActive {
@@ -469,7 +492,89 @@ func (s *AuthServer) buildServerList(client *db.OAuth2Client) []authorizeServerD
 		}
 	}
 
+	result = applyZohoUserState(ctx, result, zohoIDs, s.zohoFetcher, userEmail, s.docsURL)
 	return result
+}
+
+// isZohoServer returns true when the registered server is the Zoho stub —
+// either by tool_prefix or by carrying the "zoho" tag (case-insensitive).
+// Mirrors the same check the scoped gateway runs at request time.
+func isZohoServer(srv db.MCPServer) bool {
+	if strings.EqualFold(srv.ToolPrefix, "zoho") {
+		return true
+	}
+	for _, t := range srv.Tags {
+		if strings.EqualFold(t.Tag, "zoho") {
+			return true
+		}
+	}
+	return false
+}
+
+// applyZohoUserState rewrites each Zoho-tagged server entry in-place using
+// the per-viewer state returned by the fetcher. Configured servers get
+// their Tools replaced with the viewer's tools and Configured=true.
+// Unconfigured servers are emptied of tools, marked Configured=false, and
+// receive the docs CTA URL. Non-Zoho servers and the nil-fetcher / empty
+// email / no-Zoho-id cases are passthroughs. Pure function: testable
+// without any AuthServer plumbing.
+func applyZohoUserState(
+	ctx context.Context,
+	servers []authorizeServerDTO,
+	zohoIDs map[string]bool,
+	fetcher ZohoStateForUser,
+	userEmail string,
+	docsURL string,
+) []authorizeServerDTO {
+	if fetcher == nil {
+		log.Printf("[zoho-diag] applyZohoUserState: fetcher is nil — every Zoho server stays as cached admin tools (no per-viewer override)")
+		return servers
+	}
+	if userEmail == "" {
+		log.Printf("[zoho-diag] applyZohoUserState: userEmail is empty — every Zoho server stays as cached admin tools (no per-viewer override)")
+		return servers
+	}
+	if len(zohoIDs) == 0 {
+		log.Printf("[zoho-diag] applyZohoUserState email=%q: no Zoho-tagged servers registered — passthrough", userEmail)
+		return servers
+	}
+	log.Printf("[zoho-diag] applyZohoUserState email=%q zoho_backend_count=%d — fetching per-viewer state", userEmail, len(zohoIDs))
+	state := fetcher.FetchZohoStateForUser(ctx, userEmail)
+	if state == nil {
+		log.Printf("[zoho-diag] applyZohoUserState email=%q: FetchZohoStateForUser returned nil — every Zoho server will fall into unconfigured branch below", userEmail)
+	}
+	for i, srv := range servers {
+		if !zohoIDs[srv.ID] {
+			continue
+		}
+		st, ok := state[srv.ID]
+		if !ok {
+			log.Printf("[zoho-diag] applyZohoUserState email=%q server_id=%s: no state entry returned — marking Configured=false (fail-safe)", userEmail, srv.ID)
+			servers[i].Tools = nil
+			servers[i].Configured = false
+			servers[i].DocsURL = docsURL
+			continue
+		}
+		if !st.Configured {
+			log.Printf("[zoho-diag] applyZohoUserState email=%q server_id=%s: state.Configured=false — marking unconfigured (root cause is in [zoho-diag] StateForEmail logs above)", userEmail, srv.ID)
+			servers[i].Tools = nil
+			servers[i].Configured = false
+			servers[i].DocsURL = docsURL
+			continue
+		}
+		log.Printf("[zoho-diag] applyZohoUserState email=%q server_id=%s: Configured=true tool_count=%d — substituting per-viewer tools", userEmail, srv.ID, len(st.Tools))
+		converted := make([]authorizeToolDTO, 0, len(st.Tools))
+		for _, t := range st.Tools {
+			converted = append(converted, authorizeToolDTO{
+				Name:        t.Name,
+				Description: t.Description,
+			})
+		}
+		servers[i].Tools = converted
+		servers[i].Configured = true
+		servers[i].DocsURL = ""
+	}
+	return servers
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

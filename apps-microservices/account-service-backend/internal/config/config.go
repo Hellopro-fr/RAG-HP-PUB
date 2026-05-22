@@ -27,10 +27,13 @@ type Configuration struct {
 	WebhookRetries    int
 	LogoutWorkers     int
 	SecureCookie      bool
-	SlackWebhookURL   string
-	SlackEnvLabel     string
-	SlackCooldownS    int
+	SlackWebhookURL    string
+	SlackEnvLabel      string
+	SlackCooldownS     int
 	InternalAdminToken string
+	// API Catalog gRPC backend address and admin key.
+	APICatalogGRPC  string
+	CatalogAdminKey string
 }
 
 // buildMySQLDSN composes a DSN from MYSQL_DSN if set; otherwise from the
@@ -72,10 +75,12 @@ func Load() (*Configuration, error) {
 		WebhookRetries:    envInt("LOGOUT_WEBHOOK_RETRIES", 3),
 		LogoutWorkers:     envInt("LOGOUT_WORKERS", 4),
 		SecureCookie:      envBool("SECURE_COOKIE", true),
-		SlackWebhookURL:   os.Getenv("SLACK_WEBHOOK_URL"),
-		SlackEnvLabel:     os.Getenv("SLACK_ENV_LABEL"),
-		SlackCooldownS:    envInt("SLACK_AUTH_ALERT_COOLDOWN", 600),
+		SlackWebhookURL:    os.Getenv("SLACK_WEBHOOK_URL"),
+		SlackEnvLabel:      os.Getenv("SLACK_ENV_LABEL"),
+		SlackCooldownS:     envInt("SLACK_AUTH_ALERT_COOLDOWN", 600),
 		InternalAdminToken: os.Getenv("INTERNAL_ADMIN_TOKEN"),
+		APICatalogGRPC:     envStr("API_CATALOG_GRPC", "api-catalog-service:9100"),
+		CatalogAdminKey:    os.Getenv("CATALOG_ADMIN_KEY"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

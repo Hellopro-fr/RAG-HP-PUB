@@ -716,6 +716,7 @@ services:
     logging: *logging_defaults
 
   # Cutover completed 2026-05-07: Go service now primary on port 8500
+  # API_CATALOG: GATEWAY_USE_CATALOG=true makes routes flow from catalog gRPC.
   api-gateway-go-service:
     build:
       context: .
@@ -758,12 +759,54 @@ services:
       - ACCOUNT_CLIENT_SECRET_API_GATEWAY=${ACCOUNT_CLIENT_SECRET_API_GATEWAY:-}
       - ACCOUNT_INTERNAL_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
       - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
+      # ── API Catalog (route source) ───────────────────────────────────────
+      - GATEWAY_USE_CATALOG=${GATEWAY_USE_CATALOG:-true}
+      - API_CATALOG_GRPC=${API_CATALOG_GRPC:-api-catalog-service:9100}
+      - CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL:-5s}
+      - CATALOG_DIAL_TIMEOUT=${CATALOG_DIAL_TIMEOUT:-3s}
     # depends_on:
     #   mysql:
     #     condition: service_healthy
     networks:
       - services-net
     logging: *logging_defaults
+
+  api-catalog-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/api-catalog-service/Dockerfile
+    profiles: ["app"]
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./apps-microservices/api-gateway/.env.url:/app/.env.url:ro
+    working_dir: /app
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: ${GATEWAY_MYSQL_PORT:-3306}
+      MYSQL_USER: ${GATEWAY_MYSQL_USER:-gateway_user}
+      MYSQL_PASS: ${GATEWAY_MYSQL_PASS:-gateway_pass}
+      MYSQL_DB: ${GATEWAY_MYSQL_DB:-gateway_db}
+      GRPC_PORT: "9100"
+      HEALTH_PORT: "9101"
+      ADMIN_KEY: ${CATALOG_ADMIN_KEY:-dev-catalog-key}
+      SCAN_INTERVAL: 15m
+      SCAN_CONCURRENCY: "16"
+      PROBE_TIMEOUT: 3s
+    expose:
+      - "9100"
+      - "9101"
+    restart: unless-stopped
+    networks:
+      - services-net
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
   devis-processor-service:
     build:
@@ -1304,6 +1347,10 @@ services:
       - ./apps-microservices/crawler-service/crawler_archives:/app/archives
       - ./apps-microservices/crawler-service/crawler_download_requests:/app/download_requests
       - ./apps-microservices/crawler-service/crawler_download_results:/app/download_results
+      # Stash flow shared dirs (mirror archive-flow mounts)
+      - ./apps-microservices/crawler-service/crawler_stash:/app/stash
+      - ./apps-microservices/crawler-service/crawler_stash_download_requests:/app/gcs-stash-requests
+      - ./apps-microservices/crawler-service/crawler_stash_download_results:/app/gcs-stash-downloads
     env_file:
       - .env
     environment:
@@ -1312,6 +1359,13 @@ services:
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - DETECTION_LANGUE_API_URL=http://api-detection-langue-fr-service:8999
+      - REDIS_LOSS_THRESHOLD_MS=${REDIS_LOSS_THRESHOLD_MS:-60000}
+      - PROGRESS_STALL_THRESHOLD_MS=${PROGRESS_STALL_THRESHOLD_MS:-600000}
+      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-20}
+      - REDIS_SOCKET_TIMEOUT_S=${REDIS_SOCKET_TIMEOUT_S:-10}
+      - REDIS_SOCKET_CONNECT_TIMEOUT_S=${REDIS_SOCKET_CONNECT_TIMEOUT_S:-5}
+      - REDIS_HEALTH_CHECK_INTERVAL_S=${REDIS_HEALTH_CHECK_INTERVAL_S:-30}
+      - SERVICE_NAME=crawler-service
     deploy:
       replicas: 1
       resources:
@@ -1351,8 +1405,11 @@ services:
     profiles: ["crawling", "comparison"]
     ports:
       - "8050:8050"
+    # CUTOVER 2026-05-07: mount the api-gateway-go config (Go is the active
+    # gateway since the Python api-gateway cutover). The api-gateway/nginx.conf
+    # is kept in byte-parity for rollback only — see comment at api-gateway-service.
     volumes:
-      - ./apps-microservices/api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./apps-microservices/api-gateway-go/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
       - services-net
     logging: *logging_defaults
@@ -1817,8 +1874,8 @@ services:
       RUST_LOG: graph_rag_api_recherche_rust_service=debug
     networks:
       - services-net
-      - services-ext-net
-      - services-global-net
+      # - services-ext-net
+      # - services-global-net
 
   phpmyadmin:
     image: phpmyadmin:latest
@@ -2371,6 +2428,9 @@ services:
       # Google Templates runner sidecar (dynamic SA-JSON-backed MCP instances)
       - GOOGLE_TEMPLATES_RUNNER_URL=http://mcp-google-templates-runner:8595
       - GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      # Zoho MCP sidecar (per-user credential routing)
+      - ZOHO_INTERNAL_URL=http://mcp-zoho-service:8596
+      - ZOHO_ADMIN_TOKEN=${ZOHO_GATEWAY_TOKEN}
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SLACK_ENV_LABEL=${SLACK_ENV_LABEL:-dev}
       # SSO client (account-service) — when SSO_ENABLED=true the admin UI
@@ -2427,6 +2487,37 @@ services:
       - services-net
     logging: *logging_defaults
 
+  mcp-zoho-service:
+    build:
+      context: ./apps-microservices/mcp-zoho-service
+      dockerfile: Dockerfile
+    container_name: mcp-zoho-service
+    profiles: ["mcp"]
+    restart: unless-stopped
+    ports:
+      - "8596:8596"
+    environment:
+      - ZOHO_ROUTER_PORT=8596
+      - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/${GATEWAY_MYSQL_DB:-gateway_db}?parseTime=true
+      - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
+      - ZOHO_GATEWAY_TOKEN=${ZOHO_GATEWAY_TOKEN}
+      - ZOHO_SELF_URL=${ZOHO_SELF_URL:-http://mcp-zoho-service:8596/mcp}
+      - ZOHO_STUB_SERVER_ID=${ZOHO_STUB_SERVER_ID}
+      - ZOHO_ROUTING_CACHE_TTL=60
+      - ZOHO_UPSTREAM_TIMEOUT=30
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8596/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Gateway Frontend ────────────────────────────────────────────
   mcp-gateway-frontend:
     build:
@@ -2478,6 +2569,9 @@ services:
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       SLACK_ENV_LABEL: ${SLACK_ENV_LABEL}
       INTERNAL_ADMIN_TOKEN: ${ACCOUNT_INTERNAL_TOKEN}
+      # API Catalog (broker)
+      API_CATALOG_GRPC: ${API_CATALOG_GRPC:-api-catalog-service:9100}
+      CATALOG_ADMIN_KEY: ${CATALOG_ADMIN_KEY:-dev-catalog-key}
     restart: unless-stopped
     networks:
       - services-net

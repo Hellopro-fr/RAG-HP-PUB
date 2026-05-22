@@ -16,7 +16,7 @@ export { default as ModifyCriteriaForm } from './ModifyCriteriaForm';
 export { default as CustomNeedForm } from './CustomNeedForm';
 export { default as ProductComparisonModal } from './ProductComparisonModal';
 export { default as ProductDetailModal } from './ProductDetailModal';
-export { default as MatchingLoader } from './MatchingLoader';
+export { default as MatchingLoaderV2 } from './MatchingLoaderV2';
 export { default as CountryCodeSelect } from './CountryCodeSelect';
 export { default as ContactFormSimple } from './ContactFormSimple';
 export { default as SearchResultChoice } from './SearchResultChoice';

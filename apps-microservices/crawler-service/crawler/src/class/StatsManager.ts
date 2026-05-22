@@ -38,9 +38,10 @@ export class StatsManager {
         }
     }
 
-    async increment(metric: string): Promise<number> {
+    async increment(metric: string, by: number = 1): Promise<number> {
+        if (by === 0) return await this.getValue(metric);
         try {
-            const val = await this.redis.hIncrBy(this.key, metric, 1);
+            const val = await this.redis.hIncrBy(this.key, metric, by);
             await this.ensureTtl();
             return val;
         } catch (e) {
