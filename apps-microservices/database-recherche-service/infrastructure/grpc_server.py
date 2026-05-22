@@ -9,13 +9,13 @@ from google.protobuf import struct_pb2
 from google.protobuf.json_format import MessageToDict
 import json
 
-import redis.asyncio as aioredis
-
 from grpc_stubs import database_pb2
 from grpc_stubs import database_pb2_grpc
 
 from common_utils.concurrency.config import GuardConfig
 from common_utils.concurrency.milvus_concurrency_guard import MilvusConcurrencyGuard
+from common_utils.redis import cache_service
+from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
 
 from application.search_use_case import SearchUseCase
 
@@ -42,7 +42,17 @@ MEDIUM_PRIORITY_SERVICES = {
 
 
 class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer):
-    def __init__(self, use_case: SearchUseCase):
+    def __init__(self, use_case: SearchUseCase, redis_client=None):
+        """Build the servicer.
+
+        ``redis_client`` is the shared async Redis client obtained from
+        ``common_utils.cache_service.redis_client`` after
+        ``init_redis_pool()`` has run. The caller (``serve()``) initializes
+        the pool and passes the client in. ``None`` is acceptable — the
+        concurrency guard then falls back to local-only mode.
+
+        See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
+        """
         self.use_case = use_case
 
         self.max_concurrent_requests = TOTAL_MAX_CONCURRENT_REQUESTS
@@ -63,29 +73,23 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         self._high_executor = None
         self._default_executor = None
 
-        # Global concurrency guard replaces local Zilliz semaphore
-        redis_url = os.environ.get("REDIS_URL")
-        _redis_client = None
-        if redis_url:
-            try:
-                _redis_client = aioredis.from_url(
-                    redis_url, encoding="utf-8", decode_responses=True
-                )
-                logging.info(
-                    "database-recherche-service: Connected to Redis for concurrency guard."
-                )
-            except Exception as e:
-                logging.warning(
-                    "database-recherche-service: Redis unavailable: %s — using fallback",
-                    e,
-                )
+        # Global concurrency guard — uses the shared bounded Redis pool from
+        # common_utils. Pool cap, CLIENT SETNAME, keepalive owned by the lib.
+        if redis_client is not None:
+            logging.info(
+                "database-recherche-service: Using shared async Redis pool for concurrency guard."
+            )
+        else:
+            logging.warning(
+                "database-recherche-service: Redis client unavailable — guard falls back to local mode."
+            )
 
         _guard_config = GuardConfig(
             tier=1,
             service_name="database-recherche-service",
         )
         self._concurrency_guard = MilvusConcurrencyGuard(
-            _redis_client, _guard_config
+            redis_client, _guard_config
         )
 
         # Event pour bloquer strictement les priorités inférieures quand HAUTE est actif
@@ -724,13 +728,21 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
 
 
 async def serve(use_case: SearchUseCase):
+    # Initialize the shared async Redis pool BEFORE building the servicer.
+    # The servicer's MilvusConcurrencyGuard needs a ready client.
+    await init_redis_pool()
+    redis_client = cache_service.redis_client
+
     # Nous augmentons le thread pool gRPC pour accepter plus de requêtes, le bottleneck réel est géré par nos workers
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=200))
-    servicer = DatabaseSearchServiceImpl(use_case)
+    servicer = DatabaseSearchServiceImpl(use_case, redis_client=redis_client)
     await servicer.start_workers()
 
     database_pb2_grpc.add_DatabaseSearchServiceServicer_to_server(servicer, server)
     server.add_insecure_port("[::]:50054")
     logging.info("Serveur gRPC Database Search démarré sur le port 50054...")
-    await server.start()
-    await server.wait_for_termination()
+    try:
+        await server.start()
+        await server.wait_for_termination()
+    finally:
+        await close_redis_pool()

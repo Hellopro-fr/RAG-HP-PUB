@@ -264,6 +264,7 @@ services:
     expose:
       - "8530"
     environment:
+      - SERVICE_NAME=database-recherche-service
       - TOTAL_MAX_CONCURRENT_REQUESTS=200
       - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement,mcp-api-recherche
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
@@ -1389,6 +1390,7 @@ services:
     env_file:
       - .env
     environment:
+      - SERVICE_NAME=image-comparison-service
       - MAX_CONCURRENT_JOBS=4
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     deploy:

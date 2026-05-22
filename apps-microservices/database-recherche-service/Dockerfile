@@ -3,6 +3,9 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 
 WORKDIR /app
 ENV PYTHONPATH=/app
+# SERVICE_NAME drives the Redis CLIENT SETNAME prefix from common_utils
+# (cache_service). Overridable at runtime via docker-compose env.
+ENV SERVICE_NAME=database-recherche-service
 
 COPY apps-microservices/database-recherche-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

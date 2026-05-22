@@ -11,6 +11,9 @@ from app.core.config import settings
 from app.schemas.comparator import ComparisonResult, SimilarityPair, JobStatus, CapacityResponse
 from app.core.image_processor import ImageProcessor
 
+from common_utils.redis import cache_service
+from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
+
 logger = logging.getLogger(__name__)
 
 # Key for tracking global running jobs across all replicas
@@ -24,12 +27,23 @@ class JobManager:
         self.local_active_jobs = 0
 
     async def connect_redis(self):
-        self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        logger.info(f"Connected to Redis at {settings.REDIS_URL}")
+        """Attach to the shared async Redis pool managed by common_utils.
+
+        Pool cap (REDIS_MAX_CONNECTIONS, default 20), CLIENT SETNAME identity,
+        keepalive, and health checks are owned by the shared library.
+
+        See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
+        """
+        await init_redis_pool()
+        self.redis = cache_service.redis_client
+        if self.redis is not None:
+            logger.info("Attached to shared async Redis pool")
+        else:
+            logger.warning("Shared Redis pool unavailable; job state APIs will degrade")
 
     async def close_redis(self):
-        if self.redis:
-            await self.redis.close()
+        await close_redis_pool()
+        self.redis = None
 
     def is_local_full(self) -> bool:
         """Check if this specific instance has reached max concurrency."""

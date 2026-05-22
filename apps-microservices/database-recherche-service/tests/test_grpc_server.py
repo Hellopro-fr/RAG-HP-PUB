@@ -6,6 +6,64 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+# --- Redis pool wiring (Phase 4 Tier 4 migration) ---
+
+@pytest.mark.asyncio
+async def test_serve_initializes_shared_redis_pool():
+    """serve() must call init_redis_pool() from common_utils before
+    instantiating DatabaseSearchServiceImpl, then pass the shared client to it."""
+    mock_use_case = MagicMock()
+    mock_client = AsyncMock()
+
+    with patch("infrastructure.grpc_server.init_redis_pool", new_callable=AsyncMock) as mock_init, \
+         patch("infrastructure.grpc_server.cache_service") as mock_cs, \
+         patch("infrastructure.grpc_server.grpc") as mock_grpc:
+        mock_cs.redis_client = mock_client
+
+        # Stub gRPC server so wait_for_termination returns immediately
+        srv = MagicMock()
+        srv.start = AsyncMock()
+        srv.wait_for_termination = AsyncMock()
+        mock_grpc.aio.server.return_value = srv
+
+        from infrastructure.grpc_server import serve, DatabaseSearchServiceImpl
+
+        with patch.object(DatabaseSearchServiceImpl, "start_workers", new_callable=AsyncMock):
+            await serve(mock_use_case)
+
+        mock_init.assert_awaited_once()
+
+
+def test_servicer_accepts_injected_redis_client():
+    """DatabaseSearchServiceImpl must accept a redis_client kwarg and pass it
+    to the MilvusConcurrencyGuard instead of opening its own from_url."""
+    mock_use_case = MagicMock()
+    mock_use_case.execute_search_batch = MagicMock(return_value=[[]])
+    mock_client = MagicMock()
+
+    with patch("infrastructure.grpc_server.MilvusConcurrencyGuard") as mock_guard_cls:
+        from infrastructure.grpc_server import DatabaseSearchServiceImpl
+
+        servicer = DatabaseSearchServiceImpl(mock_use_case, redis_client=mock_client)
+        # First positional arg to MilvusConcurrencyGuard is the redis client
+        call_args = mock_guard_cls.call_args
+        assert call_args.args[0] is mock_client or call_args.kwargs.get("redis_client") is mock_client
+
+
+def test_servicer_tolerates_none_redis_client():
+    """If common_utils init failed (REDIS_URL unset), redis_client=None must
+    flow through to the guard so it can fall back."""
+    mock_use_case = MagicMock()
+    mock_use_case.execute_search_batch = MagicMock(return_value=[[]])
+
+    with patch("infrastructure.grpc_server.MilvusConcurrencyGuard") as mock_guard_cls:
+        from infrastructure.grpc_server import DatabaseSearchServiceImpl
+
+        servicer = DatabaseSearchServiceImpl(mock_use_case, redis_client=None)
+        call_args = mock_guard_cls.call_args
+        assert call_args.args[0] is None or call_args.kwargs.get("redis_client") is None
+
+
 @pytest.fixture
 def mock_use_case():
     """Create a mock SearchUseCase."""
@@ -31,18 +89,15 @@ class TestConcurrencyGuardIntegration:
 
     def test_servicer_has_concurrency_guard(self, mock_use_case):
         """Servicer must expose _concurrency_guard, not _zilliz_limiter."""
-        with patch.dict("os.environ", {"REDIS_URL": "mock-redis-for-test"}, clear=False):
-            with patch("infrastructure.grpc_server.aioredis") as mock_aioredis:
-                mock_aioredis.from_url.return_value = MagicMock()
-                from infrastructure.grpc_server import DatabaseSearchServiceImpl
+        from infrastructure.grpc_server import DatabaseSearchServiceImpl
 
-                servicer = DatabaseSearchServiceImpl(mock_use_case)
-                assert hasattr(servicer, "_concurrency_guard"), (
-                    "_concurrency_guard attribute must exist"
-                )
-                assert not hasattr(servicer, "_zilliz_limiter") or servicer._zilliz_limiter is None, (
-                    "_zilliz_limiter must no longer be used"
-                )
+        servicer = DatabaseSearchServiceImpl(mock_use_case, redis_client=MagicMock())
+        assert hasattr(servicer, "_concurrency_guard"), (
+            "_concurrency_guard attribute must exist"
+        )
+        assert not hasattr(servicer, "_zilliz_limiter") or servicer._zilliz_limiter is None, (
+            "_zilliz_limiter must no longer be used"
+        )
 
     def test_process_queue_batch_signature_no_limiter(self):
         """_process_queue_batch must not accept a 'limiter' parameter."""
