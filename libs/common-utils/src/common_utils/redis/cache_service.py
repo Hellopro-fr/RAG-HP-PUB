@@ -18,31 +18,55 @@ R = TypeVar("R")
 # Global Redis client instance
 redis_client: redis.Redis | None = None
 
+# Guards init_redis_pool() against concurrent startup coroutines racing past the
+# already-initialized check before redis_client is assigned. Lazy-init in
+# Python 3.10+ binds to the running event loop on first acquire, so module-level
+# construction is safe.
+_init_lock: asyncio.Lock = asyncio.Lock()
+
 DEFAULT_MAX_CONNECTIONS = 20
 DEFAULT_SOCKET_TIMEOUT_S = 10
 DEFAULT_SOCKET_CONNECT_TIMEOUT_S = 5
 DEFAULT_HEALTH_CHECK_INTERVAL_S = 30
 
+DEFAULT_RETRY_ATTEMPTS = 2
+DEFAULT_RETRY_BACKOFF_BASE_S = 0.5
+
 
 def _replica_name() -> str:
-    # Container hostname is per-replica (docker compose --scale gives unique names).
-    return os.getenv("HOSTNAME") or f"pid-{os.getpid()}"
+    """Pod identity. HOSTNAME is set by k8s/docker; falls back to the literal
+    'no-hostname' so the appended PID always disambiguates replicas
+    (multi-worker uvicorn/gunicorn, container restarts, ad-hoc shells).
+
+    See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
+    """
+    return os.getenv("HOSTNAME") or "no-hostname"
 
 
 def _client_name() -> str:
-    """
-    Build the Redis CLIENT SETNAME value used by init_redis_pool.
+    """Build the Redis CLIENT SETNAME value used by init_redis_pool.
 
-    Reads SERVICE_NAME env var (the same convention used by
-    common_utils.sso.credentials for OAuth2 client identity) and prefixes
-    the per-replica hostname. Falls back to the literal 'crawler-py' when
-    SERVICE_NAME is unset, empty, or whitespace — preserves the pre-fix
-    naming so deploys that don't set the env var don't change behavior.
+    Format: ``{service}-{pod}-pid{N}``
+    Example: ``api-rest-milvus-api-rest-milvus-7d4b9-pid12345``
 
-    See docs/superpowers/specs/2026-05-21-cache-service-client-name-fix-design.md
+    ``service`` is read from the SERVICE_NAME env var. If unset, empty, or
+    whitespace, a WARNING is logged and the literal ``unset-service`` is used —
+    the connection is still attributable in ``CLIENT LIST`` and the warning
+    surfaces misconfiguration in logs without breaking startup.
+
+    ``pod`` is the HOSTNAME env var, or ``no-hostname`` fallback.
+    ``pid`` is always appended (multi-worker servers are otherwise indistinguishable).
+
+    See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
     """
-    service = (os.getenv("SERVICE_NAME") or "").strip() or "crawler-py"
-    return f"{service}-{_replica_name()}"
+    service = (os.getenv("SERVICE_NAME") or "").strip()
+    if not service:
+        logger.warning(
+            "SERVICE_NAME env var unset; Redis CLIENT SETNAME will use 'unset-service'. "
+            "Set SERVICE_NAME in your deployment to make CLIENT LIST greppable per service."
+        )
+        service = "unset-service"
+    return f"{service}-{_replica_name()}-pid{os.getpid()}"
 
 
 async def _ping_safe(client: "redis.Redis") -> bool:
@@ -77,56 +101,62 @@ def _read_positive_float_env(name: str, default: float) -> float:
 async def init_redis_pool():
     """
     Initializes the Redis connection pool with a bounded client + proactive
-    health check. See spec docs/superpowers/specs/2026-05-21-redis-connection-leak-fix-design.md.
+    health check. Idempotent — concurrent callers are serialized by an asyncio
+    lock so the first one wins and subsequent calls reuse the existing client.
+
+    Specs:
+      - docs/superpowers/specs/2026-05-21-redis-connection-leak-fix-design.md
+      - docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
     """
     global redis_client
-    if redis_client and await _ping_safe(redis_client):
-        logger.info("Redis pool already initialized and connected.")
-        return
+    async with _init_lock:
+        if redis_client and await _ping_safe(redis_client):
+            logger.info("Redis pool already initialized and connected.")
+            return
 
-    redis_url = os.getenv("REDIS_URL")
-    if not redis_url:
-        logger.critical("REDIS_URL environment variable not set. Caching and state management will be unavailable.")
-        redis_client = None
-        return
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            logger.critical("REDIS_URL environment variable not set. Caching and state management will be unavailable.")
+            redis_client = None
+            return
 
-    max_conn = _read_positive_int_env("REDIS_MAX_CONNECTIONS", DEFAULT_MAX_CONNECTIONS)
-    sock_to = _read_positive_float_env("REDIS_SOCKET_TIMEOUT_S", DEFAULT_SOCKET_TIMEOUT_S)
-    sock_conn_to = _read_positive_float_env("REDIS_SOCKET_CONNECT_TIMEOUT_S", DEFAULT_SOCKET_CONNECT_TIMEOUT_S)
-    health_iv = _read_positive_int_env("REDIS_HEALTH_CHECK_INTERVAL_S", DEFAULT_HEALTH_CHECK_INTERVAL_S)
-    client_name = _client_name()
+        max_conn = _read_positive_int_env("REDIS_MAX_CONNECTIONS", DEFAULT_MAX_CONNECTIONS)
+        sock_to = _read_positive_float_env("REDIS_SOCKET_TIMEOUT_S", DEFAULT_SOCKET_TIMEOUT_S)
+        sock_conn_to = _read_positive_float_env("REDIS_SOCKET_CONNECT_TIMEOUT_S", DEFAULT_SOCKET_CONNECT_TIMEOUT_S)
+        health_iv = _read_positive_int_env("REDIS_HEALTH_CHECK_INTERVAL_S", DEFAULT_HEALTH_CHECK_INTERVAL_S)
+        client_name = _client_name()
 
-    try:
-        logger.info(
-            f"Connecting to Redis at {redis_url.split('@')[-1]} "
-            f"(max_conn={max_conn}, name={client_name})"
-        )
-        redis_client = redis.from_url(
-            redis_url,
-            encoding="utf-8",
-            decode_responses=True,
-            max_connections=max_conn,
-            socket_keepalive=True,
-            socket_connect_timeout=sock_conn_to,
-            socket_timeout=sock_to,
-            health_check_interval=health_iv,
-            client_name=client_name,
-        )
-        await redis_client.ping()
-        # Register Lua scripts for EVALSHA-based execution (avoids sending raw Lua on every call)
-        global _safe_decr_script, _delete_if_terminal_script
-        _safe_decr_script = redis_client.register_script(_SAFE_DECR_LUA)
-        _delete_if_terminal_script = redis_client.register_script(_DELETE_IF_TERMINAL_LUA)
-        logger.info("Successfully connected to Redis.")
-    except (redis.RedisError, OSError, asyncio.TimeoutError) as e:
-        logger.warning(f"Could not connect to Redis: {e}. Caching will be unavailable.")
-        # Best-effort close on half-built client; ignore secondary failures.
-        if redis_client is not None:
-            try:
-                await redis_client.close()
-            except Exception:
-                pass
-        redis_client = None
+        try:
+            logger.info(
+                f"Connecting to Redis at {redis_url.split('@')[-1]} "
+                f"(max_conn={max_conn}, name={client_name})"
+            )
+            redis_client = redis.from_url(
+                redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+                max_connections=max_conn,
+                socket_keepalive=True,
+                socket_connect_timeout=sock_conn_to,
+                socket_timeout=sock_to,
+                health_check_interval=health_iv,
+                client_name=client_name,
+            )
+            await redis_client.ping()
+            # Register Lua scripts for EVALSHA-based execution (avoids sending raw Lua on every call)
+            global _safe_decr_script, _delete_if_terminal_script
+            _safe_decr_script = redis_client.register_script(_SAFE_DECR_LUA)
+            _delete_if_terminal_script = redis_client.register_script(_DELETE_IF_TERMINAL_LUA)
+            logger.info("Successfully connected to Redis.")
+        except (redis.RedisError, OSError, asyncio.TimeoutError) as e:
+            logger.warning(f"Could not connect to Redis: {e}. Caching will be unavailable.")
+            # Best-effort close on half-built client; ignore secondary failures.
+            if redis_client is not None:
+                try:
+                    await redis_client.close()
+                except Exception:
+                    pass
+            redis_client = None
 
 async def close_redis_pool():
     """
@@ -313,6 +343,54 @@ async def publish(channel: str, message: str):
         await redis_client.publish(channel, message)
     except Exception as e:
         logger.error(f"Failed to publish message to channel '{channel}': {e}", exc_info=True)
+
+# --- Retry Helper ---
+
+async def call_with_retry(
+    fn: Callable[..., Any],
+    *args: Any,
+    attempts: int = DEFAULT_RETRY_ATTEMPTS,
+    backoff_base_s: float = DEFAULT_RETRY_BACKOFF_BASE_S,
+    **kwargs: Any,
+) -> Any:
+    """Run a redis-py async call with bounded retry on transient connection errors.
+
+    Retries on ``redis.ConnectionError``, ``redis.TimeoutError``, ``OSError``,
+    and ``asyncio.TimeoutError``. Other exceptions (RedisError data errors,
+    Lua failures, etc.) propagate immediately.
+
+    Backoff between attempts: ``backoff_base_s * 2 ** attempt``.
+    The final attempt's exception is re-raised — callers see the real error,
+    not a silent None.
+
+    Usage:
+        result = await call_with_retry(redis_client.get, "mykey")
+        await call_with_retry(redis_client.set, "k", "v", attempts=3)
+
+    This wrapper is opt-in. Existing helpers (set_json, get_json, ...) keep
+    their swallow-on-error semantics for backwards compat. Use this when the
+    caller needs the failure surfaced.
+
+    See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
+    """
+    last_exc: Exception | None = None
+    for attempt in range(attempts + 1):
+        try:
+            return await fn(*args, **kwargs)
+        except (redis.ConnectionError, redis.TimeoutError, OSError, asyncio.TimeoutError) as e:
+            last_exc = e
+            if attempt < attempts:
+                wait_s = backoff_base_s * (2 ** attempt)
+                logger.warning(
+                    f"Redis transient error on attempt {attempt + 1}/{attempts + 1}: {e}. "
+                    f"Retrying in {wait_s:.2f}s."
+                )
+                await asyncio.sleep(wait_s)
+                continue
+            raise
+    assert last_exc is not None  # unreachable; loop either returns or raises
+    raise last_exc
+
 
 # --- Caching Decorator (Existing Functionality) ---
 
