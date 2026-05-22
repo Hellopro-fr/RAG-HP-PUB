@@ -20,7 +20,10 @@ export type ConseilBlockType =
   | 'produits'
   | 'tableau-html'
   | 'tableau-prix'
-  | 'faq';
+  | 'faq'
+  | 'type-section'  // Section par type (animal, produit…) avec image, estimation, bullets
+  | 'brochure'      // Bloc guide/brochure téléchargeable avec form email
+  | 'quote-form';   // Formulaire devis inline mid-article
 
 export interface ConseilBlock<T = Record<string, unknown>> {
   id: string;

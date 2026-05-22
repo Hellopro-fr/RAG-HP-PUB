@@ -1,8 +1,11 @@
 import { SiteHeader } from './SiteHeader';
 import { SiteFooter } from './SiteFooter';
 import { Hero } from './Hero';
+import { HeroQuoteForm } from './HeroQuoteForm';
 import { Sidebar } from './Sidebar';
 import { AuthorBlock } from './AuthorBlock';
+import { Crossell } from './Crossell';
+import { Suppliers } from './Suppliers';
 import { BlockRenderer } from './BlockRenderer';
 import { extractTOC } from '@/lib/blocks/extractTOC';
 import type { ConseilPage } from '@/types/conseils';
@@ -46,6 +49,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           { label: 'Conseils', href: '/' },
           { label: page.hero.title },
         ]}
+        slot={page.pageType !== 'top' ? <HeroQuoteForm /> : undefined}
       />
 
       <main className="mx-auto max-w-[1400px] grid lg:grid-cols-[280px_1fr] gap-10 px-4 py-10 lg:px-6">
@@ -70,6 +74,8 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           ))}
 
           {/* Blocs de pied communs aux 3 types */}
+          <Suppliers />
+          <Crossell />
           {page.author && <AuthorBlock author={page.author} />}
         </article>
       </main>

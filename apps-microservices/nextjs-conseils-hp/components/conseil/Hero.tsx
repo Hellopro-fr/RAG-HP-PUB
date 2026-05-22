@@ -180,6 +180,33 @@ function PriceRangeVisual({
 
   return (
     <div className="relative mt-3 max-w-xl overflow-hidden rounded-xl bg-primary-foreground/[0.06] px-4 pb-3 pt-3 ring-1 ring-primary-foreground/10 backdrop-blur-sm">
+      {/* Courbe décorative en fond */}
+      <svg
+        viewBox="0 0 400 100"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-full w-full"
+      >
+        <defs>
+          <linearGradient id="priceCurveStroke" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="white" stopOpacity="0" />
+            <stop offset="50%" stopColor="hsl(27 90% 60%)" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="white" stopOpacity="0" />
+          </linearGradient>
+          <radialGradient id="priceCurveGlow" cx="0.5" cy="1" r="0.6">
+            <stop offset="0%" stopColor="hsl(27 90% 60%)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="hsl(27 90% 60%)" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="200" cy="100" rx="140" ry="70" fill="url(#priceCurveGlow)" />
+        <path
+          d="M 0 95 C 90 95, 140 30, 200 30 C 260 30, 310 95, 400 95"
+          fill="none"
+          stroke="url(#priceCurveStroke)"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+        />
+      </svg>
       <div className="relative mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-primary-foreground">
         Estimation de prix
       </div>
@@ -191,6 +218,7 @@ function PriceRangeVisual({
           <div className="mt-1 text-xl font-extrabold text-primary-foreground">
             {min} {estimation.unit}
           </div>
+          <div className="mt-2 h-[3px] w-8 rounded-full bg-primary-foreground/30" />
         </div>
         <div className="rounded-lg bg-primary-foreground/[0.09] px-3 py-2 text-left ring-1 ring-primary-foreground/10">
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cta">
@@ -208,6 +236,7 @@ function PriceRangeVisual({
           <div className="mt-1 text-xl font-extrabold text-primary-foreground">
             {max} {estimation.unit}
           </div>
+          <div className="mt-2 h-[3px] w-8 rounded-full bg-primary-foreground/30" />
         </div>
       </div>
     </div>

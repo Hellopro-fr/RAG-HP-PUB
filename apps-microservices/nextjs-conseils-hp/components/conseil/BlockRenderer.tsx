@@ -6,8 +6,10 @@ import { ProsConsBlock } from './blocks/ProsConsBlock';
 import { CTABlock } from './blocks/CTABlock';
 import { FaqBlock } from './blocks/FaqBlock';
 import { TableauPrixBlock } from './blocks/TableauPrixBlock';
+import { TypeSectionBlock } from './blocks/TypeSectionBlock';
+import { BrochureBlock } from './blocks/BrochureBlock';
+import { QuoteFormBlock } from './blocks/QuoteFormBlock';
 
-// Blocs Lot A à implémenter
 import type { H2BlockData } from '@/types/blocks/h2';
 import type { H3BlockData } from '@/types/blocks/h3';
 import type { TextBlockData } from '@/types/blocks/text';
@@ -15,6 +17,9 @@ import type { ProsConsBlockData } from '@/types/blocks/pros-cons';
 import type { CTABlockData } from '@/types/blocks/cta';
 import type { FaqBlockData } from '@/types/blocks/faq';
 import type { TableauPrixBlockData } from '@/types/blocks/tableau-prix';
+import type { TypeSectionBlockData } from '@/types/blocks/type-section';
+import type { BrochureBlockData } from '@/types/blocks/brochure';
+import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
 
 /**
  * BlockRenderer — switch central qui mappe un bloc BO vers son composant.
@@ -48,6 +53,13 @@ export function BlockRenderer({ block }: { block: ConseilBlock }) {
           [BlockRenderer] Type <code>resume</code> — à implémenter (Lot A)
         </div>
       );
+
+    case 'type-section':
+      return <TypeSectionBlock data={block.data as unknown as TypeSectionBlockData} />;
+    case 'brochure':
+      return <BrochureBlock data={block.data as unknown as BrochureBlockData} />;
+    case 'quote-form':
+      return <QuoteFormBlock data={block.data as unknown as QuoteFormBlockData} />;
 
     // ── Lot B — Partenaire (placeholders) ──────────────────────────────────
     case 'image':

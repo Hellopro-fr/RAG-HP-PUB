@@ -17,8 +17,8 @@
   --color-popover: hsl(0 0% 100%);
   --color-popover-foreground: hsl(220 13% 13%);
 
-  --color-primary: hsl(231 100% 60%);
-  --color-primary-foreground: hsl(0 0% 100%);
+  --color-primary: oklch(0.523 0.245 268);
+  --color-primary-foreground: oklch(0.99 0 0);
 
   --color-secondary: hsl(220 14% 96%);
   --color-secondary-foreground: hsl(220 13% 13%);
@@ -37,23 +37,23 @@
   --color-ring: hsl(231 100% 60%);
 
   /* === Couleurs sémantiques === */
-  --color-success: hsl(142 71% 45%);
-  --color-success-foreground: hsl(0 0% 100%);
+  --color-success: oklch(0.62 0.16 150);
+  --color-success-foreground: oklch(1 0 0);
   --color-warning: hsl(38 92% 50%);
   --color-warning-foreground: hsl(0 0% 100%);
   --color-info: hsl(199 89% 48%);
   --color-info-foreground: hsl(0 0% 100%);
 
-  /* === Aliases CTA (= accent, pour compatibilité templates Lovable) === */
-  --color-cta: hsl(21 80% 55%);
-  --color-cta-hover: hsl(21 80% 46%);
-  --color-cta-foreground: hsl(0 0% 100%);
+  /* === Aliases CTA — valeurs oklch alignées avec templates Lovable === */
+  --color-cta: oklch(0.66 0.19 45);
+  --color-cta-hover: oklch(0.6 0.2 42);
+  --color-cta-foreground: oklch(1 0 0);
 
   /* === Soft primary (fond léger bleu) === */
-  --color-primary-soft: hsl(231 100% 97%);
+  --color-primary-soft: oklch(0.96 0.03 268);
 
   /* === Rating (étoiles) === */
-  --color-rating: hsl(38 92% 50%);
+  --color-rating: oklch(0.78 0.16 80);
 
   /* === Spécifique cartes fournisseurs (réutilisable conseils) === */
   --color-recommended: hsl(231 100% 97%);
