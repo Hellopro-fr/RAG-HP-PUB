@@ -20,7 +20,10 @@ export type ConseilBlockType =
   | 'produits'
   | 'tableau-html'
   | 'tableau-prix'
-  | 'faq';
+  | 'faq'
+  | 'type-section'  // Section par type (animal, produit…) avec image, estimation, bullets
+  | 'brochure'      // Bloc guide/brochure téléchargeable avec form email
+  | 'quote-form';   // Formulaire devis inline mid-article
 
 export interface ConseilBlock<T = Record<string, unknown>> {
   id: string;
@@ -42,14 +45,24 @@ export interface HeroData {
   estimation?: { min: number; max: number; unit: string };
 }
 
+export interface AuthorInfo {
+  name: string;
+  role: string;
+  bio: string;
+  photo?: string;
+  linkedinUrl?: string;
+  contactEmail?: string;
+}
+
 export interface ConseilPage {
   slug: string;
   pageType: ConseilPageType;
   meta: ConseilPageMeta;
   hero: HeroData;
   blocks: ConseilBlock[];
+  author?: AuthorInfo;
   // Spécifiques au pageType (gérés HORS BlockRenderer)
-  priceData?: unknown;        // À typer en Phase 7
-  topFabricants?: unknown;    // À typer en Phase 7
-  rulesTable?: unknown;       // À typer en Phase 7
+  priceData?: unknown;        // À typer en Phase 8
+  topFabricants?: unknown;    // À typer en Phase 8
+  rulesTable?: unknown;       // À typer en Phase 8
 }

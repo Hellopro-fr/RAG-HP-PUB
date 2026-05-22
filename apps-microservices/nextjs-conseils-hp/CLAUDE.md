@@ -1,7 +1,7 @@
 # nextjs-conseils-hp — Pages conseils HelloPro
 
 > **Service Next.js 15 du monorepo RAG-HP-PUB** (conteneur Docker isolé)
-> Remplacement progressif des pages conseils PHP actuelles (`conseils.hellopro.fr`) par un nouveau template moderne, hébergé sur GCP, monté en reverse proxy sur `www.hellopro.fr/conseils/{slug}`.
+> Remplacement progressif des pages conseils PHP actuelles (`conseils.hellopro.fr`) par un nouveau template moderne, hébergé sur GCP, monté en reverse proxy sur le **sous-domaine** `conseils.hellopro.fr/<slug>-<id>.html`. Les URLs existantes restent strictement identiques (préservation totale du SEO).
 >
 > ⚠️ **Lire intégralement ce fichier au début de CHAQUE session Claude Code** avant d'écrire du code (rule `.claude/rules/config-freshness.md`).
 
@@ -13,11 +13,12 @@
 |---|---|
 | Service | `nextjs-conseils-hp` |
 | Localisation | `apps-microservices/nextjs-conseils-hp/` (monorepo RAG-HP-PUB) |
-| URL publique | `https://www.hellopro.fr/conseils/{slug}` (via reverse proxy nginx) |
-| basePath Next.js | `/conseils` |
-| Service jumeau de référence | `nextjs-formulaire-hp` (suivre ses conventions) |
+| URL publique | `https://conseils.hellopro.fr/<slug>-<id>.html` (sous-domaine via reverse proxy nginx) |
+| Pattern URL | `<slug>-<id>.html` — l'ID numérique est extrait du suffixe `-<digits>` du slug |
+| basePath Next.js | **Aucun** — app montée à la racine du sous-domaine |
+| Service jumeau de référence | `nextjs-formulaire-hp` (suivre ses conventions, sauf basePath qui diffère) |
 | Skill associée | `hellopro-nextjs` (à consulter pour les patterns standards) |
-| Backend données | API HelloPro (proxy via routes API Next.js) |
+| Backend données | API HelloPro (proxy via routes API Next.js, **pas de connexion DB directe**) |
 | Source de vérité du contenu | BO HelloPro (table de blocs ordonnés) |
 | Devs | Erick + partenaire (collaboration parallèle, voir §16) |
 
@@ -185,13 +186,11 @@ export function BlockRenderer({ block }: { block: ConseilBlock }) {
 ```
 app/
   layout.tsx                       # Root layout (providers, fonts, analytics)
-  page.tsx                         # / → redirige vers /conseils
+  page.tsx                         # / → page d'accueil conseils (liste / redirection)
   not-found.tsx
-  (conseils)/                      # Route group
-    layout.tsx                     # Layout conseils (si breadcrumb, navigation commune)
-    [slug]/
-      page.tsx                     # Server Component (fetch données)
-      not-found.tsx
+  [slugWithId]/                    # Dynamic catch-all : <slug>-<id>.html
+    page.tsx                       # Server Component (extrait ID, fetch données)
+    not-found.tsx
   api/                             # Routes API Next.js (proxy backend)
     conseils/
       [slug]/route.ts              # GET page complète par slug
@@ -304,7 +303,7 @@ Quand on ajoute un nouveau type de bloc à supporter, **suivre ces étapes dans 
 ⚠️ **Next.js 15** : `params` et `searchParams` sont des **Promises**. Toujours `await`.
 
 ```typescript
-// app/(conseils)/[slug]/page.tsx
+// app/[slugWithId]/page.tsx
 import { Metadata } from 'next';
 import { fetchConseilPage } from '@/lib/api/conseils';
 import { ConseilTemplate } from '@/components/conseil/ConseilTemplate';
@@ -313,13 +312,26 @@ import { notFound } from 'next/navigation';
 export const revalidate = 3600; // ISR 1h, ajustable par page
 
 type PageProps = {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slugWithId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+/**
+ * Pattern URL : <slug>-<id>.html
+ * Exemple : combien-coute-un-conteneur-1243.html → slug = "combien-coute-un-conteneur", id = 1243
+ */
+function parseSlugWithId(input: string): { slug: string; id: number } | null {
+  const match = input.match(/^(.+)-(\d+)\.html$/);
+  if (!match) return null;
+  return { slug: match[1], id: Number(match[2]) };
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug } = await params;
-  const page = await fetchConseilPage(slug);
+  const { slugWithId } = await params;
+  const parsed = parseSlugWithId(slugWithId);
+  if (!parsed) return {};
+  const page = await fetchConseilPage(parsed.id);
+  if (!page) return {};
   return {
     title: page.meta.title,
     description: page.meta.description,
@@ -332,8 +344,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function Page({ params }: PageProps) {
-  const { slug } = await params;
-  const page = await fetchConseilPage(slug);
+  const { slugWithId } = await params;
+  const parsed = parseSlugWithId(slugWithId);
+  if (!parsed) notFound();
+  const page = await fetchConseilPage(parsed.id);
   if (!page) notFound();
   return <ConseilTemplate page={page} />;
 }
@@ -349,13 +363,14 @@ export default async function Page({ params }: PageProps) {
 
 ---
 
-## 6. Routage & basePath
+## 6. Routage — sous-domaine sans basePath
+
+⚠️ **Différence majeure avec `nextjs-formulaire-hp`** : ce service est monté sur un **sous-domaine** (`conseils.hellopro.fr`), pas sur un sous-chemin (`/conseils`). **Pas de `basePath` à configurer.**
 
 ```javascript
 // next.config.js
 const nextConfig = {
-  basePath: '/conseils',
-  assetPrefix: '/conseils',
+  // PAS de basePath ni assetPrefix — l'app vit à la racine du sous-domaine
   output: 'standalone',
   images: {
     remotePatterns: [
@@ -368,9 +383,40 @@ const nextConfig = {
 module.exports = nextConfig;
 ```
 
-**URLs internes** : toujours utiliser `<Link>` de Next.js ou `router.push()`. `basePath` est appliqué automatiquement.
+### 6.1 Pattern URL
 
-**Assets** : utiliser le helper `getAssetPath()` (à porter depuis `nextjs-formulaire-hp`).
+Toutes les pages conseils suivent le format hérité de l'ancien site PHP :
+
+```
+https://conseils.hellopro.fr/<slug>-<id>.html
+```
+
+Exemples :
+- `combien-coute-un-conteneur-1243.html` → slug=`combien-coute-un-conteneur`, id=`1243`
+- `top-10-fabricants-portes-industrielles-892.html` → slug=`top-10-fabricants-portes-industrielles`, id=`892`
+
+**L'ID numérique est la clé de fetch côté API.** Le slug est cosmétique (SEO) mais doit toujours être présent dans l'URL pour préserver le référencement existant.
+
+Si quelqu'un arrive sur `<slug-modifié>-<id>.html` (slug ne correspondant pas au slug canonique de l'ID), on **renvoie un 301** vers le slug canonique (à implémenter en Phase 8).
+
+### 6.2 Reverse proxy nginx
+
+```nginx
+# conseils.hellopro.fr → conteneur Next.js
+server {
+  server_name conseils.hellopro.fr;
+  location / {
+    proxy_pass http://nextjs-conseils-hp:3000;
+    # pas de rewrite ni de prefix — passthrough direct
+  }
+}
+```
+
+### 6.3 Navigation interne
+
+**URLs internes** : toujours utiliser `<Link>` de Next.js. Aucun préfixe à gérer (pas de basePath).
+
+**Assets** : `<Image>` de Next.js fonctionne nativement (pas besoin de `getAssetPath()` à la différence du formulaire).
 
 ---
 
@@ -572,9 +618,9 @@ Events spécifiques conseils à prévoir :
 
 | Environnement | Branche | URL |
 |---|---|---|
-| Dev | `features/conseils-*` | `localhost:3000/conseils` |
-| Staging | `develop` | `https://staging.hellopro.fr/conseils` |
-| Production | `main` | `https://www.hellopro.fr/conseils` |
+| Dev | `features/conseils-*` | `localhost:3000` (root) |
+| Staging | `develop` | `https://staging-conseils.hellopro.fr` |
+| Production | `main` | `https://conseils.hellopro.fr` |
 
 Pipeline CI/CD : aligné avec `nextjs-formulaire-hp` (voir `.github/workflows/`).
 
@@ -596,25 +642,62 @@ Dockerfile : multi-stage Alpine, output standalone (cf. §6).
 ### 16.2 Workflow git
 
 ```
-main         ← prod
-develop      ← intégration continue (PRs mergent ici)
-  features/conseils-init       (Erick)
-  features/conseils-blocs-text (Erick)
-  features/conseils-blocs-media (partenaire)
-  features/conseils-pageType-prix (Erick)
-  features/conseils-pageType-top (partenaire)
+main                                ← prod
+develop                             ← intégration continue (PRs mergent ici)
+  features/template-conseils-service  ← scaffold initial (Erick, PR ouverte)
+  features/conseils-fondations        (Erick — Lot A : Header/Footer/Sidebar/RichText/H2/Hero/InlineCTA/ProsCons/FAQ/AuthorBlock/PriceTable)
+  features/conseils-riches            (Partenaire — Lot B : TypeSection/QuoteFormBlock/Brochure/Crossell/Suppliers/RulesTable/HeroSuppliersCarousel/ManufacturerCard/NextStepCTA/DownloadDossier/CitedProducts/GoFurther)
 ```
 
-### 16.3 Découpage du travail (proposition initiale)
+### 16.3 Découpage du travail (post-audit Lovable 2026-05-22)
 
-| Erick | Partenaire | Partagé (pair-coding) |
+Le découpage est figé sur la base de l'audit des 3 templates Lovable nettoyés (cf. `outputs/audit-templates-lovable.md`).
+
+#### Lot A — Erick (11 blocs)
+
+Fondations partagées + blocs simples + spécifique prix.
+
+| Bloc | Catégorie | Priorité |
 |---|---|---|
-| BlockRenderer + types | (review) | Architecture initiale |
-| H2/H3/TextBlock | ImageBlock + variantes | `types/conseils.ts` |
-| CTABlock, FaqBlock | VideoBlock, TableauHtmlBlock | Design tokens |
-| ProsConsBlock | TableauPrixBlock | API client générique |
-| ResumeBlock | ProduitsBlock | Layout (Header, Footer) |
-| Spécifique prix (Simulator, Curve) | Spécifique top + autre (TopFabricants, RulesTable) | Hero, Sidebar |
+| `SiteHeader` | Structure | 🔥 J1 |
+| `SiteFooter` | Structure | 🔥 J1 |
+| `Sidebar` (TOC auto) | Structure | 🔥 J2 |
+| `RichText` | Rédactionnel | 🔥 J2 |
+| `H2Section` | Rédactionnel | 🔥 J2 |
+| `Hero` (variantes guide/compare) | Structure | J3-4 |
+| `InlineCTA` | Assemblage | J4 |
+| `ProsCons` | Assemblage | J5 |
+| `FAQ` (avec variants) | Assemblage | J5 |
+| `AuthorBlock` (avec variants) | Assemblage | J6 |
+| `PriceTable` | Spécifique prix | J6 |
+
+#### Lot B — Partenaire (12 blocs)
+
+Blocs riches + spécifique autre + spécifique top.
+
+| Bloc | Catégorie | Priorité |
+|---|---|---|
+| `TypeSection` | Assemblage | 🔥 J1 |
+| `QuoteFormBlock` | Assemblage | J2-3 |
+| `Brochure` | Assemblage | J3 |
+| `Crossell` | Assemblage | J4 |
+| `Suppliers` (compact) | Assemblage | J4 |
+| `RulesTable` | Spécifique autre | J5 |
+| `HeroSuppliersCarousel` | Spécifique top | J5 |
+| `ManufacturerCard` (méta-bloc) | Spécifique top | 🔥 J6-7 |
+| `NextStepCTA` | Spécifique top | J7 |
+| `DownloadDossier` | Spécifique top | J8 |
+| `CitedProducts` | Spécifique top | J8 |
+| `GoFurther` | Spécifique top | J8 |
+
+#### Travaux partagés (pair-coding obligatoire)
+
+- `types/conseils.ts` — union `ConseilBlock` et schémas Zod par bloc
+- `BlockRenderer.tsx` — switch exhaustif
+- Design tokens (`app/globals.css`) — synchro Lovable
+- `ConseilTemplate.tsx` — orchestrateur principal (pageType → blocs)
+- `lib/api/conseils.ts` — fetcher API + parse URL `<slug>-<id>.html`
+- Contrat API `GET /api/conseils/:id` (consolidation `ManufacturerCard` côté backend)
 
 ### 16.4 Avant de commiter — checklist
 
@@ -629,37 +712,72 @@ Les hooks `.claude/hooks/nextjs-conseils-prepush-build.sh` (à créer sur le mod
 
 ---
 
-## 17. Catalogue des blocs (à jour à chaque ajout)
+## 17. Catalogue des blocs (issu de l'audit Lovable 2026-05-22)
 
-| Type BO | Composant | Status | Owner | Notes |
-|---|---|:---:|---|---|
-| `h2` | `H2Block` | ⏳ TODO | Erick | Avec `id` pour ancre sommaire |
-| `h3` | `H3Block` | ⏳ TODO | Erick | Avec `id` pour ancre sommaire |
-| `texte` | `TextBlock` | ⏳ TODO | Erick | Variants : avec/sans estimation, avec/sans CTA |
-| `pros-cons` | `ProsConsBlock` | ⏳ TODO | Erick | 2 colonnes : ✅ avantages, ❌ inconvénients |
-| `resume` | `ResumeBlock` | ⏳ TODO | Erick | Box "L'essentiel à retenir" + bullet points |
-| `image` | `ImageBlock` | ⏳ TODO | Partenaire | Avec légende optionnelle |
-| `texte-image` | `TexteImageBlock` | ⏳ TODO | Partenaire | Layout 50/50 responsive |
-| `image-texte` | `ImageTexteBlock` | ⏳ TODO | Partenaire | Inverse du précédent |
-| `image-image` | `ImageImageBlock` | ⏳ TODO | Partenaire | 2 images côte à côte |
-| `video` | `VideoBlock` | ⏳ TODO | Partenaire | YouTube embed lazy |
-| `cta` | `CTABlock` | ⏳ TODO | Erick | Bandeau orange "Estimez le prix de..." |
-| `produits` | `ProduitsBlock` | ⏳ TODO | Partenaire | Reçoit `productIds[]`, fetch côté serveur |
-| `tableau-html` | `TableauHtmlBlock` | ⏳ TODO | Partenaire | DOMPurify obligatoire |
-| `tableau-prix` | `TableauPrixBlock` | ⏳ TODO | Partenaire | 2 colonnes simples |
-| `faq` | `FaqBlock` | ⏳ TODO | Erick | shadcn Accordion |
-
-### Blocs spécifiques au type de page
-
-| Type page | Composant | Status | Owner |
-|---|---|:---:|---|
-| `prix` | `PriceSimulator` | ⏳ | Erick |
-| `prix` | `PriceCurve` | ⏳ | Erick |
-| `prix` | `Comparator` | ⏳ | Erick |
-| `top` | `TopFabricantsCards` | ⏳ | Partenaire |
-| `autre` | `RulesTable` | ⏳ | Partenaire |
+> 📋 Source : `outputs/audit-templates-lovable.md` — audit des 3 templates Lovable nettoyés (`Template conseil {prix,autre,top}`).
+>
+> **Stratégie de mapping BO → Next.js (à confirmer)** : certains blocs Next.js sont **1:1 avec un bloc BO** (`RichText` ↔ texte WYSIWYG), d'autres sont **consolidés par l'API** à partir de plusieurs blocs BO primitifs (`ManufacturerCard` = consolidation de blocs titre + image + texte + pros-cons). Voir §20 décision en attente.
 
 Légende : ✅ Fait | 🚧 En cours | ⏳ TODO | ❌ Bloqué
+
+### Structure (présents sur les 3 templates)
+
+| Bloc Next.js | Source données | Status | Owner | Notes |
+|---|---|:---:|---|---|
+| `SiteHeader` | Site (config global) | ⏳ TODO | Erick (Lot A) | Logo, search, nav, menu |
+| `SiteFooter` | Site (config global) | ⏳ TODO | Erick (Lot A) | Variantes default / top à factoriser |
+| `Hero` | Page (title, subtitle, image, breadcrumb, author, date, readTime) | ⏳ TODO | Erick (Lot A) | Slot droite : `QuoteForm` ou `SuppliersCarousel` selon `pageType` |
+| `Sidebar` (TOC) | Auto-généré depuis blocs `h2-section` | ⏳ TODO | Erick (Lot A) | Sticky, ancres `#id` |
+
+### Contenu rédactionnel (présents sur les 3 templates)
+
+| Bloc Next.js | Source données | Status | Owner | Notes |
+|---|---|:---:|---|---|
+| `RichText` | Bloc BO `texte` (HTML formaté) | ⏳ TODO | Erick (Lot A) | Plugin `@tailwindcss/typography` à valider |
+| `H2Section` | Bloc BO `h2` (id, title, intro) | ⏳ TODO | Erick (Lot A) | Ancre `#id` pour sommaire |
+
+### Assemblage commun (prix + autre)
+
+| Bloc Next.js | Source données | Status | Owner | Notes |
+|---|---|:---:|---|---|
+| `TypeSection` | Consolidation BO (h3 + image + texte + ul + cta) | ⏳ TODO | Partenaire (Lot B) | Déjà bien paramétrable côté Lovable |
+| `ProsCons` | Bloc BO `pros-cons` | ⏳ TODO | Erick (Lot A) | 2 colonnes ✅/❌ |
+| `FAQ` | Bloc BO `faq` | ⏳ TODO | Erick (Lot A) | Accordéon shadcn, variantes default/top |
+| `QuoteFormBlock` | Données formulaire (mêmes que `nextjs-formulaire-hp`) | ⏳ TODO | Partenaire (Lot B) | Réutiliser composants du formulaire |
+| `InlineCTA` | Bloc BO `cta` (title, subtitle, ctaLabel) | ⏳ TODO | Erick (Lot A) | Déjà paramétrable, simple à porter |
+| `Brochure` | Bloc BO `brochure` (title, description, bullets, image) | ⏳ TODO | Partenaire (Lot B) | Form email + bullets |
+| `Crossell` | Liste produits + articles connexes (API) | ⏳ TODO | Partenaire (Lot B) | 2 sous-sections : produits cités + articles |
+| `AuthorBlock` | Profil auteur (nom, photo, bio, LinkedIn) | ⏳ TODO | Erick (Lot A) | Variantes default/top |
+| `Suppliers` (compact) | Liste fournisseurs (3 cartes) | ⏳ TODO | Partenaire (Lot B) | Vue compacte fin de page prix/autre |
+
+### Spécifique pageType = `prix`
+
+| Bloc Next.js | Source données | Status | Owner | Notes |
+|---|---|:---:|---|---|
+| `PriceTable` | Tableau BO (colonnes : type, prix/place, surface, prix/m²) | ⏳ TODO | Erick (Lot A) | Mutualisation possible avec `RulesTable` → bloc `Table` générique |
+
+### Spécifique pageType = `autre`
+
+| Bloc Next.js | Source données | Status | Owner | Notes |
+|---|---|:---:|---|---|
+| `RulesTable` | Tableau BO (colonnes : obligation, caractère, détail, référence) | ⏳ TODO | Partenaire (Lot B) | Idem ci-dessus (mutualisation possible) |
+
+### Spécifique pageType = `top`
+
+| Bloc Next.js | Source données | Status | Owner | Notes |
+|---|---|:---:|---|---|
+| `HeroSuppliersCarousel` | Liste fabricants light (rank, badge, name, shortDesc, logo) | ⏳ TODO | Partenaire (Lot B) | Slot droite du Hero quand `pageType === 'top'` |
+| `ManufacturerCard` | **Méta-bloc consolidé** par API (rank, name, badge, origin, description, ranges[], pros[], cons[], location, founded, employees, sectors) | ⏳ TODO | Partenaire (Lot B) | 🔥 Le plus complexe — coordination backend obligatoire |
+| `NextStepCTA` | Bloc BO `next-step-cta` (options produits avec images) | ⏳ TODO | Partenaire (Lot B) | CTA centre avec sélection produit |
+| `DownloadDossier` | Bloc BO `dossier` (title, description, bullets) | ⏳ TODO | Partenaire (Lot B) | Proche de `Brochure` — mutualisation à arbitrer |
+| `CitedProducts` | Liste produits (tag, title, price) | ⏳ TODO | Partenaire (Lot B) | 4 produits cités dans l'article |
+| `GoFurther` | Liste liens articles connexes | ⏳ TODO | Partenaire (Lot B) | 4 liens pour aller plus loin |
+
+### Totaux
+
+- **23 blocs au total**
+- **Lot A (Erick)** : 11 blocs (4 structure + 2 rédactionnel + 4 assemblage + 1 spécifique prix)
+- **Lot B (Partenaire)** : 12 blocs (5 assemblage + 1 spécifique autre + 6 spécifiques top)
 
 ---
 
@@ -671,7 +789,7 @@ nvm use
 npm install
 
 # Dev
-npm run dev              # http://localhost:3000/conseils
+npm run dev              # http://localhost:3000 (root, pas de basePath)
 
 # Tests
 npm test
@@ -716,9 +834,29 @@ npx shadcn@latest add <component>
 | 2026-05-12 | Stack: Next.js 15 + React 19 + Tailwind 4 + Node 22 | Service Docker isolé → versions indépendantes du formulaire HP. Stack moderne, ecosystem mature en 2026, future-proof. Copie directe des composants Lovable sans downgrade |
 | 2026-05-12 | Pattern: BlockRenderer (composition dynamique) | Le BO stocke les blocs en table ordonnée, le front doit refléter l'ordre |
 | 2026-05-12 | Lovable code source d'inspiration design, pas de portage TanStack | Migration vers Next.js, on conserve uniquement composants + design tokens |
-| 2026-05-12 | basePath = `/conseils` | Reverse proxy nginx, même pattern que `/formulaire` |
 | 2026-05-12 | npm comme package manager (pas bun) | Cohérence avec le reste du monorepo |
 | 2026-05-12 | Tokens HSL synchronisés avec formulaire HP (mais déclarés en `@theme` TW4) | Cohérence UX cross-services malgré stacks différentes |
+| **2026-05-22** | **Pas de basePath — service monté sur sous-domaine** `conseils.hellopro.fr` | Préservation totale du SEO existant : les URLs `<slug>-<id>.html` du site PHP actuel restent strictement identiques. Pattern différent du formulaire HP (qui utilise un sous-chemin `/formulaire`) |
+| **2026-05-22** | **URL pattern `<slug>-<id>.html`** parsé en runtime, ID = clé de fetch API | Hérité de l'ancien site PHP. Catch-all `[slugWithId]/page.tsx` qui regex-parse le suffixe `-<digits>.html`. Slug non canonique → 301 vers slug canonique (Phase 8) |
+| **2026-05-22** | **Catalogue final 23 blocs Next.js** (Lot A = 11, Lot B = 12) | Issu de l'audit des 3 templates Lovable nettoyés. Voir §17 et `outputs/audit-templates-lovable.md` |
+| **2026-05-22** | **Branche scaffold renommée `features/template-conseils-service`** | Plus claire pour un binôme arrivant en cours de projet |
+
+### Décisions en attente (à arbitrer avec le binôme avant code)
+
+| # | Sujet | Options |
+|---|---|---|
+| 1 | Variants UI (FAQ, Author, Footer entre prix/autre vs top) | A. Un seul composant avec `variant?: 'default' \| 'top'` (recommandé) — B. Composants séparés |
+| 2 | Table générique | A. 1 bloc `Table` paramétrable (PriceTable + RulesTable factorisés) — B. 2 blocs distincts |
+| 3 | Brochure + DownloadDossier | A. Mutualiser en un seul bloc paramétrable — B. Garder distinct |
+| 4 | TOC Sidebar | A. Auto-généré depuis les `H2Section` côté front — B. Items éditables côté BO |
+| 5 | Plugin `@tailwindcss/typography` pour `RichText` | À installer dès le démarrage du Lot A ou plus tard |
+| 6 | Stratégie de mapping BO → Next.js | A. Blocs BO primitifs + consolidation côté API (`ManufacturerCard`, `TypeSection`) — B. Enrichir le BO avec des blocs composés |
+
+### Dette technique à régler
+
+| # | Sujet | Owner | Quand |
+|---|---|---|---|
+| 1 | Scaffold initial contient encore `basePath: '/conseils'` et route group `(conseils)/` → à corriger | Erick | Avant merge de `features/template-conseils-service` |
 
 ---
 
