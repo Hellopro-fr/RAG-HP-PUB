@@ -86,3 +86,61 @@ def test_batch_state_loads_existing_done(tmp_path):
 
     state = BatchState(input_file)
     assert state.done == {"100", "200", "300"}
+
+
+# ============================================================
+# T1: per_crawl_timeout + wait_for_disk tests
+# ============================================================
+from collections import namedtuple  # noqa: E402
+
+from stash_crawls_batch import (  # noqa: E402
+    per_crawl_timeout,
+    wait_for_disk,
+)
+
+
+def test_per_crawl_timeout_formula():
+    assert per_crawl_timeout(100 * 1024**2) == 600         # 0.1 GB → floor 10 min
+    assert per_crawl_timeout(1 * 1024**3) == 600           # 1 GB → 180s < 600s → floor
+    assert per_crawl_timeout(5 * 1024**3) == 900           # 5 GB → 5*180 = 900s
+    assert per_crawl_timeout(20 * 1024**3) == 3600         # 20 GB → ceiling 60 min
+    assert per_crawl_timeout(100 * 1024**3) == 3600        # 100 GB → ceiling
+
+
+_Usage = namedtuple("_Usage", ["total", "used", "free"])
+
+
+def test_disk_guard_waits_then_passes(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_usage(_target):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return _Usage(0, 0, 5 * 1024**3)          # below threshold first 2 calls
+        return _Usage(0, 0, 50 * 1024**3)             # passes on 3rd call
+
+    monkeypatch.setattr("stash_crawls_batch.shutil.disk_usage", fake_usage)
+    monkeypatch.setattr("stash_crawls_batch.time.sleep", lambda _s: None)
+
+    wait_for_disk(needed_bytes=10 * 1024**3, disk_target="/mnt/data")
+    assert calls["n"] == 3
+
+
+def test_disk_guard_aborts_on_timeout(monkeypatch):
+    monkeypatch.setattr(
+        "stash_crawls_batch.shutil.disk_usage",
+        lambda _t: _Usage(0, 0, 1 * 1024**3),         # always insufficient
+    )
+    t = {"now": 0.0}
+
+    def fake_time():
+        return t["now"]
+
+    def fake_sleep(_s):
+        t["now"] += 10_000  # jump 10000s ahead of any deadline
+
+    monkeypatch.setattr("stash_crawls_batch.time.time", fake_time)
+    monkeypatch.setattr("stash_crawls_batch.time.sleep", fake_sleep)
+
+    with pytest.raises(FatalError, match="Disk free"):
+        wait_for_disk(needed_bytes=10 * 1024**3, disk_target="/mnt/data")

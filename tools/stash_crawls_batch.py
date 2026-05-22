@@ -131,3 +131,70 @@ class BatchState:
             f.write(line)
         if klass == "done":
             self.done.add(crawl_id)
+
+
+# ============================================================
+# T1: Disk guard + timeout + existence checks
+# ============================================================
+import os
+import shutil
+import subprocess
+import time
+
+# Disk guard knobs
+SAFETY_MARGIN_BYTES = 10 * 1024**3        # 10 GB headroom on top of source size
+DISK_WAIT_MAX_SECONDS = 30 * 60           # 30 min total wait per crawl
+DISK_WAIT_INTERVAL = 60                   # poll every 60s
+
+# Per-crawl timeout knobs (max 60 min, min 10 min, 3 min per GB)
+_TIMEOUT_MIN = 600
+_TIMEOUT_MAX = 3600
+_TIMEOUT_PER_GB = 180
+
+
+def per_crawl_timeout(size_bytes: int) -> int:
+    """Upload-completion timeout in seconds, scaled by source size."""
+    size_g = size_bytes / 1024**3
+    return int(min(_TIMEOUT_MAX, max(_TIMEOUT_MIN, size_g * _TIMEOUT_PER_GB)))
+
+
+def local_tar_exists(crawl_id: str, stash_local_dir: str) -> bool:
+    return os.path.exists(os.path.join(stash_local_dir, f"{crawl_id}.tar.gz"))
+
+
+def dead_letter_exists(crawl_id: str, dead_letter_dir: str) -> bool:
+    return os.path.exists(os.path.join(dead_letter_dir, f"{crawl_id}.tar.gz"))
+
+
+def gcs_tar_exists(crawl_id: str, bucket: str, prefix: str) -> bool:
+    """True iff `gcloud storage ls gs://{bucket}/{prefix}/{crawl_id}.tar.gz` exits 0."""
+    uri = f"gs://{bucket}/{prefix}/{crawl_id}.tar.gz"
+    result = subprocess.run(
+        ["gcloud", "storage", "ls", uri],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def wait_for_disk(needed_bytes: int, disk_target: str) -> None:
+    """Block until free space on `disk_target` >= needed_bytes + 10 GB, or raise."""
+    threshold = needed_bytes + SAFETY_MARGIN_BYTES
+    deadline = time.time() + DISK_WAIT_MAX_SECONDS
+    while True:
+        free = shutil.disk_usage(disk_target).free
+        if free >= threshold:
+            return
+        if time.time() > deadline:
+            raise FatalError(
+                f"Disk free {free / 1024**3:.1f} GB < needed "
+                f"{threshold / 1024**3:.1f} GB after {DISK_WAIT_MAX_SECONDS}s"
+            )
+        logger.warning(
+            "Disk free %.1f GB < needed %.1f GB; sleeping %ds",
+            free / 1024**3,
+            threshold / 1024**3,
+            DISK_WAIT_INTERVAL,
+        )
+        time.sleep(DISK_WAIT_INTERVAL)
