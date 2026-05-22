@@ -81,11 +81,24 @@ api_get() {
 
 api_post_json() {
     # api_post_json <path> <json-body> [extra-headers...]
+    # Echoue avec code de retour si HTTP != 2xx. Body de reponse sur stdout
+    # (meme en cas d'erreur, pour faciliter le debug).
     local path="$1" body="$2"; shift 2
-    curl -sf -X POST "$GKE_API$path" \
-        -H "Content-Type: application/json" \
-        "$@" \
-        -d "$body"
+    local tmp
+    tmp=$(mktemp)
+    local code
+    code=$(curl -s -o "$tmp" -w "%{http_code}" \
+                -X POST "$GKE_API$path" \
+                -H "Content-Type: application/json" \
+                --max-time 1800 \
+                "$@" \
+                -d "$body" 2>&1) || code="000"
+    cat "$tmp"
+    rm -f "$tmp"
+    case "$code" in
+        2*) return 0 ;;
+        *)  return 1 ;;
+    esac
 }
 
 # ========== ETAPES ==========
@@ -218,82 +231,68 @@ step_3_ingest_chunked() {
 
     local cats_file="$CHECKPOINT_DIR/categories_to_ingest.txt"
     [ -f "$cats_file" ] || { err "step2 incomplete"; return 1; }
-    local total
-    total=$(wc -l < "$cats_file")
+
+    # Lire toutes les categories (skip lignes vides + commentaires)
+    local -a all_cats=()
+    while IFS= read -r line || [ -n "$line" ]; do
+        [ -z "$line" ] && continue
+        case "$line" in \#*) continue ;; esac
+        all_cats+=("$line")
+    done < "$cats_file"
+
+    local total=${#all_cats[@]}
     log "Total : $total categories, chunks de $CHUNK_SIZE"
 
     confirm "Lancer l'ingestion (~$((total * 30 / 60)) min estimees) ?" || return
 
     local progress_file="$CHECKPOINT_DIR/step3_progress.txt"
-    local n_done=0
-    [ -f "$progress_file" ] && n_done=$(cat "$progress_file")
-    log "Reprise depuis ligne $n_done"
+    local start_idx=0
+    [ -f "$progress_file" ] && start_idx=$(cat "$progress_file")
+    log "Reprise depuis index $start_idx (sur $total)"
 
-    local chunk_idx=0
-    local line_idx=0
-    local chunk_cats=""
-
-    # Lecture ligne par ligne
-    while IFS= read -r cat || [ -n "$cat" ]; do
-        line_idx=$((line_idx + 1))
-        # Skip lignes vides ou commentaires
-        [ -z "$cat" ] && continue
-        case "$cat" in \#*) continue ;; esac
-        # Skip si deja traite (reprise)
-        if [ "$line_idx" -le "$n_done" ]; then continue; fi
-
-        # Echappe les guillemets pour le JSON
-        cat_escaped=$(echo "$cat" | sed 's/"/\\"/g')
-        if [ -z "$chunk_cats" ]; then
-            chunk_cats="\"$cat_escaped\""
-        else
-            chunk_cats="$chunk_cats,\"$cat_escaped\""
-        fi
-
-        if [ $((line_idx % CHUNK_SIZE)) -eq 0 ]; then
-            chunk_idx=$((chunk_idx + 1))
-            send_chunk "$chunk_idx" "$chunk_cats" "$line_idx" "$total"
-            chunk_cats=""
-            echo "$line_idx" > "$progress_file"
-        fi
-    done < "$cats_file"
-
-    # Flush du dernier chunk partiel
-    if [ -n "$chunk_cats" ]; then
+    local chunk_idx=$((start_idx / CHUNK_SIZE))
+    local i=$start_idx
+    while [ "$i" -lt "$total" ]; do
         chunk_idx=$((chunk_idx + 1))
-        send_chunk "$chunk_idx" "$chunk_cats" "$line_idx" "$total"
-        echo "$line_idx" > "$progress_file"
-    fi
+        local end=$((i + CHUNK_SIZE))
+        [ "$end" -gt "$total" ] && end="$total"
 
-    log "Ingestion terminee : $line_idx categories"
+        # Slice du tableau : positions [i .. end-1]
+        local chunk_size=$((end - i))
+        local chunk_cats=("${all_cats[@]:$i:$chunk_size}")
+
+        # Construire le JSON via jq (escape automatique des guillemets, accents, etc.)
+        local body
+        body=$(printf '%s\n' "${chunk_cats[@]}" \
+               | jq -R . \
+               | jq -sc \
+                   --arg coll "$TS_COLLECTION" \
+                   --arg filter "$EXTRA_FILTER" \
+                   '{categories:., ts_collection:$coll, extra_filter:$filter, batch_size:1000, stop_if_disk_gb_below:3.0}')
+
+        log "Chunk #$chunk_idx (pos $end/$total) - $chunk_size categories..."
+        local logfile="$LOG_DIR/step3_chunk_${chunk_idx}_${TS}.json"
+        if api_post_json "/ingest/categories/batch" "$body" > "$logfile" 2>&1; then
+            local n_ok n_milvus n_cats
+            n_ok=$(jq -r '.total_chunks_ok // 0' < "$logfile" 2>/dev/null || echo 0)
+            n_milvus=$(jq -r '.total_chunks_milvus // 0' < "$logfile" 2>/dev/null || echo 0)
+            n_cats=$(jq -r '.categories_processed // 0' < "$logfile" 2>/dev/null || echo 0)
+            log "  OK $n_cats categories, $n_ok/$n_milvus docs. Detail : $logfile"
+        else
+            err "Echec chunk #$chunk_idx (HTTP error). Voir $logfile"
+            err "Premier(es) ligne(s) du log :"
+            head -5 "$logfile" >&2 || true
+            err ""
+            err "Reprendre via : bash $0 (reprend a l'index $i)"
+            exit 1
+        fi
+
+        i="$end"
+        echo "$i" > "$progress_file"
+    done
+
+    log "Ingestion terminee : $total categories"
     step_done "step3"
-}
-
-send_chunk() {
-    local idx="$1" cats="$2" pos="$3" total="$4"
-    log "Chunk #$idx (pos $pos/$total)..."
-    local body
-    body=$(cat <<EOF
-{
-  "categories": [$cats],
-  "ts_collection": "$TS_COLLECTION",
-  "extra_filter": "$EXTRA_FILTER",
-  "batch_size": 1000,
-  "stop_if_disk_gb_below": 3.0
-}
-EOF
-)
-    local logfile="$LOG_DIR/step3_chunk_${idx}_${TS}.json"
-    if api_post_json "/ingest/categories/batch" "$body" > "$logfile" 2>&1; then
-        local n_ok n_total
-        n_ok=$(jq -r '.total_chunks_ok // 0' < "$logfile")
-        n_total=$(jq -r '.total_chunks_milvus // 0' < "$logfile")
-        log "  OK $n_ok/$n_total chunks. Detail : $logfile"
-    else
-        err "Echec chunk #$idx. Voir $logfile"
-        err "Reprendre via : bash $0 (reprend a la ligne $pos)"
-        exit 1
-    fi
 }
 
 step_4_sync_delta() {
