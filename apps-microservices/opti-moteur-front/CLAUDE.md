@@ -329,6 +329,21 @@ Pages 2-4 (AJAX background)
     └── hp_classify_and_alternate_docs (avec exclude_low=$_strict_p2)
 ```
 
+## Rollback Milvus (procedure d'urgence)
+
+Depuis 2026-05-22, le pipeline hybride (Solr V2 + Typesense) est le **defaut**
+sur le front. Le RAG Milvus historique reste disponible via flag de rollback.
+
+Trois niveaux, du plus rapide au plus radical :
+
+| # | Action | Delai | Audience |
+|---|---|---|---|
+| 1 | Ajouter `?legacy=1` a une URL de test | 0 s | Debug ponctuel (Elena, Tech) |
+| 2 | `define('HP_USE_HYBRID_SEARCH', false)` dans `site/hellopro_fr/moteur_recherche.php` + redeploy Ecritel | ~5 min | Rollback global front |
+| 3 | DevOps repointe `api.hellopro.eu/opti-moteur-recherche/` sur ancien backend | ~10 min | Urgence GKE down |
+
+Voir le doc complet : `site/moteur_recherche/BASCULE_DEFAULT_HYBRID_2026-05-22.md`
+
 ## Roadmap restante
 
 1. **Migration GKE** : DevOps (Tafita). Repointer `api.hellopro.eu/optimoteur-service`

@@ -662,5 +662,50 @@ stable et significativement amélioré vs avant la série.
 
 ---
 
-*Document généré le 2026-05-21. À maintenir au fil des audits suivants.
-Référence croisée : `apps-microservices/opti-moteur-front/CLAUDE.md`.*
+## 11. Bascule par défaut — 2026-05-22
+
+**Statut** : Spec, pré-déploiement GKE
+**Doc dédié** : [`BASCULE_DEFAULT_HYBRID_2026-05-22.md`](./BASCULE_DEFAULT_HYBRID_2026-05-22.md)
+
+### 11.1 Décision
+
+Passer le pipeline `Solr V2 + Typesense hybride` en **comportement par défaut**
+du front HelloPro, en remplacement du RAG Milvus historique. Justifié par :
+- +10 % audit BDD, +14 % audit Hellopro
+- 4/4 plaintes Elena résolues
+- Migration VM → GKE planifiée (gateway switch côté DevOps Tafita)
+
+### 11.2 Mécanisme — flag `HP_USE_HYBRID_SEARCH`
+
+Ajouté dans `site/hellopro_fr/moteur_recherche.php` (lignes 48-79) :
+
+```php
+if (!defined('HP_USE_HYBRID_SEARCH')) define('HP_USE_HYBRID_SEARCH', true);
+$HP_LEGACY_FORCE = (isset($_GET['legacy']) && (string) $_GET['legacy'] === '1');
+$HYBRID_PAGE_MODE = (isset($_GET['hybrid']) && (string) $_GET['hybrid'] === '1')
+                  || $AJAX_PAGINATION_ENABLED
+                  || (HP_USE_HYBRID_SEARCH && !$HP_LEGACY_FORCE);
+```
+
+### 11.3 Rollback (3 niveaux)
+
+| # | Action | Délai |
+|---|---|---|
+| 1 | URL `?legacy=1` | 0 s |
+| 2 | Passer flag à `false` + redéploy PHP front | ~5 min |
+| 3 | DevOps repointe gateway sur ancien backend | ~10 min |
+
+### 11.4 Pré-requis avant merge + upload Ecritel
+
+| # | Tâche | Owner |
+|---|---|---|
+| 1 | Bench couverture ~150 mots-clés prod (depuis `moteur_solr_historique` pré-2026-04-18) | Rija |
+| 2 | Diff Milvus vs Typesense (recall@10, overlap) | Rija |
+| 3 | Annotation Elena top-20 catégories sensibles | Elena |
+| 4 | Migration GKE (image Docker + IDF JSON + .env) | Tafita |
+| 5 | Smoke test 24 mots-clés audit v4 sur GKE | Rija |
+
+---
+
+*Document généré le 2026-05-21, complété le 2026-05-22 (section 11). À maintenir
+au fil des audits suivants. Référence croisée : `apps-microservices/opti-moteur-front/CLAUDE.md`.*
