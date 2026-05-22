@@ -707,5 +707,90 @@ $HYBRID_PAGE_MODE = (isset($_GET['hybrid']) && (string) $_GET['hybrid'] === '1')
 
 ---
 
-*Document généré le 2026-05-21, complété le 2026-05-22 (section 11). À maintenir
-au fil des audits suivants. Référence croisée : `apps-microservices/opti-moteur-front/CLAUDE.md`.*
+## 12. Migration ingestion Milvus → Typesense GKE — 2026-05-22 10:02
+
+**Statut** : ✅ Ingestion massive réussie. Reste : régénération IDF + redéploy
+image GKE (actions Tafita).
+
+### 12.1 Architecture validée
+
+Le pod GKE `opti-moteur-front` (à `http://10.0.1.240:8570`) :
+- A accès à Milvus prod (vérifié via `/health` qui renvoie `"milvus":"ok"`)
+- A accès au Typesense GKE interne (vérifié via `"typesense":"ok"`)
+- Expose les routes `/admin/*`, `/ingest/*`, `/search/*` (`/sync/*` absentes —
+  l'image déployée est antérieure à l'ajout de `app/router/sync.py`)
+
+Du coup la migration s'orchestre **entièrement via HTTP** depuis la VM, sans
+accès direct ni Milvus ni Typesense en local.
+
+### 12.2 Bilan ingestion
+
+Lancée via `bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh`
+depuis la VM `vm-embedding-g2-std-24-use`, en 19 chunks de 20 catégories :
+
+| Métrique | Valeur |
+|---|---|
+| Durée totale | 4 min 30 s (09:57:32 → 10:02:01) |
+| Catégories ingérées | 380 / 384 (4 vides en Milvus) |
+| Chunks réussis | 19 / 19 |
+| Erreurs | 0 |
+| Docs traités (upsert) | ~52 986 |
+| Docs Typesense avant | 2 027 939 |
+| Docs Typesense après | 2 030 095 |
+| Nouveaux docs nets | +2 156 |
+| Filtre Milvus | `etat in ["Client","Pause","Prospect"]` |
+
+Stats détaillées par chunk dans `/tmp/migrate_gke_logs/step3_chunk_*.json`
+sur la VM.
+
+### 12.3 Actions restantes (Tafita)
+
+| # | Action | Priorité | Effet |
+|---|---|---|---|
+| A | `kubectl exec` → `python scripts/compute_idf.py` + rollout restart | **HAUTE** | Rétablit le gain A4 IDF (~+14% qualité) |
+| B | Vérifier que `app/data/` est sur un PVC | HAUTE | Sinon IDF disparaît à chaque redeploy |
+| C | Redéployer pod avec image features/poc HEAD (b62b0076+) | MOYENNE | Active les routes `/sync/incremental` + `/sync/health` (cron PHP de delta quotidien) |
+
+⚠️ **Tant que (A) n'est pas fait, le reranker GKE tourne en mode strict (sans
+IDF)**. Le pipeline fonctionne mais perd le gain A4. Les requêtes Elena
+(`armoire medicale`, `soudure ritmo`, etc.) risquent de régresser sur top-1.
+
+### 12.4 PRs livrées (timeline)
+
+| PR | Sujet | État |
+|---|---|---|
+| #622 | Flag `HP_USE_HYBRID_SEARCH` (bascule défaut) | ✅ Mergé |
+| #623 | Runbook + script ingestion v1 (accès Typesense direct) | ✅ Mergé |
+| #624 | Refactor v2 (HTTP service Python GKE) | ✅ Mergé |
+| #625 | Fix preflight `/health` au lieu de `/sync/health` | ✅ Mergé |
+| #626 | Fix preflight via `/openapi.json` | ✅ Mergé |
+| #627 | Fix step3 ingestion (jq pour JSON + http_code visible) | ✅ Mergé |
+
+### 12.5 Prochaines étapes (Rija)
+
+1. **Smoke test** post-migration (avec ou sans IDF Tafita) :
+   ```powershell
+   cd C:\RIJA\CLAUDE_CODE\opti_moteur\RAG-HP-PUB
+   .\bench_production\smoke_test_bascule.ps1 -Phase post
+   ```
+2. **Bench couverture** (150 mots-clés stratifiés `keywords_coverage_v1.csv`)
+   via Claude Desktop + Claude in Chrome — protocole dans
+   `bench_production/PROTOCOLE_BENCH_CLAUDE_DESKTOP.md`.
+3. **Annotation Elena** top-20 catégories sensibles.
+4. **Décision GO/NoGo** bascule par défaut grâce aux PR #622 déjà merged
+   (le flag est en place côté code, reste l'upload Ecritel).
+
+### 12.6 Reprise migration si besoin
+
+Le script `migrate_to_gke.sh` est idempotent (upsert Typesense). Pour
+relancer une migration delta plus tard, soit :
+- Relancer le script (idempotent, ignore catégories déjà à jour côté upsert)
+- Une fois (C) fait : utiliser le cron PHP `sync_typesense_daily.php` qui
+  appelle `POST /sync/incremental` (delta NEW + UPDATED + DELETED orphelins)
+
+---
+
+*Document généré le 2026-05-21, complété le 2026-05-22 (sections 11 + 12). À
+maintenir au fil des audits suivants. Référence croisée :
+`apps-microservices/opti-moteur-front/CLAUDE.md`,
+`apps-microservices/opti-moteur-front/vm/RUNBOOK_INGESTION_GKE_2026-05-22.md`.*
