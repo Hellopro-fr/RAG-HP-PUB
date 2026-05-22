@@ -116,24 +116,36 @@ preflight() {
         exit 1
     fi
 
-    # Verifier que les routes admin/ingest/sync sont bien deployees
-    # (image GKE potentiellement plus ancienne que le code repo).
-    log "Verification des routes deployees..."
+    # Verifier que les routes admin/ingest sont bien deployees
+    # via /openapi.json (plus fiable que curl HEAD/OPTIONS qui peut
+    # renvoyer 405 sur des routes POST-only existantes).
+    log "Verification des routes deployees via /openapi.json..."
+    local openapi
+    openapi=$(api_get "/openapi.json") || {
+        err "Impossible de recuperer /openapi.json"
+        exit 1
+    }
     local routes_ok=1
-    for route in "/admin/collections" "/ingest/category"; do
-        if curl -sf -o /dev/null -w "%{http_code}" "$GKE_API$route" 2>&1 \
-           | grep -qE "^(200|405|422)"; then
+    for route in "/admin/collections" "/admin/collections/{name}" \
+                 "/ingest/category" "/ingest/categories/batch"; do
+        if echo "$openapi" | jq -e --arg r "$route" '.paths | has($r)' >/dev/null; then
             log "  OK $route"
         else
-            err "  KO $route (route absente ou erreur)"
+            err "  KO $route (absente de l'OpenAPI)"
             routes_ok=0
         fi
     done
+    # Routes sync optionnelles : on log mais on bloque pas
+    for route in "/sync/incremental" "/sync/health"; do
+        if echo "$openapi" | jq -e --arg r "$route" '.paths | has($r)' >/dev/null; then
+            log "  OK $route (delta sync disponible)"
+        else
+            log "  -- $route absente (delta sync sera skip - image GKE a redeployer)"
+        fi
+    done
     if [ "$routes_ok" -eq 0 ]; then
-        err "L'image GKE n'expose pas toutes les routes attendues."
+        err "L'image GKE n'expose pas les routes ingestion necessaires."
         err "  -> Tafita doit redeployer avec l'image actuelle (features/poc HEAD)"
-        err "  -> En attendant, voir routes dispo via :"
-        err "     curl $GKE_API/openapi.json | jq '.paths | keys'"
         exit 1
     fi
 
@@ -287,6 +299,19 @@ EOF
 step_4_sync_delta() {
     if ! step_pending "step4"; then log "step4 deja fait, skip"; return; fi
     log "=== Etape 4 : sync incremental (NEW + UPDATED + DELETED orphelins) ==="
+
+    # Verifier si la route /sync/incremental est exposee (image GKE recente)
+    if ! curl -sf -o /dev/null -w "%{http_code}" "$GKE_API/sync/incremental" \
+         -X POST -H "Content-Type: application/json" -d '{}' 2>&1 \
+         | grep -qE "^(200|400|401|403|405|422)"; then
+        log "Route /sync/incremental absente sur l'image GKE actuelle."
+        log "  -> action Tafita : redeployer le pod opti-moteur-front avec"
+        log "     l'image qui contient app/router/sync.py"
+        log "Skip etape 4. L'ingestion (etape 3) suffit pour la migration initiale."
+        log "Le delta quotidien sera relance via le cron PHP une fois redeploye."
+        step_done "step4"
+        return
+    fi
 
     confirm "Lancer /sync/incremental (delta + orphelins) ?" || return
 
