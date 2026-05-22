@@ -1,14 +1,24 @@
 """Routes d'administration Typesense."""
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.credentials import settings
 from app.core.typesense_client import typesense_client
 from app.services.synonyms_service import auto_generate_synonyms
+from app.services import idf_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def _check_admin_token(x_admin_token: Optional[str]) -> None:
+    """Verifie le header X-Admin-Token. Raise 403 si invalide."""
+    if not x_admin_token or x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(
+            status_code=403,
+            detail="Missing or invalid X-Admin-Token header",
+        )
 
 
 class SynonymRequest(BaseModel):
@@ -121,6 +131,56 @@ def delete_synonym(synonym_id: str, collection: Optional[str] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ---------- IDF (regeneration en background) ----------
+
+@router.post(
+    "/compute-idf",
+    summary="Regenerer le dict IDF en background (compute_idf.py + reload)",
+)
+def admin_compute_idf(
+    background_tasks: BackgroundTasks,
+    collection: Optional[str] = None,
+    x_admin_token: Optional[str] = Header(None, description="Token jetable"),
+):
+    """
+    Lance `scripts/compute_idf.py` en background pour regenerer
+    `app/data/idf_nom_produit.json` puis recharger le cache IDF en RAM.
+
+    Securite : header `X-Admin-Token` requis.
+    Duree typique : 2-5 min sur 2M docs.
+    Pour suivre l'avancement : `GET /admin/compute-idf/status`.
+
+    A appeler :
+      - Manuellement apres une ingestion massive (cf migrate_to_gke.sh)
+      - Automatiquement chaque semaine via cron PHP `compute_idf_weekly.php`
+    """
+    _check_admin_token(x_admin_token)
+
+    if idf_service.is_running():
+        raise HTTPException(
+            status_code=429,
+            detail="A regeneration is already running. See GET /admin/compute-idf/status",
+        )
+
+    background_tasks.add_task(idf_service.regenerate_idf_background, collection)
+    return {
+        "status": "started",
+        "collection": collection or settings.TYPESENSE_COLLECTION,
+        "note": "Run in background, ~2-5 min. Poll GET /admin/compute-idf/status",
+    }
+
+
+@router.get(
+    "/compute-idf/status",
+    summary="Statut de la derniere regeneration IDF",
+)
+def admin_compute_idf_status():
+    """Retourne l'etat de la derniere regeneration : never_run/running/ok/error."""
+    return idf_service.get_state()
+
+
+# ---------- Synonymes auto-generation ----------
 
 @router.post(
     "/synonyms/auto-generate",

@@ -329,6 +329,53 @@ Pages 2-4 (AJAX background)
     └── hp_classify_and_alternate_docs (avec exclude_low=$_strict_p2)
 ```
 
+## Regeneration IDF (industrialisee 2026-05-22)
+
+Le dict IDF doit etre regenere apres :
+- Une ingestion massive de nouvelles categories
+- Une evolution naturelle du catalogue (recommande : hebdomadaire)
+
+### Route HTTP self-service (NEW 2026-05-22)
+
+```bash
+# Trigger en background (~2-5 min, retour immediat)
+curl -X POST "https://api.hellopro.eu/optimoteur-service/admin/compute-idf" \
+  -H "X-Admin-Token: hp_admin_2026_05_22_xZ7q" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# -> {"status":"started","collection":"produits_prod","note":"..."}
+
+# Suivi de l'avancement
+curl "https://api.hellopro.eu/optimoteur-service/admin/compute-idf/status"
+# -> {"status":"running","started_at":"...","finished_at":null,...}
+# Puis quand fini :
+# -> {"status":"ok","duration_s":127.3,"stdout_tail":"...","returncode":0,...}
+```
+
+Optionnel : passer `?collection=produits_prod_v2` pour cibler une autre collection.
+
+### Cron PHP hebdomadaire
+
+`site/script/typesense/compute_idf_weekly.php` est appele 1x/semaine
+(dimanche 4h, apres le sync quotidien synonymes 3h30). Il :
+- Verifie qu'aucune regen n'est en cours (via /admin/compute-idf/status)
+- POST sur /admin/compute-idf avec le X-Admin-Token
+- Logge le resultat (status + duree)
+
+Configurer cron Ecritel :
+```
+0 4 * * 0 wget -qO- "https://script.hellopro.fr/script/typesense/compute_idf_weekly.php?token=hp_idfcron_2026_05_22_xZ7q"
+```
+
+### CLI (toujours dispo, via kubectl exec sur le pod)
+
+```bash
+# Sur la machine qui a kubectl + GKE auth
+POD=$(kubectl get pod -l app=opti-moteur-front -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it $POD -- python scripts/compute_idf.py
+kubectl rollout restart deployment opti-moteur-front
+```
+
 ## Rollback Milvus (procedure d'urgence)
 
 Depuis 2026-05-22, le pipeline hybride (Solr V2 + Typesense) est le **defaut**
