@@ -19,6 +19,9 @@ WORKDIR /app
 # Étape 1: Définir le PYTHONPATH.
 # Dit à Python de toujours chercher les modules à partir du dossier /app.
 ENV PYTHONPATH=/app
+# SERVICE_NAME drives the Redis CLIENT SETNAME prefix from common_utils
+# (cache_service_sync). Overridable at runtime via docker-compose env.
+ENV SERVICE_NAME=website-processor-service
 
 # Install build-essential which contains g++ and other build tools
 # needed for compiling Python packages like faust-cchardet.

@@ -854,6 +854,7 @@ services:
     env_file:
       - .env
     environment:
+      - SERVICE_NAME=website-processor-service
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     deploy:
       replicas: 7

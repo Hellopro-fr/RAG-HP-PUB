@@ -1,8 +1,9 @@
 import redis
-import os
 import logging
 import hashlib
 import json
+
+from common_utils.redis.cache_service_sync import init_redis_pool_sync, get_client
 
 logger = logging.getLogger(__name__)
 
@@ -10,24 +11,30 @@ class RedisManager:
     """
     Manages atomic batch operations for website pages using a Lua script.
     Guarantees that only one consumer processes a full batch even under high concurrency.
+
+    Uses the shared bounded pool from common_utils.cache_service_sync. The pool
+    cap (REDIS_MAX_CONNECTIONS, default 20), CLIENT SETNAME identity, keepalive,
+    and shutdown semantics are managed by the shared library.
+
+    See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
     """
-    
+
     # Lua script to atomicaly Push, Check Length, and optionally Pop
     LUA_BATCH_SCRIPT = """
     local key = KEYS[1]
     local content = ARGV[1]
     local threshold = tonumber(ARGV[2])
     local ttl = tonumber(ARGV[3])
-    
+
     -- Push the new page content to the list
     redis.call('RPUSH', key, content)
-    
+
     -- Reset expiration on every push to keep the batch alive while active
     redis.call('EXPIRE', key, ttl)
-    
+
     -- Check length
     local len = redis.call('LLEN', key)
-    
+
     if len >= threshold then
         -- Return the batch elements
         local batch = redis.call('LRANGE', key, 0, threshold - 1)
@@ -40,16 +47,26 @@ class RedisManager:
     """
 
     def __init__(self):
-        self.redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
         self.client = None
         self.batch_script = None
-        
+
+        # init_redis_pool_sync() is idempotent — if main.py already initialized
+        # the pool, this is a no-op and just retrieves the existing client.
+        client = init_redis_pool_sync()
+        if client is None:
+            client = get_client()  # belt-and-suspenders for race ordering
+        if client is None:
+            logger.error("❌ RedisManager: shared sync pool unavailable; batch ops disabled")
+            return
+
         try:
-            self.client = redis.from_url(self.redis_url, decode_responses=True)
+            self.client = client
             self.batch_script = self.client.register_script(self.LUA_BATCH_SCRIPT)
-            logger.info(f"✅ Redis Manager connected to {self.redis_url}")
+            logger.info("✅ RedisManager attached to shared sync Redis pool")
         except Exception as e:
-            logger.error(f"❌ Failed to connect to Redis: {e}")
+            logger.error(f"❌ RedisManager failed to register Lua script: {e}")
+            self.client = None
+            self.batch_script = None
 
     def buffer_and_check_batch(self, domain: str, page_type: str, payload: str, threshold: int = 3, ttl_seconds: int = 86400):
         """

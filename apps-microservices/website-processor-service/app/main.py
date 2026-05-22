@@ -11,6 +11,7 @@ import aiormq
 from website_processor_service.messaging.consumer import Consumer
 from website_processor_service.messaging.publisher import Publisher
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
+from common_utils.redis.cache_service_sync import init_redis_pool_sync, close_redis_pool_sync
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,9 @@ async def main():
 
     # --- Start Prometheus metrics server ---
     start_metrics_server_in_thread(port=8530)
+
+    # --- Initialize shared sync Redis pool (RedisManager will reuse it) ---
+    init_redis_pool_sync()
 
     try:
         connection = await aio_pika.connect_robust(rabbitmq_url)
@@ -48,6 +52,7 @@ async def main():
     except KeyboardInterrupt:
         logger.info("🛑 Website-Processor: Arrêt demandé.")
     finally:
+        close_redis_pool_sync()
         logger.info("✅ Website-Processor: Service arrêté.")
 
 if __name__ == '__main__':
