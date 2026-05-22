@@ -319,6 +319,9 @@ Cumulative token cost per run is tracked in `graphify-out/cost.json` (gitignored
 3. **INFERRED edges need verification** for critical decisions. Run `graphify explain <node>` and grep to confirm before refactoring a shared component.
 4. **Small corpora don't benefit from compression** (< 50k words). Graph value is structural clarity, not tokens.
 5. **Cache misses on clone** — `cache/` is gitignored. First run after `git clone` re-extracts everything. Subsequent runs are instant.
+6. **ID collision on shared filestems**. Node IDs are derived as `filestem_entityname`. Files sharing a stem collapse into one node — observed for `main()` (`libs/common-utils/.../go-trafilatura/main.go` + `apps-microservices/graph-rag-api-recherche-rust-service/.../main.rs` both merged into `main_main`). Artifact: synthetic bridge between unrelated communities, betweenness inflated. Verify any high-betweenness `main`/`init`/`run` node before treating its bridge claim as real.
+7. **Source-path normalization can double a node**. Same file appears twice when AST extraction passes record `source_file` with different casings or relative vs absolute paths (observed: `crawler_manager_crawlermanager` 264 edges vs `core_crawler_manager_crawlermanager` 81 edges — same `crawler_manager.py`). Dedupe by checking source_file basenames before treating two nodes with identical labels as distinct.
+8. **INFERRED `uses` edges from tests skew god-node degree.** Example: `CrawlerManager` shows 212 INFERRED edges, of which 203 are score=0.5 `uses` pointing at test classes/helpers/docstrings (direction inverted; reality = tests reference CM). Real blast radius ≈ EXTRACTED edges + high-confidence INFERRED (≥0.8). Filter INFERRED <0.6 when reasoning about refactor impact.
 
 ## Files layout reference
 
