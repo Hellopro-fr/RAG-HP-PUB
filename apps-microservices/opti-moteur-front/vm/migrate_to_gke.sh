@@ -288,6 +288,19 @@ step_4_sync_delta() {
     if ! step_pending "step4"; then log "step4 deja fait, skip"; return; fi
     log "=== Etape 4 : sync incremental (NEW + UPDATED + DELETED orphelins) ==="
 
+    # Verifier si la route /sync/incremental est exposee (image GKE recente)
+    if ! curl -sf -o /dev/null -w "%{http_code}" "$GKE_API/sync/incremental" \
+         -X POST -H "Content-Type: application/json" -d '{}' 2>&1 \
+         | grep -qE "^(200|400|401|403|405|422)"; then
+        log "Route /sync/incremental absente sur l'image GKE actuelle."
+        log "  -> action Tafita : redeployer le pod opti-moteur-front avec"
+        log "     l'image qui contient app/router/sync.py"
+        log "Skip etape 4. L'ingestion (etape 3) suffit pour la migration initiale."
+        log "Le delta quotidien sera relance via le cron PHP une fois redeploye."
+        step_done "step4"
+        return
+    fi
+
     confirm "Lancer /sync/incremental (delta + orphelins) ?" || return
 
     local body
