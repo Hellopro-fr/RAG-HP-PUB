@@ -94,21 +94,46 @@ preflight() {
     log "Target API : $GKE_API"
     log "Collection : $TS_COLLECTION"
 
+    # On utilise /health (main.py) qui est universel : format
+    # {"status":"ok","typesense":"ok","milvus":"ok"}
+    # /sync/health donne plus de detail mais peut etre absent sur d'anciennes
+    # versions deployees sur GKE.
     local health
-    health=$(api_get "/sync/health") || {
-        err "Service Python GKE injoignable a $GKE_API/sync/health"
+    health=$(api_get "/health") || {
+        err "Service Python GKE injoignable a $GKE_API/health"
         err "  -> joindre Tafita pour verifier le pod + ingress + firewall"
         exit 1
     }
     log "Health: $(echo "$health" | jq -c .)"
-    if ! echo "$health" | jq -e '.milvus | startswith("ok")' >/dev/null; then
-        err "Milvus pas accessible depuis le service GKE"
+    if ! echo "$health" | jq -e '.milvus == "ok"' >/dev/null; then
+        err "Milvus pas OK depuis le service GKE"
         err "$(echo "$health" | jq -r .milvus)"
         exit 1
     fi
-    if ! echo "$health" | jq -e '.typesense | startswith("ok")' >/dev/null; then
-        err "Typesense pas accessible depuis le service GKE"
+    if ! echo "$health" | jq -e '.typesense == "ok"' >/dev/null; then
+        err "Typesense pas OK depuis le service GKE"
         err "$(echo "$health" | jq -r .typesense)"
+        exit 1
+    fi
+
+    # Verifier que les routes admin/ingest/sync sont bien deployees
+    # (image GKE potentiellement plus ancienne que le code repo).
+    log "Verification des routes deployees..."
+    local routes_ok=1
+    for route in "/admin/collections" "/ingest/category"; do
+        if curl -sf -o /dev/null -w "%{http_code}" "$GKE_API$route" 2>&1 \
+           | grep -qE "^(200|405|422)"; then
+            log "  OK $route"
+        else
+            err "  KO $route (route absente ou erreur)"
+            routes_ok=0
+        fi
+    done
+    if [ "$routes_ok" -eq 0 ]; then
+        err "L'image GKE n'expose pas toutes les routes attendues."
+        err "  -> Tafita doit redeployer avec l'image actuelle (features/poc HEAD)"
+        err "  -> En attendant, voir routes dispo via :"
+        err "     curl $GKE_API/openapi.json | jq '.paths | keys'"
         exit 1
     fi
 
