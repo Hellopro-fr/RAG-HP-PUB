@@ -116,24 +116,36 @@ preflight() {
         exit 1
     fi
 
-    # Verifier que les routes admin/ingest/sync sont bien deployees
-    # (image GKE potentiellement plus ancienne que le code repo).
-    log "Verification des routes deployees..."
+    # Verifier que les routes admin/ingest sont bien deployees
+    # via /openapi.json (plus fiable que curl HEAD/OPTIONS qui peut
+    # renvoyer 405 sur des routes POST-only existantes).
+    log "Verification des routes deployees via /openapi.json..."
+    local openapi
+    openapi=$(api_get "/openapi.json") || {
+        err "Impossible de recuperer /openapi.json"
+        exit 1
+    }
     local routes_ok=1
-    for route in "/admin/collections" "/ingest/category"; do
-        if curl -sf -o /dev/null -w "%{http_code}" "$GKE_API$route" 2>&1 \
-           | grep -qE "^(200|405|422)"; then
+    for route in "/admin/collections" "/admin/collections/{name}" \
+                 "/ingest/category" "/ingest/categories/batch"; do
+        if echo "$openapi" | jq -e --arg r "$route" '.paths | has($r)' >/dev/null; then
             log "  OK $route"
         else
-            err "  KO $route (route absente ou erreur)"
+            err "  KO $route (absente de l'OpenAPI)"
             routes_ok=0
         fi
     done
+    # Routes sync optionnelles : on log mais on bloque pas
+    for route in "/sync/incremental" "/sync/health"; do
+        if echo "$openapi" | jq -e --arg r "$route" '.paths | has($r)' >/dev/null; then
+            log "  OK $route (delta sync disponible)"
+        else
+            log "  -- $route absente (delta sync sera skip - image GKE a redeployer)"
+        fi
+    done
     if [ "$routes_ok" -eq 0 ]; then
-        err "L'image GKE n'expose pas toutes les routes attendues."
+        err "L'image GKE n'expose pas les routes ingestion necessaires."
         err "  -> Tafita doit redeployer avec l'image actuelle (features/poc HEAD)"
-        err "  -> En attendant, voir routes dispo via :"
-        err "     curl $GKE_API/openapi.json | jq '.paths | keys'"
         exit 1
     fi
 
