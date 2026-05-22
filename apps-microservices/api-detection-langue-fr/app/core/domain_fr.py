@@ -7,10 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
-try:
-    import redis.asyncio as aioredis
-except ImportError:
-    aioredis = None
+from common_utils.redis import cache_service
 
 from app.models.schemas import (
     DetectionMode, DetectionResponse, AlternativeUrl,
@@ -54,22 +51,28 @@ class DomainCache:
     })
 
     def __init__(self) -> None:
+        # _client/_initialized kept as instance attributes for backwards
+        # compatibility with existing tests that pre-populate them (see
+        # tests/test_domain_cache_ttl.py et al). When unset, _get_client()
+        # falls back to the shared cache_service.redis_client.
         self._client = None
         self._initialized = False
-        self._init_lock = asyncio.Lock()
 
     async def _get_client(self):
-        async with self._init_lock:
-            if not self._initialized:
-                self._initialized = True
-                redis_url = settings.REDIS_URL
-                if redis_url and aioredis:
-                    try:
-                        self._client = aioredis.from_url(redis_url, decode_responses=True)
-                        logger.info("Redis cache client créé (connexion au premier appel)")
-                    except Exception as e:
-                        logger.warning(f"Redis cache indisponible : {e}")
-        return self._client
+        """Return the shared async Redis client from common_utils.cache_service.
+
+        Pool cap (REDIS_MAX_CONNECTIONS, default 20), CLIENT SETNAME identity,
+        keepalive, and health checks are owned by the shared library. The
+        lifespan in main.py calls init_redis_pool() at startup so the client
+        is ready by the time the first request lands.
+
+        See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
+        """
+        # Tests inject a mock client directly via cache._client + cache._initialized=True;
+        # honor that for backwards compatibility.
+        if self._initialized and self._client is not None:
+            return self._client
+        return cache_service.redis_client
 
     @staticmethod
     def _normalize_domain(url: str) -> Optional[str]:

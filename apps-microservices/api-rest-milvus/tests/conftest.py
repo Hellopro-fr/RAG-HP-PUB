@@ -1,9 +1,16 @@
 """Shared fixtures for api-rest-milvus tests."""
 
 import asyncio
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+# Stub heavy native deps so test_main.py can import `main` without pymilvus,
+# waitress, etc. installed locally. These are only used by router code paths
+# the unit tests don't exercise.
+for _heavy in ("pymilvus", "uvloop", "waitress"):
+    sys.modules.setdefault(_heavy, MagicMock())
 
 
 class FakeGuard:

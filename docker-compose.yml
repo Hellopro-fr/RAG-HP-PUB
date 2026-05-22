@@ -578,6 +578,7 @@ services:
     env_file:
       - .env
     environment:
+      - SERVICE_NAME=api-detection-langue-fr
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       # Capacity tuning — see docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md § B.1
       # Reduced from defaults (10/12) after observed OOM kill loop under real load:
@@ -1173,6 +1174,7 @@ services:
     env_file:
       - .env
     environment:
+      - SERVICE_NAME=api-rest-milvus
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - MILVUS_CONCURRENCY_TIER=1
       - MILVUS_CONCURRENCY_SERVICE_NAME=api-rest-milvus

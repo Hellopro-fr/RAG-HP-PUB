@@ -5,6 +5,9 @@ WORKDIR /app
 
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
 ENV PYTHONPATH=/app
+# SERVICE_NAME drives the Redis CLIENT SETNAME prefix from common_utils
+# (cache_service). Overridable at runtime via docker-compose env.
+ENV SERVICE_NAME=api-rest-milvus
 
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service

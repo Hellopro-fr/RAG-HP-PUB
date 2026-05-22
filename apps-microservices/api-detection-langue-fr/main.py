@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.api.routes import router
@@ -8,12 +9,26 @@ from app.core import metrics  # noqa: F401
 from app.core.admission import AdmissionController
 from app.middleware.admission import AdmissionMiddleware
 
+from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
+
 # Configuration du logging — INFO pour voir les logs de stratégie proxy, retry, etc.
 # Sans cette configuration, Python utilise WARNING par défaut et masque les logs INFO.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize the shared async Redis pool (common_utils) at startup and
+    close it cleanly at shutdown.
+
+    See docs/superpowers/specs/2026-05-22-redis-common-utils-hardening-design.md
+    """
+    await init_redis_pool()
+    yield
+    await close_redis_pool()
+
 
 app = FastAPI(
     title="API Détection Langue Française",
@@ -35,7 +50,8 @@ app = FastAPI(
     ),
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 @app.get("/metrics", include_in_schema=False)
