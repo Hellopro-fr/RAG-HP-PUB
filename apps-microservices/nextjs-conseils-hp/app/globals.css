@@ -44,6 +44,17 @@
   --color-info: hsl(199 89% 48%);
   --color-info-foreground: hsl(0 0% 100%);
 
+  /* === Aliases CTA (= accent, pour compatibilité templates Lovable) === */
+  --color-cta: hsl(21 80% 55%);
+  --color-cta-hover: hsl(21 80% 46%);
+  --color-cta-foreground: hsl(0 0% 100%);
+
+  /* === Soft primary (fond léger bleu) === */
+  --color-primary-soft: hsl(231 100% 97%);
+
+  /* === Rating (étoiles) === */
+  --color-rating: hsl(38 92% 50%);
+
   /* === Spécifique cartes fournisseurs (réutilisable conseils) === */
   --color-recommended: hsl(231 100% 97%);
   --color-recommended-border: hsl(231 100% 85%);
