@@ -389,9 +389,6 @@ def _build_config_from_env() -> Config:
     if not bucket:
         print("STASH_GCS_BUCKET environment variable is required", file=sys.stderr)
         sys.exit(2)
-    disk_target = os.environ.get("DISK_TARGET", "")
-    if not disk_target:
-        disk_target = "C:" if os.name == "nt" else "/mnt/data"
     return Config(
         crawler_base_url=os.environ.get("CRAWLER_BASE_URL", "http://localhost:8500/crawler"),
         stash_local_dir=os.environ.get("STASH_LOCAL_DIR", "/app/stash"),
@@ -400,7 +397,7 @@ def _build_config_from_env() -> Config:
         ),
         stash_gcs_bucket=bucket,
         stash_gcs_prefix=os.environ.get("STASH_GCS_PREFIX", "stash"),
-        disk_target=disk_target,
+        disk_target=os.environ.get("DISK_TARGET", "/mnt/data"),
         http_timeout_seconds=int(os.environ.get("HTTP_TIMEOUT_SECONDS", "30")),
         poll_interval_seconds=int(os.environ.get("POLL_INTERVAL_SECONDS", "10")),
     )
