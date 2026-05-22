@@ -15,6 +15,8 @@ from image_download_service.core.archiver import Archiver
 from image_download_service.routers.albums import router as albums_router
 from image_download_service.routers.pages import router as pages_router
 
+from common_utils.redis.cache_service_sync import init_redis_pool_sync, close_redis_pool_sync
+
 # Configuration du logging uniforme
 logging.basicConfig(
     level=logging.INFO,
@@ -67,7 +69,11 @@ async def connect_rabbitmq() -> aio_pika.RobustConnection:
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Image-Download-Service: Démarrage...")
-    
+
+    # Initialize shared sync Redis pool — RateLimiter and any future sync
+    # Redis user (e.g. domain-specific limiters) reuses this pool.
+    init_redis_pool_sync()
+
     try:
         # Établir la connexion RabbitMQ
         app.state.rabbitmq_connection = await connect_rabbitmq()
@@ -127,6 +133,10 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, 'rabbitmq_connection') and app.state.rabbitmq_connection:
         await app.state.rabbitmq_connection.close()
         logger.info("✅ Connexion RabbitMQ fermée.")
+
+    # Close shared sync Redis pool
+    close_redis_pool_sync()
+    logger.info("✅ Redis pool fermé.")
 
 app = FastAPI(
     title="Image Download Service",

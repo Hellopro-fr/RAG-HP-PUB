@@ -162,6 +162,7 @@ services:
     volumes:
       - image_download_data:/app/storage
     environment:
+      - SERVICE_NAME=image-download-service
       - APIFY_PROXY=${APIFY_PROXY}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - RABBITMQ_URL=${RABBITMQ_URL}

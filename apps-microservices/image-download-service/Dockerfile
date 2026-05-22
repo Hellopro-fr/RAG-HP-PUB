@@ -5,6 +5,9 @@ WORKDIR /app
 # Définir le PYTHONPATH
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+# SERVICE_NAME drives the Redis CLIENT SETNAME prefix from common_utils
+# (cache_service_sync). Overridable at runtime via docker-compose env.
+ENV SERVICE_NAME=image-download-service
 
 # Install system dependencies for Pillow
 RUN apt-get update && apt-get install -y --no-install-recommends \
