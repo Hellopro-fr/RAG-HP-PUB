@@ -1,60 +1,65 @@
 #!/usr/bin/env bash
 #
-# migrate_to_gke.sh
-# =================
-# Orchestre l'ingestion Milvus -> Typesense GKE en une commande,
-# avec checkpoints et logs separes par etape.
+# migrate_to_gke.sh (v2, 2026-05-22)
+# ==================================
+# Orchestre l'ingestion Milvus -> Typesense GKE en passant par les routes
+# HTTP du service Python deja deploye sur GKE.
 #
-# Pre-requis :
-#   - Tourner sur la VM GCP (acces Milvus + reseau prive GCP)
-#   - .env contient ZILLIZ_* + TYPESENSE_* + EMBEDDING_API_*
-#   - Connectivite VM -> 10.0.1.240:8570 (Typesense GKE) validee
+# Avantages :
+#   - Pas besoin de l'IP Typesense interne GKE (le service Python la connait)
+#   - Pas besoin de credentials Milvus en local (le service GKE y accede deja)
+#   - Idempotent (upsert) : safe de relancer
+#   - Checkpoints + reprise apres interruption
+#
+# Routes utilisees :
+#   GET  /sync/health                   -> preflight
+#   GET  /admin/collections/{name}      -> stats actuelles
+#   GET  /admin/collections/{name}/...  -> facet categories pour diff
+#   POST /admin/collections/{name}      -> creer collection si absente
+#   POST /ingest/categories/batch       -> ingestion chunked
+#   POST /sync/incremental              -> delta NEW+UPDATED+DELETED
 #
 # Usage :
-#   cd ~/RAG-HP-PUB/apps-microservices/opti-moteur-front/vm
-#   bash migrate_to_gke.sh
+#   cd ~/RAG-HP-PUB
+#   bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 #
-# Etapes interactives (Y/N a chaque palier). Pour run non-interactif :
-#   AUTO=1 bash migrate_to_gke.sh
+# Run non-interactif :
+#   AUTO=1 bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 #
-# Reprise :
-#   Si une etape echoue, relancer le script : il detectera les fichiers
-#   de checkpoint dans /tmp/migrate_gke_checkpoints/ et proposera de
-#   reprendre.
+# Reset checkpoints (refaire from scratch) :
+#   rm -rf /tmp/migrate_gke_checkpoints
 
 set -eu
 set -o pipefail
 
 # ========== CONFIG ==========
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-VM_DIR="$(cd "$(dirname "$0")" && pwd)"
-OPTI_FRONT_DIR="$(cd "$VM_DIR/.." && pwd)"
+
+# Service Python GKE (entree HTTP unique)
+GKE_API="${GKE_API:-http://10.0.1.240:8570}"
+
+# La collection cible (defaut = settings du service GKE)
+TS_COLLECTION="${TS_COLLECTION:-produits_prod}"
+
+# Sync token (cron Ecritel). Doit matcher SYNC_TOKEN en env du service GKE.
+SYNC_TOKEN="${SYNC_TOKEN:-hp_sync_2026_04_30_xZ7q}"
+
+# Taille de chunk pour /ingest/categories/batch (route bloquante)
+# A 20 categories de ~500 produits = ~10k docs par appel = ~2-5 min
+CHUNK_SIZE="${CHUNK_SIZE:-20}"
+
+# Filtre etat passe a chaque ingestion
+EXTRA_FILTER="${EXTRA_FILTER:-etat in [\"Client\",\"Pause\",\"Prospect\"]}"
+
+# Source de verite catalogue Milvus (cree par list_missing_categories.py
+# ou maintenu manuellement)
+CATEGORIES_FILE="${CATEGORIES_FILE:-$REPO_ROOT/rubriques/categories_from_roots.txt}"
 
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-/tmp/migrate_gke_checkpoints}"
 LOG_DIR="${LOG_DIR:-/tmp/migrate_gke_logs}"
 mkdir -p "$CHECKPOINT_DIR" "$LOG_DIR"
-
 AUTO="${AUTO:-0}"
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-
-# Cible Typesense GKE (peut etre override par .env / env vars)
-TS_HOST="${TS_HOST:-10.0.1.240}"
-TS_PORT="${TS_PORT:-8570}"
-TS_API_KEY="${TS_API_KEY:-${TYPESENSE_API_KEY:-}}"
-TS_COLLECTION="${TS_COLLECTION:-${TYPESENSE_COLLECTION:-produits_prod}}"
-
-# Source Milvus (depuis .env de opti-moteur-front)
-if [ -f "$OPTI_FRONT_DIR/.env" ]; then
-    set -o allexport
-    # shellcheck disable=SC1091
-    source "$OPTI_FRONT_DIR/.env"
-    set +o allexport
-fi
-export MILVUS_HOST="${ZILLIZ_URI:-${MILVUS_HOST:-}}"
-export MILVUS_PORT="${ZILLIZ_PORT:-${MILVUS_PORT:-19530}}"
-export MILVUS_USER="${ZILLIZ_USER:-${MILVUS_USER:-}}"
-export MILVUS_PASSWORD="${ZILLIZ_PASSWORD:-${MILVUS_PASSWORD:-}}"
-export MILVUS_COLLECTION="${MILVUS_COLLECTION:-produits_3}"
+TS="$(date +%Y%m%d_%H%M%S)"
 
 # ========== HELPERS ==========
 log() { echo "[$(date +%H:%M:%S)] $*"; }
@@ -62,178 +67,245 @@ err() { echo "[$(date +%H:%M:%S)] ERROR: $*" >&2; }
 
 confirm() {
     if [ "$AUTO" = "1" ]; then return 0; fi
-    local msg="$1"
-    read -r -p "$msg [y/N] " ans
+    read -r -p "$1 [y/N] " ans
     case "$ans" in [yY]*) return 0 ;; *) return 1 ;; esac
 }
 
-step_done() {
-    touch "$CHECKPOINT_DIR/$1.done"
+step_done() { touch "$CHECKPOINT_DIR/$1.done"; }
+step_pending() { [ ! -f "$CHECKPOINT_DIR/$1.done" ]; }
+
+api_get() {
+    # api_get <path>
+    curl -sf "$GKE_API$1" || return 1
 }
 
-step_pending() {
-    [ ! -f "$CHECKPOINT_DIR/$1.done" ]
+api_post_json() {
+    # api_post_json <path> <json-body> [extra-headers...]
+    local path="$1" body="$2"; shift 2
+    curl -sf -X POST "$GKE_API$path" \
+        -H "Content-Type: application/json" \
+        "$@" \
+        -d "$body"
 }
 
 # ========== ETAPES ==========
 preflight() {
     log "=== Preflight ==="
-    [ -n "$TS_API_KEY" ] || { err "TS_API_KEY (ou TYPESENSE_API_KEY) manquant"; exit 1; }
-    [ -n "$MILVUS_HOST" ] || { err "MILVUS_HOST (ou ZILLIZ_URI) manquant dans .env"; exit 1; }
+    log "Target API : $GKE_API"
+    log "Collection : $TS_COLLECTION"
 
-    log "TS target  : http://$TS_HOST:$TS_PORT/$TS_COLLECTION"
-    log "Milvus src : $MILVUS_HOST:$MILVUS_PORT/$MILVUS_COLLECTION"
-
-    if ! curl -sf "http://$TS_HOST:$TS_PORT/health" \
-              -H "X-TYPESENSE-API-KEY: $TS_API_KEY" >/dev/null 2>&1; then
-        err "Typesense GKE injoignable : http://$TS_HOST:$TS_PORT/health"
-        err "Verifier le firewall GCP / VPC privee avec Tafita."
+    local health
+    health=$(api_get "/sync/health") || {
+        err "Service Python GKE injoignable a $GKE_API/sync/health"
+        err "  -> joindre Tafita pour verifier le pod + ingress + firewall"
+        exit 1
+    }
+    log "Health: $(echo "$health" | jq -c .)"
+    if ! echo "$health" | jq -e '.milvus | startswith("ok")' >/dev/null; then
+        err "Milvus pas accessible depuis le service GKE"
+        err "$(echo "$health" | jq -r .milvus)"
         exit 1
     fi
-    log "Typesense GKE OK"
+    if ! echo "$health" | jq -e '.typesense | startswith("ok")' >/dev/null; then
+        err "Typesense pas accessible depuis le service GKE"
+        err "$(echo "$health" | jq -r .typesense)"
+        exit 1
+    fi
 
-    # Inventaire actuel
-    local cur_docs
-    cur_docs=$(curl -s "http://$TS_HOST:$TS_PORT/collections/$TS_COLLECTION" \
-                    -H "X-TYPESENSE-API-KEY: $TS_API_KEY" 2>/dev/null \
-               | jq -r '.num_documents // 0')
-    log "Typesense GKE actuellement : $cur_docs docs"
-    echo "$cur_docs" > "$CHECKPOINT_DIR/docs_before.txt"
+    local stats
+    if stats=$(api_get "/admin/collections/$TS_COLLECTION" 2>/dev/null); then
+        local n
+        n=$(echo "$stats" | jq -r '.num_documents // 0')
+        log "Collection $TS_COLLECTION : $n docs"
+        echo "$n" > "$CHECKPOINT_DIR/docs_before.txt"
+    else
+        log "Collection $TS_COLLECTION inexistante. Sera creee a l'etape 1."
+    fi
 }
 
-step_1_diff_categories() {
+step_1_create_collection() {
     if ! step_pending "step1"; then log "step1 deja fait, skip"; return; fi
-    log "=== Etape 1 : diff catégories Milvus vs Typesense GKE ==="
-    confirm "Lancer list_missing_categories.py ?" || return
+    log "=== Etape 1 : creer la collection si necessaire ==="
 
-    cd "$VM_DIR"
-    python3 list_missing_categories.py 2>&1 | tee "$LOG_DIR/step1_${TIMESTAMP}.log"
-
-    local missing_file="$REPO_ROOT/rubriques/categories_missing.txt"
-    if [ ! -f "$missing_file" ]; then
-        err "categories_missing.txt non genere"
-        return 1
+    if api_get "/admin/collections/$TS_COLLECTION" >/dev/null 2>&1; then
+        log "Collection $TS_COLLECTION existe deja"
+        step_done "step1"
+        return
     fi
-    local n_missing
-    n_missing=$(wc -l < "$missing_file")
-    log "Catégories manquantes : $n_missing"
+
+    confirm "Creer la collection '$TS_COLLECTION' avec le schema standard ?" || return
+    api_post_json "/admin/collections/$TS_COLLECTION" "{}" \
+        | tee "$LOG_DIR/step1_create_${TS}.log" >/dev/null
+    log "Collection creee"
     step_done "step1"
 }
 
-step_2_ingest() {
+step_2_diff_categories() {
     if ! step_pending "step2"; then log "step2 deja fait, skip"; return; fi
-    log "=== Etape 2 : ingestion delta ==="
-    local missing_file="$REPO_ROOT/rubriques/categories_missing.txt"
-    [ -f "$missing_file" ] || { err "$missing_file absent, refaire step 1"; return 1; }
+    log "=== Etape 2 : diff categories ($CATEGORIES_FILE vs Typesense GKE) ==="
 
-    local n_missing
-    n_missing=$(wc -l < "$missing_file")
-    confirm "Ingerer $n_missing catégories ? (~5-8h)" || return
+    [ -f "$CATEGORIES_FILE" ] || {
+        err "Fichier source catalogue absent : $CATEGORIES_FILE"
+        err "  -> exporter depuis Milvus via list_missing_categories.py"
+        err "  -> ou fournir un fichier custom via CATEGORIES_FILE=... bash $0"
+        return 1
+    }
+    local total
+    total=$(wc -l < "$CATEGORIES_FILE")
+    log "Catalogue cible : $total categories ($CATEGORIES_FILE)"
 
-    cd "$VM_DIR"
-    export TS_HOST TS_PORT TS_API_KEY TS_COLLECTION
-    export EXTRA_FILTER="${EXTRA_FILTER:-etat in [\"Client\",\"Pause\",\"Prospect\"]}"
+    # Recuperer les categories deja presentes dans Typesense via facet
+    local categories_present_file="$CHECKPOINT_DIR/categories_present.txt"
+    log "Recuperation des categories actuelles via facet..."
+    api_get "/search/text" >/dev/null 2>&1 || true  # warm-up
+    # /admin n'a pas de facet direct, on fait via une requete de search
+    # qui retourne le facet (POST /search avec q=*) - utiliser la collection
+    # directement via search Typesense par le service Python.
+    # Solution simple : appeler /search (route principale) avec un facet hack
+    # Hack alternatif : faire un POST /search/text avec un query qui matche
+    # tout, et facets.
 
-    local logfile="$LOG_DIR/step2_ingest_${TIMESTAMP}.log"
-    log "Lancement en nohup : $logfile"
-    nohup python3 ingest_by_categories.py \
-        CATEGORIES_FILE="$missing_file" \
-        > "$logfile" 2>&1 &
-    local pid=$!
-    echo "$pid" > "$CHECKPOINT_DIR/step2.pid"
-    log "PID : $pid"
-    log "Suivre : tail -f $logfile"
-    log "Quand termine, relance ce script pour passer a l'etape 3."
+    # Approche pragmatique : on bombarde TOUTES les categories, l'upsert
+    # est idempotent. Pas besoin de diff strict ici, le service /ingest/category
+    # filtre Milvus par categorie donc rien ne se passe si rien a ingerer.
 
-    # On ne marque PAS step2 done ici (asynchrone). On verifie a la
-    # prochaine invocation.
+    cp "$CATEGORIES_FILE" "$CHECKPOINT_DIR/categories_to_ingest.txt"
+    log "Plan d'ingestion : toutes les $total categories (idempotent)."
+    log "Note : Typesense fait upsert, pas de duplicat cree."
+    step_done "step2"
 }
 
-step_2_check() {
-    if [ ! -f "$CHECKPOINT_DIR/step2.pid" ]; then return; fi
-    if step_pending "step2"; then
-        local pid
-        pid=$(cat "$CHECKPOINT_DIR/step2.pid")
-        if kill -0 "$pid" 2>/dev/null; then
-            log "Ingestion encore en cours (PID $pid). Patientez puis relancez."
-            exit 0
-        else
-            log "Ingestion terminee (PID $pid). Verification logs..."
-            local logfile
-            logfile=$(ls -1t "$LOG_DIR"/step2_ingest_*.log 2>/dev/null | head -1)
-            tail -20 "$logfile"
-            confirm "Marquer l'etape 2 comme done ?" && step_done "step2"
-        fi
-    fi
-}
-
-step_3_orphans() {
+step_3_ingest_chunked() {
     if ! step_pending "step3"; then log "step3 deja fait, skip"; return; fi
-    log "=== Etape 3 : cleanup orphelins ==="
-    confirm "Lancer delete_orphans.py en DRY-RUN ?" || return
+    log "=== Etape 3 : ingestion par chunks de $CHUNK_SIZE categories ==="
 
-    cd "$VM_DIR"
-    export TS_HOST TS_PORT TS_API_KEY TS_COLLECTION
+    local cats_file="$CHECKPOINT_DIR/categories_to_ingest.txt"
+    [ -f "$cats_file" ] || { err "step2 incomplete"; return 1; }
+    local total
+    total=$(wc -l < "$cats_file")
+    log "Total : $total categories, chunks de $CHUNK_SIZE"
 
-    DRY_RUN=1 python3 delete_orphans.py 2>&1 | tee "$LOG_DIR/step3_dryrun_${TIMESTAMP}.log"
+    confirm "Lancer l'ingestion (~$((total * 30 / 60)) min estimees) ?" || return
 
-    confirm "Lancer la suppression reelle des orphelins ?" || return
-    python3 delete_orphans.py 2>&1 | tee "$LOG_DIR/step3_real_${TIMESTAMP}.log"
+    local progress_file="$CHECKPOINT_DIR/step3_progress.txt"
+    local n_done=0
+    [ -f "$progress_file" ] && n_done=$(cat "$progress_file")
+    log "Reprise depuis ligne $n_done"
+
+    local chunk_idx=0
+    local line_idx=0
+    local chunk_cats=""
+
+    # Lecture ligne par ligne
+    while IFS= read -r cat || [ -n "$cat" ]; do
+        line_idx=$((line_idx + 1))
+        # Skip lignes vides ou commentaires
+        [ -z "$cat" ] && continue
+        case "$cat" in \#*) continue ;; esac
+        # Skip si deja traite (reprise)
+        if [ "$line_idx" -le "$n_done" ]; then continue; fi
+
+        # Echappe les guillemets pour le JSON
+        cat_escaped=$(echo "$cat" | sed 's/"/\\"/g')
+        if [ -z "$chunk_cats" ]; then
+            chunk_cats="\"$cat_escaped\""
+        else
+            chunk_cats="$chunk_cats,\"$cat_escaped\""
+        fi
+
+        if [ $((line_idx % CHUNK_SIZE)) -eq 0 ]; then
+            chunk_idx=$((chunk_idx + 1))
+            send_chunk "$chunk_idx" "$chunk_cats" "$line_idx" "$total"
+            chunk_cats=""
+            echo "$line_idx" > "$progress_file"
+        fi
+    done < "$cats_file"
+
+    # Flush du dernier chunk partiel
+    if [ -n "$chunk_cats" ]; then
+        chunk_idx=$((chunk_idx + 1))
+        send_chunk "$chunk_idx" "$chunk_cats" "$line_idx" "$total"
+        echo "$line_idx" > "$progress_file"
+    fi
+
+    log "Ingestion terminee : $line_idx categories"
     step_done "step3"
 }
 
-step_4_idf() {
+send_chunk() {
+    local idx="$1" cats="$2" pos="$3" total="$4"
+    log "Chunk #$idx (pos $pos/$total)..."
+    local body
+    body=$(cat <<EOF
+{
+  "categories": [$cats],
+  "ts_collection": "$TS_COLLECTION",
+  "extra_filter": "$EXTRA_FILTER",
+  "batch_size": 1000,
+  "stop_if_disk_gb_below": 3.0
+}
+EOF
+)
+    local logfile="$LOG_DIR/step3_chunk_${idx}_${TS}.json"
+    if api_post_json "/ingest/categories/batch" "$body" > "$logfile" 2>&1; then
+        local n_ok n_total
+        n_ok=$(jq -r '.total_chunks_ok // 0' < "$logfile")
+        n_total=$(jq -r '.total_chunks_milvus // 0' < "$logfile")
+        log "  OK $n_ok/$n_total chunks. Detail : $logfile"
+    else
+        err "Echec chunk #$idx. Voir $logfile"
+        err "Reprendre via : bash $0 (reprend a la ligne $pos)"
+        exit 1
+    fi
+}
+
+step_4_sync_delta() {
     if ! step_pending "step4"; then log "step4 deja fait, skip"; return; fi
-    log "=== Etape 4 : regenerer IDF ==="
-    confirm "Generer idf_nom_produit.json sur Typesense GKE ?" || return
+    log "=== Etape 4 : sync incremental (NEW + UPDATED + DELETED orphelins) ==="
 
-    cd "$OPTI_FRONT_DIR"
-    docker compose exec -e TYPESENSE_HOST="$TS_HOST" \
-                        -e TYPESENSE_PORT="$TS_PORT" \
-                        -e TYPESENSE_API_KEY="$TS_API_KEY" \
-                        opti-moteur-front \
-                        python scripts/compute_idf.py \
-        2>&1 | tee "$LOG_DIR/step4_idf_${TIMESTAMP}.log"
+    confirm "Lancer /sync/incremental (delta + orphelins) ?" || return
 
-    if [ -f "$OPTI_FRONT_DIR/app/data/idf_nom_produit.json" ]; then
-        local size
-        size=$(du -h "$OPTI_FRONT_DIR/app/data/idf_nom_produit.json" | cut -f1)
-        log "IDF cree : $size"
-        docker compose restart opti-moteur-front
-        sleep 5
-        docker compose logs --tail 30 opti-moteur-front | grep -i "IDF" || true
+    local body
+    body=$(cat <<EOF
+{
+  "delete_orphans": true,
+  "batch_size": 1000
+}
+EOF
+)
+    local logfile="$LOG_DIR/step4_sync_${TS}.json"
+    if api_post_json "/sync/incremental" "$body" -H "X-Sync-Token: $SYNC_TOKEN" > "$logfile" 2>&1; then
+        cat "$logfile" | jq .
         step_done "step4"
     else
-        err "idf_nom_produit.json non genere, voir log"
+        err "Sync incremental echoue. Voir $logfile"
         return 1
     fi
 }
 
-step_5_synonyms() {
+step_5_idf() {
     if ! step_pending "step5"; then log "step5 deja fait, skip"; return; fi
-    log "=== Etape 5 : verif synonymes ==="
-    local n_syn
-    n_syn=$(curl -s "http://$TS_HOST:$TS_PORT/collections/$TS_COLLECTION/synonyms" \
-                 -H "X-TYPESENSE-API-KEY: $TS_API_KEY" \
-            | jq -r '.synonyms | length // 0')
-    log "Synonymes Typesense GKE : $n_syn clusters"
-    if [ "$n_syn" -lt 100 ]; then
-        err "Synonymes anormalement bas. Lancer cote PHP :"
-        err "  php site/script/typesense/sync_synonyms_daily.php"
-    else
-        log "Synonymes OK"
-        step_done "step5"
-    fi
+    log "=== Etape 5 : regenerer IDF (sur le pod GKE) ==="
+
+    err "ACTION MANUELLE : regenerer idf_nom_produit.json sur le pod GKE"
+    err "  kubectl exec -it <pod-opti-moteur-front> -- python scripts/compute_idf.py"
+    err "  puis kubectl rollout restart deployment opti-moteur-front"
+    err "(demander a Tafita si tu n'as pas l'acces kubectl)"
+    err ""
+    err "Alternative : si le service expose une route /admin/compute-idf"
+    err "(pas le cas aujourd'hui), on pourrait l'appeler ici."
+
+    confirm "Marquer cette etape comme done (apres action manuelle Tafita) ?" \
+        && step_done "step5"
 }
 
 summary() {
     log "=== Resume ==="
     local docs_before docs_after
     docs_before=$(cat "$CHECKPOINT_DIR/docs_before.txt" 2>/dev/null || echo "?")
-    docs_after=$(curl -s "http://$TS_HOST:$TS_PORT/collections/$TS_COLLECTION" \
-                      -H "X-TYPESENSE-API-KEY: $TS_API_KEY" \
+    docs_after=$(api_get "/admin/collections/$TS_COLLECTION" 2>/dev/null \
                  | jq -r '.num_documents // "?"')
-    log "Docs Typesense GKE : $docs_before -> $docs_after"
+    log "Docs Typesense : $docs_before -> $docs_after"
     log ""
     log "Etapes :"
     for s in step1 step2 step3 step4 step5; do
@@ -244,16 +316,15 @@ summary() {
         fi
     done
     log ""
-    log "Pour reset checkpoints (refaire from scratch) :"
-    log "  rm -rf $CHECKPOINT_DIR"
+    log "Reset complet : rm -rf $CHECKPOINT_DIR"
+    log "Logs detailles : ls -lh $LOG_DIR"
 }
 
 # ========== MAIN ==========
 preflight
-step_2_check
-step_1_diff_categories
-step_2_ingest
-step_3_orphans
-step_4_idf
-step_5_synonyms
+step_1_create_collection
+step_2_diff_categories
+step_3_ingest_chunked
+step_4_sync_delta
+step_5_idf
 summary

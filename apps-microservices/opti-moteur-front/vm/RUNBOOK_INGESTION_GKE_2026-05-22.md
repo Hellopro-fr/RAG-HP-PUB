@@ -1,274 +1,247 @@
-# Runbook : Ingestion Milvus → Typesense GKE (toutes catégories + delta)
+# Runbook : Ingestion Milvus → Typesense GKE (v2, via service Python)
 
-**Date** : 2026-05-22
-**Contexte** : Migration définitive du moteur de recherche front. Le Typesense
-GKE a déjà reçu une 1ère ingestion partielle. On finalise en (a) couvrant
-toutes les catégories Milvus restantes, (b) supprimant les orphelins, (c)
-régénérant l'IDF.
+**Date** : 2026-05-22 (v2)
+**Statut** : Architecture clarifiée — tout passe par les routes HTTP du service
+Python GKE, plus besoin d'accéder directement à Typesense interne.
 
-**Source** : Milvus prod (collection `produits_3`) accessible depuis la VM GCP
-`vm-embedding-g2-std-24-use`.
-**Cible** : Typesense GKE `http://10.0.1.240:8570`, collection `produits_prod`.
+**Source** : Milvus prod (`produits_3`), accessible **depuis le pod GKE** (vérifié
+via `/sync/health` qui renvoie `"milvus":"ok"`).
+**Cible** : Typesense GKE, **collection `produits_prod`**, atteint via
+`POST /ingest/...` au service Python GKE `http://10.0.1.240:8570`.
 
-**Durée totale estimée** : 6-10 h (dont 5-8 h en background pour l'ingestion).
-
----
-
-## Pré-requis sur la VM (à valider AVANT)
-
-### A. `.env` à jour
-Le `.env` de la VM doit contenir (au-delà des Milvus et embedding existants) :
-
-```bash
-# Cible Typesense GKE (NEW 2026-05-22)
-TYPESENSE_HOST=10.0.1.240
-TYPESENSE_PORT=8570
-TYPESENSE_API_KEY=P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU=
-TYPESENSE_COLLECTION=produits_prod
-```
-
-⚠️ La sortie `grep -E "TYPESENSE|EMBEDDING" .env` du 22/05 ne montrait que :
-```
-EMBEDDING_API_URL="https://api.hellopro.eu/embedding-service/embedding"
-EMBEDDING_API_KEY="your_optional_embedding_api_key"
-```
-→ **Action** : ajouter le bloc TYPESENSE_* ci-dessus.
-
-### B. Connectivité réseau
-
-```bash
-# Health Typesense GKE depuis la VM
-curl -sf "http://10.0.1.240:8570/health" \
-  -H "X-TYPESENSE-API-KEY: P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU=" | jq .
-# Attendu : {"ok":true}
-```
-
-Si timeout → contacter Tafita pour vérifier le firewall GCP (VPC privé).
-
-### C. Inventaire actuel Typesense GKE
-
-```bash
-# Total docs
-curl -s "http://10.0.1.240:8570/collections/produits_prod" \
-  -H "X-TYPESENSE-API-KEY: P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU=" | jq '.num_documents'
-
-# Nb catégories distinctes (facet)
-curl -s "http://10.0.1.240:8570/collections/produits_prod/documents/search?q=*&facet_by=categorie&per_page=0&max_facet_values=2000" \
-  -H "X-TYPESENSE-API-KEY: P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU=" \
-  | jq '.facet_counts[0].counts | length'
-```
-
-Noter les chiffres → comparaison avant/après.
+**Durée totale estimée** : 4-8 h (selon volume catalogue Milvus).
 
 ---
 
-## Étape 1 — Diff catégories Milvus vs Typesense (5 min)
+## Architecture (clarifiée)
+
+```
+   [VM GCP devhp]                  [GCP private network]              [GKE cluster]
+   ──────────────                  ─────────────────────              ─────────────
+                                                                   ┌─────────────────────┐
+   migrate_to_gke.sh ───── HTTP ──> http://10.0.1.240:8570 ──────> │ opti-moteur-front   │
+   (curl + checkpoints)            (ingress GKE)                   │  /ingest/...        │
+                                                                   │  /sync/...          │
+                                                                   │  /admin/...         │
+                                                                   └─┬─────────────────┬─┘
+                                                                     │                 │
+                                                                     ▼                 ▼
+                                                          ┌──────────────┐  ┌──────────────┐
+                                                          │ Milvus prod  │  │ Typesense    │
+                                                          │  produits_3  │  │ GKE pod      │
+                                                          └──────────────┘  └──────────────┘
+```
+
+⚠️ **Ce que `10.0.1.240:8570` N'EST PAS** : ce n'est pas le Typesense GKE direct.
+C'est le **microservice Python `opti-moteur-front`** qui sert d'orchestrateur.
+On l'a confirmé via `curl /health` qui retourne :
+```json
+{"status":"ok","typesense":"ok","milvus":"ok"}
+```
+(format service Python, pas Typesense pur qui répondrait `{"ok":true}`).
+
+---
+
+## Pré-requis (3 min)
+
+### A. Connectivité depuis la VM
+
+```bash
+curl -s http://10.0.1.240:8570/sync/health | jq .
+# Attendu :
+# {
+#   "status": "ok",
+#   "milvus": "ok (XXXXXXX entities, collection=produits_3)",
+#   "typesense": "ok (NNNNNNN docs, collection=produits_prod)"
+# }
+```
+
+Si timeout → joindre Tafita (firewall VPC GCP).
+
+### B. SYNC_TOKEN
+
+Le token est défini dans l'env du pod GKE. Par défaut : `hp_sync_2026_04_30_xZ7q`.
+À vérifier avec Tafita s'il a été changé en prod.
+
+```bash
+# Si different, exporter avant de lancer le script
+export SYNC_TOKEN="<valeur reelle>"
+```
+
+### C. Liste catalogue Milvus
+
+Le script utilise par défaut `rubriques/categories_from_roots.txt` comme source
+de vérité (committé dans le repo). À refresh si manquant :
 
 ```bash
 cd ~/RAG-HP-PUB/apps-microservices/opti-moteur-front/vm
-
-# Charger les credentials Milvus
 export $(grep -E '^(ZILLIZ_|MILVUS_)' ../.env | xargs)
 export MILVUS_HOST="$ZILLIZ_URI" MILVUS_PORT="$ZILLIZ_PORT"
 export MILVUS_USER="$ZILLIZ_USER" MILVUS_PASSWORD="$ZILLIZ_PASSWORD"
-
-# Lister catégories absentes du Typesense GKE
-# NOTE : list_missing_categories.py compare avec rubriques/categories_from_roots*.txt
-# Pour comparer dynamiquement avec Typesense GKE, voir migrate_to_gke.sh ci-dessous
 python3 list_missing_categories.py
-
-# Output :
-#   ../../../rubriques/categories_missing.txt          (1 ligne / catégorie)
-#   ../../../rubriques/categories_missing_chunks_NN.txt (lots de 100)
-
-wc -l ../../../rubriques/categories_missing.txt
+# Genere rubriques/categories_missing.txt
 ```
 
 ---
 
-## Étape 2 — Ingestion (5-8 h en background)
+## Procédure en 1 commande
 
 ```bash
-# 1. Pointer Typesense GKE
-export TS_HOST=10.0.1.240
-export TS_PORT=8570
-export TS_API_KEY='P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU='
-export TS_COLLECTION=produits_prod
-
-# 2. (Optionnel) filtre etat pour ne prendre que produits actifs
-export EXTRA_FILTER='etat in ["Client","Pause","Prospect"]'
-
-# 3. Lancer en nohup, log timestampé
-LOG=/tmp/ingest_gke_$(date +%Y%m%d_%H%M).log
-nohup python3 ingest_by_categories.py \
-  CATEGORIES_FILE=../../../rubriques/categories_missing.txt \
-  > $LOG 2>&1 &
-echo "PID : $!"
-echo "Log : $LOG"
+cd ~/RAG-HP-PUB
+git pull origin features/poc
+bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 ```
 
-### Monitoring en parallèle
+Le script gère 5 étapes interactives (Y/N à chaque palier), avec checkpoints
+dans `/tmp/migrate_gke_checkpoints/` pour reprise.
+
+### Étapes orchestrées
+
+| # | Action | Route HTTP | Durée |
+|---|---|---|---|
+| 1 | Créer collection si absente | `POST /admin/collections/produits_prod` | < 1 s |
+| 2 | Préparer liste catégories | (lecture fichier) | < 1 s |
+| 3 | Ingestion chunked (CHUNK_SIZE catégories à la fois) | `POST /ingest/categories/batch` | ~4-8 h |
+| 4 | Sync delta + orphelins | `POST /sync/incremental` (token) | 5-30 min |
+| 5 | Régénération IDF | **manuel** (kubectl exec sur pod) | 1-5 min |
+
+### Options
 
 ```bash
-# Suivre les logs
-tail -f /tmp/ingest_gke_*.log
+# Run non-interactif (CI / nohup)
+AUTO=1 bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 
-# Compteur Typesense GKE (toutes les 5 min)
-watch -n 300 'curl -s "http://10.0.1.240:8570/collections/produits_prod" \
-  -H "X-TYPESENSE-API-KEY: P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU=" \
-  | jq ".num_documents"'
+# Lancer en background avec log
+nohup bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh \
+    > /tmp/migrate_gke_$(date +%Y%m%d).log 2>&1 &
+tail -f /tmp/migrate_gke_*.log
 
-# RAM/CPU
-docker stats opti-moteur-front 2>/dev/null
-```
+# Custom catalogue source
+CATEGORIES_FILE=~/RAG-HP-PUB/rubriques/categories_missing.txt \
+    bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 
-### Reprise après interruption
-
-`ingest_by_categories.py` est idempotent (upsert + SKIP_EXISTING optionnel) :
-
-```bash
-SKIP_EXISTING=1 nohup python3 ingest_by_categories.py \
-  CATEGORIES_FILE=../../../rubriques/categories_missing.txt \
-  > /tmp/ingest_gke_resume_$(date +%Y%m%d_%H%M).log 2>&1 &
+# Chunk plus petit (si timeout HTTP sur l'API)
+CHUNK_SIZE=10 bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 ```
 
 ---
 
-## Étape 3 — Cleanup orphelins (30 min)
+## Monitoring (autre terminal)
 
 ```bash
-cd ~/RAG-HP-PUB/apps-microservices/opti-moteur-front/vm
+# Compteur docs Typesense GKE
+watch -n 60 'curl -s http://10.0.1.240:8570/admin/collections/produits_prod \
+              | jq ".num_documents"'
 
-export $(grep -E '^(ZILLIZ_|MILVUS_)' ../.env | xargs)
-export MILVUS_HOST="$ZILLIZ_URI" MILVUS_PORT="$ZILLIZ_PORT"
-export MILVUS_USER="$ZILLIZ_USER" MILVUS_PASSWORD="$ZILLIZ_PASSWORD"
-export TS_HOST=10.0.1.240 TS_PORT=8570
-export TS_API_KEY='P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU='
-export TS_COLLECTION=produits_prod
+# Logs detailles par chunk
+ls -lt /tmp/migrate_gke_logs/ | head -20
+tail -f /tmp/migrate_gke_logs/step3_chunk_*.json | jq .
 
-# DRY-RUN d'abord (compte sans supprimer)
-DRY_RUN=1 python3 delete_orphans.py
-# Doit afficher : "X orphelins detectes (dry-run, aucune suppression)"
-
-# Si le X est raisonnable (< 5 % du total), supprimer pour de vrai
-python3 delete_orphans.py
-```
-
-⚠️ Si X > 10 % du total → STOP, analyser pourquoi avant suppression.
-Cas connus : filtre EXTRA_FILTER différent entre runs successifs.
-
----
-
-## Étape 4 — Régénérer IDF (1-5 min)
-
-Le fichier `app/data/idf_nom_produit.json` est **actuellement absent** sur la
-VM (vérifié 22/05). Le reranker tourne donc en mode strict (perte de la
-qualité A4 IDF). Régénération obligatoire après l'ingestion :
-
-```bash
-cd ~/RAG-HP-PUB/apps-microservices/opti-moteur-front
-
-# 1. Pointer le script sur le Typesense GKE (sinon il pointe par défaut sur
-#    le Typesense de la VM legacy)
-export TYPESENSE_HOST=10.0.1.240
-export TYPESENSE_PORT=8570
-export TYPESENSE_API_KEY='P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU='
-
-# 2. Génération via le container (toutes les deps déjà là)
-docker compose exec opti-moteur-front python scripts/compute_idf.py
-
-# 3. Vérifier que le fichier est apparu côté hôte (bind-mount)
-ls -lh app/data/idf_nom_produit.json
-# Attendu : ~20 MB, fraîchement créé
-
-# 4. Recharger le service pour reprise du nouveau dict
-docker compose restart opti-moteur-front
-docker compose logs --tail 30 opti-moteur-front | grep -i "IDF"
-# Attendu : "IDF loaded from idf_nom_produit.json : NNNN tokens, ..."
+# Etat des checkpoints
+ls -lh /tmp/migrate_gke_checkpoints/
+cat /tmp/migrate_gke_checkpoints/step3_progress.txt  # ligne actuelle dans le CSV
 ```
 
 ---
 
-## Étape 5 — Sync synonymes GKE (5 min)
+## Reprise après interruption
 
-Vérifier que les synonymes sont bien sur le Typesense GKE :
+Le script est **idempotent** (upsert Typesense) et **resumable** (checkpoints).
 
 ```bash
-curl -s "http://10.0.1.240:8570/collections/produits_prod/synonyms" \
-  -H "X-TYPESENSE-API-KEY: P8SRQOLdgrsq0gYZ1ZkbrJ8yRtY+l/A50MAo3OlnDMU=" \
-  | jq '.synonyms | length'
-# Attendu : ~2000 clusters (1993 + synonymes manuels)
-```
+# Reprendre où on s'est arreté
+bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 
-Si 0 ou très faible → lancer le script PHP de sync (côté hellopro.fr) :
-```bash
-# Sur le serveur hellopro.fr
-php site/script/typesense/sync_synonyms_daily.php
+# Force reset complet (refaire from scratch)
+rm -rf /tmp/migrate_gke_checkpoints
+bash apps-microservices/opti-moteur-front/vm/migrate_to_gke.sh
 ```
 
 ---
 
-## Étape 6 — Smoke test (10 min, depuis Windows)
+## Étape 5 — IDF (action manuelle Tafita)
 
-Une fois tout déployé, vérifier que ça fonctionne via :
+Le service ne pousse PAS encore d'endpoint admin `/admin/compute-idf` (TODO
+future). Pour régénérer :
+
+```bash
+# Sur la machine qui a kubectl/GKE acces (Tafita ou toi via gcloud auth)
+POD=$(kubectl get pod -l app=opti-moteur-front -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it $POD -- python scripts/compute_idf.py
+kubectl rollout restart deployment opti-moteur-front
+sleep 30
+kubectl logs --tail=30 -l app=opti-moteur-front | grep -i "IDF"
+# Attendu : "IDF loaded from idf_nom_produit.json : NNNNNN tokens, ..."
+```
+
+⚠️ **Persistance critique** : `app/data/idf_nom_produit.json` doit être sur un
+**PVC** (PersistentVolumeClaim) Kubernetes, sinon il sera perdu au prochain
+redéploiement. À vérifier avec Tafita. Sinon prévoir un `initContainer` qui
+regénère l'IDF au démarrage.
+
+**Alerte 22/05** : le fichier était absent du `app/data/` de la VM, signe que
+la persistance n'était peut-être déjà pas assurée côté VM. À reproduire sur
+GKE : `kubectl describe pod opti-moteur-front | grep -A5 Volumes`.
+
+---
+
+## Smoke test post-ingestion (depuis Windows)
+
+Une fois les 5 étapes vertes :
 
 ```powershell
 cd C:\RIJA\CLAUDE_CODE\opti_moteur\RAG-HP-PUB
 .\bench_production\smoke_test_bascule.ps1 -Phase post
 ```
 
-Critère succès : tous les `armoire medicale`, `ritmo`, `urinoir delabie`,
-`e-crane`, `lockers bagagerie` retournent leurs top-1 attendus.
+Critère : tous les `armoire medicale`, `ritmo`, `urinoir delabie`, `e-crane`,
+`lockers bagagerie` retournent leurs top-1 attendus (cf audits Elena).
 
 ---
 
-## Étape 7 — Bascule par défaut (PR #622)
+## Bascule par défaut (PR #622 déjà mergée)
 
-Une fois les étapes 1-6 vertes :
+Côté Ecritel, vérifier que `moteur_recherche.php` contient bien la ligne :
+```php
+if (!defined('HP_USE_HYBRID_SEARCH')) define('HP_USE_HYBRID_SEARCH', true);
+```
 
+Test final :
 ```bash
-# Sur le serveur Ecritel
-# 1. Vérifier le flag dans le PHP (doit être true post-merge PR #622)
-grep "HP_USE_HYBRID_SEARCH" /var/www/.../hellopro_fr/moteur_recherche.php
-# Attendu : if (!defined('HP_USE_HYBRID_SEARCH')) define('HP_USE_HYBRID_SEARCH', true);
-
-# 2. Test URL legacy (rollback fonctionne)
-curl -s "https://www.hellopro.fr/moteur_recherche/recherche_resultat.php?type_recherche=produit&recherche_active=1&mot_cles=ritmo&legacy=1" \
-  | grep -i "HP_QUALITY_P1"
-
-# 3. Test URL default (doit utiliser hybride)
+# URL default doit retourner mode hybride (marker HP_QUALITY_P1)
 curl -s "https://www.hellopro.fr/moteur_recherche/recherche_resultat.php?type_recherche=produit&recherche_active=1&mot_cles=ritmo" \
-  | grep -i "HP_QUALITY_P1"
-# Attendu : présence du marker HP_QUALITY_P1
+  | grep -o 'HP_QUALITY_P1:\s*regime=\w*'
 ```
 
 ---
 
-## Monitoring J+1 post-ingestion
+## Plan de rollback
+
+| Niveau | Action | Délai |
+|---|---|---|
+| URL | `?legacy=1` sur l'URL de test | 0 s |
+| Front | `HP_USE_HYBRID_SEARCH=false` + redéploy Ecritel | 5 min |
+| Infra | Tafita repointe gateway sur ancien backend Milvus | 10 min |
+
+---
+
+## Monitoring J+1
 
 | Métrique | Source | Seuil alerte |
 |---|---|---|
-| `num_documents` Typesense GKE | `/collections/produits_prod` | < 95 % du target |
-| Latence p95 `/search` | logs opti-moteur-front | > 1.5 s |
+| `num_documents` Typesense GKE | `GET /admin/collections/produits_prod` | < 95 % target |
+| Latence p95 `/search/text` | logs opti-moteur-front | > 1.5 s |
 | Taux 5xx | gateway api.hellopro.eu | > 1 % |
 | Plaintes Elena | Slack #moteur-recherche | 0 attendu |
 
 ---
 
-## Plan de rollback (urgence)
+## Liens
 
-Si dégradation détectée :
-
-1. **Quick** (URL niveau) : passer toutes les URLs en `?legacy=1` côté front
-2. **Medium** (5 min) : passer `HP_USE_HYBRID_SEARCH=false` + redéploy PHP
-3. **Heavy** (10 min) : Tafita repointe la gateway sur l'ancien backend Milvus
-
----
-
-## Fichiers liés
-
-- Script wrapper : [`migrate_to_gke.sh`](./migrate_to_gke.sh) — orchestration auto
-- Scripts d'ingestion existants : `ingest_by_categories.py`, `delete_orphans.py`,
-  `list_missing_categories.py`, `compute_idf.py`
-- Doc bascule : [`../../../site/moteur_recherche/BASCULE_DEFAULT_HYBRID_2026-05-22.md`](../../../site/moteur_recherche/BASCULE_DEFAULT_HYBRID_2026-05-22.md)
-- PR #622 : https://github.com/Hellopro-fr/RAG-HP-PUB/pull/622
+- Script wrapper : [`migrate_to_gke.sh`](./migrate_to_gke.sh)
+- API ingestion : `app/router/ingest.py` (`POST /ingest/categories/batch`)
+- API sync : `app/router/sync.py` (`POST /sync/incremental`)
+- API admin : `app/router/admin.py`
+- Doc bascule par défaut : [`../../../site/moteur_recherche/BASCULE_DEFAULT_HYBRID_2026-05-22.md`](../../../site/moteur_recherche/BASCULE_DEFAULT_HYBRID_2026-05-22.md)
+- PR bascule (mergée) : https://github.com/Hellopro-fr/RAG-HP-PUB/pull/622
+- PR ce runbook : https://github.com/Hellopro-fr/RAG-HP-PUB/pull/623
