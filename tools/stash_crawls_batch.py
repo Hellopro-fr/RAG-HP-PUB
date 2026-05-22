@@ -16,7 +16,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger("stash_crawls_batch")
@@ -122,7 +122,7 @@ class BatchState:
         if klass == "done":
             line = f"{crawl_id}\n"
         else:
-            ts = datetime.now(UTC).isoformat(timespec="seconds")
+            ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
             if detail:
                 line = f"{crawl_id}\t{detail}\t{ts}\n"
             else:
