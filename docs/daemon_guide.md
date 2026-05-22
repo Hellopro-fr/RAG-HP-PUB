@@ -273,6 +273,22 @@ If `POST /unstash/{crawl_id}` returns `gcs_cleanup_status="deferred"`, the local
 3. List orphans: `gcloud storage ls gs://{bucket}/stash/` and cross-reference with Redis `crawl_job:*` keys that no longer have `stashed_at`
 4. Delete confirmed orphans manually: `gcloud storage rm gs://{bucket}/stash/{crawl_id}.tar.gz`
 
+**Redis restarted without recreating crawler-service:**
+After any Redis restart (e.g. `maxclients` bump, version upgrade, OOM kill), **always recreate the crawler-service replicas** to drop the stale connection pool. Symptoms when skipped: intermittent `redis.exceptions.TimeoutError: Timeout connecting to server` from `cache_service.get_json` and downstream `Heartbeat for '{id}' skipped: job key disappeared from Redis mid-run` warnings. The Python pool's `health_check_interval=30s` (see spec `2026-05-21-redis-connection-leak-fix-design.md`) eventually invalidates dead sockets, but reconnect storms during Redis cold-start can exceed `socket_connect_timeout=5s`. One-line ops fix:
+
+```bash
+docker compose --profile crawling up -d --force-recreate crawler-service
+```
+
+If running multi-replica, rolling-restart one replica at a time to keep capacity:
+
+```bash
+for n in $(docker ps --filter "name=crawler-service-" --format "{{.Names}}"); do
+    docker compose --profile crawling up -d --force-recreate "$n"
+    sleep 10  # let replica drain + reconnect before moving on
+done
+```
+
 ---
 
 ## Automatic Cleanup
