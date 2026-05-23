@@ -146,10 +146,13 @@ SAFETY_MARGIN_BYTES = 10 * 1024**3        # 10 GB headroom on top of source size
 DISK_WAIT_MAX_SECONDS = 30 * 60           # 30 min total wait per crawl
 DISK_WAIT_INTERVAL = 60                   # poll every 60s
 
-# Per-crawl timeout knobs (max 60 min, min 10 min, 3 min per GB)
+# Per-crawl timeout knobs (max 120 min, min 10 min, 5 min per GB).
+# Calibrated against worst-case server wall-clock for 20 GB crawl
+# (tar + integrity + cleanup ~25-100 min on /mnt/data at 95% used).
+# See docs/superpowers/specs/2026-05-23-stash-script-poll-fallthrough-design.md § 4.
 _TIMEOUT_MIN = 600
-_TIMEOUT_MAX = 3600
-_TIMEOUT_PER_GB = 180
+_TIMEOUT_MAX = 7200
+_TIMEOUT_PER_GB = 300
 
 
 def per_crawl_timeout(size_bytes: int) -> int:
@@ -204,6 +207,7 @@ def wait_for_disk(needed_bytes: int, disk_target: str) -> None:
 # T2: HTTP post + per-crawl process loop + signals
 # ============================================================
 import signal
+import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -263,57 +267,96 @@ def process_crawl(
     state: "BatchState",
     cfg: Config,
 ) -> None:
-    """Stash one crawl: disk-guard, POST, poll, record."""
+    """Stash one crawl: disk-guard, POST, poll, record.
+
+    POST exception (timeout/URLError/OSError) is treated as "server may
+    still be tarring (see _LockHeartbeat); fall through to completion
+    poll". Persisted 5xx is treated the same way. The completion poll
+    remains the source of truth — it decides done/failed via the
+    local-tar-absent + GCS-present and dead-letter signals.
+    """
     wait_for_disk(size_bytes, cfg.disk_target)
 
     url = f"{cfg.crawler_base_url}/stash/{crawl_id}"
     logger.info("POST %s (size=%.2fG)", url, size_bytes / 1024**3)
-    resp = http_post(url, cfg.http_timeout_seconds)
 
-    if resp.status_code == 404:
-        logger.warning("404 on %s — Redis lost job", crawl_id)
-        state.append("notfound", crawl_id)
-        return
-    if resp.status_code == 409:
-        logger.info("409 on %s — already stashed/archived", crawl_id)
-        state.append("skipped", crawl_id, resp.text[:200].replace("\n", " "))
-        return
-    if resp.status_code == 400:
-        logger.warning("400 on %s — wrong status", crawl_id)
-        state.append("invalid", crawl_id, resp.text[:200].replace("\n", " "))
-        return
-    if resp.status_code >= 500:
-        logger.warning("5xx on %s — retrying in 30s", crawl_id)
-        time.sleep(30)
+    fell_through = False
+    try:
         resp = http_post(url, cfg.http_timeout_seconds)
+    except (TimeoutError, socket.timeout, urllib.error.URLError, OSError) as e:
+        logger.warning(
+            "POST %s did not return within %ds (%s). Server likely still tarring "
+            "(see _LockHeartbeat). Falling through to completion poll.",
+            crawl_id,
+            cfg.http_timeout_seconds,
+            e.__class__.__name__,
+        )
+        resp = None
+        fell_through = True
+
+    if resp is not None:
+        if resp.status_code == 404:
+            logger.warning("404 on %s — Redis lost job", crawl_id)
+            state.append("notfound", crawl_id)
+            return
+        if resp.status_code == 409:
+            logger.info("409 on %s — already stashed/archived", crawl_id)
+            state.append("skipped", crawl_id, resp.text[:200].replace("\n", " "))
+            return
+        if resp.status_code == 400:
+            logger.warning("400 on %s — wrong status", crawl_id)
+            state.append("invalid", crawl_id, resp.text[:200].replace("\n", " "))
+            return
         if resp.status_code >= 500:
-            detail = f"5xx persisted: {resp.text[:200]}".replace("\n", " ")
+            logger.warning("5xx on %s — retrying in 30s", crawl_id)
+            time.sleep(30)
+            try:
+                resp = http_post(url, cfg.http_timeout_seconds)
+            except (TimeoutError, socket.timeout, urllib.error.URLError, OSError) as e:
+                logger.warning(
+                    "Retry POST %s also did not return (%s). Falling through to completion poll.",
+                    crawl_id,
+                    e.__class__.__name__,
+                )
+                resp = None
+                fell_through = True
+            if resp is not None and resp.status_code >= 500:
+                logger.warning(
+                    "5xx persisted on %s — server may still be processing; "
+                    "falling through to completion poll.",
+                    crawl_id,
+                )
+                resp = None
+                fell_through = True
+        elif resp.status_code != 202:
+            detail = f"unexpected {resp.status_code}: {resp.text[:200]}".replace("\n", " ")
             state.append("failed", crawl_id, detail)
-            raise FatalError(f"5xx persisted on {crawl_id}")
-    if resp.status_code != 202:
-        detail = f"unexpected {resp.status_code}: {resp.text[:200]}".replace("\n", " ")
-        state.append("failed", crawl_id, detail)
-        raise FatalError(f"Unexpected {resp.status_code} on {crawl_id}")
+            raise FatalError(f"Unexpected {resp.status_code} on {crawl_id}")
 
     timeout_s = per_crawl_timeout(size_bytes)
     deadline = time.time() + timeout_s
-    logger.info("Polling completion for %s (timeout=%ds)", crawl_id, timeout_s)
+    logger.info(
+        "Polling completion for %s (timeout=%ds, fell_through=%s)",
+        crawl_id,
+        timeout_s,
+        fell_through,
+    )
 
     while time.time() < deadline:
         if _stop_requested:
-            state.append("failed", crawl_id, "interrupted during poll")
+            state.append("failed", crawl_id, f"interrupted during poll (fell_through={fell_through})")
             raise FatalError(f"Interrupted while polling {crawl_id}")
         if dead_letter_exists(crawl_id, cfg.stash_dead_letter_dir):
-            state.append("failed", crawl_id, "dead_letter")
+            state.append("failed", crawl_id, f"dead_letter (fell_through={fell_through})")
             raise FatalError(f"Upload daemon dead-lettered {crawl_id}")
         if not local_tar_exists(crawl_id, cfg.stash_local_dir):
             if gcs_tar_exists(crawl_id, cfg.stash_gcs_bucket, cfg.stash_gcs_prefix):
                 state.append("done", crawl_id)
-                logger.info("DONE %s", crawl_id)
+                logger.info("DONE %s (fell_through=%s)", crawl_id, fell_through)
                 return
         time.sleep(cfg.poll_interval_seconds)
 
-    state.append("failed", crawl_id, f"timeout after {timeout_s}s")
+    state.append("failed", crawl_id, f"timeout after {timeout_s}s (fell_through={fell_through})")
     raise FatalError(f"Timeout waiting for {crawl_id} ({timeout_s}s)")
 
 
