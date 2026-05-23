@@ -201,11 +201,9 @@ def test_process_crawl_5xx_persisted_falls_through_to_poll(monkeypatch, tmp_path
     input_file.write_text("139M\t6271\n", encoding="utf-8")
     state = BatchState(input_file)
 
+    http_post_mock = MagicMock(return_value=HttpResponse(status_code=503, text="overloaded"))
     monkeypatch.setattr("stash_crawls_batch.wait_for_disk", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        "stash_crawls_batch.http_post",
-        MagicMock(return_value=HttpResponse(status_code=503, text="overloaded")),
-    )
+    monkeypatch.setattr("stash_crawls_batch.http_post", http_post_mock)
     monkeypatch.setattr("stash_crawls_batch.local_tar_exists", lambda *_a: False)
     monkeypatch.setattr("stash_crawls_batch.dead_letter_exists", lambda *_a: False)
     monkeypatch.setattr("stash_crawls_batch.gcs_tar_exists", lambda *_a: True)
@@ -214,6 +212,7 @@ def test_process_crawl_5xx_persisted_falls_through_to_poll(monkeypatch, tmp_path
     process_crawl(139 * 1024**2, "6271", state, _cfg())
 
     assert "6271" in state.done
+    assert http_post_mock.call_count == 2, "Expected retry POST to fire on first 5xx"
 
 
 def test_process_crawl_fall_through_times_out_marks_failed(monkeypatch, tmp_path):

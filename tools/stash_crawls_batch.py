@@ -207,7 +207,6 @@ def wait_for_disk(needed_bytes: int, disk_target: str) -> None:
 # T2: HTTP post + per-crawl process loop + signals
 # ============================================================
 import signal
-import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -283,13 +282,14 @@ def process_crawl(
     fell_through = False
     try:
         resp = http_post(url, cfg.http_timeout_seconds)
-    except (TimeoutError, socket.timeout, urllib.error.URLError, OSError) as e:
+    except (urllib.error.URLError, OSError) as e:
         logger.warning(
-            "POST %s did not return within %ds (%s). Server likely still tarring "
+            "POST %s did not return within %ds (%s: %s). Server likely still tarring "
             "(see _LockHeartbeat). Falling through to completion poll.",
             crawl_id,
             cfg.http_timeout_seconds,
-            e.__class__.__name__,
+            type(e).__name__,
+            e,
         )
         resp = None
         fell_through = True
@@ -312,11 +312,12 @@ def process_crawl(
             time.sleep(30)
             try:
                 resp = http_post(url, cfg.http_timeout_seconds)
-            except (TimeoutError, socket.timeout, urllib.error.URLError, OSError) as e:
+            except (urllib.error.URLError, OSError) as e:
                 logger.warning(
-                    "Retry POST %s also did not return (%s). Falling through to completion poll.",
+                    "Retry POST %s also did not return (%s: %s). Falling through to completion poll.",
                     crawl_id,
-                    e.__class__.__name__,
+                    type(e).__name__,
+                    e,
                 )
                 resp = None
                 fell_through = True
