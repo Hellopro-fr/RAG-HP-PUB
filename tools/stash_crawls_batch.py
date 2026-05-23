@@ -390,7 +390,7 @@ def _build_config_from_env() -> Config:
         print("STASH_GCS_BUCKET environment variable is required", file=sys.stderr)
         sys.exit(2)
     return Config(
-        crawler_base_url=os.environ.get("CRAWLER_BASE_URL", "http://localhost:8500/crawler"),
+        crawler_base_url=os.environ.get("CRAWLER_BASE_URL", "http://localhost:8500/crawling-service"),
         stash_local_dir=os.environ.get("STASH_LOCAL_DIR", "/app/stash"),
         stash_dead_letter_dir=os.environ.get(
             "STASH_DEAD_LETTER_DIR", "crawler_archives/dead_letter"
