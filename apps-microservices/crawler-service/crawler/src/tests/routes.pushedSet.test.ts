@@ -65,12 +65,19 @@ test('retry-after-pushData — second attempt skips pushData, still marks handle
     let pushCount = 0;
     let handledCount = 0;
     // Attempt 1: simulates "pushData fired, then timeout before markHandled".
-    await guardedPush(
-        set,
-        'https://example.com/a',
-        async () => { pushCount++; throw new Error('TimeoutError: timed out'); },
-        async () => { handledCount++; },
-    ).catch(() => {/* timeout propagates; markHandled never fires on this path */});
+    let caught: Error | undefined;
+    try {
+        await guardedPush(
+            set,
+            'https://example.com/a',
+            async () => { pushCount++; throw new Error('TimeoutError: timed out'); },
+            async () => { handledCount++; },
+        );
+    } catch (e) {
+        caught = e as Error;
+    }
+    assert.ok(caught, 'attempt 1 must propagate the timeout error');
+    assert.equal(caught!.message, 'TimeoutError: timed out', 'error message preserved');
     assert.equal(pushCount, 1, 'attempt 1 pushed once before timeout');
     assert.equal(handledCount, 0, 'attempt 1 did NOT mark handled (timeout interrupted)');
 

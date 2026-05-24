@@ -449,6 +449,7 @@ router.addDefaultHandler(
                         log.error(`Challenge ${challengeService} not resolved for main site ${url}. Aborting crawl.`);
                         let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${targetDomain}`;
                         let errorDataset = await Dataset.open(datasetName);
+                        // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
                         if (!context.pushedSet || (await context.pushedSet.tryClaim(request.url))) {
                             await errorDataset.pushData({
                                 id: request.id,
@@ -922,6 +923,7 @@ router.addDefaultHandler(
 
                 if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
+                // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
                 if (!context.pushedSet || (await context.pushedSet.tryClaim(url))) {
                     await dataset.pushData({ url, content });
                 }
