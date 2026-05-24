@@ -749,7 +749,7 @@ if (crawlMode === 'update') {
         const updateDatasetPath = path.join(storagePath, 'storage', 'datasets', `update-${domain}`);
         const jsonlWriter = new JsonlWriter(updateDatasetPath);
         const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
-        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter);
+        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter, context.pushedSet ?? null);
         context.jsonlWriter = jsonlWriter;
         console.log(`✅ UpdateChecker + JsonlWriter initialized (output: storage/datasets/update-${domain}/).`);
     }
