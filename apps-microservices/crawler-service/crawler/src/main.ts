@@ -1190,6 +1190,12 @@ if (typeCrawling == "sitemap") {
     const TIMING_ENABLED = (process.env.TIMING_ENABLED ?? "false").toLowerCase() === "true";
     const TIMING_SAMPLE_INTERVAL_MS = parseInt(process.env.TIMING_SAMPLE_INTERVAL_MS ?? "5000");
 
+    if (TIMING_ENABLED) {
+        console.log(`[TIMING] enabled — outputDir=${storagePath} sampleIntervalMs=${TIMING_SAMPLE_INTERVAL_MS}`);
+    } else {
+        console.log("[TIMING] disabled — set TIMING_ENABLED=true to write timing.jsonl + timing-summary.json to the crawl folder");
+    }
+
     let timingSampler: NodeJS.Timeout | null = null;
 
     if (TIMING_ENABLED) {
