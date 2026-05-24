@@ -26,6 +26,7 @@ import {
     getApifyProxyUrl,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
+import { PushedSet } from "./class/PushedSet.js";
 import { RedisHealthMonitor } from "./class/RedisHealthMonitor.js";
 import { ProgressMonitor } from "./class/ProgressMonitor.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -524,6 +525,9 @@ if (fs.existsSync(stopperFile)) {
 
 // Init Managers — DedupManager reuses the shared Redis client.
 context.dedupManager = new DedupManager(sharedRedis, id, undefined, redisMonitor);
+// PushedSet guards non-idempotent dataset writes against retry/restart
+// duplication. Shares the same Redis client + monitor.
+context.pushedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor });
 context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
 // No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
@@ -540,6 +544,7 @@ if (dropData) {
 
     // Also clean managers
     await context.dedupManager.cleanup();
+    if (context.pushedSet) await context.pushedSet.cleanup();
     await context.statsManager.cleanup();
     // Shared client survives dedup.cleanup (ownsClient=false), so no reconnect
     // needed for dedupManager. StatsManager still owns its own client.
@@ -1078,6 +1083,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // 4. Cleanup Redis connections
     if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
+    if (context.pushedSet) await context.pushedSet.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
 
     // Disconnect the shared Redis client (heartbeat + dedup multiplexed on it).
