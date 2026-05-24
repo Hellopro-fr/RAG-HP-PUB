@@ -67,4 +67,5 @@ test('checkUrl second call for same URL skips all writeJsonl invocations', async
     assert.equal(r2.action, 'ignored', 'second call must be ignored');
     assert.equal(r2.reason, 'already_pushed', 'reason must indicate the PushedSet guard fired');
     assert.equal(writer._calls.length, 1, 'second call must NOT write any new JSONL line');
+    assert.equal(stats._calls.length, 1, 'second call must NOT increment any stats counter (catches future refactor moving guard below increment)');
 });
