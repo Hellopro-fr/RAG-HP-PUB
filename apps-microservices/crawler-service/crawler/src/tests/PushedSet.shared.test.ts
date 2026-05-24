@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { PushedSet } from '../class/PushedSet.js';
 import { RedisHealthMonitor } from '../class/RedisHealthMonitor.js';
 
-function makeMockClient(opts?: { sAddImpl?: (key: string, member: string) => Promise<number> }) {
+function makeMockClient(opts?: {
+    sAddImpl?: (key: string, member: string) => Promise<number>;
+    sRemImpl?: (key: string, member: string) => Promise<number>;
+}) {
     const calls: Record<string, unknown[][]> = {
         sAdd: [],
         sRem: [],
@@ -22,6 +25,7 @@ function makeMockClient(opts?: { sAddImpl?: (key: string, member: string) => Pro
         },
         async sRem(key: string, member: string): Promise<number> {
             calls.sRem.push([key, member]);
+            if (opts?.sRemImpl) return opts.sRemImpl(key, member);
             seen.delete(member);
             return 1;
         },
@@ -82,6 +86,32 @@ test('release removes URL from the set', async () => {
     // After release, claim should win again.
     const reclaim = await set.tryClaim('https://example.com/a');
     assert.equal(reclaim, true);
+});
+
+test('release reports to monitor on Redis error', async () => {
+    const errorCalls: Array<[string, unknown]> = [];
+    const monitor: Partial<RedisHealthMonitor> = {
+        onSuccess: () => {/* irrelevant for this test */},
+        onError: (channel: string, err: unknown) => { errorCalls.push([channel, err]); },
+    };
+    const client = makeMockClient({
+        sRemImpl: async () => { throw new Error('Redis sRem failed'); }
+    });
+    const set = new PushedSet(client as any, 'crawl-rel-err', { monitor: monitor as RedisHealthMonitor });
+    // release must not throw — error is swallowed and reported to monitor.
+    await set.release('https://example.com/a');
+    assert.equal(errorCalls.length, 1);
+    assert.equal(errorCalls[0][0], 'pushed');
+    assert.equal((errorCalls[0][1] as Error).message, 'Redis sRem failed');
+});
+
+test('cleanup deletes the Redis key', async () => {
+    const client = makeMockClient();
+    const set = new PushedSet(client as any, 'crawl-clean');
+    await set.tryClaim('https://example.com/a');
+    await set.cleanup();
+    assert.equal(client._calls.del.length, 1, 'cleanup must invoke del exactly once');
+    assert.equal(client._calls.del[0][0], 'pushed:crawl-clean', 'del must target the pushed:{crawlId} key');
 });
 
 test('monitor receives onSuccess/onError signals', async () => {

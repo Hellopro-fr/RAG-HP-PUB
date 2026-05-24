@@ -105,6 +105,7 @@ export class PushedSet {
             await this.redis.expire(this.key, this.ttlSeconds);
             this.ttlSetAt = now;
         } catch (e) {
+            this.monitor?.onError('pushed', e);
             console.warn(`PushedSet TTL set failed: ${e}`);
         }
     }
