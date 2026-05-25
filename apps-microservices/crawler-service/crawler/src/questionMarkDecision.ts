@@ -2,11 +2,16 @@
  * Tier-1 observer for limitQuestionMark.
  *
  * Phase 1: observation only (records domain-specific param frequency + samples).
+ * Phase 1.5: persists observations to {storage_path}/_questionmark_observations.json
+ *            at crawl end, so offline audits can read per-param frequency without
+ *            URL replay. Schema is forward-compatible with phase-2 tier-2 state.
  * Phase 2 (deferred) will add content comparison + toRemove commits.
  *
  * See docs/superpowers/specs/2026-04-17-limitquestionmark-auto-decision-design.md.
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { context } from "./context.js";
 
 const SAMPLE_CAP_PER_PARAM = 50;
@@ -84,4 +89,42 @@ export const getQuestionMarkDecisionMode = (isError?: string): "escalated" | "un
     if (!context.questionMarkObservationEnabled) return "unused";
     if (context.questionMarkObservations.domainSpecificCount === 0) return "unused";
     return "observed";
+};
+
+const OBSERVATIONS_FILE = "_questionmark_observations.json";
+
+/**
+ * Serialize the tier-1 observer state to {storage_path}/_questionmark_observations.json.
+ *
+ * Called from main.ts gracefulShutdown after _callback_payload.json has been written.
+ * Self-contained: never throws — failure is logged but does not propagate, so a
+ * sidecar write error cannot poison the crawl-end critical path.
+ *
+ * Atomic via tmp + rename (mirrors the _callback_payload.json fsync pattern at the
+ * caller). Schema is intentionally a strict superset of what audit scripts read:
+ *   { paramFrequency: { name: count }, samplesByParam: { name: [url, ...] },
+ *     domainSpecificCount: number, persistedAt: ISO-8601 }
+ */
+export const persistObservations = (storagePath: string): void => {
+    try {
+        const obs = context.questionMarkObservations;
+        const payload = {
+            paramFrequency: Object.fromEntries(obs.paramFrequency),
+            samplesByParam: Object.fromEntries(obs.samplesByParam),
+            domainSpecificCount: obs.domainSpecificCount,
+            persistedAt: new Date().toISOString(),
+        };
+
+        const finalPath = path.join(storagePath, OBSERVATIONS_FILE);
+        const tmpPath = `${finalPath}.tmp`;
+
+        fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+        // Open the tmp file r+ rather than r so fsync is permitted on Windows
+        // (Windows rejects fsync on read-only handles; POSIX tolerates it).
+        const fd = fs.openSync(tmpPath, "r+");
+        try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        fs.renameSync(tmpPath, finalPath);
+    } catch (e) {
+        console.warn(`[questionmark] Failed to persist observations: ${(e as Error).message}`);
+    }
 };

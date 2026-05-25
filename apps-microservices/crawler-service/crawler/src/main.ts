@@ -38,7 +38,7 @@ import { TimingRecorder } from "./class/TimingRecorder.js";
 import type { PoolSample, TimingSummary } from "./timing/types.js";
 import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
-import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
+import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
@@ -1016,6 +1016,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     } catch (e) {
         console.error("Failed to write output files", e);
     }
+
+    // Phase-1.5 sidecar — persist tier-1 observer Maps so offline audits can read
+    // per-param frequency without URL replay. Self-contained: own try/catch in the
+    // helper, never throws. See questionMarkDecision.ts persistObservations().
+    persistQuestionMarkObservations(storagePath);
 
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
