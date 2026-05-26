@@ -8,3 +8,4 @@ typesense==0.21.0
 requests
 httpx
 tqdm
+google-cloud-storage>=2.10.0

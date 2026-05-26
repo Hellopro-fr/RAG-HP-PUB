@@ -141,12 +141,91 @@ $status = $data['status'] ?? 'unknown';
 $coll   = $data['collection'] ?? '?';
 $dt     = microtime(true) - $t0;
 
-if ($status === 'started') {
-    log_line('OK', sprintf("Regen IDF declenchee pour collection=%s (total cron=%.2fs)",
-                           $coll, $dt));
-    log_line('INFO', "Pour suivre l'avancement : curl $STATUS_URL");
-    exit(0);
-} else {
+if ($status !== 'started') {
     log_line('WARN', "Statut inattendu : $status (response: $raw)");
     exit(1);
 }
+
+log_line('INFO', sprintf("Regen IDF declenchee pour collection=%s en %.2fs", $coll, $dt));
+
+// =============================================================================
+// POLLING jusqu'a fin de la regeneration (timeout 15 min)
+// =============================================================================
+$RELOAD_URL    = 'https://api.hellopro.eu/optimoteur-service/admin/reload-idf';
+$POLL_TIMEOUT  = 900;   // 15 min max
+$POLL_INTERVAL = 15;    // 15s entre les polls
+$elapsed = 0;
+
+log_line('INFO', "Polling status (max {$POLL_TIMEOUT}s)...");
+while ($elapsed < $POLL_TIMEOUT) {
+    sleep($POLL_INTERVAL);
+    $elapsed += $POLL_INTERVAL;
+
+    $ch = curl_init($STATUS_URL);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+    ]);
+    $sRaw = curl_exec($ch);
+    curl_close($ch);
+
+    $sData = @json_decode($sRaw, true);
+    $sStatus = is_array($sData) ? ($sData['status'] ?? '?') : '?';
+
+    if ($sStatus === 'ok') {
+        $duration = $sData['duration_s'] ?? '?';
+        $gcs_ok   = $sData['gcs_uploaded'] ?? null;
+        log_line('OK', "compute-idf termine apres {$duration}s (gcs_uploaded=" .
+                       json_encode($gcs_ok) . ")");
+        break;
+    }
+    if ($sStatus === 'error' || $sStatus === 'exception') {
+        $stderr_tail = is_array($sData) ? ($sData['stderr_tail'] ?? '') : '';
+        log_line('ERROR', "compute-idf en erreur : $stderr_tail");
+        exit(1);
+    }
+    if ($elapsed % 60 === 0) {
+        log_line('INFO', "Toujours running apres {$elapsed}s...");
+    }
+}
+
+if ($elapsed >= $POLL_TIMEOUT) {
+    log_line('ERROR', "Timeout polling apres {$POLL_TIMEOUT}s");
+    exit(1);
+}
+
+// =============================================================================
+// PROPAGATION : appeler /admin/reload-idf plusieurs fois pour que les
+// differents pods (derriere le LoadBalancer) downloadent le nouvel IDF
+// depuis GCS. 5 appels = ~95% de chance que les 2 pods soient touches.
+// =============================================================================
+log_line('INFO', "Propagation aux autres pods via $RELOAD_URL...");
+$pods_reloaded = 0;
+for ($i = 1; $i <= 5; $i++) {
+    $ch = curl_init($RELOAD_URL);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => '',
+        CURLOPT_HTTPHEADER     => ['X-Admin-Token: ' . GKE_ADMIN_TOKEN],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+    ]);
+    $rRaw = curl_exec($ch);
+    $rHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $rData = @json_decode($rRaw, true);
+    $rStatus = is_array($rData) ? ($rData['status'] ?? '?') : '?';
+    log_line('INFO', "  reload #$i : http=$rHttp status=$rStatus");
+    if ($rStatus === 'ok') $pods_reloaded++;
+    sleep(1);
+}
+
+$total = microtime(true) - $t0;
+log_line('OK', sprintf("Cron termine en %.2fs (compute + propagation %d/5 pods)",
+                       $total, $pods_reloaded));
+exit(0);

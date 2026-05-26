@@ -180,6 +180,50 @@ def admin_compute_idf_status():
     return idf_service.get_state()
 
 
+@router.post(
+    "/reload-idf",
+    summary="Recharger l'IDF depuis GCS (propage l'update entre pods)",
+)
+def admin_reload_idf(
+    x_admin_token: Optional[str] = Header(None, description="Token jetable"),
+):
+    """
+    Force le re-download de l'IDF depuis GCS et reset le cache du loader.
+
+    Use case : apres `POST /admin/compute-idf`, le pod A genere et upload
+    sur GCS. Pour que les autres pods voient le nouvel IDF sans attendre
+    un restart, appeler cette route plusieurs fois (chaque appel atterit
+    sur un pod different via le LoadBalancer).
+
+    No-op si GCS non configure.
+    """
+    _check_admin_token(x_admin_token)
+
+    from pathlib import Path
+    from app.services import gcs_idf_storage, idf_loader
+
+    if not gcs_idf_storage.gcs_enabled():
+        return {
+            "status": "skipped",
+            "reason": "GCS_IDF_BUCKET non configure - reload n'a pas de sens en mode local",
+        }
+
+    local_path = Path(idf_loader._IDF_PATH)
+    downloaded = gcs_idf_storage.download(local_path)
+    if downloaded:
+        idf_loader.reset_cache_for_test()
+        idf_loader.idf_available()  # force lazy reload immediat pour logger la stat
+        return {
+            "status": "ok",
+            "downloaded_to": str(local_path),
+            "gcs_updated_at": gcs_idf_storage.get_blob_updated_at(),
+        }
+    return {
+        "status": "error",
+        "reason": "Download GCS echoue (blob absent ou erreur reseau)",
+    }
+
+
 # ---------- Synonymes auto-generation ----------
 
 @router.post(
