@@ -21,6 +21,7 @@ Migration de la stack `Typesense + opti-moteur-front` (moteur de recherche produ
 | L'historique des incidents + dette technique | `debug.md` |
 | Le raisonnement / hypothèses derrière les choix | `PENSE_IA.md` |
 | Le détail opérationnel d'un sprint donné | `sprints/sprint_00X_*.md` |
+| **Mettre à jour l'image Docker en prod** (build + push + rollout) | `update_image.md` ⭐ |
 | Les manifests YAML à appliquer | `manifests/*.yaml` |
 | La doc benchmark moteurs (existant — Solr/Typesense/OpenSearch) | `hypothese_option.md` |
 
@@ -58,19 +59,30 @@ opti_moteur_port:   8570
 # Annotations Service obligatoires
 typesense_service:
   type: ClusterIP                              # intra-cluster uniquement
-opti_moteur_front_service:                     # à appliquer en S3
+opti_moteur_front_service:                     # appliqué S4 ✅
   type: LoadBalancer
+  internal_lb_ip: 10.0.1.240                  # IP RFC1918 — joignable via VPC peering depuis VM GPU us-east4
+  cluster_ip: 10.0.78.78                       # préservé pour DNS intra-cluster
+  port: 8570
   annotations:
     networking.gke.io/load-balancer-type: "Internal"
-    networking.gke.io/internal-load-balancer-allow-global-access: "true"   # CROSS-REGION, VM us-east4 → GKE europe-west1
+    networking.gke.io/internal-load-balancer-allow-global-access: "true"
+  firewall_gcp: allow-vm-gpu-to-opti-moteur-front  # source 10.11.0.2/32 -> tcp:8570, target-tags gke-cluster
+  network: hellopro-dev-vpc
+  subnetwork: hellopro-subnet-dev
+  measured_latency_health: 182ms              # depuis VM GPU us-east4 → 10.0.1.240:8570/health (cascade Typesense+Milvus)
 opti_moteur_probes:
   liveness:  GET /        # léger, pas de cascade
   readiness: GET /health  # vérifie Typesense en cascade
 
 service_accounts:
-  opti-moteur-sa:        # ✅ créé S1 — pod runtime, K8s simple, pas de WI
-  cicd-opti-moteur-sa:   # ⏳ à créer S5 — GitHub Actions (artifactregistry.writer + container.developer)
-  backup gcs SA:         # ♻️ existant — à réutiliser S7 pour backup Typesense
+  opti-moteur-sa:        # ✅ créé S1 — pod runtime K8s simple, pas de WI
+  cicd-opti-moteur-sa:   # ✅ usage Cloud Build manuel (impersonation) + futur CI/CD S5 (WIF)
+                         #   rôles : cloudbuild.builds.editor + artifactregistry.writer + storage.objectAdmin (bucket cloudbuild)
+                         #   acteurs autorisés : user @hellopro.fr avec iam.serviceAccountTokenCreator
+                         #   ⚠️ Auth manuel = impersonation (PAS de clé JSON exportée)
+                         #   cf. update_image.md §2 pour setup et usage
+  backup gcs SA:         # ♻️ existant (hp-sa-gcs-data-job) — à réutiliser S7 pour backup Typesense
 ```
 
 ---
@@ -102,14 +114,15 @@ PHP front  →  CDN Imperva  →  API Gateway HelloPro (api.hellopro.eu, sur VM 
 | **S0 cadrage docs** | **🟢 terminé** | **100 %** |
 | **S1 socle infra GKE** | **🟢 terminé** | **100 %** |
 | **S2 Typesense server** | **🟢 terminé** | **100 %** |
-| S3 opti-moteur-front | ⚪ à faire | 0 % |
+| **S3 opti-moteur-front** | **🟢 terminé** | **100 %** |
+| **S4 Exposition interne (ILB)** | **🟢 terminé** | **100 %** |
 | S4 exposition interne (ILB) | ⚪ à faire | 0 % |
 | S5 CI/CD GitHub Actions | ⚪ à faire | 0 % |
 | S6 validation + bascule | ⚪ à faire | 0 % |
 | S7 backup + observabilité | ⚪ à faire | 0 % |
 | S8 rapatriement VM GPU EU | ⚪ à faire | 0 % (dépend quota GPU) |
 
-**Avancement global : 55 %**
+**Avancement global : 80 %**
 
 Ressources créées sur le cluster :
 
@@ -121,8 +134,26 @@ Ressources créées sur le cluster :
 **S2 ✅** :
 - Secret `typesense-api-key` (Opaque, 44 bytes, jamais en Git)
 - Service `typesense` (ClusterIP `10.0.76.33:8108`)
-- StatefulSet `typesense` (1 réplique Running, image `27.1`, requests=8Gi/2 CPU, limits=16Gi/4 CPU, fsGroup 2000)
+- StatefulSet `typesense` (1 réplique Running, image `27.1`, requests=12Gi/1 CPU, **limits=32Gi/4 CPU** — bumped 2026-05-13 après OOMKill #007, fsGroup 2000)
 - PVC `typesense-data-typesense-0` (100Gi `premium-rwo` SSD, Bound)
+- **Probes mises à jour 2026-05-13** : `startupProbe` failureThreshold=540 (1h30 budget de boot pour large collection) + `liveness` + `readiness` (cf. incident #006 dans debug.md)
+- **État réel collection `produits_prod`** : ~1.33M docs ingérés (boot ~24 min, RAM ~9.6 Gi sur 16 Gi limit)
+
+**S3 ✅** :
+- Image `opti-moteur-front:v1.0.0-prod` dans Artifact Registry (`europe-west1-docker.pkg.dev/hellopro-rag-project/hellopro/`, 112 MB, build via Cloud Build + cloudbuild.yaml + .gcloudignore)
+- Secret `opti-moteur-milvus-creds` (user `hprag` + password, jamais en Git)
+- ConfigMap `opti-moteur-config` (22 entrées non-sensibles)
+- Service `opti-moteur-front` (ClusterIP `10.0.78.78:8570`, à transformer en Internal LB en S4)
+- Deployment `opti-moteur-front` (2 replicas Running, requests=200m/512Mi, limits=1000m/1Gi, probes split `/` + `/health`)
+- Triple connexion validée : Typesense + Milvus prod + (embedding VM GPU à valider en runtime au S6)
+
+**S4 ✅** :
+- Service `opti-moteur-front` transformé en `LoadBalancer Internal` avec global access cross-region
+- **Internal LB IP : `10.0.1.240`** (RFC1918, joignable depuis VM GPU us-east4)
+- ClusterIP `10.0.78.78` préservé pour DNS intra-cluster
+- Firewall GCP `allow-vm-gpu-to-opti-moteur-front` (vraie protection L3/L4 vu R8)
+- NetPol K8s `allow-ingress-from-vm-gpu-api-gateway` (déclarative, R8)
+- Smoketests cross-region : OK, latence `/health` mesurée 182 ms (limite SLO, S8 rapatriement nécessaire)
 
 ---
 

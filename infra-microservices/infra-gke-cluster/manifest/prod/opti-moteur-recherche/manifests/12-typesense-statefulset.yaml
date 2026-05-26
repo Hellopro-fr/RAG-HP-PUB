@@ -50,18 +50,28 @@ spec:
           resources:
             requests:
               cpu: "1"
-              memory: "8Gi"
+              memory: "12Gi"   # 2026-05-13 : augmente de 8Gi -> 12Gi suite OOMKill incident #007
             limits:
               cpu: "4"
-              memory: "16Gi"
+              memory: "32Gi"   # 2026-05-13 : augmente de 16Gi -> 32Gi (1,5M docs OOM a 16Gi, large marge pour 3M target)
           volumeMounts:
             - name: typesense-data
               mountPath: /data
+          # startupProbe : separe le bootstrap (long avec 130k+ docs) des liveness/readiness.
+          # Budget de boot : 60 * 10s = 10 min max. Augmenter failureThreshold si index grossit.
+          # Resout l'incident #006 (2026-05-13) : liveness tuait le pod avant fin chargement docs.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8108
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /health
               port: 8108
-            initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
@@ -69,7 +79,6 @@ spec:
             httpGet:
               path: /health
               port: 8108
-            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3

@@ -1,0 +1,28 @@
+# Service opti-moteur-front — Internal LoadBalancer (S4)
+# Modifie depuis ClusterIP a LoadBalancer + annotations Internal + global access cross-region
+# (us-east4 VM GPU API Gateway -> europe-west1 cluster GKE).
+apiVersion: v1
+kind: Service
+metadata:
+  name: opti-moteur-front
+  namespace: moteur-recherche
+  annotations:
+    networking.gke.io/load-balancer-type: "Internal"
+    networking.gke.io/internal-load-balancer-allow-global-access: "true"
+  labels:
+    app.kubernetes.io/name: opti-moteur-front
+    app.kubernetes.io/managed-by: manifest
+    environment: prod
+    owner: devsecops
+    cost-center: ia-rag
+    app: opti-moteur-recherche
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: opti-moteur-front
+    app: opti-moteur-recherche
+  ports:
+    - name: http
+      port: 8570
+      targetPort: 8570
+      protocol: TCP

@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opti-moteur-front
+  namespace: moteur-recherche
+  labels:
+    app.kubernetes.io/name: opti-moteur-front
+    app.kubernetes.io/managed-by: manifest
+    environment: prod
+    owner: devsecops
+    cost-center: ia-rag
+    app: opti-moteur-recherche
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # zero-downtime sur deploy CI/CD (S5)
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opti-moteur-front
+      app: opti-moteur-recherche
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: opti-moteur-front
+        app: opti-moteur-recherche
+        environment: prod
+    spec:
+      serviceAccountName: opti-moteur-sa
+      terminationGracePeriodSeconds: 30
+      # InitContainer : telecharge idf_nom_produit.json depuis GCS au boot du pod (cf. ticket T2 opti-moteur-front, 2026-05-26).
+      # Pattern (eta) milvus-backup : Secret clef JSON + volume mount + InitContainer. Cf. debug.md DT013/DT014 (migration WI future).
+      initContainers:
+        - name: fetch-idf
+          image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] fetch-idf: downloading from GCS..."
+              if gcloud storage cp gs://hellopro-rag-opti-moteur-data/idf_nom_produit.json /app/app/data/idf_nom_produit.json 2>&1; then
+                ls -lh /app/app/data/idf_nom_produit.json
+                echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] fetch-idf: download OK"
+              else
+                echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] fetch-idf: WARN - file absent in GCS (first boot before cron?). App will start without cache, will compute IDF locally."
+              fi
+          env:
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/secrets/gcp/key.json
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: gcp-cred
+              mountPath: /var/secrets/gcp
+              readOnly: true
+            - name: data
+              mountPath: /app/app/data
+      containers:
+        - name: opti-moteur-front
+          image: europe-west1-docker.pkg.dev/hellopro-rag-project/hellopro/opti-moteur-front:v1.0.1-220526-prod
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8570
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: opti-moteur-config
+          env:
+            # --- Milvus credentials (Secret opti-moteur-milvus-creds, S3) ---
+            - name: ZILLIZ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: opti-moteur-milvus-creds
+                  key: zilliz-user
+            - name: ZILLIZ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opti-moteur-milvus-creds
+                  key: zilliz-password
+            # --- Typesense API key (Secret typesense-api-key, S2) ---
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: typesense-api-key
+                  key: api-key
+            # --- GCS write access pour idf_nom_produit.json (ticket T2, 2026-05-26) ---
+            # Auth via Secret opti-moteur-data-sa-key (clef JSON SA scoped au bucket).
+            # Cf. debug.md DT013/DT014 (migration WI future).
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/secrets/gcp/key.json
+            - name: GCS_IDF_BUCKET
+              value: hellopro-rag-opti-moteur-data
+            - name: GCS_IDF_OBJECT
+              value: idf_nom_produit.json
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "1Gi"        # 2026-05-22 : 512Mi -> 1Gi (demande dev — burst tâches lourdes)
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"        # 2026-05-22 : 1Gi -> 2Gi (idem)
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8570
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8570
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Volume "data" partage avec l'InitContainer fetch-idf (cache idf_nom_produit.json).
+          # Volume "gcp-cred" : le container app ecrit dans GCS via SDK/gcloud apres regen IDF
+          # (POST /admin/compute-idf -> upload + dispatch /admin/reload-idf aux autres replicas).
+          volumeMounts:
+            - name: data
+              mountPath: /app/app/data
+            - name: gcp-cred
+              mountPath: /var/secrets/gcp
+              readOnly: true
+      volumes:
+        - name: gcp-cred
+          secret:
+            secretName: opti-moteur-data-sa-key
+            defaultMode: 0400
+        - name: data
+          emptyDir: {}

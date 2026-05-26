@@ -9,8 +9,8 @@
 
 | Indicateur | Valeur |
 |---|---|
-| **Phase actuelle** | S0 + S1 + S2 terminés, prêt pour S3 (App opti-moteur-front) |
-| **Avancement global** | ▓▓▓▓▓▓░░░░ 55 % |
+| **Phase actuelle** | S0-S4 terminés, prêt pour S5 (CI/CD GitHub Actions) |
+| **Avancement global** | ▓▓▓▓▓▓▓▓░░ 80 % |
 | **Date de démarrage** | 2026-04-28 |
 | **Date cible mise en prod** | À définir (T+2 semaines = ~2026-05-12) |
 | **Risque global** | 🟢 Vert — pas de blocage à ce stade |
@@ -24,8 +24,8 @@
 | **S0** | Cadrage / docs initiales (plan, runbook, structure) | 🟢 Terminé | 100 % | 2026-04-28 | 2026-04-30 | DevSecOps |
 | **S1** | Cadrage infra GKE (namespace, RBAC, NetworkPolicies) | 🟢 Terminé | 100 % | 2026-04-30 | 2026-04-30 | DevSecOps |
 | **S2** | Typesense server prod (StatefulSet + PVC) | 🟢 Terminé | 100 % | 2026-04-30 | 2026-04-30 | DevSecOps |
-| **S3** | App opti-moteur-front (Deployment + Service + Config) | ⚪ À faire | 0 % | — | — | DevSecOps + Lead Dev |
-| **S4** | Exposition externe (Ingress + Cloud Armor + IP allowlist) | ⚪ À faire | 0 % | — | — | DevSecOps |
+| **S3** | App opti-moteur-front (Deployment + Service + Config) | 🟢 Terminé | 100 % | 2026-04-30 | 2026-04-30 | DevSecOps |
+| **S4** | Exposition interne (Internal LB + firewall GCP + NetPol ingress) | 🟢 Terminé | 100 % | 2026-05-04 | 2026-05-04 | DevSecOps |
 | **S5** | Pipeline CI/CD GitHub Actions | ⚪ À faire | 0 % | — | — | DevSecOps |
 | **S6** | Validation + bascule front PHP | ⚪ À faire | 0 % | — | — | DevSecOps + Lead Dev + CP |
 | **S7** | Backup + observabilité | ⚪ À faire | 0 % | — | — | DevSecOps |
@@ -63,6 +63,7 @@
 | D22 | API key Typesense prod générée via `openssl rand -base64 32` (≥ 32 octets, base64). Stockage Secret K8s. Canal de remise Lead Dev : à valider en S2 | 2026-04-30 | Utilisateur |
 | D23 | PVC Typesense initial 100 Go SSD, **extensible** (StorageClass à valider via `kubectl get sc`) | 2026-04-30 | Utilisateur |
 | D24 | StorageClass = `premium-rwo` (CSI SSD, WaitForFirstConsumer, allowVolumeExpansion=true). ReclaimPolicy `Delete` accepté + mitigation = backups GCS S7 + procédure interdiction de `kubectl delete pvc` manuel | 2026-04-30 | DevSecOps |
+| D26 | SA dédié `cicd-opti-moteur-sa@hellopro-rag-project.iam.gserviceaccount.com` pour Cloud Build manuel + futur CI/CD S5. Auth manuelle = **impersonation** (pas de clé JSON exportée). Rôles minimum : `cloudbuild.builds.editor`, `artifactregistry.writer`, `storage.objectAdmin` (bucket cloudbuild). User `@hellopro.fr` = `iam.serviceAccountTokenCreator` sur ce SA | 2026-05-04 | Utilisateur |
 
 ---
 
@@ -176,3 +177,32 @@ Mettre à jour la date "Dernière mise à jour" en tête du fichier à chaque mo
 | 2026-04-30 | Incident #003 (`kubectl get pods,pvc -w` invalide) + #004 (`curl` absent dans image typesense:27.1) résolus + tracés | DevSecOps |
 | 2026-04-30 | Smoketests Typesense ✅ : `/health` interne via Service, écriture `/data` (fsGroup=2000), CRUD collection `_smoketest` via API key | Utilisateur |
 | 2026-04-30 | **S2 TERMINÉ ✅** (100 %) — stack Typesense opérationnelle en prod GKE | DevSecOps |
+| 2026-04-30 | Production sprint_003 + 4 manifests YAML + cloudbuild.yaml + .gcloudignore | DevSecOps |
+| 2026-04-30 | **S3 build #1 + #2 ÉCHEC** : Cloud Build context mismatch (Dockerfile attend RAG-HP-PUB/, pas account-pro/) → fix `cloudbuild.yaml` + `.gcloudignore` (incident #005) | Utilisateur + DevSecOps |
+| 2026-04-30 | **S3 build #3 SUCCESS ✅** : image `opti-moteur-front:v1.0.0-prod` push Artifact Registry (1m13s, tarball 20 MiB) | Utilisateur |
+| 2026-04-30 | **S3 Étape 7.1 ✅** — Secret `opti-moteur-milvus-creds` créé (user `hprag`, password 16B) | Utilisateur |
+| 2026-04-30 | **S3 Étape 7.2 ✅** — ConfigMap `opti-moteur-config` (22 entrées) | Utilisateur |
+| 2026-04-30 | **S3 Étape 7.4 ✅** — Service ClusterIP `opti-moteur-front` `10.0.78.78:8570` | Utilisateur |
+| 2026-04-30 | **S3 Étape 7.5 ✅** — Deployment 2 replicas Running 1/1 (rollout 28s), startup OK Typesense + Milvus | Utilisateur |
+| 2026-04-30 | **S3 Étape 7.6 ✅** — Smoketests `/`, `/health` (triple OK), `/docs` 200. Triple connexion validée : app ↔ Typesense ↔ Milvus prod | Utilisateur |
+| 2026-04-30 | **S3 TERMINÉ ✅** (100 %) — App `opti-moteur-front` opérationnelle en prod GKE | DevSecOps |
+| 2026-04-30 | Production `update_image.md` (procédure manuelle build+push+rollout, valable jusqu'à mise en place du CI/CD S5) | DevSecOps |
+| 2026-05-04 | Production sprint_004 + 2 manifests (NetPol ingress, Service modifié en LoadBalancer Internal) | DevSecOps |
+| 2026-05-04 | **S4 Étape 7.1 ✅** — NetPol `allow-ingress-from-vm-gpu-api-gateway` créée (déclarative, R8) | Utilisateur |
+| 2026-05-04 | **S4 Étape 7.2 ✅** — Firewall rule GCP `allow-vm-gpu-to-opti-moteur-front` créée (network `hellopro-dev-vpc`, target-tags `gke-cluster`, source `10.11.0.2/32`, port 8570) | Utilisateur |
+| 2026-05-04 | **S4 Étape 7.3 ✅** — Service `opti-moteur-front` transformé en LoadBalancer Internal, **IP `10.0.1.240`** (provisionnement 30s, ClusterIP préservé `10.0.78.78`, zéro downtime) | Utilisateur |
+| 2026-05-04 | **S4 Smoketests ✅** — Intra-cluster + VM GPU cross-region OK + port-forward. **Latence VM GPU → LB Internal = 182 ms** sur `/health` cascade (proche limite SLO 200 ms, à confirmer S6) | Utilisateur |
+| 2026-05-04 | **S4 TERMINÉ ✅** (100 %) — Service prod accessible cross-region depuis API Gateway VM GPU | DevSecOps |
+| 2026-05-04 | Production runbook dev `docs/runbooks/dev_port_forward_kubectl.md` (onboarding devs pour tester GKE depuis poste local) | DevSecOps |
+| 2026-05-04 | D26 figée — SA dédié `cicd-opti-moteur-sa` (impersonation, pas de clé JSON) ; `update_image.md` §2 refactored | Utilisateur |
+| 2026-05-13 | **Incident #006** : Typesense CrashLoopBackOff après ingestion massive (~1,33M docs, boot dépasse les 2 min de la liveness probe initiale). Fix : `startupProbe` avec `failureThreshold=540` (1h30 budget). Pod re-Ready après 30 min total (24 min chargement + 5 min catch-up Raft). 2 DT ouvertes (DT009 downtime, DT010 RAM marge). | Utilisateur + DevSecOps |
+| 2026-05-13 | **Incident #006 CLÔTURÉ ✅** — `typesense-0` Running 1/1, RESTARTS=0 sur 60min ; test cross-region VM GPU → Internal LB → app → Typesense → Milvus OK (`{"status":"ok",...}`). App `f2djv` stable depuis 2h18. Note dev : pod IP `10.0.130.65` ≠ ancienne 10.0.130.60 (instable, à ne pas utiliser — préférer port-forward ou app endpoint) | Utilisateur |
+| 2026-05-13 | **Incident #007 OOMKilled** (DT010 matérialisée) durant ingestion devs à ~80% → `typesense-0` killed Exit 137 + apps collatéral. Fix : `limits.memory 16Gi → 32Gi` + `requests.memory 8Gi → 12Gi`. DT011 ouverte (worker deadlock app sans timeout HTTP Typesense). | Utilisateur + DevSecOps |
+| 2026-05-13 | **Incident #007 CLÔTURÉ ✅** — `typesense-0` Running 1/1 (boot total 51 min : chargement 1.54M docs + catch-up Raft + drain queue). RAM stable ~11 Gi sur 32 Gi limit. Manifest `12-typesense-statefulset.yaml` synchronisé (resources 32/12 Gi). | Utilisateur |
+| 2026-05-22 | **Incident #008** — Premier build Cloud Build sous SA dédié `cicd-opti-moteur-sa` (impersonation) : 5 pièges IAM en cascade. Fixes : `serviceUsageConsumer` projet, `legacyBucketReader` bucket, `iam.serviceAccountUser` Compute SA, flag `--gcs-source-staging-dir`. Image `v1.0.1-220526-prod` push OK. Doc complète dans `update_image.md` §2 + §11. | Utilisateur + DevSecOps |
+| 2026-05-26 | **Ticket dev A (RAM bump) ✅** — `opti-moteur-front` requests `512Mi → 1Gi`, limits `1Gi → 2Gi` via manifest Git + apply zéro-downtime. Manifest `22-opti-moteur-deployment.yaml` synchronisé. | Utilisateur (apply) |
+| 2026-05-26 | **Drift Git↔cluster détecté** — manifest restait à `v1.0.0-prod` alors que LIVE était `v1.0.1-220526-prod` (kubectl set image lors #008). `kubectl apply` a régressé. Fix : alignement manifest → v1.0.1 + re-apply. Leçon documentée dans `update_image.md`. | DevSecOps |
+| 2026-05-26 | **Ticket dev B / T2 (volume `/app/app/data` partagé)** reçu. Audit cluster (7 checks) : 1 seul node pool, Data Access Audit Logs OFF, 0 dépendance Compute SA détectée. Re-orientation après débat (α) WI cluster-wide / (A') node pool dédié / (β) image bake → choix final **pattern (η) milvus-backup** : 0 $, 0 impact prod, aligné existant. | DevSecOps |
+| 2026-05-26 | **3 DT ajoutées dans debug.md** : DT012 (Compute SA `roles/editor`), DT013 (clé JSON opti-moteur-data-sa, anti-pattern à migrer WI), DT014 (sprint conjoint long-terme **Cluster rightsizing + WI activation**, économie estimée 300-360 $/mo + élimination clés JSON). | DevSecOps |
+| 2026-05-26 | **Ticket dev B / T2 ✅** — Implémentation (η) end-to-end : bucket GCS scoped, SA dédié bucket-IAM, Secret K8s, InitContainer download au boot, env vars dans container app pour write GCS. Smoketests : auth OK, `/health` cascade OK, Python lit la clé. Communication dev envoyée (modifs `/admin/compute-idf` côté code + `google-cloud-storage` dans requirements.txt). | Utilisateur + DevSecOps |
+| 2026-05-26 | **Incident auth ADC** : `gcloud auth application-default print-access-token` retournait un token sans claim `email` (scopes manquants) → kubectl voyait l'user comme numeric ID `117897935407743956877` → Forbidden. Fix : `gcloud auth application-default login`. Documenté dans `gcp_authentication.md` (rewrite multi-identités). | Utilisateur + DevSecOps |

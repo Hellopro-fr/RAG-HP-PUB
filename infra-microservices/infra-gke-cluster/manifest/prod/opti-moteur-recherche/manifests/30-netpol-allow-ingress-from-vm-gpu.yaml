@@ -1,0 +1,26 @@
+# NetworkPolicy ingress — restreint l'acces aux pods opti-moteur-front
+# a la seule IP `10.11.0.2/32` (VM GPU API Gateway us-east4-c).
+#
+# NB : R8 — NetPol non enforced sur ce cluster, cette policy est DECLARATIVE.
+# La vraie protection vient de la firewall rule GCP creee en S4 §6.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-from-vm-gpu-api-gateway
+  namespace: moteur-recherche
+  labels:
+    app.kubernetes.io/managed-by: manifest
+    environment: prod
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: opti-moteur-front
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.11.0.2/32   # vm-embedding-g2-std-24-use (us-east4-c, API Gateway)
+      ports:
+        - protocol: TCP
+          port: 8570
