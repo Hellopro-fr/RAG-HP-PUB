@@ -67,7 +67,12 @@ const CountryCodeSelect = ({ value, countryId, onChange }: CountryCodeSelectProp
         ) : (
           <>
             <span className="text-lg">{selectedCountry?.flag}</span>
-            <span className="text-sm font-medium">{selectedCountry?.code}</span>
+            <span className="text-sm font-medium">
+              {selectedCountry?.code}
+              {selectedCountry?.code === '+33' && (
+                <span className="ml-1 font-normal text-muted-foreground">(0)</span>
+              )}
+            </span>
           </>
         )}
         <ChevronDown className="h-4 w-4 text-muted-foreground" />
