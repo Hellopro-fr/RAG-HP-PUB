@@ -384,14 +384,20 @@ router.addDefaultHandler(
         // Removed early increment of "new_urls" here.
         // It is now handled inside the success block (isEnqueuingLinks) to ensure validity.
 
-        if (!isDoublon) {
+        // Option A retry-bypass: if Crawlee is retrying this request, run the
+        // full extraction logic again regardless of dedup state. DedupManager
+        // marked the URL as seen on the first (failed) attempt; without this
+        // bypass the retry would short-circuit via the doublon guard and the
+        // seed page would yield zero discovered URLs. PushedSet prevents
+        // duplicate dataset rows across the retry.
+        if (!isDoublon || request.retryCount > 0) {
             // Redis update handled in dedupManager
             // Local file update is heavy, skipped in V3 logic, keeping minimal or periodic in main.ts
 
             // Cookie consent is now injected pre-navigation in preNavigationHooks (functions.ts)
 
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
-            // If we ended up at a different URL than requested (redirect), make sure the 
+            // If we ended up at a different URL than requested (redirect), make sure the
             // final URL is also marked as known in Redis to prevent future re-crawling.
             if (context.dedupManager && request.url !== request.loadedUrl) {
                 await context.dedupManager.addUrl(request.loadedUrl);
@@ -443,15 +449,18 @@ router.addDefaultHandler(
                         log.error(`Challenge ${challengeService} not resolved for main site ${url}. Aborting crawl.`);
                         let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${targetDomain}`;
                         let errorDataset = await Dataset.open(datasetName);
-                        await errorDataset.pushData({
-                            id: request.id,
-                            url: request.url,
-                            errors: [`Challenge page ${challengeService} not resolved after 45s`],
-                            proxy_used: maskProxyUrl(proxyUrl ?? undefined),
-                            status_code: response?.status() || 0,
-                            captcha: challengeService,
-                            timestamp: new Date().toISOString()
-                        });
+                        // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
+                        if (!context.pushedSet || (await context.pushedSet.tryClaim(request.url))) {
+                            await errorDataset.pushData({
+                                id: request.id,
+                                url: request.url,
+                                errors: [`Challenge page ${challengeService} not resolved after 45s`],
+                                proxy_used: maskProxyUrl(proxyUrl ?? undefined),
+                                status_code: response?.status() || 0,
+                                captcha: challengeService,
+                                timestamp: new Date().toISOString()
+                            });
+                        }
                         context.crawlErrorMessage = `Site protégé par ${challengeService} (challenge non résolu)`;
                         await stopCrawler(crawler, `Challenge ${challengeService} not resolved for main site`);
                         return;
@@ -914,7 +923,10 @@ router.addDefaultHandler(
 
                 if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
-                await dataset.pushData({ url, content });
+                // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
+                if (!context.pushedSet || (await context.pushedSet.tryClaim(url))) {
+                    await dataset.pushData({ url, content });
+                }
             }
         } else {
             console.log(`Doublon url : ${url}`);

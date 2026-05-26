@@ -162,5 +162,20 @@
   "160": "Maps internal error codes to human-r",
   "161": "Exit code 3 OOM_RELAUNCH contract (u",
   "162": "Maps internal error codes to human-r",
-  "163": "Returns (error_message, failure_caus"
+  "163": "Returns (error_message, failure_caus",
+  "164": "Exit code 3 OOM_RELAUNCH contract (u",
+  "165": "Maps internal error codes to human-r",
+  "166": "Returns (error_message, failure_caus",
+  "167": "Maps internal error codes to human-r",
+  "168": "Returns (error_message, failure_caus",
+  "169": "exit_code=-1 → classifier says 'oom_",
+  "170": "Without an explicit kwarg, classifie",
+  "171": "Every exit_code=-1 caller passes its",
+  "172": "Maps internal error codes to human-r",
+  "173": "Returns (error_message, failure_caus",
+  "174": "PushedSet Retry-Dup Guard",
+  "175": "Stash Crawls Batch Driver",
+  "176": "Stash Poll Fall-Through",
+  "177": "Stash Poll Fall-Through",
+  "178": "Stash Poll Fall-Through"
 }

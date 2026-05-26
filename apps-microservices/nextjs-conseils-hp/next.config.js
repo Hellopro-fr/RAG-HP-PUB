@@ -17,9 +17,8 @@ const nextConfig = {
     NEXT_PUBLIC_BUILD_VERSION: BUILD_VERSION,
   },
 
-  // Reverse proxy nginx : /conseils → ce service
-  basePath: '/conseils',
-  assetPrefix: '/conseils',
+  // Pas de basePath — service monté sur sous-domaine conseils.hellopro.fr
+  // Voir CLAUDE.md §6 et §20 (décision 2026-05-22)
 
   images: {
     remotePatterns: [

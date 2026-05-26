@@ -26,6 +26,7 @@ import {
     getApifyProxyUrl,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
+import { PushedSet } from "./class/PushedSet.js";
 import { RedisHealthMonitor } from "./class/RedisHealthMonitor.js";
 import { ProgressMonitor } from "./class/ProgressMonitor.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -37,7 +38,7 @@ import { TimingRecorder } from "./class/TimingRecorder.js";
 import type { PoolSample, TimingSummary } from "./timing/types.js";
 import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
-import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
+import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
@@ -524,6 +525,9 @@ if (fs.existsSync(stopperFile)) {
 
 // Init Managers — DedupManager reuses the shared Redis client.
 context.dedupManager = new DedupManager(sharedRedis, id, undefined, redisMonitor);
+// PushedSet guards non-idempotent dataset writes against retry/restart
+// duplication. Shares the same Redis client + monitor.
+context.pushedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor });
 context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
 // No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
@@ -540,6 +544,7 @@ if (dropData) {
 
     // Also clean managers
     await context.dedupManager.cleanup();
+    if (context.pushedSet) await context.pushedSet.cleanup();
     await context.statsManager.cleanup();
     // Shared client survives dedup.cleanup (ownsClient=false), so no reconnect
     // needed for dedupManager. StatsManager still owns its own client.
@@ -744,7 +749,7 @@ if (crawlMode === 'update') {
         const updateDatasetPath = path.join(storagePath, 'storage', 'datasets', `update-${domain}`);
         const jsonlWriter = new JsonlWriter(updateDatasetPath);
         const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
-        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter);
+        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter, context.pushedSet ?? null);
         context.jsonlWriter = jsonlWriter;
         console.log(`✅ UpdateChecker + JsonlWriter initialized (output: storage/datasets/update-${domain}/).`);
     }
@@ -1012,6 +1017,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to write output files", e);
     }
 
+    // Phase-1.5 sidecar — persist tier-1 observer Maps so offline audits can read
+    // per-param frequency without URL replay. Self-contained: own try/catch in the
+    // helper, never throws. See questionMarkDecision.ts persistObservations().
+    persistQuestionMarkObservations(storagePath);
+
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
         try {
@@ -1078,6 +1088,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // 4. Cleanup Redis connections
     if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
+    if (context.pushedSet) await context.pushedSet.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
 
     // Disconnect the shared Redis client (heartbeat + dedup multiplexed on it).
@@ -1189,6 +1200,12 @@ if (typeCrawling == "sitemap") {
     // and short-circuit when it is undefined.
     const TIMING_ENABLED = (process.env.TIMING_ENABLED ?? "false").toLowerCase() === "true";
     const TIMING_SAMPLE_INTERVAL_MS = parseInt(process.env.TIMING_SAMPLE_INTERVAL_MS ?? "5000");
+
+    if (TIMING_ENABLED) {
+        console.log(`[TIMING] enabled — outputDir=${storagePath} sampleIntervalMs=${TIMING_SAMPLE_INTERVAL_MS}`);
+    } else {
+        console.log("[TIMING] disabled — set TIMING_ENABLED=true to write timing.jsonl + timing-summary.json to the crawl folder");
+    }
 
     let timingSampler: NodeJS.Timeout | null = null;
 

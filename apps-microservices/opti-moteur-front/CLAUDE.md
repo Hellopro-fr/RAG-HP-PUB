@@ -354,13 +354,39 @@ curl "https://api.hellopro.eu/optimoteur-service/admin/compute-idf/status"
 
 Optionnel : passer `?collection=produits_prod_v2` pour cibler une autre collection.
 
+### Persistance via GCS bucket (NEW 2026-05-26)
+
+Pour partager l'IDF entre plusieurs pods sans Filestore couteux, le service
+upload/download le JSON via un bucket GCS. Activation via env var :
+
+```yaml
+env:
+  - name: GCS_IDF_BUCKET
+    value: "hellopro-rag-project-opti-moteur-data"  # nom bucket
+  - name: GCS_IDF_OBJECT
+    value: "idf_nom_produit.json"  # defaut
+```
+
+Auth via Workload Identity : le SA Kubernetes du pod doit avoir le role
+`roles/storage.objectAdmin` sur le bucket.
+
+Flux :
+1. Pod A recoit `POST /admin/compute-idf` -> genere localement -> upload GCS
+2. Pour propager au pod B : appeler `POST /admin/reload-idf` (n fois pour
+   couvrir tous les pods via LoadBalancer)
+3. Au demarrage de tout pod : si fichier local absent, download depuis GCS
+
+Si `GCS_IDF_BUCKET` est vide, persistance desactivee, fallback fichier local.
+
 ### Cron PHP hebdomadaire
 
 `site/script/typesense/compute_idf_weekly.php` est appele 1x/semaine
 (dimanche 4h, apres le sync quotidien synonymes 3h30). Il :
 - Verifie qu'aucune regen n'est en cours (via /admin/compute-idf/status)
 - POST sur /admin/compute-idf avec le X-Admin-Token
-- Logge le resultat (status + duree)
+- Polle `/admin/compute-idf/status` jusqu'a "ok" (max 15 min)
+- Appelle 5x `/admin/reload-idf` pour propager aux differents pods via LB
+- Logge le resultat (status + duree + nb pods reloaded)
 
 Configurer cron Ecritel :
 ```

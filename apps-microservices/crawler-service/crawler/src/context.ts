@@ -1,4 +1,5 @@
 import { DedupManager } from "./class/DedupManager.js";
+import { PushedSet } from "./class/PushedSet.js";
 import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
@@ -9,6 +10,7 @@ import { PlaywrightCrawler } from "crawlee";
 
 export const context = {
     dedupManager: null as DedupManager | null,
+    pushedSet: undefined as PushedSet | undefined,
     statsManager: null as StatsManager | null,
     urlConsolidator: null as UrlConsolidator | null,
     updateChecker: null as UpdateChecker | null,
