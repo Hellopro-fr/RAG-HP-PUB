@@ -44,6 +44,7 @@ _state: Dict[str, Any] = {
     "stdout_tail": None,
     "stderr_tail": None,
     "error": None,
+    "gcs_uploaded": None,       # bool si upload GCS reussi (None = GCS desactive)
 }
 
 
@@ -121,6 +122,19 @@ def regenerate_idf_background(collection: Optional[str] = None) -> None:
             _state["finished_at"] = datetime.now(timezone.utc).isoformat()
 
         if result["status"] == "ok":
+            # Upload du nouveau JSON vers GCS pour partage entre pods.
+            # No-op si GCS_IDF_BUCKET non defini.
+            try:
+                from app.services import gcs_idf_storage
+                if gcs_idf_storage.gcs_enabled():
+                    upload_ok = gcs_idf_storage.upload(_OUT_PATH)
+                    with _lock:
+                        _state["gcs_uploaded"] = upload_ok
+                else:
+                    logger.info("GCS persistence disabled, IDF reste local au pod")
+            except Exception as e:
+                logger.warning("GCS upload failed: %s", e)
+
             # Reset cache du loader : force reload au prochain get_idf()
             try:
                 from app.services import idf_loader

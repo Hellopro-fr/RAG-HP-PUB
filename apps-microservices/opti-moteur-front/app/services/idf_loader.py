@@ -60,6 +60,20 @@ def _load_idf() -> Dict[str, float]:
         return _idf_cache or {}
     _load_attempted = True
 
+    # Si le fichier local est absent, on tente un download depuis GCS
+    # (pour partager l'IDF entre les 2+ pods sans PVC ReadWriteMany).
+    # No-op si GCS_IDF_BUCKET non configure.
+    if not _IDF_PATH.exists():
+        try:
+            from app.services import gcs_idf_storage
+            if gcs_idf_storage.gcs_enabled():
+                if gcs_idf_storage.download(_IDF_PATH):
+                    logger.info("IDF downloaded from GCS at startup")
+                else:
+                    logger.info("GCS configured but no IDF blob yet")
+        except Exception as e:
+            logger.warning("GCS download attempt failed at startup: %s", e)
+
     if not _IDF_PATH.exists():
         logger.warning(
             "IDF file not found at %s - reranker will fallback to flat name_match (ratio simple). "
