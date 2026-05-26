@@ -2540,6 +2540,7 @@ services:
       context: ./apps-microservices/account-service-backend
     container_name: account-service-backend
     expose: ["8600"]
+    profiles: ["app"]
     environment:
       ACCOUNT_PORT: 8600
       ACCOUNT_PUBLIC_URL: ${ACCOUNT_PUBLIC_URL}
@@ -2588,6 +2589,7 @@ services:
     build:
       context: ./apps-microservices/account-service-frontend
     container_name: account-service-frontend
+    profiles: ["app"]
     ports:
       - "${ACCOUNT_FRONTEND_PORT:-8601}:8601"
     depends_on:
