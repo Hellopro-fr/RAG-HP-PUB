@@ -311,6 +311,31 @@ class UnitNormalizationService:
                 "m2.k/w": "thermal_resistance",
                 # Rotational speed alias (French "tours/min" abbreviated as "t/min" — context: Régime PDF)
                 "t/min": "[frequency]",
+                # --- FIX 10 additions: 6th DLQ batch ---
+                # Time — French plural/singular
+                "heures": "time",
+                "heure": "time",
+                # Mass flow — tonnes per hour
+                "t/h": "mass_flow",
+                # Mohs hardness scale (0-10, dimensionless)
+                "mohs": "dimensionless",
+                # French data-size units (octets)
+                "go": "information",
+                "mo": "information",
+                "ko": "information",
+                "to": "information",
+                # Screen resolution units (pixels are a count)
+                "px": "count",
+                "pixel": "count",
+                "pixels": "count",
+                # Surface pressure / load
+                "kn/m²": "pressure",
+                "kn/m2": "pressure",
+                # Volume — Unicode variant of 'm3' (lookup uses original_unit pre-replace)
+                "m³": "volume",
+                # Luminance — candela per square meter (nits)
+                "cd/m²": "luminance",
+                "cd/m2": "luminance",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -381,6 +406,8 @@ class UnitNormalizationService:
                 "débit de vapeur": "mass_flow",
                 "consommation d'eau": "volume",
                 "consommation électrique": "power",
+                # Specific 'batterie' qualifier — autonomie is duration, not energy
+                "autonomie de la batterie": "time",
                 "batterie": "energy",
                 "consommation": "energy",
                 "débit": "volume / time",
@@ -409,6 +436,11 @@ class UnitNormalizationService:
                 # Thermal insulation properties
                 "coefficient de transmission thermique": "thermal_transmittance",
                 "résistance thermique": "thermal_resistance",
+                # --- FIX 10 additions: labels for 6th DLQ batch ---
+                "résolution de l'écran": "count",
+                "luminosité de l'écran": "luminance",
+                "dureté": "dimensionless",
+                "mémoire vive": "information",
                 # Note: 'capacité d'accueil', 'capacité de la vitrine', 'capacité de production'
                 # and 'vitesse de nettoyage' are placed ABOVE the bare 'capacité'/'vitesse'
                 # fallbacks (substring matching is insertion-order dependent).
@@ -454,6 +486,8 @@ class UnitNormalizationService:
                 "thermal_resistance": "meter ** 2 * kelvin / watt",
                 # Surface processing rate (e.g. cleaning speed in m²/h)
                 "surface_rate": "meter ** 2 / hour",
+                # Luminance — candela per square meter (nits, used for screen brightness)
+                "luminance": "candela / meter ** 2",
             }
         return cls._instance
 
@@ -641,6 +675,31 @@ class UnitNormalizationService:
                 # Pumping/cutting rate — Pint cannot parse 'coups'/'coupes' as count,
                 # so represent as inverse minute (frequency) to allow conversion to hertz.
                 unit = "1 / minute"
+            # --- FIX 10: Sanitize new units from 6th DLQ batch ---
+            elif unit_stripped in ("heures", "heure"):
+                # French plural; Pint accepts 'hour' canonical only
+                unit = "hour"
+            elif unit_stripped == "go":
+                # French gigaoctet → Pint gigabyte
+                unit = "gigabyte"
+            elif unit_stripped == "mo":
+                unit = "megabyte"
+            elif unit_stripped == "ko":
+                unit = "kilobyte"
+            elif unit_stripped == "to":
+                unit = "terabyte"
+            elif unit_stripped == "mohs":
+                # Mohs hardness scale (0-10) — dimensionless, pass value through
+                return {
+                    "valeur_canonique": float(value),
+                    "unite_canonique": "count",
+                }
+            elif unit_stripped == "kn/m2":
+                # Surface load after ² → 2 normalization (kilonewton per m² = kPa)
+                unit = "kilonewton / meter ** 2"
+            elif unit_stripped == "cd/m2":
+                # Luminance after ² → 2 normalization (candela per m² = nits)
+                unit = "candela / meter ** 2"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
