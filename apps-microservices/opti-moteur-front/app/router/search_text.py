@@ -38,16 +38,22 @@ def search_by_text(req: SearchTextRequest):
     Retourne la meme structure que /search (SearchResponse).
     """
     vector = None
+    embedding_fallback_reason = None
     if req.use_vector:
-        # 1. Embed
+        # 1. Embed avec fallback automatique en BM25-only si le service
+        #    embedding est lent/down. Plutot que 503, on degrade gracefully :
+        #    le pipeline BM25 + name_match + cat_match + synonymes + brand
+        #    reste tres performant sans embedding (cf bench : 6/7 cas Elena
+        #    top-1 corrects sans embedding).
         try:
             vector = embed_text(req.query)
         except Exception as e:
-            logger.error("Embedding failed for query=%r: %s", req.query, e)
-            raise HTTPException(
-                status_code=503,
-                detail=f"Embedding service unavailable: {e}",
+            embedding_fallback_reason = str(e)[:200]
+            logger.warning(
+                "Embedding failed for query=%r, falling back to BM25-only: %s",
+                req.query, e,
             )
+            vector = None  # = equivalent use_vector=False, do_search gere
 
     # 2. Search (reutilise le service existant, vector=None si use_vector=False)
     try:

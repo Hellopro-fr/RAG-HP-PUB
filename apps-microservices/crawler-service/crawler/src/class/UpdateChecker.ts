@@ -125,6 +125,10 @@ export class UpdateChecker {
 
     /**
      * Check if a URL contains any forbidden query parameter.
+     *
+     * Pure check — no side effects. The `filtered_qm` stat is now incremented
+     * centrally in routes.ts for every URL containing '?', which already covers
+     * URLs with a forbidden param. Double-counting here would inflate the counter.
      */
     private hasForbiddenParams(url: string): boolean {
         try {
@@ -132,7 +136,6 @@ export class UpdateChecker {
             const keys = Array.from(urlObj.searchParams.keys());
             for (const param of FORBIDDEN_PARAMS) {
                 if (keys.some(key => key === param || key.startsWith(param))) {
-                    void this.statsManager.increment("filtered_qm");
                     return true;
                 }
             }
