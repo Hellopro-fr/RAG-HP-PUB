@@ -141,19 +141,26 @@ def delete_synonym(synonym_id: str, collection: Optional[str] = None):
 def admin_compute_idf(
     background_tasks: BackgroundTasks,
     collection: Optional[str] = None,
+    limit: int = 0,
     x_admin_token: Optional[str] = Header(None, description="Token jetable"),
 ):
     """
     Lance `scripts/compute_idf.py` en background pour regenerer
     `app/data/idf_nom_produit.json` puis recharger le cache IDF en RAM.
 
+    Args:
+        collection: override la collection Typesense source (default = settings)
+        limit: si > 0, tronque l'export a N docs (test rapide, ~30-60s).
+               Par loi de Zipf, 500000 docs couvrent >95% du vocab utile.
+
     Securite : header `X-Admin-Token` requis.
-    Duree typique : 2-5 min sur 2M docs.
+    Duree typique : 2-5 min sur 2M docs (sans limit), 30-60s avec limit=500000.
     Pour suivre l'avancement : `GET /admin/compute-idf/status`.
 
     A appeler :
       - Manuellement apres une ingestion massive (cf migrate_to_gke.sh)
       - Automatiquement chaque semaine via cron PHP `compute_idf_weekly.php`
+      - En mode debug : `?limit=500000` pour valider la pipeline rapidement
     """
     _check_admin_token(x_admin_token)
 
@@ -163,11 +170,14 @@ def admin_compute_idf(
             detail="A regeneration is already running. See GET /admin/compute-idf/status",
         )
 
-    background_tasks.add_task(idf_service.regenerate_idf_background, collection)
+    background_tasks.add_task(
+        idf_service.regenerate_idf_background, collection, limit,
+    )
     return {
         "status": "started",
         "collection": collection or settings.TYPESENSE_COLLECTION,
-        "note": "Run in background, ~2-5 min. Poll GET /admin/compute-idf/status",
+        "limit": limit if limit > 0 else "full",
+        "note": "Run in background. Poll GET /admin/compute-idf/status",
     }
 
 
