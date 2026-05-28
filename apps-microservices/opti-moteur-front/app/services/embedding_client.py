@@ -74,8 +74,14 @@ def _extract_vector(resp) -> List[float]:
     raise ValueError(f"Format reponse embedding inconnu : {type(resp)}")
 
 
+EMBEDDING_MAX_RETRIES = int(os.getenv("EMBEDDING_MAX_RETRIES", "1"))
+
+
 def embed_text(text: str, timeout: int = None) -> List[float]:
-    """Appelle api-embedding-service pour obtenir le vecteur d'une query."""
+    """
+    Appelle api-embedding-service pour obtenir le vecteur d'une query.
+    Avec retry automatique sur erreur reseau / timeout (default 1 retry).
+    """
     if not text or not text.strip():
         raise ValueError("Le texte a embedder ne peut pas etre vide")
 
@@ -92,17 +98,34 @@ def embed_text(text: str, timeout: int = None) -> List[float]:
         "source_service": SERVICE_NAME,
         "service_name": SERVICE_NAME,
     }
-    try:
-        r = requests.post(
-            url,
-            json=body,
-            headers=headers,
-            timeout=timeout or EMBEDDING_TIMEOUT,
-        )
-        r.raise_for_status()
-    except requests.RequestException as e:
-        logger.error("Embedding service unavailable at %s: %s", url, e)
-        raise
+
+    last_error = None
+    for attempt in range(EMBEDDING_MAX_RETRIES + 1):
+        try:
+            r = requests.post(
+                url,
+                json=body,
+                headers=headers,
+                timeout=timeout or EMBEDDING_TIMEOUT,
+            )
+            r.raise_for_status()
+            break  # Succes : sortir de la boucle retry
+        except requests.RequestException as e:
+            last_error = e
+            if attempt < EMBEDDING_MAX_RETRIES:
+                logger.warning(
+                    "Embedding attempt %d/%d failed for query=%r: %s. Retrying...",
+                    attempt + 1, EMBEDDING_MAX_RETRIES + 1, text[:60], e,
+                )
+                # Petit backoff pour laisser le service respirer
+                import time
+                time.sleep(0.5)
+            else:
+                logger.error(
+                    "Embedding service unavailable at %s after %d attempts: %s",
+                    url, EMBEDDING_MAX_RETRIES + 1, e,
+                )
+                raise
     try:
         data = r.json()
     except ValueError:
