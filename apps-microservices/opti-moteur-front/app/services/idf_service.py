@@ -49,13 +49,16 @@ _state: Dict[str, Any] = {
 
 
 def regenerate_idf_sync(collection: Optional[str] = None,
-                        timeout_s: int = 900) -> Dict[str, Any]:
+                        timeout_s: int = 900,
+                        limit: int = 0) -> Dict[str, Any]:
     """
     Lance compute_idf.py en subprocess (bloquant).
 
     Args:
         collection: collection Typesense source (default = settings.TYPESENSE_COLLECTION).
         timeout_s: timeout du subprocess (default 15 min, large pour 5M+ docs).
+        limit: si > 0, tronque l'export Typesense a N docs (test rapide).
+               Par loi de Zipf, 500000 docs couvrent >95% du vocab utile.
 
     Returns:
         dict avec status, returncode, stdout_tail, stderr_tail, duration_s.
@@ -64,7 +67,11 @@ def regenerate_idf_sync(collection: Optional[str] = None,
     Le caller est responsable de recharger le cache idf_loader si besoin.
     """
     coll = collection or settings.TYPESENSE_COLLECTION
-    cmd = [sys.executable, str(_SCRIPT_PATH), "--collection", coll]
+    # python -u : unbuffered stdout/stderr -> logs visibles en temps reel
+    # meme en cas de kill (OOM, timeout, etc.)
+    cmd = [sys.executable, "-u", str(_SCRIPT_PATH), "--collection", coll]
+    if limit and limit > 0:
+        cmd.extend(["--limit", str(limit)])
     logger.info("Running: %s", " ".join(cmd))
     t0 = datetime.now(timezone.utc)
     try:
@@ -85,22 +92,32 @@ def regenerate_idf_sync(collection: Optional[str] = None,
         }
     except subprocess.TimeoutExpired as e:
         duration = (datetime.now(timezone.utc) - t0).total_seconds()
+        # En cas de timeout, garder les vrais logs Python (jusqu'au kill)
+        # plus le message TIMEOUT prefixe pour identifier la cause.
+        stdout_captured = (e.stdout or "")[-1800:] if e.stdout else ""
+        stderr_captured = (e.stderr or "")[-1800:] if e.stderr else ""
         return {
             "status": "error",
             "returncode": -1,
             "duration_s": round(duration, 1),
-            "stdout_tail": (e.stdout or "")[-2000:] if e.stdout else "",
-            "stderr_tail": f"TIMEOUT after {timeout_s}s",
+            "stdout_tail": stdout_captured,
+            "stderr_tail": f"[TIMEOUT after {timeout_s}s]\n{stderr_captured}",
         }
 
 
-def regenerate_idf_background(collection: Optional[str] = None) -> None:
+def regenerate_idf_background(collection: Optional[str] = None,
+                              limit: int = 0) -> None:
     """
     Wrapper utilise par FastAPI BackgroundTasks :
       1. Met a jour _state -> "running"
       2. Lance regenerate_idf_sync()
       3. Reload du cache idf_loader (force lazy reload au prochain get_idf)
-      4. Met a jour _state -> "ok" / "error" / "exception"
+      4. Upload sur GCS si configure
+      5. Met a jour _state -> "ok" / "error" / "exception"
+
+    Args:
+        collection: collection Typesense (default = settings.TYPESENSE_COLLECTION)
+        limit: tronque a N docs si > 0 (test rapide, loi de Zipf)
 
     Thread-safe : protege par lock pour eviter 2 regen concurrentes.
     """
@@ -112,7 +129,7 @@ def regenerate_idf_background(collection: Optional[str] = None) -> None:
         _state["error"] = None
 
     try:
-        result = regenerate_idf_sync(collection)
+        result = regenerate_idf_sync(collection, limit=limit)
         with _lock:
             _state["returncode"] = result["returncode"]
             _state["duration_s"] = result["duration_s"]
