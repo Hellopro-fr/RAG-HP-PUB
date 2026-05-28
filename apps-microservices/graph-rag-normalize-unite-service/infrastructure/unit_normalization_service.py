@@ -15,6 +15,10 @@ class UnitNormalizationService:
 
     _instance = None
 
+    # No threading.Lock needed: the module-level `unit_normalizer = UnitNormalizationService()`
+    # at the bottom of this file eager-initialises the singleton at import time, before any
+    # gRPC worker thread is spawned. Python's import lock guarantees single-threaded execution
+    # of the module body, so the `is None` check below never races in practice.
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(UnitNormalizationService, cls).__new__(cls)
@@ -295,7 +299,8 @@ class UnitNormalizationService:
                 # Length — thin coatings (µm). 'nm' is intentionally not listed here:
                 # it collides with Newton-meter (torque) under case-insensitive lookup.
                 # Disambiguation is handled by label context in _get_dimension.
-                "µm": "length",
+                # Key uses explicit Greek mu (U+03BC) — input NFKC-normalizes U+00B5 → U+03BC.
+                "μm": "length",
                 "um": "length",
                 # Time — explicit plural
                 "minutes": "time",
@@ -336,6 +341,16 @@ class UnitNormalizationService:
                 # Luminance — candela per square meter (nits)
                 "cd/m²": "luminance",
                 "cd/m2": "luminance",
+                # --- FIX 11: 7th DLQ batch ---
+                # Ampere-hour = battery capacity (electric charge), 1 Ah = 3600 C
+                # Include both accented and unaccented French forms — .lower() preserves accents
+                "ah": "electric_charge",
+                "a.h": "electric_charge",
+                "amperes-heures": "electric_charge",
+                "ampere-heure": "electric_charge",
+                "ampères-heures": "electric_charge",
+                "ampère-heure": "electric_charge",
+                "mah": "electric_charge",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -360,6 +375,7 @@ class UnitNormalizationService:
                 "capacité d'accueil": "count",
                 "capacité de la vitrine": "count",
                 "capacité de production": "mass_flow",
+                "capacité de la batterie": "electric_charge",
                 "recycleur": "count",
                 "cassette de délestage": "count",
                 "bac de trop-plein": "count",
@@ -488,6 +504,8 @@ class UnitNormalizationService:
                 "surface_rate": "meter ** 2 / hour",
                 # Luminance — candela per square meter (nits, used for screen brightness)
                 "luminance": "candela / meter ** 2",
+                # Electric charge — ampere-hour (battery capacity); 1 Ah = 3600 C
+                "electric_charge": "ampere_hour",
             }
         return cls._instance
 
@@ -525,6 +543,19 @@ class UnitNormalizationService:
                 )
                 if any(k in label_norm for k in length_indicators):
                     return "length"
+            # Disambiguate 't/min': tours/min (rotation, default) vs tonnes/min (mass flow).
+            # The letter 't' is overloaded: tour in rotation context, tonne in mass-flow context.
+            if unit_lower == "t/min" and label:
+                label_norm = self._strip_accents(label.strip().lower())
+                mass_flow_indicators = (
+                    "debit",
+                    "capacite de production",
+                    "production",
+                    "consommation",
+                    "tonnage",
+                )
+                if any(k in label_norm for k in mass_flow_indicators):
+                    return "mass_flow"
             if unit_lower in self.UNIT_TO_DIMENSION:
                 return self.UNIT_TO_DIMENSION[unit_lower]
 
@@ -562,6 +593,13 @@ class UnitNormalizationService:
 
         if not all([label, value is not None]):
             return {}
+
+        # --- FIX: Normalize Unicode compatibility forms (NFKC).
+        # Collapses U+00B5 MICRO SIGN and U+03BC GREEK MU into the same codepoint
+        # so 'µm' from copy-paste and 'μm' from LLM/OCR extraction both match.
+        # Also normalizes other compatibility variants (e.g. fullwidth digits).
+        if unit:
+            unit = unicodedata.normalize("NFKC", unit)
 
         # --- FIX: Save original unit for dimension lookup before sanitization ---
         original_unit = unit
@@ -634,9 +672,9 @@ class UnitNormalizationService:
             elif unit_stripped in ("pouces", "pouce"):
                 # French inch; Pint knows 'inch', use that
                 unit = "inch"
-            elif unit_stripped in ("kg/m³", "kg/m3"):
-                # Density unit: kilogram per cubic metre
-                unit = "kilogram / meter ** 3"
+            # Note: a previous duplicate `elif unit_stripped in ("kg/m³", "kg/m3")` block
+            # was removed — unreachable because `³` is replaced by `3` earlier (line ~510),
+            # and `kg/m3` is already caught by the earlier elif above.
             elif unit_stripped == "km/h":
                 # Speed: Pint requires explicit slash notation
                 unit = "kilometer / hour"
@@ -653,8 +691,8 @@ class UnitNormalizationService:
             elif unit_stripped == "minutes":
                 # Pint accepts singular only
                 unit = "minute"
-            elif unit_stripped == "µm":
-                # micro sign U+00B5 not parsed by Pint; use canonical name
+            elif unit_stripped == "μm":  # Greek mu (U+03BC) — NFKC-normalized form
+                # micro abbreviation not parsed by Pint; use canonical name
                 unit = "micrometer"
             elif unit_stripped == "kg/24h":
                 # Daily production capacity: 24h is not a valid Pint scaling token
@@ -669,8 +707,21 @@ class UnitNormalizationService:
                 # Thermal resistance (R-value) after ² → 2 normalization
                 unit = "meter ** 2 * kelvin / watt"
             elif unit_stripped == "t/min":
-                # In this corpus 't/min' = tours/minute (Régime PDF), not tonnes/minute
-                unit = "rpm"
+                # 't' is overloaded: tour (rotation, default) vs tonne (mass flow).
+                # Mirror the dimension disambiguation in _get_dimension to pick the right
+                # Pint expression — otherwise mass-flow values get silently normalized as rpm.
+                label_norm = self._strip_accents(label.strip().lower()) if label else ""
+                mass_flow_indicators = (
+                    "debit",
+                    "capacite de production",
+                    "production",
+                    "consommation",
+                    "tonnage",
+                )
+                if any(k in label_norm for k in mass_flow_indicators):
+                    unit = "tonne / minute"
+                else:
+                    unit = "rpm"
             elif unit_stripped in ("coups/min", "coupes/min"):
                 # Pumping/cutting rate — Pint cannot parse 'coups'/'coupes' as count,
                 # so represent as inverse minute (frequency) to allow conversion to hertz.
@@ -700,6 +751,17 @@ class UnitNormalizationService:
             elif unit_stripped == "cd/m2":
                 # Luminance after ² → 2 normalization (candela per m² = nits)
                 unit = "candela / meter ** 2"
+            # --- FIX 11: Ampere-hour (battery capacity)
+            elif unit_stripped in (
+                "ah", "a.h",
+                "amperes-heures", "ampere-heure",
+                "ampères-heures", "ampère-heure",  # accented forms: .lower() preserves accents
+            ):
+                # Pint case-sensitive ('Ah' is registered, 'ah'/'AH' may fail) — use canonical
+                unit = "ampere_hour"
+            elif unit_stripped == "mah":
+                # milli-ampere-hour
+                unit = "milliampere_hour"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
@@ -733,8 +795,12 @@ class UnitNormalizationService:
             if unit and unit.lower() != "null":
                 quantity = self.ureg.Quantity(value, unit)
                 canonical_quantity = quantity.to(canonical_unit)
+                # Use 6 significant figures rather than 4 decimal places to preserve
+                # sub-millimeter values: round(0.000025, 4) = 0.0 destroys µm/nm data,
+                # but f"{0.000025:.6g}" = "2.5e-05" keeps the magnitude.
+                magnitude = canonical_quantity.magnitude
                 return {
-                    "valeur_canonique": round(canonical_quantity.magnitude, 4),
+                    "valeur_canonique": float(f"{magnitude:.6g}"),
                     "unite_canonique": str(canonical_quantity.units),
                 }
             else:
