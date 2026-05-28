@@ -19,7 +19,13 @@ EMBEDDING_SERVICE_URL = os.getenv(
     "EMBEDDING_SERVICE_URL",
     "http://rag-hp-pub-api-embedding-service-1:8555",
 )
-EMBEDDING_TIMEOUT = int(os.getenv("EMBEDDING_TIMEOUT", "10"))
+EMBEDDING_TIMEOUT = int(os.getenv("EMBEDDING_TIMEOUT", "30"))  # 10 -> 30 (service lent ~13s/req)
+
+# Identifiant du caller envoye au service embedding pour priorisation.
+# Sur GKE : defini via env var SERVICE_NAME dans le deployment.
+# Le service embedding utilise cette info pour prioriser nos requetes
+# (configurable cote serveur dans sa liste de "services prioritaires").
+SERVICE_NAME = os.getenv("SERVICE_NAME", "opti-moteur-front")
 
 
 def _extract_vector(resp) -> List[float]:
@@ -74,10 +80,23 @@ def embed_text(text: str, timeout: int = None) -> List[float]:
         raise ValueError("Le texte a embedder ne peut pas etre vide")
 
     url = f"{EMBEDDING_SERVICE_URL.rstrip('/')}/embedding"
+    # On envoie SERVICE_NAME aux 3 emplacements possibles (header HTTP +
+    # body JSON) pour que le serveur le retrouve quel que soit le format
+    # qu'il attend. Format definitif a confirmer avec le collegue embedding.
+    headers = {
+        "Content-Type": "application/json",
+        "X-Service-Name": SERVICE_NAME,
+    }
+    body = {
+        "text": text,
+        "source_service": SERVICE_NAME,
+        "service_name": SERVICE_NAME,
+    }
     try:
         r = requests.post(
             url,
-            json={"text": text},
+            json=body,
+            headers=headers,
             timeout=timeout or EMBEDDING_TIMEOUT,
         )
         r.raise_for_status()
