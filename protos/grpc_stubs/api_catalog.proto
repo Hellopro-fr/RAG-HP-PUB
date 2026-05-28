@@ -11,13 +11,15 @@ service ApiCatalog {
   rpc CreateService(CreateServiceRequest) returns (Service);
   rpc UpdateService(UpdateServiceRequest) returns (Service);
   rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse);
+  rpc UpdateEndpoint(UpdateEndpointRequest) returns (Endpoint);
   rpc RescanAll(RescanAllRequest)         returns (RescanReport);
   rpc RescanService(RescanServiceRequest) returns (RescanReport);
 }
 
-enum Protocol { PROTOCOL_UNSPECIFIED = 0; REST = 1; WS = 2; GRPC = 3; }
-enum Source   { SOURCE_UNSPECIFIED   = 0; ENV  = 1; MANUAL = 2; SCAN = 3; }
-enum Status   { STATUS_UNSPECIFIED   = 0; ACTIVE = 1; DEPRECATED = 2; DOWN = 3; }
+enum Protocol   { PROTOCOL_UNSPECIFIED   = 0; REST = 1; WS = 2; GRPC = 3; }
+enum Source     { SOURCE_UNSPECIFIED     = 0; ENV  = 1; MANUAL = 2; SCAN = 3; }
+enum Status     { STATUS_UNSPECIFIED     = 0; ACTIVE = 1; DEPRECATED = 2; DOWN = 3; }
+enum AuthPolicy { AUTH_POLICY_UNSPECIFIED = 0; PUBLIC = 1; BEARER = 2; ADMIN_KEY = 3; }
 
 message Service {
   string id = 1;
@@ -36,6 +38,9 @@ message Service {
   string last_scan_error = 14;
   google.protobuf.Timestamp created_at = 15;
   google.protobuf.Timestamp updated_at = 16;
+  AuthPolicy auth_policy = 17;
+  repeated string public_paths = 18;
+  bool   has_endpoint_overrides = 19;
 }
 
 message Endpoint {
@@ -48,6 +53,7 @@ message Endpoint {
   string operation_id = 7;
   repeated string tags = 8;
   bool deprecated = 9;
+  optional AuthPolicy auth_policy = 10;
 }
 
 message ListServicesRequest   { int32 limit = 1; int32 offset = 2; string filter = 3; }
@@ -66,14 +72,25 @@ message CreateServiceRequest {
   string api_info_url = 7;
   string grpc_address = 8;
   string created_by = 9;
+  AuthPolicy auth_policy = 10;
+  repeated string public_paths = 11;
 }
+
 message UpdateServiceRequest {
   string id = 1;
   optional string description = 2;
   optional string owner = 3;
   repeated string tags = 4;
   optional Status status = 5;
+  optional AuthPolicy auth_policy = 6;
+  repeated string public_paths = 7;
 }
+
+message UpdateEndpointRequest {
+  string id = 1;
+  optional AuthPolicy auth_policy = 2;
+}
+
 message DeleteServiceRequest  { string id = 1; }
 message DeleteServiceResponse { bool deleted = 1; }
 message RescanAllRequest      { bool force = 1; }

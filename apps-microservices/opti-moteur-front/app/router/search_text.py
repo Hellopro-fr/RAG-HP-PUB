@@ -55,6 +55,15 @@ def search_by_text(req: SearchTextRequest):
             )
             vector = None  # = equivalent use_vector=False, do_search gere
 
+    # vector_only requires un vecteur valide ; sinon on tombe en BM25 par securite
+    effective_vector_only = req.vector_only and (vector is not None)
+    if req.vector_only and vector is None:
+        logger.warning(
+            "vector_only=True mais vecteur indisponible (use_vector=%s, "
+            "fallback=%s). Bascule en BM25.",
+            req.use_vector, embedding_fallback_reason,
+        )
+
     # 2. Search (reutilise le service existant, vector=None si use_vector=False)
     try:
         return do_search(
@@ -65,6 +74,7 @@ def search_by_text(req: SearchTextRequest):
             candidates=req.candidates,
             offset=req.offset or 0,
             apply_filter_by_category=req.apply_filter_by_category,
+            vector_only=effective_vector_only,
         )
     except Exception as e:
         logger.error("Search failed: %s", e, exc_info=True)

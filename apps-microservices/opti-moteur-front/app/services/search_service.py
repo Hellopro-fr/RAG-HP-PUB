@@ -49,13 +49,17 @@ def search(
     candidates: Optional[int] = None,
     offset: int = 0,
     apply_filter_by_category: bool = True,
+    vector_only: bool = False,
 ) -> Dict[str, Any]:
     """
-    Execute une recherche hybride (BM25 + kNN vecteur) OU BM25 pur selon la
-    presence de query_vector. Fallback sans filter_by si trop restrictif.
+    Execute une recherche selon 3 modes :
+    - hybrid (defaut) : BM25 + kNN vector + reranker
+    - bm25_only : query_vector=None -> pas de kNN, BM25 pur + reranker
+    - vector_only : vector_only=True ET query_vector!=None -> q=* + kNN vector pur
+      + reranker. Use case : Solr V2 fait deja le match exact en page 1, Typesense
+      apporte uniquement la valeur semantique en complement.
 
-    Si `query_vector` est None -> pipeline BM25 pur (pas d'appel vectoriel a
-    Typesense, reranker sans poids vecteur). Utile pour benchmark sans embedding.
+    Fallback automatique sans filter_by si trop restrictif.
     """
     collection = collection or settings.TYPESENSE_COLLECTION
     top_k = top_k or settings.DEFAULT_TOP_K
@@ -72,10 +76,11 @@ def search(
     if apply_filter_by_category and conf >= settings.CAT_FILTER_THRESHOLD and valid_cats:
         filter_cats = valid_cats
 
-    # 3. Hybrid or BM25-only search
+    # 3. Hybrid or BM25-only or Vector-only search
     t1 = time.time()
     ts_result = _hybrid_typesense_search(
-        query, query_vector, collection, candidates, filter_cats=filter_cats,
+        query, query_vector, collection, candidates,
+        filter_cats=filter_cats, vector_only=vector_only,
     )
     groups = ts_result.get("grouped_hits", [])
 
@@ -88,7 +93,8 @@ def search(
             len(groups), fallback_threshold, query,
         )
         ts_result = _hybrid_typesense_search(
-            query, query_vector, collection, candidates, filter_cats=None,
+            query, query_vector, collection, candidates,
+            filter_cats=None, vector_only=vector_only,
         )
         groups = ts_result.get("grouped_hits", [])
         filter_cats = None
@@ -119,6 +125,9 @@ def search(
             # (etat == 'Client' OU (etat == 'Pause' AND affichage == 'Complet')).
             "etat":          d.get("etat") or "",
             "affichage":     d.get("affichage") or "",
+            # is_cert (NEW 2026-05-28) : booleen pre-calcule cote Python, evite
+            # au PHP de refaire la logique. True si etat=Client OU etat=Pause+Complet.
+            "is_cert":       r.get("is_cert", False),
             "prix_ht":       d.get("prix_ht"),
             "score":         round(r["final_score"], 4),
             "scores_detail": {
@@ -161,12 +170,15 @@ def _hybrid_typesense_search(
     collection: str,
     candidates: int,
     filter_cats: Optional[List[str]] = None,
+    vector_only: bool = False,
 ) -> Dict[str, Any]:
     """
     Recherche paginee pour couvrir jusqu'a `candidates` documents uniques.
 
-    Si `query_vector` est None -> BM25 pur (pas de vector_query envoye).
-    Sinon -> hybrid BM25 + kNN sur embedding.
+    3 modes selon les parametres :
+    - `query_vector=None` -> BM25 pur (q=query, pas de vector_query)
+    - `vector_only=True` ET vector!=None -> kNN pur (q="*", vector_query envoye)
+    - sinon (defaut) -> hybrid BM25 + kNN (q=query + vector_query)
 
     Typesense capse `per_page` et `k` (vector kNN) a 250 pour les recherches
     hybrides. Pour remonter plus de candidats (utile pour les grosses
@@ -181,9 +193,14 @@ def _hybrid_typesense_search(
     num_pages = min((candidates + per_page - 1) // per_page, _MAX_PAGES)
     num_pages = max(num_pages, 1)
 
+    # Mode vector_only : q="*" pour neutraliser BM25 et ne garder que le kNN.
+    # Necessite un vecteur valide (sinon retour BM25 pur par securite).
+    effective_vector_only = vector_only and query_vector is not None
+    q_param = "*" if effective_vector_only else query
+
     base_params = {
         "collection": collection,
-        "q": query,
+        "q": q_param,
         "query_by": "nom_produit,categorie,text",
         "query_by_weights": "5,10,1",
         "per_page": per_page,
@@ -192,7 +209,7 @@ def _hybrid_typesense_search(
         "typo_tokens_threshold": 3,
         "drop_tokens_threshold": 2,
     }
-    # Ajoute le vector_query seulement si un vecteur est fourni (mode hybride)
+    # Ajoute le vector_query seulement si un vecteur est fourni (modes hybride OU vector_only)
     if query_vector is not None:
         vec_str = json.dumps(query_vector)
         base_params["vector_query"] = f"embedding:({vec_str}, k:{per_page})"

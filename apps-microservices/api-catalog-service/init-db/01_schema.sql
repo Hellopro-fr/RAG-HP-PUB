@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS catalog_services (
   last_scan_ok    TINYINT(1),
   last_scan_error TEXT,
   created_by      VARCHAR(255),
+  auth_policy     TINYINT      NOT NULL DEFAULT 1,
+  public_paths    JSON         NULL,
   created_at      DATETIME     NOT NULL,
   updated_at      DATETIME     NOT NULL,
   UNIQUE KEY uniq_name (name)
@@ -32,7 +34,9 @@ CREATE TABLE IF NOT EXISTS catalog_endpoints (
   operation_id VARCHAR(255),
   tags         JSON,
   deprecated   TINYINT(1) NOT NULL DEFAULT 0,
+  auth_policy  TINYINT NULL,
   CONSTRAINT fk_endpoint_service FOREIGN KEY (service_id) REFERENCES catalog_services(id) ON DELETE CASCADE,
   KEY idx_endpoint_service (service_id),
-  KEY idx_endpoint_proto   (service_id, protocol)
+  KEY idx_endpoint_proto   (service_id, protocol),
+  KEY idx_endpoint_policy  (service_id, auth_policy)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
