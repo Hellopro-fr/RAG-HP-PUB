@@ -125,6 +125,9 @@ def search(
             # (etat == 'Client' OU (etat == 'Pause' AND affichage == 'Complet')).
             "etat":          d.get("etat") or "",
             "affichage":     d.get("affichage") or "",
+            # is_cert (NEW 2026-05-28) : booleen pre-calcule cote Python, evite
+            # au PHP de refaire la logique. True si etat=Client OU etat=Pause+Complet.
+            "is_cert":       r.get("is_cert", False),
             "prix_ht":       d.get("prix_ht"),
             "score":         round(r["final_score"], 4),
             "scores_detail": {
