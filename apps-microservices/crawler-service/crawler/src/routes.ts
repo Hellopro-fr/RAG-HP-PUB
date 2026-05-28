@@ -22,6 +22,7 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
+import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -705,6 +706,10 @@ router.addDefaultHandler(
                         }
                     }
                 }
+
+                // Mirror `?` / `#` counters into StatsManager so they appear in the
+                // webhook payload (`filtered_qm` / `filtered_hash`). See qmHashTracker.ts.
+                trackQmHashStatsForUrl(url, context.statsManager);
 
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
                 if (url.includes('?')) {
