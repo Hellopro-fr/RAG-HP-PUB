@@ -32,7 +32,7 @@ import type { StatsManager } from './class/StatsManager.js';
 
 export function trackQmHashStatsForUrl(
     url: string,
-    statsManager: StatsManager | undefined,
+    statsManager: StatsManager | null | undefined,
 ): void {
     if (!statsManager) {
         return;

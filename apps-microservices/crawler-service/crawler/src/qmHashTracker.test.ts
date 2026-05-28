@@ -68,6 +68,13 @@ test('trackQmHashStatsForUrl: undefined statsManager is a no-op (no crash)', () 
     });
 });
 
+test('trackQmHashStatsForUrl: null statsManager is a no-op (no crash)', () => {
+    // context.statsManager peut être typé `StatsManager | null` côté crawler.
+    assert.doesNotThrow(() => {
+        trackQmHashStatsForUrl('https://example.com/page?id=42#section', null);
+    });
+});
+
 test('trackQmHashStatsForUrl: regression — pure `?` triggers filtered_qm', () => {
     const stats = makeMockStatsManager();
     trackQmHashStatsForUrl('https://example.com/?', stats as any);
