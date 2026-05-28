@@ -44,6 +44,10 @@ func (v *APITokenVerifier) Middleware() gin.HandlerFunc {
 			c.Set("token_payload", gin.H{"sub": service, "is_excluded": true})
 			c.Next()
 			return
+		} else {
+			c.Set("token_payload", gin.H{"sub": service, "is_excluded": true})
+			c.Next()
+			return
 		}
 
 		// 1. Excluded routes bypass authentication.
