@@ -584,6 +584,10 @@ class UnitNormalizationService:
             elif unit_stripped in ("tonnes",):
                 # Pint only knows lowercase 'tonne'; 'Tonnes' (capital) fails.
                 unit = "tonne"
+            elif unit_stripped in ("pieds", "pied"):
+                # Pint is case-sensitive; 'Pieds' (capital) fails the registry lookup.
+                # Force lowercase canonical so the define `pieds = foot = pied` matches.
+                unit = "pieds"
             elif unit_stripped == "démarrages/heure":
                 # starts per hour = frequency; Pint can't parse 'démarrages'
                 unit = "1 / hour"
