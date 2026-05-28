@@ -17,7 +17,10 @@ import { StatsManager } from './StatsManager.js';
 
 test('StatsManager class is exported with expected method surface', () => {
     assert.equal(typeof StatsManager, 'function', 'StatsManager must be a class constructor');
-    const proto = StatsManager.prototype as Record<string, unknown>;
+    // Double assertion via `unknown` — TS 5.9 strict mode rejects the direct
+    // cast because StatsManager has no string index signature. The compiler's
+    // suggested form. Safe here: we're only reading the listed method names.
+    const proto = StatsManager.prototype as unknown as Record<string, unknown>;
     const expectedMethods = [
         'connect',
         'disconnect',
