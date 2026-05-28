@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     PROMETHEUS_PORT: int = 8565
 
     # Debug
-    DEBUG_SCORING: bool = True  # TEMP: active les logs detailles de scoring V2 (a remettre a False apres diagnostic)
+    DEBUG_SCORING: bool = False  # Active les logs detailles de scoring V2
 
     class Config:
         env_file = ".env"
