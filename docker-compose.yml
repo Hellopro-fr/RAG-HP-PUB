@@ -229,7 +229,7 @@ services:
       - EMBEDDING_BATCH_SIZE=8
       - TRITON_MAX_CONCURRENT_DEFAULT=1
       - TOTAL_MAX_CONCURRENT_REQUESTS=10
-      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement,mcp-api-recherche
+      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement,mcp-api-recherche,opti-moteur-front
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
     # depends_on:
     #   triton-server:
