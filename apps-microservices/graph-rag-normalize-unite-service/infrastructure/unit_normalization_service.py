@@ -383,6 +383,10 @@ class UnitNormalizationService:
                 "kwh / kg": "specific_energy",
                 # Solar peak power (kilowatt-crête): same dimension as kW
                 "kwc": "power",
+                # --- FIX 15: 13th DLQ batch — bare 'cycles' (count, e.g. MCBF reliability) ---
+                # Distinct from 'cycles/jour' which is a frequency (count per time).
+                "cycles": "count",
+                "cycle": "count",
             }
 
             # --- Label-to-Dimension Mapping ---
