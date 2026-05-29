@@ -351,6 +351,23 @@ class UnitNormalizationService:
                 "ampères-heures": "electric_charge",
                 "ampère-heure": "electric_charge",
                 "mah": "electric_charge",
+                # --- FIX 13: 11th DLQ batch — French capitalized full-name SI units ---
+                # Pint only knows canonical English names; French plural forms fail without sanitize.
+                "kilogrammes": "mass",
+                "kilogramme": "mass",
+                "grammes": "mass",
+                "gramme": "mass",
+                "millimètres": "length",
+                "millimètre": "length",
+                "centimètres": "length",
+                "centimètre": "length",
+                # Accented + unaccented variants ('.lower()' preserves é, LLM may strip it).
+                # Compound 'Décibels (dB/dBA)' is collapsed to 'Décibels' by the
+                # parenthesis-stripping pass in normalize() — no separate key needed.
+                "décibels": "sound_level",
+                "décibel": "sound_level",
+                "decibels": "sound_level",
+                "decibel": "sound_level",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -615,6 +632,16 @@ class UnitNormalizationService:
         if unit:
             unit = unicodedata.normalize("NFKC", unit)
 
+        # --- FIX: Strip trailing parenthesized symbol annotations from unit names.
+        # Producers occasionally emit French long-form names alongside the symbol:
+        #   "Décibels (dB)", "Décibels (dBA)", "Kilogrammes (kg)", "Millimètres (mm)"
+        # The dimension is carried by the long form; the symbol in parens is redundant.
+        # Stripping it lets a single sanitize rule cover every compound form.
+        if unit:
+            stripped = re.sub(r"\s*\([^)]*\)\s*$", "", unit).strip()
+            if stripped:
+                unit = stripped
+
         # --- FIX: Save original unit for dimension lookup before sanitization ---
         original_unit = unit
 
@@ -776,6 +803,21 @@ class UnitNormalizationService:
             elif unit_stripped == "mah":
                 # milli-ampere-hour
                 unit = "milliampere_hour"
+            # --- FIX 13: French capitalized SI unit names — Pint case-sensitive, plural-rejecting
+            elif unit_stripped in ("kilogrammes", "kilogramme"):
+                unit = "kilogram"
+            elif unit_stripped in ("grammes", "gramme"):
+                unit = "gram"
+            elif unit_stripped in ("millimètres", "millimètre"):
+                unit = "millimeter"
+            elif unit_stripped in ("centimètres", "centimètre"):
+                unit = "centimeter"
+            elif unit_stripped in ("décibels", "décibel", "decibels", "decibel"):
+                # Accept both accented (Décibels) and unaccented (Decibels) forms —
+                # .lower() preserves accents, and LLM/OCR extractors sometimes strip them.
+                # Compound forms like 'Décibels (dB)' / 'Décibels (dBA)' are already
+                # collapsed by the parenthesis-stripping pass above.
+                unit = "decibel"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
