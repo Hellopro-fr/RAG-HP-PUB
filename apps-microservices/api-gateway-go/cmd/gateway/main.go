@@ -63,6 +63,10 @@ func main() {
 	// getServices returns the current route map. When catalog refresher is
 	// active, snapshot wins; otherwise falls back to the env-derived map.
 	getServices := func() map[string]string { return serviceMap }
+	// getAuthSnapshot returns the live auth snapshot. Default is empty, which
+	// makes every service resolve to PolicyPublic (fail-open) until the catalog
+	// refresher populates it.
+	getAuthSnapshot := func() auth.AuthSnapshot { return auth.AuthSnapshot{} }
 
 	var routeSource = "env"
 	if cfg.UseCatalog {
@@ -76,11 +80,18 @@ func main() {
 			serviceMap = m
 			routeSource = src
 			getServices = func() map[string]string {
-				cur, _ := refresher.Snapshot()
+				cur, _, _ := refresher.Snapshot()
 				if cur == nil {
 					return serviceMap
 				}
 				return cur
+			}
+			getAuthSnapshot = func() auth.AuthSnapshot {
+				_, snap, _ := refresher.Snapshot()
+				if snap == nil {
+					return auth.AuthSnapshot{}
+				}
+				return snap
 			}
 			go refresher.Run(ctx)
 		}
@@ -137,7 +148,7 @@ func main() {
 		AdminKey:    cfg.GatewayAdminKey,
 	})
 
-	verifier := auth.NewAPITokenVerifier(jwtSvc, gdb, cache, config.BuildExcludedRoutes())
+	verifier := auth.NewAPITokenVerifier(jwtSvc, gdb, cache, getAuthSnapshot, cfg.GatewayAdminKey)
 	wsHandler := proxy.NewWSHandler(getServices)
 	httpHandler := proxy.NewHTTPHandler(proxy.HTTPDeps{
 		Services:          getServices,
