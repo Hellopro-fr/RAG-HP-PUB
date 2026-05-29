@@ -2470,7 +2470,7 @@ services:
       context: ./apps-microservices/mcp-zoho-service
       dockerfile: Dockerfile
     container_name: mcp-zoho-service
-    profiles: ["mcp"]
+    profiles: [ "mcp" ]
     restart: unless-stopped
     ports:
       - "8596:8596"
@@ -2488,7 +2488,7 @@ services:
       mysql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8596/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8596/health" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -2515,8 +2515,8 @@ services:
     build:
       context: ./apps-microservices/account-service-backend
     container_name: account-service-backend
-    expose: ["8600"]
-    profiles: ["app"]
+    expose: [ "8600" ]
+    profiles: [ "app" ]
     environment:
       ACCOUNT_PORT: 8600
       ACCOUNT_PUBLIC_URL: ${ACCOUNT_PUBLIC_URL}
@@ -2565,7 +2565,7 @@ services:
     build:
       context: ./apps-microservices/account-service-frontend
     container_name: account-service-frontend
-    profiles: ["app"]
+    profiles: [ "app" ]
     ports:
       - "${ACCOUNT_FRONTEND_PORT:-8601}:8601"
     depends_on:
@@ -2580,10 +2580,10 @@ services:
       context: .
       dockerfile: ./apps-microservices/nextjs-conseils-hp/Dockerfile
     profiles: [ "nextjs" ]
-    #expose:
-    #  - "3003"
-    ports:
-      - "3003:3003"
+    expose:
+      - "3003"
+    # ports:
+    #   - "3003:3003"
     environment:
       - NODE_ENV=production
     restart: unless-stopped
