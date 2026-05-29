@@ -84,6 +84,46 @@ func TestBDDSyncFieldTypes_PerTable_HappyPath(t *testing.T) {
 	}
 }
 
+func TestBDDSyncFieldTypes_PerTable_EnumCollapsedToKeyword(t *testing.T) {
+	repo := setupBDDTestRepo(t)
+	h := &Handler{}
+	h.SetBDDUsedRepo(repo)
+
+	id := seedSyncTable(t, h, []db.BDDUsedField{
+		{FieldName: "event_type", FieldType: "", Description: ""},
+	})
+
+	// A long enum(...) definition that would overflow field_type varchar(128).
+	enumDef := "enum('entered','initial_started','initial_succeeded','initial_failed'," +
+		"'became_maj_eligible','maj_triggered','maj_succeeded','maj_failed'," +
+		"'domain_deactivated','domain_redirected','webhook_received')"
+	upstream := fieldsUpstream(t,
+		`{"fields":[{"field_name":"event_type","field_type":"`+enumDef+`"}],"primary":"event_type"}`)
+	defer upstream.Close()
+	h.bddCatalog = bddcatalog.New(upstream.URL, "tok")
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/v1/bdd/used/tables/"+id+"/sync-field-types", nil)
+	rr := httptest.NewRecorder()
+	h.handleBDDUsedTableByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d want=200 body=%s", rr.Code, rr.Body.String())
+	}
+
+	got, _ := repo.GetTable(context.Background(), id)
+	f := got.Fields[0]
+	if f.FieldType != "enum" {
+		t.Errorf("field_type=%q want=enum", f.FieldType)
+	}
+	if len(f.FieldType) > 128 {
+		t.Errorf("field_type len=%d exceeds column width", len(f.FieldType))
+	}
+	if f.Description != enumDef {
+		t.Errorf("description=%q want full enum def", f.Description)
+	}
+}
+
 func TestBDDSyncFieldTypes_PerTable_422WhenNoUpstreamLink(t *testing.T) {
 	repo := setupBDDTestRepo(t)
 	h := &Handler{}

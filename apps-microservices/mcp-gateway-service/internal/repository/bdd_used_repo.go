@@ -445,13 +445,24 @@ func (r *BDDUsedRepo) UpdateFieldDescription(ctx context.Context, fieldID, descr
 	return nil
 }
 
-// SyncFieldTypes overwrites field_type for the table's fields whose name
-// appears in typesByName, skipping entries with an empty new type or one
-// that already matches the stored value. Names in the map that aren't
-// registered for the table are ignored. Returns the number of rows
-// actually changed. A table with no matching fields yields (0, nil).
-func (r *BDDUsedRepo) SyncFieldTypes(ctx context.Context, usedTableID string, typesByName map[string]string) (int, error) {
-	if len(typesByName) == 0 {
+// FieldTypeSync is the desired state for one field during a catalog sync.
+// Type is the (already normalized) short type written to field_type.
+// FullDef, when non-empty, is the verbose upstream definition (e.g. the
+// full enum(...) list) used to seed the description ONLY when the field
+// has no curated description yet — never clobbering admin-entered text.
+type FieldTypeSync struct {
+	Type    string
+	FullDef string
+}
+
+// SyncFieldTypes reconciles field_type (and optionally a seed description)
+// for the table's fields whose name appears in byName. For each match it
+// updates field_type when the normalized type differs, and sets the
+// description to FullDef only when the stored description is empty. Names
+// not registered for the table are ignored. Returns the number of field
+// rows actually changed. A table with no matching changes yields (0, nil).
+func (r *BDDUsedRepo) SyncFieldTypes(ctx context.Context, usedTableID string, byName map[string]FieldTypeSync) (int, error) {
+	if len(byName) == 0 {
 		return 0, nil
 	}
 	updated := 0
@@ -461,13 +472,23 @@ func (r *BDDUsedRepo) SyncFieldTypes(ctx context.Context, usedTableID string, ty
 			return err
 		}
 		for _, f := range fields {
-			ft, ok := typesByName[f.FieldName]
-			if !ok || ft == "" || ft == f.FieldType {
+			want, ok := byName[f.FieldName]
+			if !ok {
+				continue
+			}
+			updates := map[string]interface{}{}
+			if want.Type != "" && want.Type != f.FieldType {
+				updates["field_type"] = want.Type
+			}
+			if want.FullDef != "" && strings.TrimSpace(f.Description) == "" {
+				updates["description"] = want.FullDef
+			}
+			if len(updates) == 0 {
 				continue
 			}
 			res := tx.Model(&db.BDDUsedField{}).
 				Where("id = ?", f.ID).
-				Updates(map[string]interface{}{"field_type": ft})
+				Updates(updates)
 			if res.Error != nil {
 				return res.Error
 			}

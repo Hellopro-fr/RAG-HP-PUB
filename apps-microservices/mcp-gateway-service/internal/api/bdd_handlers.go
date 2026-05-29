@@ -324,10 +324,15 @@ func (h *Handler) createBDDUsedTable(w http.ResponseWriter, r *http.Request) {
 	}
 	fields := make([]db.BDDUsedField, 0, len(req.Fields))
 	for _, f := range req.Fields {
+		typ, fullDef := normalizeCatalogFieldType(f.FieldType)
+		desc := f.Description
+		if fullDef != "" && strings.TrimSpace(desc) == "" {
+			desc = fullDef
+		}
 		fields = append(fields, db.BDDUsedField{
 			FieldName:       f.FieldName,
-			FieldType:       f.FieldType,
-			Description:     f.Description,
+			FieldType:       typ,
+			Description:     desc,
 			UpstreamFieldID: f.UpstreamFieldID,
 		})
 	}
@@ -451,10 +456,15 @@ func (h *Handler) addBDDUsedField(w http.ResponseWriter, r *http.Request, tableI
 		return
 	}
 
+	typ, fullDef := normalizeCatalogFieldType(req.FieldType)
+	desc := req.Description
+	if fullDef != "" && strings.TrimSpace(desc) == "" {
+		desc = fullDef
+	}
 	field := &db.BDDUsedField{
 		FieldName:       req.FieldName,
-		FieldType:       req.FieldType,
-		Description:     req.Description,
+		FieldType:       typ,
+		Description:     desc,
 		UpstreamFieldID: req.UpstreamFieldID,
 	}
 	created, err := h.bddUsedRepo.AddField(r.Context(), tableID, field)
@@ -1407,10 +1417,35 @@ func (h *Handler) handleBDDUsedRefreshCatalog(w http.ResponseWriter, r *http.Req
 
 // ── Sync field types from catalog ────────────────────────────────────────
 
+// bddFieldTypeMaxLen mirrors the field_type varchar(128) column width.
+const bddFieldTypeMaxLen = 128
+
+// normalizeCatalogFieldType collapses verbose catalog field types that
+// would overflow the field_type column. enum/set columns arrive as the
+// full `enum('a','b',...)` definition (often > 128 chars); we store the
+// keyword and return the full definition so callers can surface it in the
+// field description. Any other type longer than the column is truncated as
+// a last-resort guard. fullDef is empty when no enrichment is needed.
+func normalizeCatalogFieldType(raw string) (typ, fullDef string) {
+	trimmed := strings.TrimSpace(raw)
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.HasPrefix(lower, "enum("):
+		return "enum", trimmed
+	case strings.HasPrefix(lower, "set("):
+		return "set", trimmed
+	case len(trimmed) > bddFieldTypeMaxLen:
+		return trimmed[:bddFieldTypeMaxLen], trimmed
+	default:
+		return trimmed, ""
+	}
+}
+
 // syncFieldTypesForTable pulls the upstream column list for one registered
 // table and writes each catalog field_type onto the matching registered
-// field. Tables with no upstream link (UpstreamTableID == 0) are a no-op.
-// Returns the number of field rows actually changed.
+// field. enum/set definitions are stored as the keyword with the full
+// definition seeded into an empty description. Tables with no upstream
+// link (UpstreamTableID == 0) are a no-op. Returns rows actually changed.
 func (h *Handler) syncFieldTypesForTable(ctx context.Context, table db.BDDUsedTable) (int, error) {
 	if table.UpstreamTableID == 0 {
 		return 0, nil
@@ -1419,13 +1454,15 @@ func (h *Handler) syncFieldTypesForTable(ctx context.Context, table db.BDDUsedTa
 	if err != nil {
 		return 0, err
 	}
-	typesByName := make(map[string]string, len(fieldsResp.Fields))
+	byName := make(map[string]repository.FieldTypeSync, len(fieldsResp.Fields))
 	for _, f := range fieldsResp.Fields {
-		if f.FieldType != "" {
-			typesByName[f.FieldName] = f.FieldType
+		if f.FieldType == "" {
+			continue
 		}
+		typ, full := normalizeCatalogFieldType(f.FieldType)
+		byName[f.FieldName] = repository.FieldTypeSync{Type: typ, FullDef: full}
 	}
-	return h.bddUsedRepo.SyncFieldTypes(ctx, table.ID, typesByName)
+	return h.bddUsedRepo.SyncFieldTypes(ctx, table.ID, byName)
 }
 
 // handleBDDUsedSyncFieldTypes handles
