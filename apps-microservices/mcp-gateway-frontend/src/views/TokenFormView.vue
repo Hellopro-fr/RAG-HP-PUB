@@ -750,7 +750,10 @@ const generatedMcpJson = computed(() => {
 onMounted(async () => {
   try {
     const [, execs] = await Promise.all([
-      serversStore.fetchServers(),
+      // include_all=true: non-admins must see every active server in the
+      // scope picker, otherwise they cannot grant a token access to a
+      // server they did not personally create.
+      serversStore.fetchServers({ include_all: true }),
       installGuidesPublicApi.listExecutors().catch(() => [] as InstallExecutor[]),
     ])
     executors.value = execs
