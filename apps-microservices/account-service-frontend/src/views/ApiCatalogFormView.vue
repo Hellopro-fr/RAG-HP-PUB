@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as apiCatalog from '@/api/apiCatalog'
-import type { Protocol, Status } from '@/types/apiCatalog'
+import type { AuthPolicy, Protocol, Status } from '@/types/apiCatalog'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -27,6 +27,8 @@ const form = reactive<{
   apiInfoUrl: string
   grpcAddress: string
   status: Status
+  authPolicy: AuthPolicy
+  publicPaths: string[]
 }>({
   name: '',
   baseUrl: '',
@@ -37,6 +39,8 @@ const form = reactive<{
   apiInfoUrl: '',
   grpcAddress: '',
   status: 'active',
+  authPolicy: 'public',
+  publicPaths: [],
 })
 
 // In edit mode, identity fields (name, baseUrl, protocols, apiInfoUrl, grpcAddress)
@@ -74,6 +78,18 @@ function toggleProtocol(p: Protocol) {
   }
 }
 
+const newPath = ref('')
+function addPath() {
+  const v = newPath.value.trim().replace(/\/+$/, '')
+  if (v && v.startsWith('/') && !v.match(/[*?]/) && !form.publicPaths.includes(v)) {
+    form.publicPaths = [...form.publicPaths, v]
+  }
+  newPath.value = ''
+}
+function removePath(i: number) {
+  form.publicPaths = form.publicPaths.filter((_, idx) => idx !== i)
+}
+
 onMounted(async () => {
   if (!isEdit.value) return
   loading.value = true
@@ -90,6 +106,8 @@ onMounted(async () => {
     form.apiInfoUrl = s.apiInfoUrl || ''
     form.grpcAddress = s.grpcAddress || ''
     form.status = s.status
+    form.authPolicy = s.authPolicy ?? 'public'
+    form.publicPaths = s.publicPaths ?? []
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Erreur de chargement'
   } finally {
@@ -107,6 +125,8 @@ async function submit() {
         owner: form.owner || undefined,
         tags: parsedTags.value.length ? parsedTags.value : undefined,
         status: auth.isAdmin ? form.status : undefined,
+        authPolicy: form.authPolicy,
+        publicPaths: form.publicPaths.length ? form.publicPaths : undefined,
       })
     } else {
       await apiCatalog.create({
@@ -118,6 +138,8 @@ async function submit() {
         tags: parsedTags.value.length ? parsedTags.value : undefined,
         apiInfoUrl: form.apiInfoUrl || undefined,
         grpcAddress: form.grpcAddress || undefined,
+        authPolicy: form.authPolicy,
+        publicPaths: form.publicPaths.length ? form.publicPaths : undefined,
       })
     }
     router.push('/admin/api')
@@ -283,6 +305,54 @@ async function submit() {
                 placeholder="rag, embedding, grpc"
                 class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
               />
+            </div>
+
+            <!-- Auth policy -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Politique d'authentification
+              </label>
+              <select
+                v-model="form.authPolicy"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+              >
+                <option value="public">Public (sans authentification)</option>
+                <option value="bearer">Bearer (JWT requis)</option>
+                <option value="admin-key">Admin key (X-Admin-Key)</option>
+              </select>
+            </div>
+
+            <!-- Public paths chip editor -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Chemins publics <span class="text-xs text-gray-400">(bypass auth — correspondance exacte, doit commencer par /)</span>
+              </label>
+              <div class="flex flex-wrap gap-2 mb-2">
+                <span
+                  v-for="(p, i) in form.publicPaths"
+                  :key="i"
+                  class="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm text-gray-800 dark:text-gray-200"
+                >
+                  {{ p }}
+                  <button type="button" class="ml-1 text-gray-500 hover:text-red-500" @click="removePath(i)">×</button>
+                </span>
+              </div>
+              <div class="flex gap-2">
+                <input
+                  v-model="newPath"
+                  type="text"
+                  placeholder="/health"
+                  class="h-11 flex-1 rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                  @keydown.enter.prevent="addPath"
+                />
+                <button
+                  type="button"
+                  class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
+                  @click="addPath"
+                >
+                  Ajouter
+                </button>
+              </div>
             </div>
 
             <!-- Status: admin only -->
