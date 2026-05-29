@@ -457,6 +457,20 @@ class UnitNormalizationService:
                 "luminosité de l'écran": "luminance",
                 "dureté": "dimensionless",
                 "mémoire vive": "information",
+                # --- FIX 12: 9th DLQ batch — ratio labels
+                # Specific physical ratios MUST precede the bare "ratio" fallback below
+                # (substring matching is insertion-order dependent — same trap as 'capacité'/'vitesse').
+                "ratio masse/volume": "density",
+                "ratio puissance/poids": "power",
+                "ratio de compression": "pressure",
+                # Pure dimensionless ratios (reduction ratio, conversion ratio, etc.)
+                # Use "ratio" dimension (already in CANONICAL_UNITS) rather than "dimensionless"
+                # for semantic clarity — both canonicalize to "count" but the dim label differs.
+                "ratio de réduction": "ratio",
+                "ratio": "ratio",
+                # Add specific 'ratio X' variants ABOVE this line — bare "ratio" catches any
+                # future 'Ratio …' label, so physical ratios (density/power/pressure/...) must
+                # be declared first or they will be silently misclassified to count.
                 # Note: 'capacité d'accueil', 'capacité de la vitrine', 'capacité de production'
                 # and 'vitesse de nettoyage' are placed ABOVE the bare 'capacité'/'vitesse'
                 # fallbacks (substring matching is insertion-order dependent).
