@@ -11,8 +11,8 @@ const API_TOKEN = process.env.CONSEILS_API_TOKEN ?? '';
  * Voir CLAUDE.md §9.
  */
 export async function fetchConseilPage(id: number): Promise<ConseilPage | null> {
-  // Mode dev : utiliser les mocks si l'API n'est pas configurée
-  if (process.env.NODE_ENV === 'development' && !API_TOKEN) {
+  // Utiliser les mocks si l'API n'est pas configurée (dev local ou Docker sans token)
+  if (!API_TOKEN) {
     const { getMockPage } = await import('@/data/mocks/index');
     return getMockPage(id);
   }
