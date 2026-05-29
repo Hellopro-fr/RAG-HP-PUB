@@ -368,6 +368,21 @@ class UnitNormalizationService:
                 "décibel": "sound_level",
                 "decibels": "sound_level",
                 "decibel": "sound_level",
+                # --- FIX 14: 12th DLQ batch ---
+                # Bare m² (area) — m²/h surface-rate was covered earlier but plain m² wasn't
+                "m²": "area",
+                "m2": "area",
+                # Niveau(x) — paren-strip yields 'Niveau', plural-tolerant
+                "niveau": "count",
+                "niveaux": "count",
+                # Usage frequency (cycles per day) — both spaced and unspaced forms
+                "cycles/jour": "[frequency]",
+                "cycles / jour": "[frequency]",
+                # Specific energy (energy per mass) — both spaced and unspaced forms
+                "kwh/kg": "specific_energy",
+                "kwh / kg": "specific_energy",
+                # Solar peak power (kilowatt-crête): same dimension as kW
+                "kwc": "power",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -537,6 +552,8 @@ class UnitNormalizationService:
                 "luminance": "candela / meter ** 2",
                 # Electric charge — ampere-hour (battery capacity); 1 Ah = 3600 C
                 "electric_charge": "ampere_hour",
+                # Specific energy — energy per mass (e.g. drying/heating efficiency)
+                "specific_energy": "joule / kilogram",
             }
         return cls._instance
 
@@ -818,6 +835,16 @@ class UnitNormalizationService:
                 # Compound forms like 'Décibels (dB)' / 'Décibels (dBA)' are already
                 # collapsed by the parenthesis-stripping pass above.
                 unit = "decibel"
+            # --- FIX 14: 12th DLQ batch
+            elif unit_stripped in ("cycles/jour", "cycles / jour"):
+                # Usage frequency — Pint can't parse 'cycles', so inverse-day for [frequency]
+                unit = "1 / day"
+            elif unit_stripped in ("kwh/kg", "kwh / kg"):
+                # Specific energy — kilowatt-hour per kilogram (with or without spaces)
+                unit = "kilowatt_hour / kilogram"
+            elif unit_stripped == "kwc":
+                # 'crête' (peak) suffix on kW for solar panels — same dimension as kW
+                unit = "kilowatt"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
