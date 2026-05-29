@@ -99,6 +99,17 @@ export const bddApi = {
   ) => api.patch<BDDUsedTable>(`${BASE}/bdd/used/tables/${id}`, body),
   refreshCatalog: (id: string) =>
     api.post<BDDUsedTable>(`${BASE}/bdd/used/tables/${id}/refresh-catalog`, {}),
+  syncFieldTypes: (id: string) =>
+    api.post<{ updated: number; total: number }>(
+      `${BASE}/bdd/used/tables/${id}/sync-field-types`,
+      {},
+    ),
+  syncAllFieldTypes: () =>
+    api.post<{
+      tables_synced: number
+      fields_updated: number
+      errors: { table_name: string; error: string }[]
+    }>(`${BASE}/bdd/used/tables/sync-field-types`, {}),
   bulkUpdate: (body: { ids: string[]; database_id?: number; is_active?: boolean }) =>
     api.patch<{ affected: number }>(`${BASE}/bdd/used/tables/bulk`, body),
   bulkDelete: (body: { ids: string[] }) =>
@@ -109,7 +120,7 @@ export const bddApi = {
   getDoc: () => api.get<BDDDocPayload>(`${BASE}/bdd/used/tables/doc`),
   deleteUsed: (id: string) =>
     api.del<void>(`${BASE}/bdd/used/tables/${id}`),
-  addField: (id: string, body: { field_name: string; description?: string; upstream_field_id?: number }) =>
+  addField: (id: string, body: { field_name: string; field_type?: string; description?: string; upstream_field_id?: number }) =>
     api.post<BDDUsedField>(`${BASE}/bdd/used/tables/${id}/fields`, body),
   patchField: (id: string, fid: string, body: { description: string }) =>
     api.patch<BDDUsedField>(`${BASE}/bdd/used/tables/${id}/fields/${fid}`, body),

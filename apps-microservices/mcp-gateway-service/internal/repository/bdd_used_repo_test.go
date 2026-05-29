@@ -878,3 +878,69 @@ func TestImport_UpsertReplacesFields(t *testing.T) {
 		t.Errorf("fields=%+v want=[sku]", got.Fields)
 	}
 }
+
+func TestSyncFieldTypes_UpdatesOnlyMatchingChangedFields(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+	ctx := context.Background()
+
+	tbl := newTable(1, "products")
+	fields := []db.BDDUsedField{
+		{FieldName: "id", FieldType: ""},       // empty -> filled
+		{FieldName: "name", FieldType: "text"}, // identical -> skipped
+		{FieldName: "price", FieldType: "old"}, // differs -> updated
+		{FieldName: "extra", FieldType: ""},    // absent from map -> untouched
+	}
+	created, err := repo.CreateTable(ctx, tbl, fields)
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+
+	typesByName := map[string]string{
+		"id":    "int",
+		"name":  "text",
+		"price": "decimal",
+		"ghost": "varchar", // not a registered field -> ignored
+	}
+	updated, err := repo.SyncFieldTypes(ctx, created.ID, typesByName)
+	if err != nil {
+		t.Fatalf("SyncFieldTypes: %v", err)
+	}
+	if updated != 2 {
+		t.Fatalf("updated=%d want=2", updated)
+	}
+
+	got, err := repo.GetTable(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetTable: %v", err)
+	}
+	byName := map[string]string{}
+	for _, f := range got.Fields {
+		byName[f.FieldName] = f.FieldType
+	}
+	want := map[string]string{"id": "int", "name": "text", "price": "decimal", "extra": ""}
+	for n, w := range want {
+		if byName[n] != w {
+			t.Errorf("field %q type=%q want=%q", n, byName[n], w)
+		}
+	}
+}
+
+func TestSyncFieldTypes_EmptyMapNoop(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+	ctx := context.Background()
+
+	created, err := repo.CreateTable(ctx, newTable(1, "products"),
+		[]db.BDDUsedField{{FieldName: "id", FieldType: "int"}})
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+	updated, err := repo.SyncFieldTypes(ctx, created.ID, nil)
+	if err != nil {
+		t.Fatalf("SyncFieldTypes: %v", err)
+	}
+	if updated != 0 {
+		t.Fatalf("updated=%d want=0", updated)
+	}
+}

@@ -445,6 +445,42 @@ func (r *BDDUsedRepo) UpdateFieldDescription(ctx context.Context, fieldID, descr
 	return nil
 }
 
+// SyncFieldTypes overwrites field_type for the table's fields whose name
+// appears in typesByName, skipping entries with an empty new type or one
+// that already matches the stored value. Names in the map that aren't
+// registered for the table are ignored. Returns the number of rows
+// actually changed. A table with no matching fields yields (0, nil).
+func (r *BDDUsedRepo) SyncFieldTypes(ctx context.Context, usedTableID string, typesByName map[string]string) (int, error) {
+	if len(typesByName) == 0 {
+		return 0, nil
+	}
+	updated := 0
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var fields []db.BDDUsedField
+		if err := tx.Where("used_table_id = ?", usedTableID).Find(&fields).Error; err != nil {
+			return err
+		}
+		for _, f := range fields {
+			ft, ok := typesByName[f.FieldName]
+			if !ok || ft == "" || ft == f.FieldType {
+				continue
+			}
+			res := tx.Model(&db.BDDUsedField{}).
+				Where("id = ?", f.ID).
+				Updates(map[string]interface{}{"field_type": ft})
+			if res.Error != nil {
+				return res.Error
+			}
+			updated += int(res.RowsAffected)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return updated, nil
+}
+
 // DeleteField removes a single field by ID.
 func (r *BDDUsedRepo) DeleteField(ctx context.Context, fieldID string) error {
 	res := r.db.WithContext(ctx).Delete(&db.BDDUsedField{}, "id = ?", fieldID)
