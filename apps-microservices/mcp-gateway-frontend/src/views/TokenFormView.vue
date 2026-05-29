@@ -52,7 +52,31 @@
       <!-- Generated .mcp.json -->
       <div>
         <div class="flex items-center justify-between mb-2">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Configuration .mcp.json</label>
+          <div class="flex items-center gap-3 flex-wrap">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Configuration .mcp.json</label>
+            <div class="inline-flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-700 text-xs">
+              <button
+                type="button"
+                class="px-2.5 py-1 font-medium transition-colors"
+                :class="authVariant === 'bearer'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'"
+                @click="authVariant = 'bearer'"
+              >
+                Bearer
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 font-medium transition-colors border-l border-gray-200 dark:border-gray-700"
+                :class="authVariant === 'scope'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'"
+                @click="authVariant = 'scope'"
+              >
+                X-MCP-Scope-Token
+              </button>
+            </div>
+          </div>
           <a
             :href="`/install-guide/${form.mcp_command || ''}`"
             target="_blank"
@@ -522,6 +546,17 @@ const submitting = ref(false)
 const expiresEnabled = ref(false)
 const createdToken = ref<ScopeToken | null>(null)
 
+type AuthVariant = 'bearer' | 'scope'
+// Auth header variant for the post-creation .mcp.json snippet. Bearer is the
+// default for Claude.ai / Cursor / standard MCP clients; X-MCP-Scope-Token
+// remains available for custom-header integrations. The gateway accepts both.
+const authVariant = ref<AuthVariant>('bearer')
+
+function applyAuthHeader(json: string, variant: AuthVariant): string {
+  if (variant === 'scope') return json
+  return json.replace(/"X-MCP-Scope-Token:\s*/g, '"Authorization: Bearer ')
+}
+
 const isEdit = computed(() => !!route.params.id)
 
 // hasLeexiServer is true when at least one selected server is the Leexi
@@ -676,12 +711,13 @@ const generatedMcpJson = computed(() => {
       ? mcpTemplate.replace(/"<allow-http>"/g, '"--allow-http"')
       // Remove the entire line that contains the placeholder (with trailing comma)
       : mcpTemplate.replace(/^[ \t]*"<allow-http>"[ \t]*,?[ \t]*\r?\n/gm, '')
-    return withAllowHttp
+    const rendered = withAllowHttp
       .replace(/https?:\/\/<gateway-url>/g, gatewayUrl)
       .replace(/<gateway-url>/g, gatewayUrl.replace(/^https?:\/\//, ''))
       .replace(/<server-name>/g, serverName)
       .replace(/<token>/g, tokenValue)
       .replace(/<votre-token>/g, tokenValue)
+    return applyAuthHeader(rendered, authVariant.value)
   }
 
   // Fallback for custom command
@@ -701,10 +737,13 @@ const generatedMcpJson = computed(() => {
     args = [gatewayUrl + '/mcp', '--header', headerArg]
   }
 
-  return JSON.stringify(
-    { mcpServers: { [serverName]: { command, args, env } } },
-    null,
-    2
+  return applyAuthHeader(
+    JSON.stringify(
+      { mcpServers: { [serverName]: { command, args, env } } },
+      null,
+      2
+    ),
+    authVariant.value
   )
 })
 
