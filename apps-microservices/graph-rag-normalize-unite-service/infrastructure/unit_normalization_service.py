@@ -387,6 +387,12 @@ class UnitNormalizationService:
                 # Distinct from 'cycles/jour' which is a frequency (count per time).
                 "cycles": "count",
                 "cycle": "count",
+                # --- FIX 16: 14th DLQ batch ---
+                # Dynamic viscosity (Pa·s, mPa·s) — middle dot already normalized to '.'
+                "mpa.s": "viscosity",
+                "pa.s": "viscosity",
+                # 'cycles par jour' (French long form of cycles/jour)
+                "cycles par jour": "[frequency]",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -558,6 +564,8 @@ class UnitNormalizationService:
                 "electric_charge": "ampere_hour",
                 # Specific energy — energy per mass (e.g. drying/heating efficiency)
                 "specific_energy": "joule / kilogram",
+                # Dynamic viscosity — pascal-second
+                "viscosity": "pascal * second",
             }
         return cls._instance
 
@@ -662,6 +670,13 @@ class UnitNormalizationService:
             stripped = re.sub(r"\s*\([^)]*\)\s*$", "", unit).strip()
             if stripped:
                 unit = stripped
+
+        # --- FIX 16: Normalize middle dot (·, U+00B7) to ASCII period.
+        # SI units use middle dot as multiplication separator (Pa·s, m²·K/W, N·m).
+        # ASCII period and middle dot are typographically interchangeable in unit
+        # notation, so collapse both to '.' for uniform downstream matching.
+        if unit:
+            unit = unit.replace("·", ".")
 
         # --- FIX: Save original unit for dimension lookup before sanitization ---
         original_unit = unit
@@ -849,6 +864,16 @@ class UnitNormalizationService:
             elif unit_stripped == "kwc":
                 # 'crête' (peak) suffix on kW for solar panels — same dimension as kW
                 unit = "kilowatt"
+            # --- FIX 16: 14th DLQ batch
+            elif unit_stripped == "mpa.s":
+                # Dynamic viscosity — millipascal-second (middle dot already → '.')
+                unit = "millipascal * second"
+            elif unit_stripped == "pa.s":
+                # Dynamic viscosity — pascal-second
+                unit = "pascal * second"
+            elif unit_stripped == "cycles par jour":
+                # French long-form of cycles/jour — usage frequency
+                unit = "1 / day"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
