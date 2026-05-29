@@ -1,6 +1,7 @@
 export type Protocol = 'rest' | 'ws' | 'grpc'
 export type Source = 'env' | 'manual' | 'scan'
 export type Status = 'active' | 'deprecated' | 'down'
+export type AuthPolicy = 'public' | 'bearer' | 'admin-key'
 
 export interface ApiCatalogService {
   id: string
@@ -19,6 +20,9 @@ export interface ApiCatalogService {
   lastScanError?: string
   createdAt: string
   updatedAt: string
+  authPolicy?: AuthPolicy
+  publicPaths?: string[]
+  hasEndpointOverrides?: boolean
 }
 
 export interface ApiCatalogEndpoint {
@@ -31,6 +35,7 @@ export interface ApiCatalogEndpoint {
   operationId?: string
   tags?: string[]
   deprecated: boolean
+  authPolicy?: AuthPolicy
 }
 
 export interface ListResp {
@@ -52,6 +57,8 @@ export interface CreateApiRequest {
   tags?: string[]
   apiInfoUrl?: string
   grpcAddress?: string
+  authPolicy?: AuthPolicy
+  publicPaths?: string[]
 }
 
 export interface UpdateApiRequest {
@@ -59,6 +66,12 @@ export interface UpdateApiRequest {
   owner?: string
   tags?: string[]
   status?: Status
+  authPolicy?: AuthPolicy
+  publicPaths?: string[]
+}
+
+export interface UpdateEndpointRequest {
+  authPolicy: AuthPolicy | null
 }
 
 export interface RescanReport {
