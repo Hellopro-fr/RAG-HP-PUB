@@ -1,5 +1,6 @@
 import logging
 import re
+import unicodedata
 from typing import Dict, Optional, Tuple, Any, List
 
 from pint import UnitRegistry, UndefinedUnitError, DimensionalityError
@@ -14,6 +15,10 @@ class UnitNormalizationService:
 
     _instance = None
 
+    # No threading.Lock needed: the module-level `unit_normalizer = UnitNormalizationService()`
+    # at the bottom of this file eager-initialises the singleton at import time, before any
+    # gRPC worker thread is spawned. Python's import lock guarantees single-threaded execution
+    # of the module body, so the `is None` check below never races in practice.
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(UnitNormalizationService, cls).__new__(cls)
@@ -57,6 +62,15 @@ class UnitNormalizationService:
             cls._instance.ureg.define("lignes = count = ligne")
             cls._instance.ureg.define("tours_par_minute_fr = revolutions_per_minute")
             cls._instance.ureg.define("pouces = 0.0254 * meter = pouce = inch_fr")
+
+            # --- FIX 8: Units from second DLQ batch (normalize-unite retry processor) ---
+            cls._instance.ureg.define("semelles_unit = count = semelles = semelle")
+            cls._instance.ureg.define("plots_unit = count = plots = plot")
+            cls._instance.ureg.define("bacs_unit = count = bacs = bac")
+            cls._instance.ureg.define("vehicules_unit = count = vehicules = vehicule")
+            cls._instance.ureg.define("recettes_par_programme = count")
+            cls._instance.ureg.define("coups_par_minute = count / minute")
+            cls._instance.ureg.define("coupes_par_minute = count / minute")
 
             # Base & Common
             cls._instance.ureg.define("tonne = 1000 * kilogram = t")
@@ -264,6 +278,121 @@ class UnitNormalizationService:
                 "%": "ratio",
                 # Speed (km/h, e.g. wind resistance)
                 "km/h": "speed",
+                # --- FIX 8 additions: Count units from new DLQ batch ---
+                "semelles": "count",
+                "semelle": "count",
+                "plots": "count",
+                "plot": "count",
+                "bacs": "count",
+                "bac": "count",
+                "véhicule(s)": "count",
+                "véhicules": "count",
+                "véhicule": "count",
+                "vehicule(s)": "count",
+                "vehicules": "count",
+                "vehicule": "count",
+                "recettes/programmes": "count",
+                # Count rates expressed per minute — treat as frequency so Pint can convert
+                # to hertz canonical (same approach as 'démarrages/heure')
+                "coups/min": "[frequency]",
+                "coupes/min": "[frequency]",
+                # Length — thin coatings (µm). 'nm' is intentionally not listed here:
+                # it collides with Newton-meter (torque) under case-insensitive lookup.
+                # Disambiguation is handled by label context in _get_dimension.
+                # Key uses explicit Greek mu (U+03BC) — input NFKC-normalizes U+00B5 → U+03BC.
+                "μm": "length",
+                "um": "length",
+                # Time — explicit plural
+                "minutes": "time",
+                # Mass flow — production capacity per day
+                "kg/24h": "mass_flow",
+                # Surface processing rate (cleaning speed per area)
+                "m²/h": "surface_rate",
+                "m2/h": "surface_rate",
+                # Thermal insulation properties
+                "w/m².k": "thermal_transmittance",
+                "w/m2.k": "thermal_transmittance",
+                "m².k/w": "thermal_resistance",
+                "m2.k/w": "thermal_resistance",
+                # Rotational speed alias (French "tours/min" abbreviated as "t/min" — context: Régime PDF)
+                "t/min": "[frequency]",
+                # --- FIX 10 additions: 6th DLQ batch ---
+                # Time — French plural/singular
+                "heures": "time",
+                "heure": "time",
+                # Mass flow — tonnes per hour
+                "t/h": "mass_flow",
+                # Mohs hardness scale (0-10, dimensionless)
+                "mohs": "dimensionless",
+                # French data-size units (octets)
+                "go": "information",
+                "mo": "information",
+                "ko": "information",
+                "to": "information",
+                # Screen resolution units (pixels are a count)
+                "px": "count",
+                "pixel": "count",
+                "pixels": "count",
+                # Surface pressure / load
+                "kn/m²": "pressure",
+                "kn/m2": "pressure",
+                # Volume — Unicode variant of 'm3' (lookup uses original_unit pre-replace)
+                "m³": "volume",
+                # Luminance — candela per square meter (nits)
+                "cd/m²": "luminance",
+                "cd/m2": "luminance",
+                # --- FIX 11: 7th DLQ batch ---
+                # Ampere-hour = battery capacity (electric charge), 1 Ah = 3600 C
+                # Include both accented and unaccented French forms — .lower() preserves accents
+                "ah": "electric_charge",
+                "a.h": "electric_charge",
+                "amperes-heures": "electric_charge",
+                "ampere-heure": "electric_charge",
+                "ampères-heures": "electric_charge",
+                "ampère-heure": "electric_charge",
+                "mah": "electric_charge",
+                # --- FIX 13: 11th DLQ batch — French capitalized full-name SI units ---
+                # Pint only knows canonical English names; French plural forms fail without sanitize.
+                "kilogrammes": "mass",
+                "kilogramme": "mass",
+                "grammes": "mass",
+                "gramme": "mass",
+                "millimètres": "length",
+                "millimètre": "length",
+                "centimètres": "length",
+                "centimètre": "length",
+                # Accented + unaccented variants ('.lower()' preserves é, LLM may strip it).
+                # Compound 'Décibels (dB/dBA)' is collapsed to 'Décibels' by the
+                # parenthesis-stripping pass in normalize() — no separate key needed.
+                "décibels": "sound_level",
+                "décibel": "sound_level",
+                "decibels": "sound_level",
+                "decibel": "sound_level",
+                # --- FIX 14: 12th DLQ batch ---
+                # Bare m² (area) — m²/h surface-rate was covered earlier but plain m² wasn't
+                "m²": "area",
+                "m2": "area",
+                # Niveau(x) — paren-strip yields 'Niveau', plural-tolerant
+                "niveau": "count",
+                "niveaux": "count",
+                # Usage frequency (cycles per day) — both spaced and unspaced forms
+                "cycles/jour": "[frequency]",
+                "cycles / jour": "[frequency]",
+                # Specific energy (energy per mass) — both spaced and unspaced forms
+                "kwh/kg": "specific_energy",
+                "kwh / kg": "specific_energy",
+                # Solar peak power (kilowatt-crête): same dimension as kW
+                "kwc": "power",
+                # --- FIX 15: 13th DLQ batch — bare 'cycles' (count, e.g. MCBF reliability) ---
+                # Distinct from 'cycles/jour' which is a frequency (count per time).
+                "cycles": "count",
+                "cycle": "count",
+                # --- FIX 16: 14th DLQ batch ---
+                # Dynamic viscosity (Pa·s, mPa·s) — middle dot already normalized to '.'
+                "mpa.s": "viscosity",
+                "pa.s": "viscosity",
+                # 'cycles par jour' (French long form of cycles/jour)
+                "cycles par jour": "[frequency]",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -284,6 +413,11 @@ class UnitNormalizationService:
                 "capacité de stockage (masse)": "mass",
                 "capacité de stockage": "count",
                 "capacité totale de stockage": "count",
+                # Specific 'capacité …' labels MUST precede the bare 'capacité' fallback below
+                "capacité d'accueil": "count",
+                "capacité de la vitrine": "count",
+                "capacité de production": "mass_flow",
+                "capacité de la batterie": "electric_charge",
                 "recycleur": "count",
                 "cassette de délestage": "count",
                 "bac de trop-plein": "count",
@@ -303,6 +437,11 @@ class UnitNormalizationService:
                 "dimension": "length",
                 "distance": "length",
                 "epaisseur": "length",
+                # Specific 'vitesse …' labels MUST precede the bare 'vitesse' fallback below
+                "vitesse de rotation": "[frequency]",
+                "vitesse d'acceptation": "count_rate",
+                "vitesse de distribution": "count_rate",
+                "vitesse de nettoyage": "surface_rate",
                 "vitesse": "speed",
                 "puissance": "power",
                 "tension": "voltage",
@@ -311,10 +450,7 @@ class UnitNormalizationService:
                 "branchement": "voltage",
                 "fréquence d'utilisation": "[frequency]",
                 "fréquence": "frequency",
-                "vitesse de rotation": "[frequency]",
                 "tours/minute": "[frequency]",
-                "vitesse d'acceptation": "count_rate",
-                "vitesse de distribution": "count_rate",
                 "volume": "volume",
                 "cuve": "volume",
                 "contenance": "volume",
@@ -328,6 +464,8 @@ class UnitNormalizationService:
                 "débit de vapeur": "mass_flow",
                 "consommation d'eau": "volume",
                 "consommation électrique": "power",
+                # Specific 'batterie' qualifier — autonomie is duration, not energy
+                "autonomie de la batterie": "time",
                 "batterie": "energy",
                 "consommation": "energy",
                 "débit": "volume / time",
@@ -342,6 +480,45 @@ class UnitNormalizationService:
                 "rotation": "angle",
                 "production horaire": "volume / time",
                 "déverrouillage": "count",
+                # --- FIX 8 additions: Labels for nodes with unit=null or new physical dimensions ---
+                # Count labels (unit=null cases — value implicit count)
+                "lignes hydrauliques": "count",
+                "niveaux desservis": "count",
+                "cylindres": "count",
+                "plateaux": "count",
+                "configuration de la base": "count",
+                "catégorie cabine": "count",
+                "mémorisation de programmes": "count",
+                # Rate / cadence — pumping or cutting cycles per minute (frequency)
+                "cadence": "[frequency]",
+                # Thermal insulation properties
+                "coefficient de transmission thermique": "thermal_transmittance",
+                "résistance thermique": "thermal_resistance",
+                # --- FIX 10 additions: labels for 6th DLQ batch ---
+                "résolution de l'écran": "count",
+                "luminosité de l'écran": "luminance",
+                "dureté": "dimensionless",
+                "mémoire vive": "information",
+                # --- FIX 12: 9th DLQ batch — ratio labels
+                # Specific physical ratios MUST precede the bare "ratio" fallback below
+                # (substring matching is insertion-order dependent — same trap as 'capacité'/'vitesse').
+                "ratio masse/volume": "density",
+                "ratio puissance/poids": "power",
+                "ratio de compression": "pressure",
+                # Pure dimensionless ratios (reduction ratio, conversion ratio, etc.)
+                # Use "ratio" dimension (already in CANONICAL_UNITS) rather than "dimensionless"
+                # for semantic clarity — both canonicalize to "count" but the dim label differs.
+                "ratio de réduction": "ratio",
+                "ratio": "ratio",
+                # Add specific 'ratio X' variants ABOVE this line — bare "ratio" catches any
+                # future 'Ratio …' label, so physical ratios (density/power/pressure/...) must
+                # be declared first or they will be silently misclassified to count.
+                # Note: 'capacité d'accueil', 'capacité de la vitrine', 'capacité de production'
+                # and 'vitesse de nettoyage' are placed ABOVE the bare 'capacité'/'vitesse'
+                # fallbacks (substring matching is insertion-order dependent).
+                # Note: 'durée' is intentionally omitted — the accent-insensitive lookup in
+                # _get_dimension now lets the legacy 'duree' key match accented labels.
+                # 'longueur d'onde' is also omitted — already covered by 'longueur'.
             }
 
             cls._instance.CANONICAL_UNITS = {
@@ -376,19 +553,76 @@ class UnitNormalizationService:
                 # Dimensionless / ratio (humidity %, CRI Ra index, etc.)
                 "ratio": "count",
                 "dimensionless": "count",
+                # Thermal insulation — coefficient U (transmittance) and R (resistance)
+                "thermal_transmittance": "watt / meter ** 2 / kelvin",
+                "thermal_resistance": "meter ** 2 * kelvin / watt",
+                # Surface processing rate (e.g. cleaning speed in m²/h)
+                "surface_rate": "meter ** 2 / hour",
+                # Luminance — candela per square meter (nits, used for screen brightness)
+                "luminance": "candela / meter ** 2",
+                # Electric charge — ampere-hour (battery capacity); 1 Ah = 3600 C
+                "electric_charge": "ampere_hour",
+                # Specific energy — energy per mass (e.g. drying/heating efficiency)
+                "specific_energy": "joule / kilogram",
+                # Dynamic viscosity — pascal-second
+                "viscosity": "pascal * second",
             }
         return cls._instance
+
+    @staticmethod
+    def _strip_accents(text: str) -> str:
+        # Why: French labels reach this service with inconsistent accents (e.g. 'Durée'
+        # vs 'duree'). Comparing accent-stripped forms on both sides removes the need
+        # for explicit accented/unaccented duplicate dict keys.
+        if not text:
+            return text
+        return "".join(
+            c for c in unicodedata.normalize("NFKD", text)
+            if not unicodedata.combining(c)
+        )
 
     def _get_dimension(self, unit: Optional[str], label: str) -> Optional[str]:
         if unit:
             unit_lower = unit.strip().lower()
+            # Disambiguate 'nm': nanometer (length) vs Newton-meter (torque).
+            # Both collapse to 'nm' after .lower(). Default mapping is torque (legacy);
+            # override to length when the label indicates ANY length-like measure.
+            if unit_lower == "nm" and label:
+                label_norm = self._strip_accents(label.strip().lower())
+                length_indicators = (
+                    "longueur d'onde",
+                    "wavelength",
+                    "epaisseur",
+                    "diametre",
+                    "rayon",
+                    "distance",
+                    "profondeur",
+                    "largeur",
+                    "hauteur",
+                    "longueur",
+                )
+                if any(k in label_norm for k in length_indicators):
+                    return "length"
+            # Disambiguate 't/min': tours/min (rotation, default) vs tonnes/min (mass flow).
+            # The letter 't' is overloaded: tour in rotation context, tonne in mass-flow context.
+            if unit_lower == "t/min" and label:
+                label_norm = self._strip_accents(label.strip().lower())
+                mass_flow_indicators = (
+                    "debit",
+                    "capacite de production",
+                    "production",
+                    "consommation",
+                    "tonnage",
+                )
+                if any(k in label_norm for k in mass_flow_indicators):
+                    return "mass_flow"
             if unit_lower in self.UNIT_TO_DIMENSION:
                 return self.UNIT_TO_DIMENSION[unit_lower]
 
         if label:
-            label_lower = label.strip().lower()
+            label_norm = self._strip_accents(label.strip().lower())
             for keyword, dimension in self.LABEL_TO_DIMENSION.items():
-                if keyword in label_lower:
+                if self._strip_accents(keyword) in label_norm:
                     return dimension
 
         return None
@@ -419,6 +653,30 @@ class UnitNormalizationService:
 
         if not all([label, value is not None]):
             return {}
+
+        # --- FIX: Normalize Unicode compatibility forms (NFKC).
+        # Collapses U+00B5 MICRO SIGN and U+03BC GREEK MU into the same codepoint
+        # so 'µm' from copy-paste and 'μm' from LLM/OCR extraction both match.
+        # Also normalizes other compatibility variants (e.g. fullwidth digits).
+        if unit:
+            unit = unicodedata.normalize("NFKC", unit)
+
+        # --- FIX: Strip trailing parenthesized symbol annotations from unit names.
+        # Producers occasionally emit French long-form names alongside the symbol:
+        #   "Décibels (dB)", "Décibels (dBA)", "Kilogrammes (kg)", "Millimètres (mm)"
+        # The dimension is carried by the long form; the symbol in parens is redundant.
+        # Stripping it lets a single sanitize rule cover every compound form.
+        if unit:
+            stripped = re.sub(r"\s*\([^)]*\)\s*$", "", unit).strip()
+            if stripped:
+                unit = stripped
+
+        # --- FIX 16: Normalize middle dot (·, U+00B7) to ASCII period.
+        # SI units use middle dot as multiplication separator (Pa·s, m²·K/W, N·m).
+        # ASCII period and middle dot are typographically interchangeable in unit
+        # notation, so collapse both to '.' for uniform downstream matching.
+        if unit:
+            unit = unit.replace("·", ".")
 
         # --- FIX: Save original unit for dimension lookup before sanitization ---
         original_unit = unit
@@ -475,6 +733,10 @@ class UnitNormalizationService:
             elif unit_stripped in ("tonnes",):
                 # Pint only knows lowercase 'tonne'; 'Tonnes' (capital) fails.
                 unit = "tonne"
+            elif unit_stripped in ("pieds", "pied"):
+                # Pint is case-sensitive; 'Pieds' (capital) fails the registry lookup.
+                # Force lowercase canonical so the define `pieds = foot = pied` matches.
+                unit = "pieds"
             elif unit_stripped == "démarrages/heure":
                 # starts per hour = frequency; Pint can't parse 'démarrages'
                 unit = "1 / hour"
@@ -487,9 +749,9 @@ class UnitNormalizationService:
             elif unit_stripped in ("pouces", "pouce"):
                 # French inch; Pint knows 'inch', use that
                 unit = "inch"
-            elif unit_stripped in ("kg/m³", "kg/m3"):
-                # Density unit: kilogram per cubic metre
-                unit = "kilogram / meter ** 3"
+            # Note: a previous duplicate `elif unit_stripped in ("kg/m³", "kg/m3")` block
+            # was removed — unreachable because `³` is replaced by `3` earlier (line ~510),
+            # and `kg/m3` is already caught by the earlier elif above.
             elif unit_stripped == "km/h":
                 # Speed: Pint requires explicit slash notation
                 unit = "kilometer / hour"
@@ -502,6 +764,116 @@ class UnitNormalizationService:
                     "valeur_canonique": float(value),
                     "unite_canonique": "count",
                 }
+            # --- FIX 8: Sanitize new units found in DLQ batch (normalize-unite retry) ---
+            elif unit_stripped == "minutes":
+                # Pint accepts singular only
+                unit = "minute"
+            elif unit_stripped == "μm":  # Greek mu (U+03BC) — NFKC-normalized form
+                # micro abbreviation not parsed by Pint; use canonical name
+                unit = "micrometer"
+            elif unit_stripped == "kg/24h":
+                # Daily production capacity: 24h is not a valid Pint scaling token
+                unit = "kilogram / day"
+            elif unit_stripped == "m2/h":
+                # After ² → 2 normalization: surface processing rate
+                unit = "meter ** 2 / hour"
+            elif unit_stripped == "w/m2.k":
+                # Thermal transmittance (U-value) after ² → 2 normalization
+                unit = "watt / (meter ** 2 * kelvin)"
+            elif unit_stripped == "m2.k/w":
+                # Thermal resistance (R-value) after ² → 2 normalization
+                unit = "meter ** 2 * kelvin / watt"
+            elif unit_stripped == "t/min":
+                # 't' is overloaded: tour (rotation, default) vs tonne (mass flow).
+                # Mirror the dimension disambiguation in _get_dimension to pick the right
+                # Pint expression — otherwise mass-flow values get silently normalized as rpm.
+                label_norm = self._strip_accents(label.strip().lower()) if label else ""
+                mass_flow_indicators = (
+                    "debit",
+                    "capacite de production",
+                    "production",
+                    "consommation",
+                    "tonnage",
+                )
+                if any(k in label_norm for k in mass_flow_indicators):
+                    unit = "tonne / minute"
+                else:
+                    unit = "rpm"
+            elif unit_stripped in ("coups/min", "coupes/min"):
+                # Pumping/cutting rate — Pint cannot parse 'coups'/'coupes' as count,
+                # so represent as inverse minute (frequency) to allow conversion to hertz.
+                unit = "1 / minute"
+            # --- FIX 10: Sanitize new units from 6th DLQ batch ---
+            elif unit_stripped in ("heures", "heure"):
+                # French plural; Pint accepts 'hour' canonical only
+                unit = "hour"
+            elif unit_stripped == "go":
+                # French gigaoctet → Pint gigabyte
+                unit = "gigabyte"
+            elif unit_stripped == "mo":
+                unit = "megabyte"
+            elif unit_stripped == "ko":
+                unit = "kilobyte"
+            elif unit_stripped == "to":
+                unit = "terabyte"
+            elif unit_stripped == "mohs":
+                # Mohs hardness scale (0-10) — dimensionless, pass value through
+                return {
+                    "valeur_canonique": float(value),
+                    "unite_canonique": "count",
+                }
+            elif unit_stripped == "kn/m2":
+                # Surface load after ² → 2 normalization (kilonewton per m² = kPa)
+                unit = "kilonewton / meter ** 2"
+            elif unit_stripped == "cd/m2":
+                # Luminance after ² → 2 normalization (candela per m² = nits)
+                unit = "candela / meter ** 2"
+            # --- FIX 11: Ampere-hour (battery capacity)
+            elif unit_stripped in (
+                "ah", "a.h",
+                "amperes-heures", "ampere-heure",
+                "ampères-heures", "ampère-heure",  # accented forms: .lower() preserves accents
+            ):
+                # Pint case-sensitive ('Ah' is registered, 'ah'/'AH' may fail) — use canonical
+                unit = "ampere_hour"
+            elif unit_stripped == "mah":
+                # milli-ampere-hour
+                unit = "milliampere_hour"
+            # --- FIX 13: French capitalized SI unit names — Pint case-sensitive, plural-rejecting
+            elif unit_stripped in ("kilogrammes", "kilogramme"):
+                unit = "kilogram"
+            elif unit_stripped in ("grammes", "gramme"):
+                unit = "gram"
+            elif unit_stripped in ("millimètres", "millimètre"):
+                unit = "millimeter"
+            elif unit_stripped in ("centimètres", "centimètre"):
+                unit = "centimeter"
+            elif unit_stripped in ("décibels", "décibel", "decibels", "decibel"):
+                # Accept both accented (Décibels) and unaccented (Decibels) forms —
+                # .lower() preserves accents, and LLM/OCR extractors sometimes strip them.
+                # Compound forms like 'Décibels (dB)' / 'Décibels (dBA)' are already
+                # collapsed by the parenthesis-stripping pass above.
+                unit = "decibel"
+            # --- FIX 14: 12th DLQ batch
+            elif unit_stripped in ("cycles/jour", "cycles / jour"):
+                # Usage frequency — Pint can't parse 'cycles', so inverse-day for [frequency]
+                unit = "1 / day"
+            elif unit_stripped in ("kwh/kg", "kwh / kg"):
+                # Specific energy — kilowatt-hour per kilogram (with or without spaces)
+                unit = "kilowatt_hour / kilogram"
+            elif unit_stripped == "kwc":
+                # 'crête' (peak) suffix on kW for solar panels — same dimension as kW
+                unit = "kilowatt"
+            # --- FIX 16: 14th DLQ batch
+            elif unit_stripped == "mpa.s":
+                # Dynamic viscosity — millipascal-second (middle dot already → '.')
+                unit = "millipascal * second"
+            elif unit_stripped == "pa.s":
+                # Dynamic viscosity — pascal-second
+                unit = "pascal * second"
+            elif unit_stripped == "cycles par jour":
+                # French long-form of cycles/jour — usage frequency
+                unit = "1 / day"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
@@ -535,8 +907,12 @@ class UnitNormalizationService:
             if unit and unit.lower() != "null":
                 quantity = self.ureg.Quantity(value, unit)
                 canonical_quantity = quantity.to(canonical_unit)
+                # Use 6 significant figures rather than 4 decimal places to preserve
+                # sub-millimeter values: round(0.000025, 4) = 0.0 destroys µm/nm data,
+                # but f"{0.000025:.6g}" = "2.5e-05" keeps the magnitude.
+                magnitude = canonical_quantity.magnitude
                 return {
-                    "valeur_canonique": round(canonical_quantity.magnitude, 4),
+                    "valeur_canonique": float(f"{magnitude:.6g}"),
                     "unite_canonique": str(canonical_quantity.units),
                 }
             else:

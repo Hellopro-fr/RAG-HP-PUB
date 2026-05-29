@@ -12,12 +12,13 @@ import uuid
 import anyio
 import tarfile
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Any, List, Tuple
 
 import aiofiles
 import httpx
 from fastapi import HTTPException, status
+from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 
 from app.core.config import settings
 from common_utils.redis import cache_service
@@ -43,6 +44,62 @@ CRAWL_UPDATES_CHANNEL = "crawl_updates"
 WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
 FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
 
+# Capacity short-circuit + Redis retry (Spec 2026-05-22).
+# See docs/superpowers/specs/2026-05-22-start-crawl-capacity-short-circuit-design.md
+REPLICA_CAP_RETRY_AFTER_S = 5
+GLOBAL_CAP_RETRY_AFTER_S = 15
+_REDIS_RETRY_ATTEMPTS = 2  # 2 retries = 3 total attempts
+_REDIS_RETRY_BACKOFF_MS = 50
+
+# Replica identity for ownership-safe Redis locks. Generated once per process.
+# Used by stash/unstash to avoid clobbering a new acquirer's lock after TTL expiry.
+import socket as _socket
+REPLICA_ID = f"{_socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+
+
+async def _with_retry(callable_coro, *args, **kwargs):
+    """Run a Redis call with bounded retry on transient connection errors.
+
+    Wraps `cache_service.*` async helpers. On (RedisConnectionError, RedisTimeoutError,
+    OSError) retries up to _REDIS_RETRY_ATTEMPTS times with _REDIS_RETRY_BACKOFF_MS ms
+    backoff between attempts. Other exceptions propagate immediately.
+
+    Spec: docs/superpowers/specs/2026-05-22-start-crawl-capacity-short-circuit-design.md
+    """
+    for attempt in range(_REDIS_RETRY_ATTEMPTS + 1):
+        try:
+            return await callable_coro(*args, **kwargs)
+        except (RedisConnectionError, RedisTimeoutError, OSError) as e:
+            if attempt >= _REDIS_RETRY_ATTEMPTS:
+                raise
+            logger.warning(
+                f"Redis transient error on attempt {attempt + 1}/{_REDIS_RETRY_ATTEMPTS + 1}: {e}. Retrying."
+            )
+            await asyncio.sleep(_REDIS_RETRY_BACKOFF_MS / 1000.0)
+
+
+def _parse_iso_naive_utc(value: str) -> datetime:
+    """Parse an ISO 8601 datetime string and return a NAIVE UTC datetime.
+
+    Handles both naive (``2026-05-20T08:24:01``) and tz-aware
+    (``2026-05-20T08:24:01Z``, ``+00:00``, ``+05:00``) inputs. tz-aware values
+    are converted to UTC then stripped of tzinfo so they subtract safely
+    against ``datetime.utcnow()`` used elsewhere in this module.
+
+    Why: ``datetime.fromisoformat()`` on Python 3.11+ returns tz-aware
+    datetimes when the input carries a ``Z`` or offset suffix. Subtracting
+    a tz-aware datetime from naive ``utcnow()`` raises
+    ``TypeError: can't subtract offset-naive and offset-aware datetimes``.
+    External writers (legacy PHP, migration scripts) sometimes emit
+    Z-suffixed strings into ``last_heartbeat`` / ``start_time`` Redis fields
+    even though this codebase's convention is naive UTC.
+    """
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory, excluding Crawlee metadata."""
     if not os.path.isdir(path):
@@ -59,9 +116,161 @@ def _count_files_in_dir(path: str) -> int:
     except OSError:
         return 0
 
+
+def _flatten_params_for_php(params: Any, parent_key: str = "") -> List[Tuple[str, Any]]:
+    """Flatten a dict/list payload into a list of (key, value) tuples using
+    PHP-style bracket notation, so PHP's $_GET can parse it as a nested array.
+
+    Background:
+        httpx's GET ``params=dict`` serializes nested dict values via ``str()``,
+        producing e.g. ``metrics={'processed': 100}`` (Python dict-str). PHP
+        then sees ``$_GET['metrics']`` as a string instead of an array, and
+        subscripting it silently returns ``0`` because
+        ``(int)$_GET['metrics']['processed']`` evaluates to ``(int)'{'``.
+
+    Examples:
+        {"metrics": {"processed": 100}}     -> [("metrics[processed]", 100)]
+        {"jsonl": ["a.jsonl", "b.jsonl"]}   -> [("jsonl[0]", "a.jsonl"),
+                                                 ("jsonl[1]", "b.jsonl")]
+        {"deep": {"a": {"b": 1}}}           -> [("deep[a][b]", 1)]
+
+    ``None`` values are emitted as empty strings to preserve the previous
+    httpx behavior (``None`` -> ``""`` in the query string).
+    """
+    items: List[Tuple[str, Any]] = []
+
+    if isinstance(params, dict):
+        for k, v in params.items():
+            new_key = f"{parent_key}[{k}]" if parent_key else str(k)
+            items.extend(_flatten_params_for_php(v, new_key))
+    elif isinstance(params, list):
+        for idx, v in enumerate(params):
+            new_key = f"{parent_key}[{idx}]"
+            items.extend(_flatten_params_for_php(v, new_key))
+    elif params is None:
+        items.append((parent_key, ""))
+    else:
+        items.append((parent_key, params))
+
+    return items
+
+
 # Thread-safe locks for concurrent archive generation (keyed by archive path)
 _archive_locks: Dict[str, threading.Lock] = {}
 _archive_locks_guard = threading.Lock()
+
+async def _read_callback_isError(storage_path: str) -> Optional[str]:
+    """
+    Read isError from _callback_payload.json in the crawl storage dir.
+    Returns None if the file is missing, unreadable, or has no isError field.
+    Never raises — failures are logged at debug level and treated as 'no error'.
+    """
+    payload_path = os.path.join(storage_path, '_callback_payload.json')
+    if not os.path.exists(payload_path):
+        return None
+    try:
+        async with aiofiles.open(payload_path, 'r') as f:
+            content = await f.read()
+        data = json.loads(content)
+        is_error = data.get('isError', '')
+        return is_error if isinstance(is_error, str) and is_error else None
+    except Exception as e:
+        logger.debug(f"Failed to read isError from {payload_path}: {e}")
+        return None
+
+class _LockHeartbeat:
+    """
+    Async context manager that renews a Redis lock TTL while a long-running
+    operation holds the lock. Ownership-safe: only refreshes if the lock
+    value still matches our expected_value, preventing accidental refresh
+    of a lock taken over after our TTL lapsed.
+
+    Bounded by max_duration_seconds: past this cap the heartbeat stops
+    renewing, letting TTL expire so a truly hung op cannot indefinitely
+    hold the lock.
+
+    Usage:
+        lock_value = await self._acquire_ownership_lock(key, ttl)
+        try:
+            async with _LockHeartbeat(self, key, lock_value, ttl, interval, max_duration):
+                await long_running_op()
+        finally:
+            await self._release_ownership_lock(key, lock_value)
+    """
+
+    # Lua script: only EXPIRE if current value still matches expected.
+    # Returns 1 on success, 0 on value mismatch (lock taken over).
+    _LUA_REFRESH = (
+        "if redis.call('get', KEYS[1]) == ARGV[1] then "
+        "return redis.call('expire', KEYS[1], ARGV[2]) "
+        "else return 0 end"
+    )
+
+    def __init__(
+        self,
+        cm,
+        lock_key: str,
+        lock_value: str,
+        ttl_seconds: int,
+        interval_seconds: int,
+        max_duration_seconds: int,
+    ):
+        self._cm = cm
+        self._lock_key = lock_key
+        self._lock_value = lock_value
+        self._ttl = ttl_seconds
+        self._interval = interval_seconds
+        self._max_duration = max_duration_seconds
+        self._task: Optional[asyncio.Task] = None
+        self._started_at: float = 0.0
+
+    async def __aenter__(self) -> "_LockHeartbeat":
+        self._started_at = time.monotonic()
+        self._task = asyncio.create_task(
+            self._run(), name=f"lock-heartbeat:{self._lock_key}"
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._task and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    async def _run(self) -> None:
+        """Heartbeat loop: renew lock TTL via Lua CAS until stopped or cancelled."""
+        try:
+            while True:
+                await asyncio.sleep(self._interval)
+                elapsed = time.monotonic() - self._started_at
+                if elapsed > self._max_duration:
+                    logger.error(
+                        f"Lock heartbeat for '{self._lock_key}' exceeded "
+                        f"max_duration_seconds={self._max_duration}; "
+                        f"stopping renewals."
+                    )
+                    return
+                try:
+                    result = await cache_service.redis_client.eval(
+                        self._LUA_REFRESH, 1,
+                        self._lock_key, self._lock_value, str(self._ttl),
+                    )
+                    if result == 0:
+                        logger.warning(
+                            f"Lock '{self._lock_key}' no longer owned by us "
+                            f"(value mismatch). Stopping heartbeat."
+                        )
+                        return
+                except Exception as e:
+                    logger.warning(
+                        f"Lock heartbeat refresh failed for "
+                        f"'{self._lock_key}': {e}"
+                    )
+        except asyncio.CancelledError:
+            return
+
 
 class CrawlerManager:
     """
@@ -95,6 +304,31 @@ class CrawlerManager:
         if not msg:
             msg = f"Erreur inconnue : {is_error}"
         return msg[:250]  # Truncate for VARCHAR(250)
+
+    @staticmethod
+    def _classify_exit_code(exit_code: Optional[int]) -> Tuple[Optional[str], Optional[str]]:
+        """Returns (error_message, failure_cause) for a subprocess exit code.
+
+        Returns (None, None) for success codes (0, 2) and any other "no-failure" inputs.
+        """
+        if exit_code == -1:
+            return ("Out Of Memory", "oom_max_restarts")
+        elif exit_code == 3:
+            return ("Out Of Memory", "oom_relaunch")
+        elif exit_code == 4:
+            return ("Update crawl failed: previous crawl data was empty or unavailable", "update_mode_no_data")
+        elif exit_code == 5:
+            return ("Connexion Redis perdue (crawl bloqué)", "redis_lost")
+        elif exit_code == 6:
+            return ("Crawl bloqué — aucune progression URL", "progress_stalled")
+        elif exit_code in (137, -9):
+            return ("Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé", "killed_oom_system")
+        elif exit_code is not None and exit_code < 0:
+            return (f"Processus terminé par signal {abs(exit_code)}", "signal_killed")
+        elif exit_code is not None and exit_code not in (0, 2, 3, 4, 5, 6, -1, 137):
+            return (f"Erreur inattendue (code de sortie: {exit_code})", "unknown")
+        else:
+            return (None, None)
 
     def __init__(self):
         # This dictionary ONLY tracks processes running on THIS replica.
@@ -163,11 +397,63 @@ class CrawlerManager:
             "replica_id": os.uname().nodename
         }
 
-        # --- DISTRIBUTED LOCK via SET NX (separate from state document) ---
+        # --- CAPACITY SHORT-CIRCUITS (Spec 2026-05-22) ---
+        # A. LOCAL capacity check — in-memory, ZERO Redis ops.
+        # Runs BEFORE any Redis op so a saturated replica costs nothing on Redis.
+        if not is_restart:
+            active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
+            if active_local >= settings.MAX_CONCURRENT_CRAWLS:
+                logger.warning(
+                    f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'. "
+                    f"No Redis ops performed."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Retry-After": str(REPLICA_CAP_RETRY_AFTER_S)},
+                    detail={
+                        "error_code": "REPLICA_CAPACITY_EXCEEDED",
+                        "message": "This service instance is at its maximum capacity.",
+                        "replica_capacity": settings.MAX_CONCURRENT_CRAWLS,
+                        "rejected_request": {"crawl_id": crawl_id, "domain": domain},
+                    },
+                )
+
+        # B. GLOBAL capacity READ probe — 2 non-mutating Redis ops.
+        # If full, return 503 BEFORE the mutating lock SET / state write / INCR.
+        # Probe is best-effort (non-atomic across the 2 reads); the race-safe
+        # INCR backstop below (section C) is the final authority on capacity.
+        # `current_max_global` initialized here so section C has a value to compare
+        # against even on is_restart=True (where the probe + backstop are skipped).
+        current_max_global = settings.DEFAULT_MAX_GLOBAL_CRAWLS
+        if not is_restart:
+            redis_max_global_str = await _with_retry(cache_service.get_key, CRAWL_MAX_GLOBAL_KEY)
+            current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
+            current_running_str = await _with_retry(cache_service.get_key, CRAWL_RUNNING_COUNT_KEY)
+            current_running = int(current_running_str) if current_running_str else 0
+            if current_running >= current_max_global:
+                logger.warning(
+                    f"Global capacity probe shows full ({current_running}/{current_max_global}). "
+                    f"Rejecting '{crawl_id}'. No mutating Redis ops performed."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Retry-After": str(GLOBAL_CAP_RETRY_AFTER_S)},
+                    detail={
+                        "error_code": "GLOBAL_CAPACITY_EXCEEDED",
+                        "message": "The service has reached its global concurrency limit.",
+                        "global_limit": current_max_global,
+                        "current_running": current_running,
+                    },
+                )
+
+        # --- DISTRIBUTED LOCK via SET NX (mutating; runs only after capacity probes passed) ---
         # Lock key: crawl_lock:{id} with TTL — prevents duplicate crawl_ids across replicas.
         # State key: crawl_job:{id} — persists for observability, no locking semantics.
         if not is_restart:
-            claimed = await cache_service.redis_client.set(lock_key, crawl_id, nx=True, ex=CRAWL_LOCK_TTL_SECONDS)
+            claimed = await _with_retry(
+                cache_service.redis_client.set,
+                lock_key, crawl_id, nx=True, ex=CRAWL_LOCK_TTL_SECONDS,
+            )
             if not claimed:
                 logger.warning(f"Crawl job '{crawl_id}' is already running globally (lock NX failed). Request rejected.")
                 raise HTTPException(
@@ -176,34 +462,35 @@ class CrawlerManager:
                 )
 
         # Write the state document (always, for both normal starts and OOM restarts)
-        await cache_service.set_json(job_key, job_data)
+        await _with_retry(cache_service.set_json, job_key, job_data)
 
-        # --- CAPACITY CHECKS (with cleanup on rejection) ---
+        # --- CAPACITY RACE-SAFE BACKSTOP (last line of defense) ---
         # Helper to rollback both lock claim and counter on rejection.
         # INVARIANT: OOM restarts (is_restart=True) bypass both lock claim and capacity checks,
         # so rollback is never needed. If capacity checks are ever added for restarts,
         # this guard must be updated to also handle the restart path.
         async def _rollback_claim(decrement_counter: bool = False):
             if not is_restart:
-                await cache_service.delete_key(lock_key)
-                await cache_service.delete_key(job_key)
+                await _with_retry(cache_service.delete_key, lock_key)
+                await _with_retry(cache_service.delete_key, job_key)
                 if decrement_counter:
-                    await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                    await _with_retry(cache_service.safe_decrement_key, CRAWL_RUNNING_COUNT_KEY)
 
-        # Check dynamic global limit
+        # Atomic global INCR with race-safe rollback. Probe (section B) may have been
+        # stale by the time we get here (another replica raced ahead); INCR + check
+        # is the final authority.
         if not is_restart:
-            redis_max_global_str = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)
-            current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
-
-            new_count = await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
-
+            new_count = await _with_retry(cache_service.increment_key, CRAWL_RUNNING_COUNT_KEY)
             if new_count > current_max_global:
-                await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
-                await cache_service.delete_key(lock_key)
-                await cache_service.delete_key(job_key)
-                logger.warning(f"Global concurrency limit reached ({new_count - 1}/{current_max_global}). Rejecting '{crawl_id}'.")
+                # Single-source rollback: counter decrement + lock del + state del.
+                await _rollback_claim(decrement_counter=True)
+                logger.warning(
+                    f"Global concurrency limit reached after INCR race ({new_count - 1}/{current_max_global}). "
+                    f"Rejecting '{crawl_id}'."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Retry-After": str(GLOBAL_CAP_RETRY_AFTER_S)},
                     detail={
                         "error_code": "GLOBAL_CAPACITY_EXCEEDED",
                         "message": "The service has reached its global concurrency limit.",
@@ -212,25 +499,16 @@ class CrawlerManager:
                     }
                 )
 
-        # Local concurrency check for this replica
-        active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
-        if not is_restart and active_local >= settings.MAX_CONCURRENT_CRAWLS:
-            await _rollback_claim(decrement_counter=True)
-            logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'. Global counter rolled back.")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "error_code": "REPLICA_CAPACITY_EXCEEDED",
-                    "message": "This service instance is at its maximum capacity.",
-                    "replica_capacity": settings.MAX_CONCURRENT_CRAWLS,
-                    "rejected_request": {"crawl_id": crawl_id, "domain": domain}
-                }
-            )
-
         # --- STORAGE SETUP ---
         try:
             os.makedirs(job_storage_path, exist_ok=True)
             logger.info(f"Using storage for crawl_id '{crawl_id}' at '{job_storage_path}'")
+
+            # Wipe any persistent state from a prior run of this crawl_id before
+            # spawning the new subprocess. Observed bug (crawl 6229 with dropData=true):
+            # old _completion_marker.json survives makedirs, reconciler then declares
+            # the new running crawl finished and skips its success webhook.
+            await self._cleanup_stale_state_for_relaunch(crawl_id, job_storage_path)
         except OSError as e:
             await _rollback_claim(decrement_counter=True)
             logger.error(f"Failed to create/access storage directory for crawl '{crawl_id}': {e}")
@@ -352,6 +630,7 @@ class CrawlerManager:
 
             job_info["status"] = "failed"
             job_info["isError"] = "OOM_MAX_RESTARTS"
+            job_info["failure_cause"] = "oom_max_restarts"
 
             # Write completion marker before deleting key (for disk recovery)
             marker_path = os.path.join(job_info.get("storage_path", ""), '_completion_marker.json')
@@ -384,6 +663,7 @@ class CrawlerManager:
                     -1, # Special exit code for max restart fail
                     job_info.get("crawl_mode", "standard"),
                     request_id=request_id,
+                    failure_cause="oom_max_restarts",
                 ))
             return
 
@@ -414,6 +694,7 @@ class CrawlerManager:
             # Mark job as failed
             job_info["status"] = "failed"
             job_info["isError"] = "OOM_RELAUNCH_FAILED"
+            job_info["failure_cause"] = "oom_relaunch_failed"
 
             # Write completion marker before deleting key (for disk recovery)
             marker_path = os.path.join(job_info.get("storage_path", ""), '_completion_marker.json')
@@ -445,6 +726,7 @@ class CrawlerManager:
                     -1,
                     job_info.get("crawl_mode", "standard"),
                     request_id=request_id,
+                    failure_cause="oom_relaunch_failed",
                 ))
 
     def _get_or_create_failure_request_id(self, job_info: dict) -> str:
@@ -472,9 +754,11 @@ class CrawlerManager:
         NOT store in FAILED_CALLBACKS_KEY on failure — reconciliation will replay
         using the same request_id from job_info, and PHP dedupes.
         """
+        # Flatten nested dicts/lists into PHP bracket notation so $_GET parses them as arrays.
+        flat_params = _flatten_params_for_php(params)
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, timeout=timeout)
+                response = await client.get(url, params=flat_params, timeout=timeout)
                 if 200 <= response.status_code < 300:
                     logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (shutdown). Status: {response.status_code}")
                     return True
@@ -489,11 +773,13 @@ class CrawlerManager:
         Sends an HTTP GET webhook with exponential backoff retry.
         On exhaustion, stores the failed callback in Redis for manual replay.
         """
+        # Flatten nested dicts/lists into PHP bracket notation so $_GET parses them as arrays.
+        flat_params = _flatten_params_for_php(params)
         last_error = None
         for attempt, delay in enumerate(WEBHOOK_RETRY_DELAYS):
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await client.get(url, params=params, timeout=30.0)
+                    response = await client.get(url, params=flat_params, timeout=30.0)
                     if 200 <= response.status_code < 300:
                         logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (attempt {attempt + 1}). Status: {response.status_code}")
                         return True
@@ -629,28 +915,22 @@ class CrawlerManager:
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int,
                                     crawl_mode: str = "standard",
                                     request_id: Optional[str] = None,
-                                    shutdown: bool = False):
+                                    shutdown: bool = False,
+                                    failure_cause: Optional[str] = None):
         # We process failures for both standard and update modes now
-        # Determine message_erreur_crawling from context
-        error_message = ""
-        if exit_code == -1:
-            error_message = "Out Of Memory"  # Special exit code for OOM max restarts or shutdown
-        elif exit_code == 3:
-            error_message = "Out Of Memory"  # OOM_RELAUNCH exit code
-        elif exit_code == 4:
-            error_message = "Update crawl failed: previous crawl data was empty or unavailable"
-        elif exit_code in (137, -9):
-            error_message = "Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé"
-        elif exit_code is not None and exit_code < 0:
-            error_message = f"Processus terminé par signal {abs(exit_code)}"  # Signal-killed
-        elif exit_code not in (0, 2, 3, 4, -1, 137):
-            error_message = f"Erreur inattendue (code de sortie: {exit_code})"
+        # Determine message_erreur_crawling and failure_cause from exit code
+        classified_message, classified_cause = self._classify_exit_code(exit_code)
+        error_message = classified_message if classified_message is not None else ""
+        # Caller override: explicit failure_cause kwarg trumps classifier.
+        final_failure_cause = failure_cause if failure_cause is not None else classified_cause
 
         params = {
             "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
             "timestamp": datetime.utcnow().isoformat(),
             "message_erreur_crawling": error_message
         }
+        if final_failure_cause is not None:
+            params["failure_cause"] = final_failure_cause
         if request_id:
             params["request_id"] = request_id
 
@@ -826,6 +1106,19 @@ class CrawlerManager:
 
                  return # EXIT FUNCTION EARLY - NO WEBHOOKS
 
+            # Non-OOM path: re-read current status before touching counter or status.
+            # Stale detection / force-finish may have already transitioned the job to a
+            # terminal state and decremented the counter.  If so, skip the entire
+            # finalization block to avoid double-decrement and status clobber.
+            current_for_nooom = await cache_service.get_json(job_key)
+            current_status_nooom = current_for_nooom.get("status") if current_for_nooom else None
+            if current_status_nooom in ("failed", "stopped", "finished"):
+                logger.info(
+                    f"Skipping non-OOM finalization for '{crawl_id}': status is already "
+                    f"'{current_status_nooom}' (stale detection or force-finish ran first)."
+                )
+                return
+
             # Non-OOM path: release the global counter slot and distributed lock
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
@@ -835,6 +1128,9 @@ class CrawlerManager:
             job_info["pid"] = None
             if "last_heartbeat" in job_info:
                 del job_info["last_heartbeat"]
+            _, failure_cause = self._classify_exit_code(exit_code)
+            if failure_cause is not None:
+                job_info["failure_cause"] = failure_cause
             await cache_service.set_json(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. Lock released. Counter decremented.")
 
@@ -968,6 +1264,8 @@ class CrawlerManager:
             logger.warning(f"Could not write completion marker for force-finish: {e}")
 
         # Release distributed lock, update state document, and notify
+        if target_status == "failed":
+            job_info["failure_cause"] = "force_finished"
         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, target_status)
@@ -983,6 +1281,7 @@ class CrawlerManager:
                 -1,  # Force-finish exit code
                 job_info.get("crawl_mode", "standard"),
                 request_id=request_id,
+                failure_cause="force_finished",
             ))
         else:
             asyncio.create_task(self._send_stop_webhook(job_info, target_status))
@@ -1047,6 +1346,9 @@ class CrawlerManager:
                     snapshot_data = json.loads(content)
                 # Override status with current Redis value — snapshot was taken before status transition
                 snapshot_data["status"] = job_info["status"]
+                # Enrich snapshot with isError from _callback_payload.json (snapshot may predate it,
+                # and BO reconciliation needs it to route non-success terminal crawls correctly).
+                snapshot_data["is_error"] = await _read_callback_isError(storage_path)
                 logger.info(
                     f"Loaded status from snapshot for crawl '{crawl_id}' (status: {job_info['status']}).")
                 return CrawlStatus(**snapshot_data)
@@ -1091,18 +1393,21 @@ class CrawlerManager:
             except Exception as e:
                 logger.warning(f"Could not read dataset info for '{crawl_id}': {e}")
         
+        is_error = await _read_callback_isError(storage_path)
+
         return CrawlStatus(
             crawl_id=crawl_id,
             id_domaine=crawl_id, # Legacy alias
-            status=job_info["status"], 
+            status=job_info["status"],
             domain=job_info["domain"],
-            start_url=job_info["start_url"], 
+            start_url=job_info["start_url"],
             start_time=job_info["start_time"],
             urls_crawled=urls_crawled,
             error_urls_crawled=error_urls_crawled,
             nfr_urls_crawled=nfr_urls_crawled,
             last_activity=last_url_time,
-            last_heartbeat=job_info.get("last_heartbeat")
+            last_heartbeat=job_info.get("last_heartbeat"),
+            is_error=is_error,
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
@@ -1417,6 +1722,7 @@ class CrawlerManager:
             if job_info and job_info.get("status") in ("running", "restarting_oom"):
                 job_info["status"] = "failed"
                 job_info["shutdown_reason"] = "Service instance terminated" # V3 Logic
+                job_info["failure_cause"] = "service_shutdown"
                 if "last_heartbeat" in job_info:
                     del job_info["last_heartbeat"]
 
@@ -1453,6 +1759,7 @@ class CrawlerManager:
                         job_info.get("crawl_mode", "standard"),
                         request_id=failure_request_id,
                         shutdown=True,
+                        failure_cause="service_shutdown",
                     )
             else:
                  logger.warning(f"Could not find job '{crawl_id}' in Redis during shutdown or it was not in 'running' state.")
@@ -1574,180 +1881,193 @@ class CrawlerManager:
         archives_dir = settings.ARCHIVES_SHARED_PATH
         target_archive_path = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
 
-        # Acquire a Redis lock to prevent concurrent archiving of the same crawl
-        lock_key = f"archive_lock:{crawl_id}"
-        # 30 min TTL: large crawls can take >5 min to archive via shutil.make_archive
-        lock_acquired = await cache_service.redis_client.set(lock_key, "1", nx=True, ex=1800)
-        if not lock_acquired:
+        # Acquire ownership-safe Redis lock (replica-id-tagged value).
+        # ARCHIVE_LOCK_TTL_SECONDS=1800; _LockHeartbeat refreshes mid-op so
+        # the TTL never expires during a long tar.
+        archive_lock_key = f"archive_lock:{crawl_id}"
+        lock_value = await self._acquire_ownership_lock(
+            archive_lock_key, settings.ARCHIVE_LOCK_TTL_SECONDS
+        )
+        if lock_value is None:
+            # Exact string preserved — 3_archive_eligible_domains.php matches
+            # this in its 409 success-signal logic. Do not modify.
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Archiving for crawl '{crawl_id}' is already in progress."
             )
 
         try:
-            # Cleanup orphaned temp file from a previous failed attempt
-            tmp_archive_path = os.path.join(archives_dir, f"{crawl_id}.tmp.tar.gz")
-            if os.path.exists(tmp_archive_path):
-                os.remove(tmp_archive_path)
-                logger.info(f"Removed orphaned temp archive for '{crawl_id}'.")
+            async with _LockHeartbeat(
+                self,
+                archive_lock_key,
+                lock_value,
+                ttl_seconds=settings.ARCHIVE_LOCK_TTL_SECONDS,
+                interval_seconds=settings.LOCK_HEARTBEAT_INTERVAL_SECONDS,
+                max_duration_seconds=settings.LOCK_HEARTBEAT_MAX_DURATION_SECONDS,
+            ):
+                # Cleanup orphaned temp file from a previous failed attempt
+                tmp_archive_path = os.path.join(archives_dir, f"{crawl_id}.tmp.tar.gz")
+                if os.path.exists(tmp_archive_path):
+                    os.remove(tmp_archive_path)
+                    logger.info(f"Removed orphaned temp archive for '{crawl_id}'.")
 
-            # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
-            if os.path.exists(target_archive_path):
-                archive_size = os.path.getsize(target_archive_path)
-                logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
-                await self._mark_as_archived(crawl_id)
-                return {
-                    "crawl_id": crawl_id,
-                    "archive_status": "pending_upload",
-                    "archive_size_bytes": archive_size,
-                }
+                # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
+                if os.path.exists(target_archive_path):
+                    archive_size = os.path.getsize(target_archive_path)
+                    logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
+                    await self._mark_as_archived(crawl_id)
+                    return {
+                        "crawl_id": crawl_id,
+                        "archive_status": "pending_upload",
+                        "archive_size_bytes": archive_size,
+                    }
 
-            # GCS fallback: if local archive is gone, check if it was already uploaded to GCS.
-            # This handles legacy crawls stuck at 'finished' due to a previous bug where
-            # _mark_as_archived was never called, but the archive was created and uploaded.
-            try:
-                download_path = await self._retrieve_from_gcs_daemon(crawl_id)
-                # Archive exists in GCS — this crawl was already archived. Just fix the status.
-                archive_size = os.path.getsize(download_path) if os.path.exists(download_path) else None
-                self.cleanup_temp_download(crawl_id)
-                await self._mark_as_archived(crawl_id)
-                logger.info(f"Archive for '{crawl_id}' found in GCS. Status corrected to 'archived'.")
-                return {
-                    "crawl_id": crawl_id,
-                    "archive_status": "already_in_gcs",
-                    "archive_size_bytes": archive_size,
-                }
-            except HTTPException:
-                # Archive not in GCS (502/504) — proceed with normal archiving
-                logger.info(f"Archive for '{crawl_id}' not found in GCS. Proceeding with fresh archiving.")
-
-            # --- PRE-FLIGHT DISK SPACE CHECK ---
-            # Measure the source directory, check free space on /app/archives/, reject
-            # with 503 if insufficient. Fail-open if measurement itself fails.
-            baseline_state = self._get_archives_disk_state(archives_dir)
-            logger.info(f"Archive disk state for '{crawl_id}': {baseline_state}")
-
-            required_bytes = self._estimate_archive_required_bytes(job_storage_path)
-            required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
-
-            if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
-                logger.warning(
-                    f"Rejecting archive '{crawl_id}': insufficient disk space. "
-                    f"Required: {required_bytes} bytes, Available: {baseline_state['free_bytes']} bytes. "
-                    f"Disk state: {baseline_state}"
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "error_code": "INSUFFICIENT_DISK_SPACE",
-                        "required_bytes": required_bytes,
-                        "available_bytes": baseline_state["free_bytes"],
-                        "disk_state": baseline_state,
-                    },
-                )
-
-            # Save current status snapshot before archiving (critical: dataset files will be deleted)
-            try:
-                current_status = await self.get_status(job_info)
-                snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
-                snapshot_data = current_status.model_dump(mode='json')
-
-                async with aiofiles.open(snapshot_path, 'w') as f:
-                    await f.write(json.dumps(snapshot_data, indent=2, default=str))
-
-                logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
-            except Exception as e:
-                logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
-
-            logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
-
-            try:
-                def _create_archive():
-                    """Create tar.gz archive in a staging subdirectory, then atomically
-                    move to the final location. The upload daemon uses `find -maxdepth 1`,
-                    so it never sees the staging dir — preventing the race where the
-                    daemon uploads (and deletes) a partial tmp file."""
-                    staging_dir = os.path.join(archives_dir, ".staging")
-                    os.makedirs(staging_dir, exist_ok=True)
-                    os.makedirs(archives_dir, exist_ok=True)
-
-                    staging_base = os.path.join(staging_dir, crawl_id)
-                    final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
-                    staging_path = None
-
-                    try:
-                        # Create archive in staging dir (hidden from daemon)
-                        staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
-                        archive_size = os.path.getsize(staging_path)
-                        if archive_size == 0:
-                            raise RuntimeError(f"Archive at '{staging_path}' is empty (0 bytes).")
-
-                        # Verify archive is readable
-                        with tarfile.open(staging_path, 'r:gz') as t:
-                            t.getnames()  # Force read of the archive index
-
-                        # Atomic rename to final path — same filesystem, always atomic
-                        os.rename(staging_path, final_target)
-                        staging_path = None  # Successfully moved; skip cleanup
-
-                        return final_target, archive_size
-                    finally:
-                        # Clean up staging file on any failure (disk full, corrupt, 0 bytes, etc.)
-                        if staging_path and os.path.exists(staging_path):
-                            try:
-                                os.remove(staging_path)
-                            except OSError:
-                                pass
-
-                def _cleanup_local_data():
-                    """Remove crawl data files, keeping only logs and markers."""
-                    files_to_keep = {'crawler.log', '_callback_payload.json',
-                                     '_completion_marker.json', '_status_snapshot.json',
-                                     '_exit_reason.json', '_update_report.json',
-                                     'update_stats.json',
-                                     'timing.jsonl', 'timing-summary.json'}
-                    for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                        for name in files:
-                            if name not in files_to_keep:
-                                os.remove(os.path.join(root, name))
-                        for name in dirs:
-                            try:
-                                os.rmdir(os.path.join(root, name))
-                            except OSError:
-                                pass
-
-                # Step 1: Create archive
-                final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
-                logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
-
-                # Step 2: Mark as archived (must succeed before cleanup)
-                await self._mark_as_archived(crawl_id)
-
-                # Step 3: Cleanup (safe to fail — data is in the archive)
+                # GCS fallback: if local archive is gone, check if it was already uploaded to GCS.
+                # This handles legacy crawls stuck at 'finished' due to a previous bug where
+                # _mark_as_archived was never called, but the archive was created and uploaded.
                 try:
-                    await anyio.to_thread.run_sync(_cleanup_local_data)
-                    logger.info(f"Cleaned up local storage for '{crawl_id}'.")
+                    download_path = await self._retrieve_from_gcs_daemon(crawl_id)
+                    # Archive exists in GCS — this crawl was already archived. Just fix the status.
+                    archive_size = os.path.getsize(download_path) if os.path.exists(download_path) else None
+                    self.cleanup_temp_download(crawl_id)
+                    await self._mark_as_archived(crawl_id)
+                    logger.info(f"Archive for '{crawl_id}' found in GCS. Status corrected to 'archived'.")
+                    return {
+                        "crawl_id": crawl_id,
+                        "archive_status": "already_in_gcs",
+                        "archive_size_bytes": archive_size,
+                    }
+                except HTTPException:
+                    # Archive not in GCS (502/504) — proceed with normal archiving
+                    logger.info(f"Archive for '{crawl_id}' not found in GCS. Proceeding with fresh archiving.")
+
+                # --- PRE-FLIGHT DISK SPACE CHECK ---
+                # Measure the source directory, check free space on /app/archives/, reject
+                # with 503 if insufficient. Fail-open if measurement itself fails.
+                baseline_state = self._get_archives_disk_state(archives_dir)
+                logger.info(f"Archive disk state for '{crawl_id}': {baseline_state}")
+
+                required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+                required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+
+                if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                    logger.warning(
+                        f"Rejecting archive '{crawl_id}': insufficient disk space. "
+                        f"Required: {required_bytes} bytes, Available: {baseline_state['free_bytes']} bytes. "
+                        f"Disk state: {baseline_state}"
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "error_code": "INSUFFICIENT_DISK_SPACE",
+                            "required_bytes": required_bytes,
+                            "available_bytes": baseline_state["free_bytes"],
+                            "disk_state": baseline_state,
+                        },
+                    )
+
+                # Save current status snapshot before archiving (critical: dataset files will be deleted)
+                try:
+                    current_status = await self.get_status(job_info)
+                    snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
+                    snapshot_data = current_status.model_dump(mode='json')
+
+                    async with aiofiles.open(snapshot_path, 'w') as f:
+                        await f.write(json.dumps(snapshot_data, indent=2, default=str))
+
+                    logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
                 except Exception as e:
-                    logger.warning(f"Local cleanup failed for '{crawl_id}' (archive is safe): {e}")
+                    logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
 
-                return {
-                    "crawl_id": crawl_id,
-                    "archive_status": "pending_upload",
-                    "archive_size_bytes": archive_size,
-                }
+                logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
 
-            except Exception as e:
-                logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
-                # Log disk state at failure so we can correlate with the baseline log
                 try:
-                    post_failure_state = self._get_archives_disk_state(archives_dir)
-                    logger.error(f"Archive disk state at failure for '{crawl_id}': {post_failure_state}")
-                except Exception:
-                    pass
-                raise HTTPException(
-                    status_code=500, detail=f"Archiving failed: {str(e)}")
+                    def _create_archive():
+                        """Create tar.gz archive in a staging subdirectory, then atomically
+                        move to the final location. The upload daemon uses `find -maxdepth 1`,
+                        so it never sees the staging dir — preventing the race where the
+                        daemon uploads (and deletes) a partial tmp file."""
+                        staging_dir = os.path.join(archives_dir, ".staging")
+                        os.makedirs(staging_dir, exist_ok=True)
+                        os.makedirs(archives_dir, exist_ok=True)
+
+                        staging_base = os.path.join(staging_dir, crawl_id)
+                        final_target = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
+                        staging_path = None
+
+                        try:
+                            # Create archive in staging dir (hidden from daemon)
+                            staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
+                            archive_size = os.path.getsize(staging_path)
+                            if archive_size == 0:
+                                raise RuntimeError(f"Archive at '{staging_path}' is empty (0 bytes).")
+
+                            # Verify archive is readable
+                            with tarfile.open(staging_path, 'r:gz') as t:
+                                t.getnames()  # Force read of the archive index
+
+                            # Atomic rename to final path — same filesystem, always atomic
+                            os.rename(staging_path, final_target)
+                            staging_path = None  # Successfully moved; skip cleanup
+
+                            return final_target, archive_size
+                        finally:
+                            # Clean up staging file on any failure (disk full, corrupt, 0 bytes, etc.)
+                            if staging_path and os.path.exists(staging_path):
+                                try:
+                                    os.remove(staging_path)
+                                except OSError:
+                                    pass
+
+                    def _cleanup_local_data():
+                        """Remove crawl data files, keeping only logs and markers."""
+                        files_to_keep = {'crawler.log', '_callback_payload.json',
+                                         '_completion_marker.json', '_status_snapshot.json',
+                                         '_exit_reason.json', '_update_report.json',
+                                         'update_stats.json',
+                                         'timing.jsonl', 'timing-summary.json'}
+                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                            for name in files:
+                                if name not in files_to_keep:
+                                    os.remove(os.path.join(root, name))
+                            for name in dirs:
+                                try:
+                                    os.rmdir(os.path.join(root, name))
+                                except OSError:
+                                    pass
+
+                    # Step 1: Create archive
+                    final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
+                    logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
+
+                    # Step 2: Mark as archived (must succeed before cleanup)
+                    await self._mark_as_archived(crawl_id)
+
+                    # Step 3: Cleanup (safe to fail — data is in the archive)
+                    try:
+                        await anyio.to_thread.run_sync(_cleanup_local_data)
+                        logger.info(f"Cleaned up local storage for '{crawl_id}'.")
+                    except Exception as e:
+                        logger.warning(f"Local cleanup failed for '{crawl_id}' (archive is safe): {e}")
+
+                    return {
+                        "crawl_id": crawl_id,
+                        "archive_status": "pending_upload",
+                        "archive_size_bytes": archive_size,
+                    }
+
+                except Exception as e:
+                    logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+                    # Log disk state at failure so we can correlate with the baseline log
+                    try:
+                        post_failure_state = self._get_archives_disk_state(archives_dir)
+                        logger.error(f"Archive disk state at failure for '{crawl_id}': {post_failure_state}")
+                    except Exception:
+                        pass
+                    raise HTTPException(
+                        status_code=500, detail=f"Archiving failed: {str(e)}")
         finally:
-            await cache_service.redis_client.delete(lock_key)
+            await self._release_ownership_lock(archive_lock_key, lock_value)
 
     async def _mark_as_archived(self, crawl_id: str):
         """Updates job status to 'archived' in Redis to prevent double-archiving.
@@ -1826,6 +2146,494 @@ class CrawlerManager:
                     logger.debug(f"Cleaned up temp download file: {path}")
             except OSError as e:
                 logger.warning(f"Failed to clean up temp file '{path}': {e}")
+
+    def _verify_bind_mount(self, path: str, label: str) -> None:
+        """Raise 503 BIND_MOUNT_MISSING if path is not a real mount point.
+
+        Detects the silent-data-loss case where docker-compose volumes
+        were added but the container was not recreated. Without this guard
+        Python's os.makedirs creates an ephemeral in-container dir; data
+        written there is invisible to host-side daemons and lost on
+        container recreate.
+
+        Detection: os.path.ismount(p) returns True only for bind-mounts
+        and named volumes — False for ordinary dirs (or non-existent
+        paths).
+        """
+        if not os.path.ismount(path):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_code": "BIND_MOUNT_MISSING",
+                    "path": path,
+                    "label": label,
+                    "ops_action": "docker-compose --profile crawling up -d --force-recreate crawler-service",
+                    "hint": "Container was started before compose mount declaration; recreate required.",
+                },
+            )
+
+    async def _acquire_ownership_lock(self, lock_key: str, ttl_seconds: int) -> Optional[str]:
+        """Acquire a Redis lock with TTL, value = REPLICA_ID. Returns the value on
+        success, None on failure. Pairs with _release_ownership_lock for atomic
+        compare-and-delete (Lua script) to prevent clobbering a new acquirer
+        after TTL expiry."""
+        acquired = await cache_service.redis_client.set(lock_key, REPLICA_ID, nx=True, ex=ttl_seconds)
+        return REPLICA_ID if acquired else None
+
+    async def _release_ownership_lock(self, lock_key: str, expected_value: str) -> bool:
+        """Atomic compare-and-delete via Lua script. Returns True if the lock was
+        deleted (we owned it), False otherwise. Safe to call even if the lock
+        already expired or was acquired by another replica."""
+        if expected_value is None:
+            return False
+        # Atomic CAS via Lua — avoids race between GET and DEL
+        lua = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
+        try:
+            result = await cache_service.redis_client.eval(lua, 1, lock_key, expected_value)
+            return bool(result)
+        except Exception as e:
+            logger.warning(f"Ownership-safe lock release failed for '{lock_key}': {e}")
+            return False
+
+    async def stash_crawl(self, job_info: dict) -> dict:
+        """
+        Stash a terminal crawl's storage dir to GCS (under gs://{bucket}/stash/) to free
+        local disk. Only crawls in failed/stopped/finished status WITHOUT an existing
+        `stashed_at` or `archived` status can be stashed.
+
+        Sets job_data["stashed_at"] = ISO timestamp BEFORE deleting local data.
+        The upload daemon (configured with UPLOAD_GCS_PREFIX=stash) picks up the tar
+        from /app/stash/ asynchronously.
+
+        Returns a dict with crawl_id, status='stashing', stash_path, stashed_at.
+        """
+        crawl_id = job_info['crawl_id']
+        job_status = job_info.get('status')
+
+        # --- Pre-condition checks ---
+        if job_status in ("running", "restarting_oom", "stopping"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": job_status}
+            )
+        if job_status == "archived":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_ARCHIVED"}
+            )
+        if job_info.get("stashed_at"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_STASHED", "stashed_at": job_info["stashed_at"]}
+            )
+
+        # --- Acquire ownership-safe lock ---
+        stash_lock_key = f"stash_lock:{crawl_id}"
+        unstash_lock_key = f"unstash_lock:{crawl_id}"
+        if await cache_service.redis_client.exists(unstash_lock_key):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"}
+            )
+        lock_value = await self._acquire_ownership_lock(stash_lock_key, settings.STASH_LOCK_TTL_SECONDS)
+        if lock_value is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "stash"}
+            )
+
+        # --- Post-lock TOCTOU re-validation (spec follow-up §4.2) ---
+        # Another replica may have completed the operation between the caller's
+        # job_info snapshot and our lock acquire. Re-fetch and re-validate against
+        # the same pre-conditions; on mismatch, release the lock and raise the
+        # canonical 409.
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh_job_info = await cache_service.get_json(job_key)
+        if fresh_job_info is None:
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job '{crawl_id}' vanished from Redis during stash claim."
+            )
+        fresh_status = fresh_job_info.get("status")
+        if fresh_status in ("running", "restarting_oom", "stopping"):
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": fresh_status},
+            )
+        if fresh_status == "archived":
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_ARCHIVED"},
+            )
+        if fresh_job_info.get("stashed_at"):
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "ALREADY_STASHED", "stashed_at": fresh_job_info["stashed_at"]},
+            )
+        # Use the fresh blob from here on.
+        job_info = fresh_job_info
+
+        try:
+            async with _LockHeartbeat(
+                self,
+                stash_lock_key,
+                lock_value,
+                ttl_seconds=settings.STASH_LOCK_TTL_SECONDS,
+                interval_seconds=settings.LOCK_HEARTBEAT_INTERVAL_SECONDS,
+                max_duration_seconds=settings.LOCK_HEARTBEAT_MAX_DURATION_SECONDS,
+            ):
+                # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+                # Rejects with 503 BIND_MOUNT_MISSING if /app/stash is not a real
+                # bind-mount. Without this guard os.makedirs would create an
+                # ephemeral in-container dir; tar would land in container overlay
+                # FS, invisible to the host upload daemon (incident: crawl 1958).
+                self._verify_bind_mount(settings.STASH_SHARED_PATH, "stash upload")
+
+                stash_dir = settings.STASH_SHARED_PATH
+                target_tar = os.path.join(stash_dir, f"{crawl_id}.tar.gz")
+                job_storage_path = job_info["storage_path"]
+
+                # --- Pre-flight disk space check (fail-open per spec §5.1) ---
+                try:
+                    baseline_state = self._get_archives_disk_state(stash_dir)
+                    logger.info(f"Stash disk state for '{crawl_id}': {baseline_state}")
+                    required_bytes = self._estimate_archive_required_bytes(job_storage_path)
+                    required_bytes = max(required_bytes, 1_073_741_824)  # 1 GB floor
+
+                    if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                        logger.warning(
+                            f"Rejecting stash '{crawl_id}': insufficient disk space. "
+                            f"Required: {required_bytes}, Available: {baseline_state['free_bytes']}"
+                        )
+                        raise HTTPException(
+                            status_code=503,
+                            detail={
+                                "error_code": "INSUFFICIENT_DISK_SPACE",
+                                "required_bytes": required_bytes,
+                                "available_bytes": baseline_state["free_bytes"],
+                                "disk_state": baseline_state,
+                            },
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    logger.warning(
+                        f"Stash pre-flight measurement failed for '{crawl_id}': {e}. "
+                        f"Proceeding without disk-space check (fail-open)."
+                    )
+
+                # --- Tar via staging dir + atomic move (mirror archive flow) ---
+                def _create_stash_archive():
+                    staging_dir = os.path.join(stash_dir, ".staging")
+                    os.makedirs(staging_dir, exist_ok=True)
+                    os.makedirs(stash_dir, exist_ok=True)
+                    staging_base = os.path.join(staging_dir, crawl_id)
+                    staging_path = None
+                    try:
+                        staging_path = shutil.make_archive(staging_base, 'gztar', root_dir=job_storage_path)
+                        if os.path.getsize(staging_path) == 0:
+                            raise RuntimeError(f"Stash archive at '{staging_path}' is empty (0 bytes).")
+                        # Integrity check
+                        with tarfile.open(staging_path, 'r:gz') as t:
+                            t.getnames()
+                        os.rename(staging_path, target_tar)
+                        staging_path = None  # transferred ownership
+                        return target_tar, os.path.getsize(target_tar)
+                    finally:
+                        if staging_path and os.path.exists(staging_path):
+                            try:
+                                os.remove(staging_path)
+                            except OSError:
+                                pass
+
+                try:
+                    final_path, archive_size = await anyio.to_thread.run_sync(_create_stash_archive)
+                    logger.info(f"Stashed crawl '{crawl_id}' ({archive_size} bytes) -> {final_path}")
+                except Exception as e:
+                    logger.error(f"Failed to create stash archive for '{crawl_id}': {e}", exc_info=True)
+                    try:
+                        post_failure_state = self._get_archives_disk_state(stash_dir)
+                        logger.error(f"Stash disk state at failure for '{crawl_id}': {post_failure_state}")
+                    except Exception:
+                        pass
+                    raise HTTPException(status_code=500, detail=f"Stash archive creation failed: {str(e)}")
+
+                # --- Mark as stashed in Redis (BEFORE deleting local data) ---
+                # Naive UTC ISO string — matches codebase convention (archived_at,
+                # last_heartbeat, etc). Adding a 'Z' suffix would cause
+                # fromisoformat() to return a tz-aware datetime on Python 3.11+,
+                # breaking subtraction against naive utcnow() in reconcile_jobs.
+                stashed_at = datetime.utcnow().isoformat()
+                job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+                fresh_job_info = await cache_service.get_json(job_key)
+                if not fresh_job_info:
+                    logger.error(f"Cannot mark '{crawl_id}' as stashed: job not found in Redis after stash tar created.")
+                    raise HTTPException(status_code=500, detail="Job vanished from Redis during stash.")
+                fresh_job_info["stashed_at"] = stashed_at
+                await cache_service.set_json(job_key, fresh_job_info)
+                logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
+
+                # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
+                # Mirrors archive_crawl._cleanup_local_data so operator UX is
+                # consistent: ops can peek at logs locally without restoring via
+                # unstash. The tar contains everything; unstash restore is
+                # idempotent over kept files.
+                try:
+                    def _cleanup_data_keep_logs():
+                        files_to_keep = {
+                            'crawler.log', '_callback_payload.json',
+                            '_completion_marker.json', '_status_snapshot.json',
+                            '_exit_reason.json', '_update_report.json',
+                            'update_stats.json',
+                            'timing.jsonl', 'timing-summary.json',
+                        }
+                        if not os.path.isdir(job_storage_path):
+                            return
+                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                            for name in files:
+                                if name not in files_to_keep:
+                                    try:
+                                        os.remove(os.path.join(root, name))
+                                    except OSError:
+                                        pass
+                            for name in dirs:
+                                try:
+                                    os.rmdir(os.path.join(root, name))
+                                except OSError:
+                                    pass  # non-empty (kept file inside) → leave dir
+
+                    await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
+                    logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
+                except Exception as e:
+                    logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
+
+                return {
+                    "crawl_id": crawl_id,
+                    "status": "stashing",
+                    "stash_path": f"gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz",
+                    "stashed_at": stashed_at,
+                }
+
+        finally:
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+
+    async def unstash_crawl(self, job_info: dict) -> dict:
+        """
+        Restore a stashed crawl from GCS back to local storage.
+        Synchronous: writes .request marker, polls .done/.error, extracts archive,
+        writes .unstash-confirmed for the daemon to delete the GCS source, polls
+        .unstash-cleanup-done within a grace window, then clears stashed_at.
+
+        Returns a dict with crawl_id, status='unstashed', restored_to,
+        elapsed_seconds, gcs_cleanup_status ('cleaned' | 'deferred').
+        """
+        crawl_id = job_info['crawl_id']
+        start_time = time.monotonic()
+
+        # --- Pre-condition checks ---
+        if not job_info.get("stashed_at"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "NOT_STASHED"}
+            )
+
+        unstash_lock_key = f"unstash_lock:{crawl_id}"
+        stash_lock_key = f"stash_lock:{crawl_id}"
+        if await cache_service.redis_client.exists(stash_lock_key):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "stash"}
+            )
+        lock_value = await self._acquire_ownership_lock(unstash_lock_key, settings.UNSTASH_LOCK_TTL_SECONDS)
+        if lock_value is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"}
+            )
+
+        # --- Post-lock TOCTOU re-validation (spec follow-up §4.2) ---
+        # Another replica may have completed unstash between caller's job_info
+        # snapshot and our lock acquire. Re-fetch and verify stashed_at is still
+        # populated; on mismatch, release the lock and raise 409 NOT_STASHED.
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh_job_info = await cache_service.get_json(job_key)
+        if fresh_job_info is None:
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job '{crawl_id}' vanished from Redis during unstash claim."
+            )
+        if not fresh_job_info.get("stashed_at"):
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "NOT_STASHED"},
+            )
+        # Use the fresh blob from here on.
+        job_info = fresh_job_info
+
+        requests_dir = settings.STASH_DOWNLOAD_REQUESTS_PATH
+        results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
+        request_path = os.path.join(requests_dir, f"{crawl_id}.request")
+        download_path = os.path.join(results_dir, f"{crawl_id}.tar.gz")
+        done_path = os.path.join(results_dir, f"{crawl_id}.done")
+        error_path = os.path.join(results_dir, f"{crawl_id}.error")
+        confirm_path = os.path.join(results_dir, f"{crawl_id}.unstash-confirmed")
+        cleanup_done_path = os.path.join(results_dir, f"{crawl_id}.unstash-cleanup-done")
+
+        try:
+            # --- Defensive bind-mount check (spec 2026-05-20 §4) ---
+            # Rejects with 503 BIND_MOUNT_MISSING if either stash download dir
+            # is not a real bind-mount. Without these guards os.makedirs would
+            # create ephemeral in-container dirs; .request marker would never
+            # reach the host daemon and unstash would hang until UNSTASH_TIMEOUT.
+            # Inside try-block so finally releases the unstash_lock on the 503 path.
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_REQUESTS_PATH, "unstash requests")
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_RESULTS_PATH, "unstash results")
+
+            # --- Submit download request ---
+            os.makedirs(requests_dir, exist_ok=True)
+            os.makedirs(results_dir, exist_ok=True)
+            async with aiofiles.open(request_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.info(f"Unstash request submitted for '{crawl_id}'. Waiting for daemon...")
+
+            # --- Poll for .done / .error ---
+            deadline = time.monotonic() + settings.UNSTASH_TIMEOUT_SECONDS
+            done_found = False
+            while time.monotonic() < deadline:
+                if os.path.exists(error_path):
+                    error_msg = "Download failed"
+                    try:
+                        async with aiofiles.open(error_path, 'r') as f:
+                            error_msg = (await f.read()).strip()
+                    except Exception:
+                        pass
+                    try:
+                        os.remove(error_path)
+                    except OSError:
+                        pass
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail={"error_code": "GCS_DOWNLOAD_FAILED", "marker_content": error_msg}
+                    )
+                if os.path.exists(done_path) and os.path.exists(download_path):
+                    done_found = True
+                    break
+                await asyncio.sleep(1)
+
+            if not done_found:
+                # Timeout
+                try:
+                    if os.path.exists(request_path):
+                        os.remove(request_path)
+                except OSError:
+                    pass
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail={"error_code": "UNSTASH_TIMEOUT", "elapsed_seconds": settings.UNSTASH_TIMEOUT_SECONDS}
+                )
+
+            # --- Disk pre-flight for extract (size of tar × 2 + 500MB floor) ---
+            try:
+                tar_size = os.path.getsize(download_path)
+                required_bytes = max(int(tar_size * 2), 500 * 1024 * 1024)
+                baseline_state = self._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH)
+                if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "error_code": "INSUFFICIENT_DISK_SPACE",
+                            "required_bytes": required_bytes,
+                            "available_bytes": baseline_state["free_bytes"],
+                            "disk_state": baseline_state,
+                        },
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"Disk pre-flight skipped for unstash '{crawl_id}': {e}")
+
+            # --- Extract archive (failure preserves stashed_at, no .unstash-confirmed) ---
+            target_storage = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
+            try:
+                def _extract():
+                    os.makedirs(target_storage, exist_ok=True)
+                    with tarfile.open(download_path, 'r:gz') as tar:
+                        tar.extractall(path=target_storage, filter="data")
+                await anyio.to_thread.run_sync(_extract)
+                logger.info(f"Extracted unstash archive for '{crawl_id}' to '{target_storage}'.")
+            except Exception as e:
+                logger.error(f"Extract failed for unstash '{crawl_id}': {e}", exc_info=True)
+                # Cleanup partial extract; do NOT write .unstash-confirmed; preserve stashed_at
+                try:
+                    if os.path.isdir(target_storage):
+                        shutil.rmtree(target_storage)
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail={"error_code": "EXTRACT_FAILED", "exception": str(e)}
+                )
+
+            # --- Phase 2: write .unstash-confirmed; daemon will delete GCS + write cleanup-done ---
+            async with aiofiles.open(confirm_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.info(f"Wrote .unstash-confirmed for '{crawl_id}'. Waiting for daemon GCS cleanup...")
+
+            cleanup_deadline = time.monotonic() + settings.UNSTASH_CLEANUP_GRACE_SECONDS
+            gcs_cleanup_status = "deferred"
+            while time.monotonic() < cleanup_deadline:
+                if os.path.exists(cleanup_done_path):
+                    gcs_cleanup_status = "cleaned"
+                    break
+                await asyncio.sleep(1)
+
+            if gcs_cleanup_status == "deferred":
+                logger.warning(
+                    f"UNSTASH_GCS_ORPHAN crawl_id={crawl_id} "
+                    f"elapsed_seconds={settings.UNSTASH_CLEANUP_GRACE_SECONDS} "
+                    f"reason=cleanup_grace_expired "
+                    f"gcs_path=gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz"
+                )
+
+            # --- Clear stashed_at in Redis ---
+            job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+            fresh_job_info = await cache_service.get_json(job_key)
+            if fresh_job_info and "stashed_at" in fresh_job_info:
+                fresh_job_info.pop("stashed_at", None)
+                await cache_service.set_json(job_key, fresh_job_info)
+            logger.info(f"Cleared stashed_at for '{crawl_id}'.")
+
+            # --- Cleanup markers + downloaded tar ---
+            for path in (request_path, done_path, error_path, confirm_path, cleanup_done_path, download_path):
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except OSError as e:
+                    logger.warning(f"Failed to clean marker '{path}': {e}")
+
+            elapsed = round(time.monotonic() - start_time, 2)
+            return {
+                "crawl_id": crawl_id,
+                "status": "unstashed",
+                "restored_to": target_storage,
+                "elapsed_seconds": elapsed,
+                "gcs_cleanup_status": gcs_cleanup_status,
+            }
+
+        finally:
+            await self._release_ownership_lock(unstash_lock_key, lock_value)
 
     async def get_pending_callbacks(self) -> list:
         """Returns all failed webhook callbacks stored in Redis."""
@@ -1924,6 +2732,44 @@ class CrawlerManager:
             return None
         return marker
 
+    async def _cleanup_stale_state_for_relaunch(self, crawl_id: str, storage_path: str) -> None:
+        """
+        Wipes any persistent state from a prior run of this crawl_id that
+        would mislead the reconciler or downstream consumers into thinking
+        the new run is in a stale terminal state.
+
+        Called at the top of start_crawl (after makedirs) BEFORE the new
+        subprocess is spawned and BEFORE the new Redis state is written.
+
+        Currently cleans:
+          - {storage_path}/_completion_marker.json (any prior terminal marker:
+            success, OOM-failure, OOM-relaunch-failure, force-finish, or
+            reconciler-stale write — all 5 writers funnel here)
+
+        Future items (deferred — see spec §7):
+          - Stale crawl_lock:{crawl_id} Redis key
+          - Stale local_processes[crawl_id] entry
+          - Audit other persistent files in storage_path
+
+        Fail-open: each cleanup logs and continues on error. A failed cleanup
+        leaves the existing observed symptom (false marker reconciliation) —
+        no regression. The error is surfaced in logs for triage.
+
+        Args:
+            crawl_id: identifier of the crawl being launched.
+            storage_path: absolute path to {CRAWLER_STORAGE_PATH}/{crawl_id}/.
+        """
+        # 1. Completion marker — removes false signal that misleads the
+        #    reconciler's marker-check (sub-problem A) into declaring the
+        #    new running crawl finished and skipping its success webhook.
+        marker_path = os.path.join(storage_path, '_completion_marker.json')
+        if os.path.isfile(marker_path):
+            try:
+                os.unlink(marker_path)
+                logger.info(f"Removed stale completion marker for crawl_id '{crawl_id}' (relaunch)")
+            except OSError as e:
+                logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
+
     async def _reconcile_locked(self):
         """
         Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
@@ -2001,9 +2847,9 @@ class CrawlerManager:
 
                     last_activity_time = None
                     if last_heartbeat_str:
-                        last_activity_time = datetime.fromisoformat(str(last_heartbeat_str))
+                        last_activity_time = _parse_iso_naive_utc(str(last_heartbeat_str))
                     elif start_time_str:
-                        last_activity_time = datetime.fromisoformat(str(start_time_str))
+                        last_activity_time = _parse_iso_naive_utc(str(start_time_str))
 
                     # --- Ownership-aware stale detection ---
                     job_replica_id = job_data.get("replica_id")
@@ -2074,6 +2920,8 @@ class CrawlerManager:
 
                         job_data["status"] = final_status
                         job_data["shutdown_reason"] = "Stop cleanup (stale)" if is_stopping else "Stale job detected (missing heartbeat)"
+                        if not is_stopping:
+                            job_data["failure_cause"] = "stale_detected"
                         if "last_heartbeat" in job_data:
                             del job_data["last_heartbeat"]
 
@@ -2114,6 +2962,7 @@ class CrawlerManager:
                                 -1,
                                 job_data.get("crawl_mode", "standard"),
                                 request_id=reconcile_request_id,
+                                failure_cause="stale_detected",
                             ))
 
                         stale_jobs_count += 1
@@ -2195,10 +3044,13 @@ class CrawlerManager:
                 logger.error(f"Error listing archives directory during cleanup: {e}")
                 errors += 1
 
-            # Also clean up stale GCS download artifacts
+            # Also clean up stale GCS download artifacts (both archive + stash flows)
             for dir_path, file_suffixes in [
                 (settings.DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error')),
                 (settings.DOWNLOAD_REQUESTS_PATH, ('.request',)),
+                # Stash flow markers (2-phase commit) — daemon-owned /app/stash NOT cleaned here
+                (settings.STASH_DOWNLOAD_RESULTS_PATH, ('.tar.gz', '.done', '.error', '.unstash-confirmed', '.unstash-cleanup-done')),
+                (settings.STASH_DOWNLOAD_REQUESTS_PATH, ('.request',)),
             ]:
                 if not os.path.exists(dir_path):
                     continue

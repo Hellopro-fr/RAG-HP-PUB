@@ -16,6 +16,10 @@ func ServiceRowToProto(r db.ServiceRow) *pb.Service {
 	if r.Tags != "" {
 		_ = json.Unmarshal([]byte(r.Tags), &tags)
 	}
+	var publicPaths []string
+	if r.PublicPaths != "" {
+		_ = json.Unmarshal([]byte(r.PublicPaths), &publicPaths)
+	}
 	pbProtos := make([]pb.Protocol, 0, len(protos))
 	for _, s := range protos {
 		pbProtos = append(pbProtos, protoFromStr(s))
@@ -31,6 +35,8 @@ func ServiceRowToProto(r db.ServiceRow) *pb.Service {
 		ApiInfoUrl:    r.APIInfoURL,
 		GrpcAddress:   r.GRPCAddress,
 		LastScanError: r.LastScanError,
+		AuthPolicy:    authPolicyFromInt(r.AuthPolicy),
+		PublicPaths:   publicPaths,
 		CreatedAt:     timestamppb.New(r.CreatedAt),
 		UpdatedAt:     timestamppb.New(r.UpdatedAt),
 	}
@@ -48,11 +54,16 @@ func EndpointRowToProto(r db.EndpointRow) *pb.Endpoint {
 	if r.Tags != "" {
 		_ = json.Unmarshal([]byte(r.Tags), &tags)
 	}
-	return &pb.Endpoint{
+	out := &pb.Endpoint{
 		Id: r.ID, ServiceId: r.ServiceID, Method: r.Method, Path: r.Path,
 		Summary: r.Summary, OperationId: r.OperationID, Tags: tags,
 		Deprecated: r.Deprecated, Protocol: protoFromStr(r.Protocol),
 	}
+	if r.AuthPolicy != nil {
+		p := authPolicyFromInt(*r.AuthPolicy)
+		out.AuthPolicy = &p
+	}
+	return out
 }
 
 func protoFromStr(s string) pb.Protocol {
@@ -115,4 +126,33 @@ func StatusToStr(s pb.Status) string {
 		return "down"
 	}
 	return ""
+}
+
+// authPolicyFromInt maps the DB TINYINT to the proto enum.
+// Anything outside the known set (incl. 0/UNSPECIFIED) coerces to PUBLIC,
+// matching the spec fail-open default.
+func authPolicyFromInt(v int) pb.AuthPolicy {
+	switch v {
+	case 1:
+		return pb.AuthPolicy_PUBLIC
+	case 2:
+		return pb.AuthPolicy_BEARER
+	case 3:
+		return pb.AuthPolicy_ADMIN_KEY
+	}
+	return pb.AuthPolicy_PUBLIC
+}
+
+// AuthPolicyToInt maps the proto enum to the DB TINYINT.
+// UNSPECIFIED stores as 1 (PUBLIC) per the migration/seed contract.
+func AuthPolicyToInt(p pb.AuthPolicy) int {
+	switch p {
+	case pb.AuthPolicy_PUBLIC:
+		return 1
+	case pb.AuthPolicy_BEARER:
+		return 2
+	case pb.AuthPolicy_ADMIN_KEY:
+		return 3
+	}
+	return 1
 }

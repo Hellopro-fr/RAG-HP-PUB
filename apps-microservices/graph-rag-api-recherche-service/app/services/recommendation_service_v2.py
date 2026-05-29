@@ -12,6 +12,7 @@ from app.domain.models import (
     CaracteristiqueMatching,
 )
 from app.infrastructure.clients import clients
+from app.config import settings
 
 # Reuse normalization, enrichment, and scoring params from V1
 from app.services.recommendation_service import recommendation_service as v1_service
@@ -393,6 +394,13 @@ def score_product(
             }
         )
 
+    if scoring_params.get("debug"):
+        logging.warning(
+            "[V2-DETAIL] global=%.3f per_cid=%s",
+            global_score,
+            [(c["cid"], round(c["score"], 3), c["matched"]) for c in all_constraints],
+        )
+
     return global_score, details
 
 
@@ -661,6 +669,18 @@ class RecommendationServiceV2:
 
         # Apply absolute threshold
         absolute_threshold = scoring_params["absolute_threshold"]
+        if scoring_params.get("debug"):
+            logging.warning(
+                "[V2-FILTER] pid=%s id_frns=%s global=%.3f etat=%.3f typo=%.3f final=%.3f thr=%.3f keep=%s",
+                id_produit,
+                id_fournisseur,
+                global_score,
+                etat_score,
+                typo_score,
+                final_score,
+                absolute_threshold,
+                final_score >= absolute_threshold,
+            )
         if final_score < absolute_threshold:
             return None
 
@@ -768,6 +788,14 @@ class RecommendationServiceV2:
         results = []
         async for row in clients.execute_cypher_stream(query, params):
             results.append(row)
+        if settings.DEBUG_SCORING:
+            logging.warning(
+                "[V2-FETCH] raw_results=%d cids=%s id_categorie=%s min_matching_cids=%s",
+                len(results),
+                params.get("all_cids"),
+                params.get("id_categorie"),
+                params.get("min_matching_cids"),
+            )
         return results
 
     async def get_products_by_caracteristique_filters(
@@ -823,6 +851,11 @@ class RecommendationServiceV2:
             )
             score_time = time.perf_counter() - score_start
             logging.warning("[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)", score_time, len(raw_results), len(scored))
+            if scoring_params.get("debug"):
+                logging.warning(
+                    "[V2-RECAP] path=no-rerank fetched=%d scored=%d threshold=%.3f",
+                    len(raw_results), len(scored), scoring_params["absolute_threshold"],
+                )
 
             fetch_time = parallel_time
 
@@ -923,6 +956,11 @@ class RecommendationServiceV2:
             )
             score_time = time.perf_counter() - score_start
             logging.warning("[V2-TIMING] python_scoring: %.3fs (%d fetched, %d scored)", score_time, len(raw_results), len(scored))
+            if scoring_params.get("debug"):
+                logging.warning(
+                    "[V2-RECAP] path=rerank fetched=%d scored=%d threshold=%.3f",
+                    len(raw_results), len(scored), scoring_params["absolute_threshold"],
+                )
             fetch_time = parallel_time
 
             if not scored:

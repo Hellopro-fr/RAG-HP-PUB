@@ -1,14 +1,24 @@
 """Routes d'administration Typesense."""
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.credentials import settings
 from app.core.typesense_client import typesense_client
 from app.services.synonyms_service import auto_generate_synonyms
+from app.services import idf_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def _check_admin_token(x_admin_token: Optional[str]) -> None:
+    """Verifie le header X-Admin-Token. Raise 403 si invalide."""
+    if not x_admin_token or x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(
+            status_code=403,
+            detail="Missing or invalid X-Admin-Token header",
+        )
 
 
 class SynonymRequest(BaseModel):
@@ -121,6 +131,110 @@ def delete_synonym(synonym_id: str, collection: Optional[str] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ---------- IDF (regeneration en background) ----------
+
+@router.post(
+    "/compute-idf",
+    summary="Regenerer le dict IDF en background (compute_idf.py + reload)",
+)
+def admin_compute_idf(
+    background_tasks: BackgroundTasks,
+    collection: Optional[str] = None,
+    limit: int = 0,
+    x_admin_token: Optional[str] = Header(None, description="Token jetable"),
+):
+    """
+    Lance `scripts/compute_idf.py` en background pour regenerer
+    `app/data/idf_nom_produit.json` puis recharger le cache IDF en RAM.
+
+    Args:
+        collection: override la collection Typesense source (default = settings)
+        limit: si > 0, tronque l'export a N docs (test rapide, ~30-60s).
+               Par loi de Zipf, 500000 docs couvrent >95% du vocab utile.
+
+    Securite : header `X-Admin-Token` requis.
+    Duree typique : 2-5 min sur 2M docs (sans limit), 30-60s avec limit=500000.
+    Pour suivre l'avancement : `GET /admin/compute-idf/status`.
+
+    A appeler :
+      - Manuellement apres une ingestion massive (cf migrate_to_gke.sh)
+      - Automatiquement chaque semaine via cron PHP `compute_idf_weekly.php`
+      - En mode debug : `?limit=500000` pour valider la pipeline rapidement
+    """
+    _check_admin_token(x_admin_token)
+
+    if idf_service.is_running():
+        raise HTTPException(
+            status_code=429,
+            detail="A regeneration is already running. See GET /admin/compute-idf/status",
+        )
+
+    background_tasks.add_task(
+        idf_service.regenerate_idf_background, collection, limit,
+    )
+    return {
+        "status": "started",
+        "collection": collection or settings.TYPESENSE_COLLECTION,
+        "limit": limit if limit > 0 else "full",
+        "note": "Run in background. Poll GET /admin/compute-idf/status",
+    }
+
+
+@router.get(
+    "/compute-idf/status",
+    summary="Statut de la derniere regeneration IDF",
+)
+def admin_compute_idf_status():
+    """Retourne l'etat de la derniere regeneration : never_run/running/ok/error."""
+    return idf_service.get_state()
+
+
+@router.post(
+    "/reload-idf",
+    summary="Recharger l'IDF depuis GCS (propage l'update entre pods)",
+)
+def admin_reload_idf(
+    x_admin_token: Optional[str] = Header(None, description="Token jetable"),
+):
+    """
+    Force le re-download de l'IDF depuis GCS et reset le cache du loader.
+
+    Use case : apres `POST /admin/compute-idf`, le pod A genere et upload
+    sur GCS. Pour que les autres pods voient le nouvel IDF sans attendre
+    un restart, appeler cette route plusieurs fois (chaque appel atterit
+    sur un pod different via le LoadBalancer).
+
+    No-op si GCS non configure.
+    """
+    _check_admin_token(x_admin_token)
+
+    from pathlib import Path
+    from app.services import gcs_idf_storage, idf_loader
+
+    if not gcs_idf_storage.gcs_enabled():
+        return {
+            "status": "skipped",
+            "reason": "GCS_IDF_BUCKET non configure - reload n'a pas de sens en mode local",
+        }
+
+    local_path = Path(idf_loader._IDF_PATH)
+    downloaded = gcs_idf_storage.download(local_path)
+    if downloaded:
+        idf_loader.reset_cache_for_test()
+        idf_loader.idf_available()  # force lazy reload immediat pour logger la stat
+        return {
+            "status": "ok",
+            "downloaded_to": str(local_path),
+            "gcs_updated_at": gcs_idf_storage.get_blob_updated_at(),
+        }
+    return {
+        "status": "error",
+        "reason": "Download GCS echoue (blob absent ou erreur reseau)",
+    }
+
+
+# ---------- Synonymes auto-generation ----------
 
 @router.post(
     "/synonyms/auto-generate",

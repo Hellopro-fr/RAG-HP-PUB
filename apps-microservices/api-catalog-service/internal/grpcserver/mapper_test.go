@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -59,5 +60,38 @@ func TestProtoEnumRoundtrip(t *testing.T) {
 		if StatusToStr(statusFromStr(s)) != s {
 			t.Errorf("roundtrip failed for status %q", s)
 		}
+	}
+}
+
+func TestServiceRowToProto_AuthPolicy(t *testing.T) {
+	row := db.ServiceRow{
+		ID: "1", Name: "n", BaseURL: "http://x", Protocols: "[]",
+		Source: "manual", Status: "active",
+		AuthPolicy:  2, // BEARER
+		PublicPaths: `["/health","/ready"]`,
+	}
+	got := ServiceRowToProto(row)
+	if got.GetAuthPolicy() != pb.AuthPolicy_BEARER {
+		t.Fatalf("auth_policy=%v; want BEARER", got.GetAuthPolicy())
+	}
+	if want := []string{"/health", "/ready"}; !reflect.DeepEqual(got.GetPublicPaths(), want) {
+		t.Fatalf("public_paths=%v; want %v", got.GetPublicPaths(), want)
+	}
+}
+
+func TestEndpointRowToProto_AuthPolicy_Override(t *testing.T) {
+	policy := 3 // ADMIN_KEY
+	row := db.EndpointRow{ID: "e", ServiceID: "s", Protocol: "rest", Path: "/x", AuthPolicy: &policy}
+	got := EndpointRowToProto(row)
+	if got.GetAuthPolicy() != pb.AuthPolicy_ADMIN_KEY {
+		t.Fatalf("auth_policy=%v; want ADMIN_KEY", got.GetAuthPolicy())
+	}
+}
+
+func TestEndpointRowToProto_AuthPolicy_Unset(t *testing.T) {
+	row := db.EndpointRow{ID: "e", ServiceID: "s", Protocol: "rest", Path: "/x", AuthPolicy: nil}
+	got := EndpointRowToProto(row)
+	if got.AuthPolicy != nil {
+		t.Fatalf("expected proto AuthPolicy to remain nil for unset override")
 	}
 }

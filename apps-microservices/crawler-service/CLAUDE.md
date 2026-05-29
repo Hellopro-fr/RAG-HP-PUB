@@ -66,6 +66,8 @@ requirements.txt
 - `GET /results/{crawl_id}` -- Download crawl results archive
 - `GET /capacity` -- Current running/max capacity
 - `POST /archive/{crawl_id}` -- Archive finished job to GCS
+- `POST /stash/{crawl_id}` -- Stash a terminal crawl to GCS under stash/ (frees local disk)
+- `POST /unstash/{crawl_id}` -- Restore a stashed crawl from GCS to local storage
 - `POST /reindex-storage` -- Re-index orphaned jobs from disk
 - `POST /reconcile-jobs` -- Fix counter drift
 - `POST /prune-archives` -- Clean up old archives
@@ -135,6 +137,53 @@ Every archive attempt also logs a baseline disk state (`info`) and, on failure, 
 
 Spec: `docs/superpowers/specs/2026-04-18-archive-disk-space-preflight-design.md`.
 
+### Lock heartbeat (stash + archive)
+
+Both `stash_crawl` and `archive_crawl` acquire a Redis lock (`stash_lock:{id}` / `archive_lock:{id}`) via the ownership-safe `_acquire_ownership_lock` / `_release_ownership_lock` pair (replica-id-tagged value + Lua CAS DEL). The tar + cleanup block is wrapped in `_LockHeartbeat`, a background asyncio task that re-runs `EXPIRE` on the lock every `LOCK_HEARTBEAT_INTERVAL_SECONDS` via Lua compare-and-set so the TTL never lapses mid-op.
+
+Tunable settings (`app/core/config.py`):
+- `STASH_LOCK_TTL_SECONDS` — default `1800`
+- `ARCHIVE_LOCK_TTL_SECONDS` — default `1800`
+- `UNSTASH_LOCK_TTL_SECONDS` — default `600` (unstash is time-bounded by `UNSTASH_TIMEOUT_SECONDS`)
+- `LOCK_HEARTBEAT_INTERVAL_SECONDS` — default `300` (TTL / 6 → 5 missed renewals before TTL expiry)
+- `LOCK_HEARTBEAT_MAX_DURATION_SECONDS` — default `14400` (4 h hard cap; past this the heartbeat stops renewing so a hung op cannot indefinitely hold the lock)
+
+The matching nginx regex location at `apps-microservices/api-gateway-go/nginx.conf` (and the parity copy at `apps-microservices/api-gateway/nginx.conf`) sets `proxy_next_upstream off` on `/crawler/(stash|unstash|archive)/` to prevent POST retry fan-out across replicas. PHP client is the only retry layer (currently 503-only, see `3_archive_eligible_domains.php`).
+
+Spec: `docs/superpowers/specs/2026-05-21-stash-archive-lock-heartbeat-design.md`. Incident reference: crawl 6250 on 2026-05-20.
+
+## Stash — Free Disk Investigation Workflow
+
+Distinct from archiving. Use stash to **temporarily free local disk** for crawls that failed or were stopped and still need investigation. The data is parked in `gs://{bucket}/stash/` and can be retrieved later via `POST /unstash/{crawl_id}`.
+
+**Status modeling:** No new status enum. A single field `job_data["stashed_at"]` (ISO 8601 UTC) is set when data is in GCS, cleared when restored. This is **orthogonal** to status — a stashed crawl keeps its original terminal status (`failed`/`stopped`/`finished`).
+
+**Conflict matrix (POST /stash):**
+- 409 `CRAWL_IS_ACTIVE` if status is running/restarting_oom/stopping
+- 409 `ALREADY_ARCHIVED` if status is `archived`
+- 409 `ALREADY_STASHED` if `stashed_at` already set
+- 409 `OPERATION_IN_PROGRESS` if `stash_lock:{id}` or `unstash_lock:{id}` held
+- 503 `INSUFFICIENT_DISK_SPACE` if pre-flight fails (mirror archive shape)
+
+**Two-phase commit for unstash:** Naïve "delete GCS after download" loses data if extract fails. Instead:
+1. Daemon downloads → writes `.done`
+2. Service extracts tar.gz to original storage path
+3. Service writes `.unstash-confirmed` marker (signals extract success)
+4. Daemon polls `.unstash-confirmed` → `gcloud storage rm` → writes `.unstash-cleanup-done`
+5. Service polls `.unstash-cleanup-done` within `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s)
+6. On marker arrival: clear `stashed_at`, return 200 with `gcs_cleanup_status='cleaned'`
+7. On grace expired: clear `stashed_at`, return 200 with `gcs_cleanup_status='deferred'`. Orphan GCS object is logged as `UNSTASH_GCS_ORPHAN crawl_id=… elapsed_seconds=… reason=cleanup_grace_expired gcs_path=…` for operator grep (no Prometheus counter — operational observability is log-based).
+
+**Daemons:** A separate instance of the existing `upload_daemon.sh` and `download_daemon.sh` runs for stash flow, configured via env vars:
+- Upload: `UPLOAD_WATCH_DIR=…/crawler_stash UPLOAD_GCS_PREFIX=stash`
+- Download: `DOWNLOAD_REQUESTS_PATH=…/crawler_stash_download_requests DOWNLOAD_RESULTS_PATH=…/crawler_stash_download_results DOWNLOAD_GCS_PREFIX=stash DELETE_AFTER_DOWNLOAD=true`
+
+**Locks:** `stash_lock:{id}` + `unstash_lock:{id}` (Redis SET NX, ownership-safe DEL via Lua compare-and-delete to avoid clobbering a new acquirer after TTL expiry). Mirrors the `reconcile_leader_lock` pattern. The stash tar is wrapped in `_LockHeartbeat` so the TTL is refreshed mid-op — see "Lock heartbeat (stash + archive)" under the Archiving section for tunables.
+
+**Background cleanup:** `cleanup_archives` also sweeps stale stash download artifacts (`.tar.gz`, `.done`, `.error`, `.unstash-confirmed`, `.unstash-cleanup-done` in `/app/gcs-stash-downloads/` + `.request` in `/app/gcs-stash-requests/`). `/app/stash/` itself is NOT cleaned — the upload daemon owns its lifecycle.
+
+Spec: `docs/superpowers/specs/2026-05-19-stash-unstash-gcs-design.md`.
+
 ## robots.txt Blanket Block Bypass
 
 At startup, after fetching robots.txt, the crawler checks if the site has a blanket block (`Disallow: *` or `Disallow: /`) using a multi-path probe (`isBlanketBlock` in `robotsTxtGuard.ts`). Three diverse URLs are tested against `isAllowed()` — if all are blocked, `robots` is set to `undefined`, disabling all robots.txt filtering for the crawl.
@@ -197,7 +246,119 @@ Spec: `docs/superpowers/specs/2026-04-18-webhook-idempotency-design.md`.
 | 2 | Partial success | Status: `finished`, success webhook |
 | 3 | OOM relaunch | Status: `restarting_oom`, auto-relaunch (up to `MAX_OOM_RESTARTS`) |
 | 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
+| 5 | Redis connection lost (Node-side sustained loss) | Status: `failed`, failure webhook with `failure_cause=redis_lost` |
+| 6 | Progress stall (no URL progress for threshold) | Status: `failed`, failure webhook with `failure_cause=progress_stalled` |
 | Other | Failure | Status: `failed`, failure webhook |
+
+## Redis Loss / Progress Stall Detection
+
+The Node crawler runs two monitors that detect failure modes invisible to Python's existing stale detection:
+
+| Monitor | Trigger | Exit code | Threshold env var |
+|---------|---------|-----------|--------------------|
+| `RedisHealthMonitor` (`crawler/src/class/RedisHealthMonitor.ts`) | Sustained Redis loss across all clients (heartbeat + dedup) | 5 | `REDIS_LOSS_THRESHOLD_MS` (default 60000) |
+| `ProgressMonitor` (`crawler/src/class/ProgressMonitor.ts`) | No `requestsFinished` delta across stall window | 6 | `PROGRESS_STALL_THRESHOLD_MS` (default 600000) |
+
+Both monitors call `gracefulShutdown(reason, exitCode)` on fire. Python `_monitor_process` maps the exit codes to `status=failed` and persists `failure_cause` in `job_data` via the shared `_classify_exit_code` helper. The failure webhook payload to Marketplace BO carries the same `failure_cause` field.
+
+### `failure_cause` vocabulary
+
+This is a cross-language contract between Python orchestrator and Marketplace BO PHP (`fonctions_scrapping.php:handle_crawler_webhook`).
+
+| Exit code | `failure_cause` | Origin |
+|-----------|-----------------|--------|
+| -1 | `oom_max_restarts` | OOM restart budget exhausted by `_relaunch_oom_crawl` |
+| 3 | `oom_relaunch` | Node OOM, before max-restarts reached |
+| 4 | `update_mode_no_data` | Update-mode crawl produced 0 URLs |
+| 5 | `redis_lost` | `RedisHealthMonitor` fired |
+| 6 | `progress_stalled` | `ProgressMonitor` fired |
+| 137 / -9 | `killed_oom_system` | Process killed by OOM killer (SIGKILL) |
+| other negative | `signal_killed` | Killed by signal (non-OOM) |
+| other positive | `unknown` | Unexpected exit code |
+| (none — not from exit code) | `service_shutdown` | Orchestrator graceful shutdown |
+| (none — not from exit code) | `force_finished` | Operator-triggered force-finish |
+| (none — not from exit code) | `stale_detected` | Reconciliation stale detection |
+| (none — not from exit code) | `oom_relaunch_failed` | `start_crawl` raised during OOM relaunch |
+
+**Why this exists (root cause of the bug this addresses):** Python's `last_heartbeat` is a process-liveness proxy (PID alive ⇒ heartbeat fresh), not a crawl-progress proxy. Node-side Redis failures were silently swallowed at `main.ts:382` and `DedupManager.ts:13` — heartbeat publishes kept failing forever while reconciliation never fired because Python kept refreshing `last_heartbeat`. These monitors close that gap by exiting the Node process deterministically.
+
+### Troubleshooting false positives
+
+- `progress_stalled` on a legitimately slow domain → raise `PROGRESS_STALL_THRESHOLD_MS` per-deployment via env (e.g. `1200000` for 20 min).
+- `redis_lost` during a Redis maintenance window → preferred behavior; restart the crawl after maintenance completes.
+- Both thresholds validate against `NaN` and non-positive values; invalid env strings fall back to the defaults.
+
+### Manual smoke-test playbook
+
+1. Trigger a crawl on a test domain.
+2. After 30s: `docker pause <redis-container>` (or block port 6379 outbound from the crawler container with `iptables`).
+3. Watch `crawler-service` logs — expect `event: redis_lost` JSON line within ~60s.
+4. Process exits 5; verify Marketplace BO `crawl_events` row has `failure_cause=redis_lost`.
+5. `docker unpause <redis-container>` and trigger a fresh crawl — verify normal completion (regression check).
+
+For `progress_stalled` testing: set `PROGRESS_STALL_THRESHOLD_MS=120000` (2 min) in compose env for the test deployment, trigger a crawl on a hanging URL, wait 2 min, expect exit code 6.
+
+Spec: `docs/superpowers/specs/2026-05-21-redis-loss-progress-stall-detection-design.md`.
+Plan: `docs/superpowers/plans/2026-05-21-redis-loss-progress-stall-detection.md`.
+
+## Redis Connection Leak Prevention
+
+Three client-side prongs + one operator-side step prevent the connection-cap exhaustion that recurred until each crawler-service restart.
+
+### Python side (`libs/common-utils` cache_service)
+
+`init_redis_pool()` now builds a bounded, keepalive-protected client with proactive health checks. All connections are named per-replica for `CLIENT LIST` attribution.
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `REDIS_MAX_CONNECTIONS` | `20` | Pool cap per replica |
+| `REDIS_SOCKET_TIMEOUT_S` | `10` | Per-command timeout |
+| `REDIS_SOCKET_CONNECT_TIMEOUT_S` | `5` | Connect handshake timeout |
+| `REDIS_HEALTH_CHECK_INTERVAL_S` | `30` | Proactive ping cadence |
+
+`max_connections=0` is clamped to 1. When the pool is exhausted, `redis-py` raises `ConnectionError("Too many connections")` — surfaces as a 500 to the API caller, points us at the leak source rather than silently growing.
+
+Client name: `crawler-py-{HOSTNAME or pid-N}`.
+
+### Node side (crawler subprocess)
+
+Heartbeat publishes and `DedupManager` operations now multiplex on a single shared Redis client created via `createSharedRedisClient(redisUrl, { crawlId, monitor })` in `crawler/src/redisClient.ts`. Halves per-crawl conn count (2 → 1) and halves the orphan blast radius when the process is OOM-killed.
+
+`DedupManager` accepts `RedisClientType | string` — the URL form is preserved for backward compat (tests + legacy callers). When a shared client is injected, the owner attaches the `error` listener; `monitor.onError('dedup', …)` is not invoked on that path.
+
+Client name: `crawler-node-{crawlId}`. Monitor attached as `'shared'`.
+
+Note: `StatsManager` still opens its own Redis client. Deferred follow-up — see spec § Deferred follow-ups.
+
+### Server-side idle reap
+
+`./redis_diagnose.sh --apply-timeout` (run once from the deploy host) sets:
+
+- `CONFIG SET timeout 300` — server reaps idle conns after 5 min.
+- `CONFIG SET tcp-keepalive 60` — TCP-level keepalive every 60s.
+- `CONFIG REWRITE` — persists to `redis.conf` so the setting survives restart.
+
+These complement the client-side keepalive — TCP-half-open conns left behind by SIGKILL'd Node processes are reaped automatically.
+
+### Diagnostic tools
+
+| Tool | View | Use |
+|------|------|-----|
+| `./redis_diagnose.sh` (repo root) | Server-side global | All conns Redis sees, names + addrs, config |
+| `GET /admin/redis-debug` | Per-replica local | This replica's pool stats + global CLIENT LIST aggregation |
+
+The endpoint is authenticated via existing `verify_api_key` (`X-API-Key` header). Sampled `CLIENT LIST` entries are projected to a whitelisted field set (`name/addr/age/idle/cmd/fd`) so future redis-py additions cannot silently widen the leak surface.
+
+### Rollout (post-deploy)
+
+1. Run `./redis_diagnose.sh` baseline → record `connected_clients`, name distribution.
+2. Run `./redis_diagnose.sh --apply-timeout` once.
+3. Deploy code (Python pool + Node shared client + admin endpoint together).
+4. Run `./redis_diagnose.sh` again → expect `crawler-node-*` count = active crawls (not 2× active crawls); `timeout=300`; orphan count drops within 5 min.
+5. Curl `/admin/redis-debug` per replica → expect `pool_stats.in_use` well below `max_connections`.
+
+Spec: `docs/superpowers/specs/2026-05-21-redis-connection-leak-fix-design.md`.
+Plan: `docs/superpowers/plans/2026-05-21-redis-connection-leak-fix.md`.
 
 ## Capacity Counter Invariants
 

@@ -17,6 +17,7 @@ import (
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/gateway"
 	goGoogle "mcp-gateway/internal/google"
+	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/leexiadmin"
 	"mcp-gateway/internal/ringoveradmin"
 	oauth2pkg "mcp-gateway/internal/oauth2"
@@ -112,6 +113,11 @@ type Handler struct {
 	bddCatalog  *bddcatalog.Client
 	// serverAuthRepo backs the /api/v1/server-authorizations admin CRUD.
 	serverAuthRepo *repository.ServerAuthorizationRepo
+	// zohoImportRepo backs the /api/v1/zoho-imports/admin REST endpoints.
+	zohoImportRepo *repository.ZohoImportRepo
+	// encryptor is used by handlers that encrypt/decrypt sensitive blobs (e.g.
+	// auth_headers on the admin Zoho import row). nil when ENCRYPTION_KEY is unset.
+	encryptor *crypto.Encryptor
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -200,6 +206,18 @@ func (h *Handler) SetInstructionRepo(repo *repository.InstructionRepo) {
 // used by /api/v1/server-authorizations admin endpoints.
 func (h *Handler) SetServerAuthorizationRepo(repo *repository.ServerAuthorizationRepo) {
 	h.serverAuthRepo = repo
+}
+
+// SetEncryptor wires the AES-256-GCM encryptor used by handlers that store or
+// read encrypted blobs (e.g. the admin Zoho import auth_headers).
+func (h *Handler) SetEncryptor(enc *crypto.Encryptor) {
+	h.encryptor = enc
+}
+
+// SetZohoImportRepo injects the ZohoImportRepo used by the admin REST handlers
+// and the sheet-import dispatch.
+func (h *Handler) SetZohoImportRepo(repo *repository.ZohoImportRepo) {
+	h.zohoImportRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -306,6 +324,11 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			if req.ToolPrefix != "" {
 				h.registry.SetToolPrefix(id, req.ToolPrefix)
 			}
+			// Mirror tags into the registry so HasTag-driven dispatch
+			// (zoho injector) sees them on first registration.
+			if len(req.Tags) > 0 {
+				h.registry.SetTags(id, req.Tags)
+			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
@@ -333,7 +356,11 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 	}
 	tag := r.URL.Query().Get("tag")
 
-	servers, err := h.repo.ListAll(isActive, tag, "")
+	// Admins see every server; non-admins are scoped to rows they created.
+	// Scope-picker callers (token / OAuth2 creation forms) opt into the
+	// full active-server set with `?include_all=true` — see
+	// resolveListServersCreatorFilter for the rationale.
+	servers, err := h.repo.ListAll(isActive, tag, resolveListServersCreatorFilter(r))
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
@@ -492,6 +519,10 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.SaveTags(id, *req.Tags); err != nil {
 			log.Printf("[api] save tags error: %v", err)
 		}
+		// Mirror tags into the in-memory registry so downstream dispatch
+		// (HasTag-driven zoho injector) picks up the change without waiting
+		// for a re-discovery cycle.
+		h.registry.SetTags(id, *req.Tags)
 	}
 
 	// Update tool prefix on the in-memory registry if changed (even without re-discovery)
@@ -509,6 +540,14 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
 			h.registry.SetToolPrefix(id, refreshed.ToolPrefix)
+			// Re-discovery rebuilds the registry entry from the upstream
+			// init result; tags only live in the DB so we have to push
+			// them back into the registry after every re-discover.
+			refreshedTags := make([]string, 0, len(refreshed.Tags))
+			for _, t := range refreshed.Tags {
+				refreshedTags = append(refreshedTags, t.Tag)
+			}
+			h.registry.SetTags(id, refreshedTags)
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
 			}
@@ -789,8 +828,13 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 
 // checkOwnership verifies the current user owns the server.
 // If auth is disabled (no user in context), access is allowed.
+// Admins (role == "admin") bypass the ownership check so they can fix or
+// remove a server created by another user.
 // Returns false and writes a 403 response if ownership check fails.
 func checkOwnership(r *http.Request, srv *db.MCPServer, w http.ResponseWriter) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	userEmail := auth.UserEmailFromContext(r.Context())
 	if userEmail == "" {
 		// Auth disabled — no ownership filtering

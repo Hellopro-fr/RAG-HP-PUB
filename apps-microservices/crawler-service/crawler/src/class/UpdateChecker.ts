@@ -1,6 +1,7 @@
 import { UrlConsolidator } from './UrlConsolidator.js';
 import { StatsManager } from './StatsManager.js';
 import { JsonlWriter } from './JsonlWriter.js';
+import { PushedSet } from './PushedSet.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
 
 /**
@@ -87,6 +88,7 @@ export class UpdateChecker {
     private consolidator: UrlConsolidator;
     private statsManager: StatsManager;
     private jsonlWriter: JsonlWriter | null;
+    private pushedSet: PushedSet | null;
 
     // JSONL filenames
     static readonly DELETED_FILE = 'deleted_urls.jsonl';
@@ -97,10 +99,12 @@ export class UpdateChecker {
         consolidator: UrlConsolidator,
         statsManager: StatsManager,
         jsonlWriter: JsonlWriter | null = null,
+        pushedSet: PushedSet | null = null,
     ) {
         this.consolidator = consolidator;
         this.statsManager = statsManager;
         this.jsonlWriter = jsonlWriter;
+        this.pushedSet = pushedSet;
     }
 
     /**
@@ -121,6 +125,10 @@ export class UpdateChecker {
 
     /**
      * Check if a URL contains any forbidden query parameter.
+     *
+     * Pure check — no side effects. The `filtered_qm` stat is now incremented
+     * centrally in routes.ts for every URL containing '?', which already covers
+     * URLs with a forbidden param. Double-counting here would inflate the counter.
      */
     private hasForbiddenParams(url: string): boolean {
         try {
@@ -178,6 +186,12 @@ export class UpdateChecker {
         httpStatus: number,
         isFrenchContent: boolean,
     ): Promise<CheckUrlResult> {
+        // PushedSet guard — if a prior attempt already emitted for this URL,
+        // skip all side effects (writeJsonl + statsManager.increment).
+        if (this.pushedSet && !(await this.pushedSet.tryClaim(originalUrl))) {
+            return { action: 'ignored', url: originalUrl, source, reason: 'already_pushed' };
+        }
+
         const isFromDataset = source === 'dataset';
         const isHttpError = httpStatus >= 400 || httpStatus === 0;
         const isRedirect = rightTrimSlash(originalUrl) !== rightTrimSlash(loadedUrl);

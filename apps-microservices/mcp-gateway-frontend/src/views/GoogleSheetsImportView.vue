@@ -399,6 +399,7 @@ function autoDetectMapping() {
     mcp_env: ['mcpenv', 'env', 'environnement'],
     doc_slug: ['docslug', 'slug'],
     doc_description: ['docdescription', 'description'],
+    created_by: ['createdby', 'created_by', 'owner', 'email', 'createur', 'auteur'],
   }
 
   const newMapping: Record<string, string> = {}

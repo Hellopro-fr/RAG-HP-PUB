@@ -49,6 +49,10 @@ func (c *CatalogClient) Delete(ctx context.Context, id string) (*pb.DeleteServic
 	return c.cli.DeleteService(c.authCtx(ctx), &pb.DeleteServiceRequest{Id: id})
 }
 
+func (c *CatalogClient) UpdateEndpoint(ctx context.Context, req *pb.UpdateEndpointRequest) (*pb.Endpoint, error) {
+	return c.cli.UpdateEndpoint(c.authCtx(ctx), req)
+}
+
 func (c *CatalogClient) RescanAll(ctx context.Context) (*pb.RescanReport, error) {
 	return c.cli.RescanAll(c.authCtx(ctx), &pb.RescanAllRequest{})
 }

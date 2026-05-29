@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ type CatalogClientIface interface {
 	Create(ctx context.Context, req *pb.CreateServiceRequest) (*pb.Service, error)
 	Update(ctx context.Context, req *pb.UpdateServiceRequest) (*pb.Service, error)
 	Delete(ctx context.Context, id string) (*pb.DeleteServiceResponse, error)
+	UpdateEndpoint(ctx context.Context, req *pb.UpdateEndpointRequest) (*pb.Endpoint, error)
 	RescanAll(ctx context.Context) (*pb.RescanReport, error)
 	RescanService(ctx context.Context, id string) (*pb.RescanReport, error)
 }
@@ -43,10 +45,11 @@ func NewAPICatalogHandler(d APICatalogDeps) http.Handler {
 	return &apiCatalogHandler{d: d}
 }
 
-// ServeHTTP dispatches by method + {id}/{op} path values set by the Go 1.22 mux.
+// ServeHTTP dispatches by method + {id}/{op}/{endpoint_id} path values set by the Go 1.22 mux.
 func (h *apiCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	op := r.PathValue("op")
+	endpointID := r.PathValue("endpoint_id")
 
 	switch {
 	case id == "" && r.Method == http.MethodGet:
@@ -57,6 +60,8 @@ func (h *apiCatalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.rescanAll(w, r)
 	case id != "" && op == "rescan" && r.Method == http.MethodPost:
 		h.rescanOne(w, r, id)
+	case id != "" && endpointID != "" && r.Method == http.MethodPut:
+		h.updateEndpoint(w, r, id, endpointID)
 	case id != "" && op == "" && r.Method == http.MethodGet:
 		h.detail(w, r, id)
 	case id != "" && op == "" && r.Method == http.MethodPut:
@@ -113,12 +118,24 @@ type createReq struct {
 	Tags        []string `json:"tags"`
 	ApiInfoUrl  string   `json:"apiInfoUrl"`
 	GrpcAddress string   `json:"grpcAddress"`
+	AuthPolicy  string   `json:"authPolicy,omitempty"`
+	PublicPaths []string `json:"publicPaths,omitempty"`
 }
 
 func (h *apiCatalogHandler) create(w http.ResponseWriter, r *http.Request) {
 	var body createReq
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+		return
+	}
+	policy, err := authPolicyFromString(body.AuthPolicy)
+	if err != nil {
+		http.Error(w, `{"error":"invalid_auth_policy"}`, http.StatusBadRequest)
+		return
+	}
+	paths, err := normalizePublicPaths(body.PublicPaths)
+	if err != nil {
+		http.Error(w, `{"error":"invalid_public_path"}`, http.StatusBadRequest)
 		return
 	}
 	actor := actorEmail(r)
@@ -132,6 +149,8 @@ func (h *apiCatalogHandler) create(w http.ResponseWriter, r *http.Request) {
 		ApiInfoUrl:  body.ApiInfoUrl,
 		GrpcAddress: body.GrpcAddress,
 		CreatedBy:   actor,
+		AuthPolicy:  policy,
+		PublicPaths: paths,
 	}
 	svc, err := h.d.Client.Create(r.Context(), req)
 	if err != nil {
@@ -147,6 +166,12 @@ type updateReq struct {
 	Owner       *string  `json:"owner,omitempty"`
 	Tags        []string `json:"tags"`
 	Status      *string  `json:"status,omitempty"`
+	AuthPolicy  *string  `json:"authPolicy,omitempty"`
+	PublicPaths []string `json:"publicPaths,omitempty"`
+}
+
+type updateEndpointReq struct {
+	AuthPolicy *string `json:"authPolicy"`
 }
 
 func (h *apiCatalogHandler) update(w http.ResponseWriter, r *http.Request, id string) {
@@ -164,6 +189,22 @@ func (h *apiCatalogHandler) update(w http.ResponseWriter, r *http.Request, id st
 	if body.Status != nil {
 		st := statusFromString(*body.Status)
 		req.Status = &st
+	}
+	if body.AuthPolicy != nil {
+		p, err := authPolicyFromString(*body.AuthPolicy)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_auth_policy"}`, http.StatusBadRequest)
+			return
+		}
+		req.AuthPolicy = &p
+	}
+	if body.PublicPaths != nil {
+		np, err := normalizePublicPaths(body.PublicPaths)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_public_path"}`, http.StatusBadRequest)
+			return
+		}
+		req.PublicPaths = np
 	}
 	svc, err := h.d.Client.Update(r.Context(), req)
 	if err != nil {
@@ -201,6 +242,30 @@ func (h *apiCatalogHandler) rescanOne(w http.ResponseWriter, r *http.Request, id
 	}
 	h.audit(r.Context(), actorEmail(r), "catalog.rescan_service", id)
 	writeJSON(w, http.StatusOK, reportToJSON(rep))
+}
+
+func (h *apiCatalogHandler) updateEndpoint(w http.ResponseWriter, r *http.Request, serviceID, endpointID string) {
+	var body updateEndpointReq
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":"invalid_json"}`, http.StatusBadRequest)
+		return
+	}
+	req := &pb.UpdateEndpointRequest{Id: endpointID}
+	if body.AuthPolicy != nil {
+		p, err := authPolicyFromString(*body.AuthPolicy)
+		if err != nil {
+			http.Error(w, `{"error":"invalid_auth_policy"}`, http.StatusBadRequest)
+			return
+		}
+		req.AuthPolicy = &p
+	}
+	ep, err := h.d.Client.UpdateEndpoint(r.Context(), req)
+	if err != nil {
+		writeGRPCError(w, err)
+		return
+	}
+	h.audit(r.Context(), actorEmail(r), "catalog.update_endpoint", endpointID)
+	writeJSON(w, http.StatusOK, endpointToJSON(ep))
 }
 
 func (h *apiCatalogHandler) audit(ctx context.Context, actor, action, target string) {
@@ -247,6 +312,58 @@ func actorEmail(r *http.Request) string {
 		}
 	}
 	return ""
+}
+
+// --- Auth policy helpers ---
+
+func authPolicyFromString(s string) (pb.AuthPolicy, error) {
+	switch strings.ToLower(s) {
+	case "", "public":
+		return pb.AuthPolicy_PUBLIC, nil
+	case "bearer":
+		return pb.AuthPolicy_BEARER, nil
+	case "admin-key":
+		return pb.AuthPolicy_ADMIN_KEY, nil
+	}
+	return pb.AuthPolicy_AUTH_POLICY_UNSPECIFIED, fmt.Errorf("invalid_auth_policy")
+}
+
+func authPolicyToString(p pb.AuthPolicy) string {
+	switch p {
+	case pb.AuthPolicy_PUBLIC:
+		return "public"
+	case pb.AuthPolicy_BEARER:
+		return "bearer"
+	case pb.AuthPolicy_ADMIN_KEY:
+		return "admin-key"
+	}
+	return ""
+}
+
+// normalizePublicPath validates and canonicalizes a public path: must have a
+// leading "/", no trailing "/", and no wildcards. Returns error on violation.
+func normalizePublicPath(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" || !strings.HasPrefix(p, "/") || strings.ContainsAny(p, "*?") {
+		return "", fmt.Errorf("invalid_public_path")
+	}
+	p = strings.TrimRight(p, "/")
+	if p == "" {
+		return "", fmt.Errorf("invalid_public_path")
+	}
+	return p, nil
+}
+
+func normalizePublicPaths(in []string) ([]string, error) {
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		np, err := normalizePublicPath(p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, np)
+	}
+	return out, nil
 }
 
 // --- Protocol / Status / Source conversion helpers ---
@@ -321,19 +438,22 @@ func sourceToString(s pb.Source) string {
 
 func serviceToJSON(s *pb.Service) map[string]any {
 	out := map[string]any{
-		"id":            s.GetId(),
-		"name":          s.GetName(),
-		"baseUrl":       s.GetBaseUrl(),
-		"protocols":     protocolStrings(s.GetProtocols()),
-		"source":        sourceToString(s.GetSource()),
-		"status":        statusToString(s.GetStatus()),
-		"description":   s.GetDescription(),
-		"owner":         s.GetOwner(),
-		"tags":          s.GetTags(),
-		"apiInfoUrl":    s.GetApiInfoUrl(),
-		"grpcAddress":   s.GetGrpcAddress(),
-		"lastScanOk":    s.GetLastScanOk(),
-		"lastScanError": s.GetLastScanError(),
+		"id":                   s.GetId(),
+		"name":                 s.GetName(),
+		"baseUrl":              s.GetBaseUrl(),
+		"protocols":            protocolStrings(s.GetProtocols()),
+		"source":               sourceToString(s.GetSource()),
+		"status":               statusToString(s.GetStatus()),
+		"description":          s.GetDescription(),
+		"owner":                s.GetOwner(),
+		"tags":                 s.GetTags(),
+		"apiInfoUrl":           s.GetApiInfoUrl(),
+		"grpcAddress":          s.GetGrpcAddress(),
+		"lastScanOk":           s.GetLastScanOk(),
+		"lastScanError":        s.GetLastScanError(),
+		"authPolicy":           authPolicyToString(s.GetAuthPolicy()),
+		"publicPaths":          s.GetPublicPaths(),
+		"hasEndpointOverrides": s.GetHasEndpointOverrides(),
 	}
 	if ts := s.GetLastScannedAt(); ts != nil {
 		out["lastScannedAt"] = ts.AsTime()
@@ -356,7 +476,7 @@ func servicesToJSON(items []*pb.Service) []map[string]any {
 }
 
 func endpointToJSON(e *pb.Endpoint) map[string]any {
-	return map[string]any{
+	out := map[string]any{
 		"id":          e.GetId(),
 		"serviceId":   e.GetServiceId(),
 		"protocol":    strings.ToLower(e.GetProtocol().String()),
@@ -367,6 +487,10 @@ func endpointToJSON(e *pb.Endpoint) map[string]any {
 		"tags":        e.GetTags(),
 		"deprecated":  e.GetDeprecated(),
 	}
+	if pol := e.GetAuthPolicy(); pol != pb.AuthPolicy_AUTH_POLICY_UNSPECIFIED {
+		out["authPolicy"] = authPolicyToString(pol)
+	}
+	return out
 }
 
 func endpointsToJSON(items []*pb.Endpoint) []map[string]any {

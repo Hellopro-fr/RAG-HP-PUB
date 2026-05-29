@@ -52,7 +52,31 @@
       <!-- Generated .mcp.json -->
       <div>
         <div class="flex items-center justify-between mb-2">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Configuration .mcp.json</label>
+          <div class="flex items-center gap-3 flex-wrap">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Configuration .mcp.json</label>
+            <div class="inline-flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-700 text-xs">
+              <button
+                type="button"
+                class="px-2.5 py-1 font-medium transition-colors"
+                :class="authVariant === 'bearer'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'"
+                @click="authVariant = 'bearer'"
+              >
+                Bearer
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 font-medium transition-colors border-l border-gray-200 dark:border-gray-700"
+                :class="authVariant === 'scope'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'"
+                @click="authVariant = 'scope'"
+              >
+                X-MCP-Scope-Token
+              </button>
+            </div>
+          </div>
           <a
             :href="`/install-guide/${form.mcp_command || ''}`"
             target="_blank"
@@ -312,6 +336,16 @@
           />
         </div>
 
+        <!-- Section 3d: Acc\u00e8s Zoho (only when a Zoho server is selected) -->
+        <div
+          v-if="hasZohoServer"
+          v-show="isEdit || currentStep === zohoStepIndex"
+          :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
+        >
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Zoho</h3>
+          <ZohoFilterPanel v-model="form.zoho_filter" />
+        </div>
+
         <!-- Section 4: Expiration et verification -->
         <div v-show="isEdit || currentStep === expirationStepIndex" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''" class="space-y-4">
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Expiration et options</h3>
@@ -395,6 +429,10 @@
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s BDD</dt>
                 <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ bddFilterSummary }}</dd>
               </div>
+              <div v-if="hasZohoServer" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Zoho</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ zohoFilterSummary }}</dd>
+              </div>
             </dl>
           </div>
         </div>
@@ -442,9 +480,10 @@ import DragDropPanel from '@/components/shared/DragDropPanel.vue'
 import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
 import RingoverFilterPanel from '@/components/tokens/RingoverFilterPanel.vue'
 import BDDFilterPanel from '@/components/tokens/BDDFilterPanel.vue'
+import ZohoFilterPanel from '@/components/tokens/ZohoFilterPanel.vue'
 import InstructionsPicker from '@/components/llm-instructions/InstructionsPicker.vue'
 import type { ScopeToken, CreateTokenRequest } from '@/types/token'
-import type { LeexiFilter } from '@/types/leexi'
+import type { LeexiFilter, ZohoFilter } from '@/types/leexi'
 import type { RingoverFilter } from '@/types/ringover'
 import type { BDDFilter } from '@/types/bdd'
 
@@ -465,11 +504,12 @@ const stepLabels = computed(() => {
   if (hasLeexiServer.value) labels.push('Acc\u00e8s Leexi')
   if (hasRingoverServer.value) labels.push('Acc\u00e8s Ringover')
   if (hasBddServer.value) labels.push('Acc\u00e8s BDD')
+  if (hasZohoServer.value) labels.push('Acc\u00e8s Zoho')
   labels.push('Expiration et v\u00e9rification')
   return labels
 })
 // Computed step indices. The Instructions LLM step is always present (index 2);
-// Leexi, Ringover and BDD are conditional; expiration is always last.
+// Leexi, Ringover, BDD and Zoho are conditional; expiration is always last.
 const instructionsStepIndex = 2
 const leexiStepIndex = computed(() => (hasLeexiServer.value ? 3 : -1))
 const ringoverStepIndex = computed(() => {
@@ -483,11 +523,20 @@ const bddStepIndex = computed(() => {
   if (hasRingoverServer.value) idx++
   return idx
 })
+const zohoStepIndex = computed(() => {
+  if (!hasZohoServer.value) return -1
+  let idx = 3
+  if (hasLeexiServer.value) idx++
+  if (hasRingoverServer.value) idx++
+  if (hasBddServer.value) idx++
+  return idx
+})
 const expirationStepIndex = computed(() => {
   let idx = 3
   if (hasLeexiServer.value) idx++
   if (hasRingoverServer.value) idx++
   if (hasBddServer.value) idx++
+  if (hasZohoServer.value) idx++
   return idx
 })
 const lastStepIndex = computed(() => stepLabels.value.length - 1)
@@ -496,6 +545,17 @@ const loading = ref(false)
 const submitting = ref(false)
 const expiresEnabled = ref(false)
 const createdToken = ref<ScopeToken | null>(null)
+
+type AuthVariant = 'bearer' | 'scope'
+// Auth header variant for the post-creation .mcp.json snippet. Bearer is the
+// default for Claude.ai / Cursor / standard MCP clients; X-MCP-Scope-Token
+// remains available for custom-header integrations. The gateway accepts both.
+const authVariant = ref<AuthVariant>('bearer')
+
+function applyAuthHeader(json: string, variant: AuthVariant): string {
+  if (variant === 'scope') return json
+  return json.replace(/"X-MCP-Scope-Token:\s*/g, '"Authorization: Bearer ')
+}
 
 const isEdit = computed(() => !!route.params.id)
 
@@ -525,6 +585,14 @@ const hasBddServer = computed(() => {
   })
 })
 
+// hasZohoServer mirrors hasBddServer for the Zoho backend (tool_prefix === 'zoho').
+const hasZohoServer = computed(() => {
+  return dragDrop.selected.value.some(s => {
+    const srv = serversStore.servers.find(x => x.id === s.id)
+    return srv?.tool_prefix === 'zoho'
+  })
+})
+
 // Reactive list of currently-picked server ids — passed to BDDFilterPanel so
 // it can decide whether to render and which servers count as BDD backends.
 const bddDragDropServerIds = computed(() => dragDrop.selected.value.map(s => s.id))
@@ -542,6 +610,7 @@ const form = reactive({
   leexi_filter: { mode: 'none' } as LeexiFilter,
   ringover_filter: { mode: 'none' } as RingoverFilter,
   bdd_filter: { used_table_ids: [] } as BDDFilter,
+  zoho_filter: { mode: 'none' } as ZohoFilter,
   instruction_ids: [] as string[]
 })
 
@@ -563,9 +632,9 @@ const canGoNext = computed(() => {
   return currentStep.value < lastStepIndex.value
 })
 
-// If the user removes the Leexi/Ringover/BDD server while sitting on a (now-gone)
-// optional step, snap back to the new last step so the form remains navigable.
-watch([hasLeexiServer, hasRingoverServer, hasBddServer], () => {
+// If the user removes the Leexi/Ringover/BDD/Zoho server while sitting on a
+// (now-gone) optional step, snap back to the new last step so the form remains navigable.
+watch([hasLeexiServer, hasRingoverServer, hasBddServer, hasZohoServer], () => {
   if (currentStep.value > lastStepIndex.value) {
     currentStep.value = lastStepIndex.value
   }
@@ -610,6 +679,18 @@ const bddFilterSummary = computed(() => {
     : `${ids.length} table(s) autoris\u00e9e(s)`
 })
 
+const zohoFilterSummary = computed(() => {
+  const f = form.zoho_filter
+  switch (f.mode) {
+    case 'users':
+      return `${(f.allowed_emails || []).length} email(s) autoris\u00e9(s)`
+    case 'creator':
+      return 'Cr\u00e9ateur du jeton uniquement'
+    default:
+      return 'Aucune restriction'
+  }
+})
+
 const generatedMcpJson = computed(() => {
   if (!createdToken.value) return ''
   const tokenValue = createdToken.value.token || ''
@@ -630,12 +711,13 @@ const generatedMcpJson = computed(() => {
       ? mcpTemplate.replace(/"<allow-http>"/g, '"--allow-http"')
       // Remove the entire line that contains the placeholder (with trailing comma)
       : mcpTemplate.replace(/^[ \t]*"<allow-http>"[ \t]*,?[ \t]*\r?\n/gm, '')
-    return withAllowHttp
+    const rendered = withAllowHttp
       .replace(/https?:\/\/<gateway-url>/g, gatewayUrl)
       .replace(/<gateway-url>/g, gatewayUrl.replace(/^https?:\/\//, ''))
       .replace(/<server-name>/g, serverName)
       .replace(/<token>/g, tokenValue)
       .replace(/<votre-token>/g, tokenValue)
+    return applyAuthHeader(rendered, authVariant.value)
   }
 
   // Fallback for custom command
@@ -655,17 +737,23 @@ const generatedMcpJson = computed(() => {
     args = [gatewayUrl + '/mcp', '--header', headerArg]
   }
 
-  return JSON.stringify(
-    { mcpServers: { [serverName]: { command, args, env } } },
-    null,
-    2
+  return applyAuthHeader(
+    JSON.stringify(
+      { mcpServers: { [serverName]: { command, args, env } } },
+      null,
+      2
+    ),
+    authVariant.value
   )
 })
 
 onMounted(async () => {
   try {
     const [, execs] = await Promise.all([
-      serversStore.fetchServers(),
+      // include_all=true: non-admins must see every active server in the
+      // scope picker, otherwise they cannot grant a token access to a
+      // server they did not personally create.
+      serversStore.fetchServers({ include_all: true }),
       installGuidesPublicApi.listExecutors().catch(() => [] as InstallExecutor[]),
     ])
     executors.value = execs
@@ -704,6 +792,9 @@ onMounted(async () => {
         form.bdd_filter = {
           used_table_ids: [...(token.bdd_filter.used_table_ids || [])],
         }
+      }
+      if (token.zoho_filter) {
+        form.zoho_filter = { ...token.zoho_filter }
       }
       if (token.instruction_ids) {
         form.instruction_ids = [...token.instruction_ids]
@@ -776,6 +867,10 @@ async function handleSubmit() {
       bdd_filter: hasBddServer.value
         ? { used_table_ids: form.bdd_filter.used_table_ids || [] }
         : undefined,
+      // Only send the Zoho filter when a Zoho server is in scope.
+      zoho_filter: hasZohoServer.value
+        ? (form.zoho_filter.mode === 'none' ? { mode: 'none' } : form.zoho_filter)
+        : { mode: 'none' },
     }
 
     if (isEdit.value) {

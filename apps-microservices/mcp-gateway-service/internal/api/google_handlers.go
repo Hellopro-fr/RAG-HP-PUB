@@ -450,6 +450,12 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("credentials_column %q not found in sheet headers", req.CredentialsColumn)})
 		return
 	}
+	if req.CreatedByColumn != "" {
+		if _, ok := colIndex[req.CreatedByColumn]; !ok {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("created_by_column %q not found in sheet headers", req.CreatedByColumn)})
+			return
+		}
+	}
 	for key, col := range req.ExtraEnvColumns {
 		if col == "" {
 			continue
@@ -471,7 +477,7 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 		}
 	}
 
-	createdBy := auth.UserEmailFromContext(r.Context())
+	fallbackCreatedBy := auth.UserEmailFromContext(r.Context())
 	resp := SheetImportResponse{
 		Total:   len(rows),
 		Results: make([]SheetImportResultEntry, 0, len(rows)),
@@ -538,6 +544,7 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 			continue
 		}
 
+		rowCreatedBy := resolveCreatedBy(req.CreatedByColumn, row, colIndex, fallbackCreatedBy)
 		_, _, cerr := h.createInstanceFromSpec(
 			r.Context(),
 			tpl,
@@ -548,7 +555,7 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 			req.FixedIcon,
 			req.FixedToolPrefix,
 			req.AutoDiscover,
-			createdBy,
+			rowCreatedBy,
 		)
 		if cerr != nil {
 			_, msg := classifyCreateInstanceError(cerr)
@@ -694,6 +701,52 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 	}
 
 	id := uuid.New().String()
+	createdBy := resolveCreatedBy(mapping.CreatedBy, row, colIndex, userEmail)
+
+	// Zoho templates land in the dedicated zoho_imports table consumed by
+	// mcp-zoho-service. detectZohoTemplate is anchored on the catalog slug
+	// (^zoho(-.*)?$) so a future non-Zoho slug never accidentally hits the
+	// Zoho path.
+	if detectZohoTemplate(req.TemplateSlug) {
+		if h.zohoImportRepo == nil {
+			result.Status = "error"
+			result.Message = "zoho imports not configured"
+			return result
+		}
+		authHeadersStr := getVal(mapping.AuthHeaders)
+		var encryptedAuthHeaders []byte
+		if authHeadersStr != "" {
+			if h.encryptor != nil {
+				enc, eerr := h.encryptor.Encrypt([]byte(authHeadersStr))
+				if eerr != nil {
+					result.Status = "error"
+					result.Message = "encrypt auth_headers: " + eerr.Error()
+					return result
+				}
+				encryptedAuthHeaders = enc
+			} else {
+				encryptedAuthHeaders = []byte(authHeadersStr)
+			}
+		}
+		zohoRow := &db.ZohoImport{
+			Name:         name,
+			URL:          strings.TrimRight(serverURL, "/"),
+			AuthHeaders:  encryptedAuthHeaders,
+			CreatedBy:    createdBy,
+			TemplateSlug: req.TemplateSlug,
+			IsAdmin:      false,
+			IsActive:     true,
+		}
+		if cerr := h.zohoImportRepo.CreateUserImport(zohoRow); cerr != nil {
+			result.Status = "error"
+			result.Message = cerr.Error()
+			return result
+		}
+		discoverZohoToolsForImport(r.Context(), h.zohoImportRepo, h.encryptor, zohoRow)
+		result.Status = "imported"
+		return result
+	}
+
 	srv := db.MCPServer{
 		ID:                  id,
 		Name:                name,
@@ -704,7 +757,7 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 		HealthStatus:        "unknown",
 		MCPTransport:        "http",
 		DocSlug:             generateDocSlug(name, id),
-		CreatedBy:           userEmail,
+		CreatedBy:           createdBy,
 		// TemplateSlug is non-empty only when the caller is the templates
 		// catalog (e.g. custom-http). The regular /servers/import-google
 		// flow leaves this empty so the imported rows show up in the docs
@@ -824,4 +877,33 @@ func fetchGoogleEmail(client *http.Client) (string, error) {
 		return "", err
 	}
 	return info.Email, nil
+}
+
+// resolveCreatedBy returns the created_by value to stamp on a row.
+// Empty column header, missing header, or empty/whitespace cell all fall back
+// to fallback (the connected user's email). Non-empty cells are trimmed.
+//
+// Kept pure and decoupled from *http.Request so both import handlers share
+// one definition of the rule (see google_handlers_test.go for the contract).
+func resolveCreatedBy(column string, row []string, colIndex map[string]int, fallback string) string {
+	if column == "" {
+		return fallback
+	}
+	idx, ok := colIndex[column]
+	if !ok || idx >= len(row) {
+		return fallback
+	}
+	v := strings.TrimSpace(row[idx])
+	if v == "" {
+		return fallback
+	}
+	return v
+}
+
+// detectZohoTemplate returns true when the template's slug is a Zoho catalog
+// entry (matches ^zoho(-.*)?$). The detection is anchored on the catalog slug,
+// not on imported sheet content, so a future non-Zoho template can't
+// accidentally route through the zoho_imports table.
+func detectZohoTemplate(slug string) bool {
+	return slug == "zoho" || strings.HasPrefix(slug, "zoho-")
 }

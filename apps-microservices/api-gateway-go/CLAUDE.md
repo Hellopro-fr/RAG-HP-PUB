@@ -74,6 +74,24 @@ api-gateway-go/
 - `internal/` packages are unexported by default; expose only what Gin route handlers need.
 - Error strings are lowercase, no trailing punctuation (Go convention).
 
+## Auth Policy (catalog-driven)
+
+The verifier reads per-service `AuthPolicy` and `public_paths` from the catalog
+`Refresher` snapshot (`internal/auth/policy_snapshot.go` + `internal/catalog/refresher.go`)
+— there is no longer any hardcoded auth state in the gateway. Decision order per request
+(`AuthSnapshot.PolicyFor`):
+
+1. Endpoint override (`Endpoint.auth_policy` in catalog) wins.
+2. Else service `public_paths` exact match → `PUBLIC`.
+3. Else service `auth_policy` default (`public` / `bearer` / `admin-key`).
+4. Unknown service → `PUBLIC` (fail-open; logged once per hour per service).
+
+`PUBLIC` → no auth; `BEARER` → JWT + Redis/DB check; `ADMIN_KEY` → `X-Admin-Key` == `GATEWAY_ADMIN_KEY`.
+Edit policies in account-service-frontend → catalog persists → ≤`CATALOG_REFRESH_INTERVAL` (60s default)
+for the gateway snapshot to pick up the change. Snapshot empty (catalog down) → every service is `PUBLIC`.
+
+Spec: `docs/superpowers/specs/2026-05-28-apitokenverifier-catalog-driven-design.md`.
+
 ## Per-Service Downstream Timeouts
 
 The gateway applies per-service HTTP timeouts via `config.DownstreamTimeouts` in `internal/config/config.go`. Services NOT in the map use `timeout=0` (no timeout — current behavior preserved, zero blast radius on unlisted services).

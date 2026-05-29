@@ -10,6 +10,13 @@ services:
       - "8570:8570"
     env_file:
       - .env
+    # Bind-mount du dossier `app/data/` pour partager les fichiers de donnees
+    # generes offline (idf_nom_produit.json en particulier) entre l'hote et le
+    # container. Sans ce mount, le fichier IDF cree par compute_idf.py serait
+    # perdu au prochain `docker compose down` ou rebuild d'image.
+    # Le fichier JSON est gitignore (cf root .gitignore).
+    volumes:
+      - ./app/data:/app/app/data
     depends_on:
       - typesense
     restart: unless-stopped

@@ -1630,6 +1630,13 @@ export const routerDefaultHandler = async (
     domain: string | undefined,
     title: string = ""
 ) => {
+    // PushedSet guard — if a prior attempt already wrote this URL's row,
+    // skip pushData but still mark Crawlee-handled so retries do not loop.
+    if (context.pushedSet && !(await context.pushedSet.tryClaim(url))) {
+        await requestQueue.markRequestHandled(request);
+        return;
+    }
+
     let results = {
         url,
         content,

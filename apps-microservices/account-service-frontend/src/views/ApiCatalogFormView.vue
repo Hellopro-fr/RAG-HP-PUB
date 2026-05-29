@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as apiCatalog from '@/api/apiCatalog'
-import type { Protocol, Status } from '@/types/apiCatalog'
+import type { AuthPolicy, Protocol, Status } from '@/types/apiCatalog'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -27,6 +27,8 @@ const form = reactive<{
   apiInfoUrl: string
   grpcAddress: string
   status: Status
+  authPolicy: AuthPolicy
+  publicPaths: string[]
 }>({
   name: '',
   baseUrl: '',
@@ -37,11 +39,21 @@ const form = reactive<{
   apiInfoUrl: '',
   grpcAddress: '',
   status: 'active',
+  authPolicy: 'public',
+  publicPaths: [],
 })
 
 // In edit mode, identity fields (name, baseUrl, protocols, apiInfoUrl, grpcAddress)
 // are editable only when source === 'manual'. name is always locked in edit mode.
 const identityLocked = computed(() => isEdit.value && serviceSource.value !== 'manual')
+
+// Server-side normalization mirror: lowercase + append "-service" iff
+// missing. Preview the final stored name so the user sees it live.
+const normalizedName = computed(() => {
+  const raw = form.name.trim().toLowerCase()
+  if (!raw) return ''
+  return raw.endsWith('-service') ? raw : `${raw}-service`
+})
 
 const parsedTags = computed(() =>
   form.tagsInput
@@ -66,6 +78,18 @@ function toggleProtocol(p: Protocol) {
   }
 }
 
+const newPath = ref('')
+function addPath() {
+  const v = newPath.value.trim().replace(/\/+$/, '')
+  if (v && v.startsWith('/') && !v.match(/[*?]/) && !form.publicPaths.includes(v)) {
+    form.publicPaths = [...form.publicPaths, v]
+  }
+  newPath.value = ''
+}
+function removePath(i: number) {
+  form.publicPaths = form.publicPaths.filter((_, idx) => idx !== i)
+}
+
 onMounted(async () => {
   if (!isEdit.value) return
   loading.value = true
@@ -82,6 +106,8 @@ onMounted(async () => {
     form.apiInfoUrl = s.apiInfoUrl || ''
     form.grpcAddress = s.grpcAddress || ''
     form.status = s.status
+    form.authPolicy = s.authPolicy ?? 'public'
+    form.publicPaths = s.publicPaths ?? []
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Erreur de chargement'
   } finally {
@@ -99,6 +125,8 @@ async function submit() {
         owner: form.owner || undefined,
         tags: parsedTags.value.length ? parsedTags.value : undefined,
         status: auth.isAdmin ? form.status : undefined,
+        authPolicy: form.authPolicy,
+        publicPaths: form.publicPaths.length ? form.publicPaths : undefined,
       })
     } else {
       await apiCatalog.create({
@@ -110,6 +138,8 @@ async function submit() {
         tags: parsedTags.value.length ? parsedTags.value : undefined,
         apiInfoUrl: form.apiInfoUrl || undefined,
         grpcAddress: form.grpcAddress || undefined,
+        authPolicy: form.authPolicy,
+        publicPaths: form.publicPaths.length ? form.publicPaths : undefined,
       })
     }
     router.push('/admin/api')
@@ -156,15 +186,21 @@ async function submit() {
             <div class="space-y-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Nom <span class="text-red-500">*</span>
+                  Path <span class="text-red-500">*</span>
                 </label>
                 <input
                   v-model="form.name"
                   type="text"
-                  placeholder="mon-service-api"
+                  placeholder="mon-service ou mon-service-api"
                   :disabled="isEdit"
                   class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
+                <div v-if="!isEdit" class="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
+                  Premier segment de la route exposée par la passerelle (ex&nbsp;: <code class="font-mono">/mon-service</code>). Le nom est mis en minuscules&nbsp;; le suffixe <code class="font-mono">-service</code> est ajouté automatiquement s'il manque, sinon il est conservé tel quel.
+                  <div v-if="form.name" class="mt-1 text-blue-900 dark:text-blue-100">
+                    Route exposée&nbsp;: <code class="font-mono">/{{ normalizedName }}</code>
+                  </div>
+                </div>
                 <p v-if="isEdit" class="text-xs text-gray-400 mt-1">Le nom est un identifiant immuable.</p>
               </div>
 
@@ -269,6 +305,54 @@ async function submit() {
                 placeholder="rag, embedding, grpc"
                 class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
               />
+            </div>
+
+            <!-- Auth policy -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Politique d'authentification
+              </label>
+              <select
+                v-model="form.authPolicy"
+                class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+              >
+                <option value="public">Public (sans authentification)</option>
+                <option value="bearer">Bearer (JWT requis)</option>
+                <option value="admin-key">Admin key (X-Admin-Key)</option>
+              </select>
+            </div>
+
+            <!-- Public paths chip editor -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Chemins publics <span class="text-xs text-gray-400">(bypass auth — correspondance exacte, doit commencer par /)</span>
+              </label>
+              <div class="flex flex-wrap gap-2 mb-2">
+                <span
+                  v-for="(p, i) in form.publicPaths"
+                  :key="i"
+                  class="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm text-gray-800 dark:text-gray-200"
+                >
+                  {{ p }}
+                  <button type="button" class="ml-1 text-gray-500 hover:text-red-500" @click="removePath(i)">×</button>
+                </span>
+              </div>
+              <div class="flex gap-2">
+                <input
+                  v-model="newPath"
+                  type="text"
+                  placeholder="/health"
+                  class="h-11 flex-1 rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                  @keydown.enter.prevent="addPath"
+                />
+                <button
+                  type="button"
+                  class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
+                  @click="addPath"
+                >
+                  Ajouter
+                </button>
+              </div>
             </div>
 
             <!-- Status: admin only -->

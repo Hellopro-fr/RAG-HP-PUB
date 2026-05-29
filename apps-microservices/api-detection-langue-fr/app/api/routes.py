@@ -19,7 +19,7 @@ from app.models.schemas import (
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
-from app.core.metrics import DEDUP_HITS, VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED
+from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
 from app.services.page_validator import validate as validate_page, ValidationVerdict
@@ -28,6 +28,42 @@ from app.services.scraper import ScrapeResult
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class _AdmissionRejected(Exception):
+    """Raised when the route-level admission controller refuses a slot.
+
+    Translated to HTTP 503 + Retry-After on single /detect and to an
+    inline DetectionResponse(method='admission_rejected') on batch items.
+    """
+
+
+async def _fetch_with_admission(
+    url: str,
+    proxy_url: Optional[str],
+    endpoint_label: str,
+):
+    """Acquire a prod admission slot, run fetch_html, release.
+
+    Raises _AdmissionRejected when the pool is saturated. Increments
+    ADMISSION_REJECTED{endpoint=endpoint_label} on rejection.
+    Increments INFLIGHT_REQUESTS while the fetch is in flight.
+
+    Imported lazily from main to avoid a circular import (main imports
+    routes via the router include).
+    """
+    from main import _prod_admission
+
+    admitted = await _prod_admission.acquire()
+    if not admitted:
+        ADMISSION_REJECTED.labels(endpoint=endpoint_label).inc()
+        raise _AdmissionRejected
+    INFLIGHT_REQUESTS.inc()
+    try:
+        return await fetch_html(url, proxy_url)
+    finally:
+        INFLIGHT_REQUESTS.dec()
+        await _prod_admission.release()
 
 
 _inflight_dedup = InflightDedup()
@@ -113,17 +149,18 @@ async def _detect_single_url(
                     cached["analyzed_url"] = cached_req_url
                 return DetectionResponse(**cached)
 
-        # [2] Fetch HTML (with inflight dedup unless force_refresh)
+        # [2] Fetch HTML (admission gate inside dedup leader; followers wait
+        # on leader's future and do NOT acquire a slot).
         if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
             dedup_key = _normalize_url_for_dedup(url)
-            prev_hits = _inflight_dedup.hits
             fetch_result = await _inflight_dedup.coalesce(
-                dedup_key, lambda: fetch_html(url, proxy_url)
+                dedup_key,
+                lambda: _fetch_with_admission(url, proxy_url, "/api/v1/detect"),
             )
-            if _inflight_dedup.hits > prev_hits:
-                DEDUP_HITS.inc(_inflight_dedup.hits - prev_hits)
         else:
-            fetch_result = await fetch_html(url, proxy_url)
+            fetch_result = await _fetch_with_admission(
+                url, proxy_url, "/api/v1/detect"
+            )
 
         if not fetch_result:
             return DetectionResponse(
@@ -158,10 +195,15 @@ async def _detect_single_url(
                     if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
                         hp_key = _normalize_url_for_dedup(homepage)
                         hp_fetch = await _inflight_dedup.coalesce(
-                            hp_key, lambda: fetch_html(homepage, proxy_url)
+                            hp_key,
+                            lambda: _fetch_with_admission(
+                                homepage, proxy_url, "/api/v1/detect"
+                            ),
                         )
                     else:
-                        hp_fetch = await fetch_html(homepage, proxy_url)
+                        hp_fetch = await _fetch_with_admission(
+                            homepage, proxy_url, "/api/v1/detect"
+                        )
 
                     if not hp_fetch:
                         HOMEPAGE_FALLBACK_TRIGGERED.labels(outcome="network_failure").inc()
@@ -297,6 +339,16 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
             force_refresh=request.force_refresh,
             homepage_fallback=request.homepage_fallback,
         )
+    except _AdmissionRejected:
+        retry_after = os.getenv("ADMISSION_RETRY_AFTER_SECONDS", "30")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "detail": "Service temporarily saturated",
+                "retry_after_seconds": int(retry_after),
+            },
+            headers={"Retry-After": retry_after},
+        )
     except Exception as e:
         return DetectionResponse(
             ok=False, url=request.url, method='error', error=str(e)
@@ -373,6 +425,16 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
             return result
 
+        except _AdmissionRejected:
+            count = await _increment_count()
+            duration_ms = round((time.time() - item_start) * 1000)
+            logger.warning(
+                f"[BATCH] [{count}/{total_items}] ADMISSION_REJECTED {url} ({duration_ms}ms)"
+            )
+            return DetectionResponse(
+                ok=False, url=url, method='admission_rejected',
+                error='Service temporarily saturated',
+            )
         except Exception as e:
             count = await _increment_count()
             duration_ms = round((time.time() - item_start) * 1000)
@@ -438,7 +500,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 last_result = result
                 if result.ok:
                     return (_with_group(result, group_key), [])
-                if result.method in ('fetch_failed', 'challenge_page'):
+                if result.method in ('fetch_failed', 'challenge_page', 'admission_rejected'):
                     failed.append(item)
 
             return (_with_group(last_result, group_key), failed)
@@ -471,7 +533,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                         group_results[i] = _with_group(retry_result, group_key)
                         logger.info(f"[BATCH][first_match] Pass 2 OK groupe '{group_key}' via {item.url}")
                         break
-                    if retry_result.method not in ('fetch_failed', 'challenge_page'):
+                    if retry_result.method not in ('fetch_failed', 'challenge_page', 'admission_rejected'):
                         group_results[i] = _with_group(retry_result, group_key)
                         break
                 except Exception as e:
@@ -479,7 +541,10 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
         results = group_results
         success_count = sum(1 for r in results if r.ok)
-        error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
+        error_count = sum(
+            1 for r in results
+            if r.method in ('error', 'fetch_failed', 'challenge_page', 'admission_rejected')
+        )
         failed_count = len(results) - success_count - error_count
         processing_time_ms = (time.time() - start_time) * 1000
 
@@ -519,7 +584,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     # Pass 2 : retry séquentiel des fetch_failed et challenge_page
     failed_indices = [
         i for i, r in enumerate(results)
-        if r.method in ('fetch_failed', 'challenge_page')
+        if r.method in ('fetch_failed', 'challenge_page', 'admission_rejected')
     ]
 
     if failed_indices:
@@ -535,7 +600,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             try:
                 async with semaphore:
                     retry_result = await _process_item_core(item)
-                if retry_result.method not in ('fetch_failed', 'challenge_page'):
+                if retry_result.method not in ('fetch_failed', 'challenge_page', 'admission_rejected'):
                     results[idx] = retry_result
                     retry_success += 1
                     logger.info(
@@ -552,7 +617,10 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
     # Statistiques finales
     success_count = sum(1 for r in results if r.ok)
-    error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
+    error_count = sum(
+        1 for r in results
+        if r.method in ('error', 'fetch_failed', 'challenge_page', 'admission_rejected')
+    )
     failed_count = len(results) - success_count - error_count
 
     processing_time_ms = (time.time() - start_time) * 1000

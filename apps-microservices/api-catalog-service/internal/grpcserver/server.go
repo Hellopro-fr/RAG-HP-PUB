@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -41,7 +42,10 @@ func (s *Server) ListServices(ctx context.Context, req *pb.ListServicesRequest) 
 	}
 	out := &pb.ListServicesResponse{Total: total}
 	for _, r := range items {
-		out.Items = append(out.Items, ServiceRowToProto(r))
+		pbSvc := ServiceRowToProto(r)
+		has, _ := s.d.Services.HasEndpointOverrides(r.ID)
+		pbSvc.HasEndpointOverrides = has
+		out.Items = append(out.Items, pbSvc)
 	}
 	return out, nil
 }
@@ -73,6 +77,17 @@ func (s *Server) CreateService(ctx context.Context, req *pb.CreateServiceRequest
 	if req.GetName() == "" || req.GetBaseUrl() == "" {
 		return nil, status.Error(codes.InvalidArgument, "name and base_url required")
 	}
+	// Normalize: lower-case + append "-service" iff missing. Gateway routes
+	// under "/<name>" and the convention is for every name to end with
+	// "-service". Lowercasing keeps env-sourced and manual entries directly
+	// comparable so duplicates are caught before the unique-index error.
+	name := strings.ToLower(strings.TrimSpace(req.GetName()))
+	if !strings.HasSuffix(name, "-service") {
+		name += "-service"
+	}
+	if existing, err := s.d.Services.GetByName(name); err == nil && existing != nil {
+		return nil, status.Errorf(codes.AlreadyExists, "service %q already exists", name)
+	}
 	protos := make([]string, 0, len(req.GetProtocols()))
 	for _, p := range req.GetProtocols() {
 		if v := StrFromProto(p); v != "" {
@@ -85,12 +100,19 @@ func (s *Server) CreateService(ctx context.Context, req *pb.CreateServiceRequest
 		b, _ := json.Marshal(req.GetTags())
 		tagsJSON = string(b)
 	}
+	var pathsJSON string
+	if len(req.GetPublicPaths()) > 0 {
+		b, _ := json.Marshal(req.GetPublicPaths())
+		pathsJSON = string(b)
+	}
 	row := &db.ServiceRow{
-		ID: uuid.NewString(), Name: req.GetName(), BaseURL: req.GetBaseUrl(),
+		ID: uuid.NewString(), Name: name, BaseURL: req.GetBaseUrl(),
 		Protocols: string(pj), Source: "manual", Status: "active",
 		Description: req.GetDescription(), Owner: req.GetOwner(),
 		Tags: tagsJSON, APIInfoURL: req.GetApiInfoUrl(), GRPCAddress: req.GetGrpcAddress(),
 		CreatedBy: req.GetCreatedBy(),
+		AuthPolicy:  AuthPolicyToInt(req.GetAuthPolicy()),
+		PublicPaths: pathsJSON,
 	}
 	if err := s.d.Services.Create(row); err != nil {
 		return nil, status.Error(codes.AlreadyExists, err.Error())
@@ -120,6 +142,13 @@ func (s *Server) UpdateService(ctx context.Context, req *pb.UpdateServiceRequest
 	if req.Status != nil {
 		fields["status"] = StatusToStr(req.GetStatus())
 	}
+	if req.AuthPolicy != nil {
+		fields["auth_policy"] = AuthPolicyToInt(req.GetAuthPolicy())
+	}
+	if req.PublicPaths != nil {
+		b, _ := json.Marshal(req.GetPublicPaths())
+		fields["public_paths"] = string(b)
+	}
 	if len(fields) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "no fields to update")
 	}
@@ -141,6 +170,28 @@ func (s *Server) DeleteService(ctx context.Context, req *pb.DeleteServiceRequest
 		return nil, status.Error(codes.Unavailable, err.Error())
 	}
 	return &pb.DeleteServiceResponse{Deleted: true}, nil
+}
+
+func (s *Server) UpdateEndpoint(ctx context.Context, req *pb.UpdateEndpointRequest) (*pb.Endpoint, error) {
+	if req.GetId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "id required")
+	}
+	var policy *int
+	if req.AuthPolicy != nil {
+		p := AuthPolicyToInt(req.GetAuthPolicy())
+		policy = &p
+	}
+	if err := s.d.Endpoints.UpdateAuthPolicy(req.GetId(), policy); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "endpoint not found")
+		}
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+	row, err := s.d.Endpoints.GetByID(req.GetId())
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+	return EndpointRowToProto(*row), nil
 }
 
 func (s *Server) RescanAll(ctx context.Context, req *pb.RescanAllRequest) (*pb.RescanReport, error) {

@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { context } from "./context.js";
-import { recordQuestionMarkObservation, applyCliFlagGuard, getQuestionMarkDecisionMode } from "./questionMarkDecision.js";
+import { recordQuestionMarkObservation, applyCliFlagGuard, getQuestionMarkDecisionMode, persistObservations } from "./questionMarkDecision.js";
 
 const resetContextState = () => {
     context.questionMarkObservations = {
@@ -152,4 +155,71 @@ test("getQuestionMarkDecisionMode: escalated takes priority over observed", () =
     resetContextState();
     recordQuestionMarkObservation("https://example.com/page?ref=promo");
     assert.equal(getQuestionMarkDecisionMode("limitQuestionMark"), "escalated");
+});
+
+// -----------------------------------------------------------------------------
+// persistObservations — phase-1.5 sidecar tests
+// -----------------------------------------------------------------------------
+
+const makeTmpStorage = (): string =>
+    fs.mkdtempSync(path.join(os.tmpdir(), "qmark-obs-"));
+
+test("persistObservations: writes paramFrequency + samplesByParam + domainSpecificCount", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    recordQuestionMarkObservation("https://example.com/a?ref=x&tab=reviews");
+    recordQuestionMarkObservation("https://example.com/b?ref=y");
+
+    persistObservations(storage);
+
+    const filePath = path.join(storage, "_questionmark_observations.json");
+    assert.ok(fs.existsSync(filePath), "sidecar file not written");
+
+    const payload = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    assert.equal(payload.paramFrequency.ref, 2);
+    assert.equal(payload.paramFrequency.tab, 1);
+    assert.equal(payload.samplesByParam.ref.length, 2);
+    assert.equal(payload.samplesByParam.tab.length, 1);
+    assert.equal(payload.domainSpecificCount, 2);
+    assert.ok(typeof payload.persistedAt === "string");
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("persistObservations: empty observations write valid JSON with zero counts", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+
+    persistObservations(storage);
+
+    const payload = JSON.parse(fs.readFileSync(path.join(storage, "_questionmark_observations.json"), "utf-8"));
+    assert.deepEqual(payload.paramFrequency, {});
+    assert.deepEqual(payload.samplesByParam, {});
+    assert.equal(payload.domainSpecificCount, 0);
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("persistObservations: failure on invalid path does not throw", () => {
+    resetContextState();
+    recordQuestionMarkObservation("https://example.com/p?ref=x");
+
+    // path that cannot be written (no parent dir) — sidecar should swallow
+    const bogus = path.join(os.tmpdir(), "does-not-exist-" + Date.now(), "nested", "deeper");
+
+    assert.doesNotThrow(() => persistObservations(bogus));
+});
+
+test("persistObservations: atomic write — no .tmp left after success", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    recordQuestionMarkObservation("https://example.com/p?ref=x");
+
+    persistObservations(storage);
+
+    const entries = fs.readdirSync(storage);
+    assert.ok(entries.includes("_questionmark_observations.json"), "final file missing");
+    assert.ok(!entries.some(e => e.endsWith(".tmp")), "stale .tmp left behind");
+
+    fs.rmSync(storage, { recursive: true, force: true });
 });

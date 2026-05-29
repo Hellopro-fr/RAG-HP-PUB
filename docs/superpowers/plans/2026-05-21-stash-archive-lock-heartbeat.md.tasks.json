@@ -1,0 +1,58 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-21-stash-archive-lock-heartbeat.md",
+  "specPath": "docs/superpowers/specs/2026-05-21-stash-archive-lock-heartbeat-design.md",
+  "tasks": [
+    {
+      "id": 0,
+      "nativeTaskId": 32,
+      "subject": "T0: Add lock heartbeat config + bump STASH_LOCK_TTL",
+      "status": "completed",
+      "commitSha": "dace4e30",
+      "description": "**Goal:** Add 3 new settings + bump STASH_LOCK_TTL_SECONDS from 600 to 1800.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/config.py\n\n**Acceptance Criteria:**\n- STASH_LOCK_TTL_SECONDS: int = 1800\n- ARCHIVE_LOCK_TTL_SECONDS: int = 1800\n- LOCK_HEARTBEAT_INTERVAL_SECONDS: int = 300\n- LOCK_HEARTBEAT_MAX_DURATION_SECONDS: int = 14400\n\n**Verify:** `python -c \"from app.core.config import settings; print(settings.STASH_LOCK_TTL_SECONDS, settings.ARCHIVE_LOCK_TTL_SECONDS, settings.LOCK_HEARTBEAT_INTERVAL_SECONDS, settings.LOCK_HEARTBEAT_MAX_DURATION_SECONDS)\"` -> `1800 1800 300 14400`\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/config.py\"],\"verifyCommand\":\"python -c \\\"from app.core.config import settings; print(settings.STASH_LOCK_TTL_SECONDS, settings.ARCHIVE_LOCK_TTL_SECONDS, settings.LOCK_HEARTBEAT_INTERVAL_SECONDS, settings.LOCK_HEARTBEAT_MAX_DURATION_SECONDS)\\\"\",\"acceptanceCriteria\":[\"STASH_LOCK_TTL_SECONDS=1800\",\"ARCHIVE_LOCK_TTL_SECONDS=1800\",\"LOCK_HEARTBEAT_INTERVAL_SECONDS=300\",\"LOCK_HEARTBEAT_MAX_DURATION_SECONDS=14400\"]}\n```"
+    },
+    {
+      "id": 1,
+      "nativeTaskId": 33,
+      "subject": "T1: Implement _LockHeartbeat helper + unit tests",
+      "status": "completed",
+      "commitSha": "9ebcc211",
+      "blockedBy": [0],
+      "description": "**Goal:** Async context manager that renews Redis lock TTL via Lua CAS while op runs.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/crawler_manager.py (insert after _release_ownership_lock at line 1978)\n- Create: apps-microservices/crawler-service/tests/test_lock_heartbeat.py\n\n**Acceptance Criteria:**\n- Async context manager (`__aenter__` starts task, `__aexit__` cancels + awaits)\n- Lua CAS refresh: only EXPIRE if value matches expected\n- max_duration_seconds cap stops renewals\n- Value mismatch stops renewals\n- Transient Redis errors tolerated\n- asyncio.CancelledError swallowed cleanly\n- 5 unit tests pass\n\n**Verify:** `cd apps-microservices/crawler-service && pytest tests/test_lock_heartbeat.py -v` -> 5 passed\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_lock_heartbeat.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_lock_heartbeat.py -v\",\"acceptanceCriteria\":[\"Async context manager\",\"Lua CAS refresh\",\"max_duration cap\",\"value-mismatch stop\",\"transient redis error tolerated\",\"CancelledError swallowed\",\"5 tests pass\"]}\n```"
+    },
+    {
+      "id": 2,
+      "nativeTaskId": 34,
+      "subject": "T2: Wrap stash_crawl tar+cleanup block with _LockHeartbeat",
+      "status": "completed",
+      "commitSha": "1427b494",
+      "blockedBy": [1],
+      "description": "**Goal:** Integrate heartbeat in stash_crawl tar + Redis update + cleanup block.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/crawler_manager.py (stash_crawl around lines 2065-2199)\n- Modify: apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\n\n**Acceptance Criteria:**\n- `async with _LockHeartbeat(...)` wraps tar + stashed_at + cleanup\n- Existing `finally: _release_ownership_lock` preserved\n- All existing stash tests pass\n- test_stash_lock_survives_long_tar passes\n- test_stash_lock_released_on_replica_crash_simulation passes\n\n**Verify:** `cd apps-microservices/crawler-service && pytest tests/test_crawler_manager_stash.py -v` -> all pass\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager_stash.py -v\",\"acceptanceCriteria\":[\"async with _LockHeartbeat wraps tar+cleanup\",\"Existing tests pass\",\"Long-tar test passes\",\"Crash sim test passes\"]}\n```"
+    },
+    {
+      "id": 3,
+      "nativeTaskId": 35,
+      "subject": "T3: Migrate archive_lock to ownership-safe + heartbeat",
+      "status": "completed",
+      "commitSha": "e61f7f86",
+      "blockedBy": [1],
+      "description": "**Goal:** Replace constant-value SET NX + raw DEL with `_acquire_ownership_lock`/`_release_ownership_lock` pair + heartbeat wrapper. Preserve PHP cron caller contract.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/crawler_manager.py (archive_crawl lines 1678-1851)\n- Modify: apps-microservices/crawler-service/tests/test_crawler_manager.py\n\n**Acceptance Criteria:**\n- Archive uses `_acquire_ownership_lock(archive_lock_key, settings.ARCHIVE_LOCK_TTL_SECONDS)`\n- Release uses `_release_ownership_lock` (ownership-safe Lua DEL)\n- Tar wrapped in `_LockHeartbeat`\n- 409 string `Archiving for crawl '{id}' is already in progress.` preserved\n- 409 string `has already been archived` preserved (PHP regex match dependency)\n- 200 response shape unchanged\n- 3 new tests pass\n\n**Verify:** `cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py -k archive -v` -> all pass\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_crawler_manager.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py -k archive -v\",\"acceptanceCriteria\":[\"Ownership-safe lock\",\"Heartbeat wraps tar\",\"409 strings preserved\",\"200 shape preserved\",\"3 tests pass\"]}\n```"
+    },
+    {
+      "id": 4,
+      "nativeTaskId": 36,
+      "subject": "T4: Disable nginx upstream POST retry on /stash + /unstash + /archive",
+      "status": "completed",
+      "commitSha": "b91c44b2",
+      "description": "**Goal:** Add regex location before /crawler/ prefix in both gateways to intercept stash/unstash/archive with proxy_next_upstream off.\n\n**Files:**\n- Modify: apps-microservices/api-gateway-go/nginx.conf\n- Modify: apps-microservices/api-gateway/nginx.conf\n\n**Acceptance Criteria:**\n- Regex `~ ^/crawler/(stash|unstash|archive)/` block added before prefix `/crawler/` in both files\n- proxy_next_upstream off\n- proxy_read_timeout 14400s, proxy_send_timeout 14400s, proxy_connect_timeout 60s\n- Standard proxy headers preserved\n- Existing `/crawler/` block unchanged\n- nginx -t passes on both\n\n**Verify:**\n```\ndocker run --rm -v $PWD/apps-microservices/api-gateway-go/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t\ndocker run --rm -v $PWD/apps-microservices/api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t\n```\n\n```json:metadata\n{\"files\":[\"apps-microservices/api-gateway-go/nginx.conf\",\"apps-microservices/api-gateway/nginx.conf\"],\"verifyCommand\":\"docker run --rm -v $PWD/apps-microservices/api-gateway-go/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t && docker run --rm -v $PWD/apps-microservices/api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t\",\"acceptanceCriteria\":[\"Regex location ahead of prefix in both files\",\"proxy_next_upstream off\",\"proxy_read_timeout 14400s\",\"Existing block unchanged\",\"nginx -t passes on both\"]}\n```"
+    },
+    {
+      "id": 5,
+      "nativeTaskId": 37,
+      "subject": "T5: Delete dead crawler-service/nginx.conf + README cleanup",
+      "status": "completed",
+      "commitSha": "294c339d",
+      "description": "**Goal:** Remove obsolete nginx.conf (not mounted in docker-compose) and the README line that references it.\n\n**Files:**\n- Delete: apps-microservices/crawler-service/nginx.conf\n- Modify: apps-microservices/crawler-service/README.md (remove line 19 mention)\n\n**Acceptance Criteria:**\n- File removed via git rm\n- README no longer mentions nginx.conf\n- git grep only shows graphify-out artifacts\n- docker-compose unaffected\n\n**Verify:** `git ls-files apps-microservices/crawler-service/nginx.conf` empty + `grep -n nginx.conf apps-microservices/crawler-service/README.md` empty\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/nginx.conf\",\"apps-microservices/crawler-service/README.md\"],\"verifyCommand\":\"git ls-files apps-microservices/crawler-service/nginx.conf && grep -n nginx.conf apps-microservices/crawler-service/README.md\",\"acceptanceCriteria\":[\"File deleted\",\"README ref removed\",\"No production refs\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-21T00:06:00Z"
+}

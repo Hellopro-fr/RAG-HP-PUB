@@ -1,0 +1,110 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-19-stash-unstash-gcs.md",
+  "specPath": "docs/superpowers/specs/2026-05-19-stash-unstash-gcs-design.md",
+  "tasks": [
+    {
+      "id": 0,
+      "nativeTaskId": 1,
+      "subject": "Task 0: Add stash config vars to Settings",
+      "status": "completed",
+      "commitSha": "21bf809f",
+      "description": "**Goal:** Define all stash-related Pydantic Settings fields.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/config.py\n\n**Acceptance Criteria:**\n- 7 new fields with documented defaults\n- Settings instantiation succeeds\n\n**Verify:** `python -c 'from app.core.config import settings; print(settings.STASH_SHARED_PATH)'` → `/app/stash`\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/config.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -c 'from app.core.config import settings; assert settings.STASH_SHARED_PATH == \\\"/app/stash\\\"; print(\\\"OK\\\")'\",\"acceptanceCriteria\":[\"STASH_SHARED_PATH default /app/stash\",\"STASH_DOWNLOAD_REQUESTS_PATH default /app/gcs-stash-requests\",\"STASH_DOWNLOAD_RESULTS_PATH default /app/gcs-stash-downloads\",\"STASH_LOCK_TTL_SECONDS 600\",\"UNSTASH_LOCK_TTL_SECONDS 600\",\"UNSTASH_TIMEOUT_SECONDS 300\",\"UNSTASH_CLEANUP_GRACE_SECONDS 30\"]}\n```"
+    },
+    {
+      "id": 1,
+      "nativeTaskId": 2,
+      "subject": "Task 1: Parametrize upload_daemon.sh",
+      "status": "completed",
+      "commitSha": "940ffdb6",
+      "description": "**Goal:** Add UPLOAD_WATCH_DIR + UPLOAD_GCS_PREFIX + UPLOAD_DEAD_LETTER_SUBDIR env vars. Defaults preserve current behavior.\n\n**Files:**\n- Modify: tools/upload_daemon.sh\n\n**Verify:** `bash -n tools/upload_daemon.sh` + smoke-test default + stash override prints correct target bucket URL.\n\n```json:metadata\n{\"files\":[\"tools/upload_daemon.sh\"],\"verifyCommand\":\"bash -n tools/upload_daemon.sh && GCS_BUCKET_NAME=test UPLOAD_GCS_PREFIX=stash bash -c 'source tools/upload_daemon.sh 2>&1 || true' | grep -q 'gs://test/stash/'\",\"acceptanceCriteria\":[\"Default invocation uploads to gs://bucket/crawls/\",\"UPLOAD_GCS_PREFIX=stash routes to gs://bucket/stash/\",\"Retry logic + dead-letter unchanged\"]}\n```"
+    },
+    {
+      "id": 2,
+      "nativeTaskId": 3,
+      "subject": "Task 2: Parametrize download_daemon.sh + 2-phase commit",
+      "status": "completed",
+      "commitSha": "671a1644 + revert",
+      "description": "**Goal:** DOWNLOAD_GCS_PREFIX + DELETE_AFTER_DOWNLOAD env vars + new poll branch for *.unstash-confirmed markers. On gcloud rm success write .unstash-cleanup-done; on failure retain marker + log WARNING.\n\n**Files:**\n- Modify: tools/download_daemon.sh\n\n**Verify:** Syntax check + smoke-test default + smoke-test DELETE_AFTER_DOWNLOAD=true marker handling.\n\n```json:metadata\n{\"files\":[\"tools/download_daemon.sh\"],\"verifyCommand\":\"bash -n tools/download_daemon.sh\",\"acceptanceCriteria\":[\"Default downloads from crawls/ prefix\",\"DOWNLOAD_GCS_PREFIX=stash routes to stash/\",\"DELETE_AFTER_DOWNLOAD=true scans .unstash-confirmed markers\",\"gcloud rm success -> .unstash-cleanup-done written\",\"gcloud rm failure -> marker retained for retry + WARNING logged\"]}\n```"
+    },
+    {
+      "id": 3,
+      "nativeTaskId": 4,
+      "subject": "Task 3: Add stash volume mounts to docker-compose.yaml",
+      "status": "completed",
+      "commitSha": "14a02524",
+      "description": "**Goal:** Bind-mount 3 new host dirs.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/docker-compose.yaml\n\n**Verify:** `docker-compose --profile crawling config | grep stash` finds 3 mounts.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/docker-compose.yaml\"],\"verifyCommand\":\"docker-compose --profile crawling -f apps-microservices/crawler-service/docker-compose.yaml config | grep -E '(stash|gcs-stash)' | wc -l\",\"acceptanceCriteria\":[\"./crawler_stash:/app/stash\",\"./crawler_stash_download_requests:/app/gcs-stash-requests\",\"./crawler_stash_download_results:/app/gcs-stash-downloads\",\"Existing mounts unchanged\"]}\n```"
+    },
+    {
+      "id": 4,
+      "nativeTaskId": 5,
+      "subject": "Task 4: Add StashResponse + UnstashResponse schemas",
+      "status": "completed",
+      "commitSha": "9fde2bc3",
+      "description": "**Goal:** Pydantic response models for new endpoints.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/schemas/crawler.py\n\n**Verify:** Import + model instantiation with sample data succeeds.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/schemas/crawler.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -c 'from app.schemas.crawler import StashResponse, UnstashResponse; print(\\\"OK\\\")'\",\"acceptanceCriteria\":[\"StashResponse: crawl_id, status, stash_path, stashed_at\",\"UnstashResponse: crawl_id, status, restored_to, elapsed_seconds, optional gcs_cleanup_status\"]}\n```"
+    },
+    {
+      "id": 5,
+      "nativeTaskId": 6,
+      "subject": "Task 5: Implement stash_crawl() + ownership-safe lock helpers",
+      "status": "completed",
+      "commitSha": "bfe2a8c4",
+      "blockedBy": [0, 3, 4],
+      "description": "**Goal:** stash_crawl method + REPLICA_ID constant + _acquire/_release_ownership_lock helpers (Lua compare-and-delete).\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/crawler_manager.py\n\n**Verify:** Import smoke test + Task 9 unit tests pass for stash branches.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager_stash.py -v -k 'stash and not unstash'\",\"acceptanceCriteria\":[\"Pre-checks enforce conflict matrix\",\"Disk pre-flight reuses _get_archives_disk_state + _estimate_archive_required_bytes\",\"Tar via .staging + atomic move\",\"Redis stashed_at set BEFORE local cleanup\",\"Ownership-safe lock release via Lua eval\"]}\n```"
+    },
+    {
+      "id": 6,
+      "nativeTaskId": 7,
+      "subject": "Task 6: Implement unstash_crawl() with 2-phase commit",
+      "status": "completed",
+      "commitSha": "28321607",
+      "blockedBy": [0, 2, 3, 4],
+      "description": "**Goal:** unstash_crawl with full 2-phase commit: .request → poll .done/.error → extract → .unstash-confirmed → poll .unstash-cleanup-done (grace window) → clear stashed_at.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/crawler_manager.py\n\n**Verify:** Task 9 unit tests pass for unstash branches.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager_stash.py -v -k 'unstash'\",\"acceptanceCriteria\":[\"NOT_STASHED 409 if stashed_at null\",\"504 UNSTASH_TIMEOUT when no .done\",\"502 GCS_DOWNLOAD_FAILED on .error\",\"502 EXTRACT_FAILED preserves stashed_at + no .unstash-confirmed written\",\"Success: gcs_cleanup_status='cleaned'\",\"Cleanup grace expired: gcs_cleanup_status='deferred'\"]}\n```"
+    },
+    {
+      "id": 7,
+      "nativeTaskId": 8,
+      "subject": "Task 7: Add POST /stash + POST /unstash router endpoints",
+      "status": "completed",
+      "commitSha": "042fa4c2",
+      "blockedBy": [5, 6],
+      "description": "**Goal:** REST wiring with get_job_or_recover dependency.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/router/crawler.py\n\n**Verify:** Routes registered in app.routes.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/router/crawler.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -c 'from main import app; r=[x.path for x in app.routes]; assert \\\"/stash/{crawl_id}\\\" in r and \\\"/unstash/{crawl_id}\\\" in r; print(\\\"OK\\\")'\",\"acceptanceCriteria\":[\"POST /stash 202 StashResponse\",\"POST /unstash 200 UnstashResponse\",\"HTTPException surfaced unchanged\",\"get_job_or_recover dependency\"]}\n```"
+    },
+    {
+      "id": 8,
+      "nativeTaskId": 9,
+      "subject": "Task 8: Extend cleanup_archives for stash dirs",
+      "status": "completed",
+      "commitSha": "374c541b",
+      "blockedBy": [0],
+      "description": "**Goal:** Add STASH_DOWNLOAD_RESULTS_PATH + STASH_DOWNLOAD_REQUESTS_PATH to the background cleanup loop.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/crawler_manager.py (cleanup_archives method)\n\n**Verify:** Existing cleanup tests pass + Task 9 test_cleanup_includes_stash_dirs passes.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager.py -v -k cleanup\",\"acceptanceCriteria\":[\"STASH_DOWNLOAD_RESULTS_PATH scanned (.tar.gz/.done/.error/.unstash-confirmed/.unstash-cleanup-done)\",\"STASH_DOWNLOAD_REQUESTS_PATH scanned (.request)\",\"STASH_SHARED_PATH NOT touched\",\"Existing behavior preserved\"]}\n```"
+    },
+    {
+      "id": 9,
+      "nativeTaskId": 10,
+      "subject": "Task 9: Write unit tests for stash/unstash",
+      "status": "completed",
+      "commitSha": "94bea27e",
+      "blockedBy": [5, 6, 7, 8],
+      "description": "**Goal:** 15 unit tests covering all branches.\n\n**Files:**\n- Create: apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\n\n**Verify:** `pytest tests/test_crawler_manager_stash.py -v` → all pass.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/tests/test_crawler_manager_stash.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && pytest tests/test_crawler_manager_stash.py -v\",\"acceptanceCriteria\":[\"15 tests covering spec Section 8\",\"AsyncMock fixtures for Redis\",\"tmp_path for filesystem\",\"All pass\"]}\n```"
+    },
+    {
+      "id": 10,
+      "nativeTaskId": 11,
+      "subject": "Task 10: Write integration + daemon tests",
+      "status": "completed",
+      "commitSha": "a83cdf7b",
+      "blockedBy": [1, 2, 5, 6, 7],
+      "description": "**Goal:** 3 bash scripts: hermetic daemon parametrization + E2E GCS round-trip + dead-letter verification.\n\n**Files:**\n- Create: apps-microservices/crawler-service/tests/test_daemon_parametrization.sh\n- Create: apps-microservices/crawler-service/tests/integration/test_stash_unstash_e2e.sh\n- Create: apps-microservices/crawler-service/tests/integration/test_stash_dead_letter.sh\n\n**Verify:** `bash tests/test_daemon_parametrization.sh` passes (hermetic). E2E + dead-letter run manually with GCS auth.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/tests/test_daemon_parametrization.sh\",\"apps-microservices/crawler-service/tests/integration/test_stash_unstash_e2e.sh\",\"apps-microservices/crawler-service/tests/integration/test_stash_dead_letter.sh\"],\"verifyCommand\":\"bash apps-microservices/crawler-service/tests/test_daemon_parametrization.sh\",\"acceptanceCriteria\":[\"Daemon parametrization hermetic + passes locally\",\"E2E round-trip stash + unstash works\",\"Dead-letter triggered after 3 retries\"]}\n```"
+    },
+    {
+      "id": 11,
+      "nativeTaskId": 12,
+      "subject": "Task 11: Update documentation",
+      "status": "completed",
+      "commitSha": "0e86a807",
+      "blockedBy": [1, 2, 5, 6, 7, 8],
+      "description": "**Goal:** Reflect new endpoints + daemon variants across 4 doc files.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/CLAUDE.md\n- Modify: apps-microservices/crawler-service/README.md\n- Modify: docs/daemon_guide.md\n- Modify: tools/CLAUDE.md\n\n**Verify:** `grep -c 'POST /stash' apps-microservices/crawler-service/CLAUDE.md docs/daemon_guide.md` ≥ 3.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/CLAUDE.md\",\"apps-microservices/crawler-service/README.md\",\"docs/daemon_guide.md\",\"tools/CLAUDE.md\"],\"verifyCommand\":\"grep -c 'POST /stash' apps-microservices/crawler-service/CLAUDE.md docs/daemon_guide.md\",\"acceptanceCriteria\":[\"crawler-service CLAUDE.md: API entries + Stash section + cleanup note\",\"README.md: stash entries in Administrative section\",\"daemon_guide.md: 3 new Shared Dirs rows + systemd examples + orphan troubleshooting\",\"tools/CLAUDE.md: new env vars listed\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-19T19:00:00Z"
+}

@@ -1,0 +1,24 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-20-crawler-daemon-launcher.md",
+  "specPath": "docs/superpowers/specs/2026-05-20-crawler-daemon-launcher-design.md",
+  "tasks": [
+    {
+      "id": 0,
+      "nativeTaskId": 30,
+      "subject": "T0: Create tools/start-crawler-daemon.sh",
+      "status": "completed",
+      "commitSha": "3d836b29",
+      "description": "**Goal:** Ship the executable interactive launcher managing 4 daemon variants via screen.\n\n**Files:**\n- tools/start-crawler-daemon.sh (create + chmod +x)\n\n**Verify:** `bash -n tools/start-crawler-daemon.sh && test -x tools/start-crawler-daemon.sh && echo OK`\n\n```json:metadata\n{\"files\":[\"tools/start-crawler-daemon.sh\"],\"verifyCommand\":\"bash -n tools/start-crawler-daemon.sh && test -x tools/start-crawler-daemon.sh && echo OK\",\"acceptanceCriteria\":[\"File exists with +x mode\",\"bash -n syntax check passes\",\"DAEMONS array has 4 entries\",\"Helpers is_running/get_pid/stop_daemon/start_daemon defined\",\"Main loop iterates DAEMONS\",\"set -e at top\",\"git ls-files --stage shows 100755 mode\"]}\n```"
+    },
+    {
+      "id": 1,
+      "nativeTaskId": 31,
+      "subject": "T1: Update docs/daemon_guide.md runbook for launcher",
+      "status": "completed",
+      "commitSha": "3feb011f",
+      "blockedBy": [0],
+      "description": "**Goal:** Append 'One-shot launcher' section before BIND_MOUNT_MISSING + 2 cross-ref tips.\n\n**Files:**\n- docs/daemon_guide.md\n\n**Verify:** `grep -c 'One-shot launcher' docs/daemon_guide.md` → 1; `grep -c 'Prefer' docs/daemon_guide.md` → 2\n\n```json:metadata\n{\"files\":[\"docs/daemon_guide.md\"],\"verifyCommand\":\"grep -c 'One-shot launcher' docs/daemon_guide.md\",\"acceptanceCriteria\":[\"New section header present before BIND_MOUNT_MISSING\",\"Screen-session table with 4 rows\",\"bash usage block\",\"attach/tail/stop commands\",\"Prerequisites pointing at BIND_MOUNT_MISSING\",\"2 Tip: cross-refs (upload + download sections)\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-20T17:50:00Z"
+}

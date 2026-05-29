@@ -103,6 +103,13 @@
             <option value="6+">6 et plus</option>
           </select>
         </label>
+        <label v-if="authStore.isAdmin" class="flex flex-col gap-1 text-sm">
+          <span class="text-gray-600 dark:text-gray-400">Cree par</span>
+          <select v-model="filters.createdBy" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+            <option value="">Tous</option>
+            <option v-for="email in creators" :key="email" :value="email">{{ email }}</option>
+          </select>
+        </label>
         <label class="flex flex-col gap-1 text-sm">
           <span class="text-gray-600 dark:text-gray-400">Cree apres</span>
           <input v-model="filters.createdFrom" type="date" class="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200" />
@@ -203,12 +210,23 @@ const filters = reactive({
   toolsBucket: '' as '' | '0' | '1-5' | '6+',
   createdFrom: '',
   createdTo: '',
+  createdBy: '',
 })
 
 const transportOptions = computed(() => {
   const set = new Set<string>()
   for (const s of serversStore.servers) {
     if (s.transport_type) set.add(s.transport_type)
+  }
+  return Array.from(set).sort()
+})
+
+// Distinct creator emails for the admin-only "Cree par" filter dropdown.
+// Skipped on non-admins because the API already scopes the list server-side.
+const creators = computed(() => {
+  const set = new Set<string>()
+  for (const s of serversStore.servers) {
+    if (s.created_by) set.add(s.created_by)
   }
   return Array.from(set).sort()
 })
@@ -241,6 +259,7 @@ const filteredServers = computed(() => {
     if (filters.auth === 'without' && s.has_auth_headers) return false
     if (filters.toolsBucket && !matchesToolsBucket(s.tools_count, filters.toolsBucket)) return false
     if (!matchesCreatedRange(s.created_at)) return false
+    if (filters.createdBy && s.created_by !== filters.createdBy) return false
     return true
   })
 })
@@ -256,6 +275,7 @@ const activeFilterCount = computed(() => {
   if (filters.toolsBucket) n++
   if (filters.createdFrom) n++
   if (filters.createdTo) n++
+  if (filters.createdBy) n++
   return n
 })
 
@@ -269,6 +289,7 @@ function resetFilters() {
   filters.toolsBucket = ''
   filters.createdFrom = ''
   filters.createdTo = ''
+  filters.createdBy = ''
 }
 
 onMounted(() => {
@@ -277,7 +298,11 @@ onMounted(() => {
 })
 
 function loadServers() {
-  serversStore.fetchServers()
+  // include_all=true so non-admins see every active server here, matching
+  // the token / OAuth2 scope-picker reads. Mutation handlers still go
+  // through the ownership-gated backend endpoints — a non-owner who acts
+  // on a row they did not create receives 403 from the API.
+  serversStore.fetchServers({ include_all: true })
 }
 
 function handleToggle(id: string, enable: boolean) {
@@ -291,7 +316,7 @@ async function handleToggleTool(serverId: string, toolName: string, enable: bool
     } else {
       await serversApi.disableTool(serverId, toolName)
     }
-    await serversStore.fetchServers()
+    await serversStore.fetchServers({ include_all: true })
   } catch (err) {
     console.error('Failed to toggle tool:', err)
   }
