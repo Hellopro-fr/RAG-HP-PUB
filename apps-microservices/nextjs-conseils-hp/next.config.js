@@ -22,6 +22,7 @@ const nextConfig = {
 
   images: {
     remotePatterns: [
+      { protocol: 'https', hostname: 'www.hellopro.fr' },
       { protocol: 'https', hostname: 'cdn.hellopro.fr' },
       { protocol: 'https', hostname: 'api.hellopro.fr' },
       { protocol: 'https', hostname: '**.hellopro.fr' },
