@@ -298,7 +298,11 @@ onMounted(() => {
 })
 
 function loadServers() {
-  serversStore.fetchServers()
+  // include_all=true so non-admins see every active server here, matching
+  // the token / OAuth2 scope-picker reads. Mutation handlers still go
+  // through the ownership-gated backend endpoints — a non-owner who acts
+  // on a row they did not create receives 403 from the API.
+  serversStore.fetchServers({ include_all: true })
 }
 
 function handleToggle(id: string, enable: boolean) {
@@ -312,7 +316,7 @@ async function handleToggleTool(serverId: string, toolName: string, enable: bool
     } else {
       await serversApi.disableTool(serverId, toolName)
     }
-    await serversStore.fetchServers()
+    await serversStore.fetchServers({ include_all: true })
   } catch (err) {
     console.error('Failed to toggle tool:', err)
   }
