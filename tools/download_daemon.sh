@@ -89,11 +89,18 @@ process_move_requests() {
             # cleans; target-present is the authoritative success signal.)
             echo "Already moved (target present): $crawl_id"
             touch "$done_marker"; rm -f "$move_file"
+        elif ! gcloud storage ls "$src" >/dev/null 2>&1; then
+            # mv failed, target absent, AND source absent: the stash tar is most
+            # likely still being uploaded by the upload daemon (auto-stash sets
+            # stashed_at optimistically before the upload lands). Treat as
+            # TRANSIENT — leave the request so the next poll retries; do NOT write
+            # .move-error (which would surface a spurious failure to the caller).
+            echo "Source not yet in GCS for $crawl_id (upload in flight?); leaving request for retry"
         else
-            # Genuine failure. Write the error marker FIRST and only consume the
-            # request once it's durably written — if the results volume is
-            # unwritable, leave the request so the next poll retries instead of
-            # losing the failure signal.
+            # Genuine failure (source present, move still failed). Write the error
+            # marker FIRST and only consume the request once it's durably written —
+            # if the results volume is unwritable, leave the request so the next
+            # poll retries instead of losing the failure signal.
             if echo "ERROR: move failed for $crawl_id at $(date)" > "$error_marker" 2>/dev/null && [ -s "$error_marker" ]; then
                 rm -f "$move_file"
             else

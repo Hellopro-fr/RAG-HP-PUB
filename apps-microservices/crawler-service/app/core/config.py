@@ -48,7 +48,9 @@ class Settings(BaseSettings):
     MOVE_RESULTS_PATH: str = "/app/gcs-move-results"
     MOVE_SOURCE_PREFIX: str = "stash"
     MOVE_TARGET_PREFIX: str = "crawls"
-    MOVE_TIMEOUT_SECONDS: int = 120
+    # Server-side same-bucket rewrite is fast but not instant for very large
+    # objects; 600s keeps the inline /archive call from 504-ing on big crawls.
+    MOVE_TIMEOUT_SECONDS: int = 600
 
     # Stash flow Redis lock TTLs and timeouts (seconds).
     # STASH_LOCK_TTL is bumped to 1800s (was 600s) so it exceeds nginx

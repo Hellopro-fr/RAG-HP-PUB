@@ -1907,31 +1907,38 @@ class CrawlerManager:
         done_path = os.path.join(res_dir, f"{crawl_id}.move-done")
         error_path = os.path.join(res_dir, f"{crawl_id}.move-error")
 
-        async with aiofiles.open(request_path, "w") as f:
-            await f.write(crawl_id)
-        logger.info(f"Wrote .move-request for '{crawl_id}'. Waiting for daemon mv...")
+        # Reconcile a prior 504 limbo: if a previous attempt timed out but the
+        # daemon completed the move afterwards, a .move-done is already present.
+        # Skip a fresh request/poll and go straight to marking archived.
+        if not os.path.exists(done_path):
+            async with aiofiles.open(request_path, "w") as f:
+                await f.write(crawl_id)
+            logger.info(f"Wrote .move-request for '{crawl_id}'. Waiting for daemon mv...")
 
-        deadline = time.monotonic() + settings.MOVE_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            if os.path.exists(error_path):
-                # Remove both the error marker and the request so a daemon crash
-                # between writing .move-error and removing the request can't leave
-                # a stale request for another daemon instance to re-process.
-                for p in (error_path, request_path):
-                    try:
-                        if os.path.exists(p): os.remove(p)
-                    except OSError: pass
-                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
-                                    detail={"error_code": "STASH_MOVE_FAILED"})
-            if os.path.exists(done_path):
-                break
-            await asyncio.sleep(1)
+            deadline = time.monotonic() + settings.MOVE_TIMEOUT_SECONDS
+            while time.monotonic() < deadline:
+                if os.path.exists(error_path):
+                    # Remove both the error marker and the request so a daemon crash
+                    # between writing .move-error and removing the request can't leave
+                    # a stale request for another daemon instance to re-process.
+                    for p in (error_path, request_path):
+                        try:
+                            if os.path.exists(p): os.remove(p)
+                        except OSError: pass
+                    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                                        detail={"error_code": "STASH_MOVE_FAILED"})
+                if os.path.exists(done_path):
+                    break
+                await asyncio.sleep(1)
+            else:
+                try:
+                    if os.path.exists(request_path): os.remove(request_path)
+                except OSError: pass
+                raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                                    detail={"error_code": "STASH_MOVE_TIMEOUT"})
         else:
-            try:
-                if os.path.exists(request_path): os.remove(request_path)
-            except OSError: pass
-            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                                detail={"error_code": "STASH_MOVE_TIMEOUT"})
+            logger.info(f"Reconciling pre-existing .move-done for '{crawl_id}' "
+                        f"(a prior attempt completed after its 504 timeout).")
 
         await self._mark_as_archived(crawl_id)
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"

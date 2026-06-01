@@ -55,6 +55,22 @@ async def test_move_success_marks_archived(mgr):
 
 
 @pytest.mark.asyncio
+async def test_move_reconciles_preexisting_done_without_new_request(mgr):
+    """Prior-504 limbo recovery: a pre-existing .move-done is reconciled
+    (mark archived) WITHOUT writing a fresh .move-request."""
+    m, cache, tmp = mgr
+    with patch("app.core.crawler_manager.settings") as s:
+        s.MOVE_REQUESTS_PATH = str(tmp / "req"); s.MOVE_RESULTS_PATH = str(tmp / "res")
+        s.MOVE_TIMEOUT_SECONDS = 5
+        os.makedirs(s.MOVE_REQUESTS_PATH); os.makedirs(s.MOVE_RESULTS_PATH)
+        open(os.path.join(s.MOVE_RESULTS_PATH, "70.move-done"), "w").close()
+        await m._move_stash_to_archive({"crawl_id": "70"})
+        # No fresh request written — it reconciled the existing done marker.
+        assert not os.path.exists(os.path.join(s.MOVE_REQUESTS_PATH, "70.move-request"))
+    m._mark_as_archived.assert_awaited_once_with("70")
+
+
+@pytest.mark.asyncio
 async def test_move_error_raises_502(mgr):
     m, cache, tmp = mgr
     with patch("app.core.crawler_manager.settings") as s:

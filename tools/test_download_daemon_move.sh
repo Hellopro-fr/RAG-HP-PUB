@@ -7,7 +7,9 @@ trap 'rm -rf "$TMP"' EXIT
 # Mock gcloud:
 #   - "42": mv succeeds.
 #   - "already": mv fails (source gone) but ls(dst) succeeds -> idempotent done.
-#   - "fail": mv fails AND ls(dst) fails -> genuine failure.
+#   - "fail": mv fails, ls(dst) fails, but ls(src) succeeds -> genuine failure.
+#   - "notyet": mv fails, ls(dst) fails, ls(src) fails -> source not uploaded yet
+#               -> transient, leave request, no error marker.
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/gcloud" <<'EOF'
 #!/bin/bash
@@ -16,13 +18,15 @@ if [ "$2" = "mv" ]; then
   case "$3" in
     *already.tar.gz) exit 1 ;;   # source already gone
     *fail.tar.gz)    exit 1 ;;   # genuine move failure
+    *notyet.tar.gz)  exit 1 ;;   # source not uploaded yet
     *) echo "moved $3 -> $4"; exit 0 ;;
   esac
 fi
 if [ "$2" = "ls" ]; then
   case "$3" in
     *crawls/already.tar.gz) exit 0 ;;  # target present -> already moved
-    *) exit 1 ;;                        # target absent (incl. fail) -> not moved
+    *stash/fail.tar.gz)     exit 0 ;;  # source present -> genuine failure
+    *) exit 1 ;;                        # absent (notyet src/dst, fail dst)
   esac
 fi
 exit 0
@@ -57,5 +61,12 @@ process_move_requests
 [ -s "$MOVE_RESULTS_PATH/fail.move-error" ] || { echo "FAIL: fail.move-error is empty"; exit 1; }
 [ ! -f "$MOVE_RESULTS_PATH/fail.move-done" ] || { echo "FAIL: fail wrongly marked done"; exit 1; }
 [ ! -f "$MOVE_REQUESTS_PATH/fail.move-request" ] || { echo "FAIL: fail request not consumed"; exit 1; }
+
+# Transient path (source not yet uploaded): NO .move-error, request LEFT for retry.
+echo "1" > "$MOVE_REQUESTS_PATH/notyet.move-request"
+process_move_requests
+[ ! -f "$MOVE_RESULTS_PATH/notyet.move-error" ] || { echo "FAIL: notyet wrongly errored"; exit 1; }
+[ ! -f "$MOVE_RESULTS_PATH/notyet.move-done" ] || { echo "FAIL: notyet wrongly marked done"; exit 1; }
+[ -f "$MOVE_REQUESTS_PATH/notyet.move-request" ] || { echo "FAIL: notyet request not left for retry"; exit 1; }
 
 echo "OK"
