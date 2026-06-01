@@ -11,6 +11,9 @@ import { PlaywrightCrawler } from "crawlee";
 export const context = {
     dedupManager: null as DedupManager | null,
     pushedSet: undefined as PushedSet | undefined,
+    // Set de claim dédié à UpdateChecker.checkUrl (clé `checked:{id}`), distinct de
+    // `pushedSet` (clé `pushed:{id}`). Empêche checkUrl d'affamer les écritures dataset.
+    checkedSet: undefined as PushedSet | undefined,
     statsManager: null as StatsManager | null,
     urlConsolidator: null as UrlConsolidator | null,
     updateChecker: null as UpdateChecker | null,
