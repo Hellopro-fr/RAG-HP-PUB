@@ -77,6 +77,20 @@ class Settings(BaseSettings):
     REDIS_LOSS_THRESHOLD_MS: int = 60_000
     PROGRESS_STALL_THRESHOLD_MS: int = 600_000
 
+    # --- Auto-stash workflow (spec 2026-06-01) ---
+    # Master gate for the auto-stash reconcile sweep (P2). Off by default.
+    AUTO_STASH_ENABLED: bool = False
+    # After a /results download, wait this long before stashing (happy path).
+    STASH_GRACE_SECONDS: int = 3600
+    # Stash a never-downloaded terminal crawl after this long (also the
+    # investigation window for failed crawls).
+    STASH_SAFETY_TIMEOUT_SECONDS: int = 172800
+    # Disk-pressure override: at/above this used-% the sweep stashes the
+    # largest terminal crawls early, regardless of grace.
+    STASH_DISK_HIGH_WATER_PCT: int = 85
+    # Cap on crawls stashed per sweep tick (bounds upload-daemon load).
+    STASH_MAX_PER_SWEEP: int = 5
+
     model_config = {
         "env_file": ".env",
         "extra": "ignore",
