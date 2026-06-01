@@ -1426,6 +1426,20 @@ class CrawlerManager:
         if job_info["status"] == "running":
              raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
 
+        # Auto-stash: a stashed crawl's local data is in GCS. Restore it inline,
+        # then fall through to the normal serve path. unstash_crawl clears
+        # stashed_at + deletes the GCS stash copy (2-phase). On failure it raises
+        # 502/504 — do NOT fall through to a corrupt archive.
+        if job_info.get("stashed_at"):
+            logger.info(f"/results on stashed crawl '{crawl_id}': unstashing inline.")
+            await self.unstash_crawl(job_info)
+            job_info = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+            if job_info is None:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Job '{crawl_id}' disappeared from Redis after unstash.",
+                )
+
         # For archived crawls: local data is gone, retrieve from GCS via daemon
         if job_info["status"] == "archived":
             # First check if the shared archive still exists locally (daemon hasn't uploaded yet)
