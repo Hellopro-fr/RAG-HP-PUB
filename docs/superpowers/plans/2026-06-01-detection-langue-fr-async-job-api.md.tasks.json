@@ -1,0 +1,63 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-01-detection-langue-fr-async-job-api.md",
+  "specPath": "docs/superpowers/specs/2026-06-01-detection-langue-fr-async-job-api-design.md",
+  "nativeTaskIds": { "1": 43, "2": 44, "3": 45, "4": 46, "5": 47, "6": 48, "7": 49, "8": 50 },
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Async types, config, metrics",
+      "status": "pending",
+      "description": "**Goal:** Add BatchOpts/BatchCounts dataclasses, Async* schemas, 8 settings, 4 metrics. No behavior change.\n\n```json:metadata\n{\"repo\":\"RAG-HP-PUB\",\"files\":[\"apps-microservices/api-detection-langue-fr/app/models/schemas.py\",\"apps-microservices/api-detection-langue-fr/app/core/config.py\",\"apps-microservices/api-detection-langue-fr/app/core/metrics.py\",\"apps-microservices/api-detection-langue-fr/tests/test_async_schemas.py\"],\"verifyCommand\":\"python -m pytest apps-microservices/api-detection-langue-fr/tests/test_async_schemas.py -v\",\"acceptanceCriteria\":[\"BatchOpts/BatchCounts importable\",\"AsyncBatchSubmitRequest rejects >100 items, mode default COMPLETE\",\"8 settings + 4 metrics present, no name collision\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Extract _run_batch_core (refactor)",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Move /detect-batch 2-pass body into _run_batch_core(items, mode, opts, progress_cb=None) -> (results, BatchCounts); /detect-batch becomes a thin wrapper. progress_cb plumbing lands HERE (isolated commit).\n\n```json:metadata\n{\"repo\":\"RAG-HP-PUB\",\"files\":[\"apps-microservices/api-detection-langue-fr/app/api/routes.py\",\"apps-microservices/api-detection-langue-fr/tests/test_batch_core_refactor.py\"],\"verifyCommand\":\"python -m pytest apps-microservices/api-detection-langue-fr/tests/test_batch_core_refactor.py -v\",\"acceptanceCriteria\":[\"_run_batch_core returns (list,BatchCounts)\",\"/detect-batch identical results+counts\",\"progress_cb fires once/item when provided, no-op when None\",\"pass-2 retry preserved\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: JobStore Redis layer + poll_status",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** async_jobs.py JobStore (lazy connect, atomic claim_index SET NX, checked write that raises, degrading get, ping) + pure poll_status. Exceptions _JobsDisabled/_JobsUnavailable/_JobCapacityExceeded.\n\n```json:metadata\n{\"repo\":\"RAG-HP-PUB\",\"files\":[\"apps-microservices/api-detection-langue-fr/app/core/async_jobs.py\",\"apps-microservices/api-detection-langue-fr/tests/test_async_jobstore.py\"],\"verifyCommand\":\"python -m pytest apps-microservices/api-detection-langue-fr/tests/test_async_jobstore.py -v\",\"acceptanceCriteria\":[\"claim_index atomic SET NX EX\",\"write raises on failure; get returns None on failure\",\"ping False when unreachable\",\"poll_status computes stale\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: JobManager async worker",
+      "status": "pending",
+      "blockedBy": [2, 3],
+      "description": "**Goal:** JobManager: race-free submit (atomic idempotency claim, synchronous capacity reserve, checked pending write, then spawn), heartbeat ticker, terminal write authoritative counts, single-writer shutdown. batch_runner injected.\n\n```json:metadata\n{\"repo\":\"RAG-HP-PUB\",\"files\":[\"apps-microservices/api-detection-langue-fr/app/core/async_jobs.py\",\"apps-microservices/api-detection-langue-fr/tests/test_async_jobmanager.py\"],\"verifyCommand\":\"python -m pytest apps-microservices/api-detection-langue-fr/tests/test_async_jobmanager.py -v\",\"acceptanceCriteria\":[\"concurrent same client_job_id -> one task, same job_id\",\"_inflight never exceeds MAX_ACTIVE_JOBS\",\"completed counts from runner return\",\"shutdown marks only non-terminal failed(service_shutdown)\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Async endpoints + lifespan",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** routes.py POST /detect-batch-async (202/200, 503 differentiated by Retry-After header) + GET poll (stale, 404). main.py lifespan builds app.state.job_manager + shutdown. Update CLAUDE.md.\n\n```json:metadata\n{\"repo\":\"RAG-HP-PUB\",\"files\":[\"apps-microservices/api-detection-langue-fr/app/api/routes.py\",\"apps-microservices/api-detection-langue-fr/main.py\",\"apps-microservices/api-detection-langue-fr/tests/test_async_endpoints.py\",\"apps-microservices/api-detection-langue-fr/CLAUDE.md\"],\"verifyCommand\":\"python -m pytest apps-microservices/api-detection-langue-fr/tests/test_async_endpoints.py -v\",\"acceptanceCriteria\":[\"202+job_id; capacity 503 has Retry-After; disabled/unavailable 503 has none\",\"poll 404 unknown, completed with results, stale for frozen record\",\"lifespan builds job_manager + shutdown\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: BO detectBatchUrlsAsync helper",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** BO fonctions_scrapping.php async constants + _detection_absent_urls (by-url + by-domain) + detectBatchUrlsAsync (submit+poll, 503 discriminated by Retry-After header presence). Smoke+pure-assert script. Hellopro repo / main branch.\n\n```json:metadata\n{\"repo\":\"Hellopro\",\"files\":[\"BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_scrapping.php\",\"BO/admin/repertoire_test/moulinettes_rindra/script_divers/ponctuel/roadmap_v1/pct_smoke_detection_async_rindra_BO.php\"],\"verifyCommand\":\"php pct_smoke_detection_async_rindra_BO.php\",\"acceptanceCriteria\":[\"absent_urls excludes by-domain match (alt-link FR)\",\"returns 4-key shape; completed -> incomplete_urls=[]\",\"503 no Retry-After throws immediately; with Retry-After retries\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Migrate script_identifier_site_fr_v2",
+      "status": "pending",
+      "blockedBy": [6],
+      "description": "**Goal:** chunk 5->DETECTION_ASYNC_BATCH_SIZE, foreach add $chunk_idx, swap to detectBatchUrlsAsync(sha1(id_upload:chunk_idx)), per-chunk incomplete_urls re-enqueue (nb_tentatives=1) + $nb_incomplete + email/log parity. Hellopro repo.\n\n```json:metadata\n{\"repo\":\"Hellopro\",\"files\":[\"BO/script/chatgpt/variante_categorie/script_identifier_site_fr_v2.php\"],\"verifyCommand\":\"php -l BO/script/chatgpt/variante_categorie/script_identifier_site_fr_v2.php\",\"acceptanceCriteria\":[\"chunk=DETECTION_ASYNC_BATCH_SIZE, sha1(id_upload:chunk_idx)\",\"incomplete re-enqueued per chunk nb_tentatives=1, counted, in email\",\"existing upsert+admission_rejected unchanged\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Migrate retry cron to async",
+      "status": "pending",
+      "blockedBy": [6],
+      "description": "**Goal:** RETRY_BATCH_SIZE 5->100, init $nb_admission_rejected + $nb_incomplete, swap to detectBatchUrlsAsync(sha1('retry:'...)), fold incomplete touch-only into r_match===null branch via incomplete_set (no nb_tentatives burn), email parity. Hellopro repo.\n\n```json:metadata\n{\"repo\":\"Hellopro\",\"files\":[\"BO/script/chatgpt/variante_categorie/script_retry_identifier_site_fr.php\"],\"verifyCommand\":\"php -l BO/script/chatgpt/variante_categorie/script_retry_identifier_site_fr.php\",\"acceptanceCriteria\":[\"RETRY_BATCH_SIZE=100, sha1(retry:id_upload:batch_idx)\",\"incomplete -> touch-only, nb_tentatives unchanged\",\"nb_admission_rejected + nb_incomplete initialized + in email\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-01"
+}
