@@ -540,25 +540,26 @@ class CrawlerManager:
             prev_datasets_dir = os.path.join(prev_storage, "storage", "datasets")
             has_local_data = os.path.isdir(prev_datasets_dir) and len(os.listdir(prev_datasets_dir)) > 0
 
-            if prev_status == "archived" and not has_local_data:
-                logger.info(f"Previous crawl '{previous_crawl_id}' is archived. Restoring from GCS before starting update crawl.")
+            stashed = bool(prev_job_info.get("stashed_at")) if prev_job_info else False
+            if (prev_status == "archived" or stashed) and not has_local_data:
                 try:
-                    await self._restore_archived_crawl(previous_crawl_id)
+                    await self._restore_previous_crawl(prev_job_info, has_local_data)
                 except HTTPException:
                     await _rollback_claim(decrement_counter=True)
                     raise
                 except Exception as e:
                     await _rollback_claim(decrement_counter=True)
-                    logger.error(f"Failed to restore archived crawl '{previous_crawl_id}': {e}", exc_info=True)
+                    logger.error(f"Failed to restore previous crawl '{previous_crawl_id}': {e}", exc_info=True)
                     raise HTTPException(
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=f"Failed to restore archived crawl '{previous_crawl_id}' from GCS: {str(e)}"
+                        detail=f"Failed to restore previous crawl '{previous_crawl_id}' from GCS: {str(e)}"
                     )
             elif not has_local_data:
                 await _rollback_claim(decrement_counter=True)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Previous crawl '{previous_crawl_id}' has no dataset files on disk and is not archived. Cannot proceed with update mode."
+                    detail=f"Previous crawl '{previous_crawl_id}' has no dataset files on disk "
+                           f"and is not archived or stashed. Cannot proceed with update mode."
                 )
 
         # --- BUILD & LOG COMMAND ---
@@ -2114,6 +2115,23 @@ class CrawlerManager:
         await cache_service.set_json(job_key, fresh_job_info)
         await self._publish_update(crawl_id, "archived")
         logger.info(f"Marked crawl '{crawl_id}' as 'archived' in Redis.")
+
+    async def _restore_previous_crawl(self, prev_job_info: dict, has_local_data: bool) -> None:
+        """For update mode: ensure the previous crawl's data is on local disk.
+        Routes a stashed previous crawl through unstash_crawl (stash/ prefix +
+        2-phase delete); an archived one through _restore_archived_crawl
+        (crawls/ prefix). No-op if local data already present."""
+        if has_local_data:
+            return
+        previous_crawl_id = prev_job_info["crawl_id"]
+        if prev_job_info.get("stashed_at"):
+            logger.info(f"Previous crawl '{previous_crawl_id}' is stashed. "
+                        f"Unstashing from GCS before update crawl.")
+            await self.unstash_crawl(prev_job_info)
+        elif prev_job_info.get("status") == "archived":
+            logger.info(f"Previous crawl '{previous_crawl_id}' is archived. "
+                        f"Restoring from GCS before update crawl.")
+            await self._restore_archived_crawl(previous_crawl_id)
 
     async def _restore_archived_crawl(self, previous_crawl_id: str):
         """
