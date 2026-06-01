@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -143,7 +144,7 @@ func (h *Handler) handleBDDUsedTableByID(w http.ResponseWriter, r *http.Request)
 	// already routes them away from here because longer-literal match
 	// wins, but if that ever regresses we don't want to parse those
 	// strings as a UUID.
-	if len(parts) == 1 && (id == "bulk" || id == "export" || id == "import" || id == "import-doc" || id == "doc") {
+	if len(parts) == 1 && (id == "bulk" || id == "export" || id == "import" || id == "import-doc" || id == "doc" || id == "sync-field-types") {
 		http.NotFound(w, r)
 		return
 	}
@@ -167,6 +168,13 @@ func (h *Handler) handleBDDUsedTableByID(w http.ResponseWriter, r *http.Request)
 				return
 			}
 			h.handleBDDUsedRefreshCatalog(w, r, id)
+		case "sync-field-types":
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+				return
+			}
+			h.handleBDDUsedSyncFieldTypes(w, r, id)
 		default:
 			http.NotFound(w, r)
 		}
@@ -316,10 +324,15 @@ func (h *Handler) createBDDUsedTable(w http.ResponseWriter, r *http.Request) {
 	}
 	fields := make([]db.BDDUsedField, 0, len(req.Fields))
 	for _, f := range req.Fields {
+		typ, fullDef := normalizeCatalogFieldType(f.FieldType)
+		desc := f.Description
+		if fullDef != "" && strings.TrimSpace(desc) == "" {
+			desc = fullDef
+		}
 		fields = append(fields, db.BDDUsedField{
 			FieldName:       f.FieldName,
-			FieldType:       f.FieldType,
-			Description:     f.Description,
+			FieldType:       typ,
+			Description:     desc,
 			UpstreamFieldID: f.UpstreamFieldID,
 		})
 	}
@@ -443,10 +456,15 @@ func (h *Handler) addBDDUsedField(w http.ResponseWriter, r *http.Request, tableI
 		return
 	}
 
+	typ, fullDef := normalizeCatalogFieldType(req.FieldType)
+	desc := req.Description
+	if fullDef != "" && strings.TrimSpace(desc) == "" {
+		desc = fullDef
+	}
 	field := &db.BDDUsedField{
 		FieldName:       req.FieldName,
-		FieldType:       req.FieldType,
-		Description:     req.Description,
+		FieldType:       typ,
+		Description:     desc,
 		UpstreamFieldID: req.UpstreamFieldID,
 	}
 	created, err := h.bddUsedRepo.AddField(r.Context(), tableID, field)
@@ -1395,6 +1413,146 @@ func (h *Handler) handleBDDUsedRefreshCatalog(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, toBDDUsedTableDTO(*out))
+}
+
+// ── Sync field types from catalog ────────────────────────────────────────
+
+// bddFieldTypeMaxLen mirrors the field_type varchar(128) column width.
+const bddFieldTypeMaxLen = 128
+
+// normalizeCatalogFieldType collapses verbose catalog field types that
+// would overflow the field_type column. enum/set columns arrive as the
+// full `enum('a','b',...)` definition (often > 128 chars); we store the
+// keyword and return the full definition so callers can surface it in the
+// field description. Any other type longer than the column is truncated as
+// a last-resort guard. fullDef is empty when no enrichment is needed.
+func normalizeCatalogFieldType(raw string) (typ, fullDef string) {
+	trimmed := strings.TrimSpace(raw)
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.HasPrefix(lower, "enum("):
+		return "enum", trimmed
+	case strings.HasPrefix(lower, "set("):
+		return "set", trimmed
+	case len(trimmed) > bddFieldTypeMaxLen:
+		return trimmed[:bddFieldTypeMaxLen], trimmed
+	default:
+		return trimmed, ""
+	}
+}
+
+// syncFieldTypesForTable pulls the upstream column list for one registered
+// table and writes each catalog field_type onto the matching registered
+// field. enum/set definitions are stored as the keyword with the full
+// definition seeded into an empty description. Tables with no upstream
+// link (UpstreamTableID == 0) are a no-op. Returns rows actually changed.
+func (h *Handler) syncFieldTypesForTable(ctx context.Context, table db.BDDUsedTable) (int, error) {
+	if table.UpstreamTableID == 0 {
+		return 0, nil
+	}
+	fieldsResp, err := h.bddCatalog.ListFields(ctx, table.DatabaseID, table.UpstreamTableID)
+	if err != nil {
+		return 0, err
+	}
+	byName := make(map[string]repository.FieldTypeSync, len(fieldsResp.Fields))
+	for _, f := range fieldsResp.Fields {
+		if f.FieldType == "" {
+			continue
+		}
+		typ, full := normalizeCatalogFieldType(f.FieldType)
+		byName[f.FieldName] = repository.FieldTypeSync{Type: typ, FullDef: full}
+	}
+	return h.bddUsedRepo.SyncFieldTypes(ctx, table.ID, byName)
+}
+
+// handleBDDUsedSyncFieldTypes handles
+// POST /api/v1/bdd/used/tables/{id}/sync-field-types.
+//
+// Backfills field_type on the table's registered fields from the upstream
+// catalog. Returns {"updated":N,"total":M}. 503 when the catalog client
+// is unconfigured, 422 when the table has no upstream link, 502 when the
+// upstream call fails.
+func (h *Handler) handleBDDUsedSyncFieldTypes(w http.ResponseWriter, r *http.Request, id string) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if !h.bddCatalogReady() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": catalogDisabledMsg})
+		return
+	}
+
+	table, err := h.bddUsedRepo.GetTable(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrBDDNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if table.UpstreamTableID == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+			"error": "table has no upstream catalog link (upstream_table_id missing)",
+		})
+		return
+	}
+
+	updated, err := h.syncFieldTypesForTable(r.Context(), *table)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"updated": updated, "total": len(table.Fields)})
+}
+
+// handleBDDUsedSyncAllFieldTypes handles
+// POST /api/v1/bdd/used/tables/sync-field-types.
+//
+// Runs the per-table field_type sync across the whole registry. Tables
+// with no upstream link are silently skipped. Per-table upstream failures
+// are collected into `errors` without aborting the rest. Returns
+// {"tables_synced":N,"fields_updated":M,"errors":[{table_name,error}]}.
+func (h *Handler) handleBDDUsedSyncAllFieldTypes(w http.ResponseWriter, r *http.Request) {
+	if h.bddUsedRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "BDD registry is not configured"})
+		return
+	}
+	if !h.bddCatalogReady() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": catalogDisabledMsg})
+		return
+	}
+
+	tables, err := h.bddUsedRepo.ListAll(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	type syncErr struct {
+		TableName string `json:"table_name"`
+		Error     string `json:"error"`
+	}
+	tablesSynced := 0
+	fieldsUpdated := 0
+	syncErrs := make([]syncErr, 0)
+	for _, t := range tables {
+		if t.UpstreamTableID == 0 {
+			continue
+		}
+		updated, err := h.syncFieldTypesForTable(r.Context(), t)
+		if err != nil {
+			syncErrs = append(syncErrs, syncErr{TableName: t.Name, Error: err.Error()})
+			continue
+		}
+		tablesSynced++
+		fieldsUpdated += updated
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tables_synced":  tablesSynced,
+		"fields_updated": fieldsUpdated,
+		"errors":         syncErrs,
+	})
 }
 
 // ── Public (shared-secret) read endpoints ───────────────────────────────

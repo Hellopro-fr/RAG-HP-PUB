@@ -95,3 +95,14 @@ func (r *ServiceRepo) ListAll() ([]db.ServiceRow, error) {
 	}
 	return items, nil
 }
+
+func (r *ServiceRepo) HasEndpointOverrides(serviceID string) (bool, error) {
+	var count int64
+	err := r.g.Table("catalog_endpoints").
+		Where("service_id = ? AND auth_policy IS NOT NULL", serviceID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

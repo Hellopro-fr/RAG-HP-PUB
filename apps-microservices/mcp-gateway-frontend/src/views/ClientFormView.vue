@@ -587,7 +587,10 @@ const zohoFilterSummary = computed(() => {
 
 onMounted(async () => {
   try {
-    await serversStore.fetchServers()
+    // include_all=true: non-admins must see every active server in the
+    // scope picker, otherwise they cannot grant an OAuth2 client access
+    // to a server they did not personally create.
+    await serversStore.fetchServers({ include_all: true })
   } catch (err) {
     console.error('[ClientFormView] Failed to fetch servers:', err)
   }

@@ -57,10 +57,33 @@ func CombinedMiddleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 1. Check for OAuth2 Bearer token
+			// 1. X-MCP-Scope-Token wins outright when present.
+			if scopeHeader := r.Header.Get("X-MCP-Scope-Token"); scopeHeader != "" {
+				ctx, ok := scopetoken.ValidateAndBuildContext(w, r, scopeHeader, "x-mcp-scope-token", tokenCache, tokenRepo, instructionRepo, slackClient)
+				if !ok {
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			// 2. Authorization: Bearer — discriminate by prefix.
 			authHeader := r.Header.Get("Authorization")
 			if strings.HasPrefix(authHeader, "Bearer ") {
-				bearerToken := authHeader[7:]
+				bearer := authHeader[7:]
+
+				// 2a. Bearer carries a /tokens-issued scope token.
+				if strings.HasPrefix(bearer, scopetoken.TokenPrefix) {
+					ctx, ok := scopetoken.ValidateAndBuildContext(w, r, bearer, "bearer", tokenCache, tokenRepo, instructionRepo, slackClient)
+					if !ok {
+						return
+					}
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+
+				// 2b. Existing OAuth2 JWT path — verbatim from the previous version.
+				bearerToken := bearer
 				clientID, userEmail, err := ValidateAccessToken(bearerToken, jwtSecret)
 				if err != nil {
 					log.Printf("[oauth2] invalid bearer token: %v", err)
@@ -105,9 +128,6 @@ func CombinedMiddleware(
 						TTL:          client.AccessTokenTTL,
 					}
 
-					// Resolve LLM instruction rows on cache-miss (see
-					// scopetoken middleware for the equivalent on the
-					// X-MCP-Scope-Token path).
 					if instructionRepo != nil && len(client.Instructions) > 0 && len(serverIDs) > 0 {
 						allowedSlice := make([]string, 0, len(serverIDs))
 						for sid := range serverIDs {
@@ -126,7 +146,6 @@ func CombinedMiddleware(
 						}
 					}
 
-					// Decode persisted Leexi filter for runtime header injection.
 					cc.LeexiFilterMode = client.LeexiFilterMode
 					if len(client.LeexiAllowedUserUUIDs) > 0 {
 						_ = json.Unmarshal(client.LeexiAllowedUserUUIDs, &cc.LeexiAllowedUserUUIDs)
@@ -135,7 +154,6 @@ func CombinedMiddleware(
 						_ = json.Unmarshal(client.LeexiAllowedTeamUUIDs, &cc.LeexiAllowedTeamUUIDs)
 					}
 
-					// Decode persisted Ringover filter (int arrays).
 					cc.RingoverFilterMode = client.RingoverFilterMode
 					if len(client.RingoverAllowedUserIDs) > 0 {
 						_ = json.Unmarshal(client.RingoverAllowedUserIDs, &cc.RingoverAllowedUserIDs)
@@ -144,7 +162,6 @@ func CombinedMiddleware(
 						_ = json.Unmarshal(client.RingoverAllowedTeamIDs, &cc.RingoverAllowedTeamIDs)
 					}
 
-					// Decode persisted Zoho filter (email strings).
 					cc.ZohoFilterMode = client.ZohoFilterMode
 					if len(client.ZohoAllowedEmails) > 0 {
 						_ = json.Unmarshal(client.ZohoAllowedEmails, &cc.ZohoAllowedEmails)
@@ -153,7 +170,6 @@ func CombinedMiddleware(
 						cc.ZohoCreatorEmail = client.CreatedBy
 					}
 
-					// BDD scope (mirrors scope-token middleware).
 					if len(client.BDDTables) > 0 {
 						cc.BDDAllowedTableIDs = make([]string, 0, len(client.BDDTables))
 						for _, b := range client.BDDTables {
@@ -220,16 +236,7 @@ func CombinedMiddleware(
 				return
 			}
 
-			// 2. Check for X-MCP-Scope-Token (backward compat)
-			scopeTokenHeader := r.Header.Get("X-MCP-Scope-Token")
-			if scopeTokenHeader != "" {
-				// Delegate to scope token middleware (always required)
-				scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, instructionRepo, true, slackClient)
-				scopeMW(next).ServeHTTP(w, r)
-				return
-			}
-
-			// 3. Neither present — return 401 with discovery URL per MCP spec
+			// 3. Neither header present.
 			log.Printf("[oauth2] 401 unauthorized: method=%s path=%s remote=%s peer=%s xff=%q xri=%q cf_ip=%q user_agent=%q mcp_session=%q origin=%q referer=%q",
 				r.Method,
 				r.URL.Path,

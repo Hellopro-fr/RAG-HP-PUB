@@ -790,7 +790,106 @@ relancer une migration delta plus tard, soit :
 
 ---
 
-*Document généré le 2026-05-21, complété le 2026-05-22 (sections 11 + 12). À
-maintenir au fil des audits suivants. Référence croisée :
+*Document généré le 2026-05-21, complété le 2026-05-22 (sections 11 + 12),
+puis le 2026-05-28 (section 13). À maintenir au fil des audits suivants.
+Référence croisée :
 `apps-microservices/opti-moteur-front/CLAUDE.md`,
-`apps-microservices/opti-moteur-front/vm/RUNBOOK_INGESTION_GKE_2026-05-22.md`.*
+`apps-microservices/opti-moteur-front/vm/RUNBOOK_INGESTION_GKE_2026-05-22.md`,
+`site/moteur_recherche/BILAN_DG_2026-05-29.md`.*
+
+---
+
+## 13. Sprint final 28/05/2026 — finalisation GKE pour DG
+
+### 13.1 Découverte initiale (matin)
+
+L'image GKE déployée datait du **30 avril 2026** (`v1.0.0-prod`). Diagnostic :
+**aucune optimisation A3-A8 n'était en prod GKE** depuis la bascule gateway
+du 13 mai. Le front HelloPro tournait avec une version dégradée pendant
+13 jours sans qu'on le sache.
+
+### 13.2 PRs livrées (28/05)
+
+| PR | Sujet | Statut |
+|---|---|---|
+| #629 | Route `POST /admin/compute-idf` + cron PHP hebdo | ✅ Mergée |
+| #632 | Persistance IDF via GCS bucket (alternative Filestore) | ✅ Mergée |
+| #633 | python -u + capture stderr timeout + param `?limit=N` | ✅ Mergée |
+| #635 | Restore `keywords_coverage_v1.csv` (perdu au squash-merge) | ✅ Mergée |
+| #636 | Envoi `SERVICE_NAME` au service embedding + timeout 30s | ✅ Mergée |
+| #639 | Retry embedding + fallback BM25 automatique (élimine 503) | 🆕 En cours |
+
+### 13.3 Coordination DevOps + collègue embedding
+
+| Action | Owner | Statut |
+|---|---|---|
+| Rebuild image v1.0.1 → v1.0.4 (3 fois) | Tafita | ✅ Fait |
+| Création bucket GCS `hellopro-rag-opti-moteur-data` | Tafita | ✅ Fait |
+| Création SA dédié `opti-moteur-data-sa` (rôle storage.objectAdmin) | Tafita | ✅ Fait |
+| Augmentation RAM 1Gi → 2Gi limits, 1Gi requests | Tafita | ✅ Fait |
+| InitContainer `fetch-idf` au boot de chaque pod | Tafita | ✅ Fait |
+| Env vars : `SERVICE_NAME=opti-moteur-front`, `GCS_IDF_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS` | Tafita | ✅ Fait |
+| Priorisation requêtes `opti-moteur-front` côté service embedding | Collègue embedding | ✅ Active (latence 2.3s → 680ms) |
+
+### 13.4 Architecture finale validée
+
+```
+HelloPro front PHP (Ecritel)
+  └── api.hellopro.eu/optimoteur-service/search/text
+      └── Gateway nginx
+          └── opti-moteur-front (GKE, 2 pods)
+              ├── Cache IDF en RAM (chargé depuis GCS au boot via InitContainer)
+              ├── Synonymes Typesense (chargés au boot)
+              ├── Brands Typesense (chargés au boot, 3803 marques mono-token)
+              ├── Reranker Python (A3, A6, A7, A8 + A4 IDF)
+              ├── /admin/compute-idf (regen hebdo via cron PHP)
+              ├── /admin/reload-idf (propagation entre pods)
+              ├── /sync/incremental (delta quotidien)
+              └── Embedding via HTTP (10.11.0.2:8555 VM, priorité active)
+                  ├── Retry automatique (PR #639)
+                  └── Fallback BM25 si échec (PR #639)
+```
+
+### 13.5 Bench final (à confirmer après PR #639 déployée)
+
+**Bench 14:00 (sans PR #639, 14% de 503)** :
+- Total : 147/150 mots-clés
+- OK : 127 (86 %)
+- Erreurs 503 : 20 (14 %, timeout 10s)
+- Latence moyenne : ~1000 ms (vs 1400 ms avant priorité)
+
+**Cible après PR #639 + redéploiement** :
+- OK : 150/150 (100 %)
+- Latence p50 < 1 s
+- Latence p95 < 2 s
+- 0 % d'erreur 503
+
+### 13.6 Découvertes infrastructure (à retenir)
+
+- **VM embedding** : 4 workers `embedding_service.main` (port 8555 REST) +
+  un container `rag-hp-pub-embedding-model-service` (port 50052 gRPC,
+  non exposé en local). Load VM : 17 (élevée, ~70 % saturée sur 24 CPUs).
+  Latence par requête embedding : **~13s sans priorité, ~680ms avec priorité**.
+- **Cluster GKE** : `matching-api-dev-k8s` (zone `europe-west1-b`),
+  namespace `moteur-recherche`. Endpoint privé (pas accessible depuis
+  Cloud Shell standard).
+- **2 pods opti-moteur-front** derrière LoadBalancer interne `10.0.1.240:8570`.
+- **IDF persistance** : `gs://hellopro-rag-opti-moteur-data/idf_nom_produit.json`
+  (~7 MB pour 225006 tokens sur 500000 docs).
+
+### 13.7 Cas limites résiduels
+
+| Query | Comportement | Verdict |
+|---|---|---|
+| `ritmo` (mono-token) | "Tabourets Ritmo Bar" au lieu de Ritmo industriel | Cas d'homonymie pure, A4 IDF n'aide pas (1 seul token). Solution future : annotation manuelle ou boost popularité. |
+| `barre laser a led` | Scanner code-barre au lieu de lampe LED | A7 R3 marche mais pas suffisant. Solution future : signal popularité. |
+| Cold start (1ère requête) | Latence 9-13s parfois | Acceptable, statistiquement rare. Lisse au-dessus de la 1ère requête. |
+
+### 13.8 Roadmap restante (post 29/05)
+
+- [ ] Confirmer 100 % OK après déploiement PR #639
+- [ ] Activer cron PHP hebdo `compute_idf_weekly.php` sur Ecritel
+- [ ] Régénérer IDF complète (sans `?limit`, ~25 min) une fois confirmation
+- [ ] Monitoring continu (taux 503, latence p95, plaintes Elena)
+- [ ] Phase 2 long terme : passer en gRPC pour l'embedding (gain latence
+      attendu : 5-10x sur les requêtes non prioritaires)

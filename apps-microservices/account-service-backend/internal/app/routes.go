@@ -145,6 +145,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	mux.Handle("PUT /api/v1/admin/api/{id}", requireAuth(catalogHandler))
 	mux.Handle("DELETE /api/v1/admin/api/{id}", requireAdmin(catalogHandler))
 	mux.Handle("POST /api/v1/admin/api/{id}/{op}", requireAuth(catalogHandler))
+	mux.Handle("PUT /api/v1/admin/api/{id}/endpoints/{endpoint_id}", requireAuth(catalogHandler))
 
 	// Health + Prometheus metrics.
 	mux.Handle("GET /health", health.NewHandler(d.version, d.dbPing))

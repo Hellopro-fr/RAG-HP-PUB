@@ -1,11 +1,13 @@
 import { api } from './client'
 import type {
+  ApiCatalogEndpoint,
   ApiCatalogService,
   CreateApiRequest,
   DetailResp,
   ListResp,
   RescanReport,
   UpdateApiRequest,
+  UpdateEndpointRequest,
 } from '@/types/apiCatalog'
 
 const base = '/api/v1/admin/api'
@@ -43,4 +45,15 @@ export function rescanOne(id: string) {
   return api<RescanReport>(`${base}/${encodeURIComponent(id)}/rescan`, {
     method: 'POST',
   })
+}
+
+export function updateEndpoint(
+  serviceId: string,
+  endpointId: string,
+  payload: UpdateEndpointRequest,
+) {
+  return api<ApiCatalogEndpoint>(
+    `${base}/${encodeURIComponent(serviceId)}/endpoints/${encodeURIComponent(endpointId)}`,
+    { method: 'PUT', body: payload },
+  )
 }

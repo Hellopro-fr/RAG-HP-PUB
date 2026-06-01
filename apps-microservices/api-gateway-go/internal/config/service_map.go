@@ -24,26 +24,6 @@ func BuildServiceMap() map[string]string {
 	return out
 }
 
-// BuildExcludedRoutes returns the set of routes that should not be proxied to specific services.
-// Routes are stored normalized (leading/trailing slashes trimmed).
-func BuildExcludedRoutes() map[string][]string {
-	raw := map[string][]string{
-		"graphdlq-service": {"/dlq/queues"},
-	}
-	out := make(map[string][]string, len(raw))
-	for svc, paths := range raw {
-		clean := make([]string, 0, len(paths))
-		for _, p := range paths {
-			p = strings.Trim(strings.TrimSpace(p), "/")
-			if p != "" {
-				clean = append(clean, p)
-			}
-		}
-		out[svc] = clean
-	}
-	return out
-}
-
 // BuildDownstreamTimeouts returns per-service timeout overrides in seconds.
 func BuildDownstreamTimeouts() map[string]float64 {
 	return map[string]float64{

@@ -71,6 +71,26 @@ _R3_WEAK_FACTOR   = 0.75
 # A8 R2 : penalite si marque presente dans query mais type produit absent du doc
 _R2_MISSING_TYPE_FACTOR = 0.3
 
+# A9 (2026-05-28) : boost cert vendeur (alignement avec le boost bq^8000 cote Solr V2)
+# Un produit est "cert" si :
+#   - etat == 'Client' (vendeur certifie actif)
+#   - OU etat == 'Pause' AND affichage == 'Complet' (vendeur en pause mais fiche
+#     complete = qualite OK)
+# Boost final_score x 1.5. Note : Solr V2 utilise bq^8000 ce qui est tres fort.
+# Cote Python on reste plus modeste pour ne pas ecraser les autres signaux.
+_CERT_BOOST_FACTOR = 1.5
+
+
+def _is_cert_seller(doc: Dict[str, Any]) -> bool:
+    """Reproduit la logique PHP : etat=Client OU (etat=Pause AND affichage=Complet)."""
+    etat = (doc.get("etat") or "").strip().lower()
+    affichage = (doc.get("affichage") or "").strip().lower()
+    if etat == "client":
+        return True
+    if etat == "pause" and affichage == "complet":
+        return True
+    return False
+
 
 def _is_covered(
     token: str,
@@ -249,6 +269,13 @@ def rerank_candidates(
         if r["r2_missing_type"]:
             r["final_score"] *= _R2_MISSING_TYPE_FACTOR
             penalties.append("missing_type_with_brand")
+
+        # A9 (NEW 2026-05-28) : boost cert vendeur certifié (alignement Solr V2 bq^8000)
+        is_cert = _is_cert_seller(r["doc"])
+        r["is_cert"] = is_cert
+        if is_cert:
+            r["final_score"] *= _CERT_BOOST_FACTOR
+            penalties.append("cert_boost")
 
         r["penalty"] = " ".join(penalties)
 

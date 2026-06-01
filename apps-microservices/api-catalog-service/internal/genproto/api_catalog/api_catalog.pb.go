@@ -178,26 +178,81 @@ func (Status) EnumDescriptor() ([]byte, []int) {
 	return file_api_catalog_proto_rawDescGZIP(), []int{2}
 }
 
+type AuthPolicy int32
+
+const (
+	AuthPolicy_AUTH_POLICY_UNSPECIFIED AuthPolicy = 0
+	AuthPolicy_PUBLIC                  AuthPolicy = 1
+	AuthPolicy_BEARER                  AuthPolicy = 2
+	AuthPolicy_ADMIN_KEY               AuthPolicy = 3
+)
+
+// Enum value maps for AuthPolicy.
+var (
+	AuthPolicy_name = map[int32]string{
+		0: "AUTH_POLICY_UNSPECIFIED",
+		1: "PUBLIC",
+		2: "BEARER",
+		3: "ADMIN_KEY",
+	}
+	AuthPolicy_value = map[string]int32{
+		"AUTH_POLICY_UNSPECIFIED": 0,
+		"PUBLIC":                  1,
+		"BEARER":                  2,
+		"ADMIN_KEY":               3,
+	}
+)
+
+func (x AuthPolicy) Enum() *AuthPolicy {
+	p := new(AuthPolicy)
+	*p = x
+	return p
+}
+
+func (x AuthPolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuthPolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_catalog_proto_enumTypes[3].Descriptor()
+}
+
+func (AuthPolicy) Type() protoreflect.EnumType {
+	return &file_api_catalog_proto_enumTypes[3]
+}
+
+func (x AuthPolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuthPolicy.Descriptor instead.
+func (AuthPolicy) EnumDescriptor() ([]byte, []int) {
+	return file_api_catalog_proto_rawDescGZIP(), []int{3}
+}
+
 type Service struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	BaseUrl       string                 `protobuf:"bytes,3,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
-	Protocols     []Protocol             `protobuf:"varint,4,rep,packed,name=protocols,proto3,enum=api_catalog.Protocol" json:"protocols,omitempty"`
-	Source        Source                 `protobuf:"varint,5,opt,name=source,proto3,enum=api_catalog.Source" json:"source,omitempty"`
-	Status        Status                 `protobuf:"varint,6,opt,name=status,proto3,enum=api_catalog.Status" json:"status,omitempty"`
-	Description   string                 `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
-	Owner         string                 `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
-	Tags          []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
-	ApiInfoUrl    string                 `protobuf:"bytes,10,opt,name=api_info_url,json=apiInfoUrl,proto3" json:"api_info_url,omitempty"`
-	GrpcAddress   string                 `protobuf:"bytes,11,opt,name=grpc_address,json=grpcAddress,proto3" json:"grpc_address,omitempty"`
-	LastScannedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_scanned_at,json=lastScannedAt,proto3" json:"last_scanned_at,omitempty"`
-	LastScanOk    bool                   `protobuf:"varint,13,opt,name=last_scan_ok,json=lastScanOk,proto3" json:"last_scan_ok,omitempty"`
-	LastScanError string                 `protobuf:"bytes,14,opt,name=last_scan_error,json=lastScanError,proto3" json:"last_scan_error,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Id                   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name                 string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	BaseUrl              string                 `protobuf:"bytes,3,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
+	Protocols            []Protocol             `protobuf:"varint,4,rep,packed,name=protocols,proto3,enum=api_catalog.Protocol" json:"protocols,omitempty"`
+	Source               Source                 `protobuf:"varint,5,opt,name=source,proto3,enum=api_catalog.Source" json:"source,omitempty"`
+	Status               Status                 `protobuf:"varint,6,opt,name=status,proto3,enum=api_catalog.Status" json:"status,omitempty"`
+	Description          string                 `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
+	Owner                string                 `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	Tags                 []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
+	ApiInfoUrl           string                 `protobuf:"bytes,10,opt,name=api_info_url,json=apiInfoUrl,proto3" json:"api_info_url,omitempty"`
+	GrpcAddress          string                 `protobuf:"bytes,11,opt,name=grpc_address,json=grpcAddress,proto3" json:"grpc_address,omitempty"`
+	LastScannedAt        *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_scanned_at,json=lastScannedAt,proto3" json:"last_scanned_at,omitempty"`
+	LastScanOk           bool                   `protobuf:"varint,13,opt,name=last_scan_ok,json=lastScanOk,proto3" json:"last_scan_ok,omitempty"`
+	LastScanError        string                 `protobuf:"bytes,14,opt,name=last_scan_error,json=lastScanError,proto3" json:"last_scan_error,omitempty"`
+	CreatedAt            *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt            *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	AuthPolicy           AuthPolicy             `protobuf:"varint,17,opt,name=auth_policy,json=authPolicy,proto3,enum=api_catalog.AuthPolicy" json:"auth_policy,omitempty"`
+	PublicPaths          []string               `protobuf:"bytes,18,rep,name=public_paths,json=publicPaths,proto3" json:"public_paths,omitempty"`
+	HasEndpointOverrides bool                   `protobuf:"varint,19,opt,name=has_endpoint_overrides,json=hasEndpointOverrides,proto3" json:"has_endpoint_overrides,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Service) Reset() {
@@ -342,6 +397,27 @@ func (x *Service) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Service) GetAuthPolicy() AuthPolicy {
+	if x != nil {
+		return x.AuthPolicy
+	}
+	return AuthPolicy_AUTH_POLICY_UNSPECIFIED
+}
+
+func (x *Service) GetPublicPaths() []string {
+	if x != nil {
+		return x.PublicPaths
+	}
+	return nil
+}
+
+func (x *Service) GetHasEndpointOverrides() bool {
+	if x != nil {
+		return x.HasEndpointOverrides
+	}
+	return false
+}
+
 type Endpoint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -353,6 +429,7 @@ type Endpoint struct {
 	OperationId   string                 `protobuf:"bytes,7,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
 	Tags          []string               `protobuf:"bytes,8,rep,name=tags,proto3" json:"tags,omitempty"`
 	Deprecated    bool                   `protobuf:"varint,9,opt,name=deprecated,proto3" json:"deprecated,omitempty"`
+	AuthPolicy    *AuthPolicy            `protobuf:"varint,10,opt,name=auth_policy,json=authPolicy,proto3,enum=api_catalog.AuthPolicy,oneof" json:"auth_policy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -448,6 +525,13 @@ func (x *Endpoint) GetDeprecated() bool {
 		return x.Deprecated
 	}
 	return false
+}
+
+func (x *Endpoint) GetAuthPolicy() AuthPolicy {
+	if x != nil && x.AuthPolicy != nil {
+		return *x.AuthPolicy
+	}
+	return AuthPolicy_AUTH_POLICY_UNSPECIFIED
 }
 
 type ListServicesRequest struct {
@@ -713,6 +797,8 @@ type CreateServiceRequest struct {
 	ApiInfoUrl    string                 `protobuf:"bytes,7,opt,name=api_info_url,json=apiInfoUrl,proto3" json:"api_info_url,omitempty"`
 	GrpcAddress   string                 `protobuf:"bytes,8,opt,name=grpc_address,json=grpcAddress,proto3" json:"grpc_address,omitempty"`
 	CreatedBy     string                 `protobuf:"bytes,9,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	AuthPolicy    AuthPolicy             `protobuf:"varint,10,opt,name=auth_policy,json=authPolicy,proto3,enum=api_catalog.AuthPolicy" json:"auth_policy,omitempty"`
+	PublicPaths   []string               `protobuf:"bytes,11,rep,name=public_paths,json=publicPaths,proto3" json:"public_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -810,6 +896,20 @@ func (x *CreateServiceRequest) GetCreatedBy() string {
 	return ""
 }
 
+func (x *CreateServiceRequest) GetAuthPolicy() AuthPolicy {
+	if x != nil {
+		return x.AuthPolicy
+	}
+	return AuthPolicy_AUTH_POLICY_UNSPECIFIED
+}
+
+func (x *CreateServiceRequest) GetPublicPaths() []string {
+	if x != nil {
+		return x.PublicPaths
+	}
+	return nil
+}
+
 type UpdateServiceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -817,6 +917,8 @@ type UpdateServiceRequest struct {
 	Owner         *string                `protobuf:"bytes,3,opt,name=owner,proto3,oneof" json:"owner,omitempty"`
 	Tags          []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
 	Status        *Status                `protobuf:"varint,5,opt,name=status,proto3,enum=api_catalog.Status,oneof" json:"status,omitempty"`
+	AuthPolicy    *AuthPolicy            `protobuf:"varint,6,opt,name=auth_policy,json=authPolicy,proto3,enum=api_catalog.AuthPolicy,oneof" json:"auth_policy,omitempty"`
+	PublicPaths   []string               `protobuf:"bytes,7,rep,name=public_paths,json=publicPaths,proto3" json:"public_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -886,6 +988,72 @@ func (x *UpdateServiceRequest) GetStatus() Status {
 	return Status_STATUS_UNSPECIFIED
 }
 
+func (x *UpdateServiceRequest) GetAuthPolicy() AuthPolicy {
+	if x != nil && x.AuthPolicy != nil {
+		return *x.AuthPolicy
+	}
+	return AuthPolicy_AUTH_POLICY_UNSPECIFIED
+}
+
+func (x *UpdateServiceRequest) GetPublicPaths() []string {
+	if x != nil {
+		return x.PublicPaths
+	}
+	return nil
+}
+
+type UpdateEndpointRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	AuthPolicy    *AuthPolicy            `protobuf:"varint,2,opt,name=auth_policy,json=authPolicy,proto3,enum=api_catalog.AuthPolicy,oneof" json:"auth_policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateEndpointRequest) Reset() {
+	*x = UpdateEndpointRequest{}
+	mi := &file_api_catalog_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateEndpointRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateEndpointRequest) ProtoMessage() {}
+
+func (x *UpdateEndpointRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_catalog_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateEndpointRequest.ProtoReflect.Descriptor instead.
+func (*UpdateEndpointRequest) Descriptor() ([]byte, []int) {
+	return file_api_catalog_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UpdateEndpointRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateEndpointRequest) GetAuthPolicy() AuthPolicy {
+	if x != nil && x.AuthPolicy != nil {
+		return *x.AuthPolicy
+	}
+	return AuthPolicy_AUTH_POLICY_UNSPECIFIED
+}
+
 type DeleteServiceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -895,7 +1063,7 @@ type DeleteServiceRequest struct {
 
 func (x *DeleteServiceRequest) Reset() {
 	*x = DeleteServiceRequest{}
-	mi := &file_api_catalog_proto_msgTypes[9]
+	mi := &file_api_catalog_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -907,7 +1075,7 @@ func (x *DeleteServiceRequest) String() string {
 func (*DeleteServiceRequest) ProtoMessage() {}
 
 func (x *DeleteServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_catalog_proto_msgTypes[9]
+	mi := &file_api_catalog_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -920,7 +1088,7 @@ func (x *DeleteServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteServiceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteServiceRequest) Descriptor() ([]byte, []int) {
-	return file_api_catalog_proto_rawDescGZIP(), []int{9}
+	return file_api_catalog_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeleteServiceRequest) GetId() string {
@@ -939,7 +1107,7 @@ type DeleteServiceResponse struct {
 
 func (x *DeleteServiceResponse) Reset() {
 	*x = DeleteServiceResponse{}
-	mi := &file_api_catalog_proto_msgTypes[10]
+	mi := &file_api_catalog_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -951,7 +1119,7 @@ func (x *DeleteServiceResponse) String() string {
 func (*DeleteServiceResponse) ProtoMessage() {}
 
 func (x *DeleteServiceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_catalog_proto_msgTypes[10]
+	mi := &file_api_catalog_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -964,7 +1132,7 @@ func (x *DeleteServiceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteServiceResponse.ProtoReflect.Descriptor instead.
 func (*DeleteServiceResponse) Descriptor() ([]byte, []int) {
-	return file_api_catalog_proto_rawDescGZIP(), []int{10}
+	return file_api_catalog_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DeleteServiceResponse) GetDeleted() bool {
@@ -983,7 +1151,7 @@ type RescanAllRequest struct {
 
 func (x *RescanAllRequest) Reset() {
 	*x = RescanAllRequest{}
-	mi := &file_api_catalog_proto_msgTypes[11]
+	mi := &file_api_catalog_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -995,7 +1163,7 @@ func (x *RescanAllRequest) String() string {
 func (*RescanAllRequest) ProtoMessage() {}
 
 func (x *RescanAllRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_catalog_proto_msgTypes[11]
+	mi := &file_api_catalog_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1008,7 +1176,7 @@ func (x *RescanAllRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RescanAllRequest.ProtoReflect.Descriptor instead.
 func (*RescanAllRequest) Descriptor() ([]byte, []int) {
-	return file_api_catalog_proto_rawDescGZIP(), []int{11}
+	return file_api_catalog_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RescanAllRequest) GetForce() bool {
@@ -1027,7 +1195,7 @@ type RescanServiceRequest struct {
 
 func (x *RescanServiceRequest) Reset() {
 	*x = RescanServiceRequest{}
-	mi := &file_api_catalog_proto_msgTypes[12]
+	mi := &file_api_catalog_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1039,7 +1207,7 @@ func (x *RescanServiceRequest) String() string {
 func (*RescanServiceRequest) ProtoMessage() {}
 
 func (x *RescanServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_catalog_proto_msgTypes[12]
+	mi := &file_api_catalog_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1052,7 +1220,7 @@ func (x *RescanServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RescanServiceRequest.ProtoReflect.Descriptor instead.
 func (*RescanServiceRequest) Descriptor() ([]byte, []int) {
-	return file_api_catalog_proto_rawDescGZIP(), []int{12}
+	return file_api_catalog_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RescanServiceRequest) GetId() string {
@@ -1075,7 +1243,7 @@ type RescanReport struct {
 
 func (x *RescanReport) Reset() {
 	*x = RescanReport{}
-	mi := &file_api_catalog_proto_msgTypes[13]
+	mi := &file_api_catalog_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1087,7 +1255,7 @@ func (x *RescanReport) String() string {
 func (*RescanReport) ProtoMessage() {}
 
 func (x *RescanReport) ProtoReflect() protoreflect.Message {
-	mi := &file_api_catalog_proto_msgTypes[13]
+	mi := &file_api_catalog_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1100,7 +1268,7 @@ func (x *RescanReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RescanReport.ProtoReflect.Descriptor instead.
 func (*RescanReport) Descriptor() ([]byte, []int) {
-	return file_api_catalog_proto_rawDescGZIP(), []int{13}
+	return file_api_catalog_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RescanReport) GetServicesScanned() int32 {
@@ -1142,7 +1310,7 @@ var File_api_catalog_proto protoreflect.FileDescriptor
 
 const file_api_catalog_proto_rawDesc = "" +
 	"\n" +
-	"\x11api_catalog.proto\x12\vapi_catalog\x1a\x1fgoogle/protobuf/timestamp.proto\"\xec\x04\n" +
+	"\x11api_catalog.proto\x12\vapi_catalog\x1a\x1fgoogle/protobuf/timestamp.proto\"\xff\x05\n" +
 	"\aService\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -1164,7 +1332,11 @@ const file_api_catalog_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x89\x02\n" +
+	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x128\n" +
+	"\vauth_policy\x18\x11 \x01(\x0e2\x17.api_catalog.AuthPolicyR\n" +
+	"authPolicy\x12!\n" +
+	"\fpublic_paths\x18\x12 \x03(\tR\vpublicPaths\x124\n" +
+	"\x16has_endpoint_overrides\x18\x13 \x01(\bR\x14hasEndpointOverrides\"\xd8\x02\n" +
 	"\bEndpoint\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1177,7 +1349,11 @@ const file_api_catalog_proto_rawDesc = "" +
 	"\x04tags\x18\b \x03(\tR\x04tags\x12\x1e\n" +
 	"\n" +
 	"deprecated\x18\t \x01(\bR\n" +
-	"deprecated\"[\n" +
+	"deprecated\x12=\n" +
+	"\vauth_policy\x18\n" +
+	" \x01(\x0e2\x17.api_catalog.AuthPolicyH\x00R\n" +
+	"authPolicy\x88\x01\x01B\x0e\n" +
+	"\f_auth_policy\"[\n" +
 	"\x13ListServicesRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12\x16\n" +
@@ -1192,7 +1368,7 @@ const file_api_catalog_proto_rawDesc = "" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x121\n" +
 	"\bprotocol\x18\x02 \x01(\x0e2\x15.api_catalog.ProtocolR\bprotocol\"D\n" +
 	"\x15ListEndpointsResponse\x12+\n" +
-	"\x05items\x18\x01 \x03(\v2\x15.api_catalog.EndpointR\x05items\"\xaa\x02\n" +
+	"\x05items\x18\x01 \x03(\v2\x15.api_catalog.EndpointR\x05items\"\x87\x03\n" +
 	"\x14CreateServiceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x123\n" +
@@ -1204,16 +1380,29 @@ const file_api_catalog_proto_rawDesc = "" +
 	"apiInfoUrl\x12!\n" +
 	"\fgrpc_address\x18\b \x01(\tR\vgrpcAddress\x12\x1d\n" +
 	"\n" +
-	"created_by\x18\t \x01(\tR\tcreatedBy\"\xd3\x01\n" +
+	"created_by\x18\t \x01(\tR\tcreatedBy\x128\n" +
+	"\vauth_policy\x18\n" +
+	" \x01(\x0e2\x17.api_catalog.AuthPolicyR\n" +
+	"authPolicy\x12!\n" +
+	"\fpublic_paths\x18\v \x03(\tR\vpublicPaths\"\xc5\x02\n" +
 	"\x14UpdateServiceRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\vdescription\x18\x02 \x01(\tH\x00R\vdescription\x88\x01\x01\x12\x19\n" +
 	"\x05owner\x18\x03 \x01(\tH\x01R\x05owner\x88\x01\x01\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x120\n" +
-	"\x06status\x18\x05 \x01(\x0e2\x13.api_catalog.StatusH\x02R\x06status\x88\x01\x01B\x0e\n" +
+	"\x06status\x18\x05 \x01(\x0e2\x13.api_catalog.StatusH\x02R\x06status\x88\x01\x01\x12=\n" +
+	"\vauth_policy\x18\x06 \x01(\x0e2\x17.api_catalog.AuthPolicyH\x03R\n" +
+	"authPolicy\x88\x01\x01\x12!\n" +
+	"\fpublic_paths\x18\a \x03(\tR\vpublicPathsB\x0e\n" +
 	"\f_descriptionB\b\n" +
 	"\x06_ownerB\t\n" +
-	"\a_status\"&\n" +
+	"\a_statusB\x0e\n" +
+	"\f_auth_policy\"v\n" +
+	"\x15UpdateEndpointRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12=\n" +
+	"\vauth_policy\x18\x02 \x01(\x0e2\x17.api_catalog.AuthPolicyH\x00R\n" +
+	"authPolicy\x88\x01\x01B\x0e\n" +
+	"\f_auth_policy\"&\n" +
 	"\x14DeleteServiceRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"1\n" +
 	"\x15DeleteServiceResponse\x12\x18\n" +
@@ -1247,7 +1436,15 @@ const file_api_catalog_proto_rawDesc = "" +
 	"\x06ACTIVE\x10\x01\x12\x0e\n" +
 	"\n" +
 	"DEPRECATED\x10\x02\x12\b\n" +
-	"\x04DOWN\x10\x032\xff\x04\n" +
+	"\x04DOWN\x10\x03*P\n" +
+	"\n" +
+	"AuthPolicy\x12\x1b\n" +
+	"\x17AUTH_POLICY_UNSPECIFIED\x10\x00\x12\n" +
+	"\n" +
+	"\x06PUBLIC\x10\x01\x12\n" +
+	"\n" +
+	"\x06BEARER\x10\x02\x12\r\n" +
+	"\tADMIN_KEY\x10\x032\xcc\x05\n" +
 	"\n" +
 	"ApiCatalog\x12S\n" +
 	"\fListServices\x12 .api_catalog.ListServicesRequest\x1a!.api_catalog.ListServicesResponse\x12B\n" +
@@ -1256,7 +1453,8 @@ const file_api_catalog_proto_rawDesc = "" +
 	"\rListEndpoints\x12!.api_catalog.ListEndpointsRequest\x1a\".api_catalog.ListEndpointsResponse\x12H\n" +
 	"\rCreateService\x12!.api_catalog.CreateServiceRequest\x1a\x14.api_catalog.Service\x12H\n" +
 	"\rUpdateService\x12!.api_catalog.UpdateServiceRequest\x1a\x14.api_catalog.Service\x12V\n" +
-	"\rDeleteService\x12!.api_catalog.DeleteServiceRequest\x1a\".api_catalog.DeleteServiceResponse\x12E\n" +
+	"\rDeleteService\x12!.api_catalog.DeleteServiceRequest\x1a\".api_catalog.DeleteServiceResponse\x12K\n" +
+	"\x0eUpdateEndpoint\x12\".api_catalog.UpdateEndpointRequest\x1a\x15.api_catalog.Endpoint\x12E\n" +
 	"\tRescanAll\x12\x1d.api_catalog.RescanAllRequest\x1a\x19.api_catalog.RescanReport\x12M\n" +
 	"\rRescanService\x12!.api_catalog.RescanServiceRequest\x1a\x19.api_catalog.RescanReportB Z\x1erag-hp/api_catalog;api_catalogb\x06proto3"
 
@@ -1272,63 +1470,72 @@ func file_api_catalog_proto_rawDescGZIP() []byte {
 	return file_api_catalog_proto_rawDescData
 }
 
-var file_api_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_api_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_api_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_api_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_api_catalog_proto_goTypes = []any{
 	(Protocol)(0),                 // 0: api_catalog.Protocol
 	(Source)(0),                   // 1: api_catalog.Source
 	(Status)(0),                   // 2: api_catalog.Status
-	(*Service)(nil),               // 3: api_catalog.Service
-	(*Endpoint)(nil),              // 4: api_catalog.Endpoint
-	(*ListServicesRequest)(nil),   // 5: api_catalog.ListServicesRequest
-	(*ListServicesResponse)(nil),  // 6: api_catalog.ListServicesResponse
-	(*GetServiceRequest)(nil),     // 7: api_catalog.GetServiceRequest
-	(*ListEndpointsRequest)(nil),  // 8: api_catalog.ListEndpointsRequest
-	(*ListEndpointsResponse)(nil), // 9: api_catalog.ListEndpointsResponse
-	(*CreateServiceRequest)(nil),  // 10: api_catalog.CreateServiceRequest
-	(*UpdateServiceRequest)(nil),  // 11: api_catalog.UpdateServiceRequest
-	(*DeleteServiceRequest)(nil),  // 12: api_catalog.DeleteServiceRequest
-	(*DeleteServiceResponse)(nil), // 13: api_catalog.DeleteServiceResponse
-	(*RescanAllRequest)(nil),      // 14: api_catalog.RescanAllRequest
-	(*RescanServiceRequest)(nil),  // 15: api_catalog.RescanServiceRequest
-	(*RescanReport)(nil),          // 16: api_catalog.RescanReport
-	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(AuthPolicy)(0),               // 3: api_catalog.AuthPolicy
+	(*Service)(nil),               // 4: api_catalog.Service
+	(*Endpoint)(nil),              // 5: api_catalog.Endpoint
+	(*ListServicesRequest)(nil),   // 6: api_catalog.ListServicesRequest
+	(*ListServicesResponse)(nil),  // 7: api_catalog.ListServicesResponse
+	(*GetServiceRequest)(nil),     // 8: api_catalog.GetServiceRequest
+	(*ListEndpointsRequest)(nil),  // 9: api_catalog.ListEndpointsRequest
+	(*ListEndpointsResponse)(nil), // 10: api_catalog.ListEndpointsResponse
+	(*CreateServiceRequest)(nil),  // 11: api_catalog.CreateServiceRequest
+	(*UpdateServiceRequest)(nil),  // 12: api_catalog.UpdateServiceRequest
+	(*UpdateEndpointRequest)(nil), // 13: api_catalog.UpdateEndpointRequest
+	(*DeleteServiceRequest)(nil),  // 14: api_catalog.DeleteServiceRequest
+	(*DeleteServiceResponse)(nil), // 15: api_catalog.DeleteServiceResponse
+	(*RescanAllRequest)(nil),      // 16: api_catalog.RescanAllRequest
+	(*RescanServiceRequest)(nil),  // 17: api_catalog.RescanServiceRequest
+	(*RescanReport)(nil),          // 18: api_catalog.RescanReport
+	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
 }
 var file_api_catalog_proto_depIdxs = []int32{
 	0,  // 0: api_catalog.Service.protocols:type_name -> api_catalog.Protocol
 	1,  // 1: api_catalog.Service.source:type_name -> api_catalog.Source
 	2,  // 2: api_catalog.Service.status:type_name -> api_catalog.Status
-	17, // 3: api_catalog.Service.last_scanned_at:type_name -> google.protobuf.Timestamp
-	17, // 4: api_catalog.Service.created_at:type_name -> google.protobuf.Timestamp
-	17, // 5: api_catalog.Service.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: api_catalog.Endpoint.protocol:type_name -> api_catalog.Protocol
-	3,  // 7: api_catalog.ListServicesResponse.items:type_name -> api_catalog.Service
-	0,  // 8: api_catalog.ListEndpointsRequest.protocol:type_name -> api_catalog.Protocol
-	4,  // 9: api_catalog.ListEndpointsResponse.items:type_name -> api_catalog.Endpoint
-	0,  // 10: api_catalog.CreateServiceRequest.protocols:type_name -> api_catalog.Protocol
-	2,  // 11: api_catalog.UpdateServiceRequest.status:type_name -> api_catalog.Status
-	17, // 12: api_catalog.RescanReport.finished_at:type_name -> google.protobuf.Timestamp
-	5,  // 13: api_catalog.ApiCatalog.ListServices:input_type -> api_catalog.ListServicesRequest
-	7,  // 14: api_catalog.ApiCatalog.GetService:input_type -> api_catalog.GetServiceRequest
-	8,  // 15: api_catalog.ApiCatalog.ListEndpoints:input_type -> api_catalog.ListEndpointsRequest
-	10, // 16: api_catalog.ApiCatalog.CreateService:input_type -> api_catalog.CreateServiceRequest
-	11, // 17: api_catalog.ApiCatalog.UpdateService:input_type -> api_catalog.UpdateServiceRequest
-	12, // 18: api_catalog.ApiCatalog.DeleteService:input_type -> api_catalog.DeleteServiceRequest
-	14, // 19: api_catalog.ApiCatalog.RescanAll:input_type -> api_catalog.RescanAllRequest
-	15, // 20: api_catalog.ApiCatalog.RescanService:input_type -> api_catalog.RescanServiceRequest
-	6,  // 21: api_catalog.ApiCatalog.ListServices:output_type -> api_catalog.ListServicesResponse
-	3,  // 22: api_catalog.ApiCatalog.GetService:output_type -> api_catalog.Service
-	9,  // 23: api_catalog.ApiCatalog.ListEndpoints:output_type -> api_catalog.ListEndpointsResponse
-	3,  // 24: api_catalog.ApiCatalog.CreateService:output_type -> api_catalog.Service
-	3,  // 25: api_catalog.ApiCatalog.UpdateService:output_type -> api_catalog.Service
-	13, // 26: api_catalog.ApiCatalog.DeleteService:output_type -> api_catalog.DeleteServiceResponse
-	16, // 27: api_catalog.ApiCatalog.RescanAll:output_type -> api_catalog.RescanReport
-	16, // 28: api_catalog.ApiCatalog.RescanService:output_type -> api_catalog.RescanReport
-	21, // [21:29] is the sub-list for method output_type
-	13, // [13:21] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	19, // 3: api_catalog.Service.last_scanned_at:type_name -> google.protobuf.Timestamp
+	19, // 4: api_catalog.Service.created_at:type_name -> google.protobuf.Timestamp
+	19, // 5: api_catalog.Service.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 6: api_catalog.Service.auth_policy:type_name -> api_catalog.AuthPolicy
+	0,  // 7: api_catalog.Endpoint.protocol:type_name -> api_catalog.Protocol
+	3,  // 8: api_catalog.Endpoint.auth_policy:type_name -> api_catalog.AuthPolicy
+	4,  // 9: api_catalog.ListServicesResponse.items:type_name -> api_catalog.Service
+	0,  // 10: api_catalog.ListEndpointsRequest.protocol:type_name -> api_catalog.Protocol
+	5,  // 11: api_catalog.ListEndpointsResponse.items:type_name -> api_catalog.Endpoint
+	0,  // 12: api_catalog.CreateServiceRequest.protocols:type_name -> api_catalog.Protocol
+	3,  // 13: api_catalog.CreateServiceRequest.auth_policy:type_name -> api_catalog.AuthPolicy
+	2,  // 14: api_catalog.UpdateServiceRequest.status:type_name -> api_catalog.Status
+	3,  // 15: api_catalog.UpdateServiceRequest.auth_policy:type_name -> api_catalog.AuthPolicy
+	3,  // 16: api_catalog.UpdateEndpointRequest.auth_policy:type_name -> api_catalog.AuthPolicy
+	19, // 17: api_catalog.RescanReport.finished_at:type_name -> google.protobuf.Timestamp
+	6,  // 18: api_catalog.ApiCatalog.ListServices:input_type -> api_catalog.ListServicesRequest
+	8,  // 19: api_catalog.ApiCatalog.GetService:input_type -> api_catalog.GetServiceRequest
+	9,  // 20: api_catalog.ApiCatalog.ListEndpoints:input_type -> api_catalog.ListEndpointsRequest
+	11, // 21: api_catalog.ApiCatalog.CreateService:input_type -> api_catalog.CreateServiceRequest
+	12, // 22: api_catalog.ApiCatalog.UpdateService:input_type -> api_catalog.UpdateServiceRequest
+	14, // 23: api_catalog.ApiCatalog.DeleteService:input_type -> api_catalog.DeleteServiceRequest
+	13, // 24: api_catalog.ApiCatalog.UpdateEndpoint:input_type -> api_catalog.UpdateEndpointRequest
+	16, // 25: api_catalog.ApiCatalog.RescanAll:input_type -> api_catalog.RescanAllRequest
+	17, // 26: api_catalog.ApiCatalog.RescanService:input_type -> api_catalog.RescanServiceRequest
+	7,  // 27: api_catalog.ApiCatalog.ListServices:output_type -> api_catalog.ListServicesResponse
+	4,  // 28: api_catalog.ApiCatalog.GetService:output_type -> api_catalog.Service
+	10, // 29: api_catalog.ApiCatalog.ListEndpoints:output_type -> api_catalog.ListEndpointsResponse
+	4,  // 30: api_catalog.ApiCatalog.CreateService:output_type -> api_catalog.Service
+	4,  // 31: api_catalog.ApiCatalog.UpdateService:output_type -> api_catalog.Service
+	15, // 32: api_catalog.ApiCatalog.DeleteService:output_type -> api_catalog.DeleteServiceResponse
+	5,  // 33: api_catalog.ApiCatalog.UpdateEndpoint:output_type -> api_catalog.Endpoint
+	18, // 34: api_catalog.ApiCatalog.RescanAll:output_type -> api_catalog.RescanReport
+	18, // 35: api_catalog.ApiCatalog.RescanService:output_type -> api_catalog.RescanReport
+	27, // [27:36] is the sub-list for method output_type
+	18, // [18:27] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_api_catalog_proto_init() }
@@ -1336,14 +1543,16 @@ func file_api_catalog_proto_init() {
 	if File_api_catalog_proto != nil {
 		return
 	}
+	file_api_catalog_proto_msgTypes[1].OneofWrappers = []any{}
 	file_api_catalog_proto_msgTypes[8].OneofWrappers = []any{}
+	file_api_catalog_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_catalog_proto_rawDesc), len(file_api_catalog_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   14,
+			NumEnums:      4,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

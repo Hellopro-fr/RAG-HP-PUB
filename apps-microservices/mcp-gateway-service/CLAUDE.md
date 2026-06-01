@@ -185,6 +185,15 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 - `POST /message?sessionId={id}` — Send JSON-RPC over SSE
 - `POST /mcp` — Streamable HTTP JSON-RPC
 
+**Auth header precedence on MCP transports:**
+1. `X-MCP-Scope-Token: mcp_…` wins outright when present.
+2. Otherwise `Authorization: Bearer <token>` is dispatched by prefix:
+   - Starts with `mcp_` → validated as a `/tokens`-issued scope token (same pipeline as `X-MCP-Scope-Token`). Rejection emits **no** `WWW-Authenticate` header.
+   - Otherwise → validated as an OAuth2 access token (JWT, HS256). Rejection emits `WWW-Authenticate: Bearer error="invalid_token"`.
+3. Neither present → 401 + `WWW-Authenticate: Bearer resource_metadata="…"`.
+
+Scope-token accepts and rejects log an `auth_source=x-mcp-scope-token|bearer` tag; Slack `UnauthorizedEvent` reasons carry the same tag.
+
 ### Template Catalog (`/api/v1/`)
 - `GET /templates` — list available templates (seeded: GA4, GSC) with live instance counts
 - `GET /templates/{slug}` — template detail
