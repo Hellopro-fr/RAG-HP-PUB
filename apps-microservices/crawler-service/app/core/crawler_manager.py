@@ -652,6 +652,7 @@ class CrawlerManager:
                 request_id = self._get_or_create_failure_request_id(job_info)
 
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+            self._stamp_terminal_fields(job_info)
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
 
@@ -716,6 +717,7 @@ class CrawlerManager:
                 request_id = self._get_or_create_failure_request_id(job_info)
 
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+            self._stamp_terminal_fields(job_info)
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
             if request_id:
@@ -1131,6 +1133,7 @@ class CrawlerManager:
             _, failure_cause = self._classify_exit_code(exit_code)
             if failure_cause is not None:
                 job_info["failure_cause"] = failure_cause
+            self._stamp_terminal_fields(job_info)
             await cache_service.set_json(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. Lock released. Counter decremented.")
 
@@ -1267,6 +1270,7 @@ class CrawlerManager:
         if target_status == "failed":
             job_info["failure_cause"] = "force_finished"
         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+        self._stamp_terminal_fields(job_info)
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, target_status)
 
@@ -1805,6 +1809,20 @@ class CrawlerManager:
         except Exception as e:
             logger.warning(f"Could not estimate required bytes for '{job_storage_path}': {e}")
             return 0
+
+    def _stamp_terminal_fields(self, job_info: dict) -> None:
+        """Stamp finished_at (once) + size_bytes onto job_info before a terminal
+        set_json. Inputs the auto-stash sweep (P2) reads from pure Redis.
+        Fail-open: never raises."""
+        try:
+            if not job_info.get("finished_at"):
+                job_info["finished_at"] = datetime.utcnow().isoformat()
+            storage_path = job_info.get("storage_path")
+            if storage_path:
+                job_info["size_bytes"] = self._estimate_archive_required_bytes(storage_path)
+        except Exception as e:
+            logger.warning(f"_stamp_terminal_fields failed for "
+                           f"'{job_info.get('crawl_id')}': {e}")
 
     def _get_archives_disk_state(self, archives_dir: str) -> dict:
         """Collect diagnostics about the archives volume.
@@ -2948,6 +2966,7 @@ class CrawlerManager:
                             reconcile_request_id = self._get_or_create_failure_request_id(job_data)
 
                         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+                        self._stamp_terminal_fields(job_data)
                         await cache_service.set_json(all_job_keys[i], job_data)
                         await self._publish_update(crawl_id, final_status)
 
