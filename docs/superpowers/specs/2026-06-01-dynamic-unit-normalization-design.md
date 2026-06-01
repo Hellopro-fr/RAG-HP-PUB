@@ -952,4 +952,63 @@ message ProposalResponse       { int64 id = 1; string state = 2; }
 
 ---
 
+## Addendum B — Contract additions for the admin UI (2026-06-01)
+
+> Added after the companion frontend spec (`2026-06-01-units-admin-frontend-design.md`) + its adversarial review exposed that the §6 / Appendix A.3 contract is **incomplete** for an admin UI: it exposes RPCs only for `units` and `proposals`, but the UI also manages **dimensions, label rules, and disambiguation rules**, and the two-pane garde-fou panel needs a **validate-only** path. This addendum makes the contract complete and corrects the engine behavior. **These are real additions, NOT a "small addendum" — §B.2 changes the write-path engine behavior.**
+
+### B.1 — Missing CRUD RPCs (the 3 catalog tabs were table-only, never exposed)
+
+The dimensions / label_rules / disambiguation_rules layers existed only as MySQL tables + repo ports (Appendix A.2), never over gRPC. The admin UI's Dimensions / Étiquettes / Désambiguïsation tabs are un-buildable without these. Add to `protos/grpc_stubs/graph_normalization.proto` (additive; regenerate stubs via `/proto-sync`):
+
+```proto
+// ── Dimensions (Layer D) ──
+rpc ListDimensions(ListDimensionsRequest)   returns (ListDimensionsResponse);   // READ
+rpc GetDimension(GetDimensionRequest)       returns (DimensionResponse);          // READ
+rpc CreateDimension(CreateDimensionRequest) returns (DimensionResponse);          // WRITE
+rpc UpdateDimension(UpdateDimensionRequest) returns (DimensionResponse);          // WRITE (name immutable in edit)
+// ── Label rules (Layer C, order-sensitive) ──
+rpc ListLabelRules(ListLabelRulesRequest)     returns (ListLabelRulesResponse);  // READ, ORDER BY priority ASC
+rpc CreateLabelRule(CreateLabelRuleRequest)   returns (LabelRuleResponse);        // WRITE (runs G5)
+rpc UpdateLabelRule(UpdateLabelRuleRequest)   returns (LabelRuleResponse);        // WRITE (runs G5)
+rpc DeleteLabelRule(DeleteLabelRuleRequest)   returns (DeleteResponse);           // WRITE (soft -> is_active=0)
+rpc ReorderLabelRules(ReorderLabelRulesRequest) returns (ListLabelRulesResponse); // WRITE: full [{id,priority}],
+                                                                                  // runs real G5, returns rebalanced sparse priorities
+// ── Disambiguation rules (Layer E3) ──
+rpc ListDisambiguationRules(ListDisambiguationRequest)   returns (ListDisambiguationResponse);  // READ
+rpc CreateDisambiguationRule(CreateDisambiguationRequest) returns (DisambiguationResponse);      // WRITE
+rpc UpdateDisambiguationRule(UpdateDisambiguationRequest) returns (DisambiguationResponse);      // WRITE
+// ── Proposals — add the single-item getter the UI's master-detail needs ──
+rpc GetProposal(GetProposalRequest) returns (ProposalView);   // READ (ListProposals/Approve/Reject already in §6)
+// ── Validate-only (see B.2) ──
+rpc ValidateUnit(ValidateUnitRequest) returns (ValidationResult);   // READ-classified: no persist/version-bump/swap
+```
+
+Request/response messages mirror the records in Appendix A.1 (`DimensionRecord`/`LabelRuleRecord`/`DisambiguationRecord`) the same way `UnitResponse` mirrors `UnitRecord`: a `*Spec` for writes, a `*Response` carrying the persisted row, a `List*Response { repeated *Response items; int64 total }`. `ReorderLabelRulesRequest { repeated LabelRulePriority order }` where `LabelRulePriority { string id; int32 priority }`; it returns the **rebalanced** list so the client shows truthful priorities. `DeleteResponse { bool success }`. Each WRITE follows the §6.2 status-code mapping; G5 failure on a label-rule write/reorder → `InvalidArgument` with the raw G5 message.
+
+Add `string suggested_resolution = N;` to `ProposalView` (`"unit" | "disambiguation"`), set by the §8 diagnose step, so the UI's "Préparer" routes deterministically (unit form vs disambiguation-rule form) without a fragile client heuristic.
+
+### B.2 — Engine change: `validate_unit()` becomes collect-all (CHANGES the write path)
+
+> This is a **behavioral change to §5**, not additive. §5.3's engine raises `InvalidArgument` fail-fast on the first failed guard (eval order `G6→G3→G1→G2→(G5)→G4`, cheap-first short-circuit). The two-pane panel needs **all six guard results + a dry-run, persisting nothing**. So `validate_unit()` becomes the single source of truth for **both** `ValidateUnit` and `RegisterUnit`:
+
+- Each guard becomes a **pure predicate returning a `GuardOutcome`** (catches pint exceptions internally → `ok=false` + raw message; never raises for an expected garde-fou failure).
+- The orchestrator runs **all six** guards + the dry-run and aggregates into a `ValidationOutcome{overall_ok, guards (always len 6, display order G1..G6), dry_run}` (proto: `ValidationResult`/`GuardResult{guard,ok,skipped,message}`/`DryRunResult{ok,canonical_value,canonical_max?,canonical_unit,bypassed,error}`).
+- `skipped` (not applicable — PASSTHROUGH skips G2/G3, no-label-touch skips G5) is distinct from `ok=false`; skipped does not drag `overall_ok`. A failed precondition (G2/G4 can't run because G1 failed) is `ok=false` (not skipped).
+- `RegisterUnit` becomes a **thin wrapper**: call `validate_unit()`; if `overall_ok` → the existing §6.3 persist pipeline (build+validate full new registry, txn, bump, swap); else `abort()` with the first failing guard's code (`G6→AlreadyExists`, else `InvalidArgument`).
+- **Write-path behavioral delta to accept:** `RegisterUnit` now ALWAYS runs all six guards + the dry-run (no more short-circuit) even when a cheap guard already failed. For a units catalog (low write volume, ~200 rows) this is negligible, but it is a real change — the §5.3 circular-definition timeout guard now wraps every `.to_base_units()` on the write path too. G4 and the dry-run are **one** `_run_dry_run()` call (`dry_run.ok` = "produced a value"; `G4.ok` = "produced the *expected* value").
+
+`ValidateUnit` is **read-classified**: it returns gRPC `OK` even when `overall_ok=false` (the failure is in the body), never persists, and is therefore **NOT** in the `writeMethods` allow-set (B.3) — it carries no bearer. It MUST still enforce the §5.3 circular-definition/timeout bound (attacker-influenced `pint_definition`/`depends_on` must not hang a worker thread on the bounded `ThreadPoolExecutor`).
+
+### B.3 — Server-side auth interceptor (PREREQUISITE, was missing)
+
+> The review found the units gRPC server uses `add_insecure_port` with **no metadata/authorization check** — the `ADMIN_KEY` bearer the BFF attaches is currently **decorative** (gates nothing server-side). This is a hard prerequisite, not a deferred risk.
+
+Add a gRPC server interceptor (mirror the catalog's `interceptor_auth.go`): a `writeMethods` allow-set (`RegisterUnit/UpdateUnit/DeleteUnit`, `CreateDimension/UpdateDimension`, `CreateLabelRule/UpdateLabelRule/DeleteLabelRule/ReorderLabelRules`, `CreateDisambiguationRule/UpdateDisambiguationRule`, `ApproveProposal/RejectProposal`) requires a valid `authorization: Bearer <ADMIN_KEY>` in metadata; reads (`Normalize*`, all `List*`/`Get*`, `ValidateUnit`, `GetRegistryStatus`) pass unauthenticated. Keep the listener internal-only (`expose`, not `ports`, on `services-net` — already the case). Until this lands, the BFF admin gate is the ONLY gate and `ADMIN_KEY` protects nothing.
+
+### B.4 — Proposal approve when the resolution is a disambiguation rule
+
+`ApproveProposal(id, UnitSpec)` (§6) only models a unit resolution. For an nm-class proposal whose resolution is a **disambiguation rule** (`suggested_resolution="disambiguation"`), there is no `UnitSpec` to approve-with. Resolution: the operator creates the disambiguation rule via `CreateDisambiguationRule`, then the proposal is moved to `SUPERSEDED` by passing its id (`CreateDisambiguationRequest.from_proposal_id` optional field; the servicer sets `state=SUPERSEDED, reviewed_by`). So the lifecycle for the disambiguation fork is `PENDING → SUPERSEDED` (rule created independently), distinct from the unit fork's `PENDING → VALIDATING → ACTIVE/REJECTED_VALIDATION` via `ApproveProposal`.
+
+---
+
 *End of design. Next: user reviews this spec, then → writing-plans for the implementation plan.*
