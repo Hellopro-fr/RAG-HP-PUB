@@ -42,10 +42,12 @@ class Settings(BaseSettings):
 
     # Stash->archive move flow (spec 2026-06-01 P3). Service writes .move-request;
     # the move-flow daemon does `gcloud storage mv stash/{id} crawls/{id}`.
+    # Prefix names match the daemon's env vars (download_daemon.sh) so a single
+    # .env entry configures both layers; the daemon is the actual consumer.
     MOVE_REQUESTS_PATH: str = "/app/gcs-move-requests"
     MOVE_RESULTS_PATH: str = "/app/gcs-move-results"
-    MOVE_GCS_SOURCE_PREFIX: str = "stash"
-    MOVE_GCS_TARGET_PREFIX: str = "crawls"
+    MOVE_SOURCE_PREFIX: str = "stash"
+    MOVE_TARGET_PREFIX: str = "crawls"
     MOVE_TIMEOUT_SECONDS: int = 120
 
     # Stash flow Redis lock TTLs and timeouts (seconds).
