@@ -23,6 +23,7 @@
 - FastAPI + Uvicorn (`--timeout-keep-alive 300 --limit-concurrency 50`), fully request/response. **No lifespan/startup hook today** (middleware + `_prod_admission` are built at module scope in `main.py`).
 - **Redis present** (`REDIS_URL`, `redis[hiredis]>=5.0.0`) — used today only by `DomainCache` (cache, optional, graceful-degradation; lazy connect — see §4.3 caveat).
 - Concurrency primitives (in-memory): `AdmissionController` (**default `ADMISSION_MAX_SLOTS=12` in code; pinned `8` in docker-compose**), `InflightDedup`, browser semaphore (**default `BROWSER_SEMAPHORE_SIZE=10` in code; pinned `6` in docker-compose**). `AdmissionController.acquire()` is **non-blocking**: returns `False` on saturation → the item becomes `method='admission_rejected'` (it does NOT queue/park).
+- **Admission carve-out (prior spec, load-bearing here):** a prod slot is acquired ONLY on an actual network fetch. Requests passing `html_content`, cache hits, and inflight-dedup followers **bypass admission entirely** (verified: `routes.py` `if not html_was_provided:` gate; homepage-fallback needs a `fetch_result` which is `None` for html_content callers; alternative-URL fetches use direct `httpx`/`scrape_html`, not `_fetch_with_admission`). **crawler-service always passes `html_content`, so it never consumes a slot.**
 - Per-item timeout inside the batch core: `asyncio.wait_for(_process_item_core(item), timeout=300)` (routes.py); alternative-URL fetches up to 120s each; Pass-2 retry uses a 2s inter-item gap.
 - **No job queue, no worker, no broker, no persistence beyond the Redis cache.** `requirements.txt` has no celery/rq/arq/pika.
 
@@ -45,7 +46,6 @@
 3. Restart-safe contract: a service redeploy/OOM never silently loses URLs — they flow back through the existing `domaine_fr_retry` infra.
 4. No new infrastructure or heavy dependency (no broker, no worker container).
 5. Async contract (`POST` submit / `GET` poll) identical to what a future dedicated-worker backend would expose → backend swap later requires **zero BO changes**.
-6. **Async load must not starve the realtime crawler-service / sync callers** (see §4.11 — dedicated admission sub-pool).
 
 ### Non-Goals
 - Migrating the other 5 consumers. Deferred.
@@ -64,7 +64,7 @@
 | Job model | Submission granularity | **Batched async jobs** (~100 URLs/job, bounded concurrent, poll-to-completion per job). |
 | Restart | In-flight job on restart | **Fail-fast + BO re-enqueue.** Status+heartbeat in Redis, no resume. Stale/failed → BO pushes absent URLs to `domaine_fr_retry`. |
 | Backend | How work executes | **Approach A** — in-process asyncio worker + Redis job store. |
-| Admission | Blast-radius isolation | **Dedicated async admission sub-pool** (see §4.11). *This supersedes the Section-2 "shared pool, sub-pool deferred YAGNI" decision — flagged for the review gate; rationale: async sustained pressure on the shared 8-slot pool would fast-fail crawler-service into 503s.* |
+| Admission | Pool sharing | **Shared prod admission pool** (Section-2 YAGNI call, confirmed). crawler-service is immune — it passes `html_content`, which bypasses admission — so only URL-only BO-internal/low-vol sync callers compete with async, and they already retry on `admission_rejected`. A dedicated sub-pool is a deferred knob (§9). |
 
 ### Rejected alternatives
 - **Approach B (dedicated worker + broker, arq/Celery):** true isolation + scale, but a new container, a broker, and shipping Camoufox+Chromium+fastText into the worker image (doubles the ~200MB+ footprint + memory), plus ops burden. Overkill at current volume + single-replica reality. **A→B is a drop-in backend swap later (same HTTP contract), so no BO rework is lost by choosing A now.**
@@ -243,7 +243,7 @@ Existing module-scope middleware/`_prod_admission` setup in `main.py` is left as
 - `ASYNC_JOBS_TERMINAL = Counter("detect_async_jobs_terminal_total", labelnames=("status",))` — completed|failed.
 - `ASYNC_JOB_DURATION = Histogram("detect_async_job_duration_seconds", buckets=(1,5,15,30,60,120,300,600,1800))`.
 - `ASYNC_JOB_CAPACITY_REJECTED = Counter("detect_async_job_capacity_rejected_total")`.
-- `ASYNC_ADMISSION_REJECTED = Counter("detect_async_admission_rejected_total")` — per-item rejections from the async sub-pool (kept distinct from the existing prod `ADMISSION_REJECTED` so crawler/sync pressure stays legible).
+- Async per-item fetches reuse the existing `ADMISSION_REJECTED` counter with a distinct `endpoint="/api/v1/detect-batch-async"` label, so async-induced rejections stay separable from sync/crawler pressure without a new metric.
 - Names checked against existing metrics — no collision.
 
 **`poll_after_seconds` server contract:** the server returns a small fixed hint, `poll_after_seconds = max(HEARTBEAT_INTERVAL_S, 5)` on both submit and poll, bounded above by `ASYNC_POLL_HINT_MAX_S = 30`. BO clamps its sleep to `min(max(poll_after_seconds, POLL_MIN), remaining_budget)` (§5.1) so a large hint can never overshoot the BO wall-clock budget.
@@ -252,7 +252,6 @@ Existing module-scope middleware/`_prod_admission` setup in `main.py` is left as
 ```python
 ASYNC_JOBS_ENABLED: bool = True
 MAX_ACTIVE_JOBS: int = 8
-ASYNC_ADMISSION_MAX_SLOTS: int = 4         # dedicated sub-pool — see §4.11
 JOB_TTL_ACTIVE_S: int = 7200
 JOB_RESULT_TTL_S: int = 3600
 STALE_THRESHOLD_S: int = 120
@@ -260,13 +259,13 @@ HEARTBEAT_INTERVAL_S: int = 5
 ASYNC_SUBMIT_RETRY_AFTER_S: int = 15
 ASYNC_POLL_HINT_MAX_S: int = 30
 ```
-All overridable via env (Pydantic `BaseSettings`). docker-compose may pin `MAX_ACTIVE_JOBS` / `ASYNC_ADMISSION_MAX_SLOTS` per resource budget.
+All overridable via env (Pydantic `BaseSettings`). docker-compose may pin `MAX_ACTIVE_JOBS` per resource budget.
 
-### 4.11 Admission isolation & tradeoffs (flagged)
-1. **Dedicated async admission sub-pool (design change vs approved Section 2).** The async worker's per-item fetches acquire from a **separate** `AdmissionController(ASYNC_ADMISSION_MAX_SLOTS, default 4)`, **not** the prod `AdmissionController` (8 in compose). Why: the prod pool is non-blocking and fast-fails on saturation, turning items into `admission_rejected`. crawler-service (an active production pipeline) calls single `/detect`, whose fetch acquires a prod slot → a sustained async run filling the shared 8 would fast-fail crawler into 503s. A dedicated sub-pool caps async's claim and **guarantees crawler/sync keep their 8 slots**. Both pools still serialize on the single browser semaphore (6 in compose) — the real memory/OOM bound — so total concurrent browsers is unchanged; async simply queues fairly behind the semaphore instead of stealing prod admission slots. Async items that miss the sub-pool become `admission_rejected` and ride the existing Pass-2 retry (within the async run). `_fetch_with_admission` gains a `controller` argument (prod vs async); the sync path passes the prod controller unchanged.
-   - **Worst-case bound:** `MAX_ACTIVE_JOBS(8) × max_concurrency(10) = 80` coroutines may be past their per-job semaphore, but only `ASYNC_ADMISSION_MAX_SLOTS(4)` proceed to fetch concurrently; the rest are `admission_rejected`→retry. Memory ≈ a few MB of parked coroutines.
+### 4.11 Admission & tradeoffs (flagged)
+1. **Shared prod admission pool (no async sub-pool — confirms Section 2).** Async worker per-item fetches go through the **existing** prod `AdmissionController` (8 in compose) via the same `_fetch_with_admission`, tagged `endpoint="/api/v1/detect-batch-async"`. There is **no** dedicated async sub-pool. Why this is safe: a slot is acquired only on an actual network fetch, and the carve-out exempts `html_content` callers — so **crawler-service never touches the pool** (it always sends its crawled HTML; verified §1). The only callers competing with async for the 8 slots are URL-only sync fetchers (`get_domaine_rub_bo`, the 3 low-volume scripts); on saturation they get `admission_rejected` and retry (sync Pass-2 / BO retry), degrading gracefully. The single browser semaphore (6 in compose) is the real memory/throughput bound shared by all fetch paths; it **queues** (never 503s), so async adds latency — not failures — to co-running fetches. (A dedicated sub-pool would not relieve the semaphore anyway, since both pools drain into it.) The sub-pool stays available as a deferred knob (§9) if the BO-internal rejection rate proves disruptive.
+   - **Footprint bound:** `MAX_ACTIVE_JOBS(8) × max_concurrency(10) = 80` coroutines may sit past their per-job semaphore, mostly parked on the browser semaphore — a few MB. Items that miss a prod slot become `admission_rejected`→Pass-2 retry within the async run.
 2. **Redis becomes required for async** (cache stays optional). `REDIS_URL` unset / unreachable → submit returns 503 (`retryable:false`); **sync endpoints unaffected** (no full-service crash). `ASYNC_JOBS_ENABLED=false` is the explicit kill-switch.
-3. **Work runs in the API process** — same as today's sync detection; `MAX_ACTIVE_JOBS` + the sub-pool bound the footprint.
+3. **Work runs in the API process** — same as today's sync detection; `MAX_ACTIVE_JOBS` bounds the footprint.
 
 ---
 
@@ -398,7 +397,7 @@ Unchanged — `call_api_hellopro('POST','detection_site_fr-service', ...)` alrea
 1. **RAG-HP-PUB first** (service async endpoints) — additive, sync path untouched; safe before BO. BO cannot call the new path until it exists; until then nothing references it.
 2. Verify on the live service: submit a small async job via the gateway, poll to `completed`, confirm `/metrics` shows `detect_async_jobs_*` + `detect_async_admission_rejected_total`.
 3. **Hellopro second** (BO migrations) — only after the service endpoints are live.
-4. **Admission-isolation gate:** before/just-after BO cutover, confirm `detect_admission_rejected_total` (prod pool, fed by crawler/sync) does **not** climb when async jobs run — i.e. the sub-pool isolation works. If it does climb, lower `ASYNC_ADMISSION_MAX_SLOTS` / `MAX_ACTIVE_JOBS`.
+4. **Admission-pressure gate:** after BO cutover, watch `detect_admission_rejected_total` by `endpoint` label. crawler-service is immune (html_content bypass) so it won't appear. If the URL-only sync labels (`get_domaine_rub_bo` / low-vol via `/api/v1/detect-batch`) start climbing during async runs, lower `MAX_ACTIVE_JOBS` or introduce the deferred sub-pool (§9).
 5. Observe one full cron cycle of `script_retry_identifier_site_fr.php` + one manual `script_identifier_site_fr_v2.php` upload. Watch `detect_async_jobs_terminal{status}`, `ASYNC_JOBS_ACTIVE`, both admission counters, browser semaphore waiters, and BO `[detection-langue-fr]` logs.
 6. Kill-switch: `ASYNC_JOBS_ENABLED=false` → submit 503 `retryable:false`; BO callers fall to `catch` → `domaine_fr_retry` (degraded-but-safe), no retry-budget burn.
 
@@ -406,7 +405,7 @@ Unchanged — `call_api_hellopro('POST','detection_site_fr-service', ...)` alrea
 
 ## 9. Deferred Follow-Ups
 - Migrate the remaining 5 consumers once the pattern is proven.
-- Tune `ASYNC_ADMISSION_MAX_SLOTS` / `MAX_ACTIVE_JOBS` from observed pressure.
+- Introduce a dedicated `ASYNC_ADMISSION_MAX_SLOTS` sub-pool (and/or tune `MAX_ACTIVE_JOBS`) only if URL-only sync callers show elevated `admission_rejected` during async runs.
 - Job cancellation `DELETE /{job_id}`.
 - Approach-B backend swap (dedicated worker + broker) if volume outgrows single-replica — **no BO change required**.
 - Operator-forced fresh re-run via run-token in `client_job_id` (§5.4) if needed.
@@ -416,7 +415,7 @@ Unchanged — `call_api_hellopro('POST','detection_site_fr-service', ...)` alrea
 
 ## 10. Risks
 - **Coroutine accumulation** under many concurrent large jobs — bounded by `MAX_ACTIVE_JOBS`; the async sub-pool + browser semaphore are the throughput bound. Observe `ASYNC_JOBS_ACTIVE`.
-- **Async vs crawler/sync contention** — mitigated by the dedicated sub-pool (§4.11) which guarantees the prod 8 slots stay available; the deploy gate (§8.4) verifies isolation empirically.
+- **Async vs URL-only sync contention** — crawler-service is immune (html_content bypass). Only `get_domaine_rub_bo` + low-vol scripts share the prod pool with async; they retry on `admission_rejected`. The browser semaphore (6) is the real throughput bound and only queues (no 503). Deploy gate §8.4 watches the rejection labels; escalate to a sub-pool only if observed.
 - **Redis dependency for async** — explicit 503 (`retryable:false`) + kill-switch; sync unaffected.
 - **`_run_batch_core` refactor regressing sync** — characterization test + isolated refactor commit (progress_cb plumbing included in that commit).
 - **Cron-retry `incomplete` touch-only forever under chronic restarts** — acceptable; the daily cron keeps retrying and operators watch restart metrics. Not a silent data loss (rows stay `statut=0`, visible).
