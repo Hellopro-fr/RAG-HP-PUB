@@ -334,6 +334,11 @@ class CrawlerManager:
         # This dictionary ONLY tracks processes running on THIS replica.
         # The global state is in Redis.
         self.local_processes: Dict[str, asyncio.subprocess.Process] = {}
+        # crawl_ids with an in-flight auto-stash task on this (leader) replica.
+        # Prevents the sweep from re-selecting a crawl whose tar is still running
+        # across ticks (slot starvation / log churn). The Redis stash_lock is the
+        # real cross-replica guard; this is a same-leader throughput optimization.
+        self._auto_stash_inflight: set = set()
 
     def _kill_process_group(self, pid: int):
         """Kill a process and all its children via the process group."""
@@ -2820,6 +2825,61 @@ class CrawlerManager:
             except OSError as e:
                 logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
 
+    def _disk_used_pct(self, path: str = None) -> float:
+        """Used-% of the crawl storage filesystem. Fail-open -> 0.0 (no pressure)."""
+        try:
+            target = path or settings.CRAWLER_STORAGE_PATH
+            usage = shutil.disk_usage(target)
+            return (usage.used / usage.total) * 100 if usage.total else 0.0
+        except Exception as e:
+            logger.warning(f"_disk_used_pct failed: {e}")
+            return 0.0
+
+    def _select_stash_candidates(self, jobs: List[dict], now_dt: datetime) -> List[Tuple[dict, str]]:
+        """From terminal non-stashed non-archived jobs, pick (job, reason) to stash
+        this tick: grace/timeout-eligible, plus largest-by-size under disk pressure.
+        Capped at STASH_MAX_PER_SWEEP."""
+        eligible = []
+        terminal = []
+        for j in jobs:
+            ok, reason = self._is_stash_eligible(j, now_dt)
+            if ok:
+                eligible.append((j, reason))
+            elif j.get("status") in ("finished", "failed", "stopped") and not j.get("stashed_at"):
+                terminal.append(j)
+
+        selected = eligible[: settings.STASH_MAX_PER_SWEEP]
+
+        if len(selected) < settings.STASH_MAX_PER_SWEEP and \
+                self._disk_used_pct() >= settings.STASH_DISK_HIGH_WATER_PCT:
+            already = {id(j) for j, _ in selected}
+            extra = sorted(terminal, key=lambda j: j.get("size_bytes", 0), reverse=True)
+            for j in extra:
+                if len(selected) >= settings.STASH_MAX_PER_SWEEP:
+                    break
+                if id(j) not in already:
+                    selected.append((j, "disk_pressure"))
+        return selected
+
+    async def _auto_stash_one(self, job_data: dict, reason: str) -> None:
+        """Stash one crawl on behalf of the sweep. Swallows 409 (already
+        stashed / in progress); logs other failures. Never raises."""
+        crawl_id = job_data.get("crawl_id")
+        try:
+            logger.info(f"AUTO_STASH crawl_id={crawl_id} reason={reason}")
+            await self.stash_crawl(job_data)
+        except HTTPException as e:
+            if e.status_code == 409:
+                logger.debug(f"AUTO_STASH skip crawl_id={crawl_id}: {e.detail}")
+            else:
+                logger.warning(f"AUTO_STASH failed crawl_id={crawl_id}: {e.detail}")
+        except Exception as e:
+            logger.warning(f"AUTO_STASH error crawl_id={crawl_id}: {e}")
+        finally:
+            # Release the in-flight slot so the next sweep can re-select this
+            # crawl if it still needs stashing (e.g. a transient failure).
+            self._auto_stash_inflight.discard(crawl_id)
+
     def _is_stash_eligible(self, job_data: dict, now_dt: datetime) -> Tuple[bool, Optional[str]]:
         """Grace/timeout eligibility for the auto-stash sweep. Pure, fail-open.
         Disk-pressure selection is handled by the caller (sweep)."""
@@ -2876,6 +2936,7 @@ class CrawlerManager:
             pipe.get(key)
 
         all_jobs_raw = await pipe.execute()
+        auto_stash_pool = []  # collected during scan; dispatched after the loop (auto-stash P2)
 
         for i, job_raw in enumerate(all_jobs_raw):
             if not job_raw: continue
@@ -2884,6 +2945,10 @@ class CrawlerManager:
                 job_data = json.loads(job_raw)
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
+
+                if settings.AUTO_STASH_ENABLED and \
+                        status in ("finished", "failed", "stopped") and not job_data.get("stashed_at"):
+                    auto_stash_pool.append(job_data)
 
                 if status in ("running", "restarting_oom", "stopping"):
                     # Marker check (NEW): Redis may show non-terminal status
@@ -3062,6 +3127,19 @@ class CrawlerManager:
             except (json.JSONDecodeError, TypeError, ValueError) as e:
                 logger.error(f"Error processing job data during reconciliation: {e}")
                 continue
+
+        # --- Auto-stash sweep (spec 2026-06-01). Dispatch as background tasks so a
+        # multi-GB tar never holds the reconcile leader lock. Each stash_crawl takes
+        # its own stash_lock (idempotent; 409 = no-op). ---
+        if settings.AUTO_STASH_ENABLED and auto_stash_pool:
+            now_dt = datetime.utcnow()
+            # Exclude crawls already being stashed by this leader so a slow tar
+            # doesn't consume STASH_MAX_PER_SWEEP slots across ticks.
+            available = [j for j in auto_stash_pool
+                         if j.get("crawl_id") not in self._auto_stash_inflight]
+            for job_data, reason in self._select_stash_candidates(available, now_dt):
+                self._auto_stash_inflight.add(job_data.get("crawl_id"))
+                asyncio.create_task(self._auto_stash_one(job_data, reason))
 
         # Correct the global counter
         counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
