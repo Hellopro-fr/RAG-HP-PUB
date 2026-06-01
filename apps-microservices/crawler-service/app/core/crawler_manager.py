@@ -2880,6 +2880,30 @@ class CrawlerManager:
             # crawl if it still needs stashing (e.g. a transient failure).
             self._auto_stash_inflight.discard(crawl_id)
 
+    def _requeue_stash_orphan(self, crawl_id: str) -> bool:
+        """If a stashed crawl's tar was dead-lettered (upload failed), move it
+        back to the stash watch dir so the upload daemon retries. Returns True
+        if a re-queue happened. Fail-open."""
+        try:
+            dead = os.path.join(settings.STASH_SHARED_PATH, "dead_letter", f"{crawl_id}.tar.gz")
+            if not os.path.exists(dead):
+                return False
+            target = os.path.join(settings.STASH_SHARED_PATH, f"{crawl_id}.tar.gz")
+            if os.path.exists(target):
+                # A tar already awaits upload at the watch dir — do NOT overwrite
+                # it with the dead-lettered copy (would destroy the pending one).
+                # Leave the dead-letter copy for operator inspection.
+                logger.warning(f"STASH_UPLOAD_ORPHAN crawl_id={crawl_id} "
+                               f"reason=target_exists action=skip path={dead}")
+                return False
+            logger.warning(f"STASH_UPLOAD_ORPHAN crawl_id={crawl_id} "
+                           f"reason=dead_letter_found action=requeue path={dead}")
+            os.rename(dead, target)
+            return True
+        except Exception as e:
+            logger.warning(f"STASH_UPLOAD_ORPHAN requeue failed crawl_id={crawl_id}: {e}")
+            return False
+
     def _is_stash_eligible(self, job_data: dict, now_dt: datetime) -> Tuple[bool, Optional[str]]:
         """Grace/timeout eligibility for the auto-stash sweep. Pure, fail-open.
         Disk-pressure selection is handled by the caller (sweep)."""
@@ -2949,6 +2973,9 @@ class CrawlerManager:
                 if settings.AUTO_STASH_ENABLED and \
                         status in ("finished", "failed", "stopped") and not job_data.get("stashed_at"):
                     auto_stash_pool.append(job_data)
+
+                if settings.AUTO_STASH_ENABLED and job_data.get("stashed_at"):
+                    self._requeue_stash_orphan(crawl_id)
 
                 if status in ("running", "restarting_oom", "stopping"):
                     # Marker check (NEW): Redis may show non-terminal status
