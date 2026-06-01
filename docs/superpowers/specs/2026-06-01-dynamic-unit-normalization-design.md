@@ -585,4 +585,371 @@ Version unchanged → no rebuild; bumped → exactly one rebuild, new unit query
 
 ---
 
+## Appendix A — Interface Contracts (signatures only)
+
+> **Scope:** interface/contract code, **no implementation** (`...` bodies). This pins the CRUD contract the Phase-1 plan builds against. Not yet written to the codebase — the plan creates these files and adds behavior. Python: 4-space, type-hinted, `snake_case`, framework-light (stdlib `dataclasses`/`enum`/`typing` + `datetime`). Stub paths target `apps-microservices/graph-rag-normalize-unite-service/`.
+
+### A.1 — Domain types & enums (`infrastructure/db/types.py`)
+
+The data contract shared by the gRPC handlers, the repository, the registry builder, and the garde-fou engine. Records are immutable read models; `UnitSpec` is the write contract carried by `RegisterUnit`/`ApproveProposal`.
+
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+
+
+class UnitKind(str, Enum):
+    NORMAL = "NORMAL"            # converted via pint
+    PASSTHROUGH = "PASSTHROUGH"  # E2 literal bypass: skip pint, return float(value) as canonical 'count'
+
+
+class UnitStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    PENDING = "PENDING"
+    REJECTED = "REJECTED"
+    DISABLED = "DISABLED"        # soft-delete target
+
+
+class UnitSource(str, Enum):
+    SEED = "seed"
+    MANUAL = "manual"
+    AUTO_PROPOSAL = "auto_proposal"
+
+
+class ProposalState(str, Enum):
+    PENDING = "PENDING"
+    VALIDATING = "VALIDATING"
+    ACTIVE = "ACTIVE"
+    REJECTED = "REJECTED"
+    REJECTED_VALIDATION = "REJECTED_VALIDATION"
+    SUPERSEDED = "SUPERSEDED"
+
+
+@dataclass(frozen=True)
+class RegressionSample:
+    """G4 mandatory sample, re-run forever by the seed-parity gate (§10.2).
+
+    For data_type == 'numeric_range', `expected_canonical_max` is set and the
+    sample is exercised via normalize_range() (min + max), not a single call.
+    Equality on the pint-convert branch compares in .6g form; passthrough/
+    count/unit-null branches compare with == (unrounded). See §5.2 G4.
+    """
+    label: str
+    unit: str
+    value: str                              # raw string, mirrors NormalizeQuantityRequest
+    data_type: str                          # "numeric" | "numeric_range"
+    expected_canonical_value: float
+    expected_canonical_unit: str
+    expected_canonical_max: float | None = None
+
+
+@dataclass(frozen=True)
+class UnitSpec:
+    """Write contract for one logical unit (Layers A + B-unit-owned + E1 + E2-literal)."""
+    token: str                              # B-lookup key in original_unit form (§4.6), pre-lowercased
+    dimension: str                          # declared dimension NAME (FK by name -> unit_dimensions)
+    regression_sample: RegressionSample     # MANDATORY (G4)
+    kind: UnitKind = UnitKind.NORMAL
+    case_sensitive: bool = False            # only the 'G'/gauss exact-case token (§4.2)
+    aliases: tuple[str, ...] = ()           # additional spellings of THIS token
+    label_condition: str | None = None      # E2 conditional ('facteur' for Facteur-G)
+    pint_definition: str | None = None       # Layer A, verbatim ureg.define() string
+    depends_on: tuple[str, ...] = ()         # non-builtin symbols referenced (topo order)
+    rewrite_expression: str | None = None    # Layer E1, keyed on the SANITIZED form (§4.6)
+    canonical_override: str | None = None
+
+
+@dataclass(frozen=True)
+class UnitRecord:
+    """Persisted unit row (read model). Maps 1:1 to UnitResponse in the proto."""
+    id: str
+    spec: UnitSpec
+    status: UnitStatus
+    source: UnitSource
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class DimensionRecord:                        # Layer D
+    id: str
+    name: str
+    canonical_unit: str
+    bypass_pint: bool                         # True for 'count' and 'count_rate'
+    is_active: bool
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class LabelRuleRecord:                         # Layer C (order-sensitive)
+    id: str
+    key_substring: str                         # stored accented; compared accent-stripped
+    dimension: str                             # dimension NAME
+    priority: int                              # lower = checked first = more specific
+    is_active: bool
+    source: UnitSource
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class DisambiguationRecord:                    # Layer E3 (nm, t/min)
+    id: str
+    trigger_unit: str
+    keyword_list: tuple[str, ...]              # OR-matched, accent-stripped
+    match_dimension: str
+    match_pint_expr: str | None
+    default_dimension: str | None              # non-None for nm; None for t/min (uses B-row default)
+    default_pint_expr: str | None
+    is_active: bool
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ProposalRecord:                          # Phase 3
+    id: int
+    dedup_key: str
+    raw_unit: str
+    normalized_unit: str
+    dimension_hint: str | None
+    failure_reason: str | None                 # 'no_dimension' | 'pint_parse' | 'to_failed'
+    data_type: str
+    occurrence_count: int
+    first_seen_at: datetime
+    last_seen_at: datetime
+    sample_labels: tuple[str, ...]
+    sample_value: str | None
+    state: ProposalState
+    proposed_definition: dict | None
+    created_by: str
+    reviewed_by: str | None
+    created_at: datetime
+    updated_at: datetime
+```
+
+### A.2 — Repository ports + Unit of Work (`infrastructure/db/repository.py`)
+
+Structural interfaces (`typing.Protocol`) — the SQLAlchemy implementation (added by the plan) satisfies them without inheritance. Mirrors the catalog repo convention: `ErrNotFound` sentinel, map-based partial `update`, `RowsAffected`-as-existence (raise on 0). **No SQLAlchemy here.**
+
+```python
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, Protocol
+
+from .types import (
+    DimensionRecord, DisambiguationRecord, LabelRuleRecord,
+    ProposalRecord, ProposalState, UnitRecord, UnitStatus,
+)
+
+
+class RepositoryError(Exception):
+    """Base for repository-layer errors."""
+
+
+class ErrNotFound(RepositoryError):
+    """Row does not exist (mapped to gRPC NotFound by the handler)."""
+
+
+class ErrAlreadyExists(RepositoryError):
+    """Unique business-key violation (mapped to gRPC AlreadyExists / G6)."""
+
+
+class UnitRepo(Protocol):
+    def create(self, rec: UnitRecord) -> UnitRecord: ...
+    def get_by_id(self, unit_id: str) -> UnitRecord: ...        # raises ErrNotFound
+    def get_by_token(self, token: str) -> UnitRecord: ...       # raises ErrNotFound
+    def list(
+        self, *, status: UnitStatus | None = None, dimension: str | None = None,
+        limit: int = 100, offset: int = 0,
+    ) -> tuple[list[UnitRecord], int]: ...                       # (page, total)
+    def list_active(self) -> list[UnitRecord]: ...              # for the registry builder
+    def update(self, unit_id: str, fields: Mapping[str, Any]) -> UnitRecord: ...  # partial; raises ErrNotFound
+    def soft_delete(self, unit_id: str) -> None: ...            # status=DISABLED; raises ErrNotFound
+
+
+class DimensionRepo(Protocol):
+    def create(self, rec: DimensionRecord) -> DimensionRecord: ...
+    def get_by_name(self, name: str) -> DimensionRecord: ...    # raises ErrNotFound
+    def list_active(self) -> list[DimensionRecord]: ...
+    def update(self, dim_id: str, fields: Mapping[str, Any]) -> DimensionRecord: ...
+
+
+class LabelRuleRepo(Protocol):
+    def create(self, rec: LabelRuleRecord) -> LabelRuleRecord: ...
+    def list_active_ordered(self) -> list[LabelRuleRecord]: ... # ORDER BY priority ASC (Layer-C order)
+    def get_by_id(self, rule_id: str) -> LabelRuleRecord: ...   # raises ErrNotFound
+    def update(self, rule_id: str, fields: Mapping[str, Any]) -> LabelRuleRecord: ...
+    def soft_delete(self, rule_id: str) -> None: ...            # raises ErrNotFound
+
+
+class DisambiguationRepo(Protocol):
+    def create(self, rec: DisambiguationRecord) -> DisambiguationRecord: ...
+    def get_by_trigger(self, trigger_unit: str) -> DisambiguationRecord: ...  # raises ErrNotFound
+    def list_active(self) -> list[DisambiguationRecord]: ...
+    def update(self, rule_id: str, fields: Mapping[str, Any]) -> DisambiguationRecord: ...
+
+
+class MetaRepo(Protocol):
+    def get_version(self) -> int: ...                          # cheap reconcile poll
+    def bump_version(self, by: str) -> int: ...                # atomic +1, same txn as the write; returns new version
+
+
+class ProposalRepo(Protocol):                                  # Phase 3
+    def upsert_occurrence(
+        self, *, dedup_key: str, raw_unit: str, normalized_unit: str,
+        dimension_hint: str | None, failure_reason: str | None,
+        data_type: str, label: str, value: str | None,
+    ) -> ProposalRecord: ...                                    # insert-or-bump occurrence_count; cap sample_labels at 10
+    def get(self, proposal_id: int) -> ProposalRecord: ...     # raises ErrNotFound
+    def list(
+        self, *, state: ProposalState | None = None, limit: int = 100, offset: int = 0,
+    ) -> tuple[list[ProposalRecord], int]: ...                  # sorted occurrence_count DESC
+    def set_state(
+        self, proposal_id: int, state: ProposalState, reviewed_by: str | None = None,
+    ) -> ProposalRecord: ...                                    # raises ErrNotFound
+
+
+class UnitOfWork(Protocol):
+    """One transactional boundary. A mutation handler MUST persist the unit
+    write AND meta.bump_version() inside a single UoW so the version bump and
+    the row are atomic (§6.3 / §7.2). Reconcile reads do NOT need a UoW.
+
+        with make_unit_of_work() as uow:
+            rec = uow.units.create(candidate)
+            version = uow.meta.bump_version(by=created_by)
+            uow.commit()
+    """
+    units: UnitRepo
+    dimensions: DimensionRepo
+    label_rules: LabelRuleRepo
+    disambiguations: DisambiguationRepo
+    meta: MetaRepo
+    proposals: ProposalRepo
+
+    def __enter__(self) -> "UnitOfWork": ...
+    def __exit__(self, *exc: object) -> None: ...              # rollback on exception, else no-op
+    def commit(self) -> None: ...
+    def rollback(self) -> None: ...
+```
+
+### A.3 — Proto CRUD contract (`protos/grpc_stubs/graph_normalization.proto`)
+
+Canonical codegen source for the CRUD surface (consolidates §6; identical to it). Existing `NormalizeQuantity`/`NormalizeRange` untouched. Stubs regenerated by the plan via `/proto-sync` (not now).
+
+```proto
+syntax = "proto3";
+package graph_normalization;
+
+import "google/protobuf/field_mask.proto";
+
+service GraphNormalizationService {
+  // EXISTING — untouched
+  rpc NormalizeQuantity(NormalizeQuantityRequest) returns (NormalizeQuantityResponse);
+  rpc NormalizeRange(NormalizeRangeRequest)       returns (NormalizeRangeResponse);
+
+  // Phase 1 — unit CRUD (WRITE = admin-key gated, internal listener; READ = open)
+  rpc RegisterUnit(RegisterUnitRequest) returns (UnitResponse);          // CREATE
+  rpc GetUnit(GetUnitRequest)           returns (UnitResponse);          // READ one
+  rpc ListUnits(ListUnitsRequest)       returns (ListUnitsResponse);     // READ many
+  rpc UpdateUnit(UpdateUnitRequest)     returns (UnitResponse);          // UPDATE (FieldMask partial)
+  rpc DeleteUnit(DeleteUnitRequest)     returns (DeleteUnitResponse);    // DELETE (soft -> DISABLED)
+  rpc GetRegistryStatus(GetRegistryStatusRequest) returns (RegistryStatus);  // READ — propagation observability
+
+  // Phase 3 — proposals (defined now for forward-compat; behavior deferred)
+  rpc ListProposals(ListProposalsRequest)     returns (ListProposalsResponse);
+  rpc ApproveProposal(ApproveProposalRequest) returns (UnitResponse);
+  rpc RejectProposal(RejectProposalRequest)   returns (ProposalResponse);
+}
+
+message RegressionSample {
+  string label = 1;
+  string unit = 2;
+  string value = 3;
+  string data_type = 4;                       // "numeric" | "numeric_range"
+  double expected_canonical_value = 5;
+  optional double expected_canonical_max = 6; // numeric_range only
+  string expected_canonical_unit = 7;
+}
+
+message UnitSpec {
+  string token = 1;
+  bool   case_sensitive = 2;
+  repeated string aliases = 3;
+  string kind = 4;                            // "NORMAL" | "PASSTHROUGH"
+  string label_condition = 5;
+  string pint_definition = 6;
+  repeated string depends_on = 7;
+  string rewrite_expression = 8;
+  string dimension = 9;
+  string canonical_override = 10;
+  RegressionSample regression_sample = 11;    // MANDATORY (G4)
+}
+
+message UnitResponse {
+  string id = 1;
+  UnitSpec spec = 2;
+  string status = 3;                          // ACTIVE | PENDING | REJECTED | DISABLED
+  string source = 4;                          // seed | manual | auto_proposal
+  string created_by = 5;
+  string created_at = 6;
+  string updated_at = 7;
+  int64  registry_version = 8;                // version AFTER this mutation (poll to confirm propagation)
+}
+
+message RegisterUnitRequest { UnitSpec spec = 1; string created_by = 2; }
+
+message GetUnitRequest { string id = 1; }
+
+message ListUnitsRequest {
+  string status = 1;                          // filter, optional
+  string dimension = 2;                       // filter, optional
+  int32  limit = 3;                           // default 100
+  int32  offset = 4;
+}
+message ListUnitsResponse { repeated UnitResponse units = 1; int64 total = 2; }
+
+message UpdateUnitRequest {
+  string id = 1;
+  UnitSpec spec = 2;                          // new field values
+  google.protobuf.FieldMask update_mask = 3;  // exactly which fields to apply (resolves aliases-clear ambiguity)
+  string updated_by = 4;
+}
+
+message DeleteUnitRequest  { string id = 1; }
+message DeleteUnitResponse { bool success = 1; }
+
+message GetRegistryStatusRequest {}
+message RegistryStatus {
+  int64  loaded_version = 1;
+  string last_reconcile_at = 2;
+  int64  active_unit_count = 3;
+}
+
+// ── Phase 3 ──
+message ListProposalsRequest  { string state = 1; int32 limit = 2; int32 offset = 3; }
+message ProposalView {
+  int64  id = 1; string raw_unit = 2; string normalized_unit = 3; string dimension_hint = 4;
+  string failure_reason = 5; string data_type = 6; int64 occurrence_count = 7;
+  repeated string sample_labels = 8; string sample_value = 9; string state = 10;
+}
+message ListProposalsResponse { repeated ProposalView proposals = 1; int64 total = 2; }
+message ApproveProposalRequest { int64 id = 1; UnitSpec spec = 2; string reviewed_by = 3; }
+message RejectProposalRequest  { int64 id = 1; string reason = 2; string reviewed_by = 3; }
+message ProposalResponse       { int64 id = 1; string state = 2; }
+```
+
+> **Mapping checkpoints** (verified consistent with §4–§6): `UnitSpec` ↔ `units` columns; `UnitResponse.registry_version` ↔ `registry_meta`; `RegressionSample.expected_canonical_max` ↔ G4 numeric_range path (§5.2); `update_mask` ↔ map-based partial `UnitRepo.update`; soft `DeleteUnit` ↔ `UnitRepo.soft_delete` (status=DISABLED); the `UnitOfWork` bundles `units.create` + `meta.bump_version` in one txn (§6.3).
+
+---
+
 *End of design. Next: user reviews this spec, then → writing-plans for the implementation plan.*
