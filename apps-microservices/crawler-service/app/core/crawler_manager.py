@@ -2820,6 +2820,36 @@ class CrawlerManager:
             except OSError as e:
                 logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
 
+    def _is_stash_eligible(self, job_data: dict, now_dt: datetime) -> Tuple[bool, Optional[str]]:
+        """Grace/timeout eligibility for the auto-stash sweep. Pure, fail-open.
+        Disk-pressure selection is handled by the caller (sweep)."""
+        if job_data.get("status") not in ("finished", "failed", "stopped"):
+            return (False, None)
+        if job_data.get("stashed_at"):
+            return (False, None)
+
+        def _age(field):
+            raw = job_data.get(field)
+            if not raw:
+                return None
+            try:
+                return (now_dt - datetime.fromisoformat(raw)).total_seconds()
+            except (ValueError, TypeError):
+                return None
+
+        dl_age = _age("downloaded_at")
+        if dl_age is not None:
+            # Downloaded: grace governs EXCLUSIVELY. A just-downloaded crawl is
+            # protected for STASH_GRACE_SECONDS even if it finished long ago —
+            # do NOT fall through to the timeout branch (which would defeat the
+            # grace the fresh download just earned).
+            return (True, "grace") if dl_age >= settings.STASH_GRACE_SECONDS else (False, None)
+        # Never downloaded (or unparseable downloaded_at): safety timeout governs.
+        fin_age = _age("finished_at")
+        if fin_age is not None and fin_age >= settings.STASH_SAFETY_TIMEOUT_SECONDS:
+            return (True, "timeout")
+        return (False, None)
+
     async def _reconcile_locked(self):
         """
         Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
