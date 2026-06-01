@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     STASH_DOWNLOAD_REQUESTS_PATH: str = "/app/gcs-stash-requests"
     STASH_DOWNLOAD_RESULTS_PATH: str = "/app/gcs-stash-downloads"
 
+    # Stash->archive move flow (spec 2026-06-01 P3). Service writes .move-request;
+    # the move-flow daemon does `gcloud storage mv stash/{id} crawls/{id}`.
+    MOVE_REQUESTS_PATH: str = "/app/gcs-move-requests"
+    MOVE_RESULTS_PATH: str = "/app/gcs-move-results"
+    MOVE_GCS_SOURCE_PREFIX: str = "stash"
+    MOVE_GCS_TARGET_PREFIX: str = "crawls"
+    MOVE_TIMEOUT_SECONDS: int = 120
+
     # Stash flow Redis lock TTLs and timeouts (seconds).
     # STASH_LOCK_TTL is bumped to 1800s (was 600s) so it exceeds nginx
     # proxy_read_timeout (600s on /crawler/ default location) and survives

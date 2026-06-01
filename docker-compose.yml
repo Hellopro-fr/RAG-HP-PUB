@@ -1331,6 +1331,9 @@ services:
       - ./apps-microservices/crawler-service/crawler_stash:/app/stash
       - ./apps-microservices/crawler-service/crawler_stash_download_requests:/app/gcs-stash-requests
       - ./apps-microservices/crawler-service/crawler_stash_download_results:/app/gcs-stash-downloads
+      # Stash->archive move flow shared dirs
+      - ./apps-microservices/crawler-service/crawler_move_requests:/app/gcs-move-requests
+      - ./apps-microservices/crawler-service/crawler_move_results:/app/gcs-move-results
     env_file:
       - .env
     environment:
