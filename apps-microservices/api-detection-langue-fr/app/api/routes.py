@@ -4,7 +4,8 @@ import os
 import time
 from typing import Optional, Callable
 from urllib.parse import urlparse, urlunparse
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
     DetectionRequest,
@@ -16,8 +17,12 @@ from app.models.schemas import (
     BatchCounts,
     UrlCheckResponse,
     DetectionMode,
-    DebugDetectionResponse
+    DebugDetectionResponse,
+    AsyncBatchSubmitRequest,
+    AsyncBatchSubmitResponse,
+    AsyncBatchStatusResponse,
 )
+from app.core.async_jobs import _JobsDisabled, _JobsUnavailable, _JobCapacityExceeded, poll_status
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
@@ -815,3 +820,49 @@ async def health_check() -> dict:
         "version": settings.APP_VERSION,
         "service": "detection-langue-api"
     }
+
+
+def _poll_hint() -> int:
+    return min(max(settings.HEARTBEAT_INTERVAL_S, 5), settings.ASYNC_POLL_HINT_MAX_S)
+
+
+@router.post("/detect-batch-async")
+async def submit_batch_async(request: AsyncBatchSubmitRequest, http_request: Request):
+    """Submit a batch for async processing. Returns 202 + job_id (or 200 if the
+    client_job_id maps to an existing job). Poll GET /detect-batch-async/{job_id}."""
+    jm = http_request.app.state.job_manager
+    try:
+        job_id, status_code = await jm.submit(request)
+    except _JobsDisabled:
+        # permanent: NO Retry-After -> BO short-circuits
+        raise HTTPException(status_code=503, detail={"detail": "Async jobs disabled", "retryable": False})
+    except _JobsUnavailable:
+        raise HTTPException(status_code=503, detail={"detail": "Job store unavailable", "retryable": False})
+    except _JobCapacityExceeded:
+        ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
+        raise HTTPException(
+            status_code=503,
+            detail={"detail": "Max active jobs reached", "retryable": True, "retry_after_seconds": int(ra)},
+            headers={"Retry-After": ra},
+        )
+    body = AsyncBatchSubmitResponse(
+        job_id=job_id, status="pending", total=len(request.items), poll_after_seconds=_poll_hint()
+    )
+    return JSONResponse(status_code=status_code, content=body.model_dump())
+
+
+@router.get("/detect-batch-async/{job_id}", response_model=AsyncBatchStatusResponse)
+async def poll_batch_async(job_id: str, http_request: Request) -> AsyncBatchStatusResponse:
+    """Poll an async job. 404 if unknown/expired. Computes 'stale' on read."""
+    jm = http_request.app.state.job_manager
+    rec = await jm.get_record(job_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Unknown or expired job_id")
+    status = poll_status(rec, time.time(), settings.STALE_THRESHOLD_S)
+    results = rec.get("results") if status in ("completed", "failed", "stale") else None
+    return AsyncBatchStatusResponse(
+        job_id=rec["job_id"], status=status, total=rec["total"], done=rec.get("done", 0),
+        success_count=rec.get("success_count", 0), failed_count=rec.get("failed_count", 0),
+        error_count=rec.get("error_count", 0), results=results,
+        processing_time_ms=None, error=rec.get("error"), poll_after_seconds=_poll_hint(),
+    )

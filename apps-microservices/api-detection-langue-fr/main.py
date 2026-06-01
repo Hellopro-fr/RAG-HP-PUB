@@ -2,11 +2,14 @@ import logging
 import os
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from app.api.routes import router
+from app.api.routes import router, _run_batch_core
 # Import to ensure metric objects are registered with the default registry.
 from app.core import metrics  # noqa: F401
 from app.core.admission import AdmissionController
 from app.middleware.admission import AdmissionMiddleware
+from contextlib import asynccontextmanager
+from app.core.config import settings as _settings
+from app.core.async_jobs import JobStore, JobManager
 
 # Configuration du logging — INFO pour voir les logs de stratégie proxy, retry, etc.
 # Sans cette configuration, Python utilise WARNING par défaut et masque les logs INFO.
@@ -14,6 +17,16 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    store = JobStore(redis_url=_settings.REDIS_URL)
+    app.state.job_manager = JobManager(store=store, batch_runner=_run_batch_core, settings=_settings)
+    logging.getLogger(__name__).info("Async JobManager initialised (lifespan startup)")
+    yield
+    await app.state.job_manager.shutdown()
+    logging.getLogger(__name__).info("Async JobManager shut down (lifespan shutdown)")
+
 
 app = FastAPI(
     title="API Détection Langue Française",
@@ -35,7 +48,8 @@ app = FastAPI(
     ),
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 @app.get("/metrics", include_in_schema=False)
