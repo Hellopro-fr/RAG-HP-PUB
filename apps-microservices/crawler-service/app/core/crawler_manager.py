@@ -1894,6 +1894,64 @@ class CrawlerManager:
             logger.warning(f"Could not get disk state for '{archives_dir}': {e}")
             return degraded
 
+    async def _move_stash_to_archive(self, job_info: dict) -> None:
+        """Drive the GCS-side stash->archive move via the move-flow daemon:
+        write .move-request, poll .move-done/.move-error, then mark archived +
+        clear stashed_at. Idempotency lives in the daemon (already-moved=done)."""
+        crawl_id = job_info["crawl_id"]
+        req_dir = settings.MOVE_REQUESTS_PATH
+        res_dir = settings.MOVE_RESULTS_PATH
+        os.makedirs(req_dir, exist_ok=True)
+        os.makedirs(res_dir, exist_ok=True)
+        request_path = os.path.join(req_dir, f"{crawl_id}.move-request")
+        done_path = os.path.join(res_dir, f"{crawl_id}.move-done")
+        error_path = os.path.join(res_dir, f"{crawl_id}.move-error")
+
+        async with aiofiles.open(request_path, "w") as f:
+            await f.write(crawl_id)
+        logger.info(f"Wrote .move-request for '{crawl_id}'. Waiting for daemon mv...")
+
+        deadline = time.monotonic() + settings.MOVE_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if os.path.exists(error_path):
+                # Remove both the error marker and the request so a daemon crash
+                # between writing .move-error and removing the request can't leave
+                # a stale request for another daemon instance to re-process.
+                for p in (error_path, request_path):
+                    try:
+                        if os.path.exists(p): os.remove(p)
+                    except OSError: pass
+                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                                    detail={"error_code": "STASH_MOVE_FAILED"})
+            if os.path.exists(done_path):
+                break
+            await asyncio.sleep(1)
+        else:
+            try:
+                if os.path.exists(request_path): os.remove(request_path)
+            except OSError: pass
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                                detail={"error_code": "STASH_MOVE_TIMEOUT"})
+
+        await self._mark_as_archived(crawl_id)
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh = await cache_service.get_json(job_key)
+        if fresh and "stashed_at" in fresh:
+            fresh.pop("stashed_at", None)
+            await cache_service.set_json(job_key, fresh)
+        elif fresh is None:
+            # Job vanished from Redis between the move and this clear. The GCS
+            # object is already in crawls/, but stashed_at could not be cleared.
+            # Surface it so an operator can reconcile rather than letting the
+            # next /archive silently re-fire the (idempotent) move.
+            logger.warning(f"STASH_MOVE_LIMBO crawl_id={crawl_id} "
+                           f"reason=job_absent_after_move action=operator_reconcile")
+        for p in (request_path, done_path, error_path):
+            try:
+                if os.path.exists(p): os.remove(p)
+            except OSError: pass
+        logger.info(f"Stash->archive move complete for '{crawl_id}'.")
+
     async def archive_crawl(self, job_info: dict) -> dict:
         """
         Archives a finished crawl job to a shared volume for host-side upload to GCS.
@@ -1902,6 +1960,19 @@ class CrawlerManager:
         """
         crawl_id = job_info['crawl_id']
         job_status = job_info.get('status')
+
+        # Auto-stash: archiving a stashed FINISHED crawl is a GCS-side move
+        # stash/->crawls/, not a re-tar. Reuse archive_status='pending_upload' so
+        # the BO's 3_archive_eligible_domains.php (exact-string branch) needs no
+        # change. Require finished status so a stashed failed/stopped crawl still
+        # falls through to the existing finished-only 400 guard below.
+        if job_info.get("stashed_at") and job_status == "finished":
+            await self._move_stash_to_archive(job_info)
+            return {
+                "crawl_id": crawl_id,
+                "archive_status": "pending_upload",
+                "archive_size_bytes": None,
+            }
 
         if job_status == "archived":
             raise HTTPException(
