@@ -1,24 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldCheck, Star, Check, HelpCircle, MoreHorizontal, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Star, Check, ArrowRight } from 'lucide-react';
+import type { AoFormQuestion } from '@/types/conseils';
 
-const CHOICES: { label: string; emoji: string }[] = [
-  { label: 'Elevage bovin', emoji: '🐄' },
-  { label: 'Elevage porcin', emoji: '🐖' },
-  { label: 'Elevage ovin', emoji: '🐑' },
-  { label: 'Elevage caprin', emoji: '🐐' },
-  { label: 'Elevage cunicole', emoji: '🐇' },
-  { label: 'Autre', emoji: '⋯' },
-  { label: 'Je ne sais pas encore', emoji: '?' },
-];
+interface HeroQuoteFormProps {
+  question?: AoFormQuestion | null;
+}
 
 /**
  * Formulaire devis affiché dans le slot droit du Hero (pages prix et autre).
+ * Reçoit la première question AO depuis l'API (formulaire_ao[0]).
  * Voir CLAUDE.md §2.2 — slot Hero.
  */
-export function HeroQuoteForm() {
-  const [selected, setSelected] = useState('');
+export function HeroQuoteForm({ question }: HeroQuoteFormProps) {
+  const [selected, setSelected] = useState<string | number>('');
+
+  const questionLabel = question?.question ?? 'Quel est votre besoin ?';
+  const choix = question?.choix ?? [];
 
   return (
     <div className="rounded-2xl bg-card p-5 text-card-foreground shadow-2xl ring-1 ring-black/5">
@@ -32,31 +31,42 @@ export function HeroQuoteForm() {
         En 30 secondes, sans engagement. Comparez les meilleurs constructeurs de France.
       </p>
       <h3 className="mb-3 text-sm font-bold text-foreground">
-        Quel type d&apos;élevage souhaitez-vous réaliser dans le bâtiment&nbsp;?{' '}
-        <span className="text-cta">*</span>
+        {questionLabel} <span className="text-cta">*</span>
       </h3>
-      <div className="grid grid-cols-4 gap-2">
-        {CHOICES.map((c) => {
-          const isActive = selected === c.label;
-          return (
-            <button
-              key={c.label}
-              type="button"
-              onClick={() => setSelected(c.label)}
-              className={`group flex flex-col items-center gap-2 rounded-lg border bg-background px-2 pb-2 pt-3 text-center transition hover:border-primary hover:shadow-sm ${
-                isActive ? 'border-primary ring-2 ring-primary/30' : 'border-border'
-              }`}
-            >
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-muted text-2xl ring-1 ring-border">
-                {c.emoji}
-              </div>
-              <div className="text-[11px] font-medium leading-tight text-foreground group-hover:text-primary">
-                {c.label}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+
+      {choix.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {choix.map((c) => {
+            const isActive = selected === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelected(c.id)}
+                className={`group flex flex-col items-center gap-2 rounded-lg border bg-background px-2 pb-2 pt-3 text-center transition hover:border-primary hover:shadow-sm ${
+                  isActive ? 'border-primary ring-2 ring-primary/30' : 'border-border'
+                }`}
+              >
+                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-border">
+                  {c.image ? (
+                    <img
+                      src={c.image}
+                      alt={c.label}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">···</span>
+                  )}
+                </div>
+                <div className="text-[11px] font-medium leading-tight text-foreground group-hover:text-primary">
+                  {c.label}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <button
         type="button"
         className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-cta px-4 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-lg transition hover:bg-cta-hover"

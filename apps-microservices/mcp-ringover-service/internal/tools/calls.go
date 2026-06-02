@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hellopro/mcp-ringover/internal/mcp"
@@ -235,7 +236,7 @@ func handleGetCallStatsByUser(ctx context.Context, clients *Clients, args map[st
 
 // ── get_call_details ─────────────────────────────────────────────────────────
 
-const getCallDetailsDescription = "Get detailed information about a specific call"
+const getCallDetailsDescription = "Get detailed information about a specific call, including its transcription. The transcription is fetched via GET /transcriptions/{call_id} and is returned when the team transcription feature is enabled."
 const getCallDetailsInputSchema = `{
 	"type": "object",
 	"properties": {
@@ -265,5 +266,33 @@ func handleGetCallDetails(ctx context.Context, clients *Clients, args map[string
 		return errorResult(err.Error()), nil
 	}
 
-	return rawJSONResult(data), nil
+	// Enrich with the transcription. GET /transcriptions/{call_id} is gated by
+	// the team transcription feature (not by API-key permissions) and needs no
+	// channel/calluuid conversion. A failure (e.g. feature disabled = 401, or
+	// no transcription for the call = 404) is reported in the transcription
+	// field without failing the whole call.
+	combined := struct {
+		Call          json.RawMessage      `json:"call"`
+		Transcription *transcriptionResult `json:"transcription"`
+	}{Call: data, Transcription: fetchCallTranscription(ctx, clients, callID)}
+
+	return jsonResult(combined), nil
+}
+
+// transcriptionResult holds the outcome of the /transcriptions/{call_id} fetch:
+// the raw transcription payload on success, or an error string on failure.
+type transcriptionResult struct {
+	Data  json.RawMessage `json:"data,omitempty"`
+	Error string          `json:"error,omitempty"`
+}
+
+// fetchCallTranscription retrieves the transcription for callID. It never
+// returns an error: a failure is captured in the Error field so the caller
+// still receives the call details.
+func fetchCallTranscription(ctx context.Context, clients *Clients, callID string) *transcriptionResult {
+	data, err := clients.Ringover.GetTranscriptionByCallID(ctx, callID)
+	if err != nil {
+		return &transcriptionResult{Error: fmt.Sprintf("transcription fetch failed: %v", err)}
+	}
+	return &transcriptionResult{Data: data}
 }

@@ -17,8 +17,10 @@ interface HeroProps {
   publishedAt?: string;
   readTime?: string;
   breadcrumb?: Array<{ label: string; href?: string }>;
-  /** Résumé "L'essentiel à retenir" (depuis bloc BO de type resume) */
+  /** Résumé "L'essentiel à retenir" (items structurés — fallback mock) */
   resume?: ResumeItem[];
+  /** HTML brut du bloc type 15 de l'API — prioritaire sur resume si présent */
+  resumeHtml?: string;
   /** Slot droit : QuoteForm (prix/autre) ou SuppliersCarousel (top) */
   slot?: React.ReactNode;
 }
@@ -31,6 +33,7 @@ export function Hero({
   readTime = '7 min de lecture',
   breadcrumb = [],
   resume = [],
+  resumeHtml,
   slot,
 }: HeroProps) {
   return (
@@ -85,7 +88,9 @@ export function Hero({
               </p>
             )}
 
-            {resume.length > 0 && <KeyTakeaways items={resume} />}
+            {(resumeHtml || resume.length > 0) && (
+              <KeyTakeaways items={resume} html={resumeHtml} />
+            )}
 
             {/* Meta auteur / date */}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-primary-foreground/80">
@@ -131,7 +136,7 @@ export function Hero({
 
 /* ─── Sous-composants internes ───────────────────────────────────────────── */
 
-function KeyTakeaways({ items }: { items: ResumeItem[] }) {
+function KeyTakeaways({ items, html }: { items: ResumeItem[]; html?: string }) {
   const [open, setOpen] = useState(false);
   const visible = open ? items.length : 2;
 
@@ -143,27 +148,37 @@ function KeyTakeaways({ items }: { items: ResumeItem[] }) {
           L&apos;essentiel à retenir
         </span>
       </div>
-      <ul className="space-y-1 text-xs leading-snug text-primary-foreground/90">
-        {items.slice(0, visible).map((it) => (
-          <li key={it.label} className="flex gap-2">
-            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cta" aria-hidden="true" />
-            <span>
-              <strong className="text-primary-foreground">{it.label} :</strong> {it.text}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {items.length > 2 && (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
-        >
-          {open ? 'Voir moins' : `Voir plus (+${items.length - 2})`}
-          <ChevronDown
-            className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
-          />
-        </button>
+
+      {html ? (
+        <div
+          className="text-xs leading-snug text-primary-foreground/90 [&_li]:mb-1 [&_li]:flex [&_li]:gap-2 [&_strong]:text-primary-foreground [&_ul]:space-y-1 [&_ol]:space-y-1"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <>
+          <ul className="space-y-1 text-xs leading-snug text-primary-foreground/90">
+            {items.slice(0, visible).map((it) => (
+              <li key={it.label} className="flex gap-2">
+                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cta" aria-hidden="true" />
+                <span>
+                  <strong className="text-primary-foreground">{it.label} :</strong> {it.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {items.length > 2 && (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+            >
+              {open ? 'Voir moins' : `Voir plus (+${items.length - 2})`}
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
+        </>
       )}
     </aside>
   );

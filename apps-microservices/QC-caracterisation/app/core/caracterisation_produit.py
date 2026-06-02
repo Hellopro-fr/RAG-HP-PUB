@@ -31,7 +31,7 @@ class CaracterisationProduitGenerator:
     PROMPT_REPASSE_ID = "103"
     # PROMPT_CARACTERISATION_ID = "108"
     # PROMPT_REPASSE_ID = "109"
-    DEEPSEEK_MODEL = "deepseek-v4-flash"
+    DEEPSEEK_MODEL = "deepseek-v4-pro"
     
     ETAPE = "7"
 
@@ -715,32 +715,35 @@ class CaracterisationProduitGenerator:
                 if verif_result['has_change']:
                     self._log("IDs corrigés après vérification")
                 
-                # Étape 2: Repasse si des caractéristiques trouvées
+                # Étape 2: Repasse LLM — DÉSACTIVÉE avec DeepSeek v4-pro (une seule passe suffit).
+                # Conservée en commentaire pour garder la trace de son utilisation et pouvoir
+                # la réactiver si un modèle moins performant est réutilisé.
+                # La méthode repasse_caracterisation() reste définie dans la classe.
                 if produit_caract:
-                    # Construire le référentiel pour la repasse
-                    carac_referentiel = []
-                    for item in produit_caract:
-                        id_carac = item.get('id_caracteristique')
-                        if id_carac in jeu_carac_dict:
-                            carac_referentiel.append(jeu_carac_dict[id_carac])
-                    
-                    if carac_referentiel:
-                        produit_caract = await self.repasse_caracterisation(
-                            id_categorie,
-                            nom_rubrique,
-                            titre_produit,
-                            description_produit,
-                            produit_caract,
-                            carac_referentiel
-                        )
-                    
-                    # Vérification des caractéristiques textuelles après repasse
+                    # # Construire le référentiel pour la repasse
+                    # carac_referentiel = []
+                    # for item in produit_caract:
+                    #     id_carac = item.get('id_caracteristique')
+                    #     if id_carac in jeu_carac_dict:
+                    #         carac_referentiel.append(jeu_carac_dict[id_carac])
+                    #
+                    # if carac_referentiel:
+                    #     produit_caract = await self.repasse_caracterisation(
+                    #         id_categorie,
+                    #         nom_rubrique,
+                    #         titre_produit,
+                    #         description_produit,
+                    #         produit_caract,
+                    #         carac_referentiel
+                    #     )
+
+                    # Vérification des caractéristiques textuelles (garde-fou conservé)
                     produit_caract, verif_changed = await self._verify_textual_values(
                         produit_caract,
                         jeu_carac_dict,
                         id_categorie
                     )
-                    
+
                     if verif_changed:
                         self._log("Caractéristiques textuelles corrigées après vérification")
                 

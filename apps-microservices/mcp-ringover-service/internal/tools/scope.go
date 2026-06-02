@@ -70,28 +70,53 @@ func checkCallOwnedByAllowed(ctx context.Context, callUserID int) error {
 	return fmt.Errorf("call owner (user_id=%d) is not permitted by the current token scope", callUserID)
 }
 
-// extractCallUserID parses the user_id of a call from Ringover's response.
-// The /calls/{id} endpoint returns { call_list: [ { user_id, ... } ] }; some
-// proxies return a bare object. Returns 0 when the field is absent or cannot
-// be parsed — callers must treat 0 as "unknown".
-func extractCallUserID(body json.RawMessage) int {
-	// Envelope: { call_list: [...] }
-	var envelope struct {
-		CallList []struct {
-			UserID int `json:"user_id"`
-		} `json:"call_list"`
-	}
-	if err := json.Unmarshal(body, &envelope); err == nil && len(envelope.CallList) > 0 {
-		return envelope.CallList[0].UserID
-	}
-	// Bare object fallback.
-	var bare struct {
+// callItem captures the per-call fields we extract from a Ringover calls
+// response. user_id appears at the top level in the list/search endpoints but
+// is nested under "user" in the /calls/{id} detail response, so both are
+// modelled.
+type callItem struct {
+	UserID int `json:"user_id"`
+	User   struct {
 		UserID int `json:"user_id"`
+	} `json:"user"`
+}
+
+// firstCallItem returns the first call from a Ringover calls response,
+// tolerating both envelopes: GET /calls/{id} returns { list: [...] } while the
+// list/search endpoints return { call_list: [...] }. A bare object is accepted
+// as a defensive fallback. ok is false when no call could be parsed.
+func firstCallItem(body json.RawMessage) (callItem, bool) {
+	var env struct {
+		List     []callItem `json:"list"`
+		CallList []callItem `json:"call_list"`
 	}
+	if err := json.Unmarshal(body, &env); err == nil {
+		if len(env.List) > 0 {
+			return env.List[0], true
+		}
+		if len(env.CallList) > 0 {
+			return env.CallList[0], true
+		}
+	}
+	var bare callItem
 	if err := json.Unmarshal(body, &bare); err == nil {
-		return bare.UserID
+		return bare, true
 	}
-	return 0
+	return callItem{}, false
+}
+
+// extractCallUserID parses the owning agent's user_id from a Ringover call
+// response. Returns 0 when absent or unparseable — callers must treat 0 as
+// "unknown" (the scope check fails closed on 0).
+func extractCallUserID(body json.RawMessage) int {
+	item, ok := firstCallItem(body)
+	if !ok {
+		return 0
+	}
+	if item.UserID != 0 {
+		return item.UserID
+	}
+	return item.User.UserID
 }
 
 // callTypeForPostCalls normalises a single call_type string (used by the

@@ -2,9 +2,10 @@ import asyncio
 import logging
 import os
 import time
-from typing import Optional
+from typing import Optional, Callable
 from urllib.parse import urlparse, urlunparse
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
     DetectionRequest,
@@ -12,10 +13,16 @@ from app.models.schemas import (
     BatchDetectionRequest,
     BatchDetectionResponse,
     BatchItem,
+    BatchOpts,
+    BatchCounts,
     UrlCheckResponse,
     DetectionMode,
-    DebugDetectionResponse
+    DebugDetectionResponse,
+    AsyncBatchSubmitRequest,
+    AsyncBatchSubmitResponse,
+    AsyncBatchStatusResponse,
 )
+from app.core.async_jobs import _JobsDisabled, _JobsUnavailable, _JobCapacityExceeded, poll_status
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
@@ -355,38 +362,24 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
         )
 
 
-@router.post("/detect-batch", response_model=BatchDetectionResponse)
-async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionResponse:
-    """
-    Traitement par lot : détecte plusieurs URLs en parallèle.
-
-    **Traitement 2-pass :**
-    1. **Pass 1** — Traitement parallèle avec stagger (0.5s/item, plafonné à une vague de concurrence)
-    2. **Pass 2** — Retry séquentiel (2s entre chaque) pour les `fetch_failed` et `challenge_page`
-
-    **Mode `first_match` :** Traitement groupé — séquentiel intra-groupe (stop au premier FR),
-    concurrent inter-groupes. Utile pour tester plusieurs URLs d'un même fournisseur.
-
-    **Cache :** Chaque URL est vérifiée/stockée individuellement en cache Redis.
-    `force_refresh=true` bypass le cache pour toutes les URLs du lot.
-
-    **Paramètres :**
-    - `items` : Liste d'objets {url, html_content?, group?} (max 100)
-    - `mode` : simple, complete ou first_match
-    - `max_concurrency` : Requêtes parallèles (1-50, défaut: 10)
-    - `force_refresh` : Ignorer le cache pour toutes les URLs
-
-    **Retourne** les résultats dans le même ordre que les données fournies.
-    """
-    items_to_process = request.items
+async def _run_batch_core(
+    items: list[BatchItem],
+    mode: DetectionMode,
+    opts: BatchOpts,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> tuple[list[DetectionResponse], BatchCounts]:
+    """Shared 2-pass batch orchestration. Used by the sync /detect-batch route
+    (progress_cb=None) and the async worker (throttled progress_cb). Behavior is
+    identical to the former inline /detect-batch body."""
+    items_to_process = items
 
     total_items = len(items_to_process)
     start_time = time.time()
 
-    logger.info(f"[BATCH] Debut traitement: {total_items} URLs, concurrence={request.max_concurrency}, mode={request.mode}")
+    logger.info(f"[BATCH] Debut traitement: {total_items} URLs, concurrence={opts.max_concurrency}, mode={mode}")
 
     # Sémaphore pour limiter la concurrence
-    semaphore = asyncio.Semaphore(request.max_concurrency)
+    semaphore = asyncio.Semaphore(opts.max_concurrency)
     processed_count = 0
     count_lock = asyncio.Lock()
 
@@ -395,6 +388,8 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
         nonlocal processed_count
         async with count_lock:
             processed_count += 1
+            if progress_cb is not None:
+                progress_cb(processed_count)
             return processed_count
 
     async def _process_item_core(item: BatchItem) -> DetectionResponse:
@@ -403,7 +398,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
         item_start = time.time()
 
         try:
-            detection_mode = request.mode
+            detection_mode = mode
             if detection_mode == DetectionMode.FIRST_MATCH:
                 detection_mode = DetectionMode.COMPLETE
                 logger.debug(f"[BATCH] Mode first_match → complete pour détection individuelle de {url}")
@@ -411,11 +406,11 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             result = await _detect_single_url(
                 url=url,
                 html_content=item.html_content,
-                proxy_url=request.proxy_url,
+                proxy_url=opts.proxy_url,
                 mode=detection_mode,
-                use_nlp_detection=request.use_nlp_detection,
-                force_refresh=request.force_refresh,
-                homepage_fallback=request.homepage_fallback,
+                use_nlp_detection=opts.use_nlp_detection,
+                force_refresh=opts.force_refresh,
+                homepage_fallback=opts.homepage_fallback,
             )
 
             count = await _increment_count()
@@ -446,7 +441,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     async def process_single(index: int, item: BatchItem) -> DetectionResponse:
         # Stagger plafonné à une « vague » de concurrence (évite 49.5s pour item 99)
         if index > 0:
-            max_stagger = request.max_concurrency * 0.5
+            max_stagger = opts.max_concurrency * 0.5
             await asyncio.sleep(min(index * 0.5, max_stagger))
         async with semaphore:
             try:
@@ -462,7 +457,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     # =========================================================================
     # Mode first_match : traitement groupé (séquentiel intra-groupe, concurrent inter-groupes)
     # =========================================================================
-    if request.mode == DetectionMode.FIRST_MATCH:
+    if mode == DetectionMode.FIRST_MATCH:
         # Tous les items reçoivent un groupe (implicite si absent)
         grouped: dict[str, list[BatchItem]] = {}
         group_order: list[str] = []
@@ -553,13 +548,8 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             f"{error_count} erreurs ({round(processing_time_ms)}ms total)"
         )
 
-        return BatchDetectionResponse(
-            total=len(results),
-            success_count=success_count,
-            failed_count=failed_count,
-            error_count=error_count,
-            results=results,
-            processing_time_ms=round(processing_time_ms, 2)
+        return results, BatchCounts(
+            success_count=success_count, failed_count=failed_count, error_count=error_count
         )
 
     # =========================================================================
@@ -630,13 +620,51 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
         f"{error_count} erreurs ({round(processing_time_ms)}ms total)"
     )
 
+    return results, BatchCounts(
+        success_count=success_count, failed_count=failed_count, error_count=error_count
+    )
+
+
+@router.post("/detect-batch", response_model=BatchDetectionResponse)
+async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionResponse:
+    """
+    Traitement par lot : détecte plusieurs URLs en parallèle.
+
+    **Traitement 2-pass :**
+    1. **Pass 1** — Traitement parallèle avec stagger (0.5s/item, plafonné à une vague de concurrence)
+    2. **Pass 2** — Retry séquentiel (2s entre chaque) pour les `fetch_failed` et `challenge_page`
+
+    **Mode `first_match` :** Traitement groupé — séquentiel intra-groupe (stop au premier FR),
+    concurrent inter-groupes. Utile pour tester plusieurs URLs d'un même fournisseur.
+
+    **Cache :** Chaque URL est vérifiée/stockée individuellement en cache Redis.
+    `force_refresh=true` bypass le cache pour toutes les URLs du lot.
+
+    **Paramètres :**
+    - `items` : Liste d'objets {url, html_content?, group?} (max 100)
+    - `mode` : simple, complete ou first_match
+    - `max_concurrency` : Requêtes parallèles (1-50, défaut: 10)
+    - `force_refresh` : Ignorer le cache pour toutes les URLs
+
+    **Retourne** les résultats dans le même ordre que les données fournies.
+    """
+    start_time = time.time()
+    opts = BatchOpts(
+        proxy_url=request.proxy_url,
+        use_nlp_detection=request.use_nlp_detection,
+        force_refresh=request.force_refresh,
+        max_concurrency=request.max_concurrency,
+        homepage_fallback=request.homepage_fallback,
+    )
+    results, counts = await _run_batch_core(request.items, request.mode, opts)
+    processing_time_ms = (time.time() - start_time) * 1000
     return BatchDetectionResponse(
         total=len(results),
-        success_count=success_count,
-        failed_count=failed_count,
-        error_count=error_count,
+        success_count=counts.success_count,
+        failed_count=counts.failed_count,
+        error_count=counts.error_count,
         results=list(results),
-        processing_time_ms=round(processing_time_ms, 2)
+        processing_time_ms=round(processing_time_ms, 2),
     )
 
 
@@ -792,3 +820,49 @@ async def health_check() -> dict:
         "version": settings.APP_VERSION,
         "service": "detection-langue-api"
     }
+
+
+def _poll_hint() -> int:
+    return min(max(settings.HEARTBEAT_INTERVAL_S, 5), settings.ASYNC_POLL_HINT_MAX_S)
+
+
+@router.post("/detect-batch-async")
+async def submit_batch_async(request: AsyncBatchSubmitRequest, http_request: Request):
+    """Submit a batch for async processing. Returns 202 + job_id (or 200 if the
+    client_job_id maps to an existing job). Poll GET /detect-batch-async/{job_id}."""
+    jm = http_request.app.state.job_manager
+    try:
+        job_id, status_code = await jm.submit(request)
+    except _JobsDisabled:
+        # permanent: NO Retry-After -> BO short-circuits
+        raise HTTPException(status_code=503, detail={"detail": "Async jobs disabled", "retryable": False})
+    except _JobsUnavailable:
+        raise HTTPException(status_code=503, detail={"detail": "Job store unavailable", "retryable": False})
+    except _JobCapacityExceeded:
+        ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
+        raise HTTPException(
+            status_code=503,
+            detail={"detail": "Max active jobs reached", "retryable": True, "retry_after_seconds": int(ra)},
+            headers={"Retry-After": ra},
+        )
+    body = AsyncBatchSubmitResponse(
+        job_id=job_id, status="pending", total=len(request.items), poll_after_seconds=_poll_hint()
+    )
+    return JSONResponse(status_code=status_code, content=body.model_dump())
+
+
+@router.get("/detect-batch-async/{job_id}", response_model=AsyncBatchStatusResponse)
+async def poll_batch_async(job_id: str, http_request: Request) -> AsyncBatchStatusResponse:
+    """Poll an async job. 404 if unknown/expired. Computes 'stale' on read."""
+    jm = http_request.app.state.job_manager
+    rec = await jm.get_record(job_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Unknown or expired job_id")
+    status = poll_status(rec, time.time(), settings.STALE_THRESHOLD_S)
+    results = rec.get("results") if status in ("completed", "failed", "stale") else None
+    return AsyncBatchStatusResponse(
+        job_id=rec["job_id"], status=status, total=rec["total"], done=rec.get("done", 0),
+        success_count=rec.get("success_count", 0), failed_count=rec.get("failed_count", 0),
+        error_count=rec.get("error_count", 0), results=results,
+        processing_time_ms=None, error=rec.get("error"), poll_after_seconds=_poll_hint(),
+    )
