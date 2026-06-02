@@ -27,9 +27,10 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
 
   // Extraire le bloc resume pour l'afficher dans le Hero
   const resumeBlock = page.blocks.find((b) => b.type === 'resume');
-  const resumeItems = resumeBlock
-    ? (resumeBlock.data as unknown as ResumeBlockData).items
-    : [];
+  const resumeData = resumeBlock ? (resumeBlock.data as unknown as ResumeBlockData) : null;
+  const resumeItems = resumeData?.items ?? [];
+  // HTML brut du bloc type 15 — assaini côté serveur avant passage au client
+  const resumeHtml = resumeData?.html ? sanitizeResumeHtml(resumeData.html) : undefined;
 
   // Blocs à rendre (exclure le resume qui est intégré dans le Hero)
   const contentBlocks = page.blocks
@@ -44,12 +45,13 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         data={page.hero}
         pageType={page.pageType}
         resume={resumeItems}
-        breadcrumb={[
+        resumeHtml={resumeHtml}
+        breadcrumb={page.breadcrumb ?? [
           { label: 'Accueil', href: 'https://www.hellopro.fr' },
           { label: 'Conseils', href: '/' },
           { label: page.hero.title },
         ]}
-        slot={page.pageType !== 'top' ? <HeroQuoteForm /> : undefined}
+        slot={page.pageType !== 'top' ? <HeroQuoteForm question={page.formulaire_ao ?? null} /> : undefined}
       />
 
       <main className="mx-auto max-w-[1400px] grid lg:grid-cols-[280px_1fr] gap-10 px-4 py-10 lg:px-6">
@@ -83,4 +85,12 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       <SiteFooter />
     </>
   );
+}
+
+/** Supprime les balises script et les handlers inline pour sécuriser le HTML du BO. */
+function sanitizeResumeHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\s+on\w+="[^"]*"/gi, '')
+    .replace(/\s+on\w+='[^']*'/gi, '');
 }

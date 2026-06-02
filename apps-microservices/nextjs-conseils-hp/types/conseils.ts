@@ -54,6 +54,19 @@ export interface AuthorInfo {
   contactEmail?: string;
 }
 
+export interface AoChoix {
+  id: string | number;
+  label: string;
+  image?: string;
+}
+
+export interface AoFormQuestion {
+  id: string | number;
+  question: string;
+  avecImage: boolean;
+  choix: AoChoix[];
+}
+
 export interface ConseilPage {
   slug: string;
   pageType: ConseilPageType;
@@ -61,6 +74,8 @@ export interface ConseilPage {
   hero: HeroData;
   blocks: ConseilBlock[];
   author?: AuthorInfo;
+  breadcrumb?: Array<{ label: string; href?: string }>;
+  formulaire_ao?: AoFormQuestion | null;
   // Spécifiques au pageType (gérés HORS BlockRenderer)
   priceData?: unknown;        // À typer en Phase 8
   topFabricants?: unknown;    // À typer en Phase 8
