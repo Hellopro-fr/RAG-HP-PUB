@@ -1331,6 +1331,9 @@ services:
       - ./apps-microservices/crawler-service/crawler_stash:/app/stash
       - ./apps-microservices/crawler-service/crawler_stash_download_requests:/app/gcs-stash-requests
       - ./apps-microservices/crawler-service/crawler_stash_download_results:/app/gcs-stash-downloads
+      # Stash->archive move flow shared dirs
+      - ./apps-microservices/crawler-service/crawler_move_requests:/app/gcs-move-requests
+      - ./apps-microservices/crawler-service/crawler_move_results:/app/gcs-move-results
     env_file:
       - .env
     environment:
@@ -1346,6 +1349,11 @@ services:
       - REDIS_SOCKET_CONNECT_TIMEOUT_S=${REDIS_SOCKET_CONNECT_TIMEOUT_S:-5}
       - REDIS_HEALTH_CHECK_INTERVAL_S=${REDIS_HEALTH_CHECK_INTERVAL_S:-30}
       - SERVICE_NAME=crawler-service
+      - AUTO_STASH_ENABLED=${AUTO_STASH_ENABLED:-false}
+      - STASH_GRACE_SECONDS=${STASH_GRACE_SECONDS:-3600}
+      - STASH_SAFETY_TIMEOUT_SECONDS=${STASH_SAFETY_TIMEOUT_SECONDS:-172800}
+      - STASH_DISK_HIGH_WATER_PCT=${STASH_DISK_HIGH_WATER_PCT:-85}
+      - STASH_MAX_PER_SWEEP=${STASH_MAX_PER_SWEEP:-5}
       - TIMING_ENABLED=${TIMING_ENABLED:-true}
       - TIMING_SAMPLE_INTERVAL_MS=${TIMING_SAMPLE_INTERVAL_MS:-5000}
     deploy:
@@ -2580,15 +2588,13 @@ services:
       context: .
       dockerfile: ./apps-microservices/nextjs-conseils-hp/Dockerfile
     profiles: [ "nextjs" ]
-    # expose:
-    #   - "3003"
     ports:
       - "3003:3003"
     environment:
       - NODE_ENV=production
     restart: unless-stopped
-    # env_file:
-    # - ./apps-microservices/nextjs-conseils-hp/.env.production
+    env_file:
+      - ./.env
     networks:
       - services-net
     logging: *logging_defaults

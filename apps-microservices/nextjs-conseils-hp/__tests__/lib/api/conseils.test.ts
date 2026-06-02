@@ -11,8 +11,8 @@ describe('fetchConseilPage', () => {
     vi.unstubAllEnvs();
   });
 
-  it('returns mock page when CONSEILS_API_TOKEN is not set', async () => {
-    vi.stubEnv('CONSEILS_API_TOKEN', '');
+  it('returns mock page when CONSEILS_TOKEN_SECRET is not set', async () => {
+    vi.stubEnv('CONSEILS_TOKEN_SECRET', '');
     vi.stubEnv('NODE_ENV', 'production');
 
     const { fetchConseilPage } = await import('@/lib/api/conseils');
@@ -23,7 +23,7 @@ describe('fetchConseilPage', () => {
   });
 
   it('returns null on API fetch error when token is set', async () => {
-    vi.stubEnv('CONSEILS_API_TOKEN', 'fake-token');
+    vi.stubEnv('CONSEILS_TOKEN_SECRET', 'fake-token');
     vi.stubEnv('NODE_ENV', 'production');
 
     global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
@@ -35,7 +35,7 @@ describe('fetchConseilPage', () => {
   });
 
   it('returns null when API responds with 404', async () => {
-    vi.stubEnv('CONSEILS_API_TOKEN', 'fake-token');
+    vi.stubEnv('CONSEILS_TOKEN_SECRET', 'fake-token');
     vi.stubEnv('NODE_ENV', 'production');
 
     global.fetch = vi.fn().mockResolvedValueOnce({ ok: false, status: 404 } as Response);

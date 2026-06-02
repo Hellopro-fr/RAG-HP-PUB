@@ -16,7 +16,8 @@ type PageProps = {
  * Voir CLAUDE.md §6.1
  */
 function parseSlugWithId(input: string): { slug: string; id: number } | null {
-  const match = input.match(/^(.+)-(\d+)\.html$/);
+  // Le middleware retire .html avant le routing, mais on accepte les deux formes par défense.
+  const match = input.match(/^(.+)-(\d+)(?:\.html)?$/);
   if (!match) return null;
   return { slug: match[1], id: Number(match[2]) };
 }

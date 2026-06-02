@@ -48,8 +48,9 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Unit tests (node:test)
-        # Tests existants : diezDecision.test.ts, questionMarkDecision.test.ts
-        # Non-régression sur les modifs StatsManager / UpdateChecker / routes / main.
+        # Tests : node:test auto-découverts via `find`. Couvre notamment
+        # PushedSet/UpdateChecker (dont UpdateChecker.checkedSet.separation.test.ts —
+        # non-régression de l'affamement du pushData en mode update).
         #
         # On bypasse `npm test` car le script utilise le glob `src/**/*.test.ts`
         # qui n'est pas expansé par /bin/sh (le shell par défaut de npm sur Ubuntu CI).

@@ -20,6 +20,25 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _record_downloaded_at(job_info: dict) -> None:
+    """Persist downloaded_at (stream-start) so the auto-stash grace window can
+    start. Re-reads the job from Redis first so a concurrent status/archive
+    write isn't clobbered by the request-start snapshot (mirrors the fresh-read
+    pattern in stash_crawl/unstash_crawl). Skips if the job vanished. Fail-open:
+    a Redis hiccup must never break a download."""
+    try:
+        crawl_id = job_info["crawl_id"]
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh = await cache_service.get_json(job_key)
+        if fresh is None:
+            return  # job vanished — don't recreate it
+        fresh["downloaded_at"] = datetime.utcnow().isoformat()
+        await cache_service.set_json(job_key, fresh)
+    except Exception as e:
+        logger.warning(f"Failed to record downloaded_at for "
+                       f"'{job_info.get('crawl_id')}': {e}")
+
+
 async def get_job_or_recover(crawl_id: str) -> dict:
     """
     FastAPI dependency to retrieve a crawl job from Redis.
@@ -318,6 +337,9 @@ async def download_crawl_results(
                 detail=f"Could not generate results archive for crawl '{crawl_id}'. "
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
+
+        # Record the consume signal (stream-start) for the auto-stash sweep.
+        await _record_downloaded_at(job_info)
 
         if is_temporary:
             # Stream the file and clean up after streaming completes (prevents race with BackgroundTasks)

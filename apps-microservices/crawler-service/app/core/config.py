@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     STASH_DOWNLOAD_REQUESTS_PATH: str = "/app/gcs-stash-requests"
     STASH_DOWNLOAD_RESULTS_PATH: str = "/app/gcs-stash-downloads"
 
+    # Stash->archive move flow (spec 2026-06-01 P3). Service writes .move-request;
+    # the move-flow daemon does `gcloud storage mv stash/{id} crawls/{id}`.
+    # Prefix names match the daemon's env vars (download_daemon.sh) so a single
+    # .env entry configures both layers; the daemon is the actual consumer.
+    MOVE_REQUESTS_PATH: str = "/app/gcs-move-requests"
+    MOVE_RESULTS_PATH: str = "/app/gcs-move-results"
+    MOVE_SOURCE_PREFIX: str = "stash"
+    MOVE_TARGET_PREFIX: str = "crawls"
+    # Server-side same-bucket rewrite is fast but not instant for very large
+    # objects; 600s keeps the inline /archive call from 504-ing on big crawls.
+    MOVE_TIMEOUT_SECONDS: int = 600
+
     # Stash flow Redis lock TTLs and timeouts (seconds).
     # STASH_LOCK_TTL is bumped to 1800s (was 600s) so it exceeds nginx
     # proxy_read_timeout (600s on /crawler/ default location) and survives
@@ -76,6 +88,20 @@ class Settings(BaseSettings):
     # Node-side monitor thresholds (informational; actual values passed via env to crawler subprocess)
     REDIS_LOSS_THRESHOLD_MS: int = 60_000
     PROGRESS_STALL_THRESHOLD_MS: int = 600_000
+
+    # --- Auto-stash workflow (spec 2026-06-01) ---
+    # Master gate for the auto-stash reconcile sweep (P2). Off by default.
+    AUTO_STASH_ENABLED: bool = False
+    # After a /results download, wait this long before stashing (happy path).
+    STASH_GRACE_SECONDS: int = 3600
+    # Stash a never-downloaded terminal crawl after this long (also the
+    # investigation window for failed crawls).
+    STASH_SAFETY_TIMEOUT_SECONDS: int = 172800
+    # Disk-pressure override: at/above this used-% the sweep stashes the
+    # largest terminal crawls early, regardless of grace.
+    STASH_DISK_HIGH_WATER_PCT: int = 85
+    # Cap on crawls stashed per sweep tick (bounds upload-daemon load).
+    STASH_MAX_PER_SWEEP: int = 5
 
     model_config = {
         "env_file": ".env",
