@@ -1,40 +1,130 @@
-import type { ConseilPage } from '@/types/conseils';
+import type { ConseilPage, AoFormQuestion } from '@/types/conseils';
+import type { PhpAoQuestion, PhpBloc } from '@/types/api/page-conseil-php';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.hellopro.fr/v1';
+const HP_BASE = process.env.HELLOPRO_API_URL ?? 'https://api.hellopro.fr';
+const HP_CONSEILS_URL = `${HP_BASE}/api/hp/view/page_conseil.php`;
 const API_TOKEN = process.env.CONSEILS_API_TOKEN ?? '';
 
-/**
- * Récupère une page conseil depuis l'API HelloPro par son ID numérique.
- * Utilisé côté serveur uniquement (Server Component / generateMetadata).
- *
- * En dev local (Phase 6), si l'API est inaccessible, renvoie le mock correspondant.
- * Voir CLAUDE.md §9.
- */
+
+console.log('[conseils.ts] INIT — HELLOPRO_API_URL:', process.env.HELLOPRO_API_URL ?? '(non défini, défaut utilisé)');
+console.log('[conseils.ts] INIT — HP_CONSEILS_URL:', HP_CONSEILS_URL);
+console.log('[conseils.ts] INIT — CONSEILS_API_TOKEN:', API_TOKEN ? `défini (${API_TOKEN.slice(0, 6)}...)` : 'VIDE → mode mock');
+
 export async function fetchConseilPage(id: number): Promise<ConseilPage | null> {
-  // Utiliser les mocks si l'API n'est pas configurée (dev local ou Docker sans token)
+  const { getMockPage } = await import('@/data/mocks/index');
+
+  console.log(`[fetchConseilPage] id=${id} — token=${API_TOKEN ? 'présent' : 'absent'}`);
+
   if (!API_TOKEN) {
-    const { getMockPage } = await import('@/data/mocks/index');
+    console.log(`[fetchConseilPage] id=${id} — pas de token, retour mock`);
     return getMockPage(id);
   }
 
+  const url = `${HP_CONSEILS_URL}?p=${id}`;
+  console.log(`[fetchConseilPage] id=${id} — appel API: ${url}`);
+
   try {
-    const res = await fetch(`${API_BASE}/conseils/${id}`, {
-      headers: {
-        Authorization: `Bearer ${API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${API_TOKEN}` },
       next: { revalidate: 3600 },
     });
 
+    console.log(`[fetchConseilPage] id=${id} — réponse HTTP: ${res.status} ${res.statusText}`);
+
     if (!res.ok) {
-      if (res.status === 404) return null;
-      console.error(`[fetchConseilPage] API error ${res.status} for id=${id}`);
-      return null;
+      console.error(`[fetchConseilPage] id=${id} — API error ${res.status}, fallback mock`);
+      return getMockPage(id);
     }
 
-    return (await res.json()) as ConseilPage;
+    const text = await res.text();
+    console.log(`[fetchConseilPage] id=${id} — body (200 premiers chars): ${text.slice(0, 200)}`);
+
+    // L'API PHP peut retourner du texte de debug SQL avant le JSON
+    const jsonMatch = text.match(/\{[\s\S]*\}$/);
+    if (!jsonMatch) {
+      console.error(`[fetchConseilPage] id=${id} — aucun JSON trouvé dans la réponse, fallback mock`);
+      return getMockPage(id);
+    }
+
+    const raw = JSON.parse(jsonMatch[0]);
+    console.log(`[fetchConseilPage] id=${id} — JSON parsé: id=${raw.id ?? 'absent'}, titre="${raw.titre ?? 'absent'}"`);
+
+    // La réponse est un objet plat {id, titre, seo, blocs, ...} sans wrapper {code, response}
+    if (!raw.id || !raw.titre) {
+      console.error(`[fetchConseilPage] id=${id} — réponse inattendue (id/titre absents), fallback mock`);
+      return getMockPage(id);
+    }
+
+    console.log(`[fetchConseilPage] id=${id} — succès, titre: "${raw.titre}"`);
+
+    // formulaire_ao : première question + choix (id, label, image)
+    let formulaire_ao: AoFormQuestion | null = null;
+    if (Array.isArray(raw.formulaire_ao) && raw.formulaire_ao.length > 0) {
+      const q: PhpAoQuestion = raw.formulaire_ao[0];
+      formulaire_ao = {
+        id: q.id,
+        question: q.question,
+        avecImage: q.avec_image === 1,
+        choix: (q.choix ?? []).map((c) => ({
+          id: c.id,
+          label: c.choix,
+          ...(c.vignette ? { image: c.vignette } : {}),
+        })),
+      };
+      console.log(`[fetchConseilPage] id=${id} — formulaire_ao: "${q.question}" (${formulaire_ao.choix.length} choix)`);
+    }
+
+    // breadcrumb depuis fil_ariane (home toujours en premier, page courante sans lien)
+    const filAriane = (raw.fil_ariane ?? []) as Array<{ libelle: string; url: string }>;
+    const breadcrumb = [
+      { label: 'Accueil', href: 'https://www.hellopro.fr' },
+      ...filAriane.slice(0, -1).map((f) => ({ label: f.libelle, href: f.url })),
+      ...(filAriane.length > 0
+        ? [{ label: filAriane[filAriane.length - 1].libelle }]
+        : [{ label: raw.titre as string }]),
+    ];
+    console.log(`[fetchConseilPage] id=${id} — breadcrumb: ${breadcrumb.length} items`);
+
+    // prix → hero.estimation (uniquement si min ou max renseignés)
+    const prixRaw = raw.prix as { min?: string | number; max?: string | number } | null;
+    const estimation = prixRaw && (prixRaw.min || prixRaw.max)
+      ? { min: Number(prixRaw.min) || 0, max: Number(prixRaw.max) || 0, unit: '€' }
+      : undefined;
+    if (estimation) {
+      console.log(`[fetchConseilPage] id=${id} — prix: ${estimation.min}–${estimation.max} €`);
+    }
+
+    // bloc type 15 → aside "L'essentiel à retenir" dans le Hero
+    const rawBlocs = (raw.blocs ?? []) as PhpBloc[];
+    const type15 = rawBlocs.find((b) => b.type === 15);
+
+    const mockPage = getMockPage(id);
+    const base = mockPage ?? (await import('@/data/mocks/page-prix')).mockPagePrix;
+
+    // Si type 15 présent → remplace le bloc resume du mock par le HTML brut de l'API
+    let blocks = base.blocks;
+    if (type15?.contenu?.texte) {
+      const html = type15.contenu.texte;
+      console.log(`[fetchConseilPage] id=${id} — type 15 aside: HTML brut (${html.length} chars)`);
+      blocks = [
+        { id: 'resume-api', type: 'resume', order: 0, data: { html, items: [] } },
+        ...base.blocks.filter((b) => b.type !== 'resume'),
+      ];
+    }
+
+    return {
+      ...base,
+      breadcrumb,
+      hero: {
+        ...base.hero,
+        title: raw.titre,
+        ...(estimation ? { estimation } : {}),
+      },
+      blocks,
+      formulaire_ao,
+    };
   } catch (err) {
-    console.error(`[fetchConseilPage] Fetch failed for id=${id}:`, err);
-    return null;
+    console.error(`[fetchConseilPage] id=${id} — exception:`, err);
+    return getMockPage(id);
   }
 }
