@@ -2580,10 +2580,10 @@ services:
       context: .
       dockerfile: ./apps-microservices/nextjs-conseils-hp/Dockerfile
     profiles: [ "nextjs" ]
-    expose:
-      - "3003"
-    # ports:
-    #   - "3003:3003"
+    # expose:
+    #   - "3003"
+    ports:
+      - "3003:3003"
     environment:
       - NODE_ENV=production
     restart: unless-stopped
