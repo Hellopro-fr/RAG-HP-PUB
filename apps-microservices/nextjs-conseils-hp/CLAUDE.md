@@ -476,7 +476,7 @@ Installer avec : `npx shadcn@latest add <component>` (CLI compatible Tailwind 4)
 ## 8. Variables d'environnement
 
 ```env
-# .env.local (NE PAS COMMITER)
+# .env.local (dev local — NE PAS COMMITER)
 NEXT_PUBLIC_API_BASE_URL=https://api.hellopro.fr/v1
 NEXT_PUBLIC_GTM_ID=GTM-XXXXXXX
 NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
@@ -486,6 +486,8 @@ NEXT_PUBLIC_HOTJAR_ID=1234567
 CONSEILS_API_TOKEN=<token-pour-bo-readonly>
 INVALID_PAGE_REDIRECT_URL=https://www.hellopro.fr/404.html
 ```
+
+> ⚠️ **Production / Docker** : `CONSEILS_API_TOKEN` est défini dans **`RAG-HP-PUB/.env`** (racine du monorepo). Le `docker-compose.yml` charge ce fichier via `env_file: ./.env` — ne pas dupliquer la variable dans `.env.production` du service.
 
 **Toujours** maintenir un `.env.example` à jour avec les clés (valeurs vides). Pas de secrets dans le code.
 
