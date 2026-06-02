@@ -1629,3 +1629,25 @@ class TestTerminalWebhookRequestId:
         mgr._get_or_create_failure_request_id(job_info)
         assert "terminal_webhook_request_id" in job_info  # unchanged
         assert job_info["failure_webhook_request_id"] != job_info["terminal_webhook_request_id"]
+
+    def test_success_webhook_source_wires_request_id_and_persist(self):
+        import inspect
+        from app.core import crawler_manager as cm
+        src = inspect.getsource(cm.CrawlerManager._send_success_webhook)
+        assert "_get_or_create_terminal_webhook_request_id" in src, \
+            "_send_success_webhook must obtain the shared terminal request_id"
+        assert 'params["request_id"]' in src, \
+            "_send_success_webhook must add request_id to params"
+        assert "set_json" in src, \
+            "_send_success_webhook must persist job_info to Redis before sending"
+
+    def test_stop_webhook_source_wires_request_id_and_persist(self):
+        import inspect
+        from app.core import crawler_manager as cm
+        src = inspect.getsource(cm.CrawlerManager._send_stop_webhook)
+        assert "_get_or_create_terminal_webhook_request_id" in src, \
+            "_send_stop_webhook must obtain the shared terminal request_id"
+        assert 'params["request_id"]' in src, \
+            "_send_stop_webhook must add request_id to params"
+        assert "set_json" in src, \
+            "_send_stop_webhook must persist job_info to Redis before sending"
