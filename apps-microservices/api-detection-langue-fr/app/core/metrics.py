@@ -60,3 +60,27 @@ HOMEPAGE_FALLBACK_TRIGGERED = Counter(
     "Homepage fallback triggers and their outcomes",
     labelnames=("outcome",),
 )
+
+# Async job API metrics.
+ASYNC_JOBS_SUBMITTED = Counter(
+    "detect_async_jobs_submitted_total",
+    "Async batch jobs accepted (202)",
+)
+ASYNC_JOBS_ACTIVE = Gauge(
+    "detect_async_jobs_active",
+    "Currently reserved/in-flight async jobs",
+)
+ASYNC_JOBS_TERMINAL = Counter(
+    "detect_async_jobs_terminal_total",
+    "Async jobs reaching a terminal status",
+    labelnames=("status",),
+)
+ASYNC_JOB_DURATION = Histogram(
+    "detect_async_job_duration_seconds",
+    "Async job wall-clock from running to terminal",
+    buckets=(1, 5, 15, 30, 60, 120, 300, 600, 1800),
+)
+ASYNC_JOB_CAPACITY_REJECTED = Counter(
+    "detect_async_job_capacity_rejected_total",
+    "Submits rejected because MAX_ACTIVE_JOBS was reached",
+)

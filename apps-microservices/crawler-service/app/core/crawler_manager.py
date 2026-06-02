@@ -334,6 +334,11 @@ class CrawlerManager:
         # This dictionary ONLY tracks processes running on THIS replica.
         # The global state is in Redis.
         self.local_processes: Dict[str, asyncio.subprocess.Process] = {}
+        # crawl_ids with an in-flight auto-stash task on this (leader) replica.
+        # Prevents the sweep from re-selecting a crawl whose tar is still running
+        # across ticks (slot starvation / log churn). The Redis stash_lock is the
+        # real cross-replica guard; this is a same-leader throughput optimization.
+        self._auto_stash_inflight: set = set()
 
     def _kill_process_group(self, pid: int):
         """Kill a process and all its children via the process group."""
@@ -540,25 +545,26 @@ class CrawlerManager:
             prev_datasets_dir = os.path.join(prev_storage, "storage", "datasets")
             has_local_data = os.path.isdir(prev_datasets_dir) and len(os.listdir(prev_datasets_dir)) > 0
 
-            if prev_status == "archived" and not has_local_data:
-                logger.info(f"Previous crawl '{previous_crawl_id}' is archived. Restoring from GCS before starting update crawl.")
+            stashed = bool(prev_job_info.get("stashed_at")) if prev_job_info else False
+            if (prev_status == "archived" or stashed) and not has_local_data:
                 try:
-                    await self._restore_archived_crawl(previous_crawl_id)
+                    await self._restore_previous_crawl(prev_job_info, has_local_data)
                 except HTTPException:
                     await _rollback_claim(decrement_counter=True)
                     raise
                 except Exception as e:
                     await _rollback_claim(decrement_counter=True)
-                    logger.error(f"Failed to restore archived crawl '{previous_crawl_id}': {e}", exc_info=True)
+                    logger.error(f"Failed to restore previous crawl '{previous_crawl_id}': {e}", exc_info=True)
                     raise HTTPException(
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=f"Failed to restore archived crawl '{previous_crawl_id}' from GCS: {str(e)}"
+                        detail=f"Failed to restore previous crawl '{previous_crawl_id}' from GCS: {str(e)}"
                     )
             elif not has_local_data:
                 await _rollback_claim(decrement_counter=True)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Previous crawl '{previous_crawl_id}' has no dataset files on disk and is not archived. Cannot proceed with update mode."
+                    detail=f"Previous crawl '{previous_crawl_id}' has no dataset files on disk "
+                           f"and is not archived or stashed. Cannot proceed with update mode."
                 )
 
         # --- BUILD & LOG COMMAND ---
@@ -652,6 +658,7 @@ class CrawlerManager:
                 request_id = self._get_or_create_failure_request_id(job_info)
 
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+            self._stamp_terminal_fields(job_info)
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
 
@@ -716,6 +723,7 @@ class CrawlerManager:
                 request_id = self._get_or_create_failure_request_id(job_info)
 
             await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+            self._stamp_terminal_fields(job_info)
             await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             await self._publish_update(crawl_id, "failed")
             if request_id:
@@ -1131,6 +1139,7 @@ class CrawlerManager:
             _, failure_cause = self._classify_exit_code(exit_code)
             if failure_cause is not None:
                 job_info["failure_cause"] = failure_cause
+            self._stamp_terminal_fields(job_info)
             await cache_service.set_json(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. Lock released. Counter decremented.")
 
@@ -1267,6 +1276,7 @@ class CrawlerManager:
         if target_status == "failed":
             job_info["failure_cause"] = "force_finished"
         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+        self._stamp_terminal_fields(job_info)
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, target_status)
 
@@ -1421,6 +1431,20 @@ class CrawlerManager:
 
         if job_info["status"] == "running":
              raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
+
+        # Auto-stash: a stashed crawl's local data is in GCS. Restore it inline,
+        # then fall through to the normal serve path. unstash_crawl clears
+        # stashed_at + deletes the GCS stash copy (2-phase). On failure it raises
+        # 502/504 — do NOT fall through to a corrupt archive.
+        if job_info.get("stashed_at"):
+            logger.info(f"/results on stashed crawl '{crawl_id}': unstashing inline.")
+            await self.unstash_crawl(job_info)
+            job_info = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+            if job_info is None:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Job '{crawl_id}' disappeared from Redis after unstash.",
+                )
 
         # For archived crawls: local data is gone, retrieve from GCS via daemon
         if job_info["status"] == "archived":
@@ -1806,6 +1830,20 @@ class CrawlerManager:
             logger.warning(f"Could not estimate required bytes for '{job_storage_path}': {e}")
             return 0
 
+    def _stamp_terminal_fields(self, job_info: dict) -> None:
+        """Stamp finished_at (once) + size_bytes onto job_info before a terminal
+        set_json. Inputs the auto-stash sweep (P2) reads from pure Redis.
+        Fail-open: never raises."""
+        try:
+            if not job_info.get("finished_at"):
+                job_info["finished_at"] = datetime.utcnow().isoformat()
+            storage_path = job_info.get("storage_path")
+            if storage_path:
+                job_info["size_bytes"] = self._estimate_archive_required_bytes(storage_path)
+        except Exception as e:
+            logger.warning(f"_stamp_terminal_fields failed for "
+                           f"'{job_info.get('crawl_id')}': {e}")
+
     def _get_archives_disk_state(self, archives_dir: str) -> dict:
         """Collect diagnostics about the archives volume.
         Returns a dict with free_bytes, total_bytes, used_pct, file_count,
@@ -1856,6 +1894,71 @@ class CrawlerManager:
             logger.warning(f"Could not get disk state for '{archives_dir}': {e}")
             return degraded
 
+    async def _move_stash_to_archive(self, job_info: dict) -> None:
+        """Drive the GCS-side stash->archive move via the move-flow daemon:
+        write .move-request, poll .move-done/.move-error, then mark archived +
+        clear stashed_at. Idempotency lives in the daemon (already-moved=done)."""
+        crawl_id = job_info["crawl_id"]
+        req_dir = settings.MOVE_REQUESTS_PATH
+        res_dir = settings.MOVE_RESULTS_PATH
+        os.makedirs(req_dir, exist_ok=True)
+        os.makedirs(res_dir, exist_ok=True)
+        request_path = os.path.join(req_dir, f"{crawl_id}.move-request")
+        done_path = os.path.join(res_dir, f"{crawl_id}.move-done")
+        error_path = os.path.join(res_dir, f"{crawl_id}.move-error")
+
+        # Reconcile a prior 504 limbo: if a previous attempt timed out but the
+        # daemon completed the move afterwards, a .move-done is already present.
+        # Skip a fresh request/poll and go straight to marking archived.
+        if not os.path.exists(done_path):
+            async with aiofiles.open(request_path, "w") as f:
+                await f.write(crawl_id)
+            logger.info(f"Wrote .move-request for '{crawl_id}'. Waiting for daemon mv...")
+
+            deadline = time.monotonic() + settings.MOVE_TIMEOUT_SECONDS
+            while time.monotonic() < deadline:
+                if os.path.exists(error_path):
+                    # Remove both the error marker and the request so a daemon crash
+                    # between writing .move-error and removing the request can't leave
+                    # a stale request for another daemon instance to re-process.
+                    for p in (error_path, request_path):
+                        try:
+                            if os.path.exists(p): os.remove(p)
+                        except OSError: pass
+                    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                                        detail={"error_code": "STASH_MOVE_FAILED"})
+                if os.path.exists(done_path):
+                    break
+                await asyncio.sleep(1)
+            else:
+                try:
+                    if os.path.exists(request_path): os.remove(request_path)
+                except OSError: pass
+                raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                                    detail={"error_code": "STASH_MOVE_TIMEOUT"})
+        else:
+            logger.info(f"Reconciling pre-existing .move-done for '{crawl_id}' "
+                        f"(a prior attempt completed after its 504 timeout).")
+
+        await self._mark_as_archived(crawl_id)
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        fresh = await cache_service.get_json(job_key)
+        if fresh and "stashed_at" in fresh:
+            fresh.pop("stashed_at", None)
+            await cache_service.set_json(job_key, fresh)
+        elif fresh is None:
+            # Job vanished from Redis between the move and this clear. The GCS
+            # object is already in crawls/, but stashed_at could not be cleared.
+            # Surface it so an operator can reconcile rather than letting the
+            # next /archive silently re-fire the (idempotent) move.
+            logger.warning(f"STASH_MOVE_LIMBO crawl_id={crawl_id} "
+                           f"reason=job_absent_after_move action=operator_reconcile")
+        for p in (request_path, done_path, error_path):
+            try:
+                if os.path.exists(p): os.remove(p)
+            except OSError: pass
+        logger.info(f"Stash->archive move complete for '{crawl_id}'.")
+
     async def archive_crawl(self, job_info: dict) -> dict:
         """
         Archives a finished crawl job to a shared volume for host-side upload to GCS.
@@ -1864,6 +1967,19 @@ class CrawlerManager:
         """
         crawl_id = job_info['crawl_id']
         job_status = job_info.get('status')
+
+        # Auto-stash: archiving a stashed FINISHED crawl is a GCS-side move
+        # stash/->crawls/, not a re-tar. Reuse archive_status='pending_upload' so
+        # the BO's 3_archive_eligible_domains.php (exact-string branch) needs no
+        # change. Require finished status so a stashed failed/stopped crawl still
+        # falls through to the existing finished-only 400 guard below.
+        if job_info.get("stashed_at") and job_status == "finished":
+            await self._move_stash_to_archive(job_info)
+            return {
+                "crawl_id": crawl_id,
+                "archive_status": "pending_upload",
+                "archive_size_bytes": None,
+            }
 
         if job_status == "archived":
             raise HTTPException(
@@ -2082,6 +2198,23 @@ class CrawlerManager:
         await cache_service.set_json(job_key, fresh_job_info)
         await self._publish_update(crawl_id, "archived")
         logger.info(f"Marked crawl '{crawl_id}' as 'archived' in Redis.")
+
+    async def _restore_previous_crawl(self, prev_job_info: dict, has_local_data: bool) -> None:
+        """For update mode: ensure the previous crawl's data is on local disk.
+        Routes a stashed previous crawl through unstash_crawl (stash/ prefix +
+        2-phase delete); an archived one through _restore_archived_crawl
+        (crawls/ prefix). No-op if local data already present."""
+        if has_local_data:
+            return
+        previous_crawl_id = prev_job_info["crawl_id"]
+        if prev_job_info.get("stashed_at"):
+            logger.info(f"Previous crawl '{previous_crawl_id}' is stashed. "
+                        f"Unstashing from GCS before update crawl.")
+            await self.unstash_crawl(prev_job_info)
+        elif prev_job_info.get("status") == "archived":
+            logger.info(f"Previous crawl '{previous_crawl_id}' is archived. "
+                        f"Restoring from GCS before update crawl.")
+            await self._restore_archived_crawl(previous_crawl_id)
 
     async def _restore_archived_crawl(self, previous_crawl_id: str):
         """
@@ -2770,6 +2903,115 @@ class CrawlerManager:
             except OSError as e:
                 logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
 
+    def _disk_used_pct(self, path: str = None) -> float:
+        """Used-% of the crawl storage filesystem. Fail-open -> 0.0 (no pressure)."""
+        try:
+            target = path or settings.CRAWLER_STORAGE_PATH
+            usage = shutil.disk_usage(target)
+            return (usage.used / usage.total) * 100 if usage.total else 0.0
+        except Exception as e:
+            logger.warning(f"_disk_used_pct failed: {e}")
+            return 0.0
+
+    def _select_stash_candidates(self, jobs: List[dict], now_dt: datetime) -> List[Tuple[dict, str]]:
+        """From terminal non-stashed non-archived jobs, pick (job, reason) to stash
+        this tick: grace/timeout-eligible, plus largest-by-size under disk pressure.
+        Capped at STASH_MAX_PER_SWEEP."""
+        eligible = []
+        terminal = []
+        for j in jobs:
+            ok, reason = self._is_stash_eligible(j, now_dt)
+            if ok:
+                eligible.append((j, reason))
+            elif j.get("status") in ("finished", "failed", "stopped") and not j.get("stashed_at"):
+                terminal.append(j)
+
+        selected = eligible[: settings.STASH_MAX_PER_SWEEP]
+
+        if len(selected) < settings.STASH_MAX_PER_SWEEP and \
+                self._disk_used_pct() >= settings.STASH_DISK_HIGH_WATER_PCT:
+            already = {id(j) for j, _ in selected}
+            extra = sorted(terminal, key=lambda j: j.get("size_bytes", 0), reverse=True)
+            for j in extra:
+                if len(selected) >= settings.STASH_MAX_PER_SWEEP:
+                    break
+                if id(j) not in already:
+                    selected.append((j, "disk_pressure"))
+        return selected
+
+    async def _auto_stash_one(self, job_data: dict, reason: str) -> None:
+        """Stash one crawl on behalf of the sweep. Swallows 409 (already
+        stashed / in progress); logs other failures. Never raises."""
+        crawl_id = job_data.get("crawl_id")
+        try:
+            logger.info(f"AUTO_STASH crawl_id={crawl_id} reason={reason}")
+            await self.stash_crawl(job_data)
+        except HTTPException as e:
+            if e.status_code == 409:
+                logger.debug(f"AUTO_STASH skip crawl_id={crawl_id}: {e.detail}")
+            else:
+                logger.warning(f"AUTO_STASH failed crawl_id={crawl_id}: {e.detail}")
+        except Exception as e:
+            logger.warning(f"AUTO_STASH error crawl_id={crawl_id}: {e}")
+        finally:
+            # Release the in-flight slot so the next sweep can re-select this
+            # crawl if it still needs stashing (e.g. a transient failure).
+            self._auto_stash_inflight.discard(crawl_id)
+
+    def _requeue_stash_orphan(self, crawl_id: str) -> bool:
+        """If a stashed crawl's tar was dead-lettered (upload failed), move it
+        back to the stash watch dir so the upload daemon retries. Returns True
+        if a re-queue happened. Fail-open."""
+        try:
+            dead = os.path.join(settings.STASH_SHARED_PATH, "dead_letter", f"{crawl_id}.tar.gz")
+            if not os.path.exists(dead):
+                return False
+            target = os.path.join(settings.STASH_SHARED_PATH, f"{crawl_id}.tar.gz")
+            if os.path.exists(target):
+                # A tar already awaits upload at the watch dir — do NOT overwrite
+                # it with the dead-lettered copy (would destroy the pending one).
+                # Leave the dead-letter copy for operator inspection.
+                logger.warning(f"STASH_UPLOAD_ORPHAN crawl_id={crawl_id} "
+                               f"reason=target_exists action=skip path={dead}")
+                return False
+            logger.warning(f"STASH_UPLOAD_ORPHAN crawl_id={crawl_id} "
+                           f"reason=dead_letter_found action=requeue path={dead}")
+            os.rename(dead, target)
+            return True
+        except Exception as e:
+            logger.warning(f"STASH_UPLOAD_ORPHAN requeue failed crawl_id={crawl_id}: {e}")
+            return False
+
+    def _is_stash_eligible(self, job_data: dict, now_dt: datetime) -> Tuple[bool, Optional[str]]:
+        """Grace/timeout eligibility for the auto-stash sweep. Pure, fail-open.
+        Disk-pressure selection is handled by the caller (sweep)."""
+        if job_data.get("status") not in ("finished", "failed", "stopped"):
+            return (False, None)
+        if job_data.get("stashed_at"):
+            return (False, None)
+
+        def _age(field):
+            raw = job_data.get(field)
+            if not raw:
+                return None
+            try:
+                return (now_dt - datetime.fromisoformat(raw)).total_seconds()
+            except (ValueError, TypeError):
+                return None
+
+        dl_age = _age("downloaded_at")
+        if dl_age is not None:
+            # Downloaded: grace governs EXCLUSIVELY. A just-downloaded crawl is
+            # protected for STASH_GRACE_SECONDS even if it finished long ago —
+            # do NOT fall through to the timeout branch (which would defeat the
+            # grace the fresh download just earned).
+            return (True, "grace") if dl_age >= settings.STASH_GRACE_SECONDS else (False, None)
+        # Never downloaded (or unparseable downloaded_at): safety timeout governs.
+        fin_age = _age("finished_at")
+        if fin_age is not None and fin_age >= settings.STASH_SAFETY_TIMEOUT_SECONDS:
+            return (True, "timeout")
+        return (False, None)
+
     async def _reconcile_locked(self):
         """
         Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
@@ -2796,6 +3038,7 @@ class CrawlerManager:
             pipe.get(key)
 
         all_jobs_raw = await pipe.execute()
+        auto_stash_pool = []  # collected during scan; dispatched after the loop (auto-stash P2)
 
         for i, job_raw in enumerate(all_jobs_raw):
             if not job_raw: continue
@@ -2804,6 +3047,13 @@ class CrawlerManager:
                 job_data = json.loads(job_raw)
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
+
+                if settings.AUTO_STASH_ENABLED and \
+                        status in ("finished", "failed", "stopped") and not job_data.get("stashed_at"):
+                    auto_stash_pool.append(job_data)
+
+                if settings.AUTO_STASH_ENABLED and job_data.get("stashed_at"):
+                    self._requeue_stash_orphan(crawl_id)
 
                 if status in ("running", "restarting_oom", "stopping"):
                     # Marker check (NEW): Redis may show non-terminal status
@@ -2948,6 +3198,7 @@ class CrawlerManager:
                             reconcile_request_id = self._get_or_create_failure_request_id(job_data)
 
                         await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+                        self._stamp_terminal_fields(job_data)
                         await cache_service.set_json(all_job_keys[i], job_data)
                         await self._publish_update(crawl_id, final_status)
 
@@ -2981,6 +3232,19 @@ class CrawlerManager:
             except (json.JSONDecodeError, TypeError, ValueError) as e:
                 logger.error(f"Error processing job data during reconciliation: {e}")
                 continue
+
+        # --- Auto-stash sweep (spec 2026-06-01). Dispatch as background tasks so a
+        # multi-GB tar never holds the reconcile leader lock. Each stash_crawl takes
+        # its own stash_lock (idempotent; 409 = no-op). ---
+        if settings.AUTO_STASH_ENABLED and auto_stash_pool:
+            now_dt = datetime.utcnow()
+            # Exclude crawls already being stashed by this leader so a slow tar
+            # doesn't consume STASH_MAX_PER_SWEEP slots across ticks.
+            available = [j for j in auto_stash_pool
+                         if j.get("crawl_id") not in self._auto_stash_inflight]
+            for job_data, reason in self._select_stash_candidates(available, now_dt):
+                self._auto_stash_inflight.add(job_data.get("crawl_id"))
+                asyncio.create_task(self._auto_stash_one(job_data, reason))
 
         # Correct the global counter
         counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
