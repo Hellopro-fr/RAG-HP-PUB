@@ -268,6 +268,18 @@ Failure webhooks include a `request_id` UUID generated once per crawl failure an
 
 Spec: `docs/superpowers/specs/2026-04-18-webhook-idempotency-design.md`.
 
+## Success / Stop Webhook Idempotency (PW-A)
+
+Success and stop webhooks carry a single shared `terminal_webhook_request_id`
+(in `job_info`), reused by `_send_success_webhook` and `_send_stop_webhook`. A
+force-finish stop(`finished`) after a natural success therefore carries the SAME id
+and dedupes. The stop webhook reaches BO's *success* branch (it sends no
+`crawl_id`+`exit_code`), which is why it shares the success id.
+
+Every sender persists `job_info` via `cache_service.set_json` before sending so a
+replay reuses the same id. BO dedupes via `is_duplicate_crawler_webhook(request_id, 'success')`
+for success+stop and `'failure'` for failures, into the `crawler_webhook_dedup` table.
+
 ## Exit Codes (Node.js → Python)
 
 | Code | Meaning | Python Behavior |
