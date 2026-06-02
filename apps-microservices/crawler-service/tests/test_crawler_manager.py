@@ -1583,3 +1583,43 @@ class TestMonitorProcessFailureCausePersistence:
             '_monitor_process non-OOM path must check current_status_nooom in '
             '("failed", "stopped", "finished") before overwriting status'
         )
+
+
+class TestTerminalWebhookRequestId:
+    """PW-A: stable request_id shared by success + stop webhooks."""
+
+    def _manager(self):
+        from app.core.crawler_manager import CrawlerManager
+        return CrawlerManager.__new__(CrawlerManager)
+
+    def test_terminal_request_id_generated_when_absent(self):
+        mgr = self._manager()
+        job_info: dict = {}
+        rid = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert isinstance(rid, str)
+        _uuid_module.UUID(rid)  # raises if not a valid UUID
+        assert job_info["terminal_webhook_request_id"] == rid
+
+    def test_terminal_request_id_reused(self):
+        mgr = self._manager()
+        existing = "11111111-2222-3333-4444-555555555555"
+        job_info = {"terminal_webhook_request_id": existing}
+        rid = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert rid == existing
+        assert job_info["terminal_webhook_request_id"] == existing
+
+    def test_success_and_stop_share_one_id(self):
+        # Both senders call the same helper with the same job_info, so a natural
+        # success followed by a force-finish stop carries ONE id -> PHP dedupes.
+        mgr = self._manager()
+        job_info: dict = {}
+        rid_success = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        rid_stop = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert rid_success == rid_stop
+
+    def test_terminal_id_distinct_from_failure_id_key(self):
+        mgr = self._manager()
+        job_info: dict = {}
+        mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert "terminal_webhook_request_id" in job_info
+        assert "failure_webhook_request_id" not in job_info
