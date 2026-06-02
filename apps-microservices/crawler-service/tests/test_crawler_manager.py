@@ -1586,7 +1586,8 @@ class TestMonitorProcessFailureCausePersistence:
 
 
 class TestTerminalWebhookRequestId:
-    """PW-A: stable request_id shared by success + stop webhooks."""
+    """Tests for the terminal-webhook idempotency helper.
+    Pure helper — tested directly. Success and stop senders share one id so PHP dedupes."""
 
     def _manager(self):
         from app.core.crawler_manager import CrawlerManager
@@ -1623,3 +1624,8 @@ class TestTerminalWebhookRequestId:
         mgr._get_or_create_terminal_webhook_request_id(job_info)
         assert "terminal_webhook_request_id" in job_info
         assert "failure_webhook_request_id" not in job_info
+        # Symmetric isolation: the failure helper must not touch the terminal key,
+        # and the two helpers produce independent ids on the same job_info.
+        mgr._get_or_create_failure_request_id(job_info)
+        assert "terminal_webhook_request_id" in job_info  # unchanged
+        assert job_info["failure_webhook_request_id"] != job_info["terminal_webhook_request_id"]
