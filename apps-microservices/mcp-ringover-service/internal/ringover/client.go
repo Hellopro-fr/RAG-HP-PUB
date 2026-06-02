@@ -100,6 +100,18 @@ func (c *Client) GetCallDetails(ctx context.Context, callID string) (json.RawMes
 	return c.doGet(ctx, path)
 }
 
+// GetTranscriptionByCallID retrieves a single call transcription by Ringover
+// call_id. Ringover API: GET /transcriptions/{callId}.
+//
+// Unlike the Empower routes, this endpoint is NOT governed by API-key
+// permissions — access is controlled by a team-level transcription feature.
+// Returns 401 if that feature is not enabled for the team, 404 if the call has
+// no transcription. No channel_id -> calluuid conversion is needed.
+func (c *Client) GetTranscriptionByCallID(ctx context.Context, callID string) (json.RawMessage, error) {
+	path := fmt.Sprintf("/transcriptions/%s", callID)
+	return c.doGet(ctx, path)
+}
+
 // AdvancedCallsFilter holds the advanced sub-filter accepted by POST /calls.
 // Only the fields we currently use are modelled.
 type AdvancedCallsFilter struct {
@@ -182,26 +194,34 @@ func (c *Client) GetCallStatsByUser(ctx context.Context, startDate, endDate, use
 }
 
 // GetEmpowerCallUUID converts a Ringover channel_id to an Empower calluuid.
-// Requires Empower to be enabled on the API key.
-// Ringover API: GET /empower/platform/{platformName}/channel/{channelID}
+// Requires Empower to be enabled on the API key (otherwise the route returns
+// 403). Ringover API: GET /empower/platform/{platformName}/channel/{channelID}.
+//
+// NOTE: the public help guide documents this as POST /public/empower/...; that
+// does not match the /v2 base used here — live probing shows GET /empower/...
+// returns 403 (route exists, subscription required) while POST and the
+// /public/ prefix return 404 (no such route). Verified 2026-06-02.
 func (c *Client) GetEmpowerCallUUID(ctx context.Context, platformName, channelID string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/empower/platform/%s/channel/%s", platformName, channelID)
 	return c.doGet(ctx, path)
 }
 
 // GetCallTranscription retrieves the transcription for a call.
+// Ringover API: GET /empower/call/{calluuid} (requires Empower; else 403).
 func (c *Client) GetCallTranscription(ctx context.Context, callUUID string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/empower/call/%s", callUUID)
 	return c.doGet(ctx, path)
 }
 
 // GetCallSummary retrieves the AI-generated summary of a call.
+// Ringover API: GET /empower/call/{calluuid}/summary (requires Empower; else 403).
 func (c *Client) GetCallSummary(ctx context.Context, callUUID string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/empower/call/%s/summary", callUUID)
 	return c.doGet(ctx, path)
 }
 
 // GetCallMoments retrieves key moments from a call.
+// Ringover API: GET /empower/call/{calluuid}/moments (requires Empower; else 403).
 func (c *Client) GetCallMoments(ctx context.Context, callUUID string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/empower/call/%s/moments", callUUID)
 	return c.doGet(ctx, path)
