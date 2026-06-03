@@ -26,6 +26,7 @@ export const mockPageAutre: ConseilPage = {
       type: 'resume',
       order: 1,
       data: {
+        title: "L'essentiel à retenir",
         items: [
           { label: 'Autorisation de conduite', text: 'Document nominatif valable 5 ans, obligatoire pour tout opérateur.' },
           { label: 'CACES R489', text: 'Catégorie 1 requise pour les balayeuses autoportées.' },

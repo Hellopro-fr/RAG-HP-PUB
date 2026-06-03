@@ -1,13 +1,12 @@
+import Image from 'next/image';
 import { ArrowRight, Lightbulb, BookOpen, Wallet, ShieldCheck } from 'lucide-react';
+import type { LienInterne } from '@/types/conseils';
 
-// TODO Phase 8 : ces données viendront de l'API (produits cités + articles liés)
-const PRODUCTS = [
-  { cat: 'Bâtiment modulaire', name: 'Bâtiment acier galvanisé adapté à l\'élevage avec toiture PV', price: 'Sur devis' },
-  { cat: 'Stabulation', name: 'Barrière de stabulation agricole pour bovins', price: 'Dès 280 €' },
-  { cat: 'Pailleuse', name: 'Pailleuse-distributrice tractée 12 m³', price: 'Dès 14 900 €' },
-  { cat: 'Photovoltaïque', name: 'Hangar photovoltaïque clé en main 1 000 m²', price: 'Sur étude' },
-];
+interface CrossellProps {
+  liensIntexts?: LienInterne[];
+}
 
+// TODO Phase 8 : remplacer par données API (articles liés)
 type ArticleType = 'Conseil' | 'Guide' | 'Financement' | 'Réglementation';
 const ARTICLES: { type: ArticleType; title: string; icon: typeof Lightbulb }[] = [
   { type: 'Conseil', title: 'Tout savoir sur l\'installation de panneaux photovoltaïques sur des bâtiments agricoles', icon: Lightbulb },
@@ -23,31 +22,55 @@ const TYPE_STYLES: Record<ArticleType, string> = {
   Réglementation: 'bg-foreground/10 text-foreground',
 };
 
-export function Crossell() {
+export function Crossell({ liensIntexts }: CrossellProps) {
   return (
     <section className="not-prose my-12 space-y-10">
-      {/* Produits cités */}
-      <div>
-        <h2 className="text-2xl font-extrabold text-foreground">
-          Matériels &amp; bâtiments cités dans cet article
-        </h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {PRODUCTS.map((p) => (
-            <a
-              key={p.name}
-              href="#"
-              className="group rounded-xl border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
-            >
-              <div className="mb-3 aspect-[4/3] w-full overflow-hidden rounded-md bg-secondary">
-                <div className="h-full w-full bg-gradient-to-br from-primary-soft to-secondary" />
-              </div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-cta">{p.cat}</div>
-              <div className="mt-1 line-clamp-2 text-sm font-semibold text-foreground">{p.name}</div>
-              <div className="mt-2 text-sm font-bold text-primary">{p.price}</div>
-            </a>
-          ))}
+      {/* Produits cités — dynamique depuis liens_intexts */}
+      {liensIntexts && liensIntexts.length > 0 && (
+        <div>
+          <h2 className="text-2xl font-extrabold text-foreground">
+            Matériels &amp; bâtiments cités dans cet article
+          </h2>
+          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {liensIntexts.map((lien) => (
+              <a
+                key={lien.id}
+                href={lien.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex flex-col rounded-xl border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
+              >
+                {/* Image */}
+                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-t-xl bg-secondary">
+                  {lien.photo ? (
+                    <Image
+                      src={lien.photo}
+                      alt={lien.titre}
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
+                      className="object-cover transition group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-primary/10 to-secondary" />
+                  )}
+                </div>
+
+                {/* Contenu */}
+                <div className="flex flex-1 flex-col gap-1.5 p-3">
+                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground group-hover:text-primary">
+                    {lien.titre}
+                  </p>
+                  {lien.description && (
+                    <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                      {lien.description}
+                    </p>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Pour aller plus loin */}
       <div>

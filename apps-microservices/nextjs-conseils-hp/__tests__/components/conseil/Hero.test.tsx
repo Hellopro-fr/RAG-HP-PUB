@@ -28,13 +28,14 @@ describe('Hero', () => {
       <Hero
         data={BASE_HERO}
         pageType="prix"
+        resumeTitle="L'essentiel à retenir"
         resume={[
           { label: 'Coût', text: 'entre 200 et 500 €' },
           { label: 'Durée', text: '3 à 5 jours' },
         ]}
       />
     );
-    expect(screen.getByText(/essentiel à retenir/i)).toBeDefined();
+    expect(screen.getByText("L'essentiel à retenir")).toBeDefined();
     expect(screen.getByText(/Coût/)).toBeDefined();
   });
 
@@ -43,11 +44,36 @@ describe('Hero', () => {
       <Hero
         data={BASE_HERO}
         pageType="prix"
+        resumeTitle="L'essentiel à retenir"
         resumeHtml="<ul><li>Coût : entre 200 et 500 €</li><li>Durée : 3 jours</li></ul>"
       />
     );
-    expect(screen.getByText(/essentiel à retenir/i)).toBeDefined();
+    expect(screen.getByText("L'essentiel à retenir")).toBeDefined();
     expect(screen.getByText(/Coût : entre 200 et 500 €/i)).toBeDefined();
+  });
+
+  it('utilise resumeTitle comme titre du bloc résumé quand fourni', () => {
+    render(
+      <Hero
+        data={BASE_HERO}
+        pageType="prix"
+        resumeTitle="Points clés à retenir"
+        resumeHtml="<ul><li>Délai : 3 semaines</li></ul>"
+      />
+    );
+    expect(screen.getByText('Points clés à retenir')).toBeDefined();
+    expect(screen.queryByText(/essentiel à retenir/i)).toBeNull();
+  });
+
+  it("n'affiche pas de titre quand resumeTitle n'est pas fourni", () => {
+    render(
+      <Hero
+        data={BASE_HERO}
+        pageType="prix"
+        resume={[{ label: 'Coût', text: '200 €' }]}
+      />
+    );
+    expect(screen.queryByText(/essentiel à retenir/i)).toBeNull();
   });
 
   it('resumeHtml est prioritaire sur items vides', () => {
@@ -59,7 +85,7 @@ describe('Hero', () => {
         resumeHtml="<p>Résumé en HTML</p>"
       />
     );
-    expect(screen.getByText(/essentiel à retenir/i)).toBeDefined();
+    expect(screen.queryByText(/essentiel à retenir/i)).toBeNull();
     expect(screen.getByText('Résumé en HTML')).toBeDefined();
   });
 

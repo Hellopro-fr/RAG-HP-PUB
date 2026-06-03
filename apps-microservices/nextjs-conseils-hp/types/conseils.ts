@@ -67,6 +67,17 @@ export interface AoFormQuestion {
   choix: AoChoix[];
 }
 
+/** Lien interne issu du champ liens_intexts de l'API PHP */
+export interface LienInterne {
+  id: number;
+  /** 0 = feuille produit, 1 = rubrique, 2 = page conseil */
+  type: 0 | 1 | 2;
+  photo: string;
+  titre: string;
+  description: string;
+  url: string;
+}
+
 export interface ConseilPage {
   slug: string;
   pageType: ConseilPageType;
@@ -76,6 +87,7 @@ export interface ConseilPage {
   author?: AuthorInfo;
   breadcrumb?: Array<{ label: string; href?: string }>;
   formulaire_ao?: AoFormQuestion | null;
+  liensIntexts?: LienInterne[];
   // Spécifiques au pageType (gérés HORS BlockRenderer)
   priceData?: unknown;        // À typer en Phase 8
   topFabricants?: unknown;    // À typer en Phase 8

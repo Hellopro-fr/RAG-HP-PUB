@@ -61,21 +61,43 @@ describe('transformPhpConseilPage', () => {
     expect(page.hero.subtitle).toBeUndefined();
   });
 
-  it('transforme un bloc faq (type 1) en renommant question/reponse → q/a', () => {
+  it('transforme un bloc h2 (type 1) depuis contenu.titre', () => {
     const response: PhpConseilResponse = {
       ...BASE_RESPONSE,
       response: {
         ...BASE_RESPONSE.response,
-        blocs: [{
-          type: 1, ordre: 1,
-          contenu: { items: [{ question: 'Q1?', reponse: 'R1.' }, { question: 'Q2?', reponse: 'R2.' }] },
-        }],
+        blocs: [{ type: 1, ordre: 1, contenu: { titre: 'Prix de construction' } }],
       },
     };
     const page = transformPhpConseilPage(response);
     expect(page.blocks).toHaveLength(1);
-    expect(page.blocks[0].type).toBe('faq');
-    expect((page.blocks[0].data as any).items[0]).toEqual({ q: 'Q1?', a: 'R1.' });
+    expect(page.blocks[0].type).toBe('h2');
+    expect((page.blocks[0].data as any).title).toBe('Prix de construction');
+    expect((page.blocks[0].data as any).id).toBe('prix-de-construction');
+  });
+
+  it('ignore un bloc type 1 sans contenu.titre', () => {
+    const response: PhpConseilResponse = {
+      ...BASE_RESPONSE,
+      response: {
+        ...BASE_RESPONSE.response,
+        blocs: [{ type: 1, ordre: 1, contenu: {} }],
+      },
+    };
+    const page = transformPhpConseilPage(response);
+    expect(page.blocks).toHaveLength(0);
+  });
+
+  it('inclut intro depuis contenu.texte quand présent sur un bloc type 1', () => {
+    const response: PhpConseilResponse = {
+      ...BASE_RESPONSE,
+      response: {
+        ...BASE_RESPONSE.response,
+        blocs: [{ type: 1, ordre: 1, contenu: { titre: 'Section tarifs', texte: 'Découvrez les tarifs.' } }],
+      },
+    };
+    const page = transformPhpConseilPage(response);
+    expect((page.blocks[0].data as any).intro).toBe('Découvrez les tarifs.');
   });
 
   it('transforme un bloc texte (type 2)', () => {
@@ -166,7 +188,7 @@ describe('transformPhpConseilPage', () => {
     expect((page.blocks[0].data as any).productIds).toEqual(['111', '222', '333']);
   });
 
-  it('transforme un tableau HTML (type 9) en balises <table>', () => {
+  it('transforme un tableau (type 9) en headers + rows', () => {
     const response: PhpConseilResponse = {
       ...BASE_RESPONSE,
       response: {
@@ -179,11 +201,8 @@ describe('transformPhpConseilPage', () => {
     };
     const page = transformPhpConseilPage(response);
     expect(page.blocks[0].type).toBe('tableau-html');
-    const html = (page.blocks[0].data as any).html as string;
-    expect(html).toContain('<table>');
-    expect(html).toContain('<th>');
-    expect(html).toContain('Titre 1');
-    expect(html).toContain('col 2');
+    expect((page.blocks[0].data as any).headers).toEqual(['Titre 1', 'Titre 2']);
+    expect((page.blocks[0].data as any).rows).toEqual([['col 1', 'col 2']]);
   });
 
   it('transforme une estimation prix (type 11) en texte avec badge', () => {
@@ -194,6 +213,16 @@ describe('transformPhpConseilPage', () => {
     const page = transformPhpConseilPage(response);
     expect(page.blocks[0].type).toBe('texte');
     expect((page.blocks[0].data as any).estimation.value).toBe('200 à 500 €');
+  });
+
+  it('transforme un bloc h3 (type 12) depuis contenu.titre', () => {
+    const response: PhpConseilResponse = {
+      ...BASE_RESPONSE,
+      response: { ...BASE_RESPONSE.response, blocs: [{ id: 1, type: 12, ordre: 1, contenu: { titre: 'Sous-titre section' } }] },
+    };
+    const page = transformPhpConseilPage(response);
+    expect(page.blocks[0].type).toBe('h3');
+    expect((page.blocks[0].data as any).title).toBe('Sous-titre section');
   });
 
   it('transforme un bloc pros-cons (type 16)', () => {
@@ -251,5 +280,45 @@ describe('transformPhpConseilPage', () => {
     };
     const page = transformPhpConseilPage(response);
     expect(page.hero.image).toBe('https://hp.fr/hero.jpg');
+  });
+
+  it('transforme un bloc faq (type 17) avec items question/reponse', () => {
+    const response: PhpConseilResponse = {
+      ...BASE_RESPONSE,
+      response: {
+        ...BASE_RESPONSE.response,
+        blocs: [{
+          id: 42,
+          type: 17,
+          ordre: 1,
+          contenu: {
+            items: [
+              { question: 'Quel mécanisme utilise un monte-charge ?', reponse: 'Hydraulique, électrique ou manuel.' },
+              { question: 'Comment choisir un monte-charge ?', reponse: 'Selon le poids, la fréquence et la config.' },
+            ],
+          },
+        }],
+      },
+    };
+    const page = transformPhpConseilPage(response);
+    expect(page.blocks).toHaveLength(1);
+    expect(page.blocks[0].type).toBe('faq');
+    const data = page.blocks[0].data as any;
+    expect(data.items).toHaveLength(2);
+    expect(data.items[0].q).toBe('Quel mécanisme utilise un monte-charge ?');
+    expect(data.items[0].a).toBe('Hydraulique, électrique ou manuel.');
+    expect(data.items[1].q).toBe('Comment choisir un monte-charge ?');
+  });
+
+  it('ignore un bloc faq (type 17) sans items', () => {
+    const response: PhpConseilResponse = {
+      ...BASE_RESPONSE,
+      response: {
+        ...BASE_RESPONSE.response,
+        blocs: [{ type: 17, ordre: 1, contenu: {} }],
+      },
+    };
+    const page = transformPhpConseilPage(response);
+    expect(page.blocks).toHaveLength(0);
   });
 });

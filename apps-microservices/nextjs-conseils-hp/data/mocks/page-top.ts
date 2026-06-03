@@ -26,6 +26,7 @@ export const mockPageTop: ConseilPage = {
       type: 'resume',
       order: 1,
       data: {
+        title: "L'essentiel à retenir",
         items: [
           { label: 'Critères de sélection', text: 'Gamme produits, isolation thermique, SAV national, conformité CE.' },
           { label: 'Norme de référence', text: 'EN 13241 obligatoire pour toutes les portes industrielles sur le marché européen.' },

@@ -6,6 +6,10 @@ import { ProsConsBlock } from './blocks/ProsConsBlock';
 import { CTABlock } from './blocks/CTABlock';
 import { FaqBlock } from './blocks/FaqBlock';
 import { TableauPrixBlock } from './blocks/TableauPrixBlock';
+import { TableauHtmlBlock } from './blocks/TableauHtmlBlock';
+import { ImageBlock } from './blocks/ImageBlock';
+import { TexteImageBlock } from './blocks/TexteImageBlock';
+import { ImageImageBlock } from './blocks/ImageImageBlock';
 import { TypeSectionBlock } from './blocks/TypeSectionBlock';
 import { BrochureBlock } from './blocks/BrochureBlock';
 import { QuoteFormBlock } from './blocks/QuoteFormBlock';
@@ -17,6 +21,10 @@ import type { ProsConsBlockData } from '@/types/blocks/pros-cons';
 import type { CTABlockData } from '@/types/blocks/cta';
 import type { FaqBlockData } from '@/types/blocks/faq';
 import type { TableauPrixBlockData } from '@/types/blocks/tableau-prix';
+import type { TableauHtmlBlockData } from '@/types/blocks/tableau-html';
+import type { ImageBlockData } from '@/types/blocks/image';
+import type { TexteImageBlockData } from '@/types/blocks/texte-image';
+import type { ImageImageBlockData } from '@/types/blocks/image-image';
 import type { TypeSectionBlockData } from '@/types/blocks/type-section';
 import type { BrochureBlockData } from '@/types/blocks/brochure';
 import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
@@ -61,14 +69,23 @@ export function BlockRenderer({ block }: { block: ConseilBlock }) {
     case 'quote-form':
       return <QuoteFormBlock data={block.data as unknown as QuoteFormBlockData} />;
 
-    // ── Lot B — Partenaire (placeholders) ──────────────────────────────────
+    case 'tableau-html':
+      return <TableauHtmlBlock data={block.data as unknown as TableauHtmlBlockData} />;
+
     case 'image':
+      return <ImageBlock data={block.data as unknown as ImageBlockData} />;
+
     case 'texte-image':
+      return <TexteImageBlock data={block.data as unknown as TexteImageBlockData} />;
     case 'image-texte':
+      return <TexteImageBlock data={block.data as unknown as TexteImageBlockData} />;
+
     case 'image-image':
+      return <ImageImageBlock data={block.data as unknown as ImageImageBlockData} />;
+
+    // ── Lot B — Partenaire (placeholders) ──────────────────────────────────
     case 'video':
     case 'produits':
-    case 'tableau-html':
       return (
         <div className="my-4 rounded border border-dashed border-border p-4 text-sm text-muted-foreground">
           [BlockRenderer] Type <code>{block.type}</code> — à implémenter (Lot B)

@@ -1,5 +1,6 @@
 import type { ConseilPage, AoFormQuestion } from '@/types/conseils';
 import type { PhpAoQuestion, PhpBloc } from '@/types/api/page-conseil-php';
+import { transformPhpConseilPage } from '@/lib/api/transformers/conseil';
 
 const HP_BASE = process.env.HELLOPRO_API_URL ?? 'https://api.hellopro.fr';
 const HP_CONSEILS_URL = `${HP_BASE}/api/hp/view/page_conseil.php`;
@@ -94,21 +95,23 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       console.log(`[fetchConseilPage] id=${id} — prix: ${estimation.min}–${estimation.max} €`);
     }
 
-    // bloc type 15 → aside "L'essentiel à retenir" dans le Hero
     const rawBlocs = (raw.blocs ?? []) as PhpBloc[];
-    const type15 = rawBlocs.find((b) => b.type === 15);
-
     const mockPage = getMockPage(id);
     const base = mockPage ?? (await import('@/data/mocks/page-prix')).mockPagePrix;
 
-    // Si type 15 présent → remplace le bloc resume du mock par le HTML brut de l'API
-    let blocks = base.blocks;
+    // Transformer tous les blocs depuis l'API réelle
+    const transformed = transformPhpConseilPage({ code: 200, response: raw as never });
+    console.log(`[fetchConseilPage] id=${id} — ${transformed.blocks.length} blocs transformés`);
+
+    // bloc type 15 → aside résumé dans le Hero (non géré par le transformer)
+    const type15 = rawBlocs.find((b) => b.type === 15);
+    let blocks = transformed.blocks;
     if (type15?.contenu?.texte) {
       const html = type15.contenu.texte;
       console.log(`[fetchConseilPage] id=${id} — type 15 aside: HTML brut (${html.length} chars)`);
       blocks = [
         { id: 'resume-api', type: 'resume', order: 0, data: { html, items: [] } },
-        ...base.blocks.filter((b) => b.type !== 'resume'),
+        ...blocks.filter((b) => b.type !== 'resume'),
       ];
     }
 
@@ -118,6 +121,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       hero: {
         ...base.hero,
         title: raw.titre,
+        ...(raw.premier_bloc_texte ? { subtitle: raw.premier_bloc_texte as string } : {}),
         ...(estimation ? { estimation } : {}),
       },
       blocks,

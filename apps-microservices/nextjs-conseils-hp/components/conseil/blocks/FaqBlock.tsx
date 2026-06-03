@@ -10,7 +10,6 @@ interface FaqBlockProps {
 
 export function FaqBlock({ data }: FaqBlockProps) {
   const [openIndex, setOpenIndex] = useState<number>(0);
-
   return (
     <section id="faq" className="not-prose my-12 scroll-mt-32">
       <div className="mb-6">
