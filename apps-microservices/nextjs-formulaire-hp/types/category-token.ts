@@ -9,4 +9,5 @@ export interface CategoryTokenUrlData {
   id_reponse: number;
   equivalence: unknown[];
   abtest_UX_lead_version?: number;
+  abtest2?: string;
 }

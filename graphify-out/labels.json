@@ -168,7 +168,7 @@
   "166": "Returns (error_message, failure_caus",
   "167": "Maps internal error codes to human-r",
   "168": "Returns (error_message, failure_caus",
-  "169": "exit_code=-1 → classifier says 'oom_",
+  "169": "exit_code=-1 \u2192 classifier says 'oom_",
   "170": "Without an explicit kwarg, classifie",
   "171": "Every exit_code=-1 caller passes its",
   "172": "Maps internal error codes to human-r",
@@ -177,5 +177,18 @@
   "175": "Stash Crawls Batch Driver",
   "176": "Stash Poll Fall-Through",
   "177": "Stash Poll Fall-Through",
-  "178": "Stash Poll Fall-Through"
+  "178": "Stash Poll Fall-Through",
+  "179": "Crawler Exit Code Test",
+  "180": "French Error Message Mapping",
+  "181": "Subprocess Exit Code Cause",
+  "182": "PushedSet Test",
+  "183": "Stash POST Endpoint Flow",
+  "184": "Stash POST Blocking Rationale",
+  "185": "Stash Lock Heartbeat",
+  "186": "Deferred Stash BackgroundTasks",
+  "187": "DedupManager Test",
+  "188": "BO Results Timeout Bump",
+  "189": "Auto-Stash Tunables",
+  "190": "Auto-Stash Tunables",
+  "191": "Crawler Tech Stack"
 }

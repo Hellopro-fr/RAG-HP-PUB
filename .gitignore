@@ -148,14 +148,18 @@ apps-microservices/nextjs-formulaire-hp/package-lock.json
 .mcp.json
 .superpowers/
 
-# graphify — commit graph.json/graph.html/GRAPH_REPORT.md so teammates get fresh map.
+# graphify — commit graph.json/GRAPH_REPORT.md/labels.json so teammates get fresh map.
 # Exclude only local-only artifacts.
+# graph.html retired once the graph crossed graphify's 5000-node HTML render
+# ceiling (to_html hard-refuses); explore large graphs via /graphify query|path|explain.
 graphify-out/cache/
 **/graphify-out/cache/
 graphify-out/manifest.json
 **/graphify-out/manifest.json
 graphify-out/cost.json
 **/graphify-out/cost.json
+graphify-out/graph.html
+**/graphify-out/graph.html
 
 # graphify pipeline temp files (written to cwd during run)
 .graphify_python
@@ -169,6 +173,9 @@ graphify-out/cost.json
 .graphify_uncached.txt
 .graphify_incremental.json
 .graphify_old.json
+.graphify_backbone.tsv
+.graphify_scope_code.json
+.graphify_scope_doc.json
 # Leaked chunk files / detect inside graphify-out dirs
 **/graphify-out/.graphify_*
 # Scoped-hook flag — set when a doc change in scope needs semantic refresh
