@@ -29,8 +29,12 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const resumeBlock = page.blocks.find((b) => b.type === 'resume');
   const resumeData = resumeBlock ? (resumeBlock.data as unknown as ResumeBlockData) : null;
   const resumeItems = resumeData?.items ?? [];
-  // HTML brut du bloc type 15 — assaini côté serveur avant passage au client
-  const resumeHtml = resumeData?.html ? sanitizeResumeHtml(resumeData.html) : undefined;
+  // HTML brut du bloc type 15 — assaini côté serveur, titre extrait du premier élément
+  const { title: extractedTitle, bodyHtml: resumeHtml } = resumeData?.html
+    ? extractResumeTitle(sanitizeResumeHtml(resumeData.html))
+    : { title: undefined, bodyHtml: undefined };
+  // data.title (items mode) prime sur le titre extrait du HTML
+  const resumeTitle = resumeData?.title ?? extractedTitle;
 
   // Blocs à rendre (exclure le resume qui est intégré dans le Hero)
   const contentBlocks = page.blocks
@@ -45,6 +49,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         data={page.hero}
         pageType={page.pageType}
         resume={resumeItems}
+        resumeTitle={resumeTitle}
         resumeHtml={resumeHtml}
         breadcrumb={page.breadcrumb ?? [
           { label: 'Accueil', href: 'https://www.hellopro.fr' },
@@ -77,7 +82,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
 
           {/* Blocs de pied communs aux 3 types */}
           <Suppliers />
-          <Crossell />
+          <Crossell liensIntexts={page.liensIntexts} />
           {page.author && <AuthorBlock author={page.author} />}
         </article>
       </main>
@@ -87,10 +92,83 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   );
 }
 
+/** Supprime les icônes/emojis en début et le ":" en fin d'un titre extrait du HTML. */
+function cleanTitle(raw: string): string {
+  return raw
+    .replace(/<[^>]+>/g, '')          // supprimer les balises HTML
+    .replace(/^[^a-zA-ZÀ-ÿ]+/, '')   // supprimer icônes/emojis/symboles en début
+    .replace(/\s*:\s*$/, '')          // supprimer ":" en fin
+    .trim();
+}
+
 /** Supprime les balises script et les handlers inline pour sécuriser le HTML du BO. */
 function sanitizeResumeHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/\s+on\w+="[^"]*"/gi, '')
     .replace(/\s+on\w+='[^']*'/gi, '');
+}
+
+/**
+ * Extrait le titre du bloc type 15 depuis le premier élément textuel du HTML.
+ * Supporte h1-h6, <p>, <div> courts, ou un premier <li> dont le contenu est
+ * entièrement en gras (pattern "titre : …" ou "titre" seul).
+ * Le titre est retiré du corps pour éviter la duplication dans le rendu.
+ */
+export function extractResumeTitle(html: string): { title: string | undefined; bodyHtml: string } {
+  const trimmed = html.trim();
+
+  // 1. Titres h1-h6
+  const hMatch = trimmed.match(/^<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
+  if (hMatch) {
+    const title = cleanTitle(hMatch[1]);
+    return { title: title || undefined, bodyHtml: trimmed.slice(hMatch[0].length).trim() };
+  }
+
+  // 2. Premier <p> court (moins de 120 caractères de texte — clairement un titre)
+  const pMatch = trimmed.match(/^<p[^>]*>([\s\S]*?)<\/p>/i);
+  if (pMatch) {
+    const title = cleanTitle(pMatch[1]);
+    if (title && title.length < 120) {
+      return { title, bodyHtml: trimmed.slice(pMatch[0].length).trim() };
+    }
+  }
+
+  // 3. Premier <li> dont TOUT le contenu est en <strong> (li utilisé comme titre)
+  const liStrongMatch = trimmed.match(/^<ul[^>]*>\s*<li[^>]*>\s*<strong[^>]*>([\s\S]*?)<\/strong>\s*<\/li>([\s\S]*)$/i);
+  if (liStrongMatch) {
+    const title = cleanTitle(liStrongMatch[1]);
+    if (title) {
+      const rest = liStrongMatch[2].trimStart();
+      const bodyHtml = rest.startsWith('</ul>') ? rest.slice(5).trim() : `<ul>${rest}`;
+      return { title, bodyHtml };
+    }
+  }
+
+  // 4. Premier <li> détecté comme titre :
+  //    — se termine par ":" (avec ou sans espace avant, ex: "Ce qu'il faut retenir:")
+  //    — OU commence par un emoji/symbole (caractère non lettre, ex: "💡 L'essentiel à retenir")
+  //      avec au moins un autre <li> après lui (sinon c'est du contenu)
+  const firstLiMatch = trimmed.match(/^<ul[^>]*>\s*<li[^>]*>([\s\S]{1,200}?)<\/li>([\s\S]*)$/i);
+  if (firstLiMatch) {
+    const rawText = firstLiMatch[1].replace(/<[^>]+>/g, '').trim();
+    const rest = firstLiMatch[2];
+    const endsWithColon = /\s*:\s*$/.test(rawText);
+    const startsWithNonLetter = rawText.length > 0 && !/^[a-zA-ZÀ-ÿ"'«0-9]/.test(rawText);
+    const hasMoreItems = /<li/i.test(rest);
+    if (
+      rawText.length > 0 &&
+      rawText.length < 100 &&
+      (endsWithColon || (startsWithNonLetter && hasMoreItems))
+    ) {
+      const title = cleanTitle(firstLiMatch[1]);
+      if (title) {
+        const restTrimmed = rest.trimStart();
+        const bodyHtml = restTrimmed.startsWith('</ul>') ? restTrimmed.slice(5).trim() : `<ul>${restTrimmed}`;
+        return { title, bodyHtml };
+      }
+    }
+  }
+
+  return { title: undefined, bodyHtml: trimmed };
 }
