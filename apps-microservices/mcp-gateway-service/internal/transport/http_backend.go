@@ -353,6 +353,7 @@ func parseResponseBody(body []byte) (*mcp.Response, error) {
 }
 
 var (
+	htmlNoiseRE = regexp.MustCompile(`(?is)<(script|style)[^>]*>.*?</(script|style)>|<!--.*?-->`)
 	htmlTagRE   = regexp.MustCompile(`(?is)<[^>]+>`)
 	htmlTitleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 	whitespceRE = regexp.MustCompile(`\s+`)
@@ -391,12 +392,14 @@ func looksLikeHTML(trimmed string) bool {
 		strings.Contains(lower, "<body")
 }
 
-// sanitizeBodyPreview turns an unparseable backend response body into a short,
-// log-safe, human-readable string. HTML pages are stripped of markup — so the
-// raw "<html …>" dump never leaks into a JSON-RPC error message — with the
-// <title> surfaced when present; other payloads pass through verbatim. The
-// result is always whitespace-collapsed and length-bounded. This mirrors the
-// cleanMessage() sanitizer on the PHP MCP server side.
+// sanitizeBodyPreview extracts the actual human-readable error out of an
+// unparseable backend response body. HTML pages are reduced to their meaningful
+// text — the raw "<html …>" dump never leaks — by dropping <script>/<style>
+// blocks and comments wholesale, then stripping the remaining tags. The page
+// <title> wins when present (e.g. "Access Denied"); otherwise the visible body
+// text is used (e.g. an Incapsula incident line or a backend SQL error). Other
+// payloads pass through verbatim. The result is always whitespace-collapsed and
+// length-bounded. Mirrors the cleanMessage() sanitizer on the PHP MCP side.
 func sanitizeBodyPreview(body []byte) string {
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" {
@@ -404,20 +407,19 @@ func sanitizeBodyPreview(body []byte) string {
 	}
 
 	if looksLikeHTML(trimmed) {
+		cleaned := htmlNoiseRE.ReplaceAllString(trimmed, " ")
+
 		summary := ""
-		if m := htmlTitleRE.FindStringSubmatch(trimmed); m != nil {
+		if m := htmlTitleRE.FindStringSubmatch(cleaned); m != nil {
 			summary = collapseWhitespace(html.UnescapeString(m[1]))
 		}
 		if summary == "" {
-			summary = collapseWhitespace(html.UnescapeString(htmlTagRE.ReplaceAllString(trimmed, " ")))
+			summary = collapseWhitespace(html.UnescapeString(htmlTagRE.ReplaceAllString(cleaned, " ")))
 		}
 		if summary == "" {
-			summary = "(no readable text)"
+			summary = "(HTML response with no readable text)"
 		}
-		return fmt.Sprintf(
-			"backend returned an HTML page, not JSON-RPC (likely a WAF, auth, or error page): %s",
-			boundRunes(summary, 300),
-		)
+		return boundRunes(summary, 300)
 	}
 
 	return boundRunes(collapseWhitespace(trimmed), 300)

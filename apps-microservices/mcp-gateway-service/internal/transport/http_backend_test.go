@@ -41,8 +41,8 @@ func TestParseResponseBody_SSEWrapped(t *testing.T) {
 }
 
 // When a backend (or a WAF/bot-block proxy fronting it) returns an HTML page
-// instead of JSON-RPC, the error must NOT leak raw markup — it should be
-// stripped to readable text so the message stays usable in logs and clients.
+// instead of JSON-RPC, the error must NOT leak raw markup — it should surface
+// the actual page text so the real cause is readable in the result.
 func TestParseResponseBody_HTMLNotLeakedAsMarkup(t *testing.T) {
 	body := []byte(`<html style="height:100%"><head><META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW"><title>Access Denied</title></head><body>Blocked by firewall</body></html>`)
 	_, err := parseResponseBody(body)
@@ -53,11 +53,25 @@ func TestParseResponseBody_HTMLNotLeakedAsMarkup(t *testing.T) {
 	if strings.Contains(msg, "<html") || strings.Contains(msg, "<META") || strings.Contains(msg, "<title>") {
 		t.Errorf("error must not contain raw HTML markup, got: %s", msg)
 	}
-	if !strings.Contains(msg, "HTML page") {
-		t.Errorf("error should flag an HTML page, got: %s", msg)
-	}
 	if !strings.Contains(msg, "Access Denied") {
 		t.Errorf("error should surface the <title>, got: %s", msg)
+	}
+}
+
+// Real-world Incapsula/Imperva block page: the meaningful text lives in the
+// body (no <title>), alongside <script> noise that must not leak.
+func TestParseResponseBody_IncapsulaBlockPage(t *testing.T) {
+	body := []byte(`<html style="height:100%"><head><META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW"><meta name="format-detection" content="telephone=no"><meta name="viewport" content="initial-scale=1.0"></head><body style="margin:0px;height:100%"><iframe src="/_Incapsula_Resource?..." onload="var i=document.querySelector('iframe')"></iframe>Request unsuccessful. Incapsula incident ID: 1845000900615501534-39445439328884376</body></html>`)
+	_, err := parseResponseBody(body)
+	if err == nil {
+		t.Fatal("expected error for HTML body, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "Request unsuccessful. Incapsula incident ID: 1845000900615501534-39445439328884376") {
+		t.Errorf("error should surface the Incapsula incident line, got: %s", msg)
+	}
+	if strings.Contains(msg, "document.querySelector") || strings.Contains(msg, "<iframe") {
+		t.Errorf("error must not contain script/markup noise, got: %s", msg)
 	}
 }
 
@@ -69,22 +83,27 @@ func TestSanitizeBodyPreview(t *testing.T) {
 		wantAbsent  []string
 	}{
 		{
-			name:        "html with title",
+			name:        "html with title wins",
 			body:        `<html><head><title>Bad Gateway</title></head><body>nginx</body></html>`,
-			wantContain: []string{"HTML page", "Bad Gateway"},
+			wantContain: []string{"Bad Gateway"},
 			wantAbsent:  []string{"<html", "<title", "<body"},
 		},
 		{
-			name:        "html without title falls back to text",
+			name:        "html without title falls back to body text",
 			body:        `<html><body>  Service   Unavailable  </body></html>`,
-			wantContain: []string{"HTML page", "Service Unavailable"},
+			wantContain: []string{"Service Unavailable"},
 			wantAbsent:  []string{"<body", "  "},
+		},
+		{
+			name:        "script and style contents are dropped",
+			body:        `<html><head><style>.x{color:red}</style><script>alert('xss')</script></head><body>Internal Server Error: SQL syntax error near 'SELEC'</body></html>`,
+			wantContain: []string{"Internal Server Error: SQL syntax error near 'SELEC'"},
+			wantAbsent:  []string{"alert", "color:red", "<script", "<style"},
 		},
 		{
 			name:        "plain text passthrough collapsed",
 			body:        "not   json\n\nat all",
 			wantContain: []string{"not json at all"},
-			wantAbsent:  []string{"HTML page"},
 		},
 		{
 			name:        "empty body",
