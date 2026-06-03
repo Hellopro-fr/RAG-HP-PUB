@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
+	"regexp"
 	"strings"
 	"time"
 
@@ -238,6 +240,7 @@ func (c *BackendClient) tryStreamableHTTP(ctx context.Context, url string) error
 	// Try to parse as a valid JSON-RPC response (handles both pure JSON and SSE-wrapped).
 	rpcResp, err := parseResponseBody(respBody)
 	if err != nil {
+		logUnparseableBackendResponse("initialize-probe", url, resp, respBody)
 		return fmt.Errorf("parse probe response: %w", err)
 	}
 
@@ -308,6 +311,7 @@ func (c *BackendClient) Call(ctx context.Context, method string, params any) (js
 
 	rpcResp, err := parseResponseBody(respBody)
 	if err != nil {
+		logUnparseableBackendResponse(method, c.messageURL, resp, respBody)
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	if rpcResp.Error != nil {
@@ -345,12 +349,94 @@ func parseResponseBody(body []byte) (*mcp.Response, error) {
 		}
 	}
 
-	// Truncate body for error message readability.
-	preview := string(body)
-	if len(preview) > 200 {
-		preview = preview[:200] + "..."
+	return nil, fmt.Errorf("could not parse as JSON-RPC or SSE-wrapped response: %s", sanitizeBodyPreview(body))
+}
+
+var (
+	htmlNoiseRE = regexp.MustCompile(`(?is)<(script|style)[^>]*>.*?</(script|style)>|<!--.*?-->`)
+	htmlTagRE   = regexp.MustCompile(`(?is)<[^>]+>`)
+	htmlTitleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+	whitespceRE = regexp.MustCompile(`\s+`)
+)
+
+// maxRawBodyLog bounds how much of an unparseable body is written to the logs —
+// large enough to capture a WAF/error block page in full, small enough not to
+// flood the logs with a multi-MB payload.
+const maxRawBodyLog = 8 * 1024
+
+// logUnparseableBackendResponse dumps the full diagnostic context of a backend
+// response that could not be parsed as JSON-RPC — HTTP status, Content-Type,
+// and the raw (untruncated up to maxRawBodyLog) body — so the underlying cause
+// (WAF block, auth failure, upstream error page) can be read straight from the
+// gateway logs. The MCP client still receives only the sanitized short message.
+func logUnparseableBackendResponse(method, url string, resp *http.Response, body []byte) {
+	raw := string(body)
+	if len(raw) > maxRawBodyLog {
+		raw = raw[:maxRawBodyLog] + "...[truncated]"
 	}
-	return nil, fmt.Errorf("could not parse as JSON-RPC or SSE-wrapped response: %s", preview)
+	log.Printf(
+		"[backend] unparseable response method=%s url=%s status=%d content-type=%q\n--- raw body ---\n%s\n--- end raw body ---",
+		method, url, resp.StatusCode, resp.Header.Get("Content-Type"), raw,
+	)
+}
+
+// looksLikeHTML reports whether an unparseable body is an HTML document rather
+// than a JSON-RPC payload. Backends fronted by a WAF, load balancer, or hosting
+// error page commonly return an HTML block page (e.g. a robots NOINDEX/NOFOLLOW
+// page) on auth, rate-limit, or upstream failures.
+func looksLikeHTML(trimmed string) bool {
+	lower := strings.ToLower(trimmed)
+	return strings.HasPrefix(lower, "<!doctype html") ||
+		strings.HasPrefix(lower, "<html") ||
+		strings.Contains(lower, "<head") ||
+		strings.Contains(lower, "<body")
+}
+
+// sanitizeBodyPreview extracts the actual human-readable error out of an
+// unparseable backend response body. HTML pages are reduced to their meaningful
+// text — the raw "<html …>" dump never leaks — by dropping <script>/<style>
+// blocks and comments wholesale, then stripping the remaining tags. The page
+// <title> wins when present (e.g. "Access Denied"); otherwise the visible body
+// text is used (e.g. an Incapsula incident line or a backend SQL error). Other
+// payloads pass through verbatim. The result is always whitespace-collapsed and
+// length-bounded. Mirrors the cleanMessage() sanitizer on the PHP MCP side.
+func sanitizeBodyPreview(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return "(empty response body)"
+	}
+
+	if looksLikeHTML(trimmed) {
+		cleaned := htmlNoiseRE.ReplaceAllString(trimmed, " ")
+
+		summary := ""
+		if m := htmlTitleRE.FindStringSubmatch(cleaned); m != nil {
+			summary = collapseWhitespace(html.UnescapeString(m[1]))
+		}
+		if summary == "" {
+			summary = collapseWhitespace(html.UnescapeString(htmlTagRE.ReplaceAllString(cleaned, " ")))
+		}
+		if summary == "" {
+			summary = "(HTML response with no readable text)"
+		}
+		return boundRunes(summary, 300)
+	}
+
+	return boundRunes(collapseWhitespace(trimmed), 300)
+}
+
+func collapseWhitespace(s string) string {
+	return strings.TrimSpace(whitespceRE.ReplaceAllString(s, " "))
+}
+
+// boundRunes truncates on rune boundaries so a multi-byte character is never
+// split mid-sequence.
+func boundRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 // ── typed RPC wrappers ────────────────────────────────────────────────────────
