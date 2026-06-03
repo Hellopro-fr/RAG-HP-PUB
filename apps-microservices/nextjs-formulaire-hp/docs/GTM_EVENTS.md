@@ -1,18 +1,45 @@
 # Documentation des Événements GTM
 
-Ce document décrit tous les événements GTM (Google Tag Manager) utilisés dans l'application de demande de devis.
+> **Source de vérité unique** : `lib/analytics/gtm.ts`.
+> Ce document est aligné sur l'état réel du code. Toute fonction citée ici est exportée par `gtm.ts` et appelée au moins une fois dans l'application (sauf mention `[non utilisé]` ou `@deprecated`).
 
 ---
 
-## Architecture des Événements
+## Sommaire
 
-L'architecture repose sur **un événement principal** (`devis_funnel_formulaire`) qui track toutes les étapes du funnel, et **des événements secondaires** pour des actions spécifiques hors funnel.
+1. [Architecture](#architecture)
+2. [Événement principal `devis_funnel_formulaire`](#événement-principal--devis_funnel_formulaire)
+3. [Événements secondaires](#événements-secondaires)
+4. [Fonctions utilitaires](#fonctions-utilitaires)
+5. [Identifiants user / session](#identifiants-user--session)
+6. [Inventaire complet des fonctions exportées](#inventaire-complet-des-fonctions-exportées)
+7. [Dead code & fonctions dépréciées](#dead-code--fonctions-dépréciées)
+8. [GA4 & Hotjar](#ga4--hotjar)
+9. [Configuration GTM recommandée](#configuration-gtm-recommandée)
+10. [KPIs](#kpis)
+11. [Tracking DB parallèle](#tracking-db-parallèle)
 
 ---
 
-## Événement Principal : `devis_funnel_formulaire`
+## Architecture
 
-Cet événement unique track toute la progression de l'utilisateur dans le funnel de demande de devis.
+Trois canaux d'analytics coexistent :
+
+| Canal | Source | Vocation | Statut |
+|---|---|---|---|
+| **GTM (dataLayer)** | `lib/analytics/gtm.ts` | Funnel marketing, mesure d'audience, conversion. Push direct vers `window.dataLayer`. | **Actif** — utilisé partout dans le funnel |
+| **GA4 (gtag)** | `lib/analytics/ga4.ts` | Events GA4 directs (hors GTM). | **Inutilisé** — défini mais aucun appel dans le code |
+| **Hotjar** | `lib/analytics/hotjar.ts` | Tagging session recordings, identification, sondages. | **Inutilisé** — défini mais aucun appel dans le code |
+
+En parallèle, une couche de tracking interne `useDbTracking` (`hooks/tracking/useDbTracking.ts`) pousse des events vers `/api/tck` (PHP-side analytics DB). Cette couche est documentée en [Tracking DB parallèle](#tracking-db-parallèle).
+
+Le funnel GTM repose sur **un événement principal** (`devis_funnel_formulaire`) émis à chaque étape, et **quelques événements secondaires** pour des contextes hors funnel.
+
+---
+
+## Événement principal : `devis_funnel_formulaire`
+
+Émis par `trackQuoteFunnel()` ([gtm.ts:183](../lib/analytics/gtm.ts#L183)), appelé par toutes les fonctions `track*()` du funnel.
 
 ### Structure de base
 
@@ -20,67 +47,75 @@ Cet événement unique track toute la progression de l'utilisateur dans le funne
 {
   event: 'devis_funnel_formulaire',
 
-  // Progression
-  step_index: number,        // Index de l'étape (0, 1, 2...)
-  step_name: string,         // Nom de l'étape
-  step_number: number,       // Numéro de l'étape (step_index + 1)
-  step_type: string,         // Type d'étape
+  // Progression — incrémentée à chaque étape par currentStepIndex (gtm.ts:219)
+  step_index: number,        // Index séquentiel (0, 1, 2…)
+  step_name: string,         // Voir tableau ci-dessous
+  step_number: number,       // step_index + 1
+  step_type: string,         // 'init' | 'question' | 'localisation' | 'choix-propart' | 'prix' | 'selection' | 'contact' | 'conversion'
 
-  // Contexte funnel
-  funnel_devisplus: boolean, // true si funnel devis+
-  funnel_context: string,    // 'direct', 'dynamic', 'static'
-  rubrique_id: number,       // ID de la rubrique
-  'product.category5': string, // Nom de la catégorie (réutilise dimension GA4 existante)
-  abtest1: string,           // Variante A/B test
+  // Contexte funnel — setFunnelContext(...)
+  funnel_devisplus: boolean,
+  funnel_context: string,
+  rubrique_id: number,
+  'product.category5': string,
+  abtest2?: string,          // optionnel — provient du champ `abtest2` du token URL, omis du push si absent
 
-  // Type de parcours (voir section "Parcours utilisateur")
-  flow_type: string | null,  // 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | null
+  // Type de parcours
+  flow_type: string | null,  // voir section "Types de parcours"
 
   // Identifiants
-  user_id: string,           // ID utilisateur (persistant localStorage)
-  session_id: string,        // ID session (sessionStorage)
+  user_id: string,
+  session_id: string,
 
-  // + données additionnelles selon l'étape
+  // + champs additionnels selon l'étape (cf. tableau ci-dessous)
 }
 ```
 
-### Types d'étapes (step_type)
+### Types d'étapes (`step_type`)
 
 | step_type | Description |
-|-----------|-------------|
-| `init` | Initialisation du funnel |
-| `question` | Étape de question du questionnaire |
-| `choix-propart` | Choix professionnel/particulier |
-| `prix` | Étape budget (page /budget) |
-| `selection` | Sélection des fournisseurs |
-| `contact` | Formulaire de contact |
-| `conversion` | Soumission finale |
+|---|---|
+| `init` | Initialisation et écran assurance |
+| `question` | Étape du questionnaire dynamique |
+| `localisation` | Page `/geo-zone` |
+| `choix-propart` | Choix profil professionnel / particulier |
+| `prix` | Page `/budget` (estimation + tranche) |
+| `selection` | Page `/selection` et interactions sur la modale fournisseur |
+| `contact` | Formulaire de contact (parcours principal ou alternatif) |
+| `conversion` | Soumission finale (succès ou erreur) |
 
-### Types de parcours (flow_type)
+### Types de parcours (`flow_type`)
 
-Le champ `flow_type` permet d'identifier le parcours emprunté par l'utilisateur. Il est `null` pour les premières étapes (avant le branchement) puis défini une fois le parcours déterminé.
+Défini par `setFlowType()` ([gtm.ts:165](../lib/analytics/gtm.ts#L165)). Reste `null` tant que le branchement n'a pas eu lieu.
 
-| flow_type | Déclencheur | Description |
-|-----------|-------------|-------------|
-| `principal` | Arrivée sur `/selection` | Parcours standard avec sélection de produits |
-| `pas_assez_produits` | Redirection automatique vers `/something-to-add` | Pas assez de produits correspondants, l'utilisateur décrit son besoin |
-| `pas_trouve_recherchez` | Clic "Pas trouvé ce que vous cherchez ?" sur `/selection` | L'utilisateur a vu les produits mais n'a pas trouvé son besoin |
-| `null` | Avant le branchement | Parcours pas encore déterminé (questionnaire, profil) |
-
-#### Schéma des parcours
+| flow_type | Déclencheur |
+|---|---|
+| `null` | Parcours non encore déterminé (init, questionnaire, profil, geo-zone, budget) |
+| `principal` | Arrivée sur `/selection` ([selection-client.tsx:31](../app/(flow)/selection/selection-client.tsx#L31)) |
+| `pas_assez_produits` | Redirection automatique vers `/something-to-add` quand le matching renvoie trop peu de produits ([SomethingToAddForm.tsx](../components/flow/SomethingToAddForm.tsx)) |
+| `pas_trouve_recherchez` | Clic "Pas trouvé ce que vous cherchez ?" sur `/selection` ([SupplierSelectionModal.tsx](../components/flow/SupplierSelectionModal.tsx)) |
 
 ```
-                    questionnaire-start (flow_type: null)
+                    funnel-start (flow_type: null)
                               │
                               ▼
-                      choix-propart (flow_type: null)
+                       assurance (variantes 0/1/null)
+                              │
+                              ▼
+                      questionnaire (flow_type: null)
+                              │
+                              ▼
+                       choix-propart (flow_type: null)
+                              │
+                              ▼
+                        matching API
                               │
                ┌──────────────┴──────────────┐
                ▼                              ▼
-      assez de produits              pas assez de produits
+        budget displayable             pas assez de produits
                │                              │
                ▼                              ▼
-    selection-produits              description-besoin
+       selection-produits             description-besoin
    (flow_type: 'principal')    (flow_type: 'pas_assez_produits')
                │                              │
     ┌──────────┴──────────┐                   ▼
@@ -98,457 +133,327 @@ submit-success            ▼
                     submit-success
 ```
 
-### Étapes détaillées (step_name)
+### Étapes & payloads additionnels
 
-#### Initialisation
-| step_name | step_type | Description |
-|-----------|-----------|-------------|
-| `funnel-start` | `init` | Début du funnel |
-| `assurance` | `init` | Affichage de la page Assurance (avant Q1). Émis uniquement au premier passage (`hasSeenAssurance`) et hors variante A/B `2` |
-| `assurance-complete` | `init` | Clic "Continuer" sur la page Assurance |
-
-#### Questionnaire
-| step_name | step_type | Description |
-|-----------|-----------|-------------|
-| `1ere-question` | `question` | Affichage première question |
-| `2eme-question` | `question` | Affichage deuxième question |
-| `Neme-question` | `question` | Affichage N-ème question |
-| `questionnaire-complete` | `question` | Fin du questionnaire |
-
-**Données additionnelles pour les questions :**
-```javascript
-{
-  question_id: number,       // ID de la question
-  question_title: string,    // Titre de la question
-  total_questions: number,   // Nombre total de questions (pour questionnaire-complete)
-  time_spent_seconds: number // Temps passé (pour questionnaire-complete)
-}
-```
-
-#### Choix Pro/Part
-| step_name | step_type | Description |
-|-----------|-----------|-------------|
-| `choix-propart` | `choix-propart` | Affichage page profil |
-| `choix-propart-selected` | `choix-propart` | Sélection du type de profil |
-| `profile-complete` | `choix-propart` | Profil complété |
-
-**Données additionnelles :**
-```javascript
-{
-  profile_type: string,      // 'professional' | 'individual'
-  has_company: boolean,      // A une entreprise
-  country_id: number,        // ID du pays
-  location: string           // Localisation
-}
-```
-
-#### Étape budget (page /budget)
-| step_name | step_type | Description |
-|-----------|-----------|-------------|
-| `budget` | `prix` | Affichage de la page /budget (rendue uniquement quand l'estimation est displayable : fourchette valide + > 2 exemples produits) |
-| `budget-complete` | `prix` | Validation de l'étape budget — clic "Voir ma sélection". Payload : `budget_range` |
-| `budget-retour` | `prix` | Retour au questionnaire depuis /budget — clic "Précédent". Payload : `budget_range` (peut être `null`). N'incrémente pas `step_number` |
-
-#### Sélection produits
-| step_name | step_type | Description |
-|-----------|-----------|-------------|
-| `selection-produits` | `selection` | Affichage page sélection |
-| `product-click` | `selection` | Clic sur carte produit |
-| `product-selection` | `selection` | Changement sélection |
-| `comparison-modal` | `selection` | Ouverture modal comparaison |
-
-**Données additionnelles :**
-```javascript
-{
-  recommended_count: number,  // Nombre de produits recommandés
-  total_count: number,        // Nombre total de produits
-  product_id: string,         // ID produit
-  product_name: string,       // Nom produit
-  match_score: number,        // Score de correspondance
-  action: string,             // 'view_details' | 'toggle_select' | 'ajouter' | 'retirer'
-  total_selected: number,     // Nombre de produits sélectionnés
-  is_first_add: boolean,      // true uniquement lors du premier ajout de la session
-  is_first_remove: boolean,   // true uniquement lors du premier retrait de la session
-  products_compared: string[], // IDs des produits comparés
-  products_count: number      // Nombre de produits comparés
-}
-```
-
-#### Formulaire de contact (parcours principal)
-| step_name | step_type | Description |
-|-----------|-----------|-------------|
-| `formulaire-contact` | `contact` | Affichage formulaire (parcours principal) |
-| `champ-coordonnees-N` | `contact` | Remplissage champ N |
-| `validation-error` | `contact` | Erreur de validation |
-
-#### Parcours alternatif (description du besoin)
-| step_name | step_type | flow_type | Description |
-|-----------|-----------|-----------|-------------|
-| `description-besoin` | `contact` | `pas_assez_produits` ou `pas_trouve_recherchez` | Page "Votre besoin" - description libre |
-| `formulaire-contact-simple` | `contact` | `pas_assez_produits` ou `pas_trouve_recherchez` | Formulaire de coordonnées simplifié |
-
-**Données additionnelles pour `description-besoin` :**
-```javascript
-{
-  is_first_view: boolean    // Première vue de la session
-}
-```
-
-**Données additionnelles :**
-```javascript
-{
-  selected_count: number,     // Nombre de fournisseurs sélectionnés
-  field_name: string,         // Nom du champ
-  field_index: number,        // Index du champ
-  is_valid: boolean,          // Formulaire valide
-  missing_fields: string[],   // Champs manquants
-  errors_count: number,       // Nombre d'erreurs
-  errors: Array<{             // Détail des erreurs
-    field: string,
-    type: string,
-    message: string
-  }>
-}
-```
-
-#### Conversion
-| step_name | step_type | Description |
-|-----------|-----------|-------------|
-| `submit-success` | `conversion` | Soumission réussie |
-| `submit-error` | `conversion` | Erreur de soumission |
-
-**Données additionnelles :**
-```javascript
-{
-  lead_id: string,            // ID du lead créé
-  nombre_fournisseur: number, // Nombre de fournisseurs
-  profile_type: string,       // Type de profil
-  conversion: boolean,        // true si succès
-  error_type: string,         // Type d'erreur (si erreur)
-  error_message: string       // Message d'erreur (si erreur)
-}
-```
+| step_name | step_type | Fonction émettrice | Payload additionnel |
+|---|---|---|---|
+| `funnel-start` | `init` | `trackFunnelStart(context?)` | — |
+| `assurance` | `init` | `trackAssuranceView()` | `is_first_view: boolean` |
+| `assurance-complete` | `init` | `trackAssuranceComplete()` | — |
+| `1ere-question`, `2eme-question`, … `Neme-question` | `question` | `trackQuestionView(questionIndex)` | — (le numéro est codé dans `step_name`) |
+| `questionnaire-complete` | `question` | `trackQuestionnaireComplete(totalQuestions, timeSpentSeconds)` | `total_questions: number`, `time_spent_seconds: number` |
+| `geo-zone` | `localisation` | `trackGeoZoneView()` | `is_first_view: boolean` |
+| `geo-zone-complete` | `localisation` | `trackGeoZoneComplete()` | — |
+| `choix-propart` | `choix-propart` | `trackProfileView()` | — |
+| `choix-propart-complete` | `choix-propart` | `trackProfileComplete(profileType)` | `profile_type: string` |
+| `budget` | `prix` | `trackBudgetView()` | — |
+| `budget-complete` | `prix` | `trackBudgetComplete(budgetRange)` | `budget_range: string` |
+| `budget-retour` | `prix` | `trackBudgetReturn(budgetRange)` | `budget_range: string \| null` |
+| `selection-produits` | `selection` | `trackSelectionPageView(recommended, total)` | `recommended_count: number`, `total_count: number` |
+| `product-selection` | `selection` | `trackProductSelectionChange(productId, action, totalSelected)` | `product_id: string`, `action: 'ajouter'\|'retirer'`, `total_selected: number`, `is_first_add?: boolean`, `is_first_remove?: boolean` |
+| `vue-comparaison` | `selection` | `trackComparisonModalView()` **[non utilisé]** | `is_first_view: boolean` |
+| `vue-criteres` | `selection` | `trackModifyCriteriaModalView()` | `is_first_view: boolean` |
+| `criteres-modifies` | `selection` | `trackCriteriaModified(criteriaCount)` | `criteria_count: number` |
+| `vue-produit` | `selection` | `trackProductModalView(productId)` | `product_id: string`, `is_first_view: boolean` |
+| `formulaire-contact` | `contact` | `trackContactFormView(selectedSuppliersCount)` | `selected_count: number` |
+| `description-besoin` | `contact` | `trackCustomNeedPageView()` | `is_first_view: boolean` |
+| `formulaire-contact-simple` | `contact` | `trackCustomNeedContactView()` | — |
+| `validation-error` | `contact` | `trackFormValidationErrors(errorsCount, errors?)` | `errors_count: number`, `errors?: Array<{field, type, message}>` |
+| `submit-success` | `conversion` | `trackLeadSubmitted(suppliersCount, profileType, userKnownStatus)` | `nombre_fournisseur: number`, `profile_type: string`, `user_known_status: 'known'\|'unknown'`, `conversion: true` |
+| `submit-error` | `conversion` | `trackLeadSubmissionError(errorType, errorMessage)` | `error_type: string`, `error_message: string`, `conversion: false` |
 
 ---
 
-## Événements Secondaires
+## Événements secondaires
 
-Ces événements trackent des actions spécifiques hors du funnel principal.
-
-### `recherche_entreprise`
-
-Recherche d'entreprise (SIREN/SIRET).
-
-```javascript
-{
-  event: 'recherche_entreprise',
-  query_length: number,       // Longueur de la recherche
-  results_count: number       // Nombre de résultats
-}
-```
-
-### `page_vue_critere`
-
-Ouverture du modal de modification des critères.
-
-```javascript
-{
-  event: 'page_vue_critere',
-  user_id: string,
-  session_id: string,
-  is_first_view: boolean,     // Première vue de la session
-  timestamp: string           // ISO 8601
-}
-```
-
-### `critere_modifie`
-
-Modification effective des critères.
-
-```javascript
-{
-  event: 'critere_modifie',
-  user_id: string,
-  criteria_count: number,     // Nombre de critères
-  modified_fields: string[],  // Champs modifiés
-  timestamp: string
-}
-```
-
-### `vue_page_votre_besoin` *(DEPRECATED)*
-
-> **⚠️ DEPRECATED** : Cet événement est remplacé par `devis_funnel_formulaire` avec `step_name: 'description-besoin'`.
-
-Arrivée sur la page `/something-to-add` - Étape 1: "Votre besoin" (affichée quand il y a peu de produits correspondant à la recherche).
-
-### `vue_page_vos_coordonnees` *(DEPRECATED)*
-
-> **⚠️ DEPRECATED** : Cet événement est remplacé par `devis_funnel_formulaire` avec `step_name: 'formulaire-contact-simple'`.
-
-Passage à l'étape 2: "Vos coordonnées" sur la page `/something-to-add`.
-
-### `vue_modal_produit`
-
-Ouverture du modal fiche produit.
-
-```javascript
-{
-  event: 'vue_modal_produit',
-  user_id: string,
-  session_id: string,
-  is_first_view: boolean,
-  product_id: string,         // ID du produit
-  product_name: string,       // Nom du produit
-  supplier_id: string,        // ID du fournisseur
-  timestamp: string
-}
-```
-
-### `utilisateur_identifie`
-
-Identification de l'utilisateur avec ses informations.
-
-```javascript
-{
-  event: 'utilisateur_identifie',
-  user_id: string,
-  session_id: string,
-  email: string,              // Email de l'utilisateur
-  profile_type: string,       // Type de profil
-  company_name: string,       // Nom de l'entreprise
-  timestamp: string
-}
-```
-
-### `abandon_funnel`
-
-Abandon du funnel à une étape.
-
-```javascript
-{
-  event: 'abandon_funnel',
-  user_id: string,
-  session_id: string,
-  step: string,               // Nom de l'étape abandonnée
-  step_number: number,        // Numéro de l'étape
-  time_spent_seconds: number, // Temps passé avant abandon
-  last_action: string,        // Dernière action
-  device_type: string,        // 'mobile' | 'tablet' | 'desktop'
-  screen_width: number,
-  screen_height: number,
-  user_agent: string,
-  timestamp: string
-}
-```
+Émis directement via `pushToDataLayer()` (sans passer par `trackQuoteFunnel`).
 
 ### `device_info`
 
-Informations sur l'appareil (début de session).
+Émis une fois par session par `trackDeviceInfo()` ([gtm.ts:534](../lib/analytics/gtm.ts#L534)), depuis `AnalyticsProvider`.
 
 ```javascript
 {
   event: 'device_info',
   user_id: string,
   session_id: string,
-  device_type: string,        // 'mobile' | 'tablet' | 'desktop'
+  device_type: 'mobile' | 'tablet' | 'desktop',
   screen_width: number,
   screen_height: number,
   user_agent: string,
-  timestamp: string
+  timestamp: string  // ISO 8601
 }
 ```
 
 ### `source_trafic`
 
-Sources de trafic (paramètres UTM).
+Émis une fois par session par `trackTrafficSource()` ([gtm.ts:550](../lib/analytics/gtm.ts#L550)), depuis `AnalyticsProvider`. Parse les UTM params de l'URL.
 
 ```javascript
 {
   event: 'source_trafic',
   user_id: string,
   session_id: string,
-  utm_source: string,         // Source UTM ou 'direct'
-  utm_medium: string,         // Medium UTM ou 'none'
-  utm_campaign: string,       // Campagne UTM ou 'none'
-  utm_term: string,           // Terme UTM
-  utm_content: string,        // Contenu UTM
-  referrer: string,           // Document referrer ou 'direct'
-  landing_page: string,       // URL de la landing page
+  utm_source: string,      // ou 'direct'
+  utm_medium: string,      // ou 'none'
+  utm_campaign: string,    // ou 'none'
+  utm_term: string,
+  utm_content: string,
+  referrer: string,        // document.referrer ou 'direct'
+  landing_page: string,
+  timestamp: string
+}
+```
+
+### `abandon_funnel` **[non utilisé]**
+
+`trackFunnelAbandonment()` ([gtm.ts:509](../lib/analytics/gtm.ts#L509)) est exportée mais **jamais appelée** dans le code. Aucun mécanisme de détection d'abandon n'est branché aujourd'hui. À ré-évaluer ou supprimer.
+
+```javascript
+{
+  event: 'abandon_funnel',
+  user_id: string,
+  session_id: string,
+  step: string,
+  step_number: number,
+  time_spent_seconds: number,
+  last_action: string,
+  device_type, screen_width, screen_height, user_agent,
   timestamp: string
 }
 ```
 
 ---
 
-## Identifiants Utilisateur
+## Fonctions utilitaires
 
-### user_id
+| Fonction | Rôle |
+|---|---|
+| `pushToDataLayer(event, data?)` ([gtm.ts](../lib/analytics/gtm.ts)) | Helper de bas niveau : `window.dataLayer.push({ event, ...data })`. Utilisé par toutes les fonctions de tracking et par `useDbTracking` (qui en récupère `getSessionId`). |
+| `getSessionId(): string` | Récupère/crée le `hp_session_id` (sessionStorage). Réutilisé par `useDbTracking`. |
+| `setFunnelContext(context)` / `getFunnelContext()` | Mémoise le contexte funnel (rubrique, abtest, etc.) pour l'inclure dans chaque event. `getFunnelContext()` est exportée mais **jamais appelée**. |
+| `setFlowType(flowType)` / `getFlowType()` | Mémoise le `flow_type` courant. `getFlowType()` est exportée mais **jamais appelée**. |
+| `resetTrackingState()` ([gtm.ts:85](../lib/analytics/gtm.ts#L85)) | Nettoyage F5 : supprime toutes les clés `hp_viewed_*` (déduplication `isFirstView`), réinitialise `hp_session_id`, et reset `funnelContext`/`currentStepIndex`/`currentFlowType`. Appelée par `FlowStorageReset.tsx`. |
 
-- **Stockage** : `localStorage` (clé: `hp_user_id`)
-- **Format** : `user_{timestamp}_{random}`
-- **Persistance** : Permanent (survit aux sessions)
-
-### session_id
-
-- **Stockage** : `sessionStorage` (clé: `hp_session_id`)
-- **Format** : `session_{timestamp}_{random}`
-- **Persistance** : Durant la session (effacé à la fermeture)
+Helpers internes (non exportés) : `getUserId()`, `isFirstView(key)`, `getDeviceType()`, `getDeviceInfo()`, et les variables d'état `currentStepIndex`, `funnelContext`, `currentFlowType`.
 
 ---
 
-## Fonctions Disponibles
+## Identifiants user / session
+
+| Clé | Stockage | Format | Persistance |
+|---|---|---|---|
+| `hp_user_id` | `localStorage` | `user_{timestamp}_{random}` | Permanent (survit aux sessions) |
+| `hp_session_id` | `sessionStorage` | `session_{timestamp}_{random}` | Durée de l'onglet — supprimé par `resetTrackingState()` au F5 |
+| `hp_viewed_*` | `sessionStorage` | Booléen (`'true'`) | Clés de déduplication `isFirstView` — supprimées par `resetTrackingState()` au F5 |
+
+---
+
+## Inventaire complet des fonctions exportées
+
+Source : `lib/analytics/index.ts` (qui ré-exporte `gtm.ts`).
 
 ### Funnel principal
 
-| Fonction | Description |
-|----------|-------------|
-| `trackFunnelStart()` | Démarre le funnel |
-| `trackAssuranceView()` | Affichage de la page Assurance (pré-Q1) |
-| `trackAssuranceComplete()` | Clic "Continuer" sur la page Assurance |
-| `trackQuestionView(index, data)` | Affichage d'une question |
-| `trackQuestionAnswered(index, id, title, answers, isMulti)` | Réponse à une question |
-| `trackQuestionnaireComplete(total, time)` | Fin questionnaire |
-| `trackProfileView()` | Affichage page profil |
-| `trackProfileTypeSelected(type)` | Sélection type profil |
-| `trackProfileComplete(type, hasCompany, countryId, location)` | Profil complété |
-| `trackBudgetView()` | Affichage de la page /budget (étape prix) |
-| `trackBudgetComplete(budgetRange)` | Clic "Voir ma sélection" sur /budget |
-| `trackBudgetReturn(budgetRange)` | Clic "Précédent" sur /budget (retour questionnaire) |
-| `trackSelectionPageView(recommended, total)` | Page sélection |
-| `trackProductCardClick(id, name, score, action)` | Clic produit |
-| `trackProductSelectionChange(id, action, total)` | Sélection changée |
-| `trackComparisonModalView(ids)` | Modal comparaison |
-| `trackContactFormView(count)` | Formulaire contact |
-| `trackContactFieldFilled(name, index)` | Champ rempli |
-| `trackFormSubmitAttempt(valid, missing)` | Tentative soumission |
-| `trackFormValidationErrors(count, errors)` | Erreurs validation |
-| `trackLeadSubmitted(count, profileType, userKnownStatus)` | Lead soumis |
-| `trackLeadSubmissionError(type, message)` | Erreur soumission |
+| Fonction | Appelants (fichiers réels) |
+|---|---|
+| `trackFunnelStart()` (alias export `trackGTMFunnelStart`) | `NeedsQuestionnaire.tsx` |
+| `trackAssuranceView()` | `AssurancePage.tsx` |
+| `trackAssuranceComplete()` | `AssurancePage.tsx` |
+| `trackQuestionView(questionIndex)` | `NeedsQuestionnaire.tsx` |
+| `trackQuestionnaireComplete(total, time)` (alias `trackGTMQuestionnaireComplete`) | `NeedsQuestionnaire.tsx` |
+| `trackGeoZoneView()` | `geo-zone-client.tsx` |
+| `trackGeoZoneComplete()` | `geo-zone-client.tsx` |
+| `trackProfileView()` | `ProfileTypeStep.tsx` |
+| `trackProfileComplete(profileType)` | `ProfileTypeStep.tsx` |
+| `trackBudgetView()` | `budget-client.tsx` |
+| `trackBudgetComplete(budgetRange)` | `budget-client.tsx` |
+| `trackBudgetReturn(budgetRange)` | `budget-client.tsx` |
+| `trackSelectionPageView(recommended, total)` | `selection-client.tsx` |
+| `trackProductSelectionChange(productId, action, total)` | `SupplierSelectionModal.tsx` |
+| `trackModifyCriteriaModalView()` | `ModifyCriteriaForm.tsx` |
+| `trackCriteriaModified(count)` | `ModifyCriteriaForm.tsx` |
+| `trackProductModalView(productId)` | `ProductDetailModal.tsx` |
+| `trackContactFormView(suppliersCount)` | `ContactForm.tsx` |
+| `trackFormValidationErrors(count, errors?)` | `ContactForm.tsx`, `ContactFormSimple.tsx`, `CustomNeedForm.tsx` |
+| `trackCustomNeedPageView()` | `SomethingToAddForm.tsx` |
+| `trackCustomNeedContactView()` | `SomethingToAddForm.tsx`, `CustomNeedForm.tsx` |
+| `trackLeadSubmitted(count, profileType, userKnownStatus)` (alias `trackGTMLeadSubmitted`) | `useLeadSubmission.ts` |
+| `trackLeadSubmissionError(type, message)` | `useLeadSubmission.ts` |
 
-### Gestion du parcours (flow_type)
+### Hors funnel
 
-| Fonction | Description |
-|----------|-------------|
-| `setFlowType(flowType)` | Définir le type de parcours ('principal', 'pas_assez_produits', 'pas_trouve_recherchez') |
-| `getFlowType()` | Récupérer le type de parcours actuel |
+| Fonction | Appelants |
+|---|---|
+| `trackDeviceInfo()` | `AnalyticsProvider.tsx` |
+| `trackTrafficSource()` | `AnalyticsProvider.tsx` |
 
-### Parcours alternatif (description du besoin)
+### Gestion du contexte
 
-| Fonction | Description |
-|----------|-------------|
-| `trackCustomNeedPageView()` | Page "Description besoin" → `devis_funnel_formulaire` { step_name: 'description-besoin' } |
-| `trackCustomNeedContactView()` | Formulaire coordonnées simplifié → `devis_funnel_formulaire` { step_name: 'formulaire-contact-simple' } |
-
-### Événements secondaires
-
-| Fonction | Description |
-|----------|-------------|
-| `trackCompanySearch(query, results)` | Recherche entreprise |
-| `trackModifyCriteriaModalView()` | Modal critères |
-| `trackCriteriaModified(count, fields)` | Critères modifiés |
-| `trackProductModalView(productId, productName, supplierId)` | Modal produit |
-| `trackFunnelAbandonment(step, number, time, action)` | Abandon funnel |
-| `trackDeviceInfo()` | Info appareil |
-| `trackTrafficSource()` | Source trafic |
+| Fonction | Appelants |
+|---|---|
+| `setFunnelContext(context)` | `NeedsQuestionnaire.tsx` |
+| `setFlowType(flowType)` | `selection-client.tsx`, `SupplierSelectionModal.tsx` (x2), `SomethingToAddForm.tsx`, `CustomNeedForm.tsx` |
+| `pushToDataLayer(event, data?)` | `useDbTracking.ts` (transit du session_id), interne |
+| `resetTrackingState()` | `FlowStorageReset.tsx` |
 
 ---
 
-## Configuration GTM
+## Dead code & fonctions dépréciées
 
-### Triggers recommandés
+| Fonction | Statut | Action recommandée |
+|---|---|---|
+| `getFunnelContext()` | Exportée, jamais appelée | Supprimer l'export ou justifier (utile debug ?) |
+| `getFlowType()` | Exportée, jamais appelée | Supprimer — le `flowType` est récupéré via le store Zustand |
+| `trackComparisonModalView()` | Exportée, jamais appelée. Pas de modale de comparaison active dans l'UI. | Supprimer ou implémenter la feature associée |
+| `trackFunnelAbandonment()` | Exportée, jamais appelée. Aucune logique de détection d'abandon branchée. | Supprimer ou brancher un listener `pagehide`/`visibilitychange` |
+| `trackQuestionNavigation()` | `@deprecated` dans le source | Conservée pour backward compat — pas d'appelant |
+| `trackComparisonModalOpen()` | `@deprecated` dans le source — wrapper sur `trackComparisonModalView` (lui-même unused) | Supprimer la chaîne complète |
+| `trackFormValidationError()` (singulier) | `@deprecated` — remplacée par `trackFormValidationErrors` (pluriel) | Conservée pour backward compat — pas d'appelant |
 
-1. **Trigger Funnel** : Event equals `devis_funnel_formulaire`
-2. **Trigger Conversion** : Event equals `devis_funnel_formulaire` AND `conversion` equals `true`
-3. **Trigger Abandon** : Event equals `abandon_funnel`
+Fonctions documentées dans l'ancien doc et **qui n'ont jamais existé dans le code** (à oublier) :
+- `trackProductCardClick`
+- `trackQuestionAnswered`
+- `trackProfileTypeSelected`
+- `trackContactFieldFilled`
+- `trackFormSubmitAttempt`
 
-### Variables recommandées
-
-- `step_name` - Data Layer Variable
-- `step_type` - Data Layer Variable
-- `step_index` - Data Layer Variable
-- `flow_type` - Data Layer Variable
-- `conversion` - Data Layer Variable
-- `user_id` - Data Layer Variable
-- `profile_type` - Data Layer Variable
-
----
-
-## Exemple de flux complet
-
-```
-1. trackFunnelStart()
-   → devis_funnel_formulaire { step_name: 'funnel-start', step_type: 'init' }
-
-1b. trackAssuranceView()                  // variantes 0/1/null, premier passage
-   → devis_funnel_formulaire { step_name: 'assurance', step_type: 'init' }
-
-1c. trackAssuranceComplete()              // clic "Continuer"
-   → devis_funnel_formulaire { step_name: 'assurance-complete', step_type: 'init' }
-
-2. trackQuestionView(0)
-   → devis_funnel_formulaire { step_name: '1ere-question', step_type: 'question' }
-
-3. trackQuestionView(1)
-   → devis_funnel_formulaire { step_name: '2eme-question', step_type: 'question' }
-
-4. trackQuestionnaireComplete(3, 45)
-   → devis_funnel_formulaire { step_name: 'questionnaire-complete', step_type: 'question' }
-
-5. trackProfileView()
-   → devis_funnel_formulaire { step_name: 'choix-propart', step_type: 'choix-propart' }
-
-6. trackProfileComplete('professional', true, 1, 'Paris')
-   → devis_funnel_formulaire { step_name: 'profile-complete', step_type: 'choix-propart' }
-
-7. trackBudgetView()                     // page /budget rendue (estimation displayable)
-   → devis_funnel_formulaire { step_name: 'budget', step_type: 'prix' }
-
-7b. trackBudgetComplete('between_3000_3500')  // clic "Voir ma sélection"
-   → devis_funnel_formulaire { step_name: 'budget-complete', step_type: 'prix', budget_range: 'between_3000_3500' }
-
-8. trackSelectionPageView(5, 12)
-   → devis_funnel_formulaire { step_name: 'selection-produits', step_type: 'selection' }
-
-9. trackContactFormView(3)
-   → devis_funnel_formulaire { step_name: 'formulaire-contact', step_type: 'contact' }
-
-10. trackLeadSubmitted(3, 'professional', 'unknown')
-   → devis_funnel_formulaire { step_name: 'submit-success', step_type: 'conversion', conversion: true }
-```
+Events historiques marqués DEPRECATED dans l'ancien doc :
+- `vue_page_votre_besoin` → remplacé par `devis_funnel_formulaire { step_name: 'description-besoin' }`
+- `vue_page_vos_coordonnees` → remplacé par `devis_funnel_formulaire { step_name: 'formulaire-contact-simple' }`
+- `vue_modal_produit` (raw) → remplacé par `devis_funnel_formulaire { step_name: 'vue-produit' }`
+- `recherche_entreprise` (raw) → **n'existe plus**
+- `page_vue_critere` (raw) → remplacé par `devis_funnel_formulaire { step_name: 'vue-criteres' }`
+- `critere_modifie` (raw) → remplacé par `devis_funnel_formulaire { step_name: 'criteres-modifies' }`
+- `utilisateur_identifie` (raw) → **n'existe plus**
 
 ---
 
-## KPIs et Requêtes GTM/GA4
+## GA4 & Hotjar
 
-### Funnel Principal
+### GA4 (`lib/analytics/ga4.ts`) — **inutilisé en production**
 
-| KPI | Événement | Filtre |
-|-----|-----------|--------|
-| Nb arrivée funnel | `devis_funnel_formulaire` | `step_name = 'funnel-start'` |
-| Nb arrivée Q1 (Q2 ancienne UX) | `devis_funnel_formulaire` | `step_name = '1ere-question'` |
-| Nb arrivée Pro/Part | `devis_funnel_formulaire` | `step_name = 'choix-propart'` |
-| Nb arrivée sélection | `devis_funnel_formulaire` | `step_name = 'selection-produits'` |
-| Nb arrivée form coordonnées | `devis_funnel_formulaire` | `step_name = 'formulaire-contact'` |
-| Nb leads validés | `devis_funnel_formulaire` | `step_name = 'submit-success'` |
+Fonctions définies, ré-exportées par `index.ts`, mais **aucune n'est appelée dans l'application** :
 
-### Événements Secondaires (avec déduplication)
+| Fonction | Signature |
+|---|---|
+| `trackEvent(action, category, label?, value?)` | Wrapper `gtag('event', action, …)` |
+| `trackPageView(url, title?)` | `gtag('event', 'page_view', …)` |
+| `trackFunnelStart()` (export `trackGA4FunnelStart`) | Alias `trackEvent('funnel_start', …)` |
+| `trackQuestionnaireComplete(time)` (export `trackGA4QuestionnaireCompleteSimple`) | — |
+| `trackLeadSubmitted(leadId, count)` (export `trackGA4LeadSubmittedSimple`) | — |
+| `trackError(type, message)` | — |
+| `trackGA4QuestionAnswered(questionId, answersCount)` | — |
+| `trackGA4QuestionnaireComplete(total, time)` | — |
+| `trackGA4ProfileComplete(profileType, hasCompany)` | — |
+| `trackGA4SupplierSelection(supplierId, action, total)` | — |
+| `trackGA4LeadSubmitted(leadId, suppliersCount, profileType)` | — |
 
-| KPI | Événement | Total | Dédupliqué (unique) |
-|-----|-----------|-------|---------------------|
-| Affichage modifier critères | `page_vue_critere` | COUNT(*) | COUNT(*) WHERE `is_first_view = true` |
-| Affichage besoin différent | `vue_page_votre_besoin` | COUNT(*) | COUNT(*) WHERE `is_first_view = true` |
-| Affichage tableau comparatif | `comparison-modal` | COUNT(*) | COUNT(*) WHERE `is_first_view = true` |
-| Affichage popup produit | `vue_modal_produit` | COUNT(*) | COUNT(*) WHERE `is_first_view = true` |
-| Clics ajouter sélection | `product-selection` | COUNT(*) WHERE `action = 'ajouter'` | COUNT(*) WHERE `is_first_add = true` |
-| Clics retirer sélection | `product-selection` | COUNT(*) WHERE `action = 'retirer'` | COUNT(*) WHERE `is_first_remove = true` |
-| Modification effective critères | `critere_modifie` | COUNT(*) | COUNT(DISTINCT user_id) |
+GA4 reçoit malgré tout les events via la balise GTM (configurée côté GTM), donc l'absence d'appel direct est OK. Le module `ga4.ts` lui-même n'est plus nécessaire — candidat à suppression sauf intention claire de le rebrancher.
 
-### Analyse par type de parcours (flow_type)
+### Hotjar (`lib/analytics/hotjar.ts`) — **inutilisé en production**
 
-| KPI | Événement | Filtre |
-|-----|-----------|--------|
-| Conversions parcours principal | `devis_funnel_formulaire` | `step_name = 'submit-success'` AND `flow_type = 'principal'` |
-| Conversions parcours "pas assez produits" | `devis_funnel_formulaire` | `step_name = 'submit-success'` AND `flow_type = 'pas_assez_produits'` |
-| Conversions parcours "pas trouvé" | `devis_funnel_formulaire` | `step_name = 'submit-success'` AND `flow_type = 'pas_trouve_recherchez'` |
-| Nb redirections automatiques | `devis_funnel_formulaire` | `step_name = 'description-besoin'` AND `flow_type = 'pas_assez_produits'` |
-| Nb clics "pas trouvé" | `devis_funnel_formulaire` | `step_name = 'description-besoin'` AND `flow_type = 'pas_trouve_recherchez'` |
+Fonctions définies, ré-exportées, **aucune n'est appelée** :
+
+| Fonction | Rôle |
+|---|---|
+| `hotjarEvent(name)` | `hj('event', name)` |
+| `hotjarIdentify(userId, attrs?)` | `hj('identify', …)` |
+| `hotjarStateChange(url)` | `hj('stateChange', url)` — pour SPA |
+| `hotjarTagRecording(tags)` | `hj('tagRecording', tags)` |
+| `hotjarTriggerSurvey(surveyId)` | `hj('trigger', surveyId)` |
+| `tagHotjarUser(tag)` | Alias `hotjarTagRecording([tag])` |
+| `HOTJAR_TAGS` (constante) | `STARTED_FUNNEL`, `COMPLETED_QUESTIONNAIRE`, `COMPLETED_PROFILE`, `USED_COMPARISON`, `CONVERTED` |
+
+Le composant `<Hotjar />` ([components/analytics/](../components/analytics)) charge bien le script Hotjar via `app/layout.tsx`, donc le recording fonctionne. Mais aucun tagging ni identification n'est émis depuis l'app — candidat à brancher ou à supprimer.
+
+---
+
+## Configuration GTM recommandée
+
+### Triggers
+
+1. **Trigger Funnel** : `Event equals devis_funnel_formulaire`
+2. **Trigger Conversion** : `Event equals devis_funnel_formulaire` AND `conversion equals true`
+3. **Trigger Trafic Source** : `Event equals source_trafic` (1 hit par session)
+4. **Trigger Device Info** : `Event equals device_info` (1 hit par session)
+
+### Data Layer Variables
+
+- `step_name`, `step_type`, `step_index`, `step_number`
+- `flow_type`, `funnel_context`, `funnel_devisplus`, `rubrique_id`
+- `product.category5`, `abtest2`
+- `conversion`, `profile_type`, `user_known_status`
+- `user_id`, `session_id`
+
+---
+
+## KPIs
+
+### Funnel principal
+
+| KPI | Filtre |
+|---|---|
+| Arrivée funnel | `step_name = 'funnel-start'` |
+| Vue assurance | `step_name = 'assurance'` |
+| Vue Q1 | `step_name = '1ere-question'` |
+| Complétion questionnaire | `step_name = 'questionnaire-complete'` |
+| Arrivée profil | `step_name = 'choix-propart'` |
+| Vue page budget | `step_name = 'budget'` |
+| Choix tranche budget | `step_name = 'budget-complete'` |
+| Arrivée sélection | `step_name = 'selection-produits'` |
+| Arrivée formulaire | `step_name = 'formulaire-contact'` |
+| Leads validés | `step_name = 'submit-success'` |
+| Erreurs soumission | `step_name = 'submit-error'` |
+
+### Déduplication (1ʳᵉ vue par session)
+
+Les fonctions qui poussent un `is_first_view: boolean` permettent de compter à la fois le total et les vues uniques :
+
+| step_name | Total | Unique |
+|---|---|---|
+| `assurance` | `COUNT(*)` | `COUNT(*) WHERE is_first_view = true` |
+| `geo-zone` | `COUNT(*)` | `COUNT(*) WHERE is_first_view = true` |
+| `vue-criteres` | `COUNT(*)` | `COUNT(*) WHERE is_first_view = true` |
+| `vue-produit` | `COUNT(*)` | `COUNT(*) WHERE is_first_view = true` |
+| `description-besoin` | `COUNT(*)` | `COUNT(*) WHERE is_first_view = true` |
+
+Pour `product-selection` : `is_first_add` et `is_first_remove` jouent le même rôle.
+
+### Analyse par parcours
+
+| KPI | Filtre |
+|---|---|
+| Conversions parcours principal | `step_name = 'submit-success'` AND `flow_type = 'principal'` |
+| Conversions parcours "pas assez produits" | `step_name = 'submit-success'` AND `flow_type = 'pas_assez_produits'` |
+| Conversions parcours "pas trouvé" | `step_name = 'submit-success'` AND `flow_type = 'pas_trouve_recherchez'` |
+| Redirections automatiques | `step_name = 'description-besoin'` AND `flow_type = 'pas_assez_produits'` |
+| Clics "pas trouvé" | `step_name = 'description-besoin'` AND `flow_type = 'pas_trouve_recherchez'` |
+
+---
+
+## Tracking DB parallèle
+
+En complément de GTM, l'application pousse des events vers une table de tracking interne via `useDbTracking()` ([hooks/tracking/useDbTracking.ts](../hooks/tracking/useDbTracking.ts)) → `POST /api/tck`. Cette couche est **distincte** de GTM (deux destinations, deux schémas) et est utilisée pour les analyses internes côté HelloPro.
+
+Bail-out automatique sur `localhost` ([useDbTracking.ts:51](../hooks/tracking/useDbTracking.ts#L51)) — rien n'est envoyé en dev local.
+
+Events DB observés dans le code (`event_type.event_name`) :
+
+| Event DB | Émis depuis | Notes |
+|---|---|---|
+| `questionnaire.assurance_view` / `assurance_complete` | `AssurancePage.tsx` | Page assurance pré-Q1 |
+| `questionnaire.*` (questions répondues) | `useDynamicQuestionnaire.ts` | `step_index = numéro de question` |
+| `profile.geo_zone_view`, `profile.geo_zone_complete` | `geo-zone-client.tsx` | Voir convention `profile.*` |
+| `profile.*` (autres) | `useProcessMatchingLogic.ts` (commenté) | À confirmer |
+| `matching.success` / `matching.insufficient_results` | `useProcessMatching.ts` | step_index 2. Avant navigation — indépendant d'une vue de `/selection` |
+| `matching.refetch` | `useProcessMatching.ts` | Refetch après modification des critères |
+| `pricing.budget_view` | `budget-client.tsx` | Guard `sessionStorage hp_viewed_db_budget_view` (1× par session) |
+| `pricing.budget_return` | `budget-client.tsx` | Clic "Précédent" depuis `/budget` |
+| `selection.selection_view` | `selection-client.tsx` | Guard `sessionStorage hp_viewed_db_selection_view` — séparé de `matching.success`, mesure la vue effective de la page |
+| `selection.select` / `selection.deselect` | `SupplierSelectionModal.tsx` | Action utilisateur sur un fournisseur |
+| `contact.*`, `conversion.*` | `useLeadSubmission.ts` | Soumission de lead |
+
+Convention anti-doublons : pour les events de vue de page sujets aux remounts React, utiliser une clé `sessionStorage` `hp_viewed_db_<event_name>` (préfixe `hp_viewed_` → nettoyé par `resetTrackingState()` au F5). Voir [budget-client.tsx:75-79](../app/(flow)/budget/budget-client.tsx#L75-L79) et [selection-client.tsx](../app/(flow)/selection/selection-client.tsx) comme références.
+
+> Si tu cherches la doc complète du tracking DB (schéma de payload `/api/tck`, mapping `type_flow`/`type_dmd_categ`), commence par [useDbTracking.ts](../hooks/tracking/useDbTracking.ts) — il n'existe pas de doc séparée à ce jour.

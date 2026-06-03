@@ -11,6 +11,7 @@ type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | '
 interface FunnelContext {
   rubrique_id?: number;
   'product.category5'?: string;
+  abtest2?: string;
 }
 
 
@@ -198,6 +199,9 @@ export function trackQuoteFunnel(
     // Contexte funnel
     rubrique_id: funnelContext.rubrique_id,
     'product.category5': funnelContext['product.category5'],
+
+    // A/B test secondaire (token URL) — omis si absent
+    ...(funnelContext.abtest2 && { abtest2: funnelContext.abtest2 }),
 
     // Type de parcours (seulement si défini)
     ...(currentFlowType && { flow_type: currentFlowType }),
