@@ -6,7 +6,7 @@ then a stubbed _cleanup_stale_state_for_relaunch raises _Sentinel to stop
 before a real subprocess spawns.
 """
 from collections import namedtuple
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 import os as _os
 
 import pytest
@@ -127,3 +127,29 @@ async def test_start_preserves_stashed_at_for_revalidation(monkeypatch, tmp_path
     written = [c.args[1] for c in cache_mocks["set_json"].await_args_list if len(c.args) > 1]
     assert any(d.get("stashed_at") == "2026-06-01T00:00:00" for d in written), \
         "fresh job_data write must preserve stashed_at for unstash re-validation"
+
+
+@pytest.mark.asyncio
+async def test_start_real_unstash_passes_toctou_with_carried_stashed_at(monkeypatch, tmp_path):
+    """End-to-end wiring (unstash_crawl NOT mocked): start_crawl carries stashed_at
+    into the fresh record so the REAL unstash_crawl TOCTOU re-read (get_json #2)
+    passes — proving the carry-forward connects across the two methods. Stops at
+    _verify_bind_mount (controlled 503) right after re-validation. A carry-forward
+    regression would surface here as 409 NOT_STASHED instead of 503."""
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, None)
+    stashed = _stashed_record()
+    fresh_carried = {**stashed, "status": "starting"}  # carry-forward keeps stashed_at
+    # get_json #1 = prior-record capture in start_crawl; #2 = unstash_crawl TOCTOU re-read.
+    cache_mocks["get_json"].side_effect = [stashed, fresh_carried]
+    crawler_manager.cache_service.redis_client.exists = AsyncMock(return_value=False)  # no stash in progress
+    # Real unstash_crawl runs; mock only the lock primitives + the bind-mount stop-point.
+    manager._acquire_ownership_lock = AsyncMock(return_value="lockval")
+    manager._release_ownership_lock = AsyncMock()
+    manager._verify_bind_mount = Mock(
+        side_effect=HTTPException(status_code=503, detail={"error_code": "BIND_MOUNT_MISSING"}))
+    with pytest.raises(HTTPException) as exc:
+        await _call_start(manager)
+    detail = exc.value.detail
+    code = detail.get("error_code") if isinstance(detail, dict) else None
+    assert code == "BIND_MOUNT_MISSING"  # reached bind-mount → TOCTOU stashed_at gate passed
+    assert code != "NOT_STASHED"          # carry-forward did NOT regress
