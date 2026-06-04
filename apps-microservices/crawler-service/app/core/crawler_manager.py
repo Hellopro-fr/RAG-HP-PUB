@@ -383,6 +383,12 @@ class CrawlerManager:
         lock_key = f"{CRAWL_LOCK_PREFIX}{crawl_id}"
         job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
 
+        # Capture the prior Redis record BEFORE the fresh job_data write below
+        # (the set_json a few lines down overwrites it). Used by the resume-on-start
+        # unstash to detect a stashed crawl being relaunched. is_restart (OOM
+        # relaunch) never stashes, so skip the read there.
+        prior_job_info = None if is_restart else await cache_service.get_json(job_key)
+
         # Build job data early (pid will be patched after spawn).
         # last_heartbeat is set to now() immediately so concurrent reconciliation
         # on other replicas sees a fresh heartbeat — preventing the 60s blind
@@ -401,6 +407,13 @@ class CrawlerManager:
             "oom_restart_count": oom_restart_count,
             "replica_id": os.uname().nodename
         }
+
+        # Preserve stashed_at into the fresh record so the write below does not
+        # clear it before the resume-on-start unstash runs: unstash_crawl
+        # re-validates stashed_at against Redis (TOCTOU) and would 409 NOT_STASHED
+        # if it were already gone. unstash_crawl clears it after restoring.
+        if prior_job_info and prior_job_info.get("stashed_at"):
+            job_data["stashed_at"] = prior_job_info["stashed_at"]
 
         # --- CAPACITY SHORT-CIRCUITS (Spec 2026-05-22) ---
         # A. LOCAL capacity check — in-memory, ZERO Redis ops.
@@ -502,6 +515,28 @@ class CrawlerManager:
                         "global_limit": current_max_global,
                         "current_running": new_count - 1
                     }
+                )
+
+        # --- AUTO-STASH: resume-on-start ---
+        # If this crawl's own data is stashed in GCS, restore it BEFORE storage
+        # setup so the crawl resumes from its request_queue instead of starting
+        # fresh (which would orphan the GCS stash + waste local disk). Runs before
+        # _cleanup_stale_state_for_relaunch so the restored stale completion marker
+        # is stripped. Mirrors the previous_crawl_id restore + /results unstash.
+        if prior_job_info and prior_job_info.get("stashed_at"):
+            logger.info(f"Crawl '{crawl_id}' is stashed; unstashing from GCS to resume "
+                        f"instead of starting fresh.")
+            try:
+                await self.unstash_crawl(prior_job_info)
+            except HTTPException:
+                await _rollback_claim(decrement_counter=True)
+                raise
+            except Exception as e:
+                await _rollback_claim(decrement_counter=True)
+                logger.error(f"Failed to unstash crawl '{crawl_id}' on start: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to unstash crawl '{crawl_id}' from GCS: {str(e)}",
                 )
 
         # --- STORAGE SETUP ---
