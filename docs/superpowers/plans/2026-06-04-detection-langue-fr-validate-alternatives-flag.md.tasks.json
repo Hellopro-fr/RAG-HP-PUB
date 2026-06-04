@@ -4,33 +4,33 @@
     {
       "id": 17,
       "subject": "Task 1: Add validate_alternatives to request/opts models",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Declare validate_alternatives (default True) on DetectionRequest, BatchDetectionRequest, AsyncBatchSubmitRequest, BatchOpts — mirroring homepage_fallback.\n\n**Files:** schemas.py (:45-48, :153-156, :274, :294); test_validate_alternatives.py (create).\n\n**Verify:** cd apps-microservices/api-detection-langue-fr && pytest tests/test_validate_alternatives.py -v\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/models/schemas.py\", \"apps-microservices/api-detection-langue-fr/tests/test_validate_alternatives.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_validate_alternatives.py -v\", \"acceptanceCriteria\": [\"4 models expose validate_alternatives default True\", \"each accepts explicit False\", \"no other field changed\"]}\n```"
     },
     {
       "id": 18,
       "subject": "Task 2: Gate two browser paths in DomainFR + skip metric",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Add validate_alternatives ctor field; gate _validate_alternative_urls call (else: unvalidated medium alts) + Case-6 browser loop; add VALIDATION_SKIPPED counter.\n\n**Files:** metrics.py (after :62); domain_fr.py (imports; ctor :167-179; :884-886; :1195-1196); test_domain_fr.py (append TestValidateAlternativesGating).\n\n**Verify:** cd apps-microservices/api-detection-langue-fr && pytest tests/test_domain_fr.py -v\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/core/metrics.py\", \"apps-microservices/api-detection-langue-fr/app/core/domain_fr.py\", \"apps-microservices/api-detection-langue-fr/tests/test_domain_fr.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_domain_fr.py -v\", \"acceptanceCriteria\": [\"flag False skips _validate_alternative_urls; medium validated=False; hreflang validated=True\", \"flag False: Case 6 no fetch_html\", \"flag True validates (regression)\", \"VALIDATION_SKIPPED increments on skip\"]}\n```"
     },
     {
       "id": 19,
       "subject": "Task 3: Thread flag through routes + async worker",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [17, 18],
       "description": "**Goal:** Pass validate_alternatives from /detect, _run_batch_core/_process_item_core, sync /detect-batch BatchOpts, async worker BatchOpts into both DomainFR constructions. /detect-debug keeps default.\n\n**Files:** routes.py (:131-140, :258-263, :291-296, :339-348, :406-414, :652-658); async_jobs.py (:189-193); test_validate_alternatives.py (append).\n\n**Verify:** cd apps-microservices/api-detection-langue-fr && pytest tests/test_validate_alternatives.py -v ; pytest tests/test_routes_invalid_page.py -v\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/app/api/routes.py\", \"apps-microservices/api-detection-langue-fr/app/core/async_jobs.py\", \"apps-microservices/api-detection-langue-fr/tests/test_validate_alternatives.py\"], \"verifyCommand\": \"cd apps-microservices/api-detection-langue-fr && pytest tests/test_validate_alternatives.py -v\", \"acceptanceCriteria\": [\"/detect flag false: alts present, no browser\", \"_run_batch_core threads flag\", \"async BatchOpts threads flag\", \"/detect-debug ignores flag\"]}\n```"
     },
     {
       "id": 20,
       "subject": "Task 4: Crawler sends validate_alternatives:false on homepage detect",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [19],
       "description": "**Goal:** Add validateAlternatives? to DetectOptions, forward as validate_alternatives in /detect body, set validateAlternatives:false on homepage detect (routes.ts:473).\n\n**Files:** DetectionLangueClient.ts (:28-33, :102-109); routes.ts (:473-476); DetectionLangueClient.test.ts (create, co-located).\n\n**Verify:** cd apps-microservices/crawler-service/crawler && node --import tsx --test src/class/DetectionLangueClient.test.ts && npm run build\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/class/DetectionLangueClient.ts\", \"apps-microservices/crawler-service/crawler/src/routes.ts\", \"apps-microservices/crawler-service/crawler/src/class/DetectionLangueClient.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && node --import tsx --test src/class/DetectionLangueClient.test.ts && npm run build\", \"acceptanceCriteria\": [\"body validate_alternatives:false when option false\", \"field absent when option omitted\", \"homepage call sends false\", \"tsc build passes\"]}\n```"
     },
     {
       "id": 21,
       "subject": "Task 5: Document the flag in both CLAUDE.md",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [20],
       "description": "**Goal:** Document validate_alternatives in api-detection-langue-fr/CLAUDE.md (semantics, default true, skip-all, metric, debug ignores, Case-6 verdict change) and crawler-service/CLAUDE.md (homepage opt-out + why).\n\n**Files:** apps-microservices/api-detection-langue-fr/CLAUDE.md; apps-microservices/crawler-service/CLAUDE.md.\n\n**Verify:** git diff --stat shows both files.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-detection-langue-fr/CLAUDE.md\", \"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"git diff --stat\", \"acceptanceCriteria\": [\"detection CLAUDE.md documents flag\", \"crawler CLAUDE.md documents opt-out\"]}\n```"
     }
