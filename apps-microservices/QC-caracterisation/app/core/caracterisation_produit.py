@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-BATCH_SIZE = 5  # Nombre de produits traités en parallèle
+BATCH_SIZE = 15  # Nombre de produits traités en parallèle
 
 
 class CaracterisationProduitGenerator:
