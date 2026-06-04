@@ -30,6 +30,7 @@ export interface DetectOptions {
     forcedMethod?: string;
     useNlpDetection?: boolean;
     proxyUrl?: string;
+    validateAlternatives?: boolean;
 }
 
 export interface CheckUrlResult {
@@ -106,6 +107,7 @@ export class DetectionLangueClient {
                     forced_method: options?.forcedMethod ?? undefined,
                     use_nlp_detection: options?.useNlpDetection ?? true,
                     proxy_url: options?.proxyUrl ?? undefined,
+                    validate_alternatives: options?.validateAlternatives ?? undefined,
                 });
                 return response.data;
             } catch (error: any) {

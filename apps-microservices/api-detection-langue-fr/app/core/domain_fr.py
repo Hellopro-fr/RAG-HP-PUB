@@ -19,6 +19,7 @@ from app.models.schemas import (
 )
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
+from app.core.metrics import VALIDATION_SKIPPED
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -169,12 +170,14 @@ class DomainFR:
         homepage: str,
         forced_method: Optional[str] = None,
         use_nlp_detection: bool = True,
-        original_homepage: Optional[str] = None
+        original_homepage: Optional[str] = None,
+        validate_alternatives: bool = True,
     ):
         self.homepage = homepage
         self.original_homepage = original_homepage or homepage
         self.forced_method = forced_method
         self.use_nlp_detection = use_nlp_detection
+        self.validate_alternatives = validate_alternatives
         self.tracker = RedirectTracker()
         self.language_detector = LanguageDetector()
     
@@ -881,8 +884,23 @@ class DomainFR:
         except Exception:
             pass
 
-        # Validate candidates via HTTP (parallel, max 3 concurrent)
-        validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        # Validate candidates via HTTP (parallel, max 3 concurrent) — only when enabled.
+        if self.validate_alternatives:
+            validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        else:
+            # Skip-all: no httpx, no browser. Return medium candidates unvalidated.
+            validated_results = [
+                AlternativeUrl(
+                    url=c['url'],
+                    method=c['method'],
+                    reliability='low',
+                    validated=False,
+                    region_priority=self._french_region_priority(c['url'], c.get('hreflang_value', '')),
+                )
+                for c in candidates_to_validate
+            ]
+            if candidates_to_validate:
+                VALIDATION_SKIPPED.inc()
         all_alternatives.extend(validated_results)
 
         # Sort by: 1) reliability (high > medium > low), 2) region priority (France > generic > other)
@@ -1193,7 +1211,7 @@ class DomainFR:
         # Exécute la détection complète (fetch + NLP) sur les meilleures alternatives
         # pour confirmer qu'elles sont réellement en français, pas juste accessibles.
         reliable_alternatives = [a for a in alternatives if a.validated]
-        if reliable_alternatives:
+        if self.validate_alternatives and reliable_alternatives:
             challenge_blocked_count = 0
             challenge_blocked_service = None
             fetch_failed_count = 0

@@ -61,6 +61,12 @@ HOMEPAGE_FALLBACK_TRIGGERED = Counter(
     labelnames=("outcome",),
 )
 
+# Times alternative-URL validation was skipped because validate_alternatives=false.
+VALIDATION_SKIPPED = Counter(
+    "detection_alt_validation_skipped_total",
+    "Times alternative-URL validation (httpx + browser + Case-6) was skipped because validate_alternatives=false",
+)
+
 # Async job API metrics.
 ASYNC_JOBS_SUBMITTED = Counter(
     "detect_async_jobs_submitted_total",

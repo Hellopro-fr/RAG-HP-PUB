@@ -46,6 +46,10 @@ class DetectionRequest(BaseModel):
         default=True,
         description="Si la page demandée est invalide (404, soft-404, redirect-to-home), tenter une fois la page d'accueil du domaine. Désactiver pour avoir une réponse strictement URL-level."
     )
+    validate_alternatives: bool = Field(
+        default=True,
+        description="Valider les URLs alternatives via HTTP/navigateur (httpx + fallback navigateur + confirmation NLP). false = parsing seul, aucune requête réseau sur les alternatives (réduit la charge navigateur/OOM). Les alternatives hreflang restent validated=true (déclaration de confiance)."
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -153,6 +157,10 @@ class BatchDetectionRequest(BaseModel):
     homepage_fallback: bool = Field(
         default=True,
         description="Tenter un repli vers la page d'accueil si la page demandée est invalide (pour chaque item du lot)."
+    )
+    validate_alternatives: bool = Field(
+        default=True,
+        description="Valider les URLs alternatives via HTTP/navigateur (appliqué à chaque item). false = parsing seul, aucune requête réseau sur les alternatives."
     )
 
     model_config = {
@@ -272,6 +280,7 @@ class BatchOpts:
     force_refresh: bool = False
     max_concurrency: int = 10
     homepage_fallback: bool = True
+    validate_alternatives: bool = True
 
 
 @dataclass
@@ -292,6 +301,7 @@ class AsyncBatchSubmitRequest(BaseModel):
     force_refresh: bool = Field(default=False)
     max_concurrency: int = Field(default=10, ge=1, le=50)
     homepage_fallback: bool = Field(default=True)
+    validate_alternatives: bool = Field(default=True)
     client_job_id: Optional[str] = Field(
         default=None,
         description="Caller idempotency key. A re-submit with the same key returns the existing job."

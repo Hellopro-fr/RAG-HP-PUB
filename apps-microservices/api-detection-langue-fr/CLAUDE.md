@@ -202,6 +202,21 @@ Batch Pass 2 retry: `fetch_failed`, `challenge_page`, and `admission_rejected` (
 - `detection_validation_verdicts_total{verdict}` — counter, label values: `valid`, `http_error`, `soft_404`, `redirected_to_home`.
 - `detection_homepage_fallback_triggered_total{outcome}` — counter, label values: `success`, `rejected`, `network_failure`.
 
+## Alternative-URL Validation Skip (`validate_alternatives`)
+
+`validate_alternatives: bool = true` on `DetectionRequest`, `BatchDetectionRequest`, and `AsyncBatchSubmitRequest` (threaded via `BatchOpts`). When **false**, COMPLETE-mode detection still **parses** alternatives from the HTML but performs **zero HTTP/browser work** on them:
+
+- skips the httpx Phase-1 + Phase-2 browser validation (`_validate_alternative_urls` → `scrape_html`),
+- skips the Case-6 browser NLP-confirmation loop (`fetch_html` per validated alt).
+
+Returned alts: hreflang → `validated:true` (trusted declaration, unchanged); medium (`data-lang`/`link`/`option`) → `validated:false, reliability:'low'`. Default **true** ⇒ existing callers (BO) keep full validation.
+
+**Why:** `crawler-service` sends `html_content` for the homepage in `complete` mode; the alt-validation browser opens (not the initial page) were the residual OOM / `socket hang up` source. Setting `validate_alternatives=false` removes them while preserving the hreflang prefixes the crawler's Regional Path Exclusion consumes.
+
+**Deliberate behavior change (flagged calls only):** a site whose provided homepage content is not NLP-confirmed French but exposes an NLP-confirmable French alternative previously returned `ok=true` via Case 6; with the flag off it returns `ok=false` (falls through to Case 7/9). `/detect-debug` **ignores** the flag (always validates, to show the full pipeline).
+
+Metric: `detection_alt_validation_skipped_total` (no labels) — increments once per flagged skip with ≥1 candidate.
+
 ## Dependencies on Other Services
 
 None (standalone). Requires Apify proxy (`APIFY_PROXY` env var). Optionally uses Redis for caching (`REDIS_URL` env var).

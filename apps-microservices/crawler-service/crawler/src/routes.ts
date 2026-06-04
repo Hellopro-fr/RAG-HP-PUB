@@ -473,6 +473,7 @@ router.addDefaultHandler(
                     const detectResult = await detectionClient.detect(url, content, {
                         mode: "complete",
                         proxyUrl: proxyUrl ?? undefined,
+                        validateAlternatives: false,
                     });
                     _timing.detectEndAt = Date.now();
                     _detectMethod = detectResult.method;

@@ -190,6 +190,7 @@ class JobManager:
             proxy_url=req.proxy_url, use_nlp_detection=req.use_nlp_detection,
             force_refresh=req.force_refresh, max_concurrency=req.max_concurrency,
             homepage_fallback=req.homepage_fallback,
+            validate_alternatives=req.validate_alternatives,
         )
         task = asyncio.create_task(
             self._run_job(job_id, cjid, list(req.items), req.mode, opts)
