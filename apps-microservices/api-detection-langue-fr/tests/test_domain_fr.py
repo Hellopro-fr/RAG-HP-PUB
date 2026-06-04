@@ -760,3 +760,50 @@ class TestHreflangValidation:
         candidate_urls = [c['url'] for c in captured_candidates]
         assert "https://jaunin.com/nos-realisations" not in candidate_urls
         assert "https://jaunin.com/fr/home" in candidate_urls
+
+
+class TestValidateAlternativesGating:
+    """validate_alternatives=False must open no browser for alternatives."""
+
+    # hreflang (trusted, validated=true, zero-HTTP) + a /fr/ <a> link (medium, needs validation)
+    HTML_WITH_ALTS = (
+        '<html lang="en"><head>'
+        '<link rel="alternate" hreflang="fr-FR" href="https://example.com/fr-FR/">'
+        '</head><body><a href="https://example.com/fr/page">Version FR</a>'
+        '<p>Some English content here for the body.</p></body></html>'
+    )
+
+    @pytest.mark.asyncio
+    async def test_skip_does_not_validate_and_marks_medium_unvalidated(self):
+        from app.core import metrics
+        before = metrics.VALIDATION_SKIPPED._value.get()
+        detector = DomainFR("https://example.com", validate_alternatives=False)
+        with patch.object(detector, "_validate_alternative_urls", new=AsyncMock()) as spy:
+            alts = await detector.detect_alternative_languages(self.HTML_WITH_ALTS)
+        spy.assert_not_awaited()
+        hreflang = [a for a in alts if a.method == "hreflang"]
+        medium = [a for a in alts if a.method != "hreflang"]
+        assert hreflang and all(a.validated is True for a in hreflang)
+        assert medium and all(a.validated is False and a.reliability == "low" for a in medium)
+        assert metrics.VALIDATION_SKIPPED._value.get() == before + 1
+
+    @pytest.mark.asyncio
+    async def test_default_true_validates(self):
+        detector = DomainFR("https://example.com", validate_alternatives=True)
+        with patch.object(detector, "_validate_alternative_urls", new=AsyncMock(return_value=[])) as spy:
+            await detector.detect_alternative_languages(self.HTML_WITH_ALTS)
+        spy.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_case6_skipped_no_browser_fetch(self):
+        # Non-French homepage content + a validated hreflang FR alt -> would hit Case 6.
+        # With the flag off, Case 6 must be skipped and fetch_html never called.
+        detector = DomainFR("https://example.com", validate_alternatives=False)
+        with patch("app.core.domain_fr.fetch_html", new=AsyncMock()) as fetch_spy, \
+             patch.object(detector.language_detector, "detect_from_text_content_fasttext",
+                          return_value={"lang": "en", "confidence": 0.95, "method": "nlp_detection_fasttext"}), \
+             patch.object(detector.language_detector, "detect_from_text_content",
+                          return_value={"lang": "en", "confidence": 0.95}):
+            result = await detector.check_page_if_french(self.HTML_WITH_ALTS, DetectionMode.COMPLETE)
+        fetch_spy.assert_not_awaited()
+        assert result.ok is False
