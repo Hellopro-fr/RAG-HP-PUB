@@ -51,7 +51,12 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           { label: 'Conseils', href: '/' },
           { label: page.hero.title },
         ]}
-        slot={page.pageType !== 'top' ? <HeroQuoteForm question={page.formulaire_ao ?? null} /> : undefined}
+        slot={page.pageType !== 'top' ? (
+          <HeroQuoteForm
+            question={page.formulaire_ao ?? null}
+            infoRubrique={page.infoRubrique ?? null}
+          />
+        ) : undefined}
       />
 
       <main className="mx-auto max-w-[1400px] grid lg:grid-cols-[280px_1fr] gap-10 px-4 py-10 lg:px-6">

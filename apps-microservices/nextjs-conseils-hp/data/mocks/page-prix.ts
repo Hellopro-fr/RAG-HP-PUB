@@ -3,6 +3,21 @@ import type { ConseilPage } from '@/types/conseils';
 export const mockPagePrix: ConseilPage = {
   slug: 'combien-coute-un-batiment-elevage',
   pageType: 'prix',
+  formulaire_ao: {
+    id: 2001661,
+    question: "Quel type d'élevage souhaitez-vous réaliser dans le bâtiment ?",
+    avecImage: true,
+    typeSelection: 1, // 1 = choix unique → clic direct ouvre le modal
+    choix: [
+      { id: 101, label: 'Élevage bovin',    image: 'https://www.hellopro.fr/images/vignettes/vache.png' },
+      { id: 102, label: 'Élevage porcin',   image: 'https://www.hellopro.fr/images/vignettes/cochon.png' },
+      { id: 103, label: 'Élevage ovin',     image: 'https://www.hellopro.fr/images/vignettes/mouton.png' },
+      { id: 104, label: 'Élevage caprin',   image: 'https://www.hellopro.fr/images/vignettes/chevre.png' },
+      { id: 105, label: 'Élevage cunicole', image: '' },
+      { id: 106, label: 'Autre',            image: '' },
+      { id: 107, label: 'Je ne sais pas encore', image: '' },
+    ],
+  },
   meta: {
     title: "Combien coûte un bâtiment d'élevage ? Prix 2026 | HelloPro",
     description:
