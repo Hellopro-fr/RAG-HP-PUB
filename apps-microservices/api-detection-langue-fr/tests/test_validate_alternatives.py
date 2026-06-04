@@ -31,3 +31,17 @@ class TestValidateAlternativesSchema:
     def test_batch_opts_default_true_and_overridable(self):
         assert BatchOpts().validate_alternatives is True
         assert BatchOpts(validate_alternatives=False).validate_alternatives is False
+
+    def test_batch_request_accepts_false(self):
+        req = BatchDetectionRequest(
+            items=[BatchItem(url="https://example.com")],
+            validate_alternatives=False,
+        )
+        assert req.validate_alternatives is False
+
+    def test_async_submit_request_accepts_false(self):
+        req = AsyncBatchSubmitRequest(
+            items=[BatchItem(url="https://example.com")],
+            validate_alternatives=False,
+        )
+        assert req.validate_alternatives is False
