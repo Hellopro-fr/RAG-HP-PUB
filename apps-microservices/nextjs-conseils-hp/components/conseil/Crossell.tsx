@@ -1,13 +1,12 @@
-import { ArrowRight, Lightbulb, BookOpen, Wallet, ShieldCheck } from 'lucide-react';
+import { Lightbulb, BookOpen, Wallet, ShieldCheck } from 'lucide-react';
+import type { LienInterne } from '@/types/conseils';
+import { CitedProductsCarousel } from './CitedProductsCarousel';
 
-// TODO Phase 8 : ces données viendront de l'API (produits cités + articles liés)
-const PRODUCTS = [
-  { cat: 'Bâtiment modulaire', name: 'Bâtiment acier galvanisé adapté à l\'élevage avec toiture PV', price: 'Sur devis' },
-  { cat: 'Stabulation', name: 'Barrière de stabulation agricole pour bovins', price: 'Dès 280 €' },
-  { cat: 'Pailleuse', name: 'Pailleuse-distributrice tractée 12 m³', price: 'Dès 14 900 €' },
-  { cat: 'Photovoltaïque', name: 'Hangar photovoltaïque clé en main 1 000 m²', price: 'Sur étude' },
-];
+interface CrossellProps {
+  liensIntexts?: LienInterne[];
+}
 
+// TODO Phase 8 : remplacer par données API (articles liés)
 type ArticleType = 'Conseil' | 'Guide' | 'Financement' | 'Réglementation';
 const ARTICLES: { type: ArticleType; title: string; icon: typeof Lightbulb }[] = [
   { type: 'Conseil', title: 'Tout savoir sur l\'installation de panneaux photovoltaïques sur des bâtiments agricoles', icon: Lightbulb },
@@ -23,31 +22,13 @@ const TYPE_STYLES: Record<ArticleType, string> = {
   Réglementation: 'bg-foreground/10 text-foreground',
 };
 
-export function Crossell() {
+export function Crossell({ liensIntexts }: CrossellProps) {
   return (
     <section className="not-prose my-12 space-y-10">
-      {/* Produits cités */}
-      <div>
-        <h2 className="text-2xl font-extrabold text-foreground">
-          Matériels &amp; bâtiments cités dans cet article
-        </h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {PRODUCTS.map((p) => (
-            <a
-              key={p.name}
-              href="#"
-              className="group rounded-xl border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
-            >
-              <div className="mb-3 aspect-[4/3] w-full overflow-hidden rounded-md bg-secondary">
-                <div className="h-full w-full bg-gradient-to-br from-primary-soft to-secondary" />
-              </div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-cta">{p.cat}</div>
-              <div className="mt-1 line-clamp-2 text-sm font-semibold text-foreground">{p.name}</div>
-              <div className="mt-2 text-sm font-bold text-primary">{p.price}</div>
-            </a>
-          ))}
-        </div>
-      </div>
+      {/* Produits cités — dynamique depuis liens_intexts */}
+      {liensIntexts && liensIntexts.length > 0 && (
+        <CitedProductsCarousel items={liensIntexts} />
+      )}
 
       {/* Pour aller plus loin */}
       <div>
@@ -74,7 +55,6 @@ export function Crossell() {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-primary transition group-hover:translate-x-1" />
               </a>
             );
           })}

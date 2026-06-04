@@ -74,6 +74,7 @@ export interface PhpBlocContenu {
   items?: PhpFaqItem[];
   texte?: string;
   image?: PhpImage;
+  images?: PhpImage[]; // type 13 image-image
   estimation?: PhpEstimation;
   cta?: PhpCta;
   video?: string;
@@ -113,6 +114,7 @@ export interface PhpLienInterne {
   titre: string;
   description: string;
   url: string;
+  prix?: string;
 }
 
 export interface PhpAoChoix {

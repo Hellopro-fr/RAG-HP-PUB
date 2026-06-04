@@ -26,6 +26,7 @@ export const mockPageAutre: ConseilPage = {
       type: 'resume',
       order: 1,
       data: {
+        title: "L'essentiel à retenir",
         items: [
           { label: 'Autorisation de conduite', text: 'Document nominatif valable 5 ans, obligatoire pour tout opérateur.' },
           { label: 'CACES R489', text: 'Catégorie 1 requise pour les balayeuses autoportées.' },
@@ -110,6 +111,43 @@ export const mockPageAutre: ConseilPage = {
           },
         ],
       },
+    },
+  ],
+  liensIntexts: [
+    {
+      id: 10,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/1/2/3/balayeuse-autoportee-123.jpg',
+      titre: 'Balayeuse autoportée',
+      description: 'Balayeuse autoportée thermique bac 400 L, largeur de travail 1 200 mm, idéale voirie communale.',
+      url: 'https://www.hellopro.fr/balayeuse-autoportee-123.html',
+    },
+    {
+      id: 11,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/4/5/6/balayeuse-tractee-456.jpg',
+      titre: 'Balayeuse traînée',
+      description: 'Balayeuse traînée pour tracteur, montage 3 points, largeur 1 500 à 2 000 mm, brosses acier.',
+      url: 'https://www.hellopro.fr/balayeuse-trainee-456.html',
+      prix: 'Dès 1 800 €',
+    },
+    {
+      id: 12,
+      type: 1,
+      photo: 'https://www.hellopro.fr/images/produit/7/8/9/epi-protection-voirie-789.jpg',
+      titre: 'Équipement de protection',
+      description: 'Kit EPI complet pour agents voirie, gilet haute visibilité classe 3, gants anti-coupures.',
+      url: 'https://www.hellopro.fr/epi-voirie-789.html',
+      prix: 'Dès 85 €',
+    },
+    {
+      id: 13,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/2/3/4/panneau-signalisation-234.jpg',
+      titre: 'Signalisation',
+      description: 'Panneau de signalisation temporaire classe 2, pied lestable, conforme chantiers voirie.',
+      url: 'https://www.hellopro.fr/signalisation-temporaire-234.html',
+      prix: 'Dès 45 €',
     },
   ],
 };

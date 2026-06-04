@@ -60,11 +60,12 @@ describe('transformPhpConseilPage', () => {
     expect(page.hero.subtitle).toBeUndefined();
   });
 
-  it('transforme un bloc faq (type 1) — question/reponse → q/a', () => {
-    const response = withBlocs([{ type: 1, ordre: 1, contenu: { items: [{ question: 'Q1?', reponse: 'R1.' }] } }]);
+  it('transforme un bloc h2 (type 1) depuis contenu.titre', () => {
+    const response = withBlocs([{ type: 1, ordre: 1, contenu: { titre: 'Prix de construction' } }]);
     const page = transformPhpConseilPage(response);
-    expect(page.blocks[0].type).toBe('faq');
-    expect((page.blocks[0].data as any).items[0]).toEqual({ q: 'Q1?', a: 'R1.' });
+    expect(page.blocks[0].type).toBe('h2');
+    expect((page.blocks[0].data as any).title).toBe('Prix de construction');
+    expect((page.blocks[0].data as any).id).toBe('prix-de-construction');
   });
 
   it('transforme un bloc texte (type 2)', () => {
@@ -121,16 +122,14 @@ describe('transformPhpConseilPage', () => {
     expect((page.blocks[0].data as any).productIds).toEqual(['111', '222', '333']);
   });
 
-  it('transforme un tableau HTML (type 9) en <table>', () => {
+  it('transforme un tableau (type 9) en headers + rows', () => {
     const page = transformPhpConseilPage(withBlocs([{
       id: 1, type: 9, ordre: 1,
       contenu: { table: [['Titre 1', 'Titre 2'], ['col 1', 'col 2']] },
     }]));
     expect(page.blocks[0].type).toBe('tableau-html');
-    const html = (page.blocks[0].data as any).html as string;
-    expect(html).toContain('<table>');
-    expect(html).toContain('<th>Titre 1</th>');
-    expect(html).toContain('<td>col 2</td>');
+    expect((page.blocks[0].data as any).headers).toEqual(['Titre 1', 'Titre 2']);
+    expect((page.blocks[0].data as any).rows).toEqual([['col 1', 'col 2']]);
   });
 
   it('transforme une estimation prix (type 11) en badge', () => {

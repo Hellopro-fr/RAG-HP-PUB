@@ -1,5 +1,5 @@
-import type { ConseilPage, ConseilBlock, ConseilPageType } from '@/types/conseils';
-import type { PhpConseilResponse, PhpBloc } from '@/types/api/page-conseil-php';
+import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne } from '@/types/conseils';
+import type { PhpConseilResponse, PhpBloc, PhpImage } from '@/types/api/page-conseil-php';
 
 const PAGE_TYPE_MAP: Record<number, ConseilPageType> = {
   0: 'autre',
@@ -21,6 +21,24 @@ function extractHeroImage(blocs: PhpBloc[]): string | undefined {
   return undefined;
 }
 
+/** Parse "800x600" → { width: 800, height: 600 }. Retourne {} si invalide. */
+function parseTaille(taille?: string): { width?: number; height?: number } {
+  if (!taille) return {};
+  const [w, h] = taille.split(/[xX]/).map(Number);
+  return w > 0 && h > 0 ? { width: w, height: h } : {};
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
 function tableToHtml(table: string[][]): string {
   if (!table.length) return '';
   const [headerRow, ...dataRows] = table;
@@ -39,12 +57,15 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
   const c = phpBloc.contenu;
 
   switch (phpBloc.type) {
-    case 1: // FAQ
+    case 1: // H2 — titre de section (contenu.titre → id + title, contenu.texte → intro)
+      if (!c.titre) return null;
       return {
         ...base,
-        type: 'faq',
+        type: 'h2',
         data: {
-          items: (c.items ?? []).map(i => ({ q: i.question, a: i.reponse })),
+          id: slugify(c.titre),
+          title: c.titre,
+          ...(c.texte ? { intro: c.texte } : {}),
         },
       };
 
@@ -83,10 +104,10 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
             src: c.image.path,
             alt: c.image.alternatif || c.image.title || '',
           },
-          ...(c.estimation && {
+          ...(c.estimation?.valeur ? {
             estimate: c.estimation.valeur,
             estimateLabel: c.estimation.label,
-          }),
+          } : {}),
           ...(c.cta && { ctaLabel: c.cta.wording }),
           imagePosition: 'right' as const,
         },
@@ -99,6 +120,52 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         data: { youtubeUrl: c.video ?? '' },
       };
 
+    case 13: { // Image + Image — contenu.images[0] et contenu.images[1]
+      const imgs = c.images ?? [];
+      if (imgs.length < 1) return null;
+      const toImg = (img: PhpImage) => ({
+        src: img.path,
+        alt: img.alternatif || img.title || '',
+        ...(img.legende ? { caption: img.legende } : {}),
+      });
+      return {
+        ...base,
+        type: 'image-image',
+        data: {
+          left: toImg(imgs[0]),
+          right: toImg(imgs[1] ?? imgs[0]),
+        },
+      };
+    }
+
+    case 3: // Image seule
+      if (!c.image?.path) return null;
+      return {
+        ...base,
+        type: 'image',
+        data: {
+          src: c.image.path,
+          alt: c.image.alternatif || c.image.title || '',
+          ...(c.image.legende ? { caption: c.image.legende } : {}),
+          ...parseTaille(c.image.taille),
+        },
+      };
+
+    case 5: // Image gauche + Texte droite
+      if (!c.image) {
+        return { ...base, type: 'texte', data: { html: c.texte ?? '' } };
+      }
+      return {
+        ...base,
+        type: 'image-texte',
+        data: {
+          html: c.texte ?? '',
+          image: { src: c.image.path, alt: c.image.alternatif || c.image.title || '' },
+          ...(c.estimation?.valeur ? { estimate: c.estimation.valeur, estimateLabel: c.estimation.label } : {}),
+          imagePosition: 'left' as const,
+        },
+      };
+
     case 7: // Bloc CTA standalone
       if (!c.cta) return null;
       return {
@@ -108,6 +175,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
           title: c.cta.accroche_1 ?? '',
           subtitle: c.cta.accroche_2,
           ctaLabel: c.cta.wording || 'Demander un devis',
+          ...(c.cta.url ? { ctaUrl: c.cta.url } : {}),
         },
       };
 
@@ -120,12 +188,19 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         },
       };
 
-    case 9: // Tableau HTML (2D array → <table>)
+    case 13: // Tableau de prix — même structure que type 9
+    case 9: { // Tableau (première ligne = en-têtes, cellules potentiellement enveloppées dans <div>)
+      const unwrap = (cell: string) => cell.replace(/^<div[^>]*>([\s\S]*)<\/div>$/i, '$1').trim();
+      const [headerRow = [], ...dataRows] = c.table ?? [];
       return {
         ...base,
         type: 'tableau-html',
-        data: { html: tableToHtml(c.table ?? []) },
+        data: {
+          headers: headerRow.map(unwrap),
+          rows: dataRows.map(row => row.map(unwrap)),
+        },
       };
+    }
 
     case 11: // Estimation prix (texte avec badge)
       return {
@@ -137,6 +212,14 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         },
       };
 
+    case 12: // Titre H3
+      if (!c.titre) return null;
+      return {
+        ...base,
+        type: 'h3',
+        data: { title: c.titre },
+      };
+
     case 16: // Avantages / Inconvénients
       if (!c.pros_cons) return null;
       return {
@@ -145,6 +228,18 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         data: {
           pros: c.pros_cons.liste_avantages ?? [],
           cons: c.pros_cons.liste_inconvenients ?? [],
+          ...(c.pros_cons.label_avantages ? { labelPros: c.pros_cons.label_avantages } : {}),
+          ...(c.pros_cons.label_inconvenients ? { labelCons: c.pros_cons.label_inconvenients } : {}),
+        },
+      };
+
+    case 17: // FAQ
+      if (!c.items?.length) return null;
+      return {
+        ...base,
+        type: 'faq',
+        data: {
+          items: c.items.map((item) => ({ q: item.question, a: item.reponse })),
         },
       };
 
@@ -175,5 +270,18 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
       .map(transformBloc)
       .filter((b): b is ConseilBlock => b !== null),
     ...(r.auteur ? { author: r.auteur as ConseilPage['author'] } : {}),
+    ...(r.liens_intexts?.length
+      ? {
+          liensIntexts: r.liens_intexts.map((l): LienInterne => ({
+            id: l.id_mli,
+            type: l.type as 0 | 1 | 2,
+            photo: l.photo,
+            titre: l.titre,
+            description: l.description,
+            url: l.url,
+            ...(l.prix ? { prix: l.prix } : {}),
+          })),
+        }
+      : {}),
   };
 }

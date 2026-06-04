@@ -754,6 +754,25 @@ class CrawlerManager:
         job_info["failure_webhook_request_id"] = rid
         return rid
 
+    def _get_or_create_terminal_webhook_request_id(self, job_info: dict) -> str:
+        """Returns a stable request_id shared by the SUCCESS and STOP webhooks of a job.
+
+        Stored in job_info under "terminal_webhook_request_id" so every terminal delivery
+        for this job — natural success, force-finish stop, reconciliation replay,
+        /pending-callbacks replay — carries the SAME id. PHP dedupes on it, so the
+        completion pipeline runs exactly once even when a success is followed by a
+        force-finish stop(finished) (both reach PHP's success branch).
+
+        Distinct from failure_webhook_request_id so the (already-shipped) failure path is
+        untouched. The caller MUST persist job_info back to Redis via cache_service.set_json.
+        """
+        rid = job_info.get("terminal_webhook_request_id")
+        if rid:
+            return rid
+        rid = str(uuid.uuid4())
+        job_info["terminal_webhook_request_id"] = rid
+        return rid
+
     async def _send_webhook_once(self, url: str, params: dict, crawl_id: str,
                                   webhook_type: str, timeout: float = 5.0) -> bool:
         """Single-attempt webhook send with a custom timeout.
@@ -918,6 +937,13 @@ class CrawlerManager:
                 params["message_erreur_crawling"] = self._map_error_to_message(str(is_error))
         # --- END: Ensure message_erreur_crawling is present ---
 
+        # PW-A: stable request_id shared with the stop webhook; persist so reconciliation
+        # / pending-callbacks replays reuse it and PHP dedupes the duplicate delivery.
+        # We own this key for terminal webhooks: the _callback_payload.json from the TS
+        # crawler carries no request_id, and this assignment is intentionally authoritative.
+        params["request_id"] = self._get_or_create_terminal_webhook_request_id(job_info)
+        await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
+
         await self._send_webhook_with_retry(str(callback_url), params, crawl_id, "success")
 
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int,
@@ -1006,7 +1032,12 @@ class CrawlerManager:
             "timestamp": datetime.utcnow().isoformat(),
             "message_erreur_crawling": self._map_error_to_message(is_error) if is_error else ""
         }
-        
+
+        # PW-A: same shared request_id as the success webhook (a force-finish stop after a
+        # natural success must dedupe against it on the PHP side); persist for replays.
+        params["request_id"] = self._get_or_create_terminal_webhook_request_id(job_info)
+        await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
+
         await self._send_webhook_with_retry(str(url), params, crawl_id, "stop")
 
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):

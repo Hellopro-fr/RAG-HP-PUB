@@ -393,6 +393,10 @@ class UnitNormalizationService:
                 "pa.s": "viscosity",
                 # 'cycles par jour' (French long form of cycles/jour)
                 "cycles par jour": "[frequency]",
+                # --- FIX 17: French time plural (seconde/secondes) ---
+                # Mirrors FIX 8 'minutes' and FIX 10 'heures' patterns.
+                "secondes": "time",
+                "seconde": "time",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -874,6 +878,9 @@ class UnitNormalizationService:
             elif unit_stripped == "cycles par jour":
                 # French long-form of cycles/jour — usage frequency
                 unit = "1 / day"
+            # --- FIX 17: French time plural (seconde/secondes) → Pint canonical 'second'
+            elif unit_stripped in ("secondes", "seconde"):
+                unit = "second"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.

@@ -13,7 +13,7 @@ export function ProsConsBlock({ data }: ProsConsBlockProps) {
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-success text-success-foreground">
             <Check className="h-4 w-4" />
           </span>
-          Avantages
+          {data.labelPros ?? 'Avantages'}
         </h3>
         <ul className="space-y-2 text-sm text-foreground">
           {data.pros.map((p) => (
@@ -30,7 +30,7 @@ export function ProsConsBlock({ data }: ProsConsBlockProps) {
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
             <X className="h-4 w-4" />
           </span>
-          Inconvénients
+          {data.labelCons ?? 'Inconvénients'}
         </h3>
         <ul className="space-y-2 text-sm text-foreground">
           {data.cons.map((c) => (
