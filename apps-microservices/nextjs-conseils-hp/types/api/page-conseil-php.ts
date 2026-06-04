@@ -164,6 +164,7 @@ export interface PhpConseilPage {
   liens_intexts?: PhpLienInterne[];
   pages_conseils_associees?: unknown[];
   formulaire_ao?: PhpAoQuestion[];
+  info_rubrique?: { id: number; libelle: string };
   header?: unknown;
   footer?: unknown;
 }
