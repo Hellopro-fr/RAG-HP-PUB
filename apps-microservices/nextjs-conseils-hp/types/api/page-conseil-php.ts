@@ -114,6 +114,7 @@ export interface PhpLienInterne {
   titre: string;
   description: string;
   url: string;
+  prix?: string;
 }
 
 export interface PhpAoChoix {

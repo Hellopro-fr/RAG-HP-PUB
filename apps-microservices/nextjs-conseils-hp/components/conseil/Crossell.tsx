@@ -1,6 +1,6 @@
-import Image from 'next/image';
-import { ArrowRight, Lightbulb, BookOpen, Wallet, ShieldCheck } from 'lucide-react';
+import { Lightbulb, BookOpen, Wallet, ShieldCheck } from 'lucide-react';
 import type { LienInterne } from '@/types/conseils';
+import { CitedProductsCarousel } from './CitedProductsCarousel';
 
 interface CrossellProps {
   liensIntexts?: LienInterne[];
@@ -27,49 +27,7 @@ export function Crossell({ liensIntexts }: CrossellProps) {
     <section className="not-prose my-12 space-y-10">
       {/* Produits cités — dynamique depuis liens_intexts */}
       {liensIntexts && liensIntexts.length > 0 && (
-        <div>
-          <h2 className="text-2xl font-extrabold text-foreground">
-            Matériels &amp; bâtiments cités dans cet article
-          </h2>
-          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {liensIntexts.map((lien) => (
-              <a
-                key={lien.id}
-                href={lien.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex flex-col rounded-xl border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
-              >
-                {/* Image */}
-                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-t-xl bg-secondary">
-                  {lien.photo ? (
-                    <Image
-                      src={lien.photo}
-                      alt={lien.titre}
-                      fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
-                      className="object-cover transition group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-primary/10 to-secondary" />
-                  )}
-                </div>
-
-                {/* Contenu */}
-                <div className="flex flex-1 flex-col gap-1.5 p-3">
-                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground group-hover:text-primary">
-                    {lien.titre}
-                  </p>
-                  {lien.description && (
-                    <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                      {lien.description}
-                    </p>
-                  )}
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
+        <CitedProductsCarousel items={liensIntexts} />
       )}
 
       {/* Pour aller plus loin */}
@@ -97,7 +55,6 @@ export function Crossell({ liensIntexts }: CrossellProps) {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-primary transition group-hover:translate-x-1" />
               </a>
             );
           })}

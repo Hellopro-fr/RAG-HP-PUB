@@ -76,6 +76,7 @@ export interface LienInterne {
   titre: string;
   description: string;
   url: string;
+  prix?: string;
 }
 
 export interface ConseilPage {
