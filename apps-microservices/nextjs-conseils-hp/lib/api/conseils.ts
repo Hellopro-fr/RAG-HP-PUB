@@ -66,6 +66,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
         id: q.id,
         question: q.question,
         avecImage: q.avec_image === 1,
+        typeSelection: q.type_selection ?? 1,
         choix: (q.choix ?? []).map((c) => ({
           id: c.id,
           label: c.choix,
@@ -115,6 +116,10 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       ];
     }
 
+    const infoRubrique = raw.info_rubrique
+      ? { id: raw.info_rubrique.id, libelle: raw.info_rubrique.libelle }
+      : null;
+
     return {
       ...base,
       breadcrumb,
@@ -126,7 +131,8 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       },
       blocks,
       formulaire_ao,
-      liensIntexts: transformed.liensIntexts,
+      infoRubrique,
+      liensIntexts: transformed.liensIntexts
     };
   } catch (err) {
     console.error(`[fetchConseilPage] id=${id} — exception:`, err);

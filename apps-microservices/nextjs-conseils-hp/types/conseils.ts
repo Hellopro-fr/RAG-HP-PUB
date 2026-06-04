@@ -64,6 +64,8 @@ export interface AoFormQuestion {
   id: string | number;
   question: string;
   avecImage: boolean;
+  /** 1 = choix unique (radio) → clic direct ouvre le modal  /  2+ = choix multiple (checkbox) → bouton CTA */
+  typeSelection: string | number;
   choix: AoChoix[];
 }
 
@@ -88,6 +90,8 @@ export interface ConseilPage {
   author?: AuthorInfo;
   breadcrumb?: Array<{ label: string; href?: string }>;
   formulaire_ao?: AoFormQuestion | null;
+  /** Rubrique principale de la page — source de l'id_rubrique et du libellé pour l'iframe */
+  infoRubrique?: { id: number; libelle: string } | null;
   liensIntexts?: LienInterne[];
   // Spécifiques au pageType (gérés HORS BlockRenderer)
   priceData?: unknown;        // À typer en Phase 8
