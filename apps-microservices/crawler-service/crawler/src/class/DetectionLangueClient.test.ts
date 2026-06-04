@@ -26,3 +26,9 @@ test('detect() omits validate_alternatives when option not provided', async () =
     await client.detect('http://x', '<html></html>', { mode: 'complete' });
     assert.equal(getBody().validate_alternatives, undefined);
 });
+
+test('detect() sends validate_alternatives:true when validateAlternatives=true', async () => {
+    const { client, getBody } = clientWithCapture();
+    await client.detect('http://x', '<html></html>', { mode: 'complete', validateAlternatives: true });
+    assert.equal(getBody().validate_alternatives, true);
+});
