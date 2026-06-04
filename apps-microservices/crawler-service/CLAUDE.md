@@ -214,6 +214,15 @@ Capped at `STASH_MAX_PER_SWEEP` per tick; an in-flight set on the leader prevent
 
 Spec: `docs/superpowers/specs/2026-06-01-auto-stash-unstash-workflow-design.md`. Plan: `docs/superpowers/plans/2026-06-01-auto-stash-unstash-workflow.md`.
 
+### Follow-up (2026-06-02)
+
+- **Resume-on-start unstash.** `start_crawl` now unstashes the **started crawl's own id** when `stashed_at` is set — not just the update-mode `previous_crawl_id`. The prior Redis record is captured before the fresh `job_data` write; if stashed, `unstash_crawl` runs inline before STORAGE SETUP so the crawl resumes from its restored `request_queue` instead of starting fresh and orphaning the GCS stash. `stashed_at` is preserved into the fresh `job_data` so `unstash_crawl`'s TOCTOU re-read doesn't 409 `NOT_STASHED`. `is_restart` (OOM relaunch) skips it. Independent of the `previous_crawl_id` restore — both can fire in one start.
+- **Status visibility.** `GET /status/{id}` (and the list) now expose `stashed_at`, `downloaded_at`, `finished_at`, `size_bytes` (optional/nullable on `CrawlStatus`, mapped in both the main and snapshot `get_status` paths — a stashed crawl takes the snapshot path). Legacy crawls return `null`; BO contract unchanged.
+- **Failed/never-downloaded crawls DO stash** — via the 48h safety-timeout, not the download-grace path. `finished_at` is stamped at the terminal transition *before* the failure webhook is dispatched, so a failed webhook delivery never blocks stashing.
+- **Existing data (pre-feature crawls):** old terminal crawls lack `finished_at`/`downloaded_at`, so the sweep won't time-stash them. Drain them once with `python tools/stash_crawls_batch.py` after deploy (`stash_crawl` doesn't require `finished_at`). Steady-state thereafter is covered by download-grace + the sweep.
+
+Spec: `docs/superpowers/specs/2026-06-02-auto-stash-followup-design.md`. Plan: `docs/superpowers/plans/2026-06-02-auto-stash-followup.md`.
+
 ## robots.txt Blanket Block Bypass
 
 At startup, after fetching robots.txt, the crawler checks if the site has a blanket block (`Disallow: *` or `Disallow: /`) using a multi-path probe (`isBlanketBlock` in `robotsTxtGuard.ts`). Three diverse URLs are tested against `isAllowed()` — if all are blocked, `robots` is set to `undefined`, disabling all robots.txt filtering for the crawl.
