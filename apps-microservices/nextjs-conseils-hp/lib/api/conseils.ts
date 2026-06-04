@@ -71,6 +71,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
           id: c.id,
           label: c.choix,
           ...(c.vignette ? { image: c.vignette } : {}),
+          ...(c.type_input !== undefined ? { typeInput: c.type_input } : {}),
         })),
       };
       console.log(`[fetchConseilPage] id=${id} — formulaire_ao: "${q.question}" (${formulaire_ao.choix.length} choix)`);

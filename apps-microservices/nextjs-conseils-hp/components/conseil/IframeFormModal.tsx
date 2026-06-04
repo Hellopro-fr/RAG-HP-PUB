@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 /**
  * Overlay iframe plein écran — Formulaire demande groupée HelloPro
@@ -36,6 +36,8 @@ interface IframeFormModalProps {
    * Nécessite le listener dans formulaire_minisite.js côté HelloPro.
    */
   selectedChoixIds?: Array<string | number>;
+  /** Valeurs des champs libres (type_input=1) : { id_choix: texte_saisi } */
+  autres?: Record<string | number, string>;
   open: boolean;
   onClose: () => void;
 }
@@ -45,6 +47,7 @@ export function IframeFormModal({
   category,
   referer = 'conseils_next',
   selectedChoixIds,
+  autres,
   open,
   onClose,
 }: IframeFormModalProps) {
@@ -78,15 +81,33 @@ export function IframeFormModal({
         // Fonctionne pour choix unique (radio) ET choix multiple (checkbox)
         // Nécessite le listener dans formulaire_minisite.js côté HelloPro
         if (selectedChoixIds && selectedChoixIds.length > 0 && iframeRef.current?.contentWindow) {
+          // Filtrer les valeurs autres vides
+          const autresNonVides = autres
+            ? Object.fromEntries(
+                Object.entries(autres).filter(([, v]) => v.trim() !== '')
+              )
+            : undefined;
           iframeRef.current.contentWindow.postMessage(
-            { type: 'hellopro_prefill_step1', choixIds: selectedChoixIds },
+            {
+              type: 'hellopro_prefill_step1',
+              choixIds: selectedChoixIds,
+              ...(autresNonVides && Object.keys(autresNonVides).length > 0
+                ? { autres: autresNonVides }
+                : {}),
+            },
             'https://www.hellopro.fr'
           );
         }
         return;
       }
 
-      /* 2. Soumission réussie → redirection MCA (README §8bis.3 Option A) */
+      /* 2. Fermeture demandée par le X interne du formulaire */
+      if (data?.type === 'hellopro_close_modal') {
+        onClose();
+        return;
+      }
+
+      /* 3. Soumission réussie → redirection MCA (README §8bis.3 Option A) */
       if (data?.status === 'success' && typeof data.extraData === 'string') {
         const url = data.extraData;
         if (/^https?:/.test(url)) {
@@ -110,31 +131,6 @@ export function IframeFormModal({
 
   return (
     <>
-      {/*
-        Bouton X — affiché uniquement quand le formulaire est prêt (formReady)
-        Positionné au même endroit que le X natif du formulaire hellopro.fr :
-        - La modale interne est centrée, max-width 1200px
-        - right = (100vw - 1200px) / 2 + ~20px de padding interne
-        - top   = ~100px (modale démarre à ~80px + ~20px padding)
-        - max(16px, ...) = fallback sur mobile quand viewport < 1200px
-      */}
-      {formReady && (
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Fermer le formulaire"
-        style={{
-          position: 'fixed',
-          right: 'max(16px, calc((100vw - 1200px) / 2 + 20px))',
-          top: '100px',
-          zIndex: 10001,
-        }}
-        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white text-foreground shadow-md hover:bg-secondary"
-      >
-        <X className="h-5 w-5" />
-      </button>
-      )}
-
       {/* Loader — visible pendant que l'iframe charge, disparaît dès formReady */}
       {!formReady && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80">
