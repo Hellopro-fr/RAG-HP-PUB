@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { ArrowRight } from 'lucide-react';
 import type { TexteImageBlockData } from '@/types/blocks/texte-image';
 
 interface TexteImageBlockProps {
@@ -40,8 +41,8 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
         dangerouslySetInnerHTML={{ __html: data.html }}
       />
       {data.ctaLabel && (
-        <button className="mt-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover">
-          {data.ctaLabel}
+        <button className="mt-2 inline-flex items-center gap-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover">
+          {data.ctaLabel} <ArrowRight className="h-4 w-4" />
         </button>
       )}
     </div>
