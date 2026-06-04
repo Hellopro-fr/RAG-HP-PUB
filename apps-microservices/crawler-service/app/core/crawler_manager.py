@@ -1425,6 +1425,12 @@ class CrawlerManager:
                 # Enrich snapshot with isError from _callback_payload.json (snapshot may predate it,
                 # and BO reconciliation needs it to route non-success terminal crawls correctly).
                 snapshot_data["is_error"] = await _read_callback_isError(storage_path)
+                # Auto-stash metadata lives only in Redis job_data, never in the
+                # disk snapshot — inject it so terminal/stashed crawls expose it.
+                snapshot_data["stashed_at"] = job_info.get("stashed_at")
+                snapshot_data["downloaded_at"] = job_info.get("downloaded_at")
+                snapshot_data["finished_at"] = job_info.get("finished_at")
+                snapshot_data["size_bytes"] = job_info.get("size_bytes")
                 logger.info(
                     f"Loaded status from snapshot for crawl '{crawl_id}' (status: {job_info['status']}).")
                 return CrawlStatus(**snapshot_data)
@@ -1484,6 +1490,10 @@ class CrawlerManager:
             last_activity=last_url_time,
             last_heartbeat=job_info.get("last_heartbeat"),
             is_error=is_error,
+            stashed_at=job_info.get("stashed_at"),
+            downloaded_at=job_info.get("downloaded_at"),
+            finished_at=job_info.get("finished_at"),
+            size_bytes=job_info.get("size_bytes"),
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
