@@ -104,10 +104,10 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
             src: c.image.path,
             alt: c.image.alternatif || c.image.title || '',
           },
-          ...(c.estimation && {
+          ...(c.estimation?.valeur ? {
             estimate: c.estimation.valeur,
             estimateLabel: c.estimation.label,
-          }),
+          } : {}),
           ...(c.cta && { ctaLabel: c.cta.wording }),
           imagePosition: 'right' as const,
         },
@@ -161,7 +161,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         data: {
           html: c.texte ?? '',
           image: { src: c.image.path, alt: c.image.alternatif || c.image.title || '' },
-          ...(c.estimation && { estimate: c.estimation.valeur, estimateLabel: c.estimation.label }),
+          ...(c.estimation?.valeur ? { estimate: c.estimation.valeur, estimateLabel: c.estimation.label } : {}),
           imagePosition: 'left' as const,
         },
       };
@@ -228,6 +228,8 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         data: {
           pros: c.pros_cons.liste_avantages ?? [],
           cons: c.pros_cons.liste_inconvenients ?? [],
+          ...(c.pros_cons.label_avantages ? { labelPros: c.pros_cons.label_avantages } : {}),
+          ...(c.pros_cons.label_inconvenients ? { labelCons: c.pros_cons.label_inconvenients } : {}),
         },
       };
 
@@ -277,6 +279,7 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
             titre: l.titre,
             description: l.description,
             url: l.url,
+            ...(l.prix ? { prix: l.prix } : {}),
           })),
         }
       : {}),

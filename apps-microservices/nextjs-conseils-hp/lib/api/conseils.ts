@@ -126,6 +126,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       },
       blocks,
       formulaire_ao,
+      liensIntexts: transformed.liensIntexts,
     };
   } catch (err) {
     console.error(`[fetchConseilPage] id=${id} — exception:`, err);
