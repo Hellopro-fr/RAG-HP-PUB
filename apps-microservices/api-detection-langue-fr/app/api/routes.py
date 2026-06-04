@@ -137,6 +137,7 @@ async def _detect_single_url(
     forced_method: Optional[str] = None,
     force_refresh: bool = False,
     homepage_fallback: bool = True,
+    validate_alternatives: bool = True,
 ) -> DetectionResponse:
     """Pipeline de détection FR pour une URL unique."""
     effective_url = url
@@ -260,6 +261,7 @@ async def _detect_single_url(
                         forced_method=forced_method,
                         use_nlp_detection=use_nlp_detection,
                         original_homepage=url,
+                        validate_alternatives=validate_alternatives,
                     )
                     hp_result = await detector.check_page_if_french(hp_fetch.html, mode)
                     hp_result.analyzed_url = homepage
@@ -293,6 +295,7 @@ async def _detect_single_url(
         forced_method=forced_method,
         use_nlp_detection=use_nlp_detection,
         original_homepage=url if effective_url != url else None,
+        validate_alternatives=validate_alternatives,
     )
     result = await detector.check_page_if_french(html_content, mode)
 
@@ -345,6 +348,7 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
             forced_method=request.forced_method,
             force_refresh=request.force_refresh,
             homepage_fallback=request.homepage_fallback,
+            validate_alternatives=request.validate_alternatives,
         )
     except _AdmissionRejected:
         retry_after = os.getenv("ADMISSION_RETRY_AFTER_SECONDS", "30")
@@ -411,6 +415,7 @@ async def _run_batch_core(
                 use_nlp_detection=opts.use_nlp_detection,
                 force_refresh=opts.force_refresh,
                 homepage_fallback=opts.homepage_fallback,
+                validate_alternatives=opts.validate_alternatives,
             )
 
             count = await _increment_count()
@@ -655,6 +660,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
         force_refresh=request.force_refresh,
         max_concurrency=request.max_concurrency,
         homepage_fallback=request.homepage_fallback,
+        validate_alternatives=request.validate_alternatives,
     )
     results, counts = await _run_batch_core(request.items, request.mode, opts)
     processing_time_ms = (time.time() - start_time) * 1000
