@@ -38,6 +38,14 @@ interface IframeFormModalProps {
   selectedChoixIds?: Array<string | number>;
   /** Valeurs des champs libres (type_input=1) : { id_choix: texte_saisi } */
   autres?: Record<string | number, string>;
+  /**
+   * Démarre le formulaire à l'étape 1 au lieu de l'étape 2.
+   * Utiliser pour les CTA mid-article (demande_info.php) où l'utilisateur
+   * n'a pas encore sélectionné de choix. Ajoute &start=1 à l'URL iframe.
+   */
+  startFromStep1?: boolean;
+  /** Paramètres supplémentaires à ajouter tels quels à l'URL iframe (ex: soc, origine…) */
+  extraParams?: Record<string, string>;
   open: boolean;
   onClose: () => void;
 }
@@ -45,21 +53,31 @@ interface IframeFormModalProps {
 export function IframeFormModal({
   idRubrique,
   category,
-  referer = 'conseils_next',
+  referer = 'conseilsnextjs',
   selectedChoixIds,
   autres,
+  startFromStep1 = false,
+  extraParams,
   open,
   onClose,
 }: IframeFormModalProps) {
   const [formReady, setFormReady] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  const extraParamsStr = extraParams
+    ? Object.entries(extraParams)
+        .map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('')
+    : '';
+
   const src =
     `${HP_FORM_BASE}` +
     `?id_rubrique=${encodeURIComponent(idRubrique)}` +
     `&category=${encodeURIComponent(category)}` +
     `&referer=${encodeURIComponent(referer)}` +
-    `&ctx=next`;
+    `&ctx=next` +
+    (startFromStep1 ? '&start=1' : '') +
+    extraParamsStr;
 
   /* Reset à chaque ouverture */
   useEffect(() => {
@@ -81,22 +99,20 @@ export function IframeFormModal({
         // Fonctionne pour choix unique (radio) ET choix multiple (checkbox)
         // Nécessite le listener dans formulaire_minisite.js côté HelloPro
         if (selectedChoixIds && selectedChoixIds.length > 0 && iframeRef.current?.contentWindow) {
-          // Filtrer les valeurs autres vides
           const autresNonVides = autres
             ? Object.fromEntries(
                 Object.entries(autres).filter(([, v]) => v.trim() !== '')
               )
             : undefined;
-          iframeRef.current.contentWindow.postMessage(
-            {
-              type: 'hellopro_prefill_step1',
-              choixIds: selectedChoixIds,
-              ...(autresNonVides && Object.keys(autresNonVides).length > 0
-                ? { autres: autresNonVides }
-                : {}),
-            },
-            'https://www.hellopro.fr'
-          );
+          const prefillPayload = {
+            type: 'hellopro_prefill_step1',
+            choixIds: selectedChoixIds,
+            ...(autresNonVides && Object.keys(autresNonVides).length > 0
+              ? { autres: autresNonVides }
+              : {}),
+          };
+          console.log('[Next → iframe prefill]', JSON.stringify(prefillPayload, null, 2));
+          iframeRef.current.contentWindow.postMessage(prefillPayload, 'https://www.hellopro.fr');
         }
         return;
       }
@@ -119,6 +135,7 @@ export function IframeFormModal({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, onClose]);
 
   /* Bloquer le scroll body */

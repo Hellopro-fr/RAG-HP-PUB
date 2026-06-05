@@ -67,6 +67,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
         question: q.question,
         avecImage: q.avec_image === 1,
         typeSelection: q.type_selection ?? 1,
+        obligatoire: (Number(q.obligatoire) === 1 ? 1 : 0) as 0 | 1,
         choix: (q.choix ?? []).map((c) => ({
           id: c.id,
           label: c.choix,
@@ -133,7 +134,13 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       blocks,
       formulaire_ao,
       infoRubrique,
-      liensIntexts: transformed.liensIntexts
+      liensIntexts: transformed.liensIntexts,
+      ...(transformed.author ? { author: transformed.author } : {}),
+      ...(transformed.conseilsAssocies?.length
+        ? { conseilsAssocies: transformed.conseilsAssocies }
+        : {}),
+      ...(transformed.schemaGuide ? { schemaGuide: transformed.schemaGuide } : {}),
+      ...(transformed.schemaBreadcrumb ? { schemaBreadcrumb: transformed.schemaBreadcrumb } : {}),
     };
   } catch (err) {
     console.error(`[fetchConseilPage] id=${id} — exception:`, err);

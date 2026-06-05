@@ -68,7 +68,18 @@ export interface AoFormQuestion {
   avecImage: boolean;
   /** 1 = choix unique (radio) → clic direct ouvre le modal  /  2+ = choix multiple (checkbox) → bouton CTA */
   typeSelection: string | number;
+  /** 1 = réponse obligatoire avant de valider / 0 = facultatif */
+  obligatoire: 0 | 1;
   choix: AoChoix[];
+}
+
+/** Page conseil associée — "Pour aller plus loin" */
+export interface ConseilAssocie {
+  id: string;
+  titre: string;
+  url: string;
+  /** 0 = autre, 1 = prix, 2 = top */
+  idTag: number;
 }
 
 /** Lien interne issu du champ liens_intexts de l'API PHP */
@@ -95,6 +106,9 @@ export interface ConseilPage {
   /** Rubrique principale de la page — source de l'id_rubrique et du libellé pour l'iframe */
   infoRubrique?: { id: number; libelle: string } | null;
   liensIntexts?: LienInterne[];
+  conseilsAssocies?: ConseilAssocie[];
+  schemaGuide?: Record<string, unknown>;
+  schemaBreadcrumb?: Record<string, unknown>;
   // Spécifiques au pageType (gérés HORS BlockRenderer)
   priceData?: unknown;        // À typer en Phase 8
   topFabricants?: unknown;    // À typer en Phase 8

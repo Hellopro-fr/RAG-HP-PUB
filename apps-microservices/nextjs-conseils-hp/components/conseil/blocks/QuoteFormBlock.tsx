@@ -1,31 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldCheck, Star, Check, HelpCircle, MoreHorizontal, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import { ShieldCheck, Star, Check, ArrowRight } from 'lucide-react';
 import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
 
 interface QuoteFormBlockProps {
   data: QuoteFormBlockData;
 }
 
-const CHOICES: { label: string; emoji: string }[] = [
-  { label: 'Elevage bovin', emoji: '🐄' },
-  { label: 'Elevage porcin', emoji: '🐖' },
-  { label: 'Elevage ovin', emoji: '🐑' },
-  { label: 'Elevage caprin', emoji: '🐐' },
-  { label: 'Elevage cunicole', emoji: '🐇' },
-  { label: 'Autre', emoji: '⋯' },
-  { label: 'Je ne sais pas encore', emoji: '?' },
-];
-
 export function QuoteFormBlock({ data }: QuoteFormBlockProps) {
   const {
     title = 'Maintenant que vous connaissez les prix,',
-    subtitle = 'passez à l\'action.',
+    subtitle = "passez à l'action.",
     ctaLabel = 'Faire une demande groupée (1 min)',
+    question,
   } = data;
 
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState<string | number>('');
+  const choix = question?.choix ?? [];
+  const questionLabel = question?.question ?? 'Quel est votre besoin ?';
 
   return (
     <section className="not-prose my-12 overflow-hidden rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-xl">
@@ -76,31 +70,45 @@ export function QuoteFormBlock({ data }: QuoteFormBlockProps) {
             En 30 secondes, sans engagement. Comparez les meilleurs constructeurs de France.
           </p>
           <h4 className="mb-3 text-sm font-bold text-foreground">
-            Quel type d&apos;élevage souhaitez-vous réaliser dans le bâtiment ?{' '}
-            <span className="text-cta">*</span>
+            {questionLabel} <span className="text-cta">*</span>
           </h4>
-          <div className="grid grid-cols-4 gap-2">
-            {CHOICES.map((c) => {
-              const isActive = selected === c.label;
-              return (
-                <button
-                  key={c.label}
-                  type="button"
-                  onClick={() => setSelected(c.label)}
-                  className={`group flex flex-col items-center gap-2 rounded-lg border bg-background px-2 pb-2 pt-3 text-center transition hover:border-primary hover:shadow-sm ${
-                    isActive ? 'border-primary ring-2 ring-primary/30' : 'border-border'
-                  }`}
-                >
-                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-muted text-2xl ring-1 ring-border">
-                    {c.emoji}
-                  </div>
-                  <div className="text-[11px] font-medium leading-tight text-foreground group-hover:text-primary">
-                    {c.label}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+
+          {choix.length > 0 && (
+            <div className="grid grid-cols-4 gap-2">
+              {choix.map((c) => {
+                const isActive = selected === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelected(c.id)}
+                    className={`group flex flex-col items-center gap-2 rounded-lg border bg-background px-2 pb-2 pt-3 text-center transition hover:border-primary hover:shadow-sm ${
+                      isActive ? 'border-primary ring-2 ring-primary/30' : 'border-border'
+                    }`}
+                  >
+                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-border">
+                      {c.image ? (
+                        <Image
+                          src={c.image}
+                          alt={c.label}
+                          width={56}
+                          height={56}
+                          className="h-full w-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">···</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] font-medium leading-tight text-foreground group-hover:text-primary">
+                      {c.label}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <button
             type="button"
             className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-cta px-4 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-lg transition hover:bg-cta-hover"
