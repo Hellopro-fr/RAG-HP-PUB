@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';;
-import Image from 'next/image';
+import { useEffect, useState } from 'react';
 import { ShieldCheck, Star, Check, ArrowRight } from 'lucide-react';
-import type { AoFormQuestion } from '@/types/conseils';
+import type { AoFormQuestion, AoChoix } from '@/types/conseils';
+import { IframeFormModal } from './IframeFormModal';
 
 interface HeroQuoteFormProps {
   question?: AoFormQuestion | null;
@@ -243,12 +243,6 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
           <span className="text-muted-foreground">&nbsp;· 9 697 avis vérifiés</span>
         </div>
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
-        En 30 secondes, sans engagement. Comparez les meilleurs constructeurs de France.
-      </p>
-      <h3 className="mb-3 text-sm font-bold text-foreground">
-        {questionLabel} <span className="text-cta">*</span>
-      </h3>
 
       <IframeFormModal
         idRubrique={idRubrique}
