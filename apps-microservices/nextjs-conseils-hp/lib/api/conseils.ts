@@ -141,6 +141,13 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
         : {}),
       ...(transformed.schemaGuide ? { schemaGuide: transformed.schemaGuide } : {}),
       ...(transformed.schemaBreadcrumb ? { schemaBreadcrumb: transformed.schemaBreadcrumb } : {}),
+      // Catégories menu header
+      ...(Array.isArray(raw.header?.tous_les_produits) && raw.header.tous_les_produits.length > 0
+        ? {
+            headerCategories: (raw.header.tous_les_produits as Array<{ id: number; nom: string; url: string }>)
+              .map((c) => ({ id: c.id, nom: c.nom, url: c.url })),
+          }
+        : {}),
     };
   } catch (err) {
     console.error(`[fetchConseilPage] id=${id} — exception:`, err);
