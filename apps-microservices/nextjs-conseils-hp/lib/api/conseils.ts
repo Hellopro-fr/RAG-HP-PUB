@@ -134,7 +134,13 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       blocks,
       formulaire_ao,
       infoRubrique,
-      liensIntexts: transformed.liensIntexts
+      liensIntexts: transformed.liensIntexts,
+      ...(transformed.author ? { author: transformed.author } : {}),
+      ...(transformed.conseilsAssocies?.length
+        ? { conseilsAssocies: transformed.conseilsAssocies }
+        : {}),
+      ...(transformed.schemaGuide ? { schemaGuide: transformed.schemaGuide } : {}),
+      ...(transformed.schemaBreadcrumb ? { schemaBreadcrumb: transformed.schemaBreadcrumb } : {}),
     };
   } catch (err) {
     console.error(`[fetchConseilPage] id=${id} — exception:`, err);

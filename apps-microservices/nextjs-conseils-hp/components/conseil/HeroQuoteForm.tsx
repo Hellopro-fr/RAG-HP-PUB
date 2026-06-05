@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';;
+import Image from 'next/image';
 import { ShieldCheck, Star, Check, ArrowRight } from 'lucide-react';
-import type { AoFormQuestion, AoChoix } from '@/types/conseils';
-import { IframeFormModal } from './IframeFormModal';
+import type { AoFormQuestion } from '@/types/conseils';
 
 interface HeroQuoteFormProps {
   question?: AoFormQuestion | null;
@@ -11,31 +11,22 @@ interface HeroQuoteFormProps {
 }
 
 /**
- * Formulaire devis — slot droit du Hero.
- *
- * Comportement :
- *   - typeSelection == 1 (radio) : clic sur un choix → ouvre directement le modal
- *   - typeSelection != 1 (checkbox) : sélection multiple, bouton CTA → ouvre modal
- *
- * Visuels :
- *   - Choix avec image : cercle image + label
- *   - Choix sans image : cercle check (transparent / orange si sélectionné)
- *   - Choix avec typeInput=1 (champ libre) :
- *       non sélectionné → icône + label normal
- *       sélectionné     → label remonté, champ texte affiché en bas
+ * Formulaire devis affiché dans le slot droit du Hero (pages prix et autre).
+ * Reçoit la première question AO depuis l'API (formulaire_ao[0]).
+ * Voir CLAUDE.md §2.2 — slot Hero.
  */
 export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
-  const [selected, setSelected]         = useState<Set<string | number>>(new Set());
-  const [modalOpen, setModalOpen]       = useState(false);
-  const [startStep1, setStartStep1]     = useState(false);
+  const [selected, setSelected] = useState<Set<string | number>>(new Set());
+  const [modalOpen, setModalOpen] = useState(false);
+  const [startStep1, setStartStep1] = useState(false);
   const [pendingChoix, setPendingChoix] = useState<AoChoix | null>(null);
-  const [showError, setShowError]       = useState(false);
+  const [showError, setShowError] = useState(false);
   /** Valeurs saisies dans les champs libres : { id_choix → texte } */
-  const [autreValues, setAutreValues]   = useState<Record<string | number, string>>({});
+  const [autreValues, setAutreValues] = useState<Record<string | number, string>>({});
 
   const questionLabel = question?.question ?? 'Quel est votre besoin ?';
-  const choix         = question?.choix ?? [];
-  const isMultiple    = question ? Number(question.typeSelection) !== 1 : false;
+  const choix = question?.choix ?? [];
+  const isMultiple = question ? Number(question.typeSelection) !== 1 : false;
   const isObligatoire = question ? Number(question.obligatoire) === 1 : true; // défaut = obligatoire
 
   /* Auto-dismiss du message d'erreur après 5s */
@@ -46,7 +37,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
   }, [showError]);
 
   const idRubrique = infoRubrique?.id ?? question?.id ?? '';
-  const category   = infoRubrique?.libelle ?? questionLabel;
+  const category = infoRubrique?.libelle ?? questionLabel;
 
   /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -164,19 +155,18 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         {choix.length > 0 && (
           <div className="grid grid-cols-4 gap-2">
             {choix.map((c) => {
-              const isActive       = selected.has(c.id);
-              const hasTypeInput   = String(c.typeInput) === '1';
-              const hasImage       = Boolean(c.image);
-              const autreVal       = autreValues[c.id] ?? '';
+              const isActive = selected.has(c.id);
+              const hasTypeInput = String(c.typeInput) === '1';
+              const hasImage = Boolean(c.image);
+              const autreVal = autreValues[c.id] ?? '';
 
               return (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => handleChoixClick(c)}
-                  className={`group flex flex-col items-center gap-2 rounded-lg border bg-background px-2 pb-2 pt-3 text-center transition hover:border-primary hover:shadow-sm ${
-                    isActive ? 'border-primary ring-2 ring-primary/30' : 'border-border'
-                  }`}
+                  className={`group flex flex-col items-center gap-2 rounded-lg border bg-background px-2 pb-2 pt-3 text-center transition hover:border-primary hover:shadow-sm ${isActive ? 'border-primary ring-2 ring-primary/30' : 'border-border'
+                    }`}
                 >
                   {/* ── Icône ── */}
                   {hasTypeInput && isActive ? (
@@ -191,24 +181,21 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
                   ) : (
                     /* Pas d'image : cercle check (transparent / orange si sélectionné) */
                     <div
-                      className={`flex h-14 w-14 items-center justify-center rounded-full border-2 transition ${
-                        isActive
-                          ? 'border-cta bg-cta'
-                          : 'border-border bg-transparent'
-                      }`}
+                      className={`flex h-14 w-14 items-center justify-center rounded-full border-2 transition ${isActive
+                        ? 'border-cta bg-cta'
+                        : 'border-border bg-transparent'
+                        }`}
                     >
                       <Check
-                        className={`h-6 w-6 transition ${
-                          isActive ? 'text-cta-foreground' : 'text-border'
-                        }`}
+                        className={`h-6 w-6 transition ${isActive ? 'text-cta-foreground' : 'text-border'
+                          }`}
                       />
                     </div>
                   )}
 
                   {/* ── Label ── */}
-                  <div className={`text-[11px] font-medium leading-tight group-hover:text-primary ${
-                    isActive ? 'text-primary' : 'text-foreground'
-                  }`}>
+                  <div className={`text-[11px] font-medium leading-tight group-hover:text-primary ${isActive ? 'text-primary' : 'text-foreground'
+                    }`}>
                     {c.label}
                   </div>
 
@@ -256,6 +243,12 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
           <span className="text-muted-foreground">&nbsp;· 9 697 avis vérifiés</span>
         </div>
       </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        En 30 secondes, sans engagement. Comparez les meilleurs constructeurs de France.
+      </p>
+      <h3 className="mb-3 text-sm font-bold text-foreground">
+        {questionLabel} <span className="text-cta">*</span>
+      </h3>
 
       <IframeFormModal
         idRubrique={idRubrique}

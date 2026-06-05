@@ -152,7 +152,7 @@ describe('transformPhpConseilPage', () => {
     };
     const page = transformPhpConseilPage(response);
     expect(page.blocks[0].type).toBe('video');
-    expect((page.blocks[0].data as any).youtubeUrl).toBe('https://youtube.com/watch?v=abc');
+    expect((page.blocks[0].data as any).url).toBe('https://youtube.com/watch?v=abc');
   });
 
   it('transforme un bloc CTA standalone (type 7)', () => {

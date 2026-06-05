@@ -5,4 +5,5 @@ export interface FaqItem {
 
 export interface FaqBlockData {
   items: FaqItem[];
+  title?: string;
 }

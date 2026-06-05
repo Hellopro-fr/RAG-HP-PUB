@@ -24,6 +24,7 @@ import {
 } from "./interfaces/queue.js";
 import { context } from "./context.js";
 import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
+import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -469,9 +470,13 @@ export const startCrawler = async (
         });
     }
 
-    // Camoufox: resolve launch options BEFORE constructing crawler (async)
+    // Camoufox: resolve launch options BEFORE constructing crawler (async).
+    // Pin the French locale so navigator.language === 'fr': sites with
+    // client-side language negotiation (e.g. Drupal browser_language_detection)
+    // otherwise redirect the seeded /fr URL to the default-language root.
+    // See camoufoxLaunchInput.ts.
     const camoufoxOpts = camoufoxEnabled
-        ? await camoufoxLaunchOptions({ headless: true })
+        ? await camoufoxLaunchOptions(buildCamoufoxLaunchInput(true))
         : null;
 
     let optionsCrawler: PlaywrightCrawlerOptions = {
