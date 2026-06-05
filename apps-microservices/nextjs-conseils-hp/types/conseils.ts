@@ -107,6 +107,8 @@ export interface ConseilPage {
   infoRubrique?: { id: number; libelle: string } | null;
   liensIntexts?: LienInterne[];
   conseilsAssocies?: ConseilAssocie[];
+  /** Catégories pour le menu "Tous les produits" du header */
+  headerCategories?: Array<{ id: number; nom: string; url: string }>;
   schemaGuide?: Record<string, unknown>;
   schemaBreadcrumb?: Record<string, unknown>;
   // Spécifiques au pageType (gérés HORS BlockRenderer)

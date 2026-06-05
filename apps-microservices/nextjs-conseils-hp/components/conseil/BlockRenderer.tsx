@@ -1,4 +1,4 @@
-import type { ConseilBlock } from '@/types/conseils';
+import type { ConseilBlock, AoFormQuestion } from '@/types/conseils';
 import { H2Block } from './blocks/H2Block';
 import { H3Block } from './blocks/H3Block';
 import { TextBlock } from './blocks/TextBlock';
@@ -38,7 +38,13 @@ import type { VideoBlockData } from '@/types/blocks/video';
  * Couverture exhaustive garantie par le `never` dans le default.
  * Blocs Lot B (partenaire) restent en placeholder jusqu'à leur portage.
  */
-export function BlockRenderer({ block }: { block: ConseilBlock }) {
+interface BlockRendererProps {
+  block: ConseilBlock;
+  formulaire_ao?: AoFormQuestion | null;
+  infoRubrique?: { id: number; libelle: string } | null;
+}
+
+export function BlockRenderer({ block, formulaire_ao, infoRubrique }: BlockRendererProps) {
   switch (block.type) {
     // ── Lot A — Erick ──────────────────────────────────────────────────────
     case 'h2':
@@ -69,7 +75,13 @@ export function BlockRenderer({ block }: { block: ConseilBlock }) {
     case 'brochure':
       return <BrochureBlock data={block.data as unknown as BrochureBlockData} />;
     case 'quote-form':
-      return <QuoteFormBlock data={block.data as unknown as QuoteFormBlockData} />;
+      return (
+        <QuoteFormBlock
+          data={block.data as unknown as QuoteFormBlockData}
+          formulaire_ao={formulaire_ao}
+          infoRubrique={infoRubrique}
+        />
+      );
 
     case 'tableau-html':
       return <TableauHtmlBlock data={block.data as unknown as TableauHtmlBlockData} />;
