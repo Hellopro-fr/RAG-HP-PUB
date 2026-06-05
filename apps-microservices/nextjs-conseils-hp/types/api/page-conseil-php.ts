@@ -144,6 +144,13 @@ export interface PhpAoQuestion {
   choix: PhpAoChoix[];
 }
 
+export interface PhpAuteur {
+  nom_prenom: string;
+  profession: string;
+  description: string;
+  url_photo?: string;
+}
+
 export interface PhpConseilPage {
   id: number;
   titre: string;
@@ -151,7 +158,7 @@ export interface PhpConseilPage {
   url: string;
   seo: PhpSeo;
   fil_ariane: PhpFilAriane[];
-  auteur: unknown;
+  auteur?: PhpAuteur | null;
   date_modification: string;
   /** 0 = autre, 1 = prix, 2 = top */
   id_tag: number;
@@ -164,7 +171,6 @@ export interface PhpConseilPage {
   liens_intexts?: PhpLienInterne[];
   pages_conseils_associees?: unknown[];
   formulaire_ao?: PhpAoQuestion[];
-  info_rubrique?: { id: number; libelle: string };
   header?: unknown;
   footer?: unknown;
 }

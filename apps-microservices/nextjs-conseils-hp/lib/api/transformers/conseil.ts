@@ -1,5 +1,5 @@
-import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne } from '@/types/conseils';
-import type { PhpConseilResponse, PhpBloc, PhpImage } from '@/types/api/page-conseil-php';
+import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne, AuthorInfo } from '@/types/conseils';
+import type { PhpConseilResponse, PhpBloc, PhpImage, PhpAuteur } from '@/types/api/page-conseil-php';
 
 const PAGE_TYPE_MAP: Record<number, ConseilPageType> = {
   0: 'autre',
@@ -117,7 +117,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
       return {
         ...base,
         type: 'video',
-        data: { youtubeUrl: c.video ?? '' },
+        data: { url: c.video ?? '' },
       };
 
     case 13: { // Image + Image — contenu.images[0] et contenu.images[1]
@@ -249,6 +249,15 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
   }
 }
 
+function transformAuteur(auteur: PhpAuteur): AuthorInfo {
+  return {
+    name: auteur.nom_prenom,
+    role: auteur.profession,
+    bio: auteur.description,
+    ...(auteur.url_photo ? { photo: auteur.url_photo } : {}),
+  };
+}
+
 export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
   const r = raw.response;
   const heroImage = extractHeroImage(r.blocs ?? []);
@@ -269,7 +278,7 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
       .sort((a, b) => a.ordre - b.ordre)
       .map(transformBloc)
       .filter((b): b is ConseilBlock => b !== null),
-    ...(r.auteur ? { author: r.auteur as ConseilPage['author'] } : {}),
+    ...(r.auteur ? { author: transformAuteur(r.auteur) } : {}),
     ...(r.liens_intexts?.length
       ? {
           liensIntexts: r.liens_intexts.map((l): LienInterne => ({
