@@ -223,62 +223,47 @@ module "ilb" {
 # }
 
 # -----------------------------------------------------------------------------
-# Secret Manager (Phase 3 - Gestion des secrets)
-# Source: Migre depuis infra-ci-cd/terraform/main.tf
+# Secret Manager (Ticket 001-INFRA-GCP-ARCHI Sprint 002)
+# Active uniquement avec les secrets POC #1 (account-service-backend).
+# Les autres secrets seront ajoutes service par service lors de leur migration.
+# Les VALEURS sont injectees hors Terraform via gcloud secrets versions add
+# (eviter d'avoir les secrets dans le state Terraform).
 # -----------------------------------------------------------------------------
-# module "secret_manager" {
-#   source = "./modules/secret_manager"
-#   secrets = {
-#     "neo4j-password" = {
-#       service = "database"
-#     }
-#     "external-api-keys" = {
-#       service = "api"
-#     }
-#     "rabbitmq-credentials" = {
-#       service = "messaging"
-#     }
-#     "redis-password" = {
-#       service = "cache"
-#     }
-#     "jwt-signing-key" = {
-#       service = "api-gateway"
-#     }
-#     "milvus-credentials" = {
-#       service = "vector-database"
-#     }
-#   }
-#   common_labels = {
-#     environment = var.environment
-#     project     = "rag-hp"
-#   }
-# }
+module "secret_manager" {
+  source = "./modules/secret_manager"
+  secrets = {
+    "account-service-backend-mysql-url" = {
+      service = "account-service-backend"
+    }
+    "account-service-backend-redis-url" = {
+      service = "account-service-backend"
+    }
+    "account-service-backend-jwt-secret" = {
+      service = "account-service-backend"
+    }
+  }
+  common_labels = {
+    environment = var.environment
+    project     = "rag-hp"
+    managed-by  = "terraform"
+    ticket      = "001-infra-gcp-archi"
+  }
+}
 
 # -----------------------------------------------------------------------------
-# Service Accounts CI/CD (Phase 3/4)
-# Source: Migre depuis infra-ci-cd/terraform/main.tf
+# Service Accounts CI/CD + Workload Identity Federation (Sprint 002 Action 2.2)
+# Cree :
+#   - cloud-build-deployer (CI/CD legacy Cloud Build)
+#   - cloudrun-services (SA runtime des services Cloud Run)
+#   - github-deployer (CI/CD GitHub Actions via WIF, plus de cle JSON)
+#   - WIF pool + provider OIDC GitHub (filtre par github_org + github_repo)
 # -----------------------------------------------------------------------------
-# module "service_accounts" {
-#   source     = "./modules/service_accounts"
-#   project_id = var.project_id
-#   dedicated_service_accounts = {
-#     "milvus-reader" = {
-#       display_name = "Milvus Reader SA"
-#       description  = "Service account pour les services lisant Milvus"
-#       roles        = ["roles/storage.objectViewer"]
-#     }
-#     "rabbitmq-consumer" = {
-#       display_name = "RabbitMQ Consumer SA"
-#       description  = "Service account pour les processor services"
-#       roles        = ["roles/logging.logWriter"]
-#     }
-#     "gcs-backup-writer" = {
-#       display_name = "GCS Backup Writer SA"
-#       description  = "Service account pour les jobs de backup"
-#       roles        = ["roles/storage.objectAdmin"]
-#     }
-#   }
-# }
+module "service_accounts" {
+  source      = "./modules/service_accounts"
+  project_id  = var.project_id
+  github_org  = var.github_org
+  github_repo = var.github_repo
+}
 
 # -----------------------------------------------------------------------------
 # Monitoring & Alerting (Phase 3/5)

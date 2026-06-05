@@ -129,3 +129,19 @@ variable "install_gpu_startup_script" {
 #   description = "Self link du subnet (même VPC) dans la région du MIG (europe-west4)."
 #   type        = string
 # }
+
+# =============================================================================
+# Workload Identity Federation - GitHub Actions
+# Ticket 001-INFRA-GCP-ARCHI Sprint 002 Action 2.2
+# Variables consommees par module.service_accounts pour configurer WIF
+# =============================================================================
+
+variable "github_org" {
+  description = "Organisation GitHub autorisee a utiliser WIF (ex: HelloPro). Filtre attribute_condition au niveau du WIF Provider."
+  type        = string
+}
+
+variable "github_repo" {
+  description = "Repo GitHub complet au format 'org/repo' (ex: HelloPro/RAG-HP-PUB). Limite l'impersonation du SA github-deployer aux workflows de ce repo uniquement."
+  type        = string
+}

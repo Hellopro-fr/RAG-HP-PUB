@@ -47,3 +47,24 @@ output "environment" {
   description = "Current environment"
   value       = var.environment
 }
+
+# =============================================================================
+# Workload Identity Federation - GitHub Actions
+# Ticket 001-INFRA-GCP-ARCHI Sprint 002 Action 2.2
+# A copier en Repository Variables GitHub pour configurer le workflow deploy-cloud-run.yml
+# =============================================================================
+
+output "github_deployer_email" {
+  description = "Email du SA github-deployer (Repository Variable GitHub : GCP_DEPLOYER_SA)"
+  value       = module.service_accounts.github_deployer_email
+}
+
+output "wif_provider_name" {
+  description = "Nom complet du Workload Identity Provider (Repository Variable GitHub : GCP_WIF_PROVIDER)"
+  value       = module.service_accounts.wif_provider_name
+}
+
+output "wif_pool_name" {
+  description = "Nom du Workload Identity Pool (pour debugging et reference)"
+  value       = module.service_accounts.wif_pool_name
+}

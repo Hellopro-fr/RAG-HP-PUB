@@ -3,16 +3,18 @@
 # =============================================================================
 
 terraform {
-  required_version = ">= 1.0.0"
+  required_version = ">= 1.5.0"
 
   required_providers {
+    # Pin sur ~> 6.0 (stable) pour eviter les bugs des releases trop recentes
+    # sur Windows (timeout plugin gRPC observe avec v7.35.0).
     google = {
       source  = "hashicorp/google"
-      version = ">= 4.0.0"
+      version = "~> 6.0"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = ">= 4.0.0"
+      version = "~> 6.0"
     }
   }
 }
