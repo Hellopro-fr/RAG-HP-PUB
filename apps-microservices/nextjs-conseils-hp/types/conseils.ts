@@ -58,6 +58,8 @@ export interface AoChoix {
   id: string | number;
   label: string;
   image?: string;
+  /** 1 = champ libre associé au choix (révèle .input-autre dans le formulaire) */
+  typeInput?: string | number;
 }
 
 export interface AoFormQuestion {
