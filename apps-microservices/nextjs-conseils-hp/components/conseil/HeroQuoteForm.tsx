@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldCheck, Star, Check, ArrowRight } from 'lucide-react';
 import type { AoFormQuestion, AoChoix } from '@/types/conseils';
 import { IframeFormModal } from './IframeFormModal';
@@ -25,23 +25,59 @@ interface HeroQuoteFormProps {
  *       sélectionné     → label remonté, champ texte affiché en bas
  */
 export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
-  const [selected, setSelected]       = useState<Set<string | number>>(new Set());
-  const [modalOpen, setModalOpen]     = useState(false);
+  const [selected, setSelected]         = useState<Set<string | number>>(new Set());
+  const [modalOpen, setModalOpen]       = useState(false);
+  const [startStep1, setStartStep1]     = useState(false);
   const [pendingChoix, setPendingChoix] = useState<AoChoix | null>(null);
+  const [showError, setShowError]       = useState(false);
   /** Valeurs saisies dans les champs libres : { id_choix → texte } */
-  const [autreValues, setAutreValues] = useState<Record<string | number, string>>({});
+  const [autreValues, setAutreValues]   = useState<Record<string | number, string>>({});
 
   const questionLabel = question?.question ?? 'Quel est votre besoin ?';
   const choix         = question?.choix ?? [];
   const isMultiple    = question ? Number(question.typeSelection) !== 1 : false;
+  const isObligatoire = question ? Number(question.obligatoire) === 1 : true; // défaut = obligatoire
+
+  /* Auto-dismiss du message d'erreur après 5s */
+  useEffect(() => {
+    if (!showError) return;
+    const t = setTimeout(() => setShowError(false), 5000);
+    return () => clearTimeout(t);
+  }, [showError]);
 
   const idRubrique = infoRubrique?.id ?? question?.id ?? '';
   const category   = infoRubrique?.libelle ?? questionLabel;
 
+  /* ── Helpers ─────────────────────────────────────────────────────────────── */
+
+  /**
+   * Normalise un libellé de choix : décode les entités HTML courantes + minuscules.
+   * Permet la comparaison insensible à la casse et aux entités HTML.
+   */
+  function normalizeLabel(label: string): string {
+    return label
+      .replace(/&ecirc;/gi, 'ê')
+      .replace(/&egrave;/gi, 'è')
+      .replace(/&eacute;/gi, 'é')
+      .replace(/&agrave;/gi, 'à')
+      .replace(/&amp;/gi, '&')
+      .toLowerCase();
+  }
+
+  /**
+   * "Ne sais pas / souhaite être conseillé" → ouvre directement le modal
+   * même en mode choix multiple, car c'est une réponse finale.
+   */
+  function isNeSaisPas(label: string): boolean {
+    const n = normalizeLabel(label);
+    return n.includes('ne sais pas') || n.includes('souhaite être conseillé');
+  }
+
   /* ── Handlers ────────────────────────────────────────────────────────────── */
 
   function handleChoixClick(c: AoChoix) {
-    if (!isMultiple) {
+    if (!isMultiple || isNeSaisPas(c.label)) {
+      // Choix unique OU "Ne sais pas…" → ouvre directement le modal
       setSelected(new Set([c.id]));
       setPendingChoix(c);
       setModalOpen(true);
@@ -65,12 +101,27 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
   }
 
   function handleCtaClick() {
+    const hasSelection = isMultiple ? selected.size > 0 : pendingChoix !== null;
+    if (!hasSelection) {
+      if (isObligatoire) {
+        // Question obligatoire → message d'erreur 5s, pas d'ouverture
+        setShowError(true);
+        return;
+      } else {
+        // Question facultative → ouvrir le formulaire depuis l'étape 1
+        setStartStep1(true);
+        setModalOpen(true);
+        return;
+      }
+    }
+    setStartStep1(false);
     setModalOpen(true);
   }
 
   function handleModalClose() {
     setModalOpen(false);
     setPendingChoix(null);
+    setStartStep1(false);
   }
 
   /* ── Données pour le modal ───────────────────────────────────────────────── */
@@ -98,8 +149,17 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
           En 30 secondes, sans engagement. Comparez les meilleurs constructeurs de France.
         </p>
         <h3 className="mb-3 text-sm font-bold text-foreground">
-          {questionLabel} <span className="text-cta">*</span>
+          {questionLabel}
+          {isObligatoire && <span className="text-cta"> *</span>}
         </h3>
+
+        {/* Message d'erreur — visible si obligatoire + aucune réponse au clic du CTA */}
+        {showError && (
+          <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-destructive">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-destructive text-[10px] text-white">✕</span>
+            Vous devez sélectionner une réponse avant de valider
+          </p>
+        )}
 
         {choix.length > 0 && (
           <div className="grid grid-cols-4 gap-2">
@@ -172,8 +232,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         <button
           type="button"
           onClick={handleCtaClick}
-          disabled={isMultiple && selected.size === 0}
-          className="mt-4 inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-cta px-4 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-lg transition hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-4 inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-cta px-4 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-lg transition hover:bg-cta-hover"
         >
           Faire une demande groupée (1 min) <ArrowRight className="h-4 w-4" />
         </button>
@@ -203,6 +262,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         category={category}
         selectedChoixIds={selectedChoixIds}
         autres={Object.keys(autresNonVides).length > 0 ? autresNonVides : undefined}
+        startFromStep1={startStep1}
         open={modalOpen}
         onClose={handleModalClose}
       />
