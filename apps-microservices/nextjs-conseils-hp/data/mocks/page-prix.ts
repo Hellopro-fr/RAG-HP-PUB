@@ -7,6 +7,7 @@ export const mockPagePrix: ConseilPage = {
     id: 2001661,
     question: "Quel type d'élevage souhaitez-vous réaliser dans le bâtiment ?",
     avecImage: true,
+    obligatoire: 1,
     typeSelection: 1, // 1 = choix unique → clic direct ouvre le modal
     choix: [
       { id: 101, label: 'Élevage bovin',    image: 'https://www.hellopro.fr/images/vignettes/vache.png' },

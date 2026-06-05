@@ -68,6 +68,8 @@ export interface AoFormQuestion {
   avecImage: boolean;
   /** 1 = choix unique (radio) → clic direct ouvre le modal  /  2+ = choix multiple (checkbox) → bouton CTA */
   typeSelection: string | number;
+  /** 1 = réponse obligatoire avant de valider / 0 = facultatif */
+  obligatoire: 0 | 1;
   choix: AoChoix[];
 }
 
