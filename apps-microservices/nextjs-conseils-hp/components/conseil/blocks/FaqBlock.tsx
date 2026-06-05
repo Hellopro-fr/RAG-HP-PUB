@@ -15,7 +15,7 @@ export function FaqBlock({ data }: FaqBlockProps) {
       <div className="mb-6">
         <span className="text-xs font-semibold uppercase tracking-wide text-cta">FAQ</span>
         <h2 className="mt-1 text-3xl font-extrabold text-foreground">
-          Vos questions les plus fréquentes
+          {data.title ?? 'Vos questions les plus fréquentes'}
         </h2>
       </div>
 

@@ -7,6 +7,7 @@ import type { AoFormQuestion } from '@/types/conseils';
 
 interface HeroQuoteFormProps {
   question?: AoFormQuestion | null;
+  infoRubrique?: { id: number; libelle: string } | null;
 }
 
 /**

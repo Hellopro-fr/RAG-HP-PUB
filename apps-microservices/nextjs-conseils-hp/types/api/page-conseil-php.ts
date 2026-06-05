@@ -151,6 +151,14 @@ export interface PhpAuteur {
   url_photo?: string;
 }
 
+export interface PhpConseilAssocie {
+  id: string;
+  titre: string;
+  url: string;
+  /** 0 = autre, 1 = prix, 2 = top */
+  id_tag: number;
+}
+
 export interface PhpConseilPage {
   id: number;
   titre: string;
@@ -169,7 +177,7 @@ export interface PhpConseilPage {
   schema_guide: Record<string, unknown>;
   schema_breadcrumb: Record<string, unknown>;
   liens_intexts?: PhpLienInterne[];
-  pages_conseils_associees?: unknown[];
+  pages_conseils_associees?: PhpConseilAssocie[];
   formulaire_ao?: PhpAoQuestion[];
   header?: unknown;
   footer?: unknown;

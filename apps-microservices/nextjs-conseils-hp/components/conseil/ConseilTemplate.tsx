@@ -7,9 +7,25 @@ import { AuthorBlock } from './AuthorBlock';
 import { Crossell } from './Crossell';
 import { Suppliers } from './Suppliers';
 import { BlockRenderer } from './BlockRenderer';
+import { BrochureBlock } from './blocks/BrochureBlock';
+import { FaqBlock } from './blocks/FaqBlock';
+import { QuoteFormBlock } from './blocks/QuoteFormBlock';
+import type { FaqBlockData } from '@/types/blocks/faq';
 import { extractTOC } from '@/lib/blocks/extractTOC';
 import type { ConseilPage } from '@/types/conseils';
 import type { ResumeBlockData } from '@/types/blocks/resume';
+
+const STATIC_BROCHURE = {
+  title: "Le guide complet pour bien choisir votre bâtiment d'élevage",
+  description: "Toutes les clés pour cadrer votre projet, comparer les solutions et négocier les meilleurs devis — rédigé par nos experts achats pros.",
+  bullets: [
+    'Méthode pour estimer votre budget au juste prix',
+    'Comparatifs matériaux, équipements & constructeurs',
+    'Aides, financement et démarches administratives',
+    'Check-lists prêtes à l\'emploi avant signature',
+  ],
+  ctaLabel: 'Recevoir le guide gratuit',
+};
 
 interface ConseilTemplateProps {
   page: ConseilPage;
@@ -40,6 +56,51 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const contentBlocks = page.blocks
     .filter((b) => b.type !== 'resume')
     .sort((a, b) => a.order - b.order);
+
+  const hasBrochure = contentBlocks.some((b) => b.type === 'brochure');
+  const faqIndex = contentBlocks.findIndex((b) => b.type === 'faq');
+
+  // Le H2 immédiatement avant le FAQ devient le titre de la section FAQ.
+  // Il est retiré du rendu normal pour éviter la duplication.
+  const h2BeforeFaq =
+    faqIndex > 0 && contentBlocks[faqIndex - 1]?.type === 'h2'
+      ? (contentBlocks[faqIndex - 1].data as { title: string }).title
+      : undefined;
+
+  const renderBlocks = h2BeforeFaq
+    ? contentBlocks.filter((_, i) => i !== faqIndex - 1)
+    : contentBlocks;
+
+  // Index du FAQ dans renderBlocks (décalé de -1 si le H2 a été retiré)
+  const renderFaqIndex = faqIndex !== -1 ? (h2BeforeFaq ? faqIndex - 1 : faqIndex) : -1;
+
+  // Point de coupure pour la brochure statique :
+  //   - avant le FAQ s'il existe
+  //   - en fin de liste sinon (brochure affichée après tous les blocs)
+  const brochureSplitAt = !hasBrochure
+    ? (renderFaqIndex !== -1 ? renderFaqIndex : renderBlocks.length)
+    : renderBlocks.length;
+
+  const blocksBeforeBrochure = renderBlocks.slice(0, brochureSplitAt);
+  const blocksFromFaq = renderBlocks.slice(brochureSplitAt);
+
+  const hasQuoteForm = contentBlocks.some((b) => b.type === 'quote-form');
+  const showQuoteForm = !hasQuoteForm && !!page.formulaire_ao && page.pageType !== 'top';
+
+  // Mid-point insertion: advance past any title block so we never cut after an H2/H3
+  let quoteFormAt = Math.floor(blocksBeforeBrochure.length / 2);
+  while (
+    quoteFormAt < blocksBeforeBrochure.length &&
+    ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '')
+  ) {
+    quoteFormAt++;
+  }
+  const blocksBeforeQuoteForm = showQuoteForm
+    ? blocksBeforeBrochure.slice(0, quoteFormAt)
+    : blocksBeforeBrochure;
+  const blocksAfterQuoteForm = showQuoteForm
+    ? blocksBeforeBrochure.slice(quoteFormAt)
+    : [];
 
   return (
     <>
@@ -80,14 +141,39 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
             </div>
           )}
 
-          {/* Rendu dynamique des blocs BO */}
-          {contentBlocks.map((block) => (
+          {/* Première moitié des blocs */}
+          {blocksBeforeQuoteForm.map((block) => (
             <BlockRenderer key={block.id} block={block} />
           ))}
 
+          {/* Formulaire devis injecté au milieu du contenu */}
+          {showQuoteForm && (
+            <QuoteFormBlock data={{ question: page.formulaire_ao ?? undefined }} />
+          )}
+
+          {/* Seconde moitié des blocs */}
+          {blocksAfterQuoteForm.map((block) => (
+            <BlockRenderer key={block.id} block={block} />
+          ))}
+
+          {/* Brochure statique — avant le FAQ s'il existe, sinon après tous les blocs */}
+          {!hasBrochure && <BrochureBlock data={STATIC_BROCHURE} />}
+
+          {/* FAQ (avec titre du H2 précédent) + blocs suivants */}
+          {blocksFromFaq.map((block) =>
+            block.type === 'faq' && h2BeforeFaq ? (
+              <FaqBlock
+                key={block.id}
+                data={{ ...(block.data as unknown as FaqBlockData), title: h2BeforeFaq }}
+              />
+            ) : (
+              <BlockRenderer key={block.id} block={block} />
+            )
+          )}
+
           {/* Blocs de pied communs aux 3 types */}
           <Suppliers />
-          <Crossell liensIntexts={page.liensIntexts} />
+          <Crossell liensIntexts={page.liensIntexts} conseilsAssocies={page.conseilsAssocies} />
           {page.author && <AuthorBlock author={page.author} />}
         </article>
       </main>

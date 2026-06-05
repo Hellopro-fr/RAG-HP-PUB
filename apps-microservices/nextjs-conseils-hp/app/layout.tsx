@@ -9,9 +9,16 @@ export const metadata: Metadata = {
   description: 'Guides, conseils et comparatifs pour vos achats professionnels.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+  head,
+}: {
+  children: React.ReactNode;
+  head: React.ReactNode;
+}) {
   return (
     <html lang="fr">
+      <head>{head}</head>
       <body className="min-h-screen bg-background font-sans antialiased">
         {children}
       </body>

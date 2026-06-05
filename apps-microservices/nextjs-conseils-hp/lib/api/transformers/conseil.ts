@@ -1,5 +1,5 @@
-import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne, AuthorInfo } from '@/types/conseils';
-import type { PhpConseilResponse, PhpBloc, PhpImage, PhpAuteur } from '@/types/api/page-conseil-php';
+import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne, AuthorInfo, ConseilAssocie } from '@/types/conseils';
+import type { PhpConseilResponse, PhpBloc, PhpImage, PhpAuteur, PhpConseilAssocie } from '@/types/api/page-conseil-php';
 
 const PAGE_TYPE_MAP: Record<number, ConseilPageType> = {
   0: 'autre',
@@ -47,6 +47,29 @@ function tableToHtml(table: string[][]): string {
     .map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`)
     .join('');
   return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function normalizeSchemaGuide(raw: Record<string, unknown>): Record<string, unknown> {
+  const author = raw.author;
+  const authorName =
+    typeof author === 'string' ? author : (author as Record<string, unknown> | undefined)?.name ?? author;
+
+  const ordered: Record<string, unknown> = {};
+  if (raw['@context'] !== undefined) ordered['@context'] = raw['@context'];
+  if (raw['@type'] !== undefined)    ordered['@type']    = raw['@type'];
+  if (raw.about !== undefined)       ordered.about       = raw.about;
+  if (raw.name !== undefined)        ordered.name        = raw.name;
+  if (raw.text !== undefined)        ordered.text        = raw.text;
+  if (authorName !== undefined)      ordered.author      = authorName;
+  if (raw.datePublished !== undefined) ordered.datePublished = raw.datePublished;
+  if (raw.image !== undefined)       ordered.image       = raw.image;
+
+  // Champs supplémentaires éventuels non listés ci-dessus
+  for (const key of Object.keys(raw)) {
+    if (!(key in ordered)) ordered[key] = raw[key];
+  }
+
+  return ordered;
 }
 
 function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
@@ -249,6 +272,10 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
   }
 }
 
+function transformConseilAssocie(a: PhpConseilAssocie): ConseilAssocie {
+  return { id: a.id, titre: a.titre, url: a.url, idTag: a.id_tag };
+}
+
 function transformAuteur(auteur: PhpAuteur): AuthorInfo {
   return {
     name: auteur.nom_prenom,
@@ -278,7 +305,12 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
       .sort((a, b) => a.ordre - b.ordre)
       .map(transformBloc)
       .filter((b): b is ConseilBlock => b !== null),
+    ...(r.schema_guide && Object.keys(r.schema_guide).length > 0 ? { schemaGuide: normalizeSchemaGuide(r.schema_guide) } : {}),
+    ...(r.schema_breadcrumb && Object.keys(r.schema_breadcrumb).length > 0 ? { schemaBreadcrumb: r.schema_breadcrumb } : {}),
     ...(r.auteur ? { author: transformAuteur(r.auteur) } : {}),
+    ...(r.pages_conseils_associees?.length
+      ? { conseilsAssocies: r.pages_conseils_associees.map(transformConseilAssocie) }
+      : {}),
     ...(r.liens_intexts?.length
       ? {
           liensIntexts: r.liens_intexts.map((l): LienInterne => ({
