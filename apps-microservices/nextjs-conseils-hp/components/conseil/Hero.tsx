@@ -29,7 +29,7 @@ interface HeroProps {
 
 export function Hero({
   data,
-  pageType,
+  pageType: _pageType,
   author,
   publishedAt,
   readTime = '7 min de lecture',

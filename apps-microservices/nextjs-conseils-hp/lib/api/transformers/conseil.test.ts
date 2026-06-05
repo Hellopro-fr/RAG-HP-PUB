@@ -100,7 +100,7 @@ describe('transformPhpConseilPage', () => {
   it('transforme un bloc vidéo (type 6)', () => {
     const page = transformPhpConseilPage(withBlocs([{ id: 1, type: 6, ordre: 1, contenu: { video: 'https://youtube.com/watch?v=abc' } }]));
     expect(page.blocks[0].type).toBe('video');
-    expect((page.blocks[0].data as any).youtubeUrl).toBe('https://youtube.com/watch?v=abc');
+    expect((page.blocks[0].data as any).url).toBe('https://youtube.com/watch?v=abc');
   });
 
   it('transforme un bloc CTA standalone (type 7)', () => {
