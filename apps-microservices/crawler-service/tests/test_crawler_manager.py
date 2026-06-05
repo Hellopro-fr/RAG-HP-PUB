@@ -1583,3 +1583,71 @@ class TestMonitorProcessFailureCausePersistence:
             '_monitor_process non-OOM path must check current_status_nooom in '
             '("failed", "stopped", "finished") before overwriting status'
         )
+
+
+class TestTerminalWebhookRequestId:
+    """Tests for the terminal-webhook idempotency helper.
+    Pure helper — tested directly. Success and stop senders share one id so PHP dedupes."""
+
+    def _manager(self):
+        from app.core.crawler_manager import CrawlerManager
+        return CrawlerManager.__new__(CrawlerManager)
+
+    def test_terminal_request_id_generated_when_absent(self):
+        mgr = self._manager()
+        job_info: dict = {}
+        rid = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert isinstance(rid, str)
+        _uuid_module.UUID(rid)  # raises if not a valid UUID
+        assert job_info["terminal_webhook_request_id"] == rid
+
+    def test_terminal_request_id_reused(self):
+        mgr = self._manager()
+        existing = "11111111-2222-3333-4444-555555555555"
+        job_info = {"terminal_webhook_request_id": existing}
+        rid = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert rid == existing
+        assert job_info["terminal_webhook_request_id"] == existing
+
+    def test_success_and_stop_share_one_id(self):
+        # Both senders call the same helper with the same job_info, so a natural
+        # success followed by a force-finish stop carries ONE id -> PHP dedupes.
+        mgr = self._manager()
+        job_info: dict = {}
+        rid_success = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        rid_stop = mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert rid_success == rid_stop
+
+    def test_terminal_id_distinct_from_failure_id_key(self):
+        mgr = self._manager()
+        job_info: dict = {}
+        mgr._get_or_create_terminal_webhook_request_id(job_info)
+        assert "terminal_webhook_request_id" in job_info
+        assert "failure_webhook_request_id" not in job_info
+        # Symmetric isolation: the failure helper must not touch the terminal key,
+        # and the two helpers produce independent ids on the same job_info.
+        mgr._get_or_create_failure_request_id(job_info)
+        assert "terminal_webhook_request_id" in job_info  # unchanged
+        assert job_info["failure_webhook_request_id"] != job_info["terminal_webhook_request_id"]
+
+    def test_success_webhook_source_wires_request_id_and_persist(self):
+        import inspect
+        from app.core import crawler_manager as cm
+        src = inspect.getsource(cm.CrawlerManager._send_success_webhook)
+        assert "_get_or_create_terminal_webhook_request_id" in src, \
+            "_send_success_webhook must obtain the shared terminal request_id"
+        assert 'params["request_id"]' in src, \
+            "_send_success_webhook must add request_id to params"
+        assert "set_json" in src, \
+            "_send_success_webhook must persist job_info to Redis before sending"
+
+    def test_stop_webhook_source_wires_request_id_and_persist(self):
+        import inspect
+        from app.core import crawler_manager as cm
+        src = inspect.getsource(cm.CrawlerManager._send_stop_webhook)
+        assert "_get_or_create_terminal_webhook_request_id" in src, \
+            "_send_stop_webhook must obtain the shared terminal request_id"
+        assert 'params["request_id"]' in src, \
+            "_send_stop_webhook must add request_id to params"
+        assert "set_json" in src, \
+            "_send_stop_webhook must persist job_info to Redis before sending"

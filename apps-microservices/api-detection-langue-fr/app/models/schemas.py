@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional
@@ -44,6 +45,10 @@ class DetectionRequest(BaseModel):
     homepage_fallback: bool = Field(
         default=True,
         description="Si la page demandée est invalide (404, soft-404, redirect-to-home), tenter une fois la page d'accueil du domaine. Désactiver pour avoir une réponse strictement URL-level."
+    )
+    validate_alternatives: bool = Field(
+        default=True,
+        description="Valider les URLs alternatives via HTTP/navigateur (httpx + fallback navigateur + confirmation NLP). false = parsing seul, aucune requête réseau sur les alternatives (réduit la charge navigateur/OOM). Les alternatives hreflang restent validated=true (déclaration de confiance)."
     )
 
     model_config = {
@@ -153,6 +158,10 @@ class BatchDetectionRequest(BaseModel):
         default=True,
         description="Tenter un repli vers la page d'accueil si la page demandée est invalide (pour chaque item du lot)."
     )
+    validate_alternatives: bool = Field(
+        default=True,
+        description="Valider les URLs alternatives via HTTP/navigateur (appliqué à chaque item). false = parsing seul, aucune requête réseau sur les alternatives."
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -256,3 +265,65 @@ class DebugDetectionResponse(BaseModel):
     """Reponse de detection avec informations de debug"""
     result: DetectionResponse
     debug: DebugInfo
+
+
+# ============================================================================
+# Async batch job models
+# ============================================================================
+
+@dataclass
+class BatchOpts:
+    """Per-call batch options, decoupled from the request model so the batch
+    core can be driven by both the sync route and the async worker."""
+    proxy_url: Optional[str] = None
+    use_nlp_detection: bool = True
+    force_refresh: bool = False
+    max_concurrency: int = 10
+    homepage_fallback: bool = True
+    validate_alternatives: bool = True
+
+
+@dataclass
+class BatchCounts:
+    """Authoritative tallies returned by the batch core (success/failed/error)."""
+    success_count: int
+    failed_count: int
+    error_count: int
+
+
+class AsyncBatchSubmitRequest(BaseModel):
+    """Submit body for POST /detect-batch-async. Mirrors BatchDetectionRequest
+    plus an optional client idempotency key. Items must contain no duplicate URLs."""
+    items: list[BatchItem] = Field(..., max_length=100)
+    mode: DetectionMode = Field(default=DetectionMode.COMPLETE)
+    proxy_url: Optional[str] = Field(default=None)
+    use_nlp_detection: bool = Field(default=True)
+    force_refresh: bool = Field(default=False)
+    max_concurrency: int = Field(default=10, ge=1, le=50)
+    homepage_fallback: bool = Field(default=True)
+    validate_alternatives: bool = Field(default=True)
+    client_job_id: Optional[str] = Field(
+        default=None,
+        description="Caller idempotency key. A re-submit with the same key returns the existing job."
+    )
+
+
+class AsyncBatchSubmitResponse(BaseModel):
+    job_id: str
+    status: str
+    total: int
+    poll_after_seconds: int
+
+
+class AsyncBatchStatusResponse(BaseModel):
+    job_id: str
+    status: str                                   # pending|running|completed|failed|stale
+    total: int
+    done: int
+    success_count: int
+    failed_count: int
+    error_count: int
+    results: Optional[list[DetectionResponse]] = None
+    processing_time_ms: Optional[float] = None
+    error: Optional[str] = None
+    poll_after_seconds: int

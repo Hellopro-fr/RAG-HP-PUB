@@ -1,0 +1,23 @@
+{
+  "enqueue_crawling_ia": {
+    "database_id": 10,
+    "description": "File d'attente (queue) du pipeline crawling + scraping IA (scrapping_produit_ia) : 1 ligne par domaine. Pilote la machine à états « ECI » des deux phases (crawler puis scraper). Le launcher script_lancer_enqueue_crawling.php sélectionne les domaines éligibles d'après statut_crawler_eci / statut_scraper_eci, date_continuation_eci et nb_retry_eci, puis déclenche crawl/scrape. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_enqueue_crawling_ia",
+    "default_order_by": "id_enqueue_crawling_ia DESC",
+    "rows": null,
+    "columns": {
+      "id_enqueue_crawling_ia": { "type": "int", "desc": "Identifiant unique de la ligne de file (PK, auto-increment)." },
+      "id_domaine_scrapping_produit_ia": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia (DSPI). Contrainte UNIQUE : une seule ligne de file par domaine (1:1). Clé de jointure vers DSPI (qui porte systeme_dspi, statut_dspi, domaine_dspi, data_crawling_dspi…)." },
+      "statut_crawler_eci": { "type": "int", "desc": "État du crawler (machine à états ECI). 0=non commencé · 1=en cours · 2=terminé · 3=partiellement terminé · 4=erreur. Défaut 0. Distribution observée : 2 ≈ 5,6k · 4 ≈ 1,3k · 0/1 marginaux." },
+      "statut_scraper_eci": { "type": "int", "desc": "État du scraper / détection de fiches produit (machine à états ECI). 0=non commencé · 1=en cours · 2=terminé · 3=pas de traitement scraper applicable · 4=erreur. Défaut 0. Distribution observée : 3 ≈ 5,8k · 2 = 111 · 0 marginal." },
+      "method_detect_eci": { "type": "varchar(255)", "desc": "Méthode de détection du scraper : 'auto' (≈ 6,8k) | 'manuelle' (111) | NULL. Conditionne le type de traitement appliqué au domaine." },
+      "date_continuation_eci": { "type": "datetime", "desc": "Date planifiée de reprise/continuation (NULLable). Utilisée pour les crawls partiels : un domaine à statut_crawler_eci=3 redevient éligible à relance quand date_continuation_eci <= NOW()." },
+      "nb_retry_eci": { "type": "int", "desc": "Compteur de tentatives (défaut 0). Relance automatique des erreurs quand statut_crawler_eci=4 ET nb_retry_eci ∈ {1,2}. Max observé : 10 (auto) / 3 (manuelle)." },
+      "date_last_terminal_eci": { "type": "datetime", "desc": "Date du dernier passage à un état terminal (terminé ou erreur), NULLable. NULL = jamais arrivé à un état terminal." }
+    },
+    "relations": [
+      { "column": "id_domaine_scrapping_produit_ia", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "cardinality": "1:1 (UNIQUE)", "note": "DSPI porte le statut métier statut_dspi (ex. 8/9/10/11), systeme_dspi (0/1), domaine_dspi, data_crawling_dspi." }
+    ],
+    "notes": "Machine à états ECI du pipeline scrapping_produit_ia (crawler + scraper). Règle d'éligibilité du launcher : statut_crawler_eci=0, OU (=3 ET date_continuation_eci<=NOW()), OU (=4 ET nb_retry_eci ∈ {1,2}), OU (statut_scraper_eci=0 ET DSPI.systeme_dspi=0). Table sœur du pipeline d'observabilité (crawl_events, crawl_metrics) côté HELLOPRO_IA."
+  }
+}

@@ -52,15 +52,25 @@ mcp-ringover-service/
 
 ## MCP Tools
 
+Active tools (registered in `registry.go`):
+
 | Tool | Ringover API Endpoint | Description |
 |------|----------------------|-------------|
-| `get_calls` | `GET /calls` | List recent calls with optional limit |
-| `get_call_details` | `GET /calls/{callId}` | Get details for a specific call |
-| `get_call_transcription` | `GET /public/empower/call/{calluuid}` | Get call transcription |
-| `get_call_summary` | `GET /public/empower/call/{calluuid}/summary` | Get AI-generated call summary |
-| `get_call_moments` | `GET /public/empower/call/{calluuid}/moments` | Get key moments from a call |
-| `list_contacts` | `GET /contacts` | List all contacts |
-| `list_users` | `GET /users` | List all Ringover users |
+| `list_calls_by_date` | `GET /calls` (`POST /calls` under scope) | List calls within a date range |
+| `search_calls` | `GET /calls` (`POST /calls` under scope) | Filter calls by type / phone / user |
+| `get_call_details` | `GET /calls/{callId}` + `GET /transcriptions/{callId}` | Call details, enriched with its transcription |
+
+`get_call_details` returns `{ "call": <raw /calls/{id}>, "transcription": { "data": <…> } | { "error": "…" } }`.
+The transcription is fetched via `GET /transcriptions/{call_id}` — gated by the **team-level transcription
+feature**, NOT by API-key permissions, and needs no channel→calluuid conversion. `transcription.error` is set
+when the feature is disabled (401) or the call has no transcription (404); the call details are still returned.
+
+Deactivated tools (commented out in `registry.go`): `get_calls` (superseded by the two list/search tools),
+`list_contacts`, `list_users`, and the Empower tools `get_empower_call_uuid` / `get_call_transcription` /
+`get_call_summary` / `get_call_moments`. The Empower routes require the **Empower R permission + an Empower role**
+(Admin/Supervisor/User) and return an opaque `403` otherwise. They live at `GET /empower/...` on the `/v2` base
+(NOT `/public/empower/...`; the channel→calluuid conversion is **GET**, not POST — verified live against the
+public API 2026-06-02). For transcription use the team-gated `GET /transcriptions/{call_id}` instead.
 
 ## MCP Endpoints
 

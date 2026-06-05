@@ -19,6 +19,13 @@ export interface PushedSetOptions {
     ttlSeconds?: number;
     /** Optional health monitor receiving onSuccess('pushed') / onError('pushed', e). */
     monitor?: RedisHealthMonitor;
+    /**
+     * Redis key namespace. Default 'pushed' (key = `pushed:{crawlId}`), so all
+     * existing dataset-write usages are unchanged. Pass 'checked' to give the
+     * UpdateChecker its OWN claim set, decoupling its retry-dedup from the
+     * dataset-write dedup (prevents checkUrl from starving pushData).
+     */
+    keyPrefix?: string;
 }
 
 export class PushedSet {
@@ -34,7 +41,7 @@ export class PushedSet {
         opts?: PushedSetOptions,
     ) {
         this.redis = redisClient;
-        this.key = `pushed:${crawlId}`;
+        this.key = `${opts?.keyPrefix ?? 'pushed'}:${crawlId}`;
         this.ttlSeconds = opts?.ttlSeconds ?? 86400;
         this.monitor = opts?.monitor;
     }

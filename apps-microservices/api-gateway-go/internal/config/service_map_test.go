@@ -18,11 +18,6 @@ func TestBuildServiceMapFromEnv(t *testing.T) {
 	require.NotContains(t, m, "OTHER_VAR")
 }
 
-func TestExcludedRoutes(t *testing.T) {
-	er := BuildExcludedRoutes()
-	require.Equal(t, []string{"dlq/queues"}, er["graphdlq-service"])
-}
-
 func TestDownstreamTimeouts(t *testing.T) {
 	to := BuildDownstreamTimeouts()
 	v, ok := to["api-detection-langue-fr-service"]

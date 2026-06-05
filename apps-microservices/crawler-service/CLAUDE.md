@@ -184,6 +184,45 @@ Distinct from archiving. Use stash to **temporarily free local disk** for crawls
 
 Spec: `docs/superpowers/specs/2026-05-19-stash-unstash-gcs-design.md`.
 
+## Auto-Stash Workflow
+
+Folds the (previously operator-only) stash/unstash into the crawl lifecycle automatically. **Flag-gated: `AUTO_STASH_ENABLED` defaults `false`** — turning it on enables the sweep; the transparency hooks (below) are always active.
+
+**Lifecycle:** a terminal crawl is stashed once it's *consumed* + a grace window, or after a long safety timeout, or under disk pressure. It stays invisibly retrievable, and graduates from stash to archive via a GCS-side move.
+
+**Trigger — the sweep (`_reconcile_locked`):** the leader-elected reconcile loop collects terminal, non-`stashed_at`, non-`archived` crawls each tick and stashes the eligible ones via background `asyncio.create_task` (so a multi-GB tar never holds the leader lock). Eligibility (`_is_stash_eligible`, pure/fail-open):
+- **grace** — `downloaded_at` set AND `now - downloaded_at ≥ STASH_GRACE_SECONDS`. Grace governs *exclusively* when `downloaded_at` is present (a just-downloaded crawl is protected even if it finished long ago).
+- **timeout** — never downloaded AND `now - finished_at ≥ STASH_SAFETY_TIMEOUT_SECONDS` (this also doubles as the investigation window for failed crawls).
+- **disk pressure** — when `_disk_used_pct() ≥ STASH_DISK_HIGH_WATER_PCT`, the largest terminal crawls are stashed early regardless of grace.
+Capped at `STASH_MAX_PER_SWEEP` per tick; an in-flight set on the leader prevents re-selecting a crawl whose tar is still running.
+
+**New `job_data` fields (orthogonal, cached on write):** `finished_at` (stamped at every terminal transition via `_stamp_terminal_fields`), `downloaded_at` (stamped on a successful `GET /results` serve), `size_bytes`. The sweep reads these from Redis — no per-job disk I/O in the leader-held critical section.
+
+**Transparency (always on):**
+- `GET /results` on a stashed crawl → `get_results_archive` unstashes inline, re-reads `job_info`, then serves (502 if the job vanished). Sole result-serving path.
+- Update mode (`start_crawl`) → `_restore_previous_crawl` unstashes a stashed `previous_crawl_id` (the real "start → unstash, continue" path; same-ID restart does not exist). Archived previous crawls still go through `_restore_archived_crawl`.
+
+**Stash → archive (move):** `POST /archive` on a stashed **finished** crawl → `_move_stash_to_archive` writes a `.move-request` marker; the move-flow daemon does `gcloud storage mv stash/{id} → crawls/{id}` (same-bucket server-side rewrite); on `.move-done` the service `_mark_as_archived` + clears `stashed_at`, returning `archive_status='pending_upload'` (a known string — the BO's `3_archive_eligible_domains.php` needs no change). A stashed failed/stopped crawl falls through to the existing finished-only 400 guard.
+
+**Crash/restart durability:** optimistic stash (delete local before GCS upload) is kept — `/app/stash` is a persisted volume; the upload daemon resumes after restart. The sweep re-queues a dead-lettered tar (`_requeue_stash_orphan`, logs `STASH_UPLOAD_ORPHAN`). Cross-replica safety rests on the Redis `stash_lock`; the leader in-flight set is a throughput optimization.
+
+**Observability (log-based):** `AUTO_STASH crawl_id=… reason=grace|timeout|disk_pressure`, `STASH_UPLOAD_ORPHAN`, `STASH_MOVE_LIMBO`, plus the existing `UNSTASH_GCS_ORPHAN`.
+
+**Tunables (`app/core/config.py`):** `AUTO_STASH_ENABLED` (false), `STASH_GRACE_SECONDS` (3600), `STASH_SAFETY_TIMEOUT_SECONDS` (172800), `STASH_DISK_HIGH_WATER_PCT` (85), `STASH_MAX_PER_SWEEP` (5); move flow: `MOVE_REQUESTS_PATH`, `MOVE_RESULTS_PATH`, `MOVE_SOURCE_PREFIX` (stash), `MOVE_TARGET_PREFIX` (crawls), `MOVE_TIMEOUT_SECONDS` (120) — prefix names match the daemon's env vars. BO `/results` callers use a 900s timeout to cover inline unstash.
+
+**Rollout:** Phase 1 (transparency) is safe to ship with `AUTO_STASH_ENABLED=false`. Enable the sweep (Phase 2) only after transparency is proven. The move-flow daemon (Phase 3) runs as a `download_daemon.sh` instance with `ENABLE_MOVE=true`.
+
+Spec: `docs/superpowers/specs/2026-06-01-auto-stash-unstash-workflow-design.md`. Plan: `docs/superpowers/plans/2026-06-01-auto-stash-unstash-workflow.md`.
+
+### Follow-up (2026-06-02)
+
+- **Resume-on-start unstash.** `start_crawl` now unstashes the **started crawl's own id** when `stashed_at` is set — not just the update-mode `previous_crawl_id`. The prior Redis record is captured before the fresh `job_data` write; if stashed, `unstash_crawl` runs inline before STORAGE SETUP so the crawl resumes from its restored `request_queue` instead of starting fresh and orphaning the GCS stash. `stashed_at` is preserved into the fresh `job_data` so `unstash_crawl`'s TOCTOU re-read doesn't 409 `NOT_STASHED`. `is_restart` (OOM relaunch) skips it. Independent of the `previous_crawl_id` restore — both can fire in one start.
+- **Status visibility.** `GET /status/{id}` (and the list) now expose `stashed_at`, `downloaded_at`, `finished_at`, `size_bytes` (optional/nullable on `CrawlStatus`, mapped in both the main and snapshot `get_status` paths — a stashed crawl takes the snapshot path). Legacy crawls return `null`; BO contract unchanged.
+- **Failed/never-downloaded crawls DO stash** — via the 48h safety-timeout, not the download-grace path. `finished_at` is stamped at the terminal transition *before* the failure webhook is dispatched, so a failed webhook delivery never blocks stashing.
+- **Existing data (pre-feature crawls):** old terminal crawls lack `finished_at`/`downloaded_at`, so the sweep won't time-stash them. Drain them once with `python tools/stash_crawls_batch.py` after deploy (`stash_crawl` doesn't require `finished_at`). Steady-state thereafter is covered by download-grace + the sweep.
+
+Spec: `docs/superpowers/specs/2026-06-02-auto-stash-followup-design.md`. Plan: `docs/superpowers/plans/2026-06-02-auto-stash-followup.md`.
+
 ## robots.txt Blanket Block Bypass
 
 At startup, after fetching robots.txt, the crawler checks if the site has a blanket block (`Disallow: *` or `Disallow: /`) using a multi-path probe (`isBlanketBlock` in `robotsTxtGuard.ts`). Three diverse URLs are tested against `isAllowed()` — if all are blocked, `robots` is set to `undefined`, disabling all robots.txt filtering for the crawl.
@@ -237,6 +276,18 @@ Failure webhooks include a `request_id` UUID generated once per crawl failure an
 - If `request_id` is absent (legacy calls): process normally (backward compatible).
 
 Spec: `docs/superpowers/specs/2026-04-18-webhook-idempotency-design.md`.
+
+## Success / Stop Webhook Idempotency (PW-A)
+
+Success and stop webhooks carry a single shared `terminal_webhook_request_id`
+(in `job_info`), reused by `_send_success_webhook` and `_send_stop_webhook`. A
+force-finish stop(`finished`) after a natural success therefore carries the SAME id
+and dedupes. The stop webhook reaches BO's *success* branch (it sends no
+`crawl_id`+`exit_code`), which is why it shares the success id.
+
+Every sender persists `job_info` via `cache_service.set_json` before sending so a
+replay reuses the same id. BO dedupes via `is_duplicate_crawler_webhook(request_id, 'success')`
+for success+stop and `'failure'` for failures, into the `crawler_webhook_dedup` table.
 
 ## Exit Codes (Node.js → Python)
 
@@ -397,6 +448,8 @@ The global capacity counter (Redis key `crawl_jobs:running_count`) is authoritat
 On HTTP 503, precedence for the retry wait time is **server `Retry-After` header > exponential backoff (`backoffBase * 2**attempt`)**. Matches the Python `common_utils.detection_client.DetectionClient` behavior so both callers hit the detection service with identical semantics.
 
 Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md`.
+
+**Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
 
 ## Conventions
 

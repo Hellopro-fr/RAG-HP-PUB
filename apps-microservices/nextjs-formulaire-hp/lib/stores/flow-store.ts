@@ -198,6 +198,10 @@ export interface FlowState {
   // Version A/B test piloté par le token URL (champ abtest_UX_lead_version du payload décrypté)
   abtestUxLeadVersion: number | null;
 
+  // A/B test secondaire piloté par le token URL (champ abtest2 du payload décrypté).
+  // String libre injecté dans tous les events GTM devis_funnel_formulaire.
+  abtest2: string | null;
+
   // Nom de la catégorie (depuis l'API questionnaire)
   categoryName: string | null;
 
@@ -311,6 +315,7 @@ export interface FlowState {
   // Actions
   setCategoryId: (id: number) => void;
   setAbtestUxLeadVersion: (value: number | null) => void;
+  setAbtest2: (value: string | null) => void;
   setCategoryName: (name: string | null) => void;
   setCategoryStats: (stats: CategoryStats | null) => void;
   setCategoryVignette: (url: string | null) => void;
@@ -349,6 +354,7 @@ export interface FlowState {
 const initialState = {
   categoryId: null,
   abtestUxLeadVersion: null as number | null,
+  abtest2: null as string | null,
   categoryName: null,
   categoryStats: null,
   categoryVignette: null,
@@ -390,6 +396,8 @@ export const useFlowStore = create<FlowState>()(
       setCategoryId: (id) => set({ categoryId: id }),
 
       setAbtestUxLeadVersion: (value) => set({ abtestUxLeadVersion: value }),
+
+      setAbtest2: (value) => set({ abtest2: value }),
 
       setCategoryName: (name) => set({ categoryName: name }),
 

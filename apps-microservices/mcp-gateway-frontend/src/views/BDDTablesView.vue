@@ -26,6 +26,19 @@
           </button>
           <button
             type="button"
+            :disabled="syncingTypes"
+            class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Synchroniser les types de champs de toutes les tables depuis le catalogue"
+            @click="syncAllFieldTypes"
+          >
+            <i
+              :class="syncingTypes ? 'pi pi-spinner pi-spin' : 'pi pi-sync'"
+              class="text-xs"
+            />
+            Synchroniser les types
+          </button>
+          <button
+            type="button"
             :disabled="exporting"
             class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
             @click="exportRegistry"
@@ -517,6 +530,7 @@ function clearSelection() {
 
 const importInputRef = ref<HTMLInputElement | null>(null);
 const exporting = ref(false);
+const syncingTypes = ref(false);
 const importOpen = ref(false);
 const importDragOver = ref(false);
 const importing = ref(false);
@@ -761,6 +775,36 @@ async function saveMeta() {
     toast.error('Echec de l\'enregistrement: ' + msg);
   } finally {
     metaSaving.value = false;
+  }
+}
+
+// Sync field_type across the whole registry from the upstream catalog.
+async function syncAllFieldTypes() {
+  if (syncingTypes.value) return;
+  syncingTypes.value = true;
+  try {
+    const res = await bddApi.syncAllFieldTypes();
+    if (res.errors.length > 0) {
+      toast.error(
+        `${res.fields_updated} champ(s) sur ${res.tables_synced} table(s), ` +
+          `${res.errors.length} erreur(s)`,
+      );
+    } else {
+      toast.success(
+        `${res.fields_updated} champ(s) synchronise(s) sur ${res.tables_synced} table(s)`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 503) {
+      toast.error('Service BDD indisponible');
+    } else {
+      const body = (err as { body?: { error?: string } })?.body;
+      const msg =
+        body?.error || (err instanceof Error ? err.message : 'Erreur inconnue');
+      toast.error('Echec de la synchronisation: ' + msg);
+    }
+  } finally {
+    syncingTypes.value = false;
   }
 }
 

@@ -48,10 +48,38 @@ api-detection-langue-fr/
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/detect` | Detect French for a single URL (simple/complete mode) |
-| `POST` | `/api/v1/detect-batch` | Batch detection (max 100 URLs, 2-pass parallel+retry, first_match mode) |
+| `POST` | `/api/v1/detect-batch` | Batch detection (max 100 URLs, 2-pass parallel+retry, first_match mode). Sync; shares `_run_batch_core` with the async worker. |
+| `POST` | `/api/v1/detect-batch-async` | Submit a batch async → `202 {job_id}` (or `200` on idempotent re-submit). Poll-based; decouples callers from the gateway 180s ceiling. |
+| `GET`  | `/api/v1/detect-batch-async/{job_id}` | Poll an async job: `pending\|running\|completed\|failed\|stale`; `results` populated when terminal; `404` when unknown/expired. |
 | `GET`  | `/api/v1/check-url` | URL-only check (no HTML fetch) |
 | `POST` | `/api/v1/detect-debug` | Debug mode with full pipeline trace (fetch, cleaning, URL, HTML, NLP, alternatives, decision) |
 | `GET`  | `/api/v1/health` | Health check |
+
+### Async Batch Job API (`/detect-batch-async`)
+
+In-process asyncio worker + Redis job store (`app/core/async_jobs.py`), wired via a FastAPI `lifespan` in `main.py` (`app.state.job_manager`). The worker reuses the same `_run_batch_core` as the sync `/detect-batch` (DRY) and the shared prod admission pool — **crawler-service is immune** because it passes `html_content` (bypasses admission).
+
+- **Submit** (`POST /detect-batch-async`, body = `AsyncBatchSubmitRequest`): `202 {job_id, status, total, poll_after_seconds}`. With `client_job_id` set, a re-submit returns the existing job (`200`, atomic `SET NX` idempotency).
+- **Poll** (`GET /detect-batch-async/{job_id}`): `AsyncBatchStatusResponse`. `stale` is computed on read (heartbeat older than `STALE_THRESHOLD_S` → dead worker, e.g. OOM restart).
+- **503 differentiation:** capacity (`MAX_ACTIVE_JOBS` reached) → `Retry-After` header set (`retryable:true`); kill-switch (`ASYNC_JOBS_ENABLED=false`) or Redis-unavailable → **no `Retry-After`** (`retryable:false`). Callers key off the header presence.
+- **Restart = fail-fast:** no resume. Stale/failed jobs are re-enqueued by the caller (BO `domaine_fr_retry`). Graceful shutdown marks running jobs `failed(service_shutdown)`.
+- **Redis required for async** (cache stays optional): if `REDIS_URL` is unset/unreachable, submit returns `503`; sync endpoints are unaffected.
+- **TTL invariant:** `JOB_RESULT_TTL_S < JOB_TTL_ACTIVE_S`; callers must poll within `JOB_RESULT_TTL_S`.
+- Metrics: `detect_async_jobs_submitted_total`, `detect_async_jobs_active`, `detect_async_jobs_terminal_total{status}`, `detect_async_job_duration_seconds`, `detect_async_job_capacity_rejected_total`. Per-item async fetches reuse `ADMISSION_REJECTED{endpoint="/api/v1/detect-batch-async"}`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ASYNC_JOBS_ENABLED` | `true` | Kill switch for the async job API (`false` → submit 503, not retryable). |
+| `MAX_ACTIVE_JOBS` | `8` | Max concurrent async jobs (capacity 503 + `Retry-After` beyond this). |
+| `JOB_TTL_ACTIVE_S` | `7200` | TTL of a pending/running job record (refreshed by heartbeat). |
+| `JOB_RESULT_TTL_S` | `3600` | TTL of a terminal job record (poll window). |
+| `STALE_THRESHOLD_S` | `120` | No-heartbeat window after which poll reports `stale`. |
+| `HEARTBEAT_INTERVAL_S` | `5` | Wall-clock heartbeat tick. |
+| `ASYNC_SUBMIT_RETRY_AFTER_S` | `15` | `Retry-After` value on capacity 503. |
+| `ASYNC_POLL_HINT_MAX_S` | `30` | Upper bound on the server `poll_after_seconds` hint. |
+| `SHUTDOWN_GRACE_S` | `5` | Bound on `JobManager.shutdown()` task drain. |
+
+Spec: `docs/superpowers/specs/2026-06-01-detection-langue-fr-async-job-api-design.md`. Plan: `docs/superpowers/plans/2026-06-01-detection-langue-fr-async-job-api.md`.
 
 ## Detection Pipeline
 
@@ -173,6 +201,21 @@ Batch Pass 2 retry: `fetch_failed`, `challenge_page`, and `admission_rejected` (
 
 - `detection_validation_verdicts_total{verdict}` — counter, label values: `valid`, `http_error`, `soft_404`, `redirected_to_home`.
 - `detection_homepage_fallback_triggered_total{outcome}` — counter, label values: `success`, `rejected`, `network_failure`.
+
+## Alternative-URL Validation Skip (`validate_alternatives`)
+
+`validate_alternatives: bool = true` on `DetectionRequest`, `BatchDetectionRequest`, and `AsyncBatchSubmitRequest` (threaded via `BatchOpts`). When **false**, COMPLETE-mode detection still **parses** alternatives from the HTML but performs **zero HTTP/browser work** on them:
+
+- skips the httpx Phase-1 + Phase-2 browser validation (`_validate_alternative_urls` → `scrape_html`),
+- skips the Case-6 browser NLP-confirmation loop (`fetch_html` per validated alt).
+
+Returned alts: hreflang → `validated:true` (trusted declaration, unchanged); medium (`data-lang`/`link`/`option`) → `validated:false, reliability:'low'`. Default **true** ⇒ existing callers (BO) keep full validation.
+
+**Why:** `crawler-service` sends `html_content` for the homepage in `complete` mode; the alt-validation browser opens (not the initial page) were the residual OOM / `socket hang up` source. Setting `validate_alternatives=false` removes them while preserving the hreflang prefixes the crawler's Regional Path Exclusion consumes.
+
+**Deliberate behavior change (flagged calls only):** a site whose provided homepage content is not NLP-confirmed French but exposes an NLP-confirmable French alternative previously returned `ok=true` via Case 6; with the flag off it returns `ok=false` (falls through to Case 7/9). `/detect-debug` **ignores** the flag (always validates, to show the full pipeline).
+
+Metric: `detection_alt_validation_skipped_total` (no labels) — increments once per flagged skip with ≥1 candidate.
 
 ## Dependencies on Other Services
 

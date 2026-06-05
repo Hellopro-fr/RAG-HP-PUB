@@ -4,6 +4,12 @@
 # (archive + stash, upload + download). Detects existing screen sessions
 # and prompts per-daemon to skip/restart/start.
 #
+# Note: the Stash Download daemon also runs the Phase-3 stash->crawls move loop
+# (ENABLE_MOVE=true). download_daemon.sh always runs its download loop and only
+# additionally runs the move loop when ENABLE_MOVE=true, so the move is folded
+# into that single daemon — do NOT start a second move-enabled instance (two
+# daemons would race the same gcloud mv).
+#
 # Usage:
 #   bash tools/start-crawler-daemon.sh
 #
@@ -28,13 +34,15 @@ mkdir -p "$LOGS_DIR"
 STASH_DIR="$REPO_ROOT/apps-microservices/crawler-service/crawler_stash"
 STASH_REQ_DIR="$REPO_ROOT/apps-microservices/crawler-service/crawler_stash_download_requests"
 STASH_RES_DIR="$REPO_ROOT/apps-microservices/crawler-service/crawler_stash_download_results"
+MOVE_REQ_DIR="$REPO_ROOT/apps-microservices/crawler-service/crawler_move_requests"
+MOVE_RES_DIR="$REPO_ROOT/apps-microservices/crawler-service/crawler_move_results"
 
 # Daemon table: NAME|SCREEN|SCRIPT|ENV_VARS
 DAEMONS=(
     "Archive Upload|crawler-upload-archive|tools/upload_daemon.sh|"
     "Stash Upload|crawler-upload-stash|tools/upload_daemon.sh|UPLOAD_WATCH_DIR=$STASH_DIR UPLOAD_GCS_PREFIX=stash"
     "Archive Download|crawler-download-archive|tools/download_daemon.sh|"
-    "Stash Download|crawler-download-stash|tools/download_daemon.sh|DOWNLOAD_REQUESTS_PATH=$STASH_REQ_DIR DOWNLOAD_RESULTS_PATH=$STASH_RES_DIR DOWNLOAD_GCS_PREFIX=stash DELETE_AFTER_DOWNLOAD=true"
+    "Stash Download|crawler-download-stash|tools/download_daemon.sh|DOWNLOAD_REQUESTS_PATH=$STASH_REQ_DIR DOWNLOAD_RESULTS_PATH=$STASH_RES_DIR DOWNLOAD_GCS_PREFIX=stash DELETE_AFTER_DOWNLOAD=true ENABLE_MOVE=true MOVE_REQUESTS_PATH=$MOVE_REQ_DIR MOVE_RESULTS_PATH=$MOVE_RES_DIR"
 )
 
 is_running() {

@@ -1,0 +1,287 @@
+import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne } from '@/types/conseils';
+import type { PhpConseilResponse, PhpBloc, PhpImage } from '@/types/api/page-conseil-php';
+
+const PAGE_TYPE_MAP: Record<number, ConseilPageType> = {
+  0: 'autre',
+  1: 'prix',
+  2: 'top',
+};
+
+function extractSlugFromUrl(url: string): string {
+  const match = url.match(/\/([^/]+)-\d+\.html$/);
+  return match ? match[1] : '';
+}
+
+function extractHeroImage(blocs: PhpBloc[]): string | undefined {
+  for (const bloc of blocs) {
+    if (bloc.type === 4 && bloc.contenu.image?.path) {
+      return bloc.contenu.image.path;
+    }
+  }
+  return undefined;
+}
+
+/** Parse "800x600" → { width: 800, height: 600 }. Retourne {} si invalide. */
+function parseTaille(taille?: string): { width?: number; height?: number } {
+  if (!taille) return {};
+  const [w, h] = taille.split(/[xX]/).map(Number);
+  return w > 0 && h > 0 ? { width: w, height: h } : {};
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function tableToHtml(table: string[][]): string {
+  if (!table.length) return '';
+  const [headerRow, ...dataRows] = table;
+  const headers = headerRow.map(cell => `<th>${cell}</th>`).join('');
+  const rows = dataRows
+    .map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`)
+    .join('');
+  return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
+  const base = {
+    id: String(phpBloc.id ?? `bloc-${phpBloc.ordre}`),
+    order: phpBloc.ordre,
+  };
+  const c = phpBloc.contenu;
+
+  switch (phpBloc.type) {
+    case 1: // H2 — titre de section (contenu.titre → id + title, contenu.texte → intro)
+      if (!c.titre) return null;
+      return {
+        ...base,
+        type: 'h2',
+        data: {
+          id: slugify(c.titre),
+          title: c.titre,
+          ...(c.texte ? { intro: c.texte } : {}),
+        },
+      };
+
+    case 2: // Texte simple
+      return {
+        ...base,
+        type: 'texte',
+        data: {
+          html: c.texte ?? '',
+          ...(c.estimation && {
+            estimation: { value: c.estimation.valeur, label: c.estimation.label },
+          }),
+          ...(c.cta && { hasCta: true }),
+        },
+      };
+
+    case 4: // Texte + Image (estimation + CTA optionnels)
+      if (!c.image) {
+        return {
+          ...base,
+          type: 'texte',
+          data: {
+            html: c.texte ?? '',
+            ...(c.estimation && {
+              estimation: { value: c.estimation.valeur, label: c.estimation.label },
+            }),
+          },
+        };
+      }
+      return {
+        ...base,
+        type: 'texte-image',
+        data: {
+          html: c.texte ?? '',
+          image: {
+            src: c.image.path,
+            alt: c.image.alternatif || c.image.title || '',
+          },
+          ...(c.estimation?.valeur ? {
+            estimate: c.estimation.valeur,
+            estimateLabel: c.estimation.label,
+          } : {}),
+          ...(c.cta && { ctaLabel: c.cta.wording }),
+          imagePosition: 'right' as const,
+        },
+      };
+
+    case 6: // Vidéo YouTube
+      return {
+        ...base,
+        type: 'video',
+        data: { youtubeUrl: c.video ?? '' },
+      };
+
+    case 13: { // Image + Image — contenu.images[0] et contenu.images[1]
+      const imgs = c.images ?? [];
+      if (imgs.length < 1) return null;
+      const toImg = (img: PhpImage) => ({
+        src: img.path,
+        alt: img.alternatif || img.title || '',
+        ...(img.legende ? { caption: img.legende } : {}),
+      });
+      return {
+        ...base,
+        type: 'image-image',
+        data: {
+          left: toImg(imgs[0]),
+          right: toImg(imgs[1] ?? imgs[0]),
+        },
+      };
+    }
+
+    case 3: // Image seule
+      if (!c.image?.path) return null;
+      return {
+        ...base,
+        type: 'image',
+        data: {
+          src: c.image.path,
+          alt: c.image.alternatif || c.image.title || '',
+          ...(c.image.legende ? { caption: c.image.legende } : {}),
+          ...parseTaille(c.image.taille),
+        },
+      };
+
+    case 5: // Image gauche + Texte droite
+      if (!c.image) {
+        return { ...base, type: 'texte', data: { html: c.texte ?? '' } };
+      }
+      return {
+        ...base,
+        type: 'image-texte',
+        data: {
+          html: c.texte ?? '',
+          image: { src: c.image.path, alt: c.image.alternatif || c.image.title || '' },
+          ...(c.estimation?.valeur ? { estimate: c.estimation.valeur, estimateLabel: c.estimation.label } : {}),
+          imagePosition: 'left' as const,
+        },
+      };
+
+    case 7: // Bloc CTA standalone
+      if (!c.cta) return null;
+      return {
+        ...base,
+        type: 'cta',
+        data: {
+          title: c.cta.accroche_1 ?? '',
+          subtitle: c.cta.accroche_2,
+          ctaLabel: c.cta.wording || 'Demander un devis',
+          ...(c.cta.url ? { ctaUrl: c.cta.url } : {}),
+        },
+      };
+
+    case 8: // Liste de produits
+      return {
+        ...base,
+        type: 'produits',
+        data: {
+          productIds: (c.liste_id_produit ?? []).map(String),
+        },
+      };
+
+    case 13: // Tableau de prix — même structure que type 9
+    case 9: { // Tableau (première ligne = en-têtes, cellules potentiellement enveloppées dans <div>)
+      const unwrap = (cell: string) => cell.replace(/^<div[^>]*>([\s\S]*)<\/div>$/i, '$1').trim();
+      const [headerRow = [], ...dataRows] = c.table ?? [];
+      return {
+        ...base,
+        type: 'tableau-html',
+        data: {
+          headers: headerRow.map(unwrap),
+          rows: dataRows.map(row => row.map(unwrap)),
+        },
+      };
+    }
+
+    case 11: // Estimation prix (texte avec badge)
+      return {
+        ...base,
+        type: 'texte',
+        data: {
+          html: '',
+          estimation: { value: c.texte ?? '', label: 'Estimation' },
+        },
+      };
+
+    case 12: // Titre H3
+      if (!c.titre) return null;
+      return {
+        ...base,
+        type: 'h3',
+        data: { title: c.titre },
+      };
+
+    case 16: // Avantages / Inconvénients
+      if (!c.pros_cons) return null;
+      return {
+        ...base,
+        type: 'pros-cons',
+        data: {
+          pros: c.pros_cons.liste_avantages ?? [],
+          cons: c.pros_cons.liste_inconvenients ?? [],
+          ...(c.pros_cons.label_avantages ? { labelPros: c.pros_cons.label_avantages } : {}),
+          ...(c.pros_cons.label_inconvenients ? { labelCons: c.pros_cons.label_inconvenients } : {}),
+        },
+      };
+
+    case 17: // FAQ
+      if (!c.items?.length) return null;
+      return {
+        ...base,
+        type: 'faq',
+        data: {
+          items: c.items.map((item) => ({ q: item.question, a: item.reponse })),
+        },
+      };
+
+    default:
+      console.warn(`[transformBloc] Type PHP inconnu: ${(phpBloc as { type: number }).type}`);
+      return null;
+  }
+}
+
+export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
+  const r = raw.response;
+  const heroImage = extractHeroImage(r.blocs ?? []);
+
+  return {
+    slug: extractSlugFromUrl(r.url),
+    pageType: PAGE_TYPE_MAP[r.id_tag] ?? 'autre',
+    meta: {
+      title: r.seo.meta_title,
+      description: r.seo.meta_description,
+    },
+    hero: {
+      title: r.titre,
+      ...(r.premier_bloc_texte ? { subtitle: r.premier_bloc_texte } : {}),
+      ...(heroImage ? { image: heroImage } : {}),
+    },
+    blocks: (r.blocs ?? [])
+      .sort((a, b) => a.ordre - b.ordre)
+      .map(transformBloc)
+      .filter((b): b is ConseilBlock => b !== null),
+    ...(r.auteur ? { author: r.auteur as ConseilPage['author'] } : {}),
+    ...(r.liens_intexts?.length
+      ? {
+          liensIntexts: r.liens_intexts.map((l): LienInterne => ({
+            id: l.id_mli,
+            type: l.type as 0 | 1 | 2,
+            photo: l.photo,
+            titre: l.titre,
+            description: l.description,
+            url: l.url,
+            ...(l.prix ? { prix: l.prix } : {}),
+          })),
+        }
+      : {}),
+  };
+}

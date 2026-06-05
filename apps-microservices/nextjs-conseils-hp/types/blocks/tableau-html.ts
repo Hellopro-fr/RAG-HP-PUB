@@ -1,4 +1,6 @@
 export interface TableauHtmlBlockData {
-  /** HTML brut du tableau — sera passé par DOMPurify avant affichage */
-  html: string;
+  /** Première ligne du tableau PHP (titres de colonnes) */
+  headers: string[];
+  /** Lignes de données (sans la ligne de titres) */
+  rows: string[][];
 }

@@ -26,6 +26,7 @@ export const mockPageTop: ConseilPage = {
       type: 'resume',
       order: 1,
       data: {
+        title: "L'essentiel à retenir",
         items: [
           { label: 'Critères de sélection', text: 'Gamme produits, isolation thermique, SAV national, conformité CE.' },
           { label: 'Norme de référence', text: 'EN 13241 obligatoire pour toutes les portes industrielles sur le marché européen.' },
@@ -83,6 +84,42 @@ export const mockPageTop: ConseilPage = {
           },
         ],
       },
+    },
+  ],
+  liensIntexts: [
+    {
+      id: 20,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/5/6/7/porte-industrielle-sectionnelle-567.jpg',
+      titre: 'Porte sectionnelle',
+      description: 'Porte industrielle sectionnelle acier, isolation renforcée 40 mm, motorisation intégrée, largeur jusqu\'à 6 m.',
+      url: 'https://www.hellopro.fr/porte-sectionnelle-567.html',
+    },
+    {
+      id: 21,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/6/7/8/porte-rapide-enroulable-678.jpg',
+      titre: 'Porte rapide',
+      description: 'Porte rapide enroulable PVC haute fréquence, vitesse d\'ouverture 2 m/s, idéale entrepôts logistiques.',
+      url: 'https://www.hellopro.fr/porte-rapide-678.html',
+      prix: 'Dès 3 200 €',
+    },
+    {
+      id: 22,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/8/9/0/porte-coulissante-industrielle-890.jpg',
+      titre: 'Porte coulissante',
+      description: 'Porte coulissante grande largeur jusqu\'à 12 m, rail au sol ou suspendu, vantaux acier galvanisé.',
+      url: 'https://www.hellopro.fr/porte-coulissante-890.html',
+    },
+    {
+      id: 23,
+      type: 1,
+      photo: 'https://www.hellopro.fr/images/produit/9/0/1/motorisation-porte-industrielle-901.jpg',
+      titre: 'Motorisation',
+      description: 'Motorisation et automatisme de porte industrielle, moteur 24V ou 230V, conformité EN 13241.',
+      url: 'https://www.hellopro.fr/motorisation-porte-901.html',
+      prix: 'Dès 890 €',
     },
   ],
 };

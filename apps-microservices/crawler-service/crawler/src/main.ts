@@ -528,6 +528,11 @@ context.dedupManager = new DedupManager(sharedRedis, id, undefined, redisMonitor
 // PushedSet guards non-idempotent dataset writes against retry/restart
 // duplication. Shares the same Redis client + monitor.
 context.pushedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor });
+// Set de claim DÉDIÉ à UpdateChecker.checkUrl. Même client/monitor, mais clé
+// `checked:{id}` distincte de `pushed:{id}` : checkUrl ne consomme plus le jeton
+// d'écriture dataset, donc routerDefaultHandler peut de nouveau pousser les pages
+// « confirmed » en mode update (cf. régression PushedSet du 2026-05-24).
+context.checkedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor, keyPrefix: 'checked' });
 context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
 // No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
@@ -545,6 +550,7 @@ if (dropData) {
     // Also clean managers
     await context.dedupManager.cleanup();
     if (context.pushedSet) await context.pushedSet.cleanup();
+    if (context.checkedSet) await context.checkedSet.cleanup();
     await context.statsManager.cleanup();
     // Shared client survives dedup.cleanup (ownsClient=false), so no reconnect
     // needed for dedupManager. StatsManager still owns its own client.
@@ -749,7 +755,7 @@ if (crawlMode === 'update') {
         const updateDatasetPath = path.join(storagePath, 'storage', 'datasets', `update-${domain}`);
         const jsonlWriter = new JsonlWriter(updateDatasetPath);
         const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
-        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter, context.pushedSet ?? null);
+        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter, context.checkedSet ?? null);
         context.jsonlWriter = jsonlWriter;
         console.log(`✅ UpdateChecker + JsonlWriter initialized (output: storage/datasets/update-${domain}/).`);
     }
@@ -1089,6 +1095,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
     if (context.pushedSet) await context.pushedSet.cleanup();
+    if (context.checkedSet) await context.checkedSet.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
 
     // Disconnect the shared Redis client (heartbeat + dedup multiplexed on it).

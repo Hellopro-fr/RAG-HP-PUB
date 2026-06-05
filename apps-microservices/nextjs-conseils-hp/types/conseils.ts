@@ -54,6 +54,35 @@ export interface AuthorInfo {
   contactEmail?: string;
 }
 
+export interface AoChoix {
+  id: string | number;
+  label: string;
+  image?: string;
+  /** 1 = champ libre associé au choix (révèle .input-autre dans le formulaire) */
+  typeInput?: string | number;
+}
+
+export interface AoFormQuestion {
+  id: string | number;
+  question: string;
+  avecImage: boolean;
+  /** 1 = choix unique (radio) → clic direct ouvre le modal  /  2+ = choix multiple (checkbox) → bouton CTA */
+  typeSelection: string | number;
+  choix: AoChoix[];
+}
+
+/** Lien interne issu du champ liens_intexts de l'API PHP */
+export interface LienInterne {
+  id: number;
+  /** 0 = feuille produit, 1 = rubrique, 2 = page conseil */
+  type: 0 | 1 | 2;
+  photo: string;
+  titre: string;
+  description: string;
+  url: string;
+  prix?: string;
+}
+
 export interface ConseilPage {
   slug: string;
   pageType: ConseilPageType;
@@ -61,6 +90,11 @@ export interface ConseilPage {
   hero: HeroData;
   blocks: ConseilBlock[];
   author?: AuthorInfo;
+  breadcrumb?: Array<{ label: string; href?: string }>;
+  formulaire_ao?: AoFormQuestion | null;
+  /** Rubrique principale de la page — source de l'id_rubrique et du libellé pour l'iframe */
+  infoRubrique?: { id: number; libelle: string } | null;
+  liensIntexts?: LienInterne[];
   // Spécifiques au pageType (gérés HORS BlockRenderer)
   priceData?: unknown;        // À typer en Phase 8
   topFabricants?: unknown;    // À typer en Phase 8

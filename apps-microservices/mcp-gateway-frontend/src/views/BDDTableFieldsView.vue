@@ -338,15 +338,29 @@
               L'ordre est local pour le moment et sera persiste plus tard.
             </p>
           </div>
-          <button
-            v-if="isAdmin"
-            type="button"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
-            @click="showAddField = !showAddField"
-          >
-            <i :class="showAddField ? 'pi pi-times' : 'pi pi-plus'" class="text-[10px]" />
-            {{ showAddField ? 'Annuler' : 'Ajouter un champ' }}
-          </button>
+          <div v-if="isAdmin" class="flex items-center gap-2">
+            <button
+              type="button"
+              :disabled="syncingTypes || !table?.upstream_table_id"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-600 border border-brand-500 rounded-md hover:bg-brand-50 disabled:opacity-50 disabled:cursor-not-allowed dark:text-brand-400 dark:hover:bg-brand-500/10"
+              title="Synchroniser les types de champs depuis le catalogue"
+              @click="syncFieldTypes"
+            >
+              <i
+                :class="syncingTypes ? 'pi pi-spinner pi-spin' : 'pi pi-sync'"
+                class="text-[10px]"
+              />
+              Synchroniser les types
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand-500 rounded-md hover:bg-brand-600"
+              @click="showAddField = !showAddField"
+            >
+              <i :class="showAddField ? 'pi pi-times' : 'pi pi-plus'" class="text-[10px]" />
+              {{ showAddField ? 'Annuler' : 'Ajouter un champ' }}
+            </button>
+          </div>
         </div>
 
         <!-- Add-field inline form -->
@@ -648,6 +662,7 @@ const metaDraft = ref<MetaDraft>(emptyMetaDraft());
 const metaSnapshot = ref<MetaDraft>(emptyMetaDraft());
 const savingMeta = ref(false);
 const refreshingCatalog = ref(false);
+const syncingTypes = ref(false);
 
 // Manual rows override — admin can enter a row count and persist it
 // without firing the upstream /count (which times out on huge tables).
@@ -946,6 +961,25 @@ async function refreshFromCatalog() {
   }
 }
 
+// Sync field_type for every registered field of this table from the
+// upstream catalog, then reload so the UI shows the persisted types.
+async function syncFieldTypes() {
+  if (syncingTypes.value || !table.value) return;
+  syncingTypes.value = true;
+  try {
+    const res = await bddApi.syncFieldTypes(id.value);
+    await loadTable();
+    toast.success(`Types synchronises (${res.updated}/${res.total} mis a jour)`);
+  } catch (err) {
+    const body = (err as { body?: { error?: string } })?.body;
+    const msg =
+      body?.error || (err instanceof Error ? err.message : 'Erreur inconnue');
+    toast.error('Echec de la synchronisation des types: ' + msg);
+  } finally {
+    syncingTypes.value = false;
+  }
+}
+
 // Manual rows override: persists the integer typed in the input via
 // PATCH (no upstream call). Useful when refresh-catalog times out on
 // huge tables but the admin already knows the count.
@@ -1030,6 +1064,7 @@ async function submitNewField() {
   try {
     const created = await bddApi.addField(id.value, {
       field_name: newFieldName.value,
+      field_type: upstream?.field_type,
       description: newFieldDescription.value || undefined,
       upstream_field_id: upstream?.id,
     });
@@ -1061,6 +1096,7 @@ async function submitNewFields() {
     try {
       const created = await bddApi.addField(id.value, {
         field_name: name,
+        field_type: upstream?.field_type,
         upstream_field_id: upstream?.id,
       });
       fields.value = [...fields.value, created];
@@ -1173,6 +1209,7 @@ async function confirmDeleteField() {
 
 interface BDDExportedField {
   field_name: string;
+  field_type?: string;
   description?: string;
   upstream_field_id?: number;
 }
@@ -1285,6 +1322,7 @@ async function applyImport(incoming: BDDExportedField[]) {
       } else {
         await bddApi.addField(id.value, {
           field_name: name,
+          field_type: incomingField.field_type,
           description: incomingField.description,
           upstream_field_id: incomingField.upstream_field_id,
         });

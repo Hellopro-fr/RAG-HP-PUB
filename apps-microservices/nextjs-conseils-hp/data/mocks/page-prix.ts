@@ -3,17 +3,32 @@ import type { ConseilPage } from '@/types/conseils';
 export const mockPagePrix: ConseilPage = {
   slug: 'combien-coute-un-batiment-elevage',
   pageType: 'prix',
+  formulaire_ao: {
+    id: 2001661,
+    question: "Quel type d'élevage souhaitez-vous réaliser dans le bâtiment ?",
+    avecImage: true,
+    typeSelection: 1, // 1 = choix unique → clic direct ouvre le modal
+    choix: [
+      { id: 101, label: 'Élevage bovin',    image: 'https://www.hellopro.fr/images/vignettes/vache.png' },
+      { id: 102, label: 'Élevage porcin',   image: 'https://www.hellopro.fr/images/vignettes/cochon.png' },
+      { id: 103, label: 'Élevage ovin',     image: 'https://www.hellopro.fr/images/vignettes/mouton.png' },
+      { id: 104, label: 'Élevage caprin',   image: 'https://www.hellopro.fr/images/vignettes/chevre.png' },
+      { id: 105, label: 'Élevage cunicole', image: '' },
+      { id: 106, label: 'Autre',            image: '' },
+      { id: 107, label: 'Je ne sais pas encore', image: '' },
+    ],
+  },
   meta: {
     title: "Combien coûte un bâtiment d'élevage ? Prix 2026 | HelloPro",
     description:
       "Prix d'un bâtiment d'élevage : de 200 € à 13 500 € par place selon le type. Devis gratuits, simulateur et guide expert.",
-    ogImage: 'https://cdn.hellopro.fr/conseils/batiment-elevage-og.jpg',
+    ogImage: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-ruban-professionnelle-157519.jpg',
   },
   hero: {
     title: "Combien coûte un bâtiment d'élevage ?",
     subtitle:
       "Le prix de construction varie de 200 € à 13 500 € par place, selon le type d'élevage et les équipements.",
-    image: 'https://cdn.hellopro.fr/conseils/batiment-elevage-hero.jpg',
+    image: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-ruban-bois-157520.jpg',
     estimation: { min: 200, max: 13500, unit: '€ / place' },
   },
   author: {
@@ -129,7 +144,7 @@ export const mockPagePrix: ConseilPage = {
         id: 'type-allaitant',
         title: "Bâtiment d'élevage pour vaches allaitantes",
         estimate: '2 900 – 4 150 € / place',
-        imageUrl: 'https://cdn.hellopro.fr/conseils/vaches-allaitantes.jpg',
+        imageUrl: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-ruban-fixe-157521.jpg',
         imageAlt: 'Vaches allaitantes en stabulation',
         descriptionHtml: "<p>Une vache allaitante logée en bâtiment occupe en moyenne <strong>13 à 15 m² de surface utile</strong>. L'aire paillée représente la majorité de l'espace, avec environ 9 à 11 m² affectés au couchage, complétés par 3 à 4 m² pour la circulation et l'alimentation.</p>",
         bullets: [
@@ -149,7 +164,7 @@ export const mockPagePrix: ConseilPage = {
         id: 'type-laitier',
         title: "Bâtiment d'élevage pour vaches laitières",
         estimate: '11 000 – 13 500 € / place',
-        imageUrl: 'https://cdn.hellopro.fr/conseils/vaches-laitieres.jpg',
+        imageUrl: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-a-ruban-portative-62788.jpg',
         imageAlt: 'Vaches laitières en logettes',
         descriptionHtml: "<p>Le bâtiment vaches laitières se distingue par la complexité de ses équipements : logettes, aire raclée, système de traite, gestion des effluents. Un élevage de <strong>80 vaches</strong> représente un budget global de <strong>1 000 000 € à 1 150 000 €</strong> hors foncier.</p>",
         bullets: [
@@ -179,7 +194,7 @@ export const mockPagePrix: ConseilPage = {
         id: 'type-porcin',
         title: "Bâtiment d'élevage porcin",
         estimate: '8 000 – 12 000 € / truie productive',
-        imageUrl: 'https://cdn.hellopro.fr/conseils/batiment-porcin.jpg',
+        imageUrl: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-ruban-bois-157520.jpg',
         imageAlt: 'Bâtiment porcin intérieur',
         descriptionHtml: "<p>Les bâtiments porcins sont les plus techniques : ils combinent hygiène, confort thermique, ventilation contrôlée et alimentation mécanisée. Le coût cumulé pour un atelier <strong>maternité + post-sevrage + engraissement</strong> atteint 10 000 à 12 000 € par truie productive.</p>",
         bullets: [
@@ -199,7 +214,7 @@ export const mockPagePrix: ConseilPage = {
         id: 'type-caprin',
         title: "Bâtiment d'élevage caprin",
         estimate: '500 – 1 000 € / place',
-        imageUrl: 'https://cdn.hellopro.fr/conseils/batiment-caprin.jpg',
+        imageUrl: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-ruban-fixe-157521.jpg',
         imageAlt: 'Élevage caprin en chèvrerie',
         descriptionHtml: "<p>Pour un <strong>bâtiment de 200 chèvres</strong>, comptez environ 45 000 à 60 000 € pour la structure et le bardage, 25 000 à 35 000 € pour le bloc traite caprin et 20 000 à 25 000 € pour les équipements intérieurs.</p>",
         bullets: [
@@ -219,7 +234,7 @@ export const mockPagePrix: ConseilPage = {
         id: 'type-ovin',
         title: "Bâtiment d'élevage ovin",
         estimate: '250 – 500 € / place',
-        imageUrl: 'https://cdn.hellopro.fr/conseils/batiment-ovin.jpg',
+        imageUrl: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-a-ruban-portative-62788.jpg',
         imageAlt: 'Bergerie élevage ovin',
         descriptionHtml: "<p>Le coût au m² pour un bâtiment d'élevage ovin se situe entre <strong>130 € et 410 €</strong> selon le degré d'isolation et de ventilation. Un tunnel plastique avec distribution manuelle coûte 150 à 200 €/place ; un bâtiment maçonné avec dérouleuse 350 à 450 €/place.</p>",
         bullets: [
@@ -271,6 +286,42 @@ export const mockPagePrix: ConseilPage = {
           },
         ],
       },
+    },
+  ],
+  liensIntexts: [
+    {
+      id: 1,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/2/6/5/batiment-elevage-bovin-562.jpg',
+      titre: 'Bâtiment modulaire',
+      description: 'Bâtiment acier galvanisé adapté à l\'élevage avec toiture isolée, bardage bac acier et charpente galvanisée.',
+      url: 'https://www.hellopro.fr/batiment-elevage-bovin-562.html',
+    },
+    {
+      id: 2,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/3/1/4/barriere-stabulation-314.jpg',
+      titre: 'Stabulation',
+      description: 'Barrière de stabulation agricole pour bovins, tube acier galvanisé Ø 60 mm, réglable en largeur.',
+      url: 'https://www.hellopro.fr/barriere-stabulation-314.html',
+      prix: 'Dès 280 €',
+    },
+    {
+      id: 3,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/7/8/2/pailleuse-distributrice-782.jpg',
+      titre: 'Pailleuse',
+      description: 'Pailleuse-distributrice tractée 12 m³, distribution latérale ou arrière, compatible balles rondes et carrées.',
+      url: 'https://www.hellopro.fr/pailleuse-distributrice-782.html',
+      prix: 'Dès 14 900 €',
+    },
+    {
+      id: 4,
+      type: 0,
+      photo: 'https://www.hellopro.fr/images/produit/4/5/9/hangar-photovoltaique-459.jpg',
+      titre: 'Photovoltaïque',
+      description: 'Hangar photovoltaïque clé en main 1 000 m², structure acier et toiture panneaux monocristallins.',
+      url: 'https://www.hellopro.fr/hangar-photovoltaique-459.html',
     },
   ],
 };

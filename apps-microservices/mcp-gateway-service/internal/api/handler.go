@@ -184,6 +184,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/import", h.handleBDDUsedImport)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/import-doc", h.handleBDDUsedImportDoc)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/doc", h.handleBDDUsedDoc)
+	apiMux.HandleFunc("/api/v1/bdd/used/tables/sync-field-types", h.handleBDDUsedSyncAllFieldTypes)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables", h.handleBDDUsedTables)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/", h.handleBDDUsedTableByID)
 	apiMux.HandleFunc("/api/v1/bdd/used/meta", h.handleBDDUsedMeta)

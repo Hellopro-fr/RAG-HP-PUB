@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     
     # RabbitMQ
     RABBITMQ_URL: str = "amqp://user:password@localhost:5672/"
-    MAX_CONCURRENCY: int = 10  # Nombre de messages traités en parallèle
+    MAX_CONCURRENCY: int = 5  # Nombre de messages traités en parallèle
     
     # Batching configuration
     BATCH_SIZE: int = 10  # Nombre maximum de messages par batch
@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # LLM - DeepSeek (utilisé par ce service)
     DEEPSEEK_API_KEY: str
-    DEEPSEEK_MODEL_NAME: str = "deepseek-v4-flash"
+    DEEPSEEK_MODEL_NAME: str = "deepseek-v4-pro"
     DEEPSEEK_API_URL: str = "https://api.deepseek.com/v1"
     
     # API HelloPro

@@ -156,3 +156,7 @@ class CrawlStatus(BaseModel):
                     "Empty/null for successful crawls. Used by BO reconciliation "
                     "to route to the correct error branch."
     )
+    stashed_at: Optional[str] = Field(None, description="ISO ts when data was moved to GCS stash; null if local.")
+    downloaded_at: Optional[str] = Field(None, description="ISO ts of the last successful /results download (auto-stash grace start).")
+    finished_at: Optional[str] = Field(None, description="ISO ts of the terminal transition (auto-stash safety-timeout start).")
+    size_bytes: Optional[int] = Field(None, description="Estimated archive size in bytes (auto-stash disk-pressure ordering).")

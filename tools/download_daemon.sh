@@ -64,11 +64,64 @@ CHECK_INTERVAL=5 # Seconds (faster than upload daemon since the user is waiting)
 # Ensure directories exist
 mkdir -p "$REQUESTS_DIR" "$RESULTS_DIR"
 
+# Move-flow configuration (Phase 3: GCS-side stash -> crawls move)
+MOVE_REQUESTS_PATH="${MOVE_REQUESTS_PATH:-$(dirname "$0")/../apps-microservices/crawler-service/crawler_move_requests}"
+MOVE_RESULTS_PATH="${MOVE_RESULTS_PATH:-$(dirname "$0")/../apps-microservices/crawler-service/crawler_move_results}"
+MOVE_SOURCE_PREFIX="${MOVE_SOURCE_PREFIX:-stash}"
+MOVE_TARGET_PREFIX="${MOVE_TARGET_PREFIX:-crawls}"
+ENABLE_MOVE="${ENABLE_MOVE:-false}"
+mkdir -p "$MOVE_REQUESTS_PATH" "$MOVE_RESULTS_PATH" 2>/dev/null || true
+
+process_move_requests() {
+    # Scan MOVE_REQUESTS_PATH for {id}.move-request; gcloud storage mv stash/->crawls/.
+    find "$MOVE_REQUESTS_PATH" -maxdepth 1 -name "*.move-request" -print0 | while IFS= read -r -d '' move_file; do
+        crawl_id=$(basename "$move_file" .move-request)
+        src="gs://$GCS_BUCKET_NAME/$MOVE_SOURCE_PREFIX/$crawl_id.tar.gz"
+        dst="gs://$GCS_BUCKET_NAME/$MOVE_TARGET_PREFIX/$crawl_id.tar.gz"
+        done_marker="$MOVE_RESULTS_PATH/$crawl_id.move-done"
+        error_marker="$MOVE_RESULTS_PATH/$crawl_id.move-error"
+        echo "[$(date)] Move request: $crawl_id ($src -> $dst)"
+        if gcloud storage mv "$src" "$dst"; then
+            touch "$done_marker"; rm -f "$move_file"
+        elif gcloud storage ls "$dst" >/dev/null 2>&1; then
+            # Idempotent: target already present = move effectively done. (A failed
+            # mv that left a copy at the source is harmless leaked junk the audit
+            # cleans; target-present is the authoritative success signal.)
+            echo "Already moved (target present): $crawl_id"
+            touch "$done_marker"; rm -f "$move_file"
+        elif ! gcloud storage ls "$src" >/dev/null 2>&1; then
+            # mv failed, target absent, AND source absent: the stash tar is most
+            # likely still being uploaded by the upload daemon (auto-stash sets
+            # stashed_at optimistically before the upload lands). Treat as
+            # TRANSIENT — leave the request so the next poll retries; do NOT write
+            # .move-error (which would surface a spurious failure to the caller).
+            echo "Source not yet in GCS for $crawl_id (upload in flight?); leaving request for retry"
+        else
+            # Genuine failure (source present, move still failed). Write the error
+            # marker FIRST and only consume the request once it's durably written —
+            # if the results volume is unwritable, leave the request so the next
+            # poll retries instead of losing the failure signal.
+            if echo "ERROR: move failed for $crawl_id at $(date)" > "$error_marker" 2>/dev/null && [ -s "$error_marker" ]; then
+                rm -f "$move_file"
+            else
+                echo "WARNING: could not write move-error marker for $crawl_id; leaving request for retry"
+            fi
+        fi
+    done
+}
+
+# Test hook: source the script with --source-functions-only to import functions
+# without entering the daemon loop.
+if [ "${1:-}" = "--source-functions-only" ]; then
+    return 0 2>/dev/null || exit 0
+fi
+
 echo "Starting Download Daemon..."
 echo "Watching requests: $REQUESTS_DIR"
 echo "Writing results:   $RESULTS_DIR"
 echo "Source Bucket:      gs://$BUCKET_NAME/$DOWNLOAD_GCS_PREFIX/"
 echo "Delete after dl:   $DELETE_AFTER_DOWNLOAD"
+echo "Move enabled:       $ENABLE_MOVE"
 echo "Poll interval:      ${CHECK_INTERVAL}s"
 
 while true; do
@@ -120,6 +173,10 @@ while true; do
                 # poll cycle will retry the gcloud rm.
             fi
         done
+    fi
+
+    if [ "$ENABLE_MOVE" = "true" ]; then
+        process_move_requests
     fi
 
     sleep $CHECK_INTERVAL

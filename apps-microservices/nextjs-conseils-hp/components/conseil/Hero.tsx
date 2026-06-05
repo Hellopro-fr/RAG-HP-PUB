@@ -17,8 +17,12 @@ interface HeroProps {
   publishedAt?: string;
   readTime?: string;
   breadcrumb?: Array<{ label: string; href?: string }>;
-  /** Résumé "L'essentiel à retenir" (depuis bloc BO de type resume) */
+  /** Résumé "L'essentiel à retenir" (items structurés — fallback mock) */
   resume?: ResumeItem[];
+  /** Titre extrait du bloc type 15 — remplace le label hardcodé si présent */
+  resumeTitle?: string;
+  /** HTML brut du bloc type 15 de l'API — prioritaire sur resume si présent */
+  resumeHtml?: string;
   /** Slot droit : QuoteForm (prix/autre) ou SuppliersCarousel (top) */
   slot?: React.ReactNode;
 }
@@ -31,6 +35,8 @@ export function Hero({
   readTime = '7 min de lecture',
   breadcrumb = [],
   resume = [],
+  resumeTitle,
+  resumeHtml,
   slot,
 }: HeroProps) {
   return (
@@ -80,12 +86,15 @@ export function Hero({
             </h1>
 
             {data.subtitle && (
-              <p className="mt-2 max-w-xl text-sm text-primary-foreground/90">
-                {data.subtitle}
-              </p>
+              <p
+                className="mt-2 max-w-xl text-sm text-primary-foreground/90"
+                dangerouslySetInnerHTML={{ __html: highlightPrices(data.subtitle) }}
+              />
             )}
 
-            {resume.length > 0 && <KeyTakeaways items={resume} />}
+            {(resumeHtml || resume.length > 0) && (
+              <KeyTakeaways items={resume} html={resumeHtml} title={resumeTitle} />
+            )}
 
             {/* Meta auteur / date */}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-primary-foreground/80">
@@ -129,41 +138,82 @@ export function Hero({
   );
 }
 
+/** Entoure les prix (nombre + €) d'un <span> orange dans une chaîne HTML. */
+function highlightPrices(html: string): string {
+  return html.replace(
+    /(\d[\d  ]*€(?:\/[a-zA-ZÀ-ÿ²³]+)*)/g,
+    '<span class="font-bold text-cta">$1</span>',
+  );
+}
+
 /* ─── Sous-composants internes ───────────────────────────────────────────── */
 
-function KeyTakeaways({ items }: { items: ResumeItem[] }) {
+function KeyTakeaways({ items, html, title }: { items: ResumeItem[]; html?: string; title?: string }) {
   const [open, setOpen] = useState(false);
   const visible = open ? items.length : 2;
 
   return (
     <aside className="mt-3 max-w-xl rounded-xl border border-primary-foreground/20 bg-primary-foreground/10 p-3 backdrop-blur-sm">
-      <div className="mb-1.5 flex items-center gap-2">
-        <Lightbulb className="h-3.5 w-3.5 text-cta" />
-        <span className="text-xs font-bold uppercase tracking-wide text-primary-foreground">
-          L&apos;essentiel à retenir
+      <div className="mb-1.5 flex flex-row items-center gap-2">
+        <Lightbulb className="h-3.5 w-3.5 shrink-0 text-cta" />
+        <span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide text-primary-foreground">
+          {title}
         </span>
       </div>
-      <ul className="space-y-1 text-xs leading-snug text-primary-foreground/90">
-        {items.slice(0, visible).map((it) => (
-          <li key={it.label} className="flex gap-2">
-            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cta" aria-hidden="true" />
-            <span>
-              <strong className="text-primary-foreground">{it.label} :</strong> {it.text}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {items.length > 2 && (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
-        >
-          {open ? 'Voir moins' : `Voir plus (+${items.length - 2})`}
-          <ChevronDown
-            className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
-          />
-        </button>
+
+      {html ? (() => {
+        const allLis = [...html.matchAll(/<li[^>]*>[\s\S]*?<\/li>/gi)].map(m => m[0]);
+        const hasMore = allLis.length > 2;
+        const visibleHtml = allLis.length > 0
+          ? `<ul>${(open ? allLis : allLis.slice(0, 2)).join('')}</ul>`
+          : html;
+        return (
+          <>
+            <div
+              className="text-xs leading-snug text-primary-foreground/90
+                [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-4
+                [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-4
+                [&_li]:mb-0.5
+                [&_strong]:font-semibold [&_strong]:text-primary-foreground"
+              dangerouslySetInnerHTML={{ __html: visibleHtml }}
+            />
+            {hasMore && (
+              <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+              >
+                {open ? 'Voir moins' : `Voir plus (+${allLis.length - 2})`}
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+              </button>
+            )}
+          </>
+        );
+      })() : (
+        <>
+          <ul className="space-y-1 text-xs leading-snug text-primary-foreground/90">
+            {items.slice(0, visible).map((it) => (
+              <li key={it.label} className="flex gap-2">
+                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cta" aria-hidden="true" />
+                <span>
+                  <strong className="text-primary-foreground">{it.label} :</strong> {it.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {items.length > 2 && (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+            >
+              {open ? 'Voir moins' : `Voir plus (+${items.length - 2})`}
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
+        </>
       )}
     </aside>
   );

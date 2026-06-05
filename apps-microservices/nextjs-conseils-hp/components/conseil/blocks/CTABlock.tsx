@@ -19,9 +19,18 @@ export function CTABlock({ data }: CTABlockProps) {
           )}
         </div>
       </div>
-      <button className="shrink-0 rounded-md bg-cta px-5 py-3 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-md hover:bg-cta-hover">
-        {data.ctaLabel}
-      </button>
+      {data.ctaUrl ? (
+        <a
+          href={data.ctaUrl}
+          className="shrink-0 rounded-md bg-cta px-5 py-3 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-md hover:bg-cta-hover"
+        >
+          {data.ctaLabel}
+        </a>
+      ) : (
+        <button className="shrink-0 rounded-md bg-cta px-5 py-3 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-md hover:bg-cta-hover">
+          {data.ctaLabel}
+        </button>
+      )}
     </div>
   );
 }
