@@ -142,6 +142,43 @@ func TestRequestHeadersFor_ServerAuthBypassesBDD(t *testing.T) {
 	}
 }
 
+// 7. Zoho grant: the bypass skips the X-Zoho-Allowed-User filter BUT keeps the
+// identity headers, so mcp-zoho-service's resolver can escalate the granted
+// caller to the admin Zoho row (resolver Branch 2). Without identity the
+// resolver would only hit its discovery branch.
+func TestRequestHeadersFor_ZohoGrantKeepsIdentityDropsFilter(t *testing.T) {
+	sg := &ScopedGateway{
+		serverAuth: &fakeServerAuth{grants: map[string]map[string]bool{
+			"srv-zoho": {"grihal@hellopro.fr": true},
+		}},
+	}
+	backend := &BackendServer{
+		ID:          "srv-zoho",
+		ToolPrefix:  zohoToolPrefix,
+		AuthHeaders: map[string]string{"X-Static-Auth": "secret"},
+	}
+	ctx := context.WithValue(context.Background(), scopetoken.EndUserEmailContextKey, "grihal@hellopro.fr")
+	// Even with an admin-configured filter present, the bypass must skip it.
+	ctx = context.WithValue(ctx, scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+		Mode: "users", AllowedEmails: []string{"someone@else.fr"},
+	})
+
+	headers := sg.requestHeadersFor(ctx, backend)
+
+	if _, present := headers[ZohoAllowedUserHeader]; present {
+		t.Fatalf("grant must skip the Zoho filter header, got %q", headers[ZohoAllowedUserHeader])
+	}
+	if got := headers["X-End-User-Email"]; got != "grihal@hellopro.fr" {
+		t.Fatalf("identity email header must survive the bypass, got %q", got)
+	}
+	if got := headers["X-End-User-Login"]; got != "grihal" {
+		t.Fatalf("identity login header must survive the bypass, got %q", got)
+	}
+	if got := headers["X-Static-Auth"]; got != "secret" {
+		t.Fatalf("static auth header missing or wrong: %q", got)
+	}
+}
+
 // 6. Per-server granularity: grant for srv-1 does NOT bypass srv-2.
 func TestRequestHeadersFor_GrantIsPerServer(t *testing.T) {
 	leexiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
