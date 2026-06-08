@@ -2588,8 +2588,8 @@ services:
       context: .
       dockerfile: ./apps-microservices/nextjs-conseils-hp/Dockerfile
     profiles: [ "nextjs" ]
-    ports:
-      - "3003:3003"
+    expose:
+      - "3003"
     environment:
       - NODE_ENV=production
     restart: unless-stopped
@@ -2597,6 +2597,21 @@ services:
       - ./.env
     networks:
       - services-net
+    logging: *logging_defaults
+
+  nextjs-conseils-hp-lb:
+    image: nginx:alpine
+    container_name: nextjs-conseils-hp-lb
+    profiles: [ "nextjs" ]
+    ports:
+      - "8580:80"
+    volumes:
+      - ./apps-microservices/nextjs-conseils-hp/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - nextjs-conseils-hp
+    networks:
+      - services-net
+    restart: unless-stopped
     logging: *logging_defaults
 
 networks:
