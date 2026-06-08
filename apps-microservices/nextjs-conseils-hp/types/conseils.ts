@@ -98,6 +98,8 @@ export interface ConseilPage {
   slug: string;
   pageType: ConseilPageType;
   meta: ConseilPageMeta;
+  /** URL canonique complète renvoyée par l'API (ex. https://conseils.hellopro.fr/slug-id.html). Sert à la balise canonical + redirection 301. */
+  canonicalUrl?: string;
   hero: HeroData;
   blocks: ConseilBlock[];
   author?: AuthorInfo;
