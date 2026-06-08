@@ -177,7 +177,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       formulaire_ao,
       infoRubrique,
       liensIntexts: transformed.liensIntexts,
-      ...(transformed.author ? { author: transformed.author } : {}),
+      author: transformed.author,
       ...(transformed.conseilsAssocies?.length
         ? { conseilsAssocies: transformed.conseilsAssocies }
         : {}),
@@ -190,18 +190,16 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
               .map((c) => ({ id: c.id, nom: c.nom, url: c.url })),
           }
         : {}),
-      // Fournisseurs issus de top_clients
-      ...(Array.isArray(raw.top_clients) && raw.top_clients.length > 0
-        ? {
-            suppliers: (raw.top_clients as Array<{ id_societe: string; nom_commercial: string; logo: string; profil_societe_francais?: string }>)
-              .map((c) => ({
-                id: String(c.id_societe),
-                name: c.nom_commercial,
-                logoPath: c.logo ? `https://www.hellopro.fr/${c.logo}` : '',
-                ...(c.profil_societe_francais ? { description: c.profil_societe_francais } : {}),
-              })),
-          }
-        : {}),
+      // Fournisseurs issus de top_clients — undefined si absent/vide (masque le mock)
+      suppliers: Array.isArray(raw.top_clients) && raw.top_clients.length > 0
+        ? (raw.top_clients as Array<{ id_societe: string; nom_commercial: string; logo: string; profil_societe_francais?: string }>)
+            .map((c) => ({
+              id: String(c.id_societe),
+              name: c.nom_commercial,
+              logoPath: c.logo ? `https://www.hellopro.fr/${c.logo}` : '',
+              ...(c.profil_societe_francais ? { description: c.profil_societe_francais } : {}),
+            }))
+        : undefined,
     };
   } catch (err) {
     console.error(`[fetchConseilPage] id=${id} — exception:`, err);

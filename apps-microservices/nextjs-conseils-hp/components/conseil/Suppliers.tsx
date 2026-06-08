@@ -38,7 +38,7 @@ export function Suppliers({ suppliers = [] }: SuppliersProps) {
     scrollRef.current?.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
   };
 
-  if (!suppliers.length) return null;
+  if (!suppliers?.length) return null;
 
   return (
     <section id="constructeurs" className="not-prose my-12 scroll-mt-32">

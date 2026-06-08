@@ -14,12 +14,6 @@ export const mockPageAutre: ConseilPage = {
       "Autorisation de conduite, CACES, assurance et normes : tout ce qu'un exploitant de balayeuse doit savoir.",
     image: 'https://cdn.hellopro.fr/conseils/balayeuse-voirie-hero.jpg',
   },
-  author: {
-    name: 'Myriam Soumah',
-    role: 'Responsable des contenus agricoles',
-    bio: "Diplômée d'une école d'ingénieur agronome, Myriam suit le secteur des équipements de voirie depuis 10 ans.",
-    linkedinUrl: 'https://www.linkedin.com/in/myriam-soumah',
-  },
   blocks: [
     {
       id: 'b-resume',
