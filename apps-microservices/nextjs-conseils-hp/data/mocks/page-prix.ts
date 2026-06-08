@@ -39,6 +39,7 @@ export const mockPagePrix: ConseilPage = {
     linkedinUrl: 'https://www.linkedin.com/in/myriam-soumah',
     contactEmail: 'myriam.soumah@hellopro.fr',
   },
+  updatedAt: 'Mis à jour le 28 avril 2026',
   blocks: [
     {
       id: 'b-resume',

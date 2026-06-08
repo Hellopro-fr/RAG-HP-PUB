@@ -11,6 +11,20 @@ console.log('[conseils.ts] INIT — HELLOPRO_API_URL:', process.env.HELLOPRO_API
 console.log('[conseils.ts] INIT — HP_CONSEILS_URL:', HP_CONSEILS_URL);
 console.log('[conseils.ts] INIT — CONSEILS_API_TOKEN:', API_TOKEN ? `défini (${API_TOKEN.slice(0, 6)}...)` : 'VIDE → mode mock');
 
+const MOIS_FR = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+/** Formate "2026-05-28 09:21:49" → "Mis à jour le 28 mai 2026" */
+function formatFrenchDate(raw: string): string {
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return raw;
+  const [, year, month, day] = match;
+  const mois = MOIS_FR[parseInt(month, 10) - 1];
+  return `Mis à jour le ${parseInt(day, 10)} ${mois} ${year}`;
+}
+
 export async function fetchConseilPage(id: number): Promise<ConseilPage | null> {
   const { getMockPage } = await import('@/data/mocks/index');
 
@@ -81,7 +95,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
     // breadcrumb depuis fil_ariane (home toujours en premier, page courante sans lien)
     const filAriane = (raw.fil_ariane ?? []) as Array<{ libelle: string; url: string }>;
     const breadcrumb = [
-      { label: 'Accueil', href: 'https://www.hellopro.fr' },
+      { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
       ...filAriane.slice(0, -1).map((f) => ({ label: f.libelle, href: f.url })),
       ...(filAriane.length > 0
         ? [{ label: filAriane[filAriane.length - 1].libelle }]
@@ -122,6 +136,10 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       ? { id: raw.info_rubrique.id, libelle: raw.info_rubrique.libelle }
       : null;
 
+    const updatedAt = raw.date_modification
+      ? formatFrenchDate(raw.date_modification as string)
+      : undefined;
+
     // SEO : title + description depuis seo, canonical depuis url
     const seo = raw.seo as { meta_title?: string; meta_description?: string } | undefined;
     const meta = {
@@ -139,6 +157,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       meta,
       ...(canonicalUrl ? { canonicalUrl } : {}),
       breadcrumb,
+      ...(updatedAt ? { updatedAt } : {}),
       hero: {
         ...base.hero,
         title: raw.titre,

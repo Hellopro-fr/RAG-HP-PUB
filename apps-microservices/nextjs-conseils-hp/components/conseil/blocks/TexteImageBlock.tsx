@@ -7,15 +7,21 @@ interface TexteImageBlockProps {
 }
 
 export function TexteImageBlock({ data }: TexteImageBlockProps) {
+  // Blocs 4 & 5 : dimensions naturelles sans +9px (min-height commenté côté PHP)
+  const w = data.image.width ?? 600;
+  const h = data.image.height ?? 400;
+
   const imageCol = (
-    <figure className="overflow-hidden rounded-xl">
-      <Image
-        src={data.image.src}
-        alt={data.image.alt}
-        width={600}
-        height={400}
-        className="h-auto w-full object-cover"
-      />
+    <figure className="flex flex-col items-center">
+      <div className="overflow-hidden rounded-xl">
+        <Image
+          src={data.image.src}
+          alt={data.image.alt}
+          width={w}
+          height={h}
+          className="h-auto max-w-full"
+        />
+      </div>
     </figure>
   );
 
