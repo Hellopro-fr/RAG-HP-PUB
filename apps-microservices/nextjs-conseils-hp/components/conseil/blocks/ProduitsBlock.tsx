@@ -5,15 +5,12 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ProduitsBlockData, ProductItem } from '@/types/blocks/produits';
 
-const PAGE_SIZE = 4;
+const PAGE_SIZE = 6;
 
 export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
   const { titre, produits = [] } = data;
 
-  // Dédoublonnage par nom (première occurrence conservée)
-  const unique = produits.filter(
-    (p, i, arr) => arr.findIndex((q) => q.name === p.name) === i,
-  );
+  const unique = produits.slice(0, PAGE_SIZE);
 
   const [page, setPage] = useState(0);
   const totalPages = Math.ceil(unique.length / PAGE_SIZE);
@@ -21,8 +18,26 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
 
   if (unique.length === 0) return null;
 
+  const gtmScript = unique
+    .slice(0, 6)
+    .map((p, i) => {
+      const pos = i + 1;
+      return (
+        `\t\tprod_intern_gtm[${pos}] = {\n` +
+        `\t\t\t"name": "",\n` +
+        `\t\t\t"id": ${JSON.stringify(p.id)},\n` +
+        `\t\t\t"brand": ${JSON.stringify(p.brand ?? '')},\n` +
+        `\t\t\t"category": ${JSON.stringify(p.category ?? '')},\n` +
+        `\t\t\t"variant": ${JSON.stringify(p.variant ?? '')},\n` +
+        `\t\t\t"list": "lien interne",\n` +
+        `\t\t\t"position": ${pos}\t\t};`
+      );
+    })
+    .join('\n');
+
   return (
     <section className="my-8">
+      <script dangerouslySetInnerHTML={{ __html: gtmScript }}></script>
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold leading-snug text-foreground">

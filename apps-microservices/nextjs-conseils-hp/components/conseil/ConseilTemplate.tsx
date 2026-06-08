@@ -87,11 +87,15 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const hasQuoteForm = contentBlocks.some((b) => b.type === 'quote-form');
   const showQuoteForm = !hasQuoteForm && !!page.formulaire_ao && page.pageType !== 'top';
 
-  // Mid-point insertion: advance past any title block so we never cut after an H2/H3
+  // Mid-point insertion: advance if block before is a heading or block after is an image
+  const IMAGE_TYPES = ['image', 'texte-image', 'image-texte', 'image-image'];
   let quoteFormAt = Math.floor(blocksBeforeBrochure.length / 2);
   while (
     quoteFormAt < blocksBeforeBrochure.length &&
-    ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '')
+    (
+      ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '') ||
+      IMAGE_TYPES.includes(blocksBeforeBrochure[quoteFormAt]?.type ?? '')
+    )
   ) {
     quoteFormAt++;
   }
@@ -178,7 +182,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           )}
 
           {/* Blocs de pied communs aux 3 types */}
-          <Suppliers />
+          <Suppliers suppliers={page.suppliers} />
           <Crossell liensIntexts={page.liensIntexts} conseilsAssocies={page.conseilsAssocies} />
           {page.author && <AuthorBlock author={page.author} />}
         </article>

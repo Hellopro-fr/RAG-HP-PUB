@@ -29,7 +29,7 @@ interface HeroProps {
 
 export function Hero({
   data,
-  pageType: _pageType,
+  pageType,
   author,
   publishedAt,
   readTime = '7 min de lecture',
@@ -135,8 +135,8 @@ export function Hero({
               </span>
             </div>
 
-            {/* Estimation de prix (pageType = prix) */}
-            {data.estimation && (
+            {/* Estimation de prix — uniquement sur les pages de type prix */}
+            {pageType === 'prix' && data.estimation && (
               <PriceRangeVisual estimation={data.estimation} />
             )}
           </div>

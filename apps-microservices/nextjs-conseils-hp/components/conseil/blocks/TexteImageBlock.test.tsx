@@ -36,4 +36,9 @@ describe('TexteImageBlock', () => {
     const { container } = render(<TexteImageBlock data={{ ...BASE, imagePosition: 'left' }} />);
     expect(container.querySelector('figure')).toBeTruthy();
   });
+
+  it('affiche l\'image avec dimensions connues (taille définie)', () => {
+    render(<TexteImageBlock data={{ ...BASE, image: { ...BASE.image, width: 400, height: 300 } }} />);
+    expect(screen.getByAltText('Photo chantier')).toBeDefined();
+  });
 });
