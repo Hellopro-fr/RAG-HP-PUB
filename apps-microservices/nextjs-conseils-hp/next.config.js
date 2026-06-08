@@ -29,16 +29,23 @@ const nextConfig = {
     ],
   },
 
+  async rewrites() {
+    return [
+      // /slug-123.html → /slug-123 : route les URLs .html vers le segment
+      // dynamique [slugWithId] SANS middleware. Préserve l'ISR / le full route
+      // cache, contrairement à NextResponse.rewrite() en middleware qui force
+      // le rendu dynamique. L'URL .html reste visible (rewrite interne, pas de redirect).
+      { source: '/:slug([^/]+)\\.html', destination: '/:slug' },
+    ];
+  },
+
   async headers() {
     return [
-      {
-        source: '/:path*',
-        headers: [
-          { key: 'X-DNS-Prefetch-Control', value: 'on' },
-          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-        ],
-      },
+      // Les en-têtes de sécurité (X-Frame-Options, X-Content-Type-Options,
+      // X-XSS-Protection, Referrer-Policy, X-DNS-Prefetch-Control) sont posés par
+      // le reverse proxy nginx (nginx.conf), unique point d'entrée public en prod
+      // (le conteneur Next est `expose` only). On évite ici de les dupliquer.
+      // Seuls les Cache-Control par route restent gérés côté Next.
       {
         source: '/fonts/:path*',
         headers: [
