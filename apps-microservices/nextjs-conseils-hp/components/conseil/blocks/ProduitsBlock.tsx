@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ProduitsBlockData, ProductItem } from '@/types/blocks/produits';
 
@@ -10,16 +10,28 @@ const PAGE_SIZE = 6;
 export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
   const { titre, produits = [] } = data;
 
-  const unique = produits.slice(0, PAGE_SIZE);
+  const items = produits.slice(0, PAGE_SIZE);
 
-  const [page, setPage] = useState(0);
-  const totalPages = Math.ceil(unique.length / PAGE_SIZE);
-  const visible = unique.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
-  if (unique.length === 0) return null;
+  const updateScrollState = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+  };
 
-  const gtmScript = unique
-    .slice(0, 6)
+  useEffect(() => { updateScrollState(); }, [items.length]);
+
+  const scroll = (dir: 'left' | 'right') => {
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
+  };
+
+  if (items.length === 0) return null;
+
+  const gtmScript = items
     .map((p, i) => {
       const pos = i + 1;
       return (
@@ -46,32 +58,34 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
           <div className="mt-1 h-0.5 w-10 rounded-full bg-primary" />
         </div>
 
-        {totalPages > 1 && (
-          <div className="flex shrink-0 gap-1 pt-0.5">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              aria-label="Produits précédents"
-              className="flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-30"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={page === totalPages - 1}
-              aria-label="Produits suivants"
-              className="flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-30"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+        <div className="flex shrink-0 gap-1 pt-0.5">
+          <button
+            type="button"
+            onClick={() => scroll('left')}
+            disabled={!canScrollLeft}
+            aria-label="Produits précédents"
+            className="flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-30"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => scroll('right')}
+            disabled={!canScrollRight}
+            aria-label="Produits suivants"
+            className="flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-30"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {visible.map((product) => (
+      <div
+        ref={scrollRef}
+        onScroll={updateScrollState}
+        className="flex gap-4 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {items.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}
       </div>
@@ -85,7 +99,7 @@ function ProductCard({ product }: { product: ProductItem }) {
     : 'Prix sur demande';
 
   return (
-    <div className="flex flex-col rounded border border-border bg-background p-3">
+    <div className="flex w-44 shrink-0 flex-col rounded border border-border bg-background p-3">
       <a
         href={product.url}
         target="_blank"
@@ -99,7 +113,7 @@ function ProductCard({ product }: { product: ProductItem }) {
             alt=""
             fill
             className="object-contain p-2"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            sizes="176px"
           />
         </div>
         <p className="line-clamp-2 text-sm font-bold leading-tight text-foreground">

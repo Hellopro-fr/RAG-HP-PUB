@@ -182,7 +182,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           )}
 
           {/* Blocs de pied communs aux 3 types */}
-          <Suppliers suppliers={page.suppliers} />
+          {!!page.suppliers?.length && <Suppliers suppliers={page.suppliers} />}
           <Crossell liensIntexts={page.liensIntexts} conseilsAssocies={page.conseilsAssocies} />
           {page.author && <AuthorBlock author={page.author} />}
         </article>

@@ -14,12 +14,6 @@ export const mockPageTop: ConseilPage = {
       "Sélection des 10 fabricants actifs en France, retenus sur leur gamme, leurs caractéristiques techniques et leur capacité de service.",
     image: 'https://cdn.hellopro.fr/conseils/portes-industrielles-hero.jpg',
   },
-  author: {
-    name: 'Myriam Soumah',
-    role: 'Experte équipements industriels',
-    bio: 'Myriam suit le marché des fermetures industrielles depuis 8 ans et coordonne les comparatifs experts HelloPro.',
-    linkedinUrl: 'https://www.linkedin.com/in/myriam-soumah',
-  },
   blocks: [
     {
       id: 'b-resume',
