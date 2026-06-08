@@ -104,7 +104,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader categories={page.headerCategories ?? []} />
 
       <Hero
         data={page.hero}
@@ -145,17 +145,21 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
 
           {/* Première moitié des blocs */}
           {blocksBeforeQuoteForm.map((block) => (
-            <BlockRenderer key={block.id} block={block} />
+            <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
           ))}
 
           {/* Formulaire devis injecté au milieu du contenu */}
           {showQuoteForm && (
-            <QuoteFormBlock data={{ question: page.formulaire_ao ?? undefined }} />
+            <QuoteFormBlock
+              data={{}}
+              formulaire_ao={page.formulaire_ao ?? null}
+              infoRubrique={page.infoRubrique ?? null}
+            />
           )}
 
           {/* Seconde moitié des blocs */}
           {blocksAfterQuoteForm.map((block) => (
-            <BlockRenderer key={block.id} block={block} />
+            <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
           ))}
 
           {/* Brochure statique — avant le FAQ s'il existe, sinon après tous les blocs */}
@@ -169,7 +173,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
                 data={{ ...(block.data as unknown as FaqBlockData), title: h2BeforeFaq }}
               />
             ) : (
-              <BlockRenderer key={block.id} block={block} />
+              <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
             )
           )}
 

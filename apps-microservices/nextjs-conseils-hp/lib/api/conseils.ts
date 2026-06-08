@@ -140,8 +140,22 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       ? formatFrenchDate(raw.date_modification as string)
       : undefined;
 
+    // SEO : title + description depuis seo, canonical depuis url
+    const seo = raw.seo as { meta_title?: string; meta_description?: string } | undefined;
+    const meta = {
+      ...base.meta,
+      title: seo?.meta_title || (raw.titre as string),
+      description: seo?.meta_description || base.meta.description,
+    };
+    const canonicalUrl = typeof raw.url === 'string' && raw.url ? raw.url : base.canonicalUrl;
+    if (canonicalUrl) {
+      console.log(`[fetchConseilPage] id=${id} — canonical: ${canonicalUrl}`);
+    }
+
     return {
       ...base,
+      meta,
+      ...(canonicalUrl ? { canonicalUrl } : {}),
       breadcrumb,
       ...(updatedAt ? { updatedAt } : {}),
       hero: {
@@ -160,6 +174,13 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
         : {}),
       ...(transformed.schemaGuide ? { schemaGuide: transformed.schemaGuide } : {}),
       ...(transformed.schemaBreadcrumb ? { schemaBreadcrumb: transformed.schemaBreadcrumb } : {}),
+      // Catégories menu header
+      ...(Array.isArray(raw.header?.tous_les_produits) && raw.header.tous_les_produits.length > 0
+        ? {
+            headerCategories: (raw.header.tous_les_produits as Array<{ id: number; nom: string; url: string }>)
+              .map((c) => ({ id: c.id, nom: c.nom, url: c.url })),
+          }
+        : {}),
     };
   } catch (err) {
     console.error(`[fetchConseilPage] id=${id} — exception:`, err);
