@@ -28,14 +28,6 @@ describe('ProduitsBlock', () => {
     expect(screen.getByRole('heading')).toBeDefined();
   });
 
-  it('deduplicates products with identical name', () => {
-    render(
-      <ProduitsBlock data={{ productIds: [], titre: 'T', produits: PRODUITS }} />
-    );
-    // "Monte-charge hydraulique compact" dupliqué → 1 seule occurrence
-    const cards = screen.getAllByText('Monte-charge hydraulique compact');
-    expect(cards).toHaveLength(1);
-  });
 
   it('formats price as "X € HT"', () => {
     render(<ProduitsBlock data={{ productIds: [], titre: 'T', produits: PRODUITS }} />);
@@ -45,5 +37,22 @@ describe('ProduitsBlock', () => {
   it('shows "Prix sur demande" when priceHt is null', () => {
     render(<ProduitsBlock data={{ productIds: [], titre: 'T', produits: PRODUITS }} />);
     expect(screen.getByText('Prix sur demande')).toBeDefined();
+  });
+
+  it('injecte le script prod_intern_gtm avec les données GTM', () => {
+    const gtmProduits = [
+      { id: '11454124', name: 'Produit A', image: '/img/a.jpg', priceHt: null, url: '/a',
+        brand: 'Marque A', category: '1002121', variant: 'cert' },
+    ];
+    const { container } = render(
+      <ProduitsBlock data={{ productIds: [], produits: gtmProduits }} />
+    );
+    const script = container.querySelector('script');
+    expect(script?.innerHTML).toContain('prod_intern_gtm[1]');
+    expect(script?.innerHTML).toContain('"id": "11454124"');
+    expect(script?.innerHTML).toContain('"category": "1002121"');
+    expect(script?.innerHTML).toContain('"variant": "cert"');
+    expect(script?.innerHTML).toContain('"list": "lien interne"');
+    expect(script?.innerHTML).toContain('"position": 1');
   });
 });

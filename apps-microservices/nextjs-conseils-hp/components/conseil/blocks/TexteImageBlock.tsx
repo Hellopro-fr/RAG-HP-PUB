@@ -8,19 +8,38 @@ interface TexteImageBlockProps {
 
 export function TexteImageBlock({ data }: TexteImageBlockProps) {
   // Blocs 4 & 5 : dimensions naturelles sans +9px (min-height commenté côté PHP)
+  const hasDims = data.image.width !== undefined && data.image.height !== undefined;
   const w = data.image.width ?? 600;
   const h = data.image.height ?? 400;
 
+  // Sans taille connue : unoptimized + width:auto → rendu à dimensions naturelles,
+  // jamais d'upscale depuis une source plus petite que le fallback 600px.
+  const imageEl = hasDims ? (
+    <Image
+      src={data.image.src}
+      alt={data.image.alt}
+      width={w}
+      height={h}
+      className="h-auto max-w-full"
+      style={{ maxWidth: `${w}px` }}
+      sizes={`(max-width: 768px) 100vw, ${w}px`}
+    />
+  ) : (
+    <Image
+      src={data.image.src}
+      alt={data.image.alt}
+      width={600}
+      height={400}
+      unoptimized
+      className="h-auto max-w-full"
+      style={{ width: 'auto', height: 'auto' }}
+    />
+  );
+
   const imageCol = (
     <figure className="flex flex-col items-center">
-      <div className="overflow-hidden rounded-xl">
-        <Image
-          src={data.image.src}
-          alt={data.image.alt}
-          width={w}
-          height={h}
-          className="h-auto max-w-full"
-        />
+      <div className="w-fit max-w-full overflow-hidden rounded-xl">
+        {imageEl}
       </div>
     </figure>
   );
@@ -54,8 +73,13 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
     </div>
   );
 
+  // Image 40% / Texte 60% — règle PHP flex-basis: 40% sur la colonne image
+  const gridCols = data.imagePosition === 'left'
+    ? 'md:grid-cols-[2fr_3fr]'
+    : 'md:grid-cols-[3fr_2fr]';
+
   return (
-    <div className="my-8 grid gap-8 md:grid-cols-2 md:items-center">
+    <div className={`my-8 grid gap-8 md:items-center ${gridCols}`}>
       {data.imagePosition === 'left' ? (
         <>{imageCol}{textCol}</>
       ) : (

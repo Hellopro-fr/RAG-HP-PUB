@@ -5,6 +5,12 @@ export interface ProductItem {
   /** Prix HT en nombre, null si non renseigné (→ "Prix sur demande") */
   priceHt: number | null;
   url: string;
+  /** GTM: nom_fabricant */
+  brand?: string;
+  /** GTM: id_rubrique (catégorie produit) */
+  category?: string;
+  /** GTM: variant_gtm (ex. "cert") */
+  variant?: string;
 }
 
 export interface ProduitsBlockData {
