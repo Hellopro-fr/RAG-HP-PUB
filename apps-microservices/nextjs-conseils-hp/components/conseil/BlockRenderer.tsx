@@ -14,6 +14,7 @@ import { TypeSectionBlock } from './blocks/TypeSectionBlock';
 import { BrochureBlock } from './blocks/BrochureBlock';
 import { QuoteFormBlock } from './blocks/QuoteFormBlock';
 import { VideoBlock } from './blocks/VideoBlock';
+import { ProduitsBlock } from './blocks/ProduitsBlock';
 
 import type { H2BlockData } from '@/types/blocks/h2';
 import type { H3BlockData } from '@/types/blocks/h3';
@@ -30,6 +31,7 @@ import type { TypeSectionBlockData } from '@/types/blocks/type-section';
 import type { BrochureBlockData } from '@/types/blocks/brochure';
 import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
 import type { VideoBlockData } from '@/types/blocks/video';
+import type { ProduitsBlockData } from '@/types/blocks/produits';
 
 /**
  * BlockRenderer — switch central qui mappe un bloc BO vers son composant.
@@ -88,13 +90,8 @@ export function BlockRenderer({ block }: { block: ConseilBlock }) {
     case 'video':
       return <VideoBlock data={block.data as unknown as VideoBlockData} />;
 
-    // ── Lot B — Partenaire (placeholders) ──────────────────────────────────
     case 'produits':
-      return (
-        <div className="my-4 rounded border border-dashed border-border p-4 text-sm text-muted-foreground">
-          [BlockRenderer] Type <code>{block.type}</code> — à implémenter (Lot B)
-        </div>
-      );
+      return <ProduitsBlock data={block.data as unknown as ProduitsBlockData} />;
 
     default: {
       const exhaustive: never = block.type;

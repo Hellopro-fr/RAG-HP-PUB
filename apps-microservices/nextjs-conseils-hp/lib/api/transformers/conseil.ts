@@ -126,6 +126,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
           image: {
             src: c.image.path,
             alt: c.image.alternatif || c.image.title || '',
+            ...parseTaille(c.image.taille),
           },
           ...(c.estimation?.valeur ? {
             estimate: c.estimation.valeur,
@@ -150,6 +151,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         src: img.path,
         alt: img.alternatif || img.title || '',
         ...(img.legende ? { caption: img.legende } : {}),
+        ...parseTaille(img.taille),
       });
       return {
         ...base,
@@ -183,7 +185,11 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         type: 'image-texte',
         data: {
           html: c.texte ?? '',
-          image: { src: c.image.path, alt: c.image.alternatif || c.image.title || '' },
+          image: {
+            src: c.image.path,
+            alt: c.image.alternatif || c.image.title || '',
+            ...parseTaille(c.image.taille),
+          },
           ...(c.estimation?.valeur ? { estimate: c.estimation.valeur, estimateLabel: c.estimation.label } : {}),
           imagePosition: 'left' as const,
         },
@@ -208,6 +214,16 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         type: 'produits',
         data: {
           productIds: (c.liste_id_produit ?? []).map(String),
+          ...(c.titre ? { titre: c.titre } : {}),
+          produits: (c.produits ?? []).map((p) => ({
+            id: String(p.id_produit),
+            name: p.nom_produit,
+            image: p.vignette,
+            priceHt: p.prix_ht !== null && p.prix_ht !== undefined
+              ? (Number(p.prix_ht) || null)
+              : null,
+            url: p.url,
+          })),
         },
       };
 

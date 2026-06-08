@@ -1,4 +1,12 @@
+export interface ImageItem {
+  src: string;
+  alt: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface ImageImageBlockData {
-  left: { src: string; alt: string; caption?: string };
-  right: { src: string; alt: string; caption?: string };
+  left: ImageItem;
+  right: ImageItem;
 }

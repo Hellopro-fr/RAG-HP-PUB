@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { Calendar, Clock, ChevronDown, Lightbulb } from 'lucide-react';
+import { Calendar, Clock, ChevronDown, Lightbulb, Home } from 'lucide-react';
 import type { HeroData, ConseilPageType } from '@/types/conseils';
 import type { ResumeItem } from '@/types/blocks/resume';
 
@@ -64,11 +64,11 @@ export function Hero({
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <span aria-hidden="true">›</span>}
                 {item.href ? (
-                  <a href={item.href} className="hover:underline">
-                    {item.label}
+                  <a href={item.href} className="hover:underline" aria-label={i === 0 ? item.label : undefined}>
+                    {i === 0 ? <Home className="h-3.5 w-3.5" /> : item.label}
                   </a>
                 ) : (
-                  <span className="text-primary-foreground">{item.label}</span>
+                  <span className="text-primary-foreground">{i === 0 ? <Home className="h-3.5 w-3.5" /> : item.label}</span>
                 )}
               </span>
             ))}
@@ -100,7 +100,7 @@ export function Hero({
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-primary-foreground/80">
               {author && (
                 <a href="#author" className="flex items-center gap-2 hover:text-primary-foreground">
-                  {author.photo && (
+                  {author.photo ? (
                     <Image
                       src={author.photo}
                       alt={author.name}
@@ -108,6 +108,17 @@ export function Hero({
                       height={24}
                       className="h-6 w-6 rounded-full border border-primary-foreground/30 object-cover"
                     />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-primary-foreground/30 bg-primary-foreground/15 text-[10px] font-bold uppercase text-primary-foreground"
+                    >
+                      {author.name
+                        .split(' ')
+                        .slice(0, 2)
+                        .map((w) => w[0])
+                        .join('')}
+                    </span>
                   )}
                   <span>
                     Par <strong>{author.name}</strong>
@@ -148,73 +159,73 @@ function highlightPrices(html: string): string {
 
 /* ─── Sous-composants internes ───────────────────────────────────────────── */
 
-function KeyTakeaways({ items, html, title }: { items: ResumeItem[]; html?: string; title?: string }) {
+function KeyTakeaways({ items, html, title: _title }: { items: ResumeItem[]; html?: string; title?: string }) {
   const [open, setOpen] = useState(false);
   const visible = open ? items.length : 2;
 
   return (
     <aside className="mt-3 max-w-xl rounded-xl border border-primary-foreground/20 bg-primary-foreground/10 p-3 backdrop-blur-sm">
-      <div className="mb-1.5 flex flex-row items-center gap-2">
-        <Lightbulb className="h-3.5 w-3.5 shrink-0 text-cta" />
-        <span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide text-primary-foreground">
-          {title}
-        </span>
-      </div>
-
-      {html ? (() => {
-        const allLis = [...html.matchAll(/<li[^>]*>[\s\S]*?<\/li>/gi)].map(m => m[0]);
-        const hasMore = allLis.length > 2;
-        const visibleHtml = allLis.length > 0
-          ? `<ul>${(open ? allLis : allLis.slice(0, 2)).join('')}</ul>`
-          : html;
-        return (
-          <>
-            <div
-              className="text-xs leading-snug text-primary-foreground/90
-                [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-4
-                [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-4
-                [&_li]:mb-0.5
-                [&_strong]:font-semibold [&_strong]:text-primary-foreground"
-              dangerouslySetInnerHTML={{ __html: visibleHtml }}
-            />
-            {hasMore && (
-              <button
-                type="button"
-                onClick={() => setOpen(v => !v)}
-                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
-              >
-                {open ? 'Voir moins' : `Voir plus (+${allLis.length - 2})`}
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
-              </button>
-            )}
-          </>
-        );
-      })() : (
-        <>
-          <ul className="space-y-1 text-xs leading-snug text-primary-foreground/90">
-            {items.slice(0, visible).map((it) => (
-              <li key={it.label} className="flex gap-2">
-                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cta" aria-hidden="true" />
-                <span>
-                  <strong className="text-primary-foreground">{it.label} :</strong> {it.text}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {items.length > 2 && (
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
-            >
-              {open ? 'Voir moins' : `Voir plus (+${items.length - 2})`}
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
-              />
-            </button>
+      <div className="flex gap-2">
+        <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cta" />
+        <div
+          className="min-w-0 flex-1 text-xs leading-snug text-primary-foreground/90
+            [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-4
+            [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-4
+            [&_li]:mb-0.5
+            [&_strong]:font-semibold [&_strong]:text-primary-foreground"
+        >
+          {html ? (() => {
+            const cleaned = html.replace(/^(\s*(?:<[^>]*>\s*)*)💡\s*/, '$1');
+            const allLis = [...cleaned.matchAll(/<li[^>]*>[\s\S]*?<\/li>/gi)].map(m => m[0]);
+            const hasMore = allLis.length > 2;
+            const ulStart = cleaned.indexOf('<ul');
+            const prefix = ulStart > 0 ? cleaned.slice(0, ulStart) : '';
+            const visibleHtml = allLis.length > 0
+              ? `${prefix}<ul>${(open ? allLis : allLis.slice(0, 2)).join('')}</ul>`
+              : cleaned;
+            return (
+              <>
+                <div dangerouslySetInnerHTML={{ __html: visibleHtml }} />
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={() => setOpen(v => !v)}
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+                  >
+                    {open ? 'Voir moins' : `Voir plus (+${allLis.length - 2})`}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
+              </>
+            );
+          })() : (
+            <>
+              <ul className="space-y-1">
+                {items.slice(0, visible).map((it) => (
+                  <li key={it.label} className="flex gap-2">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cta" aria-hidden="true" />
+                    <span>
+                      <strong className="text-primary-foreground">{it.label} :</strong> {it.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {items.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setOpen((v) => !v)}
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+                >
+                  {open ? 'Voir moins' : `Voir plus (+${items.length - 2})`}
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+                  />
+                </button>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </aside>
   );
 }

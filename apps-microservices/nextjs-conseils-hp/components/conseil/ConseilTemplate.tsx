@@ -45,12 +45,12 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const resumeBlock = page.blocks.find((b) => b.type === 'resume');
   const resumeData = resumeBlock ? (resumeBlock.data as unknown as ResumeBlockData) : null;
   const resumeItems = resumeData?.items ?? [];
-  // HTML brut du bloc type 15 — assaini côté serveur, titre extrait du premier élément
-  const { title: extractedTitle, bodyHtml: resumeHtml } = resumeData?.html
-    ? extractResumeTitle(sanitizeResumeHtml(resumeData.html))
-    : { title: undefined, bodyHtml: undefined };
-  // data.title (items mode) prime sur le titre extrait du HTML
-  const resumeTitle = resumeData?.title ?? extractedTitle;
+  // HTML brut du bloc type 15 — affiché tel quel en un seul bloc (titre compris)
+  const resumeHtml = resumeData?.html ? sanitizeResumeHtml(resumeData.html) : undefined;
+  // Titre renvoyé par l'API, emoji de tête retiré — undefined si absent (pas de fallback)
+  const resumeTitle = resumeData?.title
+    ?.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+/u, '')
+    .trim() || undefined;
 
   // Blocs à rendre (exclure le resume qui est intégré dans le Hero)
   const contentBlocks = page.blocks
@@ -109,11 +109,13 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       <Hero
         data={page.hero}
         pageType={page.pageType}
+        author={page.author}
+        publishedAt={page.updatedAt}
         resume={resumeItems}
         resumeTitle={resumeTitle}
         resumeHtml={resumeHtml}
         breadcrumb={page.breadcrumb ?? [
-          { label: 'Accueil', href: 'https://www.hellopro.fr' },
+          { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
           { label: 'Conseils', href: '/' },
           { label: page.hero.title },
         ]}
