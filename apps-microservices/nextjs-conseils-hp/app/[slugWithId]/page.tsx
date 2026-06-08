@@ -1,7 +1,16 @@
 import { Metadata } from 'next';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { permanentRedirect, redirect } from 'next/navigation';
 import { ConseilTemplate } from '@/components/conseil/ConseilTemplate';
 import { fetchConseilPage } from '@/lib/api/conseils';
+
+/**
+ * Page 404 HelloPro — cible quand l'URL est invalide (id vide/0) OU quand l'API
+ * signale une page introuvable (404). Comportement aligné sur hellopro.fr.
+ */
+const HELLOPRO_404_URL = 'https://www.hellopro.fr/404.php';
+
+/** Page 410 HelloPro — cible quand l'API signale une page conseil supprimée (410 Gone). */
+const HELLOPRO_410_URL = 'https://www.hellopro.fr/410.php';
 
 /**
  * Extrait le chemin (sans domaine) d'une URL canonique complète.
@@ -17,6 +26,18 @@ function canonicalPathname(url: string): string | null {
 }
 
 export const revalidate = 3600; // ISR 1h
+
+/**
+ * Déclare la route comme statiquement générable → active l'ISR à la demande.
+ * On ne prérend AUCUNE page au build (les slugs/ID viennent du BO à l'exécution),
+ * d'où le tableau vide. Mais sans ce `generateStaticParams`, Next.js rend le
+ * segment dynamique [slugWithId] en mode dynamique pur (SSR à chaque requête,
+ * Cache-Control: no-store) et IGNORE le `revalidate` ci-dessus.
+ * `dynamicParams` reste à true (défaut) → tout slug est rendu à la demande puis caché.
+ */
+export async function generateStaticParams() {
+  return [];
+}
 
 type PageProps = {
   params: Promise<{ slugWithId: string }>;
@@ -38,10 +59,11 @@ function parseSlugWithId(input: string): { slug: string; id: number } | null {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slugWithId } = await params;
   const parsed = parseSlugWithId(slugWithId);
-  if (!parsed) return {};
+  if (!parsed || parsed.id <= 0) return {};
 
-  const page = await fetchConseilPage(parsed.id);
-  if (!page) return {};
+  const result = await fetchConseilPage(parsed.id);
+  if (!result.ok) return {};
+  const page = result.page;
 
   return {
     // `absolute` court-circuite le template "%s | HelloPro" du layout :
@@ -60,10 +82,21 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function Page({ params }: PageProps) {
   const { slugWithId } = await params;
   const parsed = parseSlugWithId(slugWithId);
-  if (!parsed) notFound();
+  // ID vide/absent ou égal à 0 → URL invalide → page 404 HelloPro.
+  // redirect() émet un 307 (temporaire) : ce sont des URLs structurellement invalides,
+  // pas une page "déplacée définitivement", donc on ne veut pas de 308 mis en cache.
+  if (!parsed || parsed.id <= 0) redirect(HELLOPRO_404_URL);
 
-  const page = await fetchConseilPage(parsed.id);
-  if (!page) notFound();
+  const result = await fetchConseilPage(parsed.id);
+  // Redirections selon le signal de l'API :
+  //   - 'gone' (410, supprimée)        → page 410 HelloPro — permanentRedirect (308, suppression définitive)
+  //   - 'not-found' (404, introuvable) → page 404 HelloPro — redirect (307, même cible que l'id vide/0)
+  // NB: Next.js n'émet pas de 301 littéral depuis un Server Component (308 = équivalent SEO).
+  if (!result.ok) {
+    if (result.reason === 'gone') permanentRedirect(HELLOPRO_410_URL);
+    redirect(HELLOPRO_404_URL);
+  }
+  const page = result.page;
 
   // Redirection canonique : si le chemin demandé diffère du chemin canonique,
   // on redirige (301/308) vers le slug canonique — comme la gestion sur hellopro.fr.

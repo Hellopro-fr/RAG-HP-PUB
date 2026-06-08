@@ -2,12 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/api/conseils', () => ({
   fetchConseilPage: vi.fn().mockResolvedValue({
-    schemaGuide: {
-      '@context': 'http://schema.org',
-      '@type': 'Guide',
-      name: 'Test guide',
-      author: 'Test Author',
-      datePublished: '2026-01-01',
+    ok: true,
+    page: {
+      schemaGuide: {
+        '@context': 'http://schema.org',
+        '@type': 'Guide',
+        name: 'Test guide',
+        author: 'Test Author',
+        datePublished: '2026-01-01',
+      },
     },
   }),
 }));
@@ -21,9 +24,9 @@ describe('HeadSlot', () => {
     expect(result).not.toBeNull();
   });
 
-  it('returns null when no page is found', async () => {
+  it('returns null when the page is not found', async () => {
     const { fetchConseilPage } = await import('@/lib/api/conseils');
-    vi.mocked(fetchConseilPage).mockResolvedValueOnce(null);
+    vi.mocked(fetchConseilPage).mockResolvedValueOnce({ ok: false, reason: 'not-found' });
 
     const { default: HeadSlot } = await import('@/app/@head/[slugWithId]/page');
     const result = await HeadSlot({
