@@ -4,6 +4,12 @@ import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { FaqBlockData } from '@/types/blocks/faq';
 
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\s+on\w+="[^"]*"/gi, '');
+}
+
 interface FaqBlockProps {
   data: FaqBlockData;
 }
@@ -40,7 +46,10 @@ export function FaqBlock({ data }: FaqBlockProps) {
             </button>
             {openIndex === i && (
               <div className="border-t border-border px-5 py-4 text-sm text-foreground/90">
-                {item.a}
+                <div
+                  className="[&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_a]:text-primary [&_a]:underline"
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.a) }}
+                />
               </div>
             )}
           </div>

@@ -159,6 +159,15 @@ export interface PhpConseilAssocie {
   id_tag: number;
 }
 
+export interface PhpTopClient {
+  id_societe: string;
+  nom_commercial: string;
+  montant_alloue: number;
+  /** Chemin relatif ex. "images/logo/logo_3002237.jpg" */
+  logo: string;
+  profil_societe_francais?: string;
+}
+
 export interface PhpConseilPage {
   id: number;
   titre: string;
@@ -179,6 +188,7 @@ export interface PhpConseilPage {
   liens_intexts?: PhpLienInterne[];
   pages_conseils_associees?: PhpConseilAssocie[];
   formulaire_ao?: PhpAoQuestion[];
+  top_clients?: PhpTopClient[];
   header?: unknown;
   footer?: unknown;
 }

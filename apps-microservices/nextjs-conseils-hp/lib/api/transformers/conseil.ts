@@ -223,6 +223,9 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
               ? (Number(p.prix_ht) || null)
               : null,
             url: p.url,
+            brand: p.nom_fabricant ?? '',
+            category: String(p.id_rubrique ?? ''),
+            variant: p.variant_gtm ?? '',
           })),
         },
       };

@@ -146,6 +146,14 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
       ];
     }
 
+    // premier_bloc_texte est affiché dans le hero (subtitle) — retirer le premier bloc texte des blocs pour éviter la duplication
+    if (raw.premier_bloc_texte) {
+      const firstTexteIdx = blocks.findIndex((b) => b.type === 'texte');
+      if (firstTexteIdx !== -1) {
+        blocks = blocks.filter((_, i) => i !== firstTexteIdx);
+      }
+    }
+
     const infoRubrique = raw.info_rubrique
       ? { id: raw.info_rubrique.id, libelle: raw.info_rubrique.libelle }
       : null;
@@ -165,6 +173,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
 
     const page: ConseilPage = {
       ...base,
+      pageType: transformed.pageType,
       meta,
       ...(canonicalUrl ? { canonicalUrl } : {}),
       breadcrumb,
@@ -190,6 +199,18 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
         ? {
             headerCategories: (raw.header.tous_les_produits as Array<{ id: number; nom: string; url: string }>)
               .map((c) => ({ id: c.id, nom: c.nom, url: c.url })),
+          }
+        : {}),
+      // Fournisseurs issus de top_clients
+      ...(Array.isArray(raw.top_clients) && raw.top_clients.length > 0
+        ? {
+            suppliers: (raw.top_clients as Array<{ id_societe: string; nom_commercial: string; logo: string; profil_societe_francais?: string }>)
+              .map((c) => ({
+                id: String(c.id_societe),
+                name: c.nom_commercial,
+                logoPath: c.logo ? `https://www.hellopro.fr/${c.logo}` : '',
+                ...(c.profil_societe_francais ? { description: c.profil_societe_francais } : {}),
+              })),
           }
         : {}),
     };
