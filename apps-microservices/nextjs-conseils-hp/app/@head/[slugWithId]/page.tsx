@@ -14,8 +14,10 @@ export default async function HeadSlot({ params }: Props) {
   const id = parseId(slugWithId);
   if (!id) return null;
 
-  const page = await fetchConseilPage(id);
-  if (!page?.schemaGuide && !page?.schemaBreadcrumb) return null;
+  const result = await fetchConseilPage(id);
+  if (!result.ok) return null;
+  const page = result.page;
+  if (!page.schemaGuide && !page.schemaBreadcrumb) return null;
 
   return (
     <>
