@@ -122,8 +122,22 @@ export async function fetchConseilPage(id: number): Promise<ConseilPage | null> 
       ? { id: raw.info_rubrique.id, libelle: raw.info_rubrique.libelle }
       : null;
 
+    // SEO : title + description depuis seo, canonical depuis url
+    const seo = raw.seo as { meta_title?: string; meta_description?: string } | undefined;
+    const meta = {
+      ...base.meta,
+      title: seo?.meta_title || (raw.titre as string),
+      description: seo?.meta_description || base.meta.description,
+    };
+    const canonicalUrl = typeof raw.url === 'string' && raw.url ? raw.url : base.canonicalUrl;
+    if (canonicalUrl) {
+      console.log(`[fetchConseilPage] id=${id} — canonical: ${canonicalUrl}`);
+    }
+
     return {
       ...base,
+      meta,
+      ...(canonicalUrl ? { canonicalUrl } : {}),
       breadcrumb,
       hero: {
         ...base.hero,
