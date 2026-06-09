@@ -231,17 +231,26 @@ module "ilb" {
 # -----------------------------------------------------------------------------
 module "secret_manager" {
   source = "./modules/secret_manager"
+  # Perimetre POC #1 (account-service-backend) - revision Sprint 002 apres lecture
+  # du .env reel et docker-compose.yml lignes 2522-2570.
+  # Mapping :
+  #   mysql-pass            <- GATEWAY_MYSQL_PASS (partage api-gateway)
+  #   encryption-key        <- ACCOUNT_ENCRYPTION_KEY (chiffrement donnees users)
+  #   jwt-secret            <- JWT_SECRET (partage plateforme)
+  #   fallback-pass         <- MCP_FALLBACK_PASS (break-glass)
+  #   internal-admin-token  <- ACCOUNT_INTERNAL_TOKEN (token interne MCP)
+  #   catalog-admin-key     <- CATALOG_ADMIN_KEY (API Catalog)
+  #   slack-webhook-url     <- SLACK_WEBHOOK_URL (URL contient le token)
   secrets = {
-    "account-service-backend-mysql-url" = {
-      service = "account-service-backend"
-    }
-    "account-service-backend-redis-url" = {
-      service = "account-service-backend"
-    }
-    "account-service-backend-jwt-secret" = {
-      service = "account-service-backend"
-    }
+    "account-service-backend-mysql-pass"           = { service = "account-service-backend" }
+    "account-service-backend-encryption-key"       = { service = "account-service-backend" }
+    "account-service-backend-jwt-secret"           = { service = "account-service-backend" }
+    "account-service-backend-fallback-pass"        = { service = "account-service-backend" }
+    "account-service-backend-internal-admin-token" = { service = "account-service-backend" }
+    "account-service-backend-catalog-admin-key"    = { service = "account-service-backend" }
+    "account-service-backend-slack-webhook-url"    = { service = "account-service-backend" }
   }
+  cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {
     environment = var.environment
     project     = "rag-hp"

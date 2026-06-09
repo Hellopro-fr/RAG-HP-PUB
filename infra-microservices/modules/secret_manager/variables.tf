@@ -11,3 +11,9 @@ variable "common_labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "cloudrun_sa_email" {
+  description = "Email du SA Cloud Run runtime. Recoit roles/secretmanager.secretAccessor sur chaque secret du module (granulaire, least privilege). Null = pas de binding cree."
+  type        = string
+  default     = null
+}

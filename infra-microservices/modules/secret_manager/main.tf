@@ -20,3 +20,12 @@ resource "google_secret_manager_secret" "secrets" {
     var.common_labels
   )
 }
+
+# IAM granulaire : Cloud Run SA peut lire chaque secret (least privilege).
+# Pas de binding au niveau projet → blast radius limite au perimetre de ce module.
+resource "google_secret_manager_secret_iam_member" "cloudrun_accessor" {
+  for_each  = var.cloudrun_sa_email != null ? google_secret_manager_secret.secrets : {}
+  secret_id = each.value.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.cloudrun_sa_email}"
+}
