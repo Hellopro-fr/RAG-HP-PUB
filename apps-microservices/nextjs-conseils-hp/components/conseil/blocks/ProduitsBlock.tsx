@@ -31,25 +31,8 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
 
   if (items.length === 0) return null;
 
-  const gtmScript = items
-    .map((p, i) => {
-      const pos = i + 1;
-      return (
-        `\t\tprod_intern_gtm[${pos}] = {\n` +
-        `\t\t\t"name": "",\n` +
-        `\t\t\t"id": ${JSON.stringify(p.id)},\n` +
-        `\t\t\t"brand": ${JSON.stringify(p.brand ?? '')},\n` +
-        `\t\t\t"category": ${JSON.stringify(p.category ?? '')},\n` +
-        `\t\t\t"variant": ${JSON.stringify(p.variant ?? '')},\n` +
-        `\t\t\t"list": "lien interne",\n` +
-        `\t\t\t"position": ${pos}\t\t};`
-      );
-    })
-    .join('\n');
-
   return (
     <section className="my-8">
-      <script dangerouslySetInnerHTML={{ __html: gtmScript }}></script>
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold leading-snug text-foreground">
@@ -104,7 +87,7 @@ function ProductCard({ product }: { product: ProductItem }) {
         href={product.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="block"
+        className={product.variant === 'cert' ? 'block tracking' : 'block'}
         aria-label={product.name}
       >
         <div className="relative mb-3 aspect-square w-full overflow-hidden rounded bg-muted">
@@ -121,7 +104,7 @@ function ProductCard({ product }: { product: ProductItem }) {
         </p>
       </a>
 
-      <p className={`mt-1 text-sm ${product.priceHt ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+      <p className={`mt-auto pt-2 text-sm ${product.priceHt ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
         {priceLabel}
       </p>
 
@@ -129,7 +112,7 @@ function ProductCard({ product }: { product: ProductItem }) {
         href={product.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-3 block rounded border border-primary px-3 py-1.5 text-center text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+        className={`mt-3 block rounded border border-primary px-3 py-1.5 text-center text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground${product.variant === 'cert' ? ' tracking' : ''}`}
       >
         Envoyer un message
       </a>

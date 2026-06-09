@@ -1,5 +1,6 @@
 import { SiteHeader } from './SiteHeader';
 import { SiteFooter } from './SiteFooter';
+import { GtmFooterScripts } from './GtmFooterScripts';
 import { Hero } from './Hero';
 import { HeroQuoteForm } from './HeroQuoteForm';
 import { Sidebar } from './Sidebar';
@@ -14,6 +15,7 @@ import type { FaqBlockData } from '@/types/blocks/faq';
 import { extractTOC } from '@/lib/blocks/extractTOC';
 import type { ConseilPage } from '@/types/conseils';
 import type { ResumeBlockData } from '@/types/blocks/resume';
+import type { ProduitsBlockData } from '@/types/blocks/produits';
 
 const STATIC_BROCHURE = {
   title: "Le guide complet pour bien choisir votre bâtiment d'élevage",
@@ -40,6 +42,22 @@ interface ConseilTemplateProps {
  */
 export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const tocItems = extractTOC(page.blocks);
+
+  // Steps 5 & 6 — collecte globale des produits pour GTM (positions continues sur tous les blocs)
+  const gtmEntries: string[] = [];
+  let gtmPos = 0;
+  for (const block of page.blocks) {
+    if (block.type === 'produits') {
+      const data = block.data as unknown as ProduitsBlockData;
+      for (const p of (data.produits ?? []).slice(0, 6)) {
+        gtmPos++;
+        gtmEntries.push(
+          `prod_intern_gtm[${gtmPos}]={"name":"","id":${JSON.stringify(p.id)},"brand":${JSON.stringify(p.brand ?? '')},"category":${JSON.stringify(p.category ?? '')},"variant":${JSON.stringify(p.variant ?? '')},"list":"lien interne","position":${gtmPos}};`
+        );
+      }
+    }
+  }
+  const gtmProductsScript = `var prod_intern_gtm={};\n${gtmEntries.join('\n')}`;
 
   // Extraire le bloc resume pour l'afficher dans le Hero
   const resumeBlock = page.blocks.find((b) => b.type === 'resume');
@@ -135,6 +153,8 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         <Sidebar items={tocItems} />
 
         <article className="min-w-0">
+          {/* Step 5 & 6 — initialisation prod_intern_gtm + entrées produits (positions globales) */}
+          <script dangerouslySetInnerHTML={{ __html: gtmProductsScript }} />
           {/* Blocs spécifiques au pageType — insérés à position fixe avant les blocs BO */}
           {page.pageType === 'prix' && page.priceData !== undefined && (
             <div className="my-4 rounded border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -166,8 +186,9 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
             <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
           ))}
 
-          {/* Brochure statique — avant le FAQ s'il existe, sinon après tous les blocs */}
+          {/* Brochure statique — temporairement désactivée (à réactiver)
           {!hasBrochure && <BrochureBlock data={STATIC_BROCHURE} />}
+          */}
 
           {/* FAQ (avec titre du H2 précédent) + blocs suivants */}
           {blocksFromFaq.map((block) =>
@@ -188,6 +209,12 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         </article>
       </main>
 
+      {/* Steps 6-10 — scripts GTM footer (page_template → user+cats → GTM → GA4 → impressions) */}
+      <GtmFooterScripts breadcrumb={page.breadcrumb ?? [
+        { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
+        { label: 'Conseils', href: '/' },
+        { label: page.hero.title },
+      ]} />
       <SiteFooter />
     </>
   );
