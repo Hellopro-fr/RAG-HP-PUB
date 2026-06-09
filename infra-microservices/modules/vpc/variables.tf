@@ -16,8 +16,8 @@ variable "subnetworks" {
     region        = string
   }))
 }
-variable proxy_subnet_prefix {}
+variable "proxy_subnet_prefix" {}
 
-variable cidr_range_pods {}
-variable cidr_range_svcs {}
-variable cidr_range_master {}
+variable "cidr_range_pods" {}
+variable "cidr_range_svcs" {}
+variable "cidr_range_master" {}

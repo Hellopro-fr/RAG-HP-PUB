@@ -14,14 +14,14 @@ resource "google_compute_subnetwork" "subnets" {
   project       = var.project_id
 
   lifecycle {
-    ignore_changes = [ 
+    ignore_changes = [
       log_config,
-     ]
+    ]
   }
 }
 
 resource "google_compute_subnetwork" "proxy_only_subnet" {
-  project     = var.project_id
+  project       = var.project_id
   name          = "proxy-subnet"
   provider      = google-beta
   ip_cidr_range = var.proxy_subnet_prefix
@@ -39,7 +39,7 @@ locals {
   vpc_subnet_cidrs = [for s in google_compute_subnetwork.subnets : s.ip_cidr_range]
 
   # Ranges GKE (pods & services) si tu veux joindre directement les Pods
-  pods_svcs_cidrs  = compact([
+  pods_svcs_cidrs = compact([
     var.cidr_range_pods,
     var.cidr_range_svcs
   ])
@@ -52,7 +52,7 @@ locals {
 # (ICMP + TCP/UDP) depuis tes plages internes
 #############################################
 resource "google_compute_firewall" "allow-internal-all" {
-  project = var.project_id
+  project   = var.project_id
   name      = "${var.name}-allow-internal-all"
   network   = google_compute_network.vpc.name
   direction = "INGRESS"
@@ -61,13 +61,13 @@ resource "google_compute_firewall" "allow-internal-all" {
   source_ranges = local.internal_sources
 
   allow { protocol = "icmp" }
-  allow { 
+  allow {
     protocol = "tcp"
-    ports = ["0-65535"] 
-}
-  allow { 
+    ports    = ["0-65535"]
+  }
+  allow {
     protocol = "udp"
-    ports = ["0-65535"] 
+    ports    = ["0-65535"]
   }
 
   # Option: cible tous les VMs du réseau (pas de target_tags)
