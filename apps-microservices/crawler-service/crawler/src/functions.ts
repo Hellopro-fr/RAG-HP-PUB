@@ -1219,9 +1219,9 @@ export const generateUpdateReport = async (domain: string) => {
             else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
         } else {
             if (processed >= cb.minSample) {
-                if (errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
-                else if (redirectRate > cb.maxRedirectRate) { status = "CRITICAL"; statusMessage = `Redirect rate too high (${(redirectRate*100).toFixed(1)}%)`; }
-                else if (growthRate > cb.maxGrowthRate) { status = "WARNING"; statusMessage = `Site growth high (${(growthRate*100).toFixed(1)}%)`; }
+                if (cb.maxErrorRate > 0 && errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
+                else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) { status = "CRITICAL"; statusMessage = `Redirect rate too high (${(redirectRate*100).toFixed(1)}%)`; }
+                else if (cb.maxGrowthRate > 0 && growthRate > cb.maxGrowthRate) { status = "WARNING"; statusMessage = `Site growth high (${(growthRate*100).toFixed(1)}%)`; }
             } else {
                 status = "PENDING_SAMPLE";
                 statusMessage = `Waiting for minimum sample (${processed}/${cb.minSample})`;
