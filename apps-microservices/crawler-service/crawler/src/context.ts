@@ -59,10 +59,20 @@ export const context = {
             // Micro Mode Settings (<= 50 URLs)
             maxAbsErrors: 5,
             maxAbsRedirects: 10,
-            maxAbsNew: 20
+            maxAbsNew: 20,
+
+            // External-redirect breaker (update mode): abort + fail when all/most
+            // seeded URLs redirect off-domain (relocated site). See spec 2026-06-09.
+            externalRedirectBreakerEnabled: true,
+            maxExternalRedirectRate: 0.90,
+            externalRedirectMinSample: 10
         }
     },
     stopReason: "",
+    // Exit code to use at natural completion instead of the default 2 (success).
+    // Set by a fatal in-handler breaker (e.g. domainChanged -> 7) so the crawl
+    // terminates as a failure. Null = normal success path. See spec 2026-06-09.
+    fatalExitCode: null as number | null,
     robotsTxtBypassed: false,
     camoufoxEnabled: true,
     crawlErrorMessage: "",

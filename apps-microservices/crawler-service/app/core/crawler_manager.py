@@ -321,11 +321,13 @@ class CrawlerManager:
             return ("Connexion Redis perdue (crawl bloqué)", "redis_lost")
         elif exit_code == 6:
             return ("Crawl bloqué — aucune progression URL", "progress_stalled")
+        elif exit_code == 7:
+            return ("Le domaine a changé : toutes les URLs redirigent vers un autre domaine", "domain_changed")
         elif exit_code in (137, -9):
             return ("Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé", "killed_oom_system")
         elif exit_code is not None and exit_code < 0:
             return (f"Processus terminé par signal {abs(exit_code)}", "signal_killed")
-        elif exit_code is not None and exit_code not in (0, 2, 3, 4, 5, 6, -1, 137):
+        elif exit_code is not None and exit_code not in (0, 2, 3, 4, 5, 6, 7, -1, 137):
             return (f"Erreur inattendue (code de sortie: {exit_code})", "unknown")
         else:
             return (None, None)
