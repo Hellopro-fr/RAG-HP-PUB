@@ -85,7 +85,7 @@ export function Suppliers({ suppliers = [] }: SuppliersProps) {
         {suppliers.map((s) => (
           <article
             key={s.id}
-            className={`rounded-xl border border-border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md${showArrows ? ' w-72 shrink-0' : ''}`}
+            className={`flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md${showArrows ? ' w-72 shrink-0' : ''}`}
           >
             <div className="mb-3 flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg bg-primary-soft text-primary">
               {s.logoPath ? (
@@ -114,7 +114,7 @@ export function Suppliers({ suppliers = [] }: SuppliersProps) {
             ) : (
               <p className="mt-3 text-sm text-foreground/90">{FALLBACK_DESC}</p>
             )}
-            <button className="mt-4 w-full rounded-md border border-primary bg-primary/5 py-2 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground">
+            <button className="mt-auto w-full rounded-md border border-primary bg-primary/5 py-2 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground">
               Demander un devis
             </button>
           </article>
