@@ -1,5 +1,6 @@
 import { SiteHeader } from './SiteHeader';
 import { SiteFooter } from './SiteFooter';
+import { GtmFooterScripts } from './GtmFooterScripts';
 import { Hero } from './Hero';
 import { HeroQuoteForm } from './HeroQuoteForm';
 import { Sidebar } from './Sidebar';
@@ -14,6 +15,7 @@ import type { FaqBlockData } from '@/types/blocks/faq';
 import { extractTOC } from '@/lib/blocks/extractTOC';
 import type { ConseilPage } from '@/types/conseils';
 import type { ResumeBlockData } from '@/types/blocks/resume';
+import type { ProduitsBlockData } from '@/types/blocks/produits';
 
 const STATIC_BROCHURE = {
   title: "Le guide complet pour bien choisir votre bâtiment d'élevage",
@@ -41,16 +43,32 @@ interface ConseilTemplateProps {
 export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const tocItems = extractTOC(page.blocks);
 
+  // Steps 5 & 6 — collecte globale des produits pour GTM (positions continues sur tous les blocs)
+  const gtmEntries: string[] = [];
+  let gtmPos = 0;
+  for (const block of page.blocks) {
+    if (block.type === 'produits') {
+      const data = block.data as unknown as ProduitsBlockData;
+      for (const p of (data.produits ?? []).slice(0, 6)) {
+        gtmPos++;
+        gtmEntries.push(
+          `prod_intern_gtm[${gtmPos}]={"name":"","id":${JSON.stringify(p.id)},"brand":${JSON.stringify(p.brand ?? '')},"category":${JSON.stringify(p.category ?? '')},"variant":${JSON.stringify(p.variant ?? '')},"list":"lien interne","position":${gtmPos}};`
+        );
+      }
+    }
+  }
+  const gtmProductsScript = `var prod_intern_gtm={};\n${gtmEntries.join('\n')}`;
+
   // Extraire le bloc resume pour l'afficher dans le Hero
   const resumeBlock = page.blocks.find((b) => b.type === 'resume');
   const resumeData = resumeBlock ? (resumeBlock.data as unknown as ResumeBlockData) : null;
   const resumeItems = resumeData?.items ?? [];
-  // HTML brut du bloc type 15 — assaini côté serveur, titre extrait du premier élément
-  const { title: extractedTitle, bodyHtml: resumeHtml } = resumeData?.html
-    ? extractResumeTitle(sanitizeResumeHtml(resumeData.html))
-    : { title: undefined, bodyHtml: undefined };
-  // data.title (items mode) prime sur le titre extrait du HTML
-  const resumeTitle = resumeData?.title ?? extractedTitle;
+  // HTML brut du bloc type 15 — affiché tel quel en un seul bloc (titre compris)
+  const resumeHtml = resumeData?.html ? sanitizeResumeHtml(resumeData.html) : undefined;
+  // Titre renvoyé par l'API, emoji de tête retiré — undefined si absent (pas de fallback)
+  const resumeTitle = resumeData?.title
+    ?.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+/u, '')
+    .trim() || undefined;
 
   // Blocs à rendre (exclure le resume qui est intégré dans le Hero)
   const contentBlocks = page.blocks
@@ -87,11 +105,15 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const hasQuoteForm = contentBlocks.some((b) => b.type === 'quote-form');
   const showQuoteForm = !hasQuoteForm && !!page.formulaire_ao && page.pageType !== 'top';
 
-  // Mid-point insertion: advance past any title block so we never cut after an H2/H3
+  // Mid-point insertion: advance if block before is a heading or block after is an image
+  const IMAGE_TYPES = ['image', 'texte-image', 'image-texte', 'image-image'];
   let quoteFormAt = Math.floor(blocksBeforeBrochure.length / 2);
   while (
     quoteFormAt < blocksBeforeBrochure.length &&
-    ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '')
+    (
+      ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '') ||
+      IMAGE_TYPES.includes(blocksBeforeBrochure[quoteFormAt]?.type ?? '')
+    )
   ) {
     quoteFormAt++;
   }
@@ -109,11 +131,13 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       <Hero
         data={page.hero}
         pageType={page.pageType}
+        author={page.author}
+        publishedAt={page.updatedAt}
         resume={resumeItems}
         resumeTitle={resumeTitle}
         resumeHtml={resumeHtml}
         breadcrumb={page.breadcrumb ?? [
-          { label: 'Accueil', href: 'https://www.hellopro.fr' },
+          { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
           { label: 'Conseils', href: '/' },
           { label: page.hero.title },
         ]}
@@ -129,6 +153,8 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         <Sidebar items={tocItems} />
 
         <article className="min-w-0">
+          {/* Step 5 & 6 — initialisation prod_intern_gtm + entrées produits (positions globales) */}
+          <script dangerouslySetInnerHTML={{ __html: gtmProductsScript }} />
           {/* Blocs spécifiques au pageType — insérés à position fixe avant les blocs BO */}
           {page.pageType === 'prix' && page.priceData !== undefined && (
             <div className="my-4 rounded border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -160,8 +186,9 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
             <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
           ))}
 
-          {/* Brochure statique — avant le FAQ s'il existe, sinon après tous les blocs */}
+          {/* Brochure statique — temporairement désactivée (à réactiver)
           {!hasBrochure && <BrochureBlock data={STATIC_BROCHURE} />}
+          */}
 
           {/* FAQ (avec titre du H2 précédent) + blocs suivants */}
           {blocksFromFaq.map((block) =>
@@ -176,12 +203,18 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           )}
 
           {/* Blocs de pied communs aux 3 types */}
-          <Suppliers />
+          {!!page.suppliers?.length && <Suppliers suppliers={page.suppliers} />}
           <Crossell liensIntexts={page.liensIntexts} conseilsAssocies={page.conseilsAssocies} />
           {page.author && <AuthorBlock author={page.author} />}
         </article>
       </main>
 
+      {/* Steps 6-10 — scripts GTM footer (page_template → user+cats → GTM → GA4 → impressions) */}
+      <GtmFooterScripts breadcrumb={page.breadcrumb ?? [
+        { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
+        { label: 'Conseils', href: '/' },
+        { label: page.hero.title },
+      ]} />
       <SiteFooter />
     </>
   );

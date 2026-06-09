@@ -43,4 +43,11 @@ describe('FaqBlock', () => {
     fireEvent.click(btn);
     expect(screen.queryByText('Entre 1 000 et 2 000 €.')).toBeNull();
   });
+
+  it('compile les balises HTML dans les réponses FAQ', () => {
+    const htmlItems = [{ q: 'Question HTML ?', a: '<p>Réponse avec <strong>mise en forme</strong>.</p>' }];
+    render(<FaqBlock data={{ items: htmlItems }} />);
+    const strong = document.querySelector('strong');
+    expect(strong?.textContent).toBe('mise en forme');
+  });
 });

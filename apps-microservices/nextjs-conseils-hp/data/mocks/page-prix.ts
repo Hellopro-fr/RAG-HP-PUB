@@ -32,13 +32,7 @@ export const mockPagePrix: ConseilPage = {
     image: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-ruban-bois-157520.jpg',
     estimation: { min: 200, max: 13500, unit: '€ / place' },
   },
-  author: {
-    name: 'Myriam Soumah',
-    role: 'Responsable des contenus agricoles',
-    bio: "Diplômée d'une école d'ingénieur agronome, Myriam suit le secteur des bâtiments agricoles depuis plus de 10 ans. Elle accompagne les éleveurs dans leurs projets de construction.",
-    linkedinUrl: 'https://www.linkedin.com/in/myriam-soumah',
-    contactEmail: 'myriam.soumah@hellopro.fr',
-  },
+  updatedAt: 'Mis à jour le 28 avril 2026',
   blocks: [
     {
       id: 'b-resume',

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Search, User, Menu, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { SearchModal } from './SearchModal';
+import { getCategoryIcon } from '@/lib/categoryIcons';
 
 interface Category {
   id: number;
@@ -165,18 +166,24 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
 
                 {/* Grille de catégories — scrollable sur mobile */}
                 <ul className="grid max-h-[60svh] grid-cols-1 gap-0.5 overflow-y-auto sm:max-h-none sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {categories.map((cat) => (
-                    <li key={cat.id}>
-                      <a
-                        href={cat.url}
-                        onClick={() => setMenuOpen(false)}
-                        className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-foreground hover:bg-primary-soft hover:text-primary"
-                      >
-                        <span>{cat.nom}</span>
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      </a>
-                    </li>
-                  ))}
+                  {categories.map((cat) => {
+                    const Icon = getCategoryIcon(cat.nom);
+                    return (
+                      <li key={cat.id}>
+                        <a
+                          href={cat.url}
+                          onClick={() => setMenuOpen(false)}
+                          className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground hover:bg-primary-soft hover:text-primary"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                            <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                          </span>
+                          <span className="min-w-0 flex-1">{cat.nom}</span>
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                        </a>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </div>

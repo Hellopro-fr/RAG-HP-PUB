@@ -21,6 +21,7 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import type { PageTimingEntry } from "./timing/types.js";
@@ -263,9 +264,41 @@ router.addDefaultHandler(
             || (siteHostname && hostname.includes(siteHostname));
         if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            const isHomepageRedirect = request.url === site;
             // Set structured error message for "1 seul URL crawlé" case: domain change
-            if (request.url === site) {
+            if (isHomepageRedirect) {
                 context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
+
+            // --- External-Redirect Breaker (update mode only) ---
+            // Off-domain redirects return here BEFORE the circuit-breaker block and
+            // before UpdateChecker, so this guard is the only place that can detect a
+            // relocated domain. Abort + fail (exit 7) instead of wasting a full
+            // re-crawl and reporting a misleading success. See spec 2026-06-09.
+            const cb = context.config?.circuitBreaker;
+            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled) {
+                const external = await context.statsManager.increment("external_redirects");
+
+                // Homepage fast-path: homepage off-domain ⇒ whole site moved.
+                // Abort BEFORE Phase 2 seeds the previous dataset (saves the re-crawl).
+                if (isHomepageRedirect) {
+                    context.stopReason = "domainChanged";
+                    context.fatalExitCode = 7;
+                    await stopCrawler(crawler, "Domain changed: homepage redirects off-domain");
+                    return;
+                }
+
+                // Ratio breaker: most seeded URLs redirect off-domain.
+                const processed = await context.statsManager.getValue("processed");
+                const decision = shouldTripExternalRedirectBreaker(external, processed, cb);
+                if (decision.trip) {
+                    log.warning(`🛑 External-redirect breaker: ${decision.reason}`);
+                    context.stopReason = "domainChanged";
+                    context.crawlErrorMessage = "Toutes les URLs redirigent vers un autre domaine (domaine changé)";
+                    context.fatalExitCode = 7;
+                    await stopCrawler(crawler, `Domain changed: ${decision.reason}`);
+                    return;
+                }
             }
             return;
         }
@@ -333,11 +366,11 @@ router.addDefaultHandler(
                         const errorRate = errors / processed;
                         const redirectRate = redirects / processed;
                         
-                        if (errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
-                        else if (redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
+                        if (cb.maxErrorRate > 0 && errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
+                        else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
                         
                         // Check growth relative to previous total
-                        if (cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
+                        if (cb.maxGrowthRate > 0 && cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
                             abortReason = `Site growth too fast (> ${(cb.maxGrowthRate*100)}% of previous size)`;
                         }
                     }

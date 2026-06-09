@@ -198,9 +198,10 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	// client and let them issue calls against the admin upstream via the
 	// findZohoFallback path.
 	if sg.zohoCatalog != nil {
-		state := sg.zohoCatalog.StateForEmail(ctx, email)
+		granted := sg.zohoGranted(ctx, zohoBackends)
+		state := sg.zohoCatalog.StateForEmail(ctx, email, granted)
 		if !state.Configured {
-			log.Printf("[scoped] tools/list email=%s: zoho catalog unconfigured — omitting %d zoho backend(s) from result", email, len(zohoBackends))
+			log.Printf("[scoped] tools/list email=%s: zoho catalog unconfigured (granted=%t) — omitting %d zoho backend(s) from result", email, granted, len(zohoBackends))
 			tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(zohoBackends), sg.allowedTools)
 			if tools == nil {
 				tools = []mcp.Tool{}
@@ -329,7 +330,8 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		// stub would surface admin tools to a non-configured user.
 		if email, hasEmail := scopetoken.EndUserEmailFromContext(ctx); hasEmail {
 			if sg.zohoCatalog != nil {
-				state := sg.zohoCatalog.StateForEmail(ctx, email)
+				granted := sg.zohoGranted(ctx, sg.zohoBackendsInScope())
+				state := sg.zohoCatalog.StateForEmail(ctx, email, granted)
 				if !state.Configured {
 					log.Printf("[scoped] tools/call email=%s name=%s: zoho catalog unconfigured — refusing fallback", email, params.Name)
 					return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
@@ -379,6 +381,14 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 	// by backend.ID) and per-email (from EndUserEmailContextKey).
 	if sg.isServerAuthorized(ctx, backend.ID) {
 		log.Printf("[scoped] server-authorization bypass for backend %s", backend.ID)
+		// Zoho routes per-identity downstream: mcp-zoho-service's resolver keys
+		// on X-End-User-Email to pick the upstream and only escalates to the
+		// admin row when that email holds a grant (resolver Branch 2). Keep the
+		// identity headers so the granted caller actually resolves to the admin
+		// Zoho account — the bypass only skips the X-Zoho-Allowed-User *filter*.
+		if backend.HasTag(zohoToolPrefix) || backend.ToolPrefix == zohoToolPrefix {
+			sg.injectZohoIdentity(ctx, headers, backend)
+		}
 		return headers
 	}
 
@@ -417,6 +427,21 @@ func (sg *ScopedGateway) isServerAuthorized(ctx context.Context, serverID string
 		return false
 	}
 	return sg.serverAuth.IsAuthorized(serverID, email)
+}
+
+// zohoGranted reports whether the request's end-user holds a server-auth grant
+// on any in-scope Zoho backend. A grant routes the caller to the admin Zoho
+// row downstream (mcp-zoho-service resolver Branch 2), so the gateway must
+// surface the admin catalog instead of omitting Zoho for a viewer who has no
+// personal zoho_imports row. Returns false for client_credentials grants (no
+// email on context) and when serverAuth is not wired.
+func (sg *ScopedGateway) zohoGranted(ctx context.Context, zohoBackends []*BackendServer) bool {
+	for _, b := range zohoBackends {
+		if sg.isServerAuthorized(ctx, b.ID) {
+			return true
+		}
+	}
+	return false
 }
 
 // injectLeexiHeader resolves the active Leexi filter and writes the
@@ -700,7 +725,7 @@ func (sg *ScopedGateway) resolveRingoverAllowedUsers(ctx context.Context, f *sco
 //   - mode "users" with empty list → deny sentinel
 //   - mode "creator" with non-empty CreatorEmail → single email
 //   - mode "creator" with empty CreatorEmail → deny sentinel
-func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[string]string, backend *BackendServer) {
+func (sg *ScopedGateway) injectZohoIdentity(ctx context.Context, headers map[string]string, backend *BackendServer) {
 	// Identity headers for mcp-zoho-service. Independent of the X-Zoho-Allowed-User
 	// filter feature: these are always injected on Zoho backends when an end-user
 	// is on context, so the downstream router can pick the right per-user upstream.
@@ -713,6 +738,10 @@ func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[strin
 	} else {
 		log.Printf("[scoped] zoho injectHeaders backend=%s tool_prefix=%s NO end_user_email in ctx — discovery/health probe or non-OAuth2 grant", backend.ID, backend.ToolPrefix)
 	}
+}
+
+func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[string]string, backend *BackendServer) {
+	sg.injectZohoIdentity(ctx, headers, backend)
 
 	// Step 1 — auto-filter on imported Zoho servers.
 	if backend.TemplateSlug != "" && backend.CreatedBy != "" {
