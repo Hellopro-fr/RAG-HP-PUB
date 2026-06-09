@@ -1,0 +1,38 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-09-external-redirect-breaker.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: External-redirect breaker decision helper + tests",
+      "status": "pending",
+      "description": "**Goal:** Pure Crawlee-free shouldTripExternalRedirectBreaker(external, processed, cfg)->{trip,reason} + full unit tests.\n\n**Files:**\n- Create: apps-microservices/crawler-service/crawler/src/externalRedirectBreaker.ts\n- Test: apps-microservices/crawler-service/crawler/src/externalRedirectBreaker.test.ts\n\n**Verify:** cd apps-microservices/crawler-service/crawler && node --import tsx --test src/externalRedirectBreaker.test.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/externalRedirectBreaker.ts\", \"apps-microservices/crawler-service/crawler/src/externalRedirectBreaker.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && node --import tsx --test src/externalRedirectBreaker.test.ts\", \"acceptanceCriteria\": [\"below sample gate no trip\", \"ratio>=rate at gate trips\", \"ratio<rate no trip\", \"no divide-by-zero\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Config fields + fatalExitCode plumbing",
+      "status": "pending",
+      "description": "**Goal:** 3 breaker config fields (defaults+CLI args), context.fatalExitCode, exit-code override at completion, surface external_redirects in payload.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/crawler/src/context.ts\n- Modify: apps-microservices/crawler-service/crawler/src/main.ts (arg parse ~108-110, cb literal ~129-140, payload ~960-995, line 1342)\n\n**Verify:** cd apps-microservices/crawler-service/crawler && npm run build\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/context.ts\", \"apps-microservices/crawler-service/crawler/src/main.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm run build\", \"acceptanceCriteria\": [\"3 cfg fields + defaults\", \"fatalExitCode field\", \"CLI args parse\", \"1342 uses fatalExitCode ?? 2\", \"external_redirects in payload\", \"tsc passes\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Integrate breaker into external-redirect guard",
+      "status": "pending",
+      "blockedBy": [1, 2],
+      "description": "**Goal:** In routes.ts off-domain guard (update mode): increment external_redirects, homepage fast-path, ratio breaker via helper -> set stopReason/crawlErrorMessage/fatalExitCode=7 + stopCrawler.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/crawler/src/routes.ts (import top; guard 264-271)\n\n**Verify:** cd apps-microservices/crawler-service/crawler && npm run build && npm test\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/routes.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm run build && npm test\", \"acceptanceCriteria\": [\"helper imported\", \"increments external_redirects\", \"homepage fast-path exit7\", \"ratio breaker exit7\", \"kill-switch no-op\", \"tsc + tests pass\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Python classify exit code 7 as domain_changed",
+      "status": "pending",
+      "description": "**Goal:** _classify_exit_code(7) -> (msg, 'domain_changed') + add 7 to catch-all exclusion set; failure routing automatic via is_success.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/app/core/crawler_manager.py (_classify_exit_code 309-331)\n- Create: apps-microservices/crawler-service/tests/test_classify_exit_code_domain_changed.py\n\n**Verify:** cd apps-microservices/crawler-service && python -m pytest tests/test_classify_exit_code_domain_changed.py -v\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_classify_exit_code_domain_changed.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_classify_exit_code_domain_changed.py -v\", \"acceptanceCriteria\": [\"exit7 -> domain_changed\", \"not unknown\", \"7 not in (0,2)\", \"0/2 still (None,None)\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Document exit code 7 / domain_changed in CLAUDE.md",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** Add exit-code 7 row + domain_changed failure_cause row to crawler-service CLAUDE.md.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/CLAUDE.md (Exit Codes table + failure_cause vocabulary table)\n\n**Verify:** grep -n domain_changed apps-microservices/crawler-service/CLAUDE.md -> >=2 matches\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -n domain_changed apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"exit-code row 7\", \"failure_cause domain_changed row\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-09"
+}
