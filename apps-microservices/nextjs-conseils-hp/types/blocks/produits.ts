@@ -11,6 +11,8 @@ export interface ProductItem {
   category?: string;
   /** GTM: variant_gtm (ex. "cert") */
   variant?: string;
+  /** Source du produit : 0 = base edgb2b (catalogue officiel), 1 = base hellopro_ia (scrapé) */
+  srcInteg?: 0 | 1;
 }
 
 export interface ProduitsBlockData {

@@ -132,7 +132,10 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
             estimate: c.estimation.valeur,
             estimateLabel: c.estimation.label,
           } : {}),
-          ...(c.cta && { ctaLabel: c.cta.wording }),
+          ...(c.cta && {
+            ctaLabel: c.cta.wording,
+            ...(c.cta.url ? { ctaUrl: c.cta.url } : {}),
+          }),
           imagePosition: 'right' as const,
         },
       };
@@ -191,6 +194,10 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
             ...parseTaille(c.image.taille),
           },
           ...(c.estimation?.valeur ? { estimate: c.estimation.valeur, estimateLabel: c.estimation.label } : {}),
+          ...(c.cta && {
+            ctaLabel: c.cta.wording,
+            ...(c.cta.url ? { ctaUrl: c.cta.url } : {}),
+          }),
           imagePosition: 'left' as const,
         },
       };
@@ -226,6 +233,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
             brand: p.nom_fabricant ?? '',
             category: String(p.id_rubrique ?? ''),
             variant: p.variant_gtm ?? '',
+            srcInteg: (Number(p.affichage_dd_rd) === 1 ? 1 : 0) as 0 | 1,
           })),
         },
       };

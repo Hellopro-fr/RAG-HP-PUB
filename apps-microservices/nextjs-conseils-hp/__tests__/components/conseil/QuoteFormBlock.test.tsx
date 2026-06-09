@@ -8,6 +8,7 @@ const mockQuestion: AoFormQuestion = {
   question: 'Quel type de projet ?',
   avecImage: true,
   typeSelection: 1,
+  obligatoire: 0,
   choix: [
     { id: 10, label: 'Construction neuve', image: 'https://cdn.hellopro.fr/construction.jpg' },
     { id: 11, label: 'Rénovation' },
