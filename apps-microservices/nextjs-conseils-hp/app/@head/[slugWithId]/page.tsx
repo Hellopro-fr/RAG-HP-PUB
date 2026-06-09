@@ -17,10 +17,10 @@ export default async function HeadSlot({ params }: Props) {
   const result = await fetchConseilPage(id);
   if (!result.ok) return null;
   const page = result.page;
-  if (!page.schemaGuide && !page.schemaBreadcrumb) return null;
 
   return (
     <>
+      {/* Données structurées JSON-LD uniquement — GTM est géré en footer */}
       {page.schemaGuide && (
         <script
           type="application/ld+json"
