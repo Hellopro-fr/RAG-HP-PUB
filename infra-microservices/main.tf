@@ -275,6 +275,19 @@ module "service_accounts" {
 }
 
 # -----------------------------------------------------------------------------
+# IAM hors-module : bindings sur SAs existants geres manuellement
+# F-HP-IAM-001 remediation - Sprint 002 (2026-06-09)
+# Le SA devops-infra-sa (cree hors TF) doit pouvoir gerer les versions Secret
+# Manager pour eviter le contournement via compte humain CTO lors des pushes
+# de valeurs (audit + gouvernance + autonomie equipe).
+# -----------------------------------------------------------------------------
+resource "google_project_iam_member" "devops_infra_sa_secretmanager_admin" {
+  project = var.project_id
+  role    = "roles/secretmanager.admin"
+  member  = "serviceAccount:devops-infra-sa@${var.project_id}.iam.gserviceaccount.com"
+}
+
+# -----------------------------------------------------------------------------
 # Monitoring & Alerting (Phase 3/5)
 # Source: Migre depuis infra-ci-cd/terraform/main.tf
 # NOTE: Decommenter quand alert_email et billing_account_id sont configures
