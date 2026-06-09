@@ -299,6 +299,7 @@ for success+stop and `'failure'` for failures, into the `crawler_webhook_dedup` 
 | 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
 | 5 | Redis connection lost (Node-side sustained loss) | Status: `failed`, failure webhook with `failure_cause=redis_lost` |
 | 6 | Progress stall (no URL progress for threshold) | Status: `failed`, failure webhook with `failure_cause=progress_stalled` |
+| 7 | Update mode: domain changed (all/most URLs redirect off-domain) | Status: `failed`, failure webhook with `failure_cause=domain_changed` |
 | Other | Failure | Status: `failed`, failure webhook |
 
 ## Redis Loss / Progress Stall Detection
@@ -323,6 +324,7 @@ This is a cross-language contract between Python orchestrator and Marketplace BO
 | 4 | `update_mode_no_data` | Update-mode crawl produced 0 URLs |
 | 5 | `redis_lost` | `RedisHealthMonitor` fired |
 | 6 | `progress_stalled` | `ProgressMonitor` fired |
+| 7 | `domain_changed` | Update crawl aborted: all/most seeded URLs redirect off-domain (relocated site). Homepage fast-path or external-redirect ratio breaker. Spec `docs/superpowers/specs/2026-06-09-external-redirect-breaker-design.md`. |
 | 137 / -9 | `killed_oom_system` | Process killed by OOM killer (SIGKILL) |
 | other negative | `signal_killed` | Killed by signal (non-OOM) |
 | other positive | `unknown` | Unexpected exit code |
