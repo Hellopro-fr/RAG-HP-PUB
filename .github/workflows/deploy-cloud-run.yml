@@ -198,7 +198,9 @@ jobs:
             "${{ inputs.build_context }}"
 
       - name: Trivy scan (gate CRITICAL + HIGH)
-        uses: aquasecurity/trivy-action@595be6a0f6760a0111c7a59a82bff43d04bd1ce4 # v0.24.0 (stable, sans dépendance setup-trivy externe)
+        # NOTE : tag direct (mutable) en attendant pinning SHA vérifié - à reprendre C.6.
+        # 0.24.0 = version stable sans la dépendance setup-trivy externe qui bloquait 0.28+.
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ${{ steps.tag.outputs.image_ref }}
           severity: ${{ inputs.trivy_severity_block }}
