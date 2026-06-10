@@ -197,18 +197,29 @@ jobs:
             -f "${{ inputs.dockerfile_path }}" \
             "${{ inputs.build_context }}"
 
-      - name: Trivy scan (gate CRITICAL + HIGH)
-        # NOTE : tag direct (mutable) en attendant pinning SHA vérifié - à reprendre C.6.
-        # 0.24.0 = version stable sans la dépendance setup-trivy externe qui bloquait 0.28+.
-        uses: aquasecurity/trivy-action@0.24.0
-        with:
-          image-ref: ${{ steps.tag.outputs.image_ref }}
-          severity: ${{ inputs.trivy_severity_block }}
-          exit-code: '1'
-          ignore-unfixed: ${{ inputs.trivy_ignore_unfixed }}
-          vuln-type: 'os,library'
-          format: 'table'
-          # Si le scan échoue (exit-code=1), le job s'arrête ici et l'image n'est PAS pushée.
+      - name: Trivy scan (gate CRITICAL + HIGH) — install CLI + run
+        # Approche bash directe au lieu de l'action wrapper aquasecurity/trivy-action :
+        # les versions actions récentes (0.28+) ont une dépendance setup-trivy@v0.2.2
+        # inexistante, et les anciennes versions ne sont pas toujours bien taguées.
+        # Le script install.sh d'aquasecurity est officiel et stable.
+        # NOTE C.6 : pinner la version Trivy CLI (actuellement: latest stable).
+        run: |
+          set -euo pipefail
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+          trivy --version
+          EXTRA_ARGS=()
+          if [ "${{ inputs.trivy_ignore_unfixed }}" = "true" ]; then
+            EXTRA_ARGS+=(--ignore-unfixed)
+          fi
+          # exit-code=1 sur findings = bloque le job + image NON pushée vers AR
+          trivy image \
+            --severity "${{ inputs.trivy_severity_block }}" \
+            --exit-code 1 \
+            --vuln-type os,library \
+            --format table \
+            "${EXTRA_ARGS[@]}" \
+            "${{ steps.tag.outputs.image_ref }}"
 
       - name: Push image vers Artifact Registry (scan OK)
         id: push
