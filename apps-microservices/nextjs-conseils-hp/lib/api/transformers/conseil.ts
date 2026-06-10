@@ -72,6 +72,38 @@ function normalizeSchemaGuide(raw: Record<string, unknown>): Record<string, unkn
   return ordered;
 }
 
+/**
+ * Si un bloc type 11 (estimation prix) est directement suivi d'un bloc type 4 ou 5
+ * sans estimation propre, injecte l'estimation dans le bloc suivant et supprime le type 11.
+ */
+function mergeEstimationIntoNextBloc(blocs: PhpBloc[]): PhpBloc[] {
+  const result: PhpBloc[] = [];
+  let i = 0;
+  while (i < blocs.length) {
+    const cur = blocs[i];
+    const next = blocs[i + 1];
+    if (
+      cur.type === 11 &&
+      next &&
+      (next.type === 4 || next.type === 5) &&
+      !next.contenu.estimation?.valeur
+    ) {
+      result.push({
+        ...next,
+        contenu: {
+          ...next.contenu,
+          estimation: { label: 'Estimation de prix', valeur: cur.contenu.texte ?? '' },
+        },
+      });
+      i += 2;
+    } else {
+      result.push(cur);
+      i++;
+    }
+  }
+  return result;
+}
+
 function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
   const base = {
     id: String(phpBloc.id ?? `bloc-${phpBloc.ordre}`),
@@ -328,8 +360,9 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
       ...(r.premier_bloc_texte ? { subtitle: r.premier_bloc_texte } : {}),
       ...(heroImage ? { image: heroImage } : {}),
     },
-    blocks: (r.blocs ?? [])
-      .sort((a, b) => a.ordre - b.ordre)
+    blocks: mergeEstimationIntoNextBloc(
+      (r.blocs ?? []).sort((a, b) => a.ordre - b.ordre)
+    )
       .map(transformBloc)
       .filter((b): b is ConseilBlock => b !== null),
     ...(r.schema_guide && Object.keys(r.schema_guide).length > 0 ? { schemaGuide: normalizeSchemaGuide(r.schema_guide) } : {}),
