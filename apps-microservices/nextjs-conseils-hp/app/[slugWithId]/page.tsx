@@ -98,6 +98,13 @@ export default async function Page({ params }: PageProps) {
   }
   const page = result.page;
 
+  // Pages de type "top" (id_tag = 2) : non gérées côté Next.js pour l'instant.
+  // On redirige définitivement vers l'URL canonique retournée par l'API
+  // (qui pointe vers la version PHP sur conseils.hellopro.fr).
+  if (page.pageType === 'top' && page.canonicalUrl) {
+    permanentRedirect(page.canonicalUrl);
+  }
+
   // Redirection canonique : si le chemin demandé diffère du chemin canonique,
   // on redirige (301/308) vers le slug canonique — comme la gestion sur hellopro.fr.
   // ⚠️ On compare uniquement le CHEMIN (sans domaine) : en local le domaine diffère

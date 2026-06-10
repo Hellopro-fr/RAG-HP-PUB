@@ -168,7 +168,7 @@ function KeyTakeaways({ items, html, title: _title }: { items: ResumeItem[]; htm
       <div className="flex gap-2">
         <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cta" />
         <div
-          className="min-w-0 flex-1 text-xs leading-snug text-primary-foreground/90
+          className="min-w-0 flex-1 text-[13px] leading-snug text-primary-foreground/90
             [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-4
             [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-4
             [&_li]:mb-0.5

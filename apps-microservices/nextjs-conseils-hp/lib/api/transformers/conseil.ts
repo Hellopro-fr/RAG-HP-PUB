@@ -258,7 +258,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         type: 'texte',
         data: {
           html: '',
-          estimation: { value: c.texte ?? '', label: 'Estimation' },
+          estimation: { value: c.texte ?? '', label: 'Estimation de prix' },
         },
       };
 

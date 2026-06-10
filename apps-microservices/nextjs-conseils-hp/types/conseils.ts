@@ -70,6 +70,8 @@ export interface AoFormQuestion {
   typeSelection: string | number;
   /** 1 = réponse obligatoire avant de valider / 0 = facultatif */
   obligatoire: 0 | 1;
+  /** Nombre d'écrans dans le formulaire — utilisé pour step_number dans le push GTM quote_form_funnel */
+  stepNumber?: number;
   choix: AoChoix[];
 }
 

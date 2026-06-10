@@ -18,7 +18,8 @@ describe('RootLayout', () => {
         <div>Content</div>
       </RootLayout>
     );
-    expect(screen.getByTestId('schema')).toBeDefined();
+    // Le head slot est rendu dans <head> — hors du body — donc on cherche dans document
+    expect(document.querySelector('[data-testid="schema"]')).toBeTruthy();
   });
 
   it('renders without head slot when null', () => {
