@@ -123,6 +123,11 @@ on:
         required: false
         type: boolean
         default: true
+      trivy_disable_gate:
+        description: 'Si true, le scan Trivy est informatif (n''échoue pas). À utiliser en POC pour les services avec dette CVE connue. À désactiver dès que la dette est traitée.'
+        required: false
+        type: boolean
+        default: false
     outputs:
       service_url:
         description: 'URL publique du service Cloud Run déployé'
@@ -212,11 +217,16 @@ jobs:
           if [ "${{ inputs.trivy_ignore_unfixed }}" = "true" ]; then
             EXTRA_ARGS+=(--ignore-unfixed)
           fi
-          # exit-code=1 sur findings = bloque le job + image NON pushée vers AR
+          # Gate ON/OFF : par défaut exit-code=1 (bloque). Pour POC avec dette CVE connue, exit-code=0 (informatif).
+          EXIT_CODE=1
+          if [ "${{ inputs.trivy_disable_gate }}" = "true" ]; then
+            echo "::warning::Trivy gate DÉSACTIVÉE (trivy_disable_gate=true) - scan informatif uniquement"
+            EXIT_CODE=0
+          fi
           trivy image \
             --severity "${{ inputs.trivy_severity_block }}" \
-            --exit-code 1 \
-            --vuln-type os,library \
+            --exit-code "$EXIT_CODE" \
+            --pkg-types os,library \
             --format table \
             "${EXTRA_ARGS[@]}" \
             "${{ steps.tag.outputs.image_ref }}"
