@@ -4,13 +4,13 @@
     {
       "id": 7,
       "subject": "Task 1: Create snapshot backup branch",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** archive/dead-services-2026-06-10 exists at current features/poc HEAD with all 35 workflow files reachable.\n\n**Files:** none modified (branch ref only).\n\n**Acceptance Criteria:**\n- Working tree clean apart from known untracked noise; branch is features/poc\n- archive/dead-services-2026-06-10 points at same SHA as features/poc\n- git ls-tree of branch shows 35 files under .github/workflows/\n\n**Verify:** git rev-parse archive/dead-services-2026-06-10 features/poc -> identical SHAs; git ls-tree --name-only archive/dead-services-2026-06-10 -- .github/workflows/ | wc -l -> 35\n\n**Steps:** preconditions check (branch + clean status) -> git branch archive/dead-services-2026-06-10 -> verify SHAs + file count. STOP if branch already exists or tree dirty. Full commands in plan doc Task 1.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"git rev-parse archive/dead-services-2026-06-10 features/poc && git ls-tree --name-only archive/dead-services-2026-06-10 -- .github/workflows/ | wc -l\", \"acceptanceCriteria\": [\"branch points at features/poc HEAD\", \"35 workflow files reachable from branch\", \"no working-tree changes made\"]}\n```"
     },
     {
       "id": 8,
       "subject": "Task 2: Delete 28 dead workflows, commit, verify",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
       "description": "**Goal:** Single commit on features/poc removing exactly the 28 dead workflow files; 7 files remain in .github/workflows/.\n\n**Files:** delete 28 under .github/workflows/ (9x cd_build_push_services_*, 9x ci_services_*, 9x service-*-pipeline.yml, + test-embedding-service.yaml — exact list in plan doc Task 2). Keep 7: cd_build_push_api_catalog.yml, ci_services_api_catalog.yml, ci_account_service_backend.yml, ci_account_service_frontend.yml, ci_services_crawler.yml, graphify-auto-rebuild.yml, graphify-coverage-check.yml.\n\n**Acceptance Criteria:**\n- Commit touches exactly 28 files, all deletions, all under .github/workflows/\n- Exactly the 7 kept files remain\n- Bilingual EN+FR conventional commit (message text in plan doc)\n- Working tree clean after (except untracked noise)\n\n**Verify:** ls -1 .github/workflows | wc -l -> 7; git show --stat HEAD -> 28 files changed, deletions only\n\n**Steps:** git rm 28 files -> pre-commit check (28 staged D lines, ls shows 7) -> write commit msg to .git-commit-msg-tmp.txt via Write tool -> git commit --file= + rm temp -> post-commit verify (stat 28, ls 7, archive 35, status clean). NO push.\n\n```json:metadata\n{\"files\": [\".github/workflows/\"], \"verifyCommand\": \"ls -1 .github/workflows | wc -l && git show --stat HEAD | tail -3\", \"acceptanceCriteria\": [\"exactly 28 deletions in commit\", \"7 files remain\", \"bilingual commit message\", \"no push\"]}\n```"
     }
