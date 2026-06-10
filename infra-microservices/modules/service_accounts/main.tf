@@ -93,7 +93,7 @@ resource "google_service_account" "github_deployer" {
 # Permissions minimales pour deployer sur Cloud Run + push AR + lire secrets
 resource "google_project_iam_member" "github_deployer_roles" {
   for_each = toset([
-    "roles/run.developer",                # Deploy services Cloud Run
+    "roles/run.admin",                    # Deploy services Cloud Run + setIamPolicy (allUsers binding via --allow-unauthenticated) - F-HP-IAM-003 (2026-06-10)
     "roles/iam.serviceAccountUser",       # Impersonate cloudrun_sa lors du deploy
     "roles/artifactregistry.writer",      # Push images vers Artifact Registry
     "roles/secretmanager.secretAccessor", # Lire les secrets (si necessaire pour deploy)

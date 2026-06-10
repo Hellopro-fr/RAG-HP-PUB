@@ -304,6 +304,18 @@ resource "google_project_iam_member" "devops_infra_sa_viewer" {
 }
 
 # -----------------------------------------------------------------------------
+# F-HP-IAM-003 remediation - Sprint 002 (2026-06-10)
+# devops-infra-sa doit pouvoir manage Cloud Run y compris setIamPolicy
+# (allUsers binding via --allow-unauthenticated). Sans cela, un deploy CR
+# avec allow_unauthenticated=true rend le service inaccessible (403).
+# -----------------------------------------------------------------------------
+resource "google_project_iam_member" "devops_infra_sa_run_admin" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:devops-infra-sa@${var.project_id}.iam.gserviceaccount.com"
+}
+
+# -----------------------------------------------------------------------------
 # Monitoring & Alerting (Phase 3/5)
 # Source: Migre depuis infra-ci-cd/terraform/main.tf
 # NOTE: Decommenter quand alert_email et billing_account_id sont configures
