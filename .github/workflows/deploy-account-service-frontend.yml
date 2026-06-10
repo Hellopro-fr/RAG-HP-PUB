@@ -12,10 +12,12 @@ name: 'Deploy — account-service-frontend'
 on:
   push:
     branches:
-      - main
-      - features/poc
-      - features/infra-gcp-prod
+      # Phase POC (Sprint 002) : uniquement les branches migration déclenchent un deploy auto.
+      # main + features/poc à réactiver en S006 (CI/CD consolidation + branch protection).
       - 'feat/migration-**'
+      # - main                       # TODO S006 : réactiver pour CD prod
+      # - features/poc               # TODO S006 : réactiver après validation POC
+      # - features/infra-gcp-prod    # TODO : réactiver si push de la branche infra centralisée
     paths:
       - 'apps-microservices/account-service-frontend/**'
       - '.github/workflows/deploy-account-service-frontend.yml'

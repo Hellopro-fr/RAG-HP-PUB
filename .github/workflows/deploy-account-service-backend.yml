@@ -10,10 +10,12 @@ name: 'Deploy — account-service-backend'
 on:
   push:
     branches:
-      - main
-      - features/poc
-      - features/infra-gcp-prod
+      # Phase POC (Sprint 002) : uniquement les branches migration déclenchent un deploy auto.
+      # main + features/poc à réactiver en S006 (CI/CD consolidation + branch protection).
       - 'feat/migration-**'
+      # - main                       # TODO S006 : réactiver pour CD prod
+      # - features/poc               # TODO S006 : réactiver après validation POC
+      # - features/infra-gcp-prod    # TODO : réactiver si push de la branche infra centralisée
     paths:
       - 'apps-microservices/account-service-backend/**'
       - '.github/workflows/deploy-account-service-backend.yml'
@@ -45,29 +47,31 @@ jobs:
       vpc_connector: vpc-access-connector
       vpc_egress: private-ranges-only
       health_check_path: /health
-      # Env vars non-sensibles
-      # NOTE C.5: vérifier les valeurs JWT_ALGO/JWT_AUDIENCE/AUTH_URL/ADMIN_EMAILS depuis .env réel
-      # MYSQL_HOST/API_CATALOG_GRPC: IP interne VM GPU. À remplacer par DNS interne (D3 - Phase ultérieure).
+      # Env vars non-sensibles (valeurs validées depuis VM GPU prod conteneur account-service-backend - 2026-06-09)
+      # MYSQL_HOST/API_CATALOG_GRPC : IP interne VM GPU 10.11.0.2. À remplacer par DNS interne (D3 - Phase ultérieure).
+      # JWT_AUDIENCE : URL complète https://www.hellopro.fr (validation JWT cross-service, partagé avec api-gateway).
+      # SLACK_ENV_LABEL : dev-cr-poc pour identifier explicitement le POC dans les notifs Slack (vs prod sur VM GPU).
       env_vars_json: |
         {
           "ACCOUNT_PORT": "8600",
+          "ACCOUNT_PUBLIC_URL": "https://login.hellopro.eu",
           "MYSQL_HOST": "10.11.0.2",
           "MYSQL_PORT": "3306",
           "MYSQL_USER": "gateway_user",
           "MYSQL_DB": "gateway_db",
           "JWT_ALGO": "HS256",
-          "JWT_AUDIENCE": "hellopro",
-          "AUTH_URL": "https://auth.hellopro.fr",
-          "ADMIN_EMAILS": "",
-          "FALLBACK_USER": "",
-          "FALLBACK_EMAIL": "",
+          "JWT_AUDIENCE": "https://www.hellopro.fr",
+          "AUTH_URL": "https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php",
+          "ADMIN_EMAILS": "sandrianirinaharivelo@hellopro.fr,randrianjanaka@hellopro.fr,rravelonarisoa@hellopro.fr",
+          "FALLBACK_USER": "aandrianirina",
+          "FALLBACK_EMAIL": "aandrianirina@hellopro.fr",
           "OAUTH2_DEFAULT_TOKEN_TTL": "60",
           "OAUTH2_DEFAULT_REFRESH_TTL": "2592000",
           "OAUTH2_AUTH_CODE_TTL": "600",
           "LOGOUT_WEBHOOK_TIMEOUT": "5",
           "LOGOUT_WEBHOOK_RETRIES": "3",
           "SECURE_COOKIE": "true",
-          "SLACK_ENV_LABEL": "dev",
+          "SLACK_ENV_LABEL": "dev-cr-poc",
           "API_CATALOG_GRPC": "10.11.0.2:9100"
         }
       # Secrets montés depuis Secret Manager (cf. Phase C.2 - 7 secrets dédiés)
