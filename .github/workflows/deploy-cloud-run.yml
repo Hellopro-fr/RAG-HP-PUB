@@ -198,7 +198,7 @@ jobs:
             "${{ inputs.build_context }}"
 
       - name: Trivy scan (gate CRITICAL + HIGH)
-        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # 0.29.0
+        uses: aquasecurity/trivy-action@595be6a0f6760a0111c7a59a82bff43d04bd1ce4 # v0.24.0 (stable, sans dépendance setup-trivy externe)
         with:
           image-ref: ${{ steps.tag.outputs.image_ref }}
           severity: ${{ inputs.trivy_severity_block }}
