@@ -21,8 +21,10 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
+import { classifyHttpStatus } from "./httpStatusPolicy.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -194,7 +196,7 @@ const ALWAYS_REMOVE_PARAMS = [
 ];
 
 router.addDefaultHandler(
-    async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
+    async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response, session }) => {
         // Shared detect client (Part B). Constructed once in main.ts so the
         // timing sampler observes the SAME p-limit queue (live pendingCount /
         // activeCount). Fail fast if main.ts has not initialised it — a silent
@@ -263,9 +265,41 @@ router.addDefaultHandler(
             || (siteHostname && hostname.includes(siteHostname));
         if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            const isHomepageRedirect = request.url === site;
             // Set structured error message for "1 seul URL crawlé" case: domain change
-            if (request.url === site) {
+            if (isHomepageRedirect) {
                 context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
+
+            // --- External-Redirect Breaker (update mode only) ---
+            // Off-domain redirects return here BEFORE the circuit-breaker block and
+            // before UpdateChecker, so this guard is the only place that can detect a
+            // relocated domain. Abort + fail (exit 7) instead of wasting a full
+            // re-crawl and reporting a misleading success. See spec 2026-06-09.
+            const cb = context.config?.circuitBreaker;
+            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled) {
+                const external = await context.statsManager.increment("external_redirects");
+
+                // Homepage fast-path: homepage off-domain ⇒ whole site moved.
+                // Abort BEFORE Phase 2 seeds the previous dataset (saves the re-crawl).
+                if (isHomepageRedirect) {
+                    context.stopReason = "domainChanged";
+                    context.fatalExitCode = 7;
+                    await stopCrawler(crawler, "Domain changed: homepage redirects off-domain");
+                    return;
+                }
+
+                // Ratio breaker: most seeded URLs redirect off-domain.
+                const processed = await context.statsManager.getValue("processed");
+                const decision = shouldTripExternalRedirectBreaker(external, processed, cb);
+                if (decision.trip) {
+                    log.warning(`🛑 External-redirect breaker: ${decision.reason}`);
+                    context.stopReason = "domainChanged";
+                    context.crawlErrorMessage = "Toutes les URLs redirigent vers un autre domaine (domaine changé)";
+                    context.fatalExitCode = 7;
+                    await stopCrawler(crawler, `Domain changed: ${decision.reason}`);
+                    return;
+                }
             }
             return;
         }
@@ -284,25 +318,37 @@ router.addDefaultHandler(
             }
         }
 
-        // Blocked Status Check
+        // HTTP Status Policy — single source of truth.
+        // Reachable for every non-ok status because blockedStatusCodes is now empty
+        // (Crawlee no longer pre-throws) and navigation resolves on 'domcontentloaded'
+        // so response.status() is available even on heavy/slow pages.
+        // Spec: docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md
         if (response) {
             const status = response.status();
-            if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
-                log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
-                // Set structured error message for "1 seul URL crawlé" case: HTTP error on homepage
+            const statusClass = classifyHttpStatus(status);
+            if (statusClass !== "ok") {
+                // Preserve existing bookkeeping: homepage error message + error tracking.
                 if (request.url === site) {
                     context.crawlErrorMessage = `Erreur HTTP ${status}`;
                 }
-                // Delegate error tracking to UpdateChecker in update mode
                 const source = request.userData.source || '';
                 if (context.updateChecker && source) {
                     await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
                 } else if (context.statsManager && request.userData.is_existing) {
-                    // Legacy fallback for non-update mode
                     await context.statsManager.increment("errors");
                 }
-                // Don't process, let failedRequestHandler handle it
-                throw new Error(`BLOCKED: HTTP ${status}`);
+
+                if (statusClass === "permanent") {
+                    request.noRetry = true;
+                    log.error(`⛔ PERMANENT HTTP ${status} on ${url} — no retry`);
+                } else if (statusClass === "block") {
+                    session?.retire();
+                    log.warning(`🚫 BLOCKED HTTP ${status} on ${url} — retire session, retry`);
+                } else {
+                    log.warning(`↻ TRANSIENT HTTP ${status} on ${url} — retry`);
+                }
+                // Hand off to failedRequestHandler (records the rich error row).
+                throw new Error(`HTTP ${status}`);
             }
         }
 

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ProduitsBlockData, ProductItem } from '@/types/blocks/produits';
+import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
 
 const PAGE_SIZE = 6;
 
@@ -15,6 +16,7 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [openProductId, setOpenProductId] = useState<string | null>(null);
 
   const updateScrollState = () => {
     const el = scrollRef.current;
@@ -69,14 +71,32 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
         className="flex gap-4 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard
+            key={product.id}
+            product={product}
+            onContact={() => setOpenProductId(String(product.id))}
+          />
         ))}
       </div>
+
+      {/* Un seul modal partagé — id_produit change selon le produit cliqué */}
+      {openProductId && (
+        <IframeProduitModal
+          idProduit={openProductId}
+          open={true}
+          onClose={() => setOpenProductId(null)}
+        />
+      )}
     </section>
   );
 }
 
-function ProductCard({ product }: { product: ProductItem }) {
+interface ProductCardProps {
+  product: ProductItem;
+  onContact: () => void;
+}
+
+function ProductCard({ product, onContact }: ProductCardProps) {
   const priceLabel = product.priceHt
     ? `${product.priceHt.toLocaleString('fr-FR')} € HT`
     : 'Prix sur demande';
@@ -108,14 +128,14 @@ function ProductCard({ product }: { product: ProductItem }) {
         {priceLabel}
       </p>
 
-      <a
-        href={product.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`mt-3 block rounded border border-primary px-3 py-1.5 text-center text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground${product.variant === 'cert' ? ' tracking' : ''}`}
+      {/* Bouton contact — ouvre le formulaire produit via iframe, jamais de href */}
+      <button
+        type="button"
+        onClick={onContact}
+        className="mt-3 cursor-pointer rounded border border-primary px-3 py-1.5 text-center text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
       >
         Envoyer un message
-      </a>
+      </button>
     </div>
   );
 }

@@ -317,6 +317,39 @@ function testComputeExcludedRegionalPaths() {
         assertEqual(result.rejected, [], "Case G: empty alts produces no rejections");
     }
 
+    // Case H: winner/seed prefix differs only by CASE from its own hreflang alt.
+    // BCP-47 locale codes are case-insensitive (lang lowercase, region uppercase:
+    // "fr-FR"), but the detection API may surface detectResult.url normalized to
+    // lowercase ("/fr-fr") while the alternative_urls entry keeps the raw hreflang
+    // casing ("/fr-FR"). A case-sensitive === skip would fail to recognize the
+    // winner's own tree and wrongly exclude it, blocking the locale we picked.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://www.leybold.com/fr-FR/", method: "hreflang", reliability: "high", validated: true, region_priority: 0 },
+                { url: "https://www.leybold.com/en-be", method: "hreflang", reliability: "high", validated: true, region_priority: 2 },
+            ],
+            "/fr-fr", // winnerPrefix — API normalized detectResult.url to lowercase
+            "/fr-fr", // seedPrefix
+        );
+        assertEqual(result.excluded, ["/en-be"], "Case H: winner /fr-FR (case-variant of /fr-fr) NOT excluded; /en-be excluded");
+    }
+
+    // Case I: implicit-winner case-variant — seed/winner null, FR alt raw-cased.
+    // Confirms the case-insensitive skip also protects an implicit FR winner whose
+    // hreflang casing differs from a sibling non-FR locale we DO want excluded.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://example.com/FR-fr/", method: "hreflang", reliability: "high", validated: true, region_priority: 0 },
+                { url: "https://example.com/DE-de/", method: "hreflang", reliability: "high", validated: true, region_priority: 2 },
+            ],
+            "/fr-FR", // winnerPrefix
+            "/fr-FR", // seedPrefix
+        );
+        assertEqual(result.excluded, ["/DE-de"], "Case I: /FR-fr case-variant of winner not excluded; /DE-de excluded");
+    }
+
     console.log(`computeExcludedRegionalPaths: ${passed} passed, ${failed} failed`);
     if (failed > 0) process.exit(1);
 }

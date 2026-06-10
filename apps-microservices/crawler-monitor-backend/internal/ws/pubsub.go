@@ -120,6 +120,16 @@ func (p *PubSub) broadcastTransformed(payload string) {
 
 	msgType, _ := raw["type"].(string)
 	if msgType != "heartbeat" {
+		// crawler-service publie les changements de statut sur crawl_updates
+		// au format {crawl_id, status, timestamp} sans champ type. Le frontend
+		// React ne reagit qu aux messages {type:job_update, crawl_id}. On les
+		// traduit donc en job_update type : sans ca, les transitions de statut
+		// (finished/failed/archived/stopping/restarting_oom) n atteignent jamais
+		// le dashboard (aucun polling REST de secours n existe).
+		if cid := stringOrNum(raw["crawl_id"]); cid != "" {
+			p.emitJobUpdate(cid)
+			return
+		}
 		p.hub.Broadcast([]byte(payload))
 		return
 	}

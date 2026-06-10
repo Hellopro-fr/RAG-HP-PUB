@@ -1,11 +1,15 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { CoherenceProvider } from '../CoherenceProvider';
 import { CoherencePastille } from './CoherencePastille';
 import { mkReplica } from '../__fixtures__/mocks';
+
+// Constants mirrored from CoherenceProvider to compute timing expectations
+const EVAL_INTERVAL_MS = 5000;
+const HYSTERESIS_MS = 4000;
 
 const renderWith = (ui, { replicas = {}, capacity = null } = {}) => {
   const qc = new QueryClient({
@@ -37,10 +41,15 @@ describe('CoherencePastille', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('renders an icon + link when violated', () => {
+  it('renders an icon + link when violated', async () => {
+    vi.useFakeTimers();
     renderWith(<CoherencePastille ruleId="replicas_vs_max_slots" />, {
       replicas: { r1: mkReplica('r1') },
       capacity: { max_global_jobs: 3, running_jobs: 0 },
+    });
+    // Advance past first eval tick + hysteresis before the violation is shown
+    await act(async () => {
+      vi.advanceTimersByTime(EVAL_INTERVAL_MS + HYSTERESIS_MS + 100);
     });
     const link = screen.getByRole('link');
     expect(link).toHaveAttribute('href', '/health#rule-replicas_vs_max_slots');
@@ -48,6 +57,7 @@ describe('CoherencePastille', () => {
       'aria-label',
       expect.stringMatching(/Incohérence/),
     );
+    vi.useRealTimers();
   });
 
   it('renders nothing for unknown rule id', () => {

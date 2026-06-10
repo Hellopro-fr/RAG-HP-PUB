@@ -329,13 +329,24 @@ export class DetectionLangueClient {
             }
         }
 
+        // Locale codes are case-insensitive per BCP-47 (e.g. "fr-FR"). The detection
+        // API may surface detectResult.url normalized to lowercase ("/fr-fr") while an
+        // alternative_urls entry keeps the raw hreflang casing ("/fr-FR"). Compare the
+        // skip prefixes case-insensitively so the winner/seed locale is never excluded
+        // by mere casing drift. excluded[] keeps each alt's ORIGINAL casing so the
+        // downstream isExcludedRegionalPath gate still matches the served link paths.
+        const winnerPrefixLc = winnerPrefix?.toLowerCase() ?? null;
+        const seedPrefixLc = seedPrefix?.toLowerCase() ?? null;
+        const implicitWinnerPrefixLc = implicitWinnerPrefix?.toLowerCase() ?? null;
+
         for (const alt of alternativeUrls) {
             const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
+            const altPrefixLc = altPrefix?.toLowerCase() ?? null;
             if (
                 !altPrefix ||
-                altPrefix === winnerPrefix ||
-                altPrefix === seedPrefix ||
-                altPrefix === implicitWinnerPrefix
+                altPrefixLc === winnerPrefixLc ||
+                altPrefixLc === seedPrefixLc ||
+                altPrefixLc === implicitWinnerPrefixLc
             ) {
                 continue;
             }

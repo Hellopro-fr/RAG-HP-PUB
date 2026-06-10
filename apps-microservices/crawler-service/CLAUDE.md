@@ -299,6 +299,7 @@ for success+stop and `'failure'` for failures, into the `crawler_webhook_dedup` 
 | 4 | Update mode no data | Status: `failed`, failure webhook with descriptive message |
 | 5 | Redis connection lost (Node-side sustained loss) | Status: `failed`, failure webhook with `failure_cause=redis_lost` |
 | 6 | Progress stall (no URL progress for threshold) | Status: `failed`, failure webhook with `failure_cause=progress_stalled` |
+| 7 | Update mode: domain changed (all/most URLs redirect off-domain) | Status: `failed`, failure webhook with `failure_cause=domain_changed` |
 | Other | Failure | Status: `failed`, failure webhook |
 
 ## Redis Loss / Progress Stall Detection
@@ -323,6 +324,7 @@ This is a cross-language contract between Python orchestrator and Marketplace BO
 | 4 | `update_mode_no_data` | Update-mode crawl produced 0 URLs |
 | 5 | `redis_lost` | `RedisHealthMonitor` fired |
 | 6 | `progress_stalled` | `ProgressMonitor` fired |
+| 7 | `domain_changed` | Update crawl aborted: all/most seeded URLs redirect off-domain (relocated site). Homepage fast-path or external-redirect ratio breaker. Spec `docs/superpowers/specs/2026-06-09-external-redirect-breaker-design.md`. |
 | 137 / -9 | `killed_oom_system` | Process killed by OOM killer (SIGKILL) |
 | other negative | `signal_killed` | Killed by signal (non-OOM) |
 | other positive | `unknown` | Unexpected exit code |
@@ -450,6 +452,38 @@ On HTTP 503, precedence for the retry wait time is **server `Retry-After` header
 Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md`.
 
 **Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
+
+## HTTP Status & Navigation Retry Policy
+
+`page.goto` resolves on `domcontentloaded` (not Playwright's default `load`), so the
+HTTP status is visible even on heavy pages whose sub-resources never settle. Default
+`load` previously hung for the full `navigationTimeoutSecs` (90s) and the status was
+never read — a real 404 timed out and was retried 5×. Content completeness is
+unaffected: the handler re-settles content post-navigation via
+`processPage`/`waitAndScroll` (bounded `networkidle` + scroll).
+
+Status handling is a single source of truth in `crawler/src/httpStatusPolicy.ts`
+(`classifyHttpStatus`), applied in the `routes.ts` default handler. `blockedStatusCodes`
+is empty — Crawlee no longer pre-throws on status; every status reaches the handler.
+
+| Class | Codes | Behavior |
+|-------|-------|----------|
+| permanent | 400, 401, 404, 405, 406, 410, 414, 423, 451, 501 | `request.noRetry = true` → fail once |
+| block | 403, 429 | `session.retire()` → retry with fresh session |
+| transient | 408, 425, 500, 502, 503, 504, 509, 521-526 | retry (≤ `maxRequestRetries`) |
+| ok | all others (2xx/3xx + unlisted) | proceed to extraction |
+
+Navigation timeouts (no HTTP response at all) are capped in `failedRequestHandler`:
+after `TIMEOUT_MAX_RETRIES`, `request.noRetry` is set.
+
+**Env vars (optional; defaults baked in, inherited by the Node subprocess):**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `NAVIGATION_WAIT_UNTIL` | `domcontentloaded` | `page.goto` wait condition. Allowed: `load`, `domcontentloaded`, `commit`, `networkidle`. Invalid → default. Set `load` to revert. |
+| `TIMEOUT_MAX_RETRIES` | `2` | Max navigation-timeout retries before `noRetry`. |
+
+Spec: `docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md`.
 
 ## Conventions
 
