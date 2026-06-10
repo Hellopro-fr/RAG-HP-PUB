@@ -275,7 +275,15 @@ jobs:
         id: args
         run: |
           set -euo pipefail
-          ENV_ARGS=$(echo '${{ inputs.env_vars_json }}' | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
+          # ENV vars : séparateur custom '|' (gcloud syntaxe ^|^) car certaines valeurs
+          # contiennent ',' (ex: ADMIN_EMAILS=email1,email2,email3) → collision avec
+          # le séparateur par défaut. Le '|' n'apparaît jamais dans nos valeurs
+          # (URLs, emails, IPs, paths, JSON). Doc gcloud : `gcloud topic escaping`.
+          ENV_ARGS=$(echo '${{ inputs.env_vars_json }}' | jq -r 'to_entries | map("\(.key)=\(.value)") | join("|")')
+          if [ -n "$ENV_ARGS" ]; then
+            ENV_ARGS="^|^${ENV_ARGS}"
+          fi
+          # SECRETS : séparateur ',' OK car les références secret-name:version ne contiennent jamais ','
           SECRET_ARGS=$(echo '${{ inputs.secret_env_vars_json }}' | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
           echo "env_args=${ENV_ARGS}" >> "$GITHUB_OUTPUT"
           echo "secret_args=${SECRET_ARGS}" >> "$GITHUB_OUTPUT"
