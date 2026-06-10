@@ -26,7 +26,7 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
   useEffect(() => { updateScrollState(); }, [items.length]);
 
   const scroll = (dir: 'left' | 'right') => {
-    scrollRef.current?.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -256 : 256, behavior: 'smooth' });
   };
 
   if (items.length === 0) return null;
@@ -82,7 +82,7 @@ function ProductCard({ product }: { product: ProductItem }) {
     : 'Prix sur demande';
 
   return (
-    <div className="flex w-44 shrink-0 flex-col rounded border border-border bg-background p-3">
+    <div className="flex w-60 shrink-0 flex-col rounded border border-border bg-background p-3">
       <a
         href={product.url}
         target="_blank"
@@ -96,7 +96,7 @@ function ProductCard({ product }: { product: ProductItem }) {
             alt=""
             fill
             className="object-contain p-2"
-            sizes="176px"
+            sizes="240px"
           />
         </div>
         <p className="line-clamp-2 text-sm font-bold leading-tight text-foreground">

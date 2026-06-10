@@ -8,7 +8,7 @@ export function TableauHtmlBlock({ data }: TableauHtmlBlockProps) {
   if (!data.headers.length && !data.rows.length) return null;
 
   return (
-    <div className="not-prose my-6 rounded-xl border border-border shadow-sm">
+    <div className="not-prose my-6 overflow-hidden rounded-xl border border-border shadow-sm">
       <div className="overflow-x-auto [scrollbar-width:thin]">
         <table className="w-full text-left text-sm">
           {data.headers.length > 0 && (

@@ -141,6 +141,7 @@ export interface PhpAoQuestion {
   ordre: string | number;
   obligatoire: string | number;
   avec_image: 0 | 1;
+  step_number?: number;
   choix: PhpAoChoix[];
 }
 
