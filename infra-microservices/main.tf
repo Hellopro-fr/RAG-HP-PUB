@@ -288,6 +288,22 @@ resource "google_project_iam_member" "devops_infra_sa_secretmanager_admin" {
 }
 
 # -----------------------------------------------------------------------------
+# F-HP-IAM-002 remediation - Sprint 002 (2026-06-09)
+# Pattern recurrent : devops-infra-sa peut creer/destruire des ressources mais
+# n'a pas les .list/.get sur les divers services GCP (vpcaccess, dns, compute,
+# run, etc.). Ajout de roles/viewer projet pour couvrir TOUTES les lectures
+# de maniere uniforme - evite le yo-yo permission denied a chaque exploration.
+# Coherent avec son scope d'admin infra : il peut deja tout creer/destruire,
+# autoriser la lecture est logique. Audit Cloud Logging trace toutes les
+# lectures => visibilite conservee.
+# -----------------------------------------------------------------------------
+resource "google_project_iam_member" "devops_infra_sa_viewer" {
+  project = var.project_id
+  role    = "roles/viewer"
+  member  = "serviceAccount:devops-infra-sa@${var.project_id}.iam.gserviceaccount.com"
+}
+
+# -----------------------------------------------------------------------------
 # Monitoring & Alerting (Phase 3/5)
 # Source: Migre depuis infra-ci-cd/terraform/main.tf
 # NOTE: Decommenter quand alert_email et billing_account_id sont configures
