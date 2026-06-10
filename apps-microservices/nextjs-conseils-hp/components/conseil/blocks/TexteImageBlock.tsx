@@ -129,7 +129,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
       {data.estimate && (
         <div className="inline-flex items-baseline gap-2 self-start rounded-md bg-primary-soft px-3 py-2">
           {data.estimateLabel && (
-            <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+            <span className="text-sm font-semibold tracking-wide text-primary">
               {data.estimateLabel}
             </span>
           )}

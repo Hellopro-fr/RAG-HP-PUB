@@ -128,16 +128,17 @@ class CaracterisationProduitGenerator:
         """
         Normalise une chaîne pour comparaison stricte:
         - Transforme en minuscule
-        - Supprime tous les espaces
+        - Supprime les espaces
         - Supprime les accents
         - Supprime les caractères spéciaux
-        Retourne uniquement les lettres alphabétiques
-        
+        Conserve lettres ET chiffres (les chiffres sont distinctifs :
+        "4 semelles" ≠ "6 semelles").
+
         Args:
             text: Chaîne à normaliser
-            
+
         Returns:
-            Chaîne normalisée (uniquement alphabet minuscule)
+            Chaîne normalisée (alphanumérique minuscule, sans accents/espaces)
         """
         if not text:
             return ""
@@ -147,8 +148,8 @@ class CaracterisationProduitGenerator:
         # Normaliser pour supprimer les accents
         nfkd = unicodedata.normalize('NFKD', text)
         text_clean = ''.join([c for c in nfkd if not unicodedata.combining(c)])
-        # Garder uniquement les lettres alphabétiques (supprimer espaces, chiffres, caractères spéciaux)
-        return re.sub(r'[^a-z]', '', text_clean)
+        # Garder lettres + chiffres (supprimer espaces, accents déjà retirés, caractères spéciaux)
+        return re.sub(r'[^a-z0-9]', '', text_clean)
     
     def _normalize_string(self, text: str) -> str:
         """Normalise une chaîne pour comparaison (minuscule, sans caractères spéciaux)"""
