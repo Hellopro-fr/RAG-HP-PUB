@@ -83,9 +83,9 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
     />
   );
 
-  const imageColAlign = data.imagePosition === 'left' ? 'items-start' : 'items-end';
+  const imageColAlign = data.imagePosition === 'left' ? 'md:items-start' : 'md:items-end';
   const imageCol = (
-    <figure className={`flex flex-col ${imageColAlign}`}>
+    <figure className={`flex flex-col items-center ${imageColAlign}`}>
       <div className="w-fit max-w-full overflow-hidden rounded-xl">
         {imageEl}
       </div>
