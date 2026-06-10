@@ -28,6 +28,12 @@ on:
         type: string
         default: 'europe-west1'
 
+# Permissions requises par le workflow réutilisable deploy-cloud-run.yml
+# (sinon GHA refuse l'appel : "is requesting 'id-token: write', but is only allowed 'id-token: none'")
+permissions:
+  id-token: write   # Pour WIF OIDC vers GCP
+  contents: read    # Pour checkout du code
+
 jobs:
   deploy:
     name: 'Deploy account-service-backend'
