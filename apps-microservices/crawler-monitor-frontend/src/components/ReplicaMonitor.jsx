@@ -4,6 +4,7 @@ import { ResponsiveContainer, LineChart, Line, YAxis, Tooltip } from 'recharts';
 import { useJobsQuery, useReplicasHistoryQuery } from '../hooks/queries';
 import { Card } from './ui/card';
 import { cn } from '../lib/utils';
+import { isReplicaLive, replicaAge } from '../lib/replicas';
 import { CoherencePastille } from '../coherence/components/CoherencePastille';
 
 /**
@@ -37,8 +38,8 @@ const ReplicaMonitor = ({ replicas, token }) => {
   };
   const formatCpu = (load) => (load ? `${(load * 100).toFixed(1)}%` : '0%');
 
-  const getStatusClass = (timestamp) => {
-    const age = Date.now() - timestamp;
+  const getStatusClass = (replica) => {
+    const age = replicaAge(replica);
     if (age < 5000)  return 'bg-ok animate-pulse';
     if (age < 15000) return 'bg-warn';
     return 'bg-err';
@@ -70,7 +71,7 @@ const ReplicaMonitor = ({ replicas, token }) => {
   };
 
   const activeReplicas = Object.values(replicas).filter(
-    r => r && r.replicaId && Date.now() - (r.timestamp || 0) < 30000
+    r => r && r.replicaId && isReplicaLive(r)
   );
 
   return (
@@ -93,7 +94,7 @@ const ReplicaMonitor = ({ replicas, token }) => {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {activeReplicas.map((replica) => {
-            const statusClass = getStatusClass(replica.timestamp);
+            const statusClass = getStatusClass(replica);
             const linkedJob = replica.jobId ? jobsById.get(replica.jobId) : null;
             const crawlMode = linkedJob?.crawl_mode;
             const history = historyByReplica[replica.replicaId] || [];
