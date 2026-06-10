@@ -11,6 +11,7 @@ interface TexteImageBlockProps {
   data: TexteImageBlockData;
 }
 
+/** demande_info.php → TOUJOURS IframeFormModal. */
 function parseDemandeInfo(url: string): { idRubrique: string; extraParams: Record<string, string> } | null {
   try {
     if (!url.includes('demande_info.php')) return null;
@@ -27,12 +28,12 @@ function parseDemandeInfo(url: string): { idRubrique: string; extraParams: Recor
   }
 }
 
+/** contact_info.php → TOUJOURS IframeProduitModal, id_produit peut être absent. */
 function parseContactInfo(url: string): { idProduit: string; srcInteg: 0 | 1; extraParams: Record<string, string> } | null {
   try {
     if (!url.includes('contact_info.php')) return null;
     const parsed = new URL(url, 'https://www.hellopro.fr');
-    const idProduit = parsed.searchParams.get('id_produit');
-    if (!idProduit) return null;
+    const idProduit = parsed.searchParams.get('id_produit') ?? '';
     const srcInteg: 0 | 1 = parsed.searchParams.get('src_integ') === '1' ? 1 : 0;
     const extraParams: Record<string, string> = {};
     parsed.searchParams.forEach((value, key) => {
