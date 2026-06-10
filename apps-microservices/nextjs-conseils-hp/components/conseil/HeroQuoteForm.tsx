@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { ShieldCheck, Star, Check, ArrowRight } from 'lucide-react';
 import type { AoFormQuestion } from '@/types/conseils';
 import { IframeFormModal } from './IframeFormModal';
@@ -12,6 +13,43 @@ interface HeroQuoteFormProps {
 }
 
 export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
+  const formRef = useRef<HTMLDivElement>(null);
+  const stepNumber = question?.stepNumber;
+
+  useEffect(() => {
+    const el = formRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        observer.disconnect();
+
+        type GtmEntry = { product?: { category5?: string } } & Record<string, unknown>;
+        type GtmWindow = Window & { dataLayer?: GtmEntry[] };
+        const dl: GtmEntry[] = (window as GtmWindow).dataLayer ?? [];
+        const category5 = dl.find((d) => d.product?.category5)?.product?.category5 ?? '';
+
+        ((window as GtmWindow).dataLayer ??= []).push({
+          event: 'quote_form_funnel',
+          step_index: 0,
+          step_name: '1ere-question',
+          ...(stepNumber !== undefined ? { step_number: stepNumber } : {}),
+          funnel_devisplus: 'True',
+          funnel_context: 'header pages conseils',
+          user_known_status: 'Unknown',
+          'product.category5': category5,
+          step_type: '1ere-question',
+          page_location_uri: window.location.pathname + window.location.search,
+        });
+      },
+      { threshold: 0.01 },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [stepNumber]);
+
   const {
     modalOpen, startStep1, showError,
     questionLabel, isObligatoire,
@@ -22,7 +60,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
 
   return (
     <>
-      <div className="rounded-2xl bg-card p-5 text-card-foreground shadow-2xl ring-1 ring-black/5">
+      <div ref={formRef} className="rounded-2xl bg-card p-5 text-card-foreground shadow-2xl ring-1 ring-black/5">
         <div className="mb-1 flex items-center gap-2 text-sm">
           <ShieldCheck className="h-5 w-5 text-success" />
           <span className="font-semibold text-foreground">Recevez jusqu&apos;à 3 devis gratuits</span>

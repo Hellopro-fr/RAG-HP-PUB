@@ -30,12 +30,14 @@ export function VideoEmbed({ placeholder, embedUrl, rawUrl }: VideoEmbedProps) {
   }, [embedUrl]);
 
   return (
-    <embed
-      ref={ref}
-      src={placeholder}
-      data-src={embedUrl}
-      data-val={rawUrl}
-      className="video-embed lazy-load-img w-[675px] h-[450px]"
-    />
+    <div className="relative w-full aspect-video overflow-hidden rounded-lg md:w-[675px] md:h-[450px]">
+      <embed
+        ref={ref}
+        src={placeholder}
+        data-src={embedUrl}
+        data-val={rawUrl}
+        className="video-embed lazy-load-img absolute inset-0 w-full h-full"
+      />
+    </div>
   );
 }
