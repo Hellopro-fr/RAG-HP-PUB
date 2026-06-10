@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ProduitsBlockData, ProductItem } from '@/types/blocks/produits';
+import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
 
 const PAGE_SIZE = 6;
 
@@ -15,6 +16,7 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [openProductId, setOpenProductId] = useState<string | null>(null);
 
   const updateScrollState = () => {
     const el = scrollRef.current;
@@ -31,25 +33,8 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
 
   if (items.length === 0) return null;
 
-  const gtmScript = items
-    .map((p, i) => {
-      const pos = i + 1;
-      return (
-        `\t\tprod_intern_gtm[${pos}] = {\n` +
-        `\t\t\t"name": "",\n` +
-        `\t\t\t"id": ${JSON.stringify(p.id)},\n` +
-        `\t\t\t"brand": ${JSON.stringify(p.brand ?? '')},\n` +
-        `\t\t\t"category": ${JSON.stringify(p.category ?? '')},\n` +
-        `\t\t\t"variant": ${JSON.stringify(p.variant ?? '')},\n` +
-        `\t\t\t"list": "lien interne",\n` +
-        `\t\t\t"position": ${pos}\t\t};`
-      );
-    })
-    .join('\n');
-
   return (
     <section className="my-8">
-      <script dangerouslySetInnerHTML={{ __html: gtmScript }}></script>
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold leading-snug text-foreground">
@@ -86,14 +71,32 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
         className="flex gap-4 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard
+            key={product.id}
+            product={product}
+            onContact={() => setOpenProductId(String(product.id))}
+          />
         ))}
       </div>
+
+      {/* Un seul modal partagé — id_produit change selon le produit cliqué */}
+      {openProductId && (
+        <IframeProduitModal
+          idProduit={openProductId}
+          open={true}
+          onClose={() => setOpenProductId(null)}
+        />
+      )}
     </section>
   );
 }
 
-function ProductCard({ product }: { product: ProductItem }) {
+interface ProductCardProps {
+  product: ProductItem;
+  onContact: () => void;
+}
+
+function ProductCard({ product, onContact }: ProductCardProps) {
   const priceLabel = product.priceHt
     ? `${product.priceHt.toLocaleString('fr-FR')} € HT`
     : 'Prix sur demande';
@@ -104,7 +107,7 @@ function ProductCard({ product }: { product: ProductItem }) {
         href={product.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="block"
+        className={product.variant === 'cert' ? 'block tracking' : 'block'}
         aria-label={product.name}
       >
         <div className="relative mb-3 aspect-square w-full overflow-hidden rounded bg-muted">
@@ -121,18 +124,18 @@ function ProductCard({ product }: { product: ProductItem }) {
         </p>
       </a>
 
-      <p className={`mt-1 text-sm ${product.priceHt ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+      <p className={`mt-auto pt-2 text-sm ${product.priceHt ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
         {priceLabel}
       </p>
 
-      <a
-        href={product.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-3 block rounded border border-primary px-3 py-1.5 text-center text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+      {/* Bouton contact — ouvre le formulaire produit via iframe, jamais de href */}
+      <button
+        type="button"
+        onClick={onContact}
+        className="mt-3 cursor-pointer rounded border border-primary px-3 py-1.5 text-center text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
       >
         Envoyer un message
-      </a>
+      </button>
     </div>
   );
 }

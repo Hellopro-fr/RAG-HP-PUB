@@ -101,7 +101,7 @@ export function CitedProductsCarousel({ items }: CitedProductsCarouselProps) {
               <p className="line-clamp-2 text-sm font-bold leading-snug text-foreground">
                 {lien.description}
               </p>
-              <span className="text-sm font-semibold text-primary">
+              <span className="mt-auto text-sm font-semibold text-primary">
                 {lien.prix ?? 'Sur devis'}
               </span>
             </div>

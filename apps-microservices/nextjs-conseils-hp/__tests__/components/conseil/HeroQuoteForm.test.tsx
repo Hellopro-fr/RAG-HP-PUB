@@ -7,6 +7,8 @@ const mockQuestion: AoFormQuestion = {
   id: 42,
   question: 'Quel type de projet ?',
   avecImage: false,
+  typeSelection: 1,
+  obligatoire: 0,
   choix: [
     { id: 1, label: 'Construction neuve' },
     { id: 2, label: 'Rénovation' },
