@@ -22,21 +22,37 @@ const HP_PRODUIT_BASE =
 
 interface IframeProduitModalProps {
   idProduit: string | number;
+  /** 0 = base edgb2b (catalogue officiel), 1 = base hellopro_ia (scrapé). Défaut : 0 */
+  srcInteg?: 0 | 1;
+  /** Paramètres supplémentaires à ajouter à l'URL (ex: origine, soc…) */
+  extraParams?: Record<string, string>;
   open: boolean;
   onClose: () => void;
 }
 
-export function IframeProduitModal({ idProduit, open, onClose }: IframeProduitModalProps) {
+export function IframeProduitModal({
+  idProduit,
+  srcInteg = 0,
+  extraParams,
+  open,
+  onClose,
+}: IframeProduitModalProps) {
   const [formReady, setFormReady] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const extraParamsStr = extraParams
+    ? Object.entries(extraParams)
+        .map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('')
+    : '';
 
   const src =
     `${HP_PRODUIT_BASE}` +
     `?id_produit=${encodeURIComponent(idProduit)}` +
-    `&src_integ=0` +
-    `&origine=56` +
+    `&src_integ=${srcInteg}` +
     `&referer=conseilsnextjs` +
-    `&ctx=next`;
+    `&ctx=next` +
+    extraParamsStr;
 
   /* Reset loader à chaque ouverture */
   useEffect(() => {
@@ -48,6 +64,7 @@ export function IframeProduitModal({ idProduit, open, onClose }: IframeProduitMo
     if (!open) return;
 
     function onMessage(e: MessageEvent) {
+      console.log('[produit msg reçu]', e.origin, e.data);
       if (e.origin !== 'https://www.hellopro.fr') return;
       const data = e.data as Record<string, unknown>;
 

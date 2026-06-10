@@ -83,6 +83,7 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
       {openProductId && (
         <IframeProduitModal
           idProduit={openProductId}
+          extraParams={{ origine: '56' }}
           open={true}
           onClose={() => setOpenProductId(null)}
         />
