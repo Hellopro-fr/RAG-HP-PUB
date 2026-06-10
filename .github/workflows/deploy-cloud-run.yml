@@ -1,0 +1,505 @@
+name: 'Deploy — Cloud Run (réutilisable)'
+
+# Workflow réutilisable (workflow_call) — déploie un service sur Cloud Run avec :
+#  - Authentification WIF (pas de SA key JSON)
+#  - Build image Docker local
+#  - Scan Trivy bloquant (CRITICAL + HIGH, ignore-unfixed=true au début)
+#  - Push vers Artifact Registry uniquement si scan OK (évite de polluer AR)
+#  - Deploy Cloud Run avec montage secrets depuis Secret Manager + env vars + VPC Connector
+#  - Smoke test post-deploy (avec auto-rollback si fail)
+#  - Slack notification optionnelle (skip si secret absent)
+#
+# Ticket : 001-INFRA-GCP-ARCHI — Sprint 002 Phase C.3.b
+# Design : Docs/DevSecOps/TICKETS/001-MIGRATION-ARCHI/sprint_002_artifacts/deploy-cloud-run-workflow-design.md
+# Décisions D1-D8 (cf. design doc) actées 2026-06-09.
+#
+# Pré-requis :
+#  - GitHub Repository Variables configurées : GCP_PROJECT_ID, GCP_REGION, GCP_WIF_PROVIDER, GCP_DEPLOYER_SA
+#  - WIF + SA cloudrun-services + Artifact Registry déployés via Terraform (Phase B Sprint 002)
+#  - Secrets Secret Manager créés et alimentés pour le service (Phase C.2)
+#
+# Caller pattern (wrapper) :
+#   jobs:
+#     deploy:
+#       uses: ./.github/workflows/deploy-cloud-run.yml
+#       with:
+#         service_name: account-service-backend
+#         dockerfile_path: apps-microservices/account-service-backend/Dockerfile
+#         build_context: apps-microservices/account-service-backend
+#         ingress: internal
+#         vpc_connector: vpc-access-connector
+#         env_vars_json: '{"PORT": "8600"}'
+#         secret_env_vars_json: '{"JWT_SECRET": "account-service-backend-jwt-secret:latest"}'
+#       secrets:
+#         slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: 'Nom du service Cloud Run (ex: account-service-backend)'
+        required: true
+        type: string
+      dockerfile_path:
+        description: 'Chemin du Dockerfile (relatif à la racine du repo)'
+        required: true
+        type: string
+      build_context:
+        description: 'Build context Docker (relatif à la racine du repo)'
+        required: true
+        type: string
+      cloud_run_region:
+        description: 'Région Cloud Run (default: depuis vars.GCP_REGION)'
+        required: false
+        type: string
+        default: ''
+      ingress:
+        description: 'Cloud Run ingress (all | internal | internal-and-cloud-load-balancing)'
+        required: false
+        type: string
+        default: 'internal'
+      allow_unauthenticated:
+        description: 'Autoriser les appels non authentifiés (true pour service public, false sinon)'
+        required: false
+        type: boolean
+        default: false
+      cpu:
+        description: 'CPU alloué (ex: "1", "2", "0.5")'
+        required: false
+        type: string
+        default: '1'
+      memory:
+        description: 'Mémoire allouée (ex: "512Mi", "1Gi")'
+        required: false
+        type: string
+        default: '512Mi'
+      min_instances:
+        description: 'Nombre minimum d''instances (0 = scale-to-zero)'
+        required: false
+        type: number
+        default: 0
+      max_instances:
+        description: 'Nombre maximum d''instances'
+        required: false
+        type: number
+        default: 10
+      vpc_connector:
+        description: 'Nom du VPC Connector (vide = pas de connector)'
+        required: false
+        type: string
+        default: ''
+      vpc_egress:
+        description: 'Egress du VPC Connector (all-traffic | private-ranges-only)'
+        required: false
+        type: string
+        default: 'private-ranges-only'
+      container_port:
+        description: 'Port d''écoute du conteneur (ex: 8600 pour Go backend, 8601 pour Nginx frontend)'
+        required: false
+        type: number
+        default: 8080
+      health_check_path:
+        description: 'Path du health check (ex: /health)'
+        required: false
+        type: string
+        default: '/health'
+      env_vars_json:
+        description: 'JSON map des env vars non-sensibles (ex: {"PORT":"8600"})'
+        required: false
+        type: string
+        default: '{}'
+      secret_env_vars_json:
+        description: 'JSON map env_var -> secret_name:version (ex: {"JWT_SECRET":"my-secret:latest"})'
+        required: false
+        type: string
+        default: '{}'
+      trivy_severity_block:
+        description: 'Sévérités Trivy bloquantes (default: CRITICAL,HIGH)'
+        required: false
+        type: string
+        default: 'CRITICAL,HIGH'
+      trivy_ignore_unfixed:
+        description: 'Ignorer les CVE sans fix dispo (recommandé true au début)'
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      service_url:
+        description: 'URL publique du service Cloud Run déployé'
+        value: ${{ jobs.deploy.outputs.service_url }}
+      revision_name:
+        description: 'Nom de la revision Cloud Run créée'
+        value: ${{ jobs.deploy.outputs.revision_name }}
+      image_digest:
+        description: 'Digest SHA256 de l''image pushée dans AR'
+        value: ${{ jobs.build.outputs.image_digest }}
+      smoke_test_status:
+        description: 'Statut du smoke test (success | failed | skipped)'
+        value: ${{ jobs.smoke-test.outputs.status }}
+    secrets:
+      slack_webhook_url:
+        description: 'URL Slack webhook pour notif post-deploy (optionnel)'
+        required: false
+
+env:
+  AR_HOST: europe-west1-docker.pkg.dev
+  AR_REPO: hellopro
+  CLOUDRUN_SA: cloudrun-services
+  # Image tag = SHA git court (D7 : pas de :latest)
+
+jobs:
+  # =============================================================================
+  # Job 1 : Build image Docker locale + scan Trivy + push AR (gated)
+  # =============================================================================
+  build:
+    name: 'Build + Trivy scan + Push AR'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_ref: ${{ steps.tag.outputs.image_ref }}
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+      image_digest: ${{ steps.push.outputs.image_digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Authenticate to GCP (WIF)
+        id: auth
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70 # v2.1.10
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          token_format: access_token
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7 # v2.1.4
+
+      - name: Configure Docker pour Artifact Registry
+        run: gcloud auth configure-docker ${{ env.AR_HOST }} --quiet
+
+      - name: Compute image tag (SHA git court)
+        id: tag
+        run: |
+          set -euo pipefail
+          SHA_SHORT=$(git rev-parse --short=8 HEAD)
+          IMAGE_REF="${{ env.AR_HOST }}/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/${{ inputs.service_name }}:${SHA_SHORT}"
+          echo "image_tag=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+          echo "Image ref: ${IMAGE_REF}"
+
+      - name: Build image (tag local pour scan pré-push)
+        run: |
+          set -euo pipefail
+          docker build \
+            -t "${{ steps.tag.outputs.image_ref }}" \
+            -f "${{ inputs.dockerfile_path }}" \
+            "${{ inputs.build_context }}"
+
+      - name: Trivy scan (gate CRITICAL + HIGH)
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # 0.29.0
+        with:
+          image-ref: ${{ steps.tag.outputs.image_ref }}
+          severity: ${{ inputs.trivy_severity_block }}
+          exit-code: '1'
+          ignore-unfixed: ${{ inputs.trivy_ignore_unfixed }}
+          vuln-type: 'os,library'
+          format: 'table'
+          # Si le scan échoue (exit-code=1), le job s'arrête ici et l'image n'est PAS pushée.
+
+      - name: Push image vers Artifact Registry (scan OK)
+        id: push
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.tag.outputs.image_ref }}"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${{ steps.tag.outputs.image_ref }}" | cut -d@ -f2)
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Image pushée : ${{ steps.tag.outputs.image_ref }}"
+          echo "Digest : ${DIGEST}"
+
+  # =============================================================================
+  # Job 2 : Deploy Cloud Run avec secrets + env vars + VPC connector
+  # =============================================================================
+  deploy:
+    name: 'Deploy Cloud Run'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      service_url: ${{ steps.deploy.outputs.service_url }}
+      revision_name: ${{ steps.deploy.outputs.revision_name }}
+      previous_revision: ${{ steps.prev.outputs.previous_revision }}
+    steps:
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70 # v2.1.10
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7 # v2.1.4
+
+      - name: Récupérer la revision précédente (pour rollback potentiel)
+        id: prev
+        run: |
+          set -euo pipefail
+          REGION="${{ inputs.cloud_run_region }}"
+          [ -z "$REGION" ] && REGION="${{ vars.GCP_REGION }}"
+          # La 1ère revision (index 0) est la latest. Avant deploy, c'est la "précédente" en cas de rollback.
+          PREV=$(gcloud run revisions list \
+            --service="${{ inputs.service_name }}" \
+            --region="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format="value(metadata.name)" \
+            --limit=1 2>/dev/null || echo "")
+          echo "previous_revision=${PREV}" >> "$GITHUB_OUTPUT"
+          echo "Previous revision (pour rollback) : ${PREV:-aucune (premier deploy)}"
+
+      - name: Construire les flags env_vars et secrets
+        id: args
+        run: |
+          set -euo pipefail
+          ENV_ARGS=$(echo '${{ inputs.env_vars_json }}' | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
+          SECRET_ARGS=$(echo '${{ inputs.secret_env_vars_json }}' | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
+          echo "env_args=${ENV_ARGS}" >> "$GITHUB_OUTPUT"
+          echo "secret_args=${SECRET_ARGS}" >> "$GITHUB_OUTPUT"
+          echo "Env vars : ${ENV_ARGS:-(aucune)}"
+          echo "Secrets : ${SECRET_ARGS:-(aucun)}"
+
+      - name: Deploy Cloud Run
+        id: deploy
+        run: |
+          set -euo pipefail
+          REGION="${{ inputs.cloud_run_region }}"
+          [ -z "$REGION" ] && REGION="${{ vars.GCP_REGION }}"
+
+          # Construction des flags conditionnels
+          EXTRA_FLAGS=()
+          if [ -n "${{ inputs.vpc_connector }}" ]; then
+            EXTRA_FLAGS+=(--vpc-connector="${{ inputs.vpc_connector }}")
+            EXTRA_FLAGS+=(--vpc-egress="${{ inputs.vpc_egress }}")
+          fi
+          if [ "${{ inputs.allow_unauthenticated }}" = "true" ]; then
+            EXTRA_FLAGS+=(--allow-unauthenticated)
+          else
+            EXTRA_FLAGS+=(--no-allow-unauthenticated)
+          fi
+          if [ -n "${{ steps.args.outputs.env_args }}" ]; then
+            EXTRA_FLAGS+=(--set-env-vars="${{ steps.args.outputs.env_args }}")
+          fi
+          if [ -n "${{ steps.args.outputs.secret_args }}" ]; then
+            EXTRA_FLAGS+=(--set-secrets="${{ steps.args.outputs.secret_args }}")
+          fi
+
+          gcloud run deploy "${{ inputs.service_name }}" \
+            --image="${{ needs.build.outputs.image_ref }}" \
+            --region="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --service-account="${{ env.CLOUDRUN_SA }}@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --ingress="${{ inputs.ingress }}" \
+            --cpu="${{ inputs.cpu }}" \
+            --memory="${{ inputs.memory }}" \
+            --min-instances="${{ inputs.min_instances }}" \
+            --max-instances="${{ inputs.max_instances }}" \
+            --port="${{ inputs.container_port }}" \
+            "${EXTRA_FLAGS[@]}"
+
+          # Récupération des outputs
+          SERVICE_URL=$(gcloud run services describe "${{ inputs.service_name }}" \
+            --region="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format="value(status.url)")
+          REVISION=$(gcloud run services describe "${{ inputs.service_name }}" \
+            --region="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format="value(status.latestReadyRevisionName)")
+
+          echo "service_url=${SERVICE_URL}" >> "$GITHUB_OUTPUT"
+          echo "revision_name=${REVISION}" >> "$GITHUB_OUTPUT"
+          echo "Deploy OK : ${SERVICE_URL} (revision: ${REVISION})"
+
+  # =============================================================================
+  # Job 3 : Smoke test post-deploy (curl health endpoint)
+  # =============================================================================
+  smoke-test:
+    name: 'Smoke test'
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      status: ${{ steps.smoke.outputs.status }}
+    steps:
+      - name: Authenticate to GCP (WIF) — pour ID token si ingress internal
+        if: inputs.allow_unauthenticated == false
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70 # v2.1.10
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - name: Setup gcloud (si auth)
+        if: inputs.allow_unauthenticated == false
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7 # v2.1.4
+
+      - name: Smoke test (curl avec retry 3x)
+        id: smoke
+        run: |
+          set -euo pipefail
+          SERVICE_URL="${{ needs.deploy.outputs.service_url }}"
+          HEALTH_URL="${SERVICE_URL}${{ inputs.health_check_path }}"
+          echo "Health endpoint : ${HEALTH_URL}"
+
+          # ⚠️ Si ingress=internal, le runner GHA (Internet public) NE PEUT PAS atteindre l'URL.
+          # Dans ce cas, on skip le smoke test (à améliorer C.5 : via VM Manager ou Cloud Build).
+          if [ "${{ inputs.ingress }}" = "internal" ]; then
+            echo "::warning::Smoke test skip (ingress=internal, runner GHA ne peut pas atteindre l'URL)"
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Sinon, smoke test classique avec retry
+          AUTH_HEADER=""
+          if [ "${{ inputs.allow_unauthenticated }}" = "false" ]; then
+            ID_TOKEN=$(gcloud auth print-identity-token --audiences="$SERVICE_URL")
+            AUTH_HEADER="Authorization: Bearer $ID_TOKEN"
+          fi
+
+          for i in 1 2 3; do
+            echo "Tentative $i/3 : curl $HEALTH_URL"
+            if [ -n "$AUTH_HEADER" ]; then
+              HTTP_CODE=$(curl -fsS -o /tmp/smoke.out -w "%{http_code}" --max-time 10 -H "$AUTH_HEADER" "$HEALTH_URL" || echo "000")
+            else
+              HTTP_CODE=$(curl -fsS -o /tmp/smoke.out -w "%{http_code}" --max-time 10 "$HEALTH_URL" || echo "000")
+            fi
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Smoke test PASSED (HTTP 200)"
+              echo "status=success" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Tentative $i: HTTP $HTTP_CODE (response: $(head -c 200 /tmp/smoke.out 2>/dev/null || true))"
+            sleep 10
+          done
+
+          echo "::error::Smoke test FAILED après 3 tentatives"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 1
+
+  # =============================================================================
+  # Job 4 : Auto-rollback si smoke test failed (D5)
+  # =============================================================================
+  rollback:
+    name: 'Auto-rollback (smoke test failed)'
+    needs: [build, deploy, smoke-test]
+    if: always() && needs.smoke-test.outputs.status == 'failed' && needs.deploy.outputs.previous_revision != ''
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70 # v2.1.10
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7 # v2.1.4
+
+      - name: Rollback vers la revision précédente
+        run: |
+          set -euo pipefail
+          REGION="${{ inputs.cloud_run_region }}"
+          [ -z "$REGION" ] && REGION="${{ vars.GCP_REGION }}"
+          PREV_REV="${{ needs.deploy.outputs.previous_revision }}"
+
+          echo "::warning::Rollback vers revision : ${PREV_REV}"
+
+          gcloud run services update-traffic "${{ inputs.service_name }}" \
+            --region="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --to-revisions="${PREV_REV}=100"
+
+          echo "Rollback effectué vers ${PREV_REV}"
+
+  # =============================================================================
+  # Job 5 : Summary + Slack notification (toujours, même si étape précédente fail)
+  # =============================================================================
+  summary:
+    name: 'Summary + Slack notif'
+    needs: [build, deploy, smoke-test, rollback]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Statuts agrégés
+        id: status
+        run: |
+          set -euo pipefail
+          BUILD_STATUS="${{ needs.build.result }}"
+          DEPLOY_STATUS="${{ needs.deploy.result }}"
+          SMOKE_STATUS="${{ needs.smoke-test.outputs.status }}"
+          ROLLBACK_STATUS="${{ needs.rollback.result }}"
+
+          # Statut global
+          if [ "$BUILD_STATUS" != "success" ] || [ "$DEPLOY_STATUS" != "success" ]; then
+            GLOBAL="failed"
+            ICON=":x:"
+          elif [ "$SMOKE_STATUS" = "failed" ]; then
+            GLOBAL="rolled-back"
+            ICON=":rotating_light:"
+          elif [ "$SMOKE_STATUS" = "skipped" ]; then
+            GLOBAL="deployed (smoke skipped)"
+            ICON=":warning:"
+          else
+            GLOBAL="success"
+            ICON=":white_check_mark:"
+          fi
+          echo "global=${GLOBAL}" >> "$GITHUB_OUTPUT"
+          echo "icon=${ICON}" >> "$GITHUB_OUTPUT"
+
+      - name: Build summary markdown
+        if: always()
+        run: |
+          {
+            echo "## ${{ steps.status.outputs.icon }} Deploy Cloud Run — ${{ inputs.service_name }}"
+            echo ""
+            echo "| Champ | Valeur |"
+            echo "|---|---|"
+            echo "| Service | \`${{ inputs.service_name }}\` |"
+            echo "| Région | \`${{ inputs.cloud_run_region || vars.GCP_REGION }}\` |"
+            echo "| Image | \`${{ needs.build.outputs.image_ref }}\` |"
+            echo "| Digest | \`${{ needs.build.outputs.image_digest }}\` |"
+            echo "| Revision | \`${{ needs.deploy.outputs.revision_name }}\` |"
+            echo "| Service URL | ${{ needs.deploy.outputs.service_url }} |"
+            echo "| Build | ${{ needs.build.result }} |"
+            echo "| Deploy | ${{ needs.deploy.result }} |"
+            echo "| Smoke test | ${{ needs.smoke-test.outputs.status }} |"
+            echo "| Rollback | ${{ needs.rollback.result }} |"
+            echo "| **Statut global** | **${{ steps.status.outputs.global }}** |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Slack notification (optionnel)
+        if: always() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(cat <<EOF
+          {
+            "text": "${{ steps.status.outputs.icon }} *Deploy ${{ inputs.service_name }}* — ${{ steps.status.outputs.global }}",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "${{ steps.status.outputs.icon }} *Deploy ${{ inputs.service_name }}* — ${{ steps.status.outputs.global }}\n• Image: \`${{ needs.build.outputs.image_ref }}\`\n• Revision: \`${{ needs.deploy.outputs.revision_name }}\`\n• URL: ${{ needs.deploy.outputs.service_url }}"
+                }
+              }
+            ]
+          }
+          EOF
+          )
+          curl -fsS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$SLACK_WEBHOOK_URL"
