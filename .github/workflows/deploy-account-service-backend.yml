@@ -1,0 +1,87 @@
+name: 'Deploy — account-service-backend'
+
+# Wrapper minimal qui appelle deploy-cloud-run.yml avec les inputs spécifiques
+# au service account-service-backend (Go backend, port 8600, ingress=internal).
+#
+# Ticket : 001-INFRA-GCP-ARCHI — Sprint 002 Phase C.4 (POC #1)
+# Mapping secrets : 7 secrets account-service-backend-* (créés Phase C.2)
+# Pré-requis : workflow réutilisable deploy-cloud-run.yml + secrets alimentés.
+
+on:
+  push:
+    branches:
+      - main
+      - features/poc
+      - features/infra-gcp-prod
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/account-service-backend/**'
+      - '.github/workflows/deploy-account-service-backend.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+jobs:
+  deploy:
+    name: 'Deploy account-service-backend'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: account-service-backend
+      dockerfile_path: apps-microservices/account-service-backend/Dockerfile
+      build_context: apps-microservices/account-service-backend
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: internal
+      allow_unauthenticated: false
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 10
+      container_port: 8600
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      health_check_path: /health
+      # Env vars non-sensibles
+      # NOTE C.5: vérifier les valeurs JWT_ALGO/JWT_AUDIENCE/AUTH_URL/ADMIN_EMAILS depuis .env réel
+      # MYSQL_HOST/API_CATALOG_GRPC: IP interne VM GPU. À remplacer par DNS interne (D3 - Phase ultérieure).
+      env_vars_json: |
+        {
+          "ACCOUNT_PORT": "8600",
+          "MYSQL_HOST": "10.11.0.2",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "gateway_user",
+          "MYSQL_DB": "gateway_db",
+          "JWT_ALGO": "HS256",
+          "JWT_AUDIENCE": "hellopro",
+          "AUTH_URL": "https://auth.hellopro.fr",
+          "ADMIN_EMAILS": "",
+          "FALLBACK_USER": "",
+          "FALLBACK_EMAIL": "",
+          "OAUTH2_DEFAULT_TOKEN_TTL": "60",
+          "OAUTH2_DEFAULT_REFRESH_TTL": "2592000",
+          "OAUTH2_AUTH_CODE_TTL": "600",
+          "LOGOUT_WEBHOOK_TIMEOUT": "5",
+          "LOGOUT_WEBHOOK_RETRIES": "3",
+          "SECURE_COOKIE": "true",
+          "SLACK_ENV_LABEL": "dev",
+          "API_CATALOG_GRPC": "10.11.0.2:9100"
+        }
+      # Secrets montés depuis Secret Manager (cf. Phase C.2 - 7 secrets dédiés)
+      secret_env_vars_json: |
+        {
+          "MYSQL_PASS": "account-service-backend-mysql-pass:latest",
+          "ENCRYPTION_KEY": "account-service-backend-encryption-key:latest",
+          "JWT_SECRET": "account-service-backend-jwt-secret:latest",
+          "FALLBACK_PASS": "account-service-backend-fallback-pass:latest",
+          "INTERNAL_ADMIN_TOKEN": "account-service-backend-internal-admin-token:latest",
+          "CATALOG_ADMIN_KEY": "account-service-backend-catalog-admin-key:latest",
+          "SLACK_WEBHOOK_URL": "account-service-backend-slack-webhook-url:latest"
+        }
+    secrets:
+      # Slack webhook pour notif post-deploy (anticipation F-HP-ARCH-001 - platform-migration-slack-webhook-url)
+      # À configurer en repo secret SLACK_WEBHOOK_URL (skip si absent).
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

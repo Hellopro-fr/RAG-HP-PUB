@@ -1,0 +1,110 @@
+name: 'Deploy — account-service-frontend'
+
+# Wrapper qui appelle deploy-cloud-run.yml avec les inputs spécifiques au
+# frontend Nginx (port 8601, ingress=all, public). Le frontend fait un
+# proxy_pass HTTPS vers account-service-backend déployé précédemment ; on
+# récupère son URL dynamiquement via gcloud avant le deploy.
+#
+# Ticket : 001-INFRA-GCP-ARCHI — Sprint 002 Phase C.4 (POC #1)
+# Décision D4 : proxy_pass Nginx + URL backend en env var au runtime.
+# Pré-requis : account-service-backend doit être déployé (sinon job lookup échoue).
+
+on:
+  push:
+    branches:
+      - main
+      - features/poc
+      - features/infra-gcp-prod
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/account-service-frontend/**'
+      - '.github/workflows/deploy-account-service-frontend.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+jobs:
+  # =============================================================================
+  # Job 1 : Lookup URL backend déployé (pré-requis pour le frontend)
+  # =============================================================================
+  get-backend-url:
+    name: 'Lookup URL account-service-backend'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      backend_url: ${{ steps.lookup.outputs.backend_url }}
+      env_vars_json: ${{ steps.build-json.outputs.env_vars_json }}
+    steps:
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@8254fb75a33b976a221574d287e93919e6a36f70 # v2.1.10
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7 # v2.1.4
+
+      - name: Lookup URL backend
+        id: lookup
+        run: |
+          set -euo pipefail
+          REGION="${{ github.event.inputs.cloud_run_region || 'europe-west1' }}"
+          BACKEND_URL=$(gcloud run services describe account-service-backend \
+            --region="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format="value(status.url)" 2>/dev/null || echo "")
+
+          if [ -z "$BACKEND_URL" ]; then
+            echo "::error::account-service-backend n'est pas déployé sur Cloud Run (région $REGION). Déployer le backend d'abord."
+            exit 1
+          fi
+
+          echo "backend_url=${BACKEND_URL}" >> "$GITHUB_OUTPUT"
+          echo "Backend URL trouvée : ${BACKEND_URL}"
+
+      - name: Construire env_vars_json (avec BACKEND_URL injectée)
+        id: build-json
+        run: |
+          set -euo pipefail
+          # JSON inline (jq permet la construction propre avec interpolation)
+          ENV_JSON=$(jq -nc \
+            --arg backend_url "${{ steps.lookup.outputs.backend_url }}" \
+            '{
+              "BACKEND_URL": $backend_url,
+              "NGINX_PORT": "8601"
+            }')
+          echo "env_vars_json=${ENV_JSON}" >> "$GITHUB_OUTPUT"
+          echo "env_vars_json: ${ENV_JSON}"
+
+  # =============================================================================
+  # Job 2 : Deploy frontend Cloud Run (consomme l'URL backend)
+  # =============================================================================
+  deploy:
+    name: 'Deploy account-service-frontend'
+    needs: get-backend-url
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: account-service-frontend
+      dockerfile_path: apps-microservices/account-service-frontend/Dockerfile
+      build_context: apps-microservices/account-service-frontend
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '0.5'
+      memory: '256Mi'
+      min_instances: 0
+      max_instances: 5
+      container_port: 8601
+      vpc_connector: ''
+      health_check_path: /
+      env_vars_json: ${{ needs.get-backend-url.outputs.env_vars_json }}
+      secret_env_vars_json: '{}'
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
