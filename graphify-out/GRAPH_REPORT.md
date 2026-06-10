@@ -1,4 +1,4 @@
-# Graph Report - scoped --update (crawler http-status retry policy)  (2026-06-10)
+# Graph Report - scoped --update (crawler main.ts, code-only)  (2026-06-10)
 
 ## Corpus Check
 - 0 files · ~0 words
