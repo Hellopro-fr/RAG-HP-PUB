@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Building2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Supplier } from '@/types/conseils';
+import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
 
 const FALLBACK_DESC = 'Fournisseur référencé sur HelloPro — demandez votre devis gratuitement.';
 
@@ -15,12 +16,15 @@ function sanitizeHtml(html: string): string {
 
 interface SuppliersProps {
   suppliers?: Supplier[];
+  /** id de la rubrique — utilisé comme paramètre f dans contact_info.php */
+  infoRubriqueId?: number;
 }
 
-export function Suppliers({ suppliers = [] }: SuppliersProps) {
+export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [openSocId, setOpenSocId] = useState<string | null>(null);
   const showArrows = suppliers.length > 3;
 
   const updateScrollState = () => {
@@ -114,12 +118,30 @@ export function Suppliers({ suppliers = [] }: SuppliersProps) {
             ) : (
               <p className="mt-3 text-sm text-foreground/90">{FALLBACK_DESC}</p>
             )}
-            <button className="mt-auto w-full rounded-md border border-primary bg-primary/5 py-2 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground">
+            <button
+              type="button"
+              onClick={() => setOpenSocId(String(s.id))}
+              className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
+            >
               Demander un devis
             </button>
           </article>
         ))}
       </div>
+
+      {/* Modal contact_info.php — soc = id_societe, origine = 55, f = id_rubrique */}
+      {openSocId && (
+        <IframeProduitModal
+          idProduit=""
+          extraParams={{
+            soc: openSocId,
+            origine: '55',
+            ...(infoRubriqueId !== undefined ? { f: String(infoRubriqueId) } : {}),
+          }}
+          open={true}
+          onClose={() => setOpenSocId(null)}
+        />
+      )}
     </section>
   );
 }

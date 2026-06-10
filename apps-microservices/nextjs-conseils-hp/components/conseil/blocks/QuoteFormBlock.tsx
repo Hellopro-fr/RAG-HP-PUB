@@ -16,7 +16,7 @@ interface QuoteFormBlockProps {
 
 export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormBlockProps) {
   const {
-    title    = 'Maintenant que vous connaissez les prix,',
+    title    = 'Trouvez les fournisseurs,',
     subtitle = "passez à l'action.",
     ctaLabel = 'Faire une demande groupée (1 min)',
   } = data;
@@ -47,7 +47,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
             <p className="text-sm text-primary-foreground/85 lg:text-base">
               Décrivez votre projet en 30 secondes et recevez{' '}
               <strong className="text-primary-foreground">jusqu&apos;à 3 devis gratuits</strong> de
-              constructeurs vérifiés près de chez vous.
+              fournisseurs vérifiés près de chez vous.
             </p>
             <ul className="mt-1 space-y-1.5 text-sm text-primary-foreground/90">
               {['Devis personnalisés sous 48h', 'Comparez plusieurs offres en un clic', 'Sans engagement · 100 % gratuit'].map((t) => (
