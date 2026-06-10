@@ -5,16 +5,13 @@ import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 import type { TexteImageBlockData } from '@/types/blocks/texte-image';
 import { IframeFormModal } from '@/components/conseil/IframeFormModal';
+import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
 
 interface TexteImageBlockProps {
   data: TexteImageBlockData;
 }
 
-/**
- * Même logique que CTABlock :
- * si l'URL contient demande_info.php → extraire f (id_rubrique) + extraParams,
- * rendre un <button> (pas de href dans le DOM pour le SEO/crawl).
- */
+/** demande_info.php → TOUJOURS IframeFormModal. */
 function parseDemandeInfo(url: string): { idRubrique: string; extraParams: Record<string, string> } | null {
   try {
     if (!url.includes('demande_info.php')) return null;
@@ -31,11 +28,31 @@ function parseDemandeInfo(url: string): { idRubrique: string; extraParams: Recor
   }
 }
 
-export function TexteImageBlock({ data }: TexteImageBlockProps) {
-  const [modalOpen, setModalOpen] = useState(false);
+/** contact_info.php → TOUJOURS IframeProduitModal, id_produit peut être absent. */
+function parseContactInfo(url: string): { idProduit: string; srcInteg: 0 | 1; extraParams: Record<string, string> } | null {
+  try {
+    if (!url.includes('contact_info.php')) return null;
+    const parsed = new URL(url, 'https://www.hellopro.fr');
+    const idProduit = parsed.searchParams.get('id_produit') ?? '';
+    const srcInteg: 0 | 1 = parsed.searchParams.get('src_integ') === '1' ? 1 : 0;
+    const extraParams: Record<string, string> = {};
+    parsed.searchParams.forEach((value, key) => {
+      if (key !== 'id_produit' && key !== 'src_integ') extraParams[key] = value;
+    });
+    return { idProduit, srcInteg, extraParams };
+  } catch {
+    return null;
+  }
+}
 
-  const demandeInfo = data.ctaUrl ? parseDemandeInfo(data.ctaUrl) : null;
+export function TexteImageBlock({ data }: TexteImageBlockProps) {
+  const [groupeeModalOpen, setGroupeeModalOpen] = useState(false);
+  const [produitModalOpen, setProduitModalOpen] = useState(false);
+
+  const demandeInfo  = data.ctaUrl ? parseDemandeInfo(data.ctaUrl) : null;
+  const contactInfo  = data.ctaUrl ? parseContactInfo(data.ctaUrl) : null;
   const isDemandeInfo = demandeInfo !== null;
+  const isContactInfo = contactInfo !== null;
 
   // Blocs 4 & 5 : dimensions naturelles sans +9px (min-height commenté côté PHP)
   const hasDims = data.image.width !== undefined && data.image.height !== undefined;
@@ -78,7 +95,15 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
   const ctaButton = isDemandeInfo ? (
     <button
       type="button"
-      onClick={() => setModalOpen(true)}
+      onClick={() => setGroupeeModalOpen(true)}
+      className="mt-2 inline-flex cursor-pointer items-center gap-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover"
+    >
+      {data.ctaLabel} <ArrowRight className="h-4 w-4" />
+    </button>
+  ) : isContactInfo ? (
+    <button
+      type="button"
+      onClick={() => setProduitModalOpen(true)}
       className="mt-2 inline-flex cursor-pointer items-center gap-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover"
     >
       {data.ctaLabel} <ArrowRight className="h-4 w-4" />
@@ -139,15 +164,26 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
         )}
       </div>
 
-      {/* Modal iframe — démarre à l'étape 1 (start=1) car pas de pré-sélection */}
+      {/* Modal demande groupée */}
       {isDemandeInfo && demandeInfo && (
         <IframeFormModal
           idRubrique={demandeInfo.idRubrique}
           category=""
           extraParams={Object.keys(demandeInfo.extraParams).length > 0 ? demandeInfo.extraParams : undefined}
           startFromStep1
-          open={modalOpen}
-          onClose={() => setModalOpen(false)}
+          open={groupeeModalOpen}
+          onClose={() => setGroupeeModalOpen(false)}
+        />
+      )}
+
+      {/* Modal demande sur produit */}
+      {isContactInfo && contactInfo && (
+        <IframeProduitModal
+          idProduit={contactInfo.idProduit}
+          srcInteg={contactInfo.srcInteg}
+          extraParams={Object.keys(contactInfo.extraParams).length > 0 ? contactInfo.extraParams : undefined}
+          open={produitModalOpen}
+          onClose={() => setProduitModalOpen(false)}
         />
       )}
     </>

@@ -14,13 +14,14 @@ const isMac =
  *
  * Hauteur : 52px (alignée sur le brand de la Sidebar).
  * Layout (gauche → droite) :
- *   [burger mobile] · Breadcrumbs · (spacer) · Cmd+K · Refresh · ThemeToggle
+ *   [burger mobile] · Breadcrumbs · (spacer) · Badge Live · Cmd+K · Refresh · ThemeToggle
  */
 export function Topbar({
   onOpenMobileSidebar,
   onOpenCommandPalette,
   onRefresh,
   isRefreshing = false,
+  wsConnected = true,
 }) {
   return (
     <header className="h-[52px] flex-shrink-0 flex items-center px-5 border-b border-hairline bg-surface gap-4">
@@ -42,6 +43,20 @@ export function Topbar({
 
       {/* Actions à droite */}
       <div className="flex items-center gap-1 shrink-0">
+        {/* État de la liaison temps réel (WebSocket) */}
+        <span
+          className={cn(
+            'hidden sm:inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+            wsConnected
+              ? 'border-ok/30 bg-ok-soft text-ok'
+              : 'border-err/30 bg-err-soft text-err',
+          )}
+          title={wsConnected ? 'Temps réel actif (WebSocket connecté)' : 'Temps réel interrompu — données rafraîchies toutes les 15s, reconnexion en cours'}
+        >
+          <span className={cn('h-1.5 w-1.5 rounded-full', wsConnected ? 'bg-ok animate-pulse' : 'bg-err')} />
+          {wsConnected ? 'Live' : 'Hors ligne'}
+        </span>
+
         {/* Bouton Cmd+K — desktop */}
         {onOpenCommandPalette && (
           <button

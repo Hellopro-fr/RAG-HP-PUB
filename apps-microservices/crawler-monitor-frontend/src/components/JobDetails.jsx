@@ -6,7 +6,6 @@ import {
   Play, Download, ExternalLink, MoreVertical,
   Settings, Layers, Mail,
   Cpu, RefreshCw,
-  ChevronDown, Search,
 } from 'lucide-react';
 import AdvancedLogViewer from './AdvancedLogViewer';
 import { Button } from './ui/button';
@@ -273,6 +272,21 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
   const cbUrl = cb?.url ?? null;
   const cbOk = cbStatus === '200' || cbStatus === 200;
 
+  /*
+   * Visibilité des sections — une section est masquée tant que TOUTES ses
+   * valeurs sont absentes ; elle réapparaîtra dès que l'API les fournira.
+   */
+  const hasAnyKpi = [
+    stats?.requestsTotal,
+    stats?.requestsFinished,
+    stats?.requestsFailed,
+    formatDuration(stats?.crawlerRuntimeMillis),
+    throughput,
+    formatBytes(stats?.totalBytes),
+  ].some((v) => v != null);
+  const hasConfig = [cfg.strategy, cfg.depth, cfg.concurrency, cfg.user_agent ?? cfg.userAgent, cfg.respect_robots, cfg.timeout_ms ?? cfg.timeout, cfg.retries, cfg.cron ?? job.cron].some((v) => v != null);
+  const hasCallbackInfo = cbStatus != null || cbUrl != null || cbLatency != null;
+
   /* -- render --------------------------------------------------------------- */
   return (
     <div>
@@ -379,19 +393,21 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
         </div>
       </div>
 
-      {/* KPI STRIP */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 border border-hairline rounded-lg mb-5">
-        <KpiCell label="URLs crawlées"  value={stats?.requestsTotal ?? null} />
-        <KpiCell label="Items extraits" value={stats?.requestsFinished ?? null} />
-        <KpiCell
-          label="Erreurs HTTP"
-          value={stats?.requestsFailed ?? null}
-          tone={stats?.requestsFailed > 0 ? 'warn' : undefined}
-        />
-        <KpiCell label="Durée totale"   value={formatDuration(stats?.crawlerRuntimeMillis)} />
-        <KpiCell label="Throughput"     value={throughput} />
-        <KpiCell label="Bandwidth"      value={formatBytes(stats?.totalBytes)} />
-      </div>
+      {/* KPI STRIP — masqué tant que l'API ne fournit aucune statistique */}
+      {hasAnyKpi && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 border border-hairline rounded-lg mb-5">
+          <KpiCell label="URLs crawlées"  value={stats?.requestsTotal ?? null} />
+          <KpiCell label="Items extraits" value={stats?.requestsFinished ?? null} />
+          <KpiCell
+            label="Erreurs HTTP"
+            value={stats?.requestsFailed ?? null}
+            tone={stats?.requestsFailed > 0 ? 'warn' : undefined}
+          />
+          <KpiCell label="Durée totale"   value={formatDuration(stats?.crawlerRuntimeMillis)} />
+          <KpiCell label="Throughput"     value={throughput} />
+          <KpiCell label="Bandwidth"      value={formatBytes(stats?.totalBytes)} />
+        </div>
+      )}
 
       {/* TABS + SIDEBAR */}
       <div className="grid gap-5 grid-cols-1 md:grid-cols-[1fr_360px]">
@@ -419,24 +435,6 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
                 <AdvancedLogViewer content={job.rawContent || 'Contenu brut non disponible.'} jobId={job.id} />
               ) : (
                 <>
-                  {/* Fix 6: Logs toolbar */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <button
-                      onClick={() => console.log('Filtre niveau')}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-ink-2 hover:text-ink-0 hover:bg-bg-2 border border-hairline transition-colors"
-                    >
-                      <ChevronDown size={12} />
-                      Niveau
-                    </button>
-                    <button
-                      onClick={() => console.log('Filtrer logs')}
-                      className="inline-flex items-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-md text-[12px] text-ink-2 hover:text-ink-0 hover:bg-bg-2 border border-hairline transition-colors"
-                    >
-                      <Search size={12} />
-                      Filtrer
-                    </button>
-                  </div>
-
                   {!job.hasStats && !job.stats ? (
                     <div className="py-12 text-center text-ink-2">
                       <Clock className={`mx-auto mb-3 h-10 w-10 ${isRunning ? 'animate-spin' : 'text-ink-3'}`} />
@@ -530,67 +528,78 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
         {/* Right: sidebar — Fix 8: 3 dedicated cards */}
         <div className="flex flex-col gap-4">
 
-          {/* Card A: Configuration */}
-          <SideCard icon={Settings} title="Configuration">
-            <KV k="Strategy"       v={cfg.strategy ?? null}            mono />
-            <KV k="Depth"          v={cfg.depth != null ? String(cfg.depth) : null} />
-            <KV k="Concurrency"    v={cfg.concurrency != null ? `${cfg.concurrency} parallel` : null} />
-            <KV k="User-agent"     v={cfg.user_agent ?? cfg.userAgent ?? null}  mono />
-            <KV k="Respect robots" v={cfg.respect_robots != null ? (cfg.respect_robots ? 'oui' : 'non') : null} tone={cfg.respect_robots ? 'ok' : undefined} />
-            <KV k="Timeout"        v={cfg.timeout_ms != null ? `${cfg.timeout_ms / 1000}s` : cfg.timeout ?? null} />
-            <KV k="Retries"        v={cfg.retries != null ? `${cfg.retries} max` : null} />
-            <KV k="Cron"           v={cfg.cron ?? job.cron ?? null}    mono />
-          </SideCard>
+          {/* Card A: Configuration — masquée tant que l'API ne fournit aucune valeur */}
+          {hasConfig && (
+            <SideCard icon={Settings} title="Configuration">
+              <KV k="Strategy"       v={cfg.strategy ?? null}            mono />
+              <KV k="Depth"          v={cfg.depth != null ? String(cfg.depth) : null} />
+              <KV k="Concurrency"    v={cfg.concurrency != null ? `${cfg.concurrency} parallel` : null} />
+              <KV k="User-agent"     v={cfg.user_agent ?? cfg.userAgent ?? null}  mono />
+              <KV k="Respect robots" v={cfg.respect_robots != null ? (cfg.respect_robots ? 'oui' : 'non') : null} tone={cfg.respect_robots ? 'ok' : undefined} />
+              <KV k="Timeout"        v={cfg.timeout_ms != null ? `${cfg.timeout_ms / 1000}s` : cfg.timeout ?? null} />
+              <KV k="Retries"        v={cfg.retries != null ? `${cfg.retries} max` : null} />
+              <KV k="Cron"           v={cfg.cron ?? job.cron ?? null}    mono />
+            </SideCard>
+          )}
 
-          {/* Card B: Pipeline */}
-          <SideCard icon={Layers} title="Pipeline">
-            {PIPELINE_STEPS.map((step) => {
-              const s = pipeline ? (pipeline[step] ?? {}) : {};
-              return (
-                <PipelineRow
-                  key={step}
-                  label={step}
-                  duration={s.duration ?? null}
-                  ratio={s.ratio ?? null}
-                />
-              );
-            })}
-          </SideCard>
+          {/* Card B: Pipeline — masquée tant que job.pipeline est absent de l'API */}
+          {pipeline && (
+            <SideCard icon={Layers} title="Pipeline">
+              {PIPELINE_STEPS.map((step) => {
+                const s = pipeline ? (pipeline[step] ?? {}) : {};
+                return (
+                  <PipelineRow
+                    key={step}
+                    label={step}
+                    duration={s.duration ?? null}
+                    ratio={s.ratio ?? null}
+                  />
+                );
+              })}
+            </SideCard>
+          )}
 
-          {/* Card C: Callback */}
-          <SideCard icon={Mail} title="Callback">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                {cbStatus ? (
-                  <>
-                    <Pill tone={cbOk ? 'ok' : 'err'} dot>
-                      {cbOk ? '200 OK' : `Échec${cbStatus ? ` (${cbStatus})` : ''}`}
-                    </Pill>
-                    {cbLatency && (
-                      <span className="font-mono text-[11px] text-ink-2">{cbLatency}</span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-[12px] text-ink-3 font-mono">—</span>
-                )}
+          {/* Card C: Callback — masquée sans info callback (le bouton Rejouer est disabled sans cb, donc inutile seul) */}
+          {hasCallbackInfo && (
+            <SideCard icon={Mail} title="Callback">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  {cbStatus ? (
+                    <>
+                      <Pill tone={cbOk ? 'ok' : 'err'} dot>
+                        {cbOk ? '200 OK' : `Échec${cbStatus ? ` (${cbStatus})` : ''}`}
+                      </Pill>
+                      {cbLatency && (
+                        <span className="font-mono text-[11px] text-ink-2">{cbLatency}</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-[12px] text-ink-3 font-mono">—</span>
+                  )}
+                </div>
+
+                <div className="font-mono text-[11px] text-ink-1 p-2.5 bg-bg-1 rounded-md border border-hairline break-all min-h-[32px]">
+                  {cbUrl ?? '—'}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!cb}
+                  onClick={() => console.log('Rejouer callback', job.id)}
+                  className="w-full justify-center gap-1.5 text-[12px]"
+                >
+                  <RefreshCw size={12} />
+                  Rejouer le callback
+                </Button>
               </div>
+            </SideCard>
+          )}
 
-              <div className="font-mono text-[11px] text-ink-1 p-2.5 bg-bg-1 rounded-md border border-hairline break-all min-h-[32px]">
-                {cbUrl ?? '—'}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!cb}
-                onClick={() => console.log('Rejouer callback', job.id)}
-                className="w-full justify-center gap-1.5 text-[12px]"
-              >
-                <RefreshCw size={12} />
-                Rejouer le callback
-              </Button>
-            </div>
-          </SideCard>
+          {/* Fallback discret quand aucune métadonnée latérale n'est disponible */}
+          {!hasConfig && !pipeline && !hasCallbackInfo && (
+            <p className="text-[12px] text-ink-3 text-center py-4">Métadonnées de configuration non disponibles pour ce job.</p>
+          )}
 
         </div>
       </div>

@@ -4,8 +4,8 @@ import { CitedProductsCarousel } from './CitedProductsCarousel';
 import type { LienInterne } from '@/types/conseils';
 
 const ITEMS: LienInterne[] = [
-  { id: '1', url: 'https://example.com/1', titre: 'Produit A', description: 'Desc A', photo: null, prix: '1 200 € HT' },
-  { id: '2', url: 'https://example.com/2', titre: 'Produit B', description: 'Desc B', photo: null, prix: null },
+  { id: 1, url: 'https://example.com/1', titre: 'Produit A', description: 'Desc A', photo: '', prix: '1 200 € HT', type: 0 },
+  { id: 2, url: 'https://example.com/2', titre: 'Produit B', description: 'Desc B', photo: '', type: 0 },
 ];
 
 describe('CitedProductsCarousel', () => {
