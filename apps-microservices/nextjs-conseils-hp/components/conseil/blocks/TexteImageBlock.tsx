@@ -131,7 +131,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
 
   return (
     <>
-      <div className={`my-8 grid gap-8 md:items-center ${gridCols}`}>
+      <div className={`my-8 grid gap-8 md:items-start ${gridCols}`}>
         {data.imagePosition === 'left' ? (
           <>{imageCol}{textCol}</>
         ) : (
