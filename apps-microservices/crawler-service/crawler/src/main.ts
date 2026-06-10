@@ -745,7 +745,8 @@ if (crawlMode === 'update') {
     const previousTotal = consolidationCounts.dataset;
     context.config.circuitBreaker.enabled = true;
     context.config.circuitBreaker.previousTotal = previousTotal;
-    context.config.circuitBreaker.isMicroMode = previousTotal < 50;
+    // We will not basing the Circuit Breaker using the number of URL anymore
+    // context.config.circuitBreaker.isMicroMode = previousTotal < 50;
     
     console.log(`\n🛡️ Circuit Breaker Configured:`);
     console.log(`   - Previous Total (Dataset): ${previousTotal}`);

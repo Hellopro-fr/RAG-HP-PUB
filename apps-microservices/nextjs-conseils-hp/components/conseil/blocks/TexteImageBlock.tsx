@@ -82,8 +82,9 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
     />
   );
 
+  const imageColAlign = data.imagePosition === 'left' ? 'items-start' : 'items-end';
   const imageCol = (
-    <figure className="flex flex-col items-center">
+    <figure className={`flex flex-col ${imageColAlign}`}>
       <div className="w-fit max-w-full overflow-hidden rounded-xl">
         {imageEl}
       </div>
@@ -123,7 +124,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
   );
 
   const textCol = (
-    <div className="flex flex-col justify-center gap-3">
+    <div className="flex flex-col gap-3">
       {data.estimate && (
         <div className="inline-flex items-baseline gap-2 self-start rounded-md bg-primary-soft px-3 py-2">
           {data.estimateLabel && (
@@ -154,7 +155,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
 
   return (
     <>
-      <div className={`my-8 grid gap-8 md:items-center ${gridCols}`}>
+      <div className={`my-8 grid gap-8 md:items-start ${gridCols}`}>
         {data.imagePosition === 'left' ? (
           <>{imageCol}{textCol}</>
         ) : (

@@ -25,6 +25,11 @@ import {
 import { context } from "./context.js";
 import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
 import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
+import {
+    NAVIGATION_WAIT_UNTIL,
+    TIMEOUT_MAX_RETRIES,
+    shouldCapTimeoutRetry,
+} from "./httpStatusPolicy.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -535,7 +540,11 @@ export const startCrawler = async (
         useSessionPool: true,
         persistCookiesPerSession: true,
         sessionPoolOptions: {
-            blockedStatusCodes: [401, 403, 429, 404, 410, 423, 502, 500, 503],
+            // Empty: status-based retire/retry is now handled by the single policy
+            // in routes.ts (classifyHttpStatus). Crawlee no longer pre-throws on
+            // status codes, so every status reaches the handler. 403/429 session
+            // rotation is re-implemented there via session.retire().
+            blockedStatusCodes: [],
         },
 
         // V3 Logic: Rich error reporting
@@ -558,6 +567,16 @@ export const startCrawler = async (
             if (isPermanentError) {
                 request.noRetry = true;
                 log.warning(`Permanent error detected for ${request.url} — no retry`);
+            }
+
+            // Navigation-timeout retry cap: a genuinely-unresponsive URL (no HTTP
+            // response at all) would otherwise burn all maxRequestRetries × navigation
+            // timeout. With waitUntil 'domcontentloaded', a real 404 resolves fast and
+            // is handled by the status policy; a true timeout means the server never
+            // responded — cap the retries.
+            if (shouldCapTimeoutRetry(errorStr, request.retryCount, TIMEOUT_MAX_RETRIES)) {
+                request.noRetry = true;
+                log.warning(`Navigation timeout cap reached for ${request.url} (retryCount=${request.retryCount}) — no retry`);
             }
 
             // Accumulate error stats ONLY if the URL is from the previous crawl
@@ -665,6 +684,16 @@ export const startCrawler = async (
         },
 
         preNavigationHooks: [
+            // Resolve navigation as soon as the DOM is parsed (NAVIGATION_WAIT_UNTIL,
+            // default 'domcontentloaded'), NOT when every sub-resource finishes.
+            // Playwright's default 'load' hangs for the full navigationTimeoutSecs on
+            // heavy pages whose trackers/lazy assets never settle — which hides the
+            // HTTP status behind a never-completing navigation. Content completeness
+            // is handled post-navigation by processPage/waitAndScroll (bounded
+            // networkidle + scroll), so this does not reduce extracted content.
+            async (_crawlingContext, gotoOptions) => {
+                gotoOptions.waitUntil = NAVIGATION_WAIT_UNTIL;
+            },
             async ({ page }) => {
                 const isStopped = isStoppedManualy(domain, false);
                 if (isStopped) {

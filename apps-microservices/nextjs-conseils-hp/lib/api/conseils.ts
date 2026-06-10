@@ -103,6 +103,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
         avecImage: q.avec_image === 1,
         typeSelection: q.type_selection ?? 1,
         obligatoire: (Number(q.obligatoire) === 1 ? 1 : 0) as 0 | 1,
+        ...(q.step_number !== undefined ? { stepNumber: q.step_number } : {}),
         choix: (q.choix ?? []).map((c) => ({
           id: c.id,
           label: c.choix,
