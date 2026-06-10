@@ -262,7 +262,7 @@ export function useAlbumErrorsQuery(token, domain, options = {}) {
 export function useAlbumDeleteJobQuery(token, jobId, options = {}) {
   return useQuery({
     queryKey: queryKeys.albumDeleteJob(jobId),
-    queryFn: () => api.get(`/albums/delete-jobs/${jobId}`, token),
+    queryFn: () => api.get(`/albums/jobs/${jobId}`, token),
     enabled: !!token && !!jobId,
     refetchInterval: (q) => {
       const status = q.state.data?.status;
