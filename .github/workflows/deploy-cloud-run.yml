@@ -502,12 +502,17 @@ jobs:
             echo "| **Statut global** | **${{ steps.status.outputs.global }}** |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Slack notification (optionnel)
-        if: always() && env.SLACK_WEBHOOK_URL != ''
+      - name: Slack notification (optionnel - skip si secret absent)
+        if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
         run: |
           set -euo pipefail
+          # Check dans le run (pas dans 'if:' car env du step pas accessible côté if)
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "Slack webhook URL non configuré, skip notification."
+            exit 0
+          fi
           PAYLOAD=$(cat <<EOF
           {
             "text": "${{ steps.status.outputs.icon }} *Deploy ${{ inputs.service_name }}* — ${{ steps.status.outputs.global }}",
