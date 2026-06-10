@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { setOnUnauthorized } from './lib/api';
+import { isReplicaLive } from './lib/replicas';
 import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
 import LoginPage from './components/LoginPage';
 import Overview from './pages/Overview';
@@ -117,7 +118,9 @@ const App = () => {
           const hb = data.data;
           if (!hb || !hb.replicaId) return;
           // Buffer: same replicaId collapses to the latest heartbeat only.
-          pendingReplicasRef.current[hb.replicaId] = hb;
+          // Stamp browser-local receive time → liveness immune to clock skew
+          // between this machine and the crawler container (see lib/replicas).
+          pendingReplicasRef.current[hb.replicaId] = { ...hb, receivedAt: Date.now() };
           if (!replicasFlushTimerRef.current) {
             replicasFlushTimerRef.current = setTimeout(flushReplicas, 1000);
           }
@@ -151,7 +154,7 @@ const App = () => {
         const next = {};
         let changed = false;
         Object.entries(prev).forEach(([id, data]) => {
-          if (now - data.timestamp < 30000) {
+          if (isReplicaLive(data, now)) {
             next[id] = data;
           } else {
             changed = true;
