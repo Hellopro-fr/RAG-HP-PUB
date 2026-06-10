@@ -11,13 +11,9 @@ interface CTABlockProps {
 }
 
 /**
- * Détecte si l'URL pointe vers demande_info.php.
- * Si oui → extraire f (= id_rubrique) + tous les autres params à passer à l'iframe.
- * L'URL demande_info.php ne doit JAMAIS apparaître dans le HTML (SEO/crawl).
- *
- * Exemple : https://www.hellopro.fr/demande_info.php?soc=1&origine=46&f=1002011
- *   → idRubrique = "1002011"
- *   → extraParams = { soc: "1", origine: "46" }
+ * demande_info.php → TOUJOURS IframeFormModal (formulaire groupée).
+ * Extrait f (= id_rubrique) + tous les autres params à transmettre à l'iframe.
+ * L'URL demande_info.php ne doit JAMAIS apparaître dans le HTML rendu.
  */
 function parseDemandeInfo(url: string): { idRubrique: string; extraParams: Record<string, string> } | null {
   try {
@@ -36,21 +32,15 @@ function parseDemandeInfo(url: string): { idRubrique: string; extraParams: Recor
 }
 
 /**
- * Détecte si l'URL pointe vers contact_info.php.
- * Si oui → extraire id_produit + src_integ + tous les autres params.
- * L'URL contact_info.php ne doit JAMAIS apparaître dans le HTML (SEO/crawl).
- *
- * Exemple : https://www.hellopro.fr/contact_info.php?id_produit=19526928&src_integ=0&origine=56
- *   → idProduit = "19526928"
- *   → srcInteg  = 0
- *   → extraParams = { origine: "56" }
+ * contact_info.php → TOUJOURS IframeProduitModal, id_produit peut être absent.
+ * Tous les params de l'URL originale sont transmis à l'iframe sauf id_produit et src_integ
+ * qui sont extraits séparément.
  */
 function parseContactInfo(url: string): { idProduit: string; srcInteg: 0 | 1; extraParams: Record<string, string> } | null {
   try {
     if (!url.includes('contact_info.php')) return null;
     const parsed = new URL(url, 'https://www.hellopro.fr');
-    const idProduit = parsed.searchParams.get('id_produit');
-    if (!idProduit) return null;
+    const idProduit = parsed.searchParams.get('id_produit') ?? '';
     const srcInteg: 0 | 1 = parsed.searchParams.get('src_integ') === '1' ? 1 : 0;
     const extraParams: Record<string, string> = {};
     parsed.searchParams.forEach((value, key) => {
