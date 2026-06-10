@@ -16,7 +16,7 @@ export function TextBlock({ data }: TextBlockProps) {
       {data.estimation && (
         <div className="mb-3 inline-flex items-baseline gap-2 rounded-md bg-primary-soft px-3 py-2">
           {data.estimation.label && (
-            <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+            <span className="text-sm font-semibold tracking-wide text-primary">
               {data.estimation.label}
             </span>
           )}
