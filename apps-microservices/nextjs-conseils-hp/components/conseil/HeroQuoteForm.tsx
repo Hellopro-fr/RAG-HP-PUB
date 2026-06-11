@@ -120,6 +120,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         selectedChoixIds={selectedChoixIds}
         autres={Object.keys(autresNonVides).length > 0 ? autresNonVides : undefined}
         startFromStep1={startStep1}
+        withPrev
         open={modalOpen}
         onClose={handleModalClose}
       />

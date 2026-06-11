@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
 
 /**
  * Overlay iframe plein écran — Formulaire demande groupée HelloPro
@@ -44,6 +45,11 @@ interface IframeFormModalProps {
    * n'a pas encore sélectionné de choix. Ajoute &start=1 à l'URL iframe.
    */
   startFromStep1?: boolean;
+  /**
+   * Ajoute &prev=1 à l'URL iframe.
+   * À utiliser uniquement depuis le Hero et le bloc QuoteForm du milieu de page.
+   */
+  withPrev?: boolean;
   /** Paramètres supplémentaires à ajouter tels quels à l'URL iframe (ex: soc, origine…) */
   extraParams?: Record<string, string>;
   open: boolean;
@@ -57,12 +63,16 @@ export function IframeFormModal({
   selectedChoixIds,
   autres,
   startFromStep1 = false,
+  withPrev = false,
   extraParams,
   open,
   onClose,
 }: IframeFormModalProps) {
-  const [formReady, setFormReady] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const { attempt, formReady, markReady, handleIframeError } = useIframeAutoRetry({
+    open,
+    onClose,
+  });
 
   const extraParamsStr = extraParams
     ? Object.entries(extraParams)
@@ -77,12 +87,9 @@ export function IframeFormModal({
     `&referer=${encodeURIComponent(referer)}` +
     `&ctx=next` +
     (startFromStep1 ? '&start=1' : '') +
-    extraParamsStr;
-
-  /* Reset à chaque ouverture */
-  useEffect(() => {
-    if (open) setFormReady(false);
-  }, [open]);
+    (withPrev ? '&prev=1' : '') +
+    extraParamsStr +
+    `&_retry=${attempt}`;
 
   /* postMessages */
   useEffect(() => {
@@ -94,7 +101,7 @@ export function IframeFormModal({
 
       /* 1. Formulaire prêt → masquer le loader + pré-remplir step 1 */
       if (data?.type === 'hellopro_form_ready_for_minisite' && data?.loaded) {
-        setFormReady(true);
+        markReady();
         // Pré-remplir les choix step 1 déjà sélectionnés dans HeroQuoteForm (README §7.4)
         // Fonctionne pour choix unique (radio) ET choix multiple (checkbox)
         // Nécessite le listener dans formulaire_minisite.js côté HelloPro
@@ -163,15 +170,20 @@ export function IframeFormModal({
           puis opacity:1 dès formReady
       */}
       <iframe
+        key={attempt}
         ref={iframeRef}
         src={src}
         title="Formulaire de demande de devis HelloPro"
         allowTransparency
+        onError={handleIframeError}
         style={{
           position: 'fixed',
           inset: 0,
           width: '100vw',
-          height: '100vh',
+          // 100dvh = hauteur réellement visible sur mobile (évite que le bas de la modale —
+          // bouton "Suivant" — passe sous la barre de navigation / l'UI du navigateur).
+          // inset:0 (ci-dessus) sert de fallback pour les navigateurs sans support dvh.
+          height: '100dvh',
           border: 0,
           zIndex: 9999,
           background: 'transparent',
