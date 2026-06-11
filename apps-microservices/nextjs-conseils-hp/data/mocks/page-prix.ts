@@ -60,6 +60,14 @@ export const mockPagePrix: ConseilPage = {
       },
     },
     {
+      id: 'b-premier-texte',
+      type: 'texte',
+      order: 1,
+      data: {
+        html: "Le prix de construction varie de 200 € à 13 500 € par place, selon le type d'élevage et les équipements.",
+      },
+    },
+    {
       id: 'b-h2-prix',
       type: 'h2',
       order: 2,

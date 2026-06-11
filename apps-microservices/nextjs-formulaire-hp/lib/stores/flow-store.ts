@@ -202,6 +202,13 @@ export interface FlowState {
   // String libre injecté dans tous les events GTM devis_funnel_formulaire.
   abtest2: string | null;
 
+  // 3 champs additionnels piloté par le token URL, injectés dans tous les events
+  // GTM devis_funnel_formulaire (omis si absent). Naming côté token et GTM en
+  // snake_case ; côté store on suit le camelCase JS.
+  pageTemplateGtm: string | null;
+  funnelContextValue: string | null;
+  pageLocationUri: string | null;
+
   // Nom de la catégorie (depuis l'API questionnaire)
   categoryName: string | null;
 
@@ -316,6 +323,9 @@ export interface FlowState {
   setCategoryId: (id: number) => void;
   setAbtestUxLeadVersion: (value: number | null) => void;
   setAbtest2: (value: string | null) => void;
+  setPageTemplateGtm: (value: string | null) => void;
+  setFunnelContextValue: (value: string | null) => void;
+  setPageLocationUri: (value: string | null) => void;
   setCategoryName: (name: string | null) => void;
   setCategoryStats: (stats: CategoryStats | null) => void;
   setCategoryVignette: (url: string | null) => void;
@@ -355,6 +365,9 @@ const initialState = {
   categoryId: null,
   abtestUxLeadVersion: null as number | null,
   abtest2: null as string | null,
+  pageTemplateGtm: null as string | null,
+  funnelContextValue: null as string | null,
+  pageLocationUri: null as string | null,
   categoryName: null,
   categoryStats: null,
   categoryVignette: null,
@@ -398,6 +411,12 @@ export const useFlowStore = create<FlowState>()(
       setAbtestUxLeadVersion: (value) => set({ abtestUxLeadVersion: value }),
 
       setAbtest2: (value) => set({ abtest2: value }),
+
+      setPageTemplateGtm: (value) => set({ pageTemplateGtm: value }),
+
+      setFunnelContextValue: (value) => set({ funnelContextValue: value }),
+
+      setPageLocationUri: (value) => set({ pageLocationUri: value }),
 
       setCategoryName: (name) => set({ categoryName: name }),
 
