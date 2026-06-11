@@ -52,17 +52,22 @@ function getUserId(): string {
 /**
  * Obtenir ou créer un ID de session (temporaire)
  */
-/**
- * Obtenir ou créer un ID de session (temporaire)
- */
+const SESSION_INACTIVITY_MS = 30 * 60 * 1000; // 30 min d'inactivité avant renouvellement
+
 export function getSessionId(): string {
   if (typeof window === 'undefined') return 'unknown';
 
+  const now = Date.now();
   let sessionId = sessionStorage.getItem('hp_session_id');
-  if (!sessionId) {
-    sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const lastActivity = parseInt(sessionStorage.getItem('hp_session_last_activity') || '', 10);
+
+  // Garde-fou d'inactivité de 30 min (fenêtre glissante) : on ne régénère qu'au-delà.
+  if (!sessionId || isNaN(lastActivity) || now - lastActivity > SESSION_INACTIVITY_MS) {
+    sessionId = `session_${now}_${Math.random().toString(36).substr(2, 9)}`;
     sessionStorage.setItem('hp_session_id', sessionId);
   }
+
+  sessionStorage.setItem('hp_session_last_activity', String(now));
   return sessionId;
 }
 
@@ -84,7 +89,7 @@ function isFirstView(key: string): boolean {
 
 /**
  * Réinitialiser tous les états de tracking (appelé lors d'un F5/reload)
- * Nettoie les flags de déduplication et le session_id
+ * Nettoie les flags de déduplication (le session_id est conservé : voir getSessionId)
  */
 export function resetTrackingState(): void {
   if (typeof window === 'undefined') return;
@@ -99,8 +104,8 @@ export function resetTrackingState(): void {
   }
   keysToRemove.forEach((key) => sessionStorage.removeItem(key));
 
-  // Supprimer le session_id pour en générer un nouveau
-  sessionStorage.removeItem('hp_session_id');
+  // Le session_id N'EST PLUS supprimé au reload : il est gouverné par le
+  // garde-fou d'inactivité de 30 min dans getSessionId() (hp_session_last_activity).
 
   // Réinitialiser le contexte funnel, le step index et le flow type
   funnelContext = {};
