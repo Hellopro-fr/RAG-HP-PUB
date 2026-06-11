@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
 
 /**
  * Overlay iframe plein écran — Formulaire demande produit HelloPro
@@ -37,8 +38,11 @@ export function IframeProduitModal({
   open,
   onClose,
 }: IframeProduitModalProps) {
-  const [formReady, setFormReady] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const { attempt, formReady, markReady, handleIframeError } = useIframeAutoRetry({
+    open,
+    onClose,
+  });
 
   const extraParamsStr = extraParams
     ? Object.entries(extraParams)
@@ -52,12 +56,8 @@ export function IframeProduitModal({
     `&src_integ=${srcInteg}` +
     `&referer=conseilsnextjs` +
     `&ctx=next` +
-    extraParamsStr;
-
-  /* Reset loader à chaque ouverture */
-  useEffect(() => {
-    if (open) setFormReady(false);
-  }, [open]);
+    extraParamsStr +
+    `&_retry=${attempt}`;
 
   /* postMessages */
   useEffect(() => {
@@ -70,7 +70,7 @@ export function IframeProduitModal({
 
       /* 1. Formulaire prêt → masquer le loader */
       if (data?.type === 'hellopro_form_ready_for_minisite' && data?.loaded) {
-        setFormReady(true);
+        markReady();
         return;
       }
 
@@ -113,10 +113,12 @@ export function IframeProduitModal({
       )}
 
       <iframe
+        key={attempt}
         ref={iframeRef}
         src={src}
         title="Formulaire de demande produit HelloPro"
         allowTransparency
+        onError={handleIframeError}
         style={{
           position: 'fixed',
           inset: 0,

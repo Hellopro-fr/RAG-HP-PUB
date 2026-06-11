@@ -105,6 +105,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
         selectedChoixIds={selectedChoixIds}
         autres={Object.keys(autresNonVides).length > 0 ? autresNonVides : undefined}
         startFromStep1={startStep1}
+        withPrev
         open={modalOpen}
         onClose={handleModalClose}
       />
