@@ -29,6 +29,14 @@ export const mockPageTop: ConseilPage = {
       },
     },
     {
+      id: 'b-premier-texte',
+      type: 'texte',
+      order: 1,
+      data: {
+        html: "Sélection des 10 fabricants actifs en France, retenus sur leur gamme, leurs caractéristiques techniques et leur capacité de service.",
+      },
+    },
+    {
       id: 'b-h2-selection',
       type: 'h2',
       order: 2,

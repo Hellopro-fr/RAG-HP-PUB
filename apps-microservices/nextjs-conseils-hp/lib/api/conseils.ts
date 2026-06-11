@@ -147,13 +147,6 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
       ];
     }
 
-    // premier_bloc_texte est affiché dans le hero (subtitle) — retirer le premier bloc texte des blocs pour éviter la duplication
-    if (raw.premier_bloc_texte) {
-      const firstTexteIdx = blocks.findIndex((b) => b.type === 'texte');
-      if (firstTexteIdx !== -1) {
-        blocks = blocks.filter((_, i) => i !== firstTexteIdx);
-      }
-    }
 
     const infoRubrique = raw.info_rubrique
       ? { id: raw.info_rubrique.id, libelle: raw.info_rubrique.libelle }
