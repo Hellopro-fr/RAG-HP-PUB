@@ -75,6 +75,10 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
     .filter((b) => b.type !== 'resume')
     .sort((a, b) => a.order - b.order);
 
+  // Ancre vers le premier bloc texte — cible du lien "Lire la suite" dans le Hero
+  const FIRST_BLOCK_ANCHOR = 'premier-bloc-texte';
+  const firstTextBlockId = contentBlocks.find((b) => b.type === 'texte')?.id ?? null;
+
   const hasBrochure = contentBlocks.some((b) => b.type === 'brochure');
   const faqIndex = contentBlocks.findIndex((b) => b.type === 'faq');
 
@@ -168,9 +172,15 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           )}
 
           {/* Première moitié des blocs */}
-          {blocksBeforeQuoteForm.map((block) => (
-            <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
-          ))}
+          {blocksBeforeQuoteForm.map((block) =>
+            block.id === firstTextBlockId ? (
+              <div key={block.id} id={FIRST_BLOCK_ANCHOR} className="scroll-mt-28">
+                <BlockRenderer block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
+              </div>
+            ) : (
+              <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
+            )
+          )}
 
           {/* Formulaire devis injecté au milieu du contenu */}
           {showQuoteForm && (
@@ -182,9 +192,15 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
           )}
 
           {/* Seconde moitié des blocs */}
-          {blocksAfterQuoteForm.map((block) => (
-            <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
-          ))}
+          {blocksAfterQuoteForm.map((block) =>
+            block.id === firstTextBlockId ? (
+              <div key={block.id} id={FIRST_BLOCK_ANCHOR} className="scroll-mt-28">
+                <BlockRenderer block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
+              </div>
+            ) : (
+              <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
+            )
+          )}
 
           {/* Brochure statique — temporairement désactivée (à réactiver)
           {!hasBrochure && <BrochureBlock data={STATIC_BROCHURE} />}
@@ -197,6 +213,10 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
                 key={block.id}
                 data={{ ...(block.data as unknown as FaqBlockData), title: h2BeforeFaq }}
               />
+            ) : block.id === firstTextBlockId ? (
+              <div key={block.id} id={FIRST_BLOCK_ANCHOR} className="scroll-mt-28">
+                <BlockRenderer block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
+              </div>
             ) : (
               <BlockRenderer key={block.id} block={block} formulaire_ao={page.formulaire_ao} infoRubrique={page.infoRubrique} />
             )

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { Calendar, Clock, ChevronDown, Lightbulb, Home } from 'lucide-react';
+import { ArrowRight, Calendar, Clock, ChevronDown, Lightbulb, Home } from 'lucide-react';
 import type { HeroData, ConseilPageType } from '@/types/conseils';
 import type { ResumeItem } from '@/types/blocks/resume';
 
@@ -86,10 +86,18 @@ export function Hero({
             </h1>
 
             {data.subtitle && (
-              <p
-                className="mt-2 max-w-xl text-sm text-primary-foreground/90"
-                dangerouslySetInnerHTML={{ __html: highlightPrices(data.subtitle) }}
-              />
+              <div className="mt-2 max-w-xl">
+                <div
+                  className="line-clamp-2 text-sm leading-relaxed text-primary-foreground/90 [&_a]:underline [&_a]:decoration-primary-foreground/60 [&_a:hover]:decoration-primary-foreground"
+                  dangerouslySetInnerHTML={{ __html: highlightPrices(data.subtitle) }}
+                />
+                <a
+                  href="#premier-bloc-texte"
+                  className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+                >
+                  Lire la suite <ArrowRight className="h-3 w-3" />
+                </a>
+              </div>
             )}
 
             {(resumeHtml || resume.length > 0) && (
