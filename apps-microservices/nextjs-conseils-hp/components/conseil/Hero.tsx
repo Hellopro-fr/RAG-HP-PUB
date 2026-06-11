@@ -58,7 +58,7 @@ export function Hero({
         {breadcrumb.length > 0 && (
           <nav
             aria-label="Fil d'Ariane"
-            className="mb-3 flex flex-wrap items-center gap-1 text-xs text-primary-foreground/80"
+            className="mb-3 hidden min-[769px]:flex flex-wrap items-center gap-1 text-xs text-primary-foreground/80"
           >
             {breadcrumb.map((item, i) => (
               <span key={i} className="flex items-center gap-1">
