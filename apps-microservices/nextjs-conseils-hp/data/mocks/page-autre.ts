@@ -30,6 +30,14 @@ export const mockPageAutre: ConseilPage = {
       },
     },
     {
+      id: 'b-premier-texte',
+      type: 'texte',
+      order: 1,
+      data: {
+        html: "Autorisation de conduite, CACES, assurance et normes : tout ce qu'un exploitant de balayeuse doit savoir.",
+      },
+    },
+    {
       id: 'b-h2-regles',
       type: 'h2',
       order: 2,
