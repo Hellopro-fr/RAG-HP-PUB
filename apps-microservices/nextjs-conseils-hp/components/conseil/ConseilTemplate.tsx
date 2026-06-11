@@ -1,3 +1,4 @@
+import { Home } from 'lucide-react';
 import { SiteHeader } from './SiteHeader';
 import { SiteFooter } from './SiteFooter';
 import { GtmFooterScripts } from './GtmFooterScripts';
@@ -42,6 +43,12 @@ interface ConseilTemplateProps {
  */
 export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const tocItems = extractTOC(page.blocks);
+
+  const breadcrumb = page.breadcrumb ?? [
+    { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
+    { label: 'Conseils', href: '/' },
+    { label: page.hero.title },
+  ];
 
   // Steps 5 & 6 — collecte globale des produits pour GTM (positions continues sur tous les blocs)
   const gtmEntries: string[] = [];
@@ -140,11 +147,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         resume={resumeItems}
         resumeTitle={resumeTitle}
         resumeHtml={resumeHtml}
-        breadcrumb={page.breadcrumb ?? [
-          { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
-          { label: 'Conseils', href: '/' },
-          { label: page.hero.title },
-        ]}
+        breadcrumb={breadcrumb}
         slot={page.pageType !== 'top' ? (
           <HeroQuoteForm
             question={page.formulaire_ao ?? null}
@@ -235,11 +238,35 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       </main>
 
       {/* Steps 6-10 — scripts GTM footer (page_template → user+cats → GTM → GA4 → impressions) */}
-      <GtmFooterScripts breadcrumb={page.breadcrumb ?? [
-        { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
-        { label: 'Conseils', href: '/' },
-        { label: page.hero.title },
-      ]} />
+      <GtmFooterScripts breadcrumb={breadcrumb} />
+
+      {/* Fil d'ariane mobile — masqué sur desktop (le Hero l'affiche en md+) */}
+      {breadcrumb.length > 0 && (
+        <nav
+          aria-label="Fil d'Ariane"
+          className="min-[769px]:hidden flex flex-wrap items-center gap-1 border-t border-border bg-background px-4 py-3 text-xs text-muted-foreground"
+        >
+          {breadcrumb.map((item, i) => (
+            <span key={i} className="flex items-center gap-1">
+              {i > 0 && <span aria-hidden="true">›</span>}
+              {item.href ? (
+                <a
+                  href={item.href}
+                  className="hover:underline hover:text-foreground"
+                  aria-label={i === 0 ? item.label : undefined}
+                >
+                  {i === 0 ? <Home className="h-3.5 w-3.5" /> : item.label}
+                </a>
+              ) : (
+                <span className="text-foreground">
+                  {i === 0 ? <Home className="h-3.5 w-3.5" /> : item.label}
+                </span>
+              )}
+            </span>
+          ))}
+        </nav>
+      )}
+
       <SiteFooter />
     </>
   );
