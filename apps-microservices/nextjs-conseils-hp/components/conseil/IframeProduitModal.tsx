@@ -123,7 +123,10 @@ export function IframeProduitModal({
           position: 'fixed',
           inset: 0,
           width: '100vw',
-          height: '100vh',
+          // 100dvh = hauteur réellement visible sur mobile (évite que le bas de la modale —
+          // bouton "Suivant" — passe sous la barre de navigation / l'UI du navigateur).
+          // inset:0 (ci-dessus) sert de fallback pour les navigateurs sans support dvh.
+          height: '100dvh',
           border: 0,
           zIndex: 9999,
           background: 'transparent',
