@@ -57,7 +57,7 @@ Le funnel GTM repose sur **un événement principal** (`devis_funnel_formulaire`
   rubrique_id: number,
   'product.category5': string,
   abtest2?: string,           // optionnel — provient du token URL, omis si absent
-  page_template_gtm?: string, // optionnel — template GTM de la page d'entrée, depuis le token URL
+  page_template?: string,     // optionnel — template GTM de la page d'entrée, depuis le token URL (champ `page_template_gtm` côté token, remappé en `page_template` pour le push)
   funnel_context?: string,    // optionnel — contexte funnel, depuis le token URL
   page_location_uri?: string, // optionnel — URI de la page d'entrée, depuis le token URL
 
@@ -383,7 +383,7 @@ Le composant `<Hotjar />` ([components/analytics/](../components/analytics)) cha
 
 - `step_name`, `step_type`, `step_index`, `step_number`
 - `flow_type`, `rubrique_id`, `product.category5`, `abtest2`
-- `page_template_gtm`, `funnel_context`, `page_location_uri` (depuis le token URL)
+- `page_template`, `funnel_context`, `page_location_uri` (depuis le token URL — `page_template` correspond au champ `page_template_gtm` du payload chiffré)
 - `conversion`, `profile_type`, `user_known_status`
 - `user_id`, `session_id`
 
