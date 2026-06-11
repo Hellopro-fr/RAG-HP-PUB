@@ -57,7 +57,11 @@ export function useAoQuoteForm(
       setSelected(new Set([c.id]));
       setPendingChoix(c);
       setStartStep1(false);
-      setModalOpen(true);
+      // Si le choix a un champ libre (typeInput=1), ne pas ouvrir le modal immédiatement :
+      // l'utilisateur doit d'abord remplir l'input, puis cliquer sur le CTA.
+      if (String(c.typeInput) !== '1') {
+        setModalOpen(true);
+      }
     } else {
       setSelected((prev) => {
         const next = new Set(prev);
