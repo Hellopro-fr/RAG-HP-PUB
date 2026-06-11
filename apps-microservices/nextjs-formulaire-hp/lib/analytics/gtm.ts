@@ -12,6 +12,9 @@ interface FunnelContext {
   rubrique_id?: number;
   'product.category5'?: string;
   abtest2?: string;
+  page_template_gtm?: string;
+  funnel_context?: string;
+  page_location_uri?: string;
 }
 
 
@@ -202,6 +205,11 @@ export function trackQuoteFunnel(
 
     // A/B test secondaire (token URL) — omis si absent
     ...(funnelContext.abtest2 && { abtest2: funnelContext.abtest2 }),
+
+    // Champs additionnels token URL — omis si absent
+    ...(funnelContext.page_template_gtm && { page_template_gtm: funnelContext.page_template_gtm }),
+    ...(funnelContext.funnel_context && { funnel_context: funnelContext.funnel_context }),
+    ...(funnelContext.page_location_uri && { page_location_uri: funnelContext.page_location_uri }),
 
     // Type de parcours (seulement si défini)
     ...(currentFlowType && { flow_type: currentFlowType }),

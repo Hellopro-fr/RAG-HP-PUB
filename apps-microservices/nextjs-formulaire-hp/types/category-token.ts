@@ -10,4 +10,7 @@ export interface CategoryTokenUrlData {
   equivalence: unknown[];
   abtest_UX_lead_version?: number;
   abtest2?: string;
+  page_template_gtm?: string;
+  funnel_context?: string;
+  page_location_uri?: string;
 }
