@@ -71,15 +71,21 @@ if job_info.get("status") == "running":
 
 > **AMENDEMENT 2026-06-12 (CR-T3, vérification de scope)** : (1) le critère `dropdata is False`
 > envisagé est VACUEUX — le schéma FastAPI (`schemas/crawler.py:73`) défaute `dropdata=False`
-> pour tout start BO, donc les re-crawls frais de la classe incident porteraient toujours le
-> stashed_at gen-1. **Critère retenu : porter `stashed_at` (et exécuter le resume-on-start
-> unstash, même prédicat) UNIQUEMENT si le blob gen-1 a `status == "stopped"`** (continuation
-> volontaire — c'est le cas que modélisent les tests resume) ; gen-1 finished/failed → drop +
-> warning, tar GCS orphelin assumé. (2) La purge du marker gen-1 existe DÉJÀ
+> pour tout start BO. Un premier critère `status == "stopped"` (`155edb02`) s'est révélé
+> TROP ÉTROIT (revue utilisateur) : continuer un crawl `finished` est courant (limitDiez/
+> limitQuestionMark/limitCrawl sortent en `finished`+isError ; traitement post-webhook cassé).
+> **Règle finale (`4a805b94`) : porter `stashed_at` + exécuter le resume-on-start unstash pour
+> TOUT statut gen-1, SAUF `params.dropdata` truthy (dropData=1 explicite = restart propre).**
+> Sûreté : le danger tar-périmé (6430/6690) exige qu'un `stashed_at` survive NON CONSOMMÉ
+> jusqu'au blob terminal gen-2 ; la reprise inconditionnelle le CONSOMME au start (unstash
+> efface `stashed_at` + supprime le tar) ; en échec d'unstash, le start avorte (rollback) —
+> aucun crawl ne tourne avec l'état périmé. (2) La purge du marker gen-1 existe DÉJÀ
 > (`_cleanup_stale_state_for_relaunch`, appelée à chaque start ~L553) — non dupliquée, pinnée
 > par test. (3) Les request_ids/compteurs gen-1 sont déjà écartés par la réécriture wholesale
-> du blob au start. Implémenté en `155edb02`. Update-mode (`_restore_previous_crawl`) non
-> concerné (chemin séparé sur previousCrawlId).
+> du blob au start. Update-mode (`_restore_previous_crawl`) non concerné (chemin séparé sur
+> previousCrawlId). **Suivi (non bloquant)** : le rollback d'un unstash en échec SUPPRIME le
+> blob (perte du pointeur stashed_at, tar orphelin → sweep) — restaurer `prior_job_info`
+> serait plus sûr ; exposition élargie maintenant que finished/failed passent par l'unstash.
 
 Site : `start_crawl`, au moment où le job_info de la nouvelle génération est construit
 pour un crawl_id qui existait déjà en Redis (et/ou dont le storage existe).
