@@ -414,19 +414,20 @@ class CrawlerManager:
         # clear it before the resume-on-start unstash runs: unstash_crawl
         # re-validates stashed_at against Redis (TOCTOU) and would 409 NOT_STASHED
         # if it were already gone. unstash_crawl clears it after restoring.
-        # F3 (incident 2026-06-10) : la reprise ne vaut QUE pour un crawl gen-1 STOPPÉ
-        # (relance volontaire = continuation). Un gen-1 finished/failed re-crawlé est une
-        # nouvelle génération : hériter son stashed_at ferait dérouter un /results futur
-        # vers l'unstash d'un tar GCS obsolète qui ÉCRASE les données fraîches
-        # (blobs 6430/6690, tars du 23/05). Le tar GCS orphelin reste au sweep.
+        # F3 (décision 2026-06-12) : la reprise vaut pour TOUT statut gen-1 (continuer un
+        # crawl finished est courant — ex. traitement post-webhook cassé). Le danger
+        # tar-périmé (incident 06-10, blobs 6430/6690) est fermé par la CONSOMMATION au
+        # start : l'unstash restaure les données, efface stashed_at et supprime le tar
+        # GCS — rien ne survit jusqu'au blob terminal gen-2. Seule exception : dropData
+        # explicite (intention de repartir propre) — unstash-puis-drop gaspillerait un
+        # téléchargement GCS.
         if prior_job_info and prior_job_info.get("stashed_at"):
-            if prior_job_info.get("status") == "stopped":
+            if not params.get("dropdata"):
                 job_data["stashed_at"] = prior_job_info["stashed_at"]
             else:
                 logger.warning(
                     f"start_crawl '{crawl_id}': dropping gen-1 stashed_at="
-                    f"{prior_job_info['stashed_at']} (prior status="
-                    f"{prior_job_info.get('status')}, not a resume)."
+                    f"{prior_job_info['stashed_at']} (explicit dropdata — clean restart)."
                 )
 
         # --- CAPACITY SHORT-CIRCUITS (Spec 2026-05-22) ---
@@ -537,9 +538,9 @@ class CrawlerManager:
         # fresh (which would orphan the GCS stash + waste local disk). Runs before
         # _cleanup_stale_state_for_relaunch so the restored stale completion marker
         # is stripped. Mirrors the previous_crawl_id restore + /results unstash.
-        # F3 : même prédicat que le carry ci-dessus (status == "stopped") — un carry
-        # droppé ne doit PAS unstasher (409 NOT_STASHED → rollback → start échoue).
-        if prior_job_info and prior_job_info.get("stashed_at") and prior_job_info.get("status") == "stopped":
+        # F3 : même prédicat que le carry ci-dessus (not params.get("dropdata")) — un
+        # carry droppé ne doit PAS unstasher (409 NOT_STASHED → rollback → start échoue).
+        if prior_job_info and prior_job_info.get("stashed_at") and not params.get("dropdata"):
             logger.info(f"Crawl '{crawl_id}' is stashed; unstashing from GCS to resume "
                         f"instead of starting fresh.")
             try:

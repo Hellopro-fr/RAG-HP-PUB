@@ -1,11 +1,16 @@
-"""F3 (incident 2026-06-10): gen-1 state hygiene on fresh start_crawl.
+"""F3 (décision produit 2026-06-12): gen-1 stash carry + resume-on-start.
 
-The gen-1 stashed_at carry + resume-on-start unstash apply ONLY when the prior
-blob's status is "stopped" (deliberate stop -> operator relaunch = the designed
-continuation case). A prior finished/failed blob being re-crawled is a NEW
-generation: inheriting its stashed_at would route a future /results through the
-unstash of a stale GCS tar that OVERWRITES the fresh data (blobs 6430/6690,
-tars of 2026-05-23). The orphaned GCS tar is left to the sweep/lifecycle.
+Decided rule: the gen-1 stashed_at carry + resume-on-start unstash apply for
+ANY prior status (stopped, finished, failed, ...) — operators commonly continue
+a FINISHED crawl (e.g. post-webhook treatment broke). The ONLY exception is an
+explicit clean-restart intent: params["dropdata"] truthy (operator dropData=1),
+where unstash-then-drop would waste a GCS download — there the gen-1 stashed_at
+is dropped (warning logged) and the unstash is skipped.
+
+Safety: the stale-tar-overwrite hazard (incident 2026-06-10, blobs 6430/6690)
+requires stashed_at to survive UNconsumed into the gen-2 terminal blob. The
+unconditional resume CONSUMES it at start (unstash clears stashed_at + deletes
+the GCS tar), so the hazard is closed by consumption, not by status gating.
 
 Also pins that _cleanup_stale_state_for_relaunch removes a stale
 _completion_marker.json from a reused storage dir on every start.
@@ -15,6 +20,7 @@ the capacity probes + lock, then a stubbed (or wrapped, for the marker test)
 _cleanup_stale_state_for_relaunch raises _Sentinel to stop before a real
 subprocess spawns.
 """
+import logging
 from collections import namedtuple
 from unittest.mock import AsyncMock
 import os as _os
@@ -72,10 +78,11 @@ def _setup(monkeypatch, tmp_path, get_json_return):
     return manager, cache_mocks
 
 
-async def _call_start(manager):
+async def _call_start(manager, params=None):
     return await manager.start_crawl(
         domain="x.fr", start_url="https://x.fr/", crawl_id="900",
-        callback_url="https://cb", failure_callback_url=None, params={},
+        callback_url="https://cb", failure_callback_url=None,
+        params=params if params is not None else {},
         is_restart=False,
     )
 
@@ -85,30 +92,14 @@ def _written_job_data(cache_mocks):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("prior_status", ["finished", "failed"])
-async def test_fresh_start_drops_gen1_stashed_at_for_non_stopped_prior(
+@pytest.mark.parametrize("prior_status", ["finished", "failed", "stopped"])
+async def test_fresh_start_carries_stashed_at_and_unstashes_for_any_prior_status(
         monkeypatch, tmp_path, prior_status):
-    """Prior blob finished/failed (incident class): stashed_at must NOT be
-    carried into the fresh record, and the resume-on-start unstash must NOT run."""
+    """Décision 2026-06-12: stashed_at carried + resume-on-start unstash invoked
+    for ANY gen-1 status (continuing a finished crawl is a common operator move,
+    e.g. post-webhook treatment broke). The stale-tar hazard is closed because
+    the unstash CONSUMES the stash at start (clears stashed_at, deletes the tar)."""
     manager, cache_mocks = _setup(monkeypatch, tmp_path, _prior_record(prior_status))
-    manager.unstash_crawl = AsyncMock(return_value={"status": "unstashed"})
-    monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
-                        AsyncMock(side_effect=_Sentinel()))
-    with pytest.raises(_Sentinel):
-        await _call_start(manager)
-    manager.unstash_crawl.assert_not_called()
-    written = _written_job_data(cache_mocks)
-    assert written, "start_crawl must have written the fresh job_data"
-    assert all("stashed_at" not in d for d in written), \
-        f"gen-1 stashed_at must be dropped when prior status is '{prior_status}'"
-
-
-@pytest.mark.asyncio
-async def test_fresh_start_carries_stashed_at_and_unstashes_for_stopped_prior(
-        monkeypatch, tmp_path):
-    """Prior blob stopped (deliberate stop -> relaunch): stashed_at carried into
-    the fresh record AND the resume-on-start unstash path is invoked."""
-    manager, cache_mocks = _setup(monkeypatch, tmp_path, _prior_record("stopped"))
     manager.unstash_crawl = AsyncMock(return_value={"status": "unstashed"})
     monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
                         AsyncMock(side_effect=_Sentinel()))
@@ -117,7 +108,30 @@ async def test_fresh_start_carries_stashed_at_and_unstashes_for_stopped_prior(
     manager.unstash_crawl.assert_awaited_once()
     written = _written_job_data(cache_mocks)
     assert any(d.get("stashed_at") == STASHED_AT for d in written), \
-        "fresh job_data write must preserve stashed_at for a stopped prior"
+        f"fresh job_data write must preserve stashed_at for a '{prior_status}' prior"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dropdata_value", [True, 1])
+async def test_fresh_start_drops_gen1_stashed_at_on_explicit_dropdata(
+        monkeypatch, tmp_path, caplog, dropdata_value):
+    """Explicit dropData (clean-restart intent — BO sends 1): stashed_at must NOT
+    be carried into the fresh record, the resume-on-start unstash must NOT run
+    (unstash-then-drop would waste a GCS download), and a warning is logged."""
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, _prior_record("finished"))
+    manager.unstash_crawl = AsyncMock(return_value={"status": "unstashed"})
+    monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
+                        AsyncMock(side_effect=_Sentinel()))
+    with caplog.at_level(logging.WARNING, logger="app.core.crawler_manager"):
+        with pytest.raises(_Sentinel):
+            await _call_start(manager, params={"dropdata": dropdata_value})
+    manager.unstash_crawl.assert_not_called()
+    written = _written_job_data(cache_mocks)
+    assert written, "start_crawl must have written the fresh job_data"
+    assert all("stashed_at" not in d for d in written), \
+        "gen-1 stashed_at must be dropped on explicit dropdata"
+    assert "dropping gen-1 stashed_at" in caplog.text and "dropdata" in caplog.text, \
+        "the drop must be logged as a warning"
 
 
 @pytest.mark.asyncio
