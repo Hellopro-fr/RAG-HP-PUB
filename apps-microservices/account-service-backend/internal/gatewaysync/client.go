@@ -68,7 +68,7 @@ func (c *Client) SyncUsers(users []SyncUser) (*Result, error) {
 	}
 	var out Result
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gateway sync: decode response: %w", err)
 	}
 	return &out, nil
 }
