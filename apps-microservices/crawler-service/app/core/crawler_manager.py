@@ -1547,6 +1547,11 @@ class CrawlerManager:
                 )
                 job_info["status"] = healed_status
                 job_info.pop("last_heartbeat", None)
+                # F8: the healed blob is terminal — persist final counters +
+                # terminal stamps (both fail-open; finished_at only if absent)
+                # or a later stash makes /status report urls_crawled=0.
+                self._persist_final_counters(job_info)
+                self._stamp_terminal_fields(job_info)
                 await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             else:
                 raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
@@ -3252,6 +3257,11 @@ class CrawlerManager:
                         job_data["status"] = marker_status
                         if "last_heartbeat" in job_data:
                             del job_data["last_heartbeat"]
+                        # F8: terminal blob — persist final counters + terminal
+                        # stamps (fail-open; finished_at only if absent), same
+                        # contract as the finalize and F2-B heal paths.
+                        self._persist_final_counters(job_data)
+                        self._stamp_terminal_fields(job_data)
                         await cache_service.set_json(all_job_keys[i], job_data)
                         await self._publish_update(crawl_id, marker_status)
                         # Skip remaining stale-detection logic for this job.
