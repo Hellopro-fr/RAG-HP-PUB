@@ -1,0 +1,14 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-12-crawler-f2-f3-f8-results-400.md",
+  "tasks": [
+    { "id": 1, "subject": "CR-T1: F2-A write-then-verify statut terminal (TDD)", "status": "pending",
+      "description": "_verify_terminal_status_persisted after terminal set_json in _monitor_process; rewrite once on mismatch; critical log; webhook still fires. Tests test_finalize_write_verify.py.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_finalize_write_verify.py\"], \"verifyCommand\": \"python -m pytest tests/ -x -q\", \"acceptanceCriteria\": [\"read-back+rewrite\", \"suite green\"]}\n```" },
+    { "id": 2, "subject": "CR-T2: F2-B tolérance marker get_results_archive (TDD)", "status": "pending", "blockedBy": [1],
+      "description": "running + _completion_marker.json → heal finished + persist + serve; sans marker → 400. Tests test_results_running_marker_tolerance.py.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_results_running_marker_tolerance.py\"], \"verifyCommand\": \"python -m pytest tests/ -x -q\", \"acceptanceCriteria\": [\"marker tolerance + heal\", \"400 kept sans marker\"]}\n```" },
+    { "id": 3, "subject": "CR-T3: F3 hygiène gen-1 start_crawl (TDD)", "status": "pending", "blockedBy": [2],
+      "description": "stashed_at carried only when params.dropdata is False; stale marker removed on fresh start; test_auto_stash_resume_on_start green or STOP. Tests test_start_crawl_gen1_hygiene.py.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_start_crawl_gen1_hygiene.py\"], \"verifyCommand\": \"python -m pytest tests/ -x -q\", \"acceptanceCriteria\": [\"gated stashed_at\", \"stale marker removed\", \"resume test green or STOP\"]}\n```" },
+    { "id": 4, "subject": "CR-T4: F8 compteurs persistés au finalize (TDD)", "status": "pending", "blockedBy": [3],
+      "description": "final_urls_crawled/final_error_urls_crawled persisted at finalize; status stats serve them when dataset dir absent; never fabricate 0 if schema allows. Tests test_status_counters_survive_stash.py.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_status_counters_survive_stash.py\"], \"verifyCommand\": \"python -m pytest tests/ -x -q\", \"acceptanceCriteria\": [\"finals persisted\", \"served when disk gone\"]}\n```" }
+  ],
+  "lastUpdated": "2026-06-12"
+}
