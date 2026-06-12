@@ -135,3 +135,46 @@ func (r *UserRepo) UpdateAllowed(id uint64, isAllowed bool) error {
 func (r *UserRepo) Delete(id uint64) error {
 	return r.db.Delete(&db.GatewayUser{}, id).Error
 }
+
+// SyncUserInput is one user pushed from account-service via the internal
+// sync endpoint.
+type SyncUserInput struct {
+	Email       string
+	DisplayName string
+}
+
+// SyncUsers creates a gateway user for every input email that does not exist
+// yet (role config-only, is_allowed=false) and skips existing ones untouched.
+// Returns the emails created and skipped. Both slices are always non-nil so
+// callers can JSON-encode them as [] rather than null.
+func (r *UserRepo) SyncUsers(users []SyncUserInput) (created, skipped []string, err error) {
+	created = []string{}
+	skipped = []string{}
+	for _, u := range users {
+		existing, getErr := r.GetByEmail(u.Email)
+		if getErr != nil {
+			return nil, nil, getErr
+		}
+		if existing != nil {
+			skipped = append(skipped, u.Email)
+			continue
+		}
+		newUser := db.GatewayUser{
+			Email:       u.Email,
+			DisplayName: u.DisplayName,
+			Role:        "config-only",
+			IsAllowed:   false,
+		}
+		if createErr := r.db.Create(&newUser).Error; createErr != nil {
+			// Unique-constraint race: the user logged in (UpsertOnLogin)
+			// between our lookup and insert. Re-check and treat as skipped.
+			if again, _ := r.GetByEmail(u.Email); again != nil {
+				skipped = append(skipped, u.Email)
+				continue
+			}
+			return nil, nil, createErr
+		}
+		created = append(created, u.Email)
+	}
+	return created, skipped, nil
+}

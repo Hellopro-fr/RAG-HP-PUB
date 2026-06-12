@@ -2,7 +2,7 @@ import os
 import json
 import re
 import asyncio
-from vllm.transformers_utils.tokenizer import get_tokenizer
+from transformers import AutoTokenizer
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 from common_utils.metrics.prometheus import measure_processing_time
@@ -107,7 +107,7 @@ Contenu en entrée (Markdown) :
 {content}
 """
 
-TOKENIZER = get_tokenizer("deepseek-ai/DeepSeek-R1", trust_remote_code=True)
+TOKENIZER = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1", trust_remote_code=True)
 MAX_MODEL_LEN = 128000 # Correspond à la limite théorique du modèle DeepSeek-R1
 # On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
 SAFE_MAX_LEN = MAX_MODEL_LEN - 512
@@ -190,14 +190,22 @@ async def _process_single_message(message: dict) -> dict:
                 raise ValueError(f"Le champ 'page_type' est manquant ou vide dans la réponse JSON: {raw_text}")
             
             page_type = page_type.strip().lower()
-            
+
             if collection == "document":
-                if page_type not in page_types_ocr:
-                    raise ValueError(f"Type de page inconnu pour OCR: '{page_type}' dans la réponse JSON: {raw_text}")
+                allowed_types = page_types_ocr
+                source_type = "OCR"
             else:
-                if page_type not in page_types_siteweb:
-                    raise ValueError(f"Type de page inconnu pour site web: '{page_type}' dans la réponse JSON: {raw_text}")
-            
+                allowed_types = page_types_siteweb
+                source_type = "site web"
+            if page_type not in allowed_types:
+                # Type hors liste : on force "autre" au lieu de lever une erreur
+                # (sinon le message part en retry/DLQ pour un simple écart de label du LLM).
+                print(f"   -> ⚠️  Type de page inconnu pour {source_type}: '{page_type}' pour l'URL {url}. Forçage à 'autre'.")
+                original_message["data"]["commentaire_si_autre"] = f"Type non listé retourné par le LLM : '{page_type}'"
+                page_type = "autre"
+            elif page_type == "autre" and parsed_json.get("commentaire_si_autre"):
+                original_message["data"]["commentaire_si_autre"] = parsed_json["commentaire_si_autre"]
+
             original_message["data"]["page_type"] = page_type
             return {
                 "status": "success",

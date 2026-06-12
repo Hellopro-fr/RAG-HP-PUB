@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
+	"mcp-gateway/internal/repository"
 	"mcp-gateway/internal/runnerclient"
 )
 
@@ -82,4 +84,62 @@ func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+type syncUserEntry struct {
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+}
+
+type syncUsersRequest struct {
+	Users []syncUserEntry `json:"users"`
+}
+
+type syncUsersResponse struct {
+	Created []string `json:"created"`
+	Skipped []string `json:"skipped"`
+}
+
+// handleUserSync is called by account-service-backend to pre-provision its
+// users as gateway users (role config-only, is_allowed=false). Existing
+// users are skipped untouched.
+// Auth: X-Admin-Token only (no JWT — machine-to-machine), validated against
+// ACCOUNT_INTERNAL_TOKEN, the same shared secret the gateway presents to
+// account-service /internal/credentials.
+func (h *Handler) handleUserSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	if h.config == nil || h.userRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "user sync not configured"})
+		return
+	}
+	expected := h.config.AccountInternalToken
+	got := r.Header.Get("X-Admin-Token")
+	if expected == "" || subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	var req syncUsersRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON body"})
+		return
+	}
+	inputs := make([]repository.SyncUserInput, 0, len(req.Users))
+	for _, u := range req.Users {
+		email := strings.ToLower(strings.TrimSpace(u.Email))
+		if email == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "entry with empty email"})
+			return
+		}
+		inputs = append(inputs, repository.SyncUserInput{Email: email, DisplayName: u.DisplayName})
+	}
+	created, skipped, err := h.userRepo.SyncUsers(inputs)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, syncUsersResponse{Created: created, Skipped: skipped})
 }

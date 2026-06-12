@@ -7,7 +7,7 @@ RabbitMQ consumer that classifies web pages and OCR documents by type using LLM 
 - Python 3.11, asyncio
 - RabbitMQ (aio-pika) with batch processing, retry/DLQ
 - gRPC client (to llm-service)
-- vllm tokenizer (for token counting/truncation)
+- transformers AutoTokenizer (for token counting/truncation)
 - Prometheus metrics on port **8530**
 - Shared libs: `grpc-stubs`, `common-utils`
 

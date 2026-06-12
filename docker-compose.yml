@@ -1384,7 +1384,7 @@ services:
       resources:
         limits:
           cpus: '2.0'
-          memory: 4G
+          memory: 2G
     networks:
       - services-net
     logging: *logging_defaults
@@ -2556,6 +2556,9 @@ services:
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       SLACK_ENV_LABEL: ${SLACK_ENV_LABEL}
       INTERNAL_ADMIN_TOKEN: ${ACCOUNT_INTERNAL_TOKEN}
+      # MCP gateway user sync (reverse direction of ACCOUNT_INTERNAL_TOKEN:
+      # the backend pushes users to the gateway with the same shared secret)
+      MCP_GATEWAY_INTERNAL_URL: ${MCP_GATEWAY_INTERNAL_URL:-http://mcp-gateway-service:8592}
       # API Catalog (broker)
       API_CATALOG_GRPC: ${API_CATALOG_GRPC:-api-catalog-service:9100}
       CATALOG_ADMIN_KEY: ${CATALOG_ADMIN_KEY:-dev-catalog-key}
