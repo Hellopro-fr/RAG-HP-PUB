@@ -560,9 +560,14 @@ class CrawlerManager:
         # F3 follow-up (décision 2026-06-12) : dropData explicite sur un gen-1
         # stashé = repartir propre PARTOUT — demander aussi la suppression du tar
         # GCS (fire-and-forget via la primitive 2-phase du daemon). Placé APRÈS
-        # le claim lock + INCR backstop : un start rejeté en capacité/lock (409/503
-        # ci-dessus, AVANT toute écriture) laisse le blob gen-1 intact AVEC son
-        # stashed_at — supprimer le tar à ce stade casserait un futur resume.
+        # les trois rejets PRÉ-écriture (cap locale 503, probe globale 503,
+        # lock NX 409) : eux n'ont encore rien écrit, le blob gen-1 reste intact
+        # AVEC son stashed_at — supprimer le tar à ce stade casserait un futur
+        # resume. ATTENTION : ce placement ne protège PAS le rejet du backstop
+        # INCR — celui-ci survient APRÈS le set_json du blob frais et son
+        # _rollback_claim SUPPRIME job_key, donc l'état gen-1 est détruit quel
+        # que soit l'emplacement de cette demande (sémantique rollback
+        # pré-existante ; suivi noté dans la spec).
         # Fail-open : un échec ici ne bloque JAMAIS le start.
         if prior_job_info and prior_job_info.get("stashed_at") and params.get("dropdata"):
             try:
@@ -2519,6 +2524,35 @@ class CrawlerManager:
             logger.warning(f"Ownership-safe lock release failed for '{lock_key}': {e}")
             return False
 
+    def _void_stale_deletion_intent(self, crawl_id: str) -> None:
+        """A new stash voids any old GCS deletion intent (hardening post-6227f433).
+
+        A lingering {id}.unstash-confirmed from a prior dropData start (never
+        consumed by the daemon — e.g. the gen-1 tar upload dead-lettered so its
+        `gcloud storage rm` kept failing until the age-janitor would sweep it)
+        would be consumed AFTER a re-stash of the same crawl_id uploads its
+        gen-2 tar to the same gs://.../stash/{id}.tar.gz path: the stale marker
+        deletes the brand-new tar, the blob says stashed_at but the tar is gone,
+        and the next resume 502s. A stale {id}.unstash-cleanup-done is dropped
+        too, so a future deletion request cannot mistake the old daemon ack for
+        its own. Best-effort: failures are logged and never block the stash.
+        """
+        results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
+        for suffix in ("unstash-confirmed", "unstash-cleanup-done"):
+            marker_path = os.path.join(results_dir, f"{crawl_id}.{suffix}")
+            try:
+                if os.path.exists(marker_path):
+                    os.remove(marker_path)
+                    logger.warning(
+                        f"stash_crawl '{crawl_id}': removed stale .{suffix} marker "
+                        f"'{marker_path}' — a new stash voids any old GCS deletion intent."
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"stash_crawl '{crawl_id}': could not remove stale marker "
+                    f"'{marker_path}' (fail-open, stash proceeds): {e}"
+                )
+
     async def stash_crawl(self, job_info: dict) -> dict:
         """
         Stash a terminal crawl's storage dir to GCS (under gs://{bucket}/stash/) to free
@@ -2606,6 +2640,13 @@ class CrawlerManager:
         job_info = fresh_job_info
 
         try:
+            # --- A new stash voids any old GCS deletion intent (post-6227f433) ---
+            # Must run under the stash lock, BEFORE the tar work / stashed_at write:
+            # a lingering {id}.unstash-confirmed from a prior dropData start would be
+            # consumed by the daemon AFTER this re-stash uploads the gen-2 tar to the
+            # same gs://.../stash/{id}.tar.gz path, deleting the brand-new tar.
+            self._void_stale_deletion_intent(crawl_id)
+
             async with _LockHeartbeat(
                 self,
                 stash_lock_key,
