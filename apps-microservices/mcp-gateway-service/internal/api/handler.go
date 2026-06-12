@@ -420,6 +420,19 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		h.handleRunnerSync(w, r)
 	})
 
+	// Account-service → gateway user sync. account-service-backend
+	// authenticates with X-Admin-Token (shared ACCOUNT_INTERNAL_TOKEN);
+	// the handler enforces it. Path is in the auth middleware's
+	// publicExact list so JWT is bypassed.
+	apiMux.HandleFunc("/api/v1/internal/users/sync", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleUserSync(w, r)
+	})
+
 	// ── Server icons routes ──────────────────────────────────────────────────
 	apiMux.HandleFunc("/api/v1/server-icons", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
