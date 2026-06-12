@@ -1384,7 +1384,7 @@ services:
       resources:
         limits:
           cpus: '2.0'
-          memory: 4G
+          memory: 2G
     networks:
       - services-net
     logging: *logging_defaults
