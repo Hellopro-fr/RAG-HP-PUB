@@ -427,7 +427,8 @@ class CrawlerManager:
             else:
                 logger.warning(
                     f"start_crawl '{crawl_id}': dropping gen-1 stashed_at="
-                    f"{prior_job_info['stashed_at']} (explicit dropdata — clean restart)."
+                    f"{prior_job_info['stashed_at']} (explicit dropdata — clean restart); "
+                    f"GCS stash tar deletion will be requested once the start claim commits."
                 )
 
         # --- CAPACITY SHORT-CIRCUITS (Spec 2026-05-22) ---
@@ -554,6 +555,22 @@ class CrawlerManager:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail=f"Failed to unstash crawl '{crawl_id}' from GCS: {str(e)}",
+                )
+
+        # F3 follow-up (décision 2026-06-12) : dropData explicite sur un gen-1
+        # stashé = repartir propre PARTOUT — demander aussi la suppression du tar
+        # GCS (fire-and-forget via la primitive 2-phase du daemon). Placé APRÈS
+        # le claim lock + INCR backstop : un start rejeté en capacité/lock (409/503
+        # ci-dessus, AVANT toute écriture) laisse le blob gen-1 intact AVEC son
+        # stashed_at — supprimer le tar à ce stade casserait un futur resume.
+        # Fail-open : un échec ici ne bloque JAMAIS le start.
+        if prior_job_info and prior_job_info.get("stashed_at") and params.get("dropdata"):
+            try:
+                await self._request_stash_tar_deletion(crawl_id)
+            except Exception as e:
+                logger.warning(
+                    f"start_crawl '{crawl_id}': GCS stash tar deletion request raised "
+                    f"unexpectedly (fail-open, start proceeds): {e}"
                 )
 
         # --- STORAGE SETUP ---
@@ -2894,6 +2911,15 @@ class CrawlerManager:
                 )
 
             # --- Phase 2: write .unstash-confirmed; daemon will delete GCS + write cleanup-done ---
+            # Drop a stale daemon ack first (e.g. left by a dropData fire-and-forget
+            # tar deletion, which never polls/cleans it): the polling below would
+            # otherwise mistake it for OUR ack and the cleanup loop would remove the
+            # fresh .unstash-confirmed before the daemon saw it → silent GCS orphan.
+            try:
+                if os.path.exists(cleanup_done_path):
+                    os.remove(cleanup_done_path)
+            except OSError:
+                pass
             async with aiofiles.open(confirm_path, 'w') as f:
                 await f.write(crawl_id)
             logger.info(f"Wrote .unstash-confirmed for '{crawl_id}'. Waiting for daemon GCS cleanup...")
@@ -2941,6 +2967,62 @@ class CrawlerManager:
 
         finally:
             await self._release_ownership_lock(unstash_lock_key, lock_value)
+
+    async def _request_stash_tar_deletion(self, crawl_id: str) -> bool:
+        """
+        Fire-and-forget: ask the host daemon to delete the GCS stash tar
+        (gs://{bucket}/stash/{crawl_id}.tar.gz) WITHOUT downloading it.
+
+        Reuses the unstash phase-2 primitive: the download daemon
+        (DELETE_AFTER_DOWNLOAD=true) scans STASH_DOWNLOAD_RESULTS_PATH for
+        {id}.unstash-confirmed independently of any .request, runs
+        `gcloud storage rm` on the GCS object and writes
+        {id}.unstash-cleanup-done (the rm is retried on every poll until it
+        succeeds — which also covers a stash upload still in flight). We do NOT
+        poll for the ack: callers (dropData start) must never block on GCS
+        cleanup.
+
+        Returns False (skip, tar stays orphan-inert) when a stash/unstash is in
+        flight for this crawl_id (stash_lock/unstash_lock held) — deleting under
+        an in-flight operation would race the daemon. Fail-open: never raises.
+        """
+        try:
+            for lock_key, op in ((f"stash_lock:{crawl_id}", "stash"),
+                                 (f"unstash_lock:{crawl_id}", "unstash")):
+                if await cache_service.redis_client.exists(lock_key):
+                    logger.warning(
+                        f"start_crawl '{crawl_id}': skipping GCS stash tar deletion — "
+                        f"{op} in flight ({lock_key}); tar stays orphan-inert."
+                    )
+                    return False
+
+            # Same guard as unstash_crawl: a non-bind-mounted results dir would
+            # swallow the marker (invisible to the host daemon) while we log success.
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_RESULTS_PATH, "unstash results")
+
+            results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
+            confirm_path = os.path.join(results_dir, f"{crawl_id}.unstash-confirmed")
+            cleanup_done_path = os.path.join(results_dir, f"{crawl_id}.unstash-cleanup-done")
+            os.makedirs(results_dir, exist_ok=True)
+            # Pre-clean a stale daemon ack: nobody polls/cleans it on this
+            # fire-and-forget path, and a leftover would fool the NEXT unstash
+            # of this crawl_id into taking it for its own phase-2 ack.
+            if os.path.exists(cleanup_done_path):
+                os.remove(cleanup_done_path)
+            async with aiofiles.open(confirm_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.warning(
+                f"start_crawl '{crawl_id}': requested GCS stash tar deletion "
+                f"(wrote .unstash-confirmed; daemon will rm "
+                f"gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz)."
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                f"start_crawl '{crawl_id}': GCS stash tar deletion request failed "
+                f"(fail-open, tar stays orphan-inert): {e}"
+            )
+            return False
 
     async def get_pending_callbacks(self) -> list:
         """Returns all failed webhook callbacks stored in Redis."""

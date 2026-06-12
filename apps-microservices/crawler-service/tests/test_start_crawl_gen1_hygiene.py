@@ -134,6 +134,120 @@ async def test_fresh_start_drops_gen1_stashed_at_on_explicit_dropdata(
         "the drop must be logged as a warning"
 
 
+# --- F3 follow-up (décision 2026-06-12): dropData purge aussi le tar GCS gen-1 ---
+# A dropData start over a stashed gen-1 must ALSO request deletion of the GCS
+# stash tar (fresh start = no stale data anywhere). Redis is already clean (the
+# fresh blob never carries stashed_at); the tar deletion reuses the unstash
+# phase-2 primitive: write {id}.unstash-confirmed into
+# STASH_DOWNLOAD_RESULTS_PATH — the host daemon (DELETE_AFTER_DOWNLOAD=true)
+# scans for it independently of any .request, runs `gcloud storage rm` and
+# writes {id}.unstash-cleanup-done. Fire-and-forget + fail-open: the start must
+# NEVER block on (or fail because of) GCS cleanup.
+
+
+@pytest.mark.asyncio
+async def test_dropdata_over_stashed_gen1_requests_gcs_tar_deletion(monkeypatch, tmp_path):
+    """dropData start over {finished, stashed_at}: the tar-deletion primitive is
+    invoked for this crawl_id, the fresh writes still drop stashed_at, and the
+    resume-on-start unstash is still skipped (no wasted GCS download)."""
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, _prior_record("finished"))
+    manager.unstash_crawl = AsyncMock(return_value={"status": "unstashed"})
+    manager._request_stash_tar_deletion = AsyncMock(return_value=True)
+    monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
+                        AsyncMock(side_effect=_Sentinel()))
+    with pytest.raises(_Sentinel):
+        await _call_start(manager, params={"dropdata": 1})
+    manager._request_stash_tar_deletion.assert_awaited_once_with("900")
+    manager.unstash_crawl.assert_not_called()
+    written = _written_job_data(cache_mocks)
+    assert written, "start_crawl must have written the fresh job_data"
+    assert all("stashed_at" not in d for d in written), \
+        "gen-1 stashed_at must still be dropped on explicit dropdata"
+
+
+@pytest.mark.asyncio
+async def test_dropdata_tar_deletion_failure_is_fail_open(monkeypatch, tmp_path, caplog):
+    """The deletion primitive raising must NEVER block the start: the start
+    proceeds (reaches the post-deletion Sentinel) and a warning is logged."""
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, _prior_record("finished"))
+    manager.unstash_crawl = AsyncMock()
+    manager._request_stash_tar_deletion = AsyncMock(side_effect=RuntimeError("daemon dir gone"))
+    monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
+                        AsyncMock(side_effect=_Sentinel()))
+    with caplog.at_level(logging.WARNING, logger="app.core.crawler_manager"):
+        with pytest.raises(_Sentinel):  # Sentinel == start ran PAST the deletion request
+            await _call_start(manager, params={"dropdata": True})
+    manager._request_stash_tar_deletion.assert_awaited_once()
+    assert "deletion request raised" in caplog.text and "fail-open" in caplog.text, \
+        "the swallowed deletion failure must be logged as a warning"
+
+
+@pytest.mark.asyncio
+async def test_dropdata_tar_deletion_skipped_when_unstash_lock_held(
+        monkeypatch, tmp_path, caplog):
+    """A stash/unstash in flight (lock key present) must skip the deletion
+    (tar stays orphan-inert) with a warning — and the start still proceeds.
+    Exercises the REAL helper: no .unstash-confirmed marker may be written."""
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, _prior_record("finished"))
+    manager.unstash_crawl = AsyncMock()
+    results_dir = tmp_path / "stash_results"
+    results_dir.mkdir()
+    monkeypatch.setattr(settings, "STASH_DOWNLOAD_RESULTS_PATH", str(results_dir),
+                        raising=False)
+    crawler_manager.cache_service.redis_client.exists = AsyncMock(
+        side_effect=lambda key: 1 if key == "unstash_lock:900" else 0)
+    monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
+                        AsyncMock(side_effect=_Sentinel()))
+    with caplog.at_level(logging.WARNING, logger="app.core.crawler_manager"):
+        with pytest.raises(_Sentinel):
+            await _call_start(manager, params={"dropdata": 1})
+    assert not (results_dir / "900.unstash-confirmed").exists(), \
+        "no deletion marker may be written while an unstash is in flight"
+    assert "skipping GCS stash tar deletion" in caplog.text and "unstash" in caplog.text
+    written = _written_job_data(cache_mocks)
+    assert written and all("stashed_at" not in d for d in written)
+
+
+@pytest.mark.asyncio
+async def test_dropdata_without_prior_stash_does_not_request_deletion(monkeypatch, tmp_path):
+    """dropData over a prior WITHOUT stashed_at: no tar exists, no deletion attempt."""
+    prior = {"crawl_id": "900", "status": "finished", "domain": "x.fr",
+             "storage_path": "/app/storage/900"}  # no stashed_at
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, prior)
+    manager.unstash_crawl = AsyncMock()
+    manager._request_stash_tar_deletion = AsyncMock()
+    monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
+                        AsyncMock(side_effect=_Sentinel()))
+    with pytest.raises(_Sentinel):
+        await _call_start(manager, params={"dropdata": 1})
+    manager._request_stash_tar_deletion.assert_not_called()
+    manager.unstash_crawl.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_request_stash_tar_deletion_writes_confirm_marker_and_clears_stale_ack(
+        monkeypatch, tmp_path):
+    """Helper pin (real primitive): with no locks held it writes
+    {id}.unstash-confirmed (content = crawl_id) into STASH_DOWNLOAD_RESULTS_PATH
+    and pre-cleans a stale {id}.unstash-cleanup-done (a leftover daemon ack from
+    a previous fire-and-forget would fool the NEXT unstash's phase-2 polling)."""
+    manager, _ = _setup(monkeypatch, tmp_path, None)
+    results_dir = tmp_path / "stash_results"
+    results_dir.mkdir()
+    monkeypatch.setattr(settings, "STASH_DOWNLOAD_RESULTS_PATH", str(results_dir),
+                        raising=False)
+    monkeypatch.setattr(manager, "_verify_bind_mount", lambda path, label: None)
+    crawler_manager.cache_service.redis_client.exists = AsyncMock(return_value=0)
+    stale_ack = results_dir / "900.unstash-cleanup-done"
+    stale_ack.write_text("stale")
+
+    assert await manager._request_stash_tar_deletion("900") is True
+
+    confirm = results_dir / "900.unstash-confirmed"
+    assert confirm.exists() and confirm.read_text() == "900"
+    assert not stale_ack.exists(), "stale daemon ack must be pre-cleaned"
+
+
 @pytest.mark.asyncio
 async def test_fresh_start_removes_stale_completion_marker(monkeypatch, tmp_path):
     """Marker pin: a reused storage dir containing _completion_marker.json is
