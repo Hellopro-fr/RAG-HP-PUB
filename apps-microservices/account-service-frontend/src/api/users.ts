@@ -40,6 +40,18 @@ export function revoke(email: string) {
   return api<{ status: string }>(`/api/v1/admin/users/${encodeURIComponent(email)}/revoke`, { method: 'POST' })
 }
 
+export interface McpSyncResult {
+  created: string[]
+  skipped: string[]
+}
+
+export function syncMcp(email: string) {
+  return api<McpSyncResult>(`/api/v1/admin/users/${encodeURIComponent(email)}/sync-mcp`, { method: 'POST' })
+}
+export function syncMcpAll() {
+  return api<McpSyncResult>('/api/v1/admin/users/sync-mcp', { method: 'POST' })
+}
+
 export function listSessions(email: string) {
   return api<{ items: AdminSession[]; total: number }>(`/api/v1/admin/users/${encodeURIComponent(email)}/sessions`)
 }

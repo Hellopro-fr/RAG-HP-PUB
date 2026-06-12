@@ -214,8 +214,9 @@ Scope-token accepts and rejects log an `auth_source=x-mcp-scope-token|bearer` ta
 - `POST /api/v1/zoho-imports/{id}/test` — server-side `POST tools/list` probe against the row's upstream URL with decrypted headers, 10s timeout. Returns `{ok, status_code?, latency_ms, error?}`. Logs only the row ID + caller email (never the URL or headers).
 - `GET /api/v1/zoho-imports/{id}/tools` — list the persisted tool catalog for one row. Body: `{tools: [{name, description, input_schema, updated_at}], total}`. Returns 200 (empty list when catalog empty), 404 when the row is missing. Read-only — refresh the catalog via `POST /api/v1/zoho-imports/{id}/discover`.
 
-### Runner Sync (internal, shared-secret auth via `X-Admin-Token`)
+### Internal Sync (shared-secret auth via `X-Admin-Token`)
 - `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)
+- `POST /api/v1/internal/users/sync` — account-service-backend pushes its users; gateway creates missing `gateway_users` (role `config-only`, `is_allowed=false`) and returns `{created, skipped}`. Token: `ACCOUNT_INTERNAL_TOKEN`.
 
 ### Other
 - `GET /health` — Health probe
