@@ -1512,14 +1512,20 @@ class CrawlerManager:
             # F2-B (incident /results 400-running): the blob can read a stale 'running'
             # right after finalize (lost/raced Redis write). The completion marker is
             # written by _monitor_process BEFORE the webhook and is the disk source of
-            # truth — a genuinely active crawl never has one. Heal at consumption.
-            marker_path = os.path.join(job_info.get("storage_path", ""), "_completion_marker.json")
-            if job_info.get("storage_path") and os.path.exists(marker_path):
+            # truth — a genuinely active crawl never has one. Heal at consumption, to the
+            # MARKER's status (a failed crawl must not flip to finished). Persisting is
+            # deliberate: the BO replay loop needs /status to report terminal.
+            marker = None
+            if job_info.get("storage_path"):
+                marker = await self._load_completion_marker_or_none(job_info["storage_path"])
+            if marker:
+                healed_status = marker.get("final_status", "failed")
                 logger.warning(
                     f"/results for '{crawl_id}': blob says 'running' but completion marker "
-                    f"exists — treating as finished and healing the blob (F2-B)."
+                    f"says '{healed_status}' — healing the blob (F2-B)."
                 )
-                job_info["status"] = "finished"
+                job_info["status"] = healed_status
+                job_info.pop("last_heartbeat", None)
                 await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
             else:
                 raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
