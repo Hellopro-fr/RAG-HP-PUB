@@ -27,6 +27,7 @@ type routeDeps struct {
 	version      string
 	catalog      api.CatalogClientIface
 	catalogAudit api.CatalogAuditFn
+	mcpSync      api.McpSyncer
 }
 
 // registerRoutes mounts every route on mux. Split out of main() so the entry
@@ -122,8 +123,11 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		Repo:        r.User,
 		RevokeAll:   r.Refresh,
 		Broadcaster: userBroadcastAdapter{clients: r.OAuth2, refresh: r.Refresh, bc: d.broadcaster},
+		McpSync:     d.mcpSync,
 	}
 	mux.Handle("GET /api/v1/admin/users", requireAdmin(api.NewAdminUserHandler(adminUserDeps)))
+	// Literal segment — Go 1.22 mux prefers it over the {email}/{op} wildcard.
+	mux.Handle("POST /api/v1/admin/users/sync-mcp", requireAdmin(api.NewAdminUserMcpSyncAllHandler(adminUserDeps)))
 	mux.Handle("POST /api/v1/admin/users/{email}/{op}", requireAdmin(api.NewAdminUserHandler(adminUserDeps)))
 	sessionsDeps := api.SessionsDeps{Repo: r.Refresh}
 	mux.Handle("GET /api/v1/admin/users/{email}/sessions", requireAdmin(api.NewSessionsHandler(sessionsDeps)))
