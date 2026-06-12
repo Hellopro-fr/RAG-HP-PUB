@@ -1209,6 +1209,7 @@ class CrawlerManager:
                 job_info["failure_cause"] = failure_cause
             self._stamp_terminal_fields(job_info)
             await cache_service.set_json(job_key, job_info)
+            await self._verify_terminal_status_persisted(job_key, job_info, final_status)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. Lock released. Counter decremented.")
 
             await self._publish_update(crawl_id, final_status)
@@ -1921,6 +1922,25 @@ class CrawlerManager:
         except Exception as e:
             logger.warning(f"_stamp_terminal_fields failed for "
                            f"'{job_info.get('crawl_id')}': {e}")
+
+    async def _verify_terminal_status_persisted(self, job_key: str, job_info: dict, final_status: str):
+        """F2-A (incident /results 400-running): set_json is fail-open — a lost terminal
+        write leaves the blob 'running' and the BO's immediate GET /results gets a 400.
+        Read back once; on mismatch rewrite once and re-check. Never raises."""
+        persisted = await cache_service.get_json(job_key)
+        if persisted and persisted.get("status") == final_status:
+            return
+        logger.error(
+            f"Finalize write lost for '{job_info.get('crawl_id')}' "
+            f"(read-back={persisted.get('status') if persisted else None}); rewriting."
+        )
+        await cache_service.set_json(job_key, job_info)
+        persisted2 = await cache_service.get_json(job_key)
+        if not persisted2 or persisted2.get("status") != final_status:
+            logger.critical(
+                f"Finalize write STILL lost for '{job_info.get('crawl_id')}' after rewrite — "
+                f"/results will 400 until reconcile heals the blob."
+            )
 
     def _get_archives_disk_state(self, archives_dir: str) -> dict:
         """Collect diagnostics about the archives volume.
