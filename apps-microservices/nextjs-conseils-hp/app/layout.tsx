@@ -5,9 +5,6 @@ import { CookieConsent } from '@/components/conseil/CookieConsent';
 
 const GTM_ID = 'GTM-PBBSTMC';
 
-// Anti-flicker : cache la page le temps que GTM charge en footer (timeout 2000ms)
-const ANTI_FLICKER = `(function(a,s,y,n,c,h,i,d,e){s.className+=' '+y;h.start=1*new Date;h.end=i=function(){s.className=s.className.replace(RegExp(' ?'+y),'')};(a[n]=a[n]||[]).hide=h;setTimeout(function(){i();h.end=null},c);h.timeout=c;})(window,document.documentElement,'async-hide','dataLayer',2000,{'${GTM_ID}':true});`;
-
 export const metadata: Metadata = {
   title: {
     default: 'Conseils HelloPro',
@@ -36,12 +33,10 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <head>
-        {/* Consent Mode v2 — DOIT être avant GTM : push `consent default` (denied) +
-            résolution depuis les cookies (.hellopro.fr) avec migration hp_consent. Cf. ticket GTM. */}
+        {/* Consent Mode v2 — DOIT être la 1re commande, avant GTM : push `consent default`
+            (denied) + résolution depuis les cookies (.hellopro.fr) avec migration hp_consent.
+            Remplace l'ancien anti-flicker Google Optimize (obsolète, service arrêté). Cf. ticket GTM. */}
         <script dangerouslySetInnerHTML={{ __html: CONSENT_MODE_INIT }} />
-        {/* Étape 1 — anti-flicker : cache la page + init dataLayer (avant tout) */}
-        <style dangerouslySetInnerHTML={{ __html: '.async-hide{opacity:0!important}' }} />
-        <script dangerouslySetInnerHTML={{ __html: ANTI_FLICKER }} />
         {/* JSON-LD (schemaGuide + schemaBreadcrumb) rendu par @head/[slugWithId]/page.tsx */}
         {head}
       </head>
