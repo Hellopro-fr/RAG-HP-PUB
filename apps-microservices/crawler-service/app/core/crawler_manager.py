@@ -1221,6 +1221,7 @@ class CrawlerManager:
             _, failure_cause = self._classify_exit_code(exit_code)
             if failure_cause is not None:
                 job_info["failure_cause"] = failure_cause
+            self._persist_final_counters(job_info)
             self._stamp_terminal_fields(job_info)
             await cache_service.set_json(job_key, job_info)
             await self._verify_terminal_status_persisted(job_key, job_info, final_status)
@@ -1481,7 +1482,13 @@ class CrawlerManager:
         urls_crawled = _count_files_in_dir(dataset_path)
         error_urls_crawled = _count_files_in_dir(error_dataset_path)
         nfr_urls_crawled = _count_files_in_dir(nfr_dataset_path)
-        
+
+        # F8 — données locales absentes (stash/archive/cleanup) : servir les compteurs
+        # terminaux persistés au finalize plutôt que des zéros de disque vide.
+        if urls_crawled == 0 and not os.path.isdir(dataset_path) and job_info.get("final_urls_crawled") is not None:
+            urls_crawled = job_info["final_urls_crawled"]
+            error_urls_crawled = job_info.get("final_error_urls_crawled", error_urls_crawled)
+
         last_url_time = None
         if os.path.isdir(dataset_path):
             try:
@@ -1941,6 +1948,36 @@ class CrawlerManager:
         except Exception as e:
             logger.warning(f"Could not estimate required bytes for '{job_storage_path}': {e}")
             return 0
+
+    def _persist_final_counters(self, job_info: dict) -> None:
+        """F8 (incident /results 400-running): /status counters are recomputed
+        from the dataset dirs on every call — a stash deletes the local data, so
+        post-stash /status reported urls_crawled=0 and BO re-triggers downgraded
+        healthy crawls (insufficientData / DSPI=9). Persist the final counts into
+        the blob at finalize so get_status can serve them once the dataset dir is
+        gone. Same path conventions as _send_success_webhook (domain + dot→dash
+        fallback). Fail-open: never blocks finalize."""
+        try:
+            domain = job_info.get("domain")
+            storage_path = job_info.get("storage_path")
+            if not domain or not storage_path:
+                return
+            sanitized_name = domain.replace('.', '-')
+            crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
+
+            dataset_path = os.path.join(crawlee_storage_base, domain)
+            if not os.path.isdir(dataset_path):
+                dataset_path = os.path.join(crawlee_storage_base, sanitized_name)
+
+            error_dataset_path = os.path.join(crawlee_storage_base, f"error-{domain}")
+            if not os.path.isdir(error_dataset_path):
+                error_dataset_path = os.path.join(crawlee_storage_base, f"error-{sanitized_name}")
+
+            job_info["final_urls_crawled"] = _count_files_in_dir(dataset_path)
+            job_info["final_error_urls_crawled"] = _count_files_in_dir(error_dataset_path)
+        except Exception as e:
+            logger.warning(f"_persist_final_counters failed for "
+                           f"'{job_info.get('crawl_id')}': {e}")
 
     def _stamp_terminal_fields(self, job_info: dict) -> None:
         """Stamp finished_at (once) + size_bytes onto job_info before a terminal
