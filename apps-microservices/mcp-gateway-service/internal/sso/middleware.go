@@ -77,6 +77,7 @@ var publicExact = map[string]bool{
 	"/health":       true,
 	"/api/v1/sso/logout":              true,
 	"/api/v1/internal/runner/sync":    true,
+	"/api/v1/internal/users/sync":     true,
 }
 
 var publicPrefixes = []string{
