@@ -11,7 +11,9 @@ const FALLBACK_DESC = 'Fournisseur référencé sur HelloPro — demandez votre 
 function sanitizeHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/\s+on\w+="[^"]*"/gi, '');
+    .replace(/\s+on\w+="[^"]*"/gi, '')
+    .replace(/\sstyle="[^"]*"/gi, '')
+    .replace(/\[\/?(b|i|u|s|em|strong)\]/gi, '');
 }
 
 interface SuppliersProps {
@@ -107,9 +109,9 @@ export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
             </div>
             <h3 className="text-lg font-extrabold text-foreground">{s.name}</h3>
             {s.description ? (
-              <div className="relative mt-3 max-h-[10rem] overflow-hidden text-sm text-foreground/90">
+              <div className="relative mt-3 max-h-[10rem] overflow-hidden text-sm text-foreground/90 [&_*]:!text-sm">
                 <div
-                  className="[&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_a]:text-primary [&_a]:underline"
+                  className="[&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-normal [&_b]:font-normal [&_u]:no-underline [&_h1]:text-sm [&_h1]:font-normal [&_h2]:text-sm [&_h2]:font-normal [&_h3]:text-sm [&_h3]:font-normal [&_h4]:text-sm [&_h4]:font-normal [&_a]:text-primary [&_a]:underline"
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(s.description) }}
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
