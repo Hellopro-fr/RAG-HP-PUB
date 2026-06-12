@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { CONSENT_MODE_INIT } from '@/lib/consent/consentMode';
+import { CookieConsent } from '@/components/conseil/CookieConsent';
 
 const GTM_ID = 'GTM-PBBSTMC';
 
@@ -34,6 +36,9 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <head>
+        {/* Consent Mode v2 — DOIT être avant GTM : push `consent default` (denied) +
+            résolution depuis les cookies (.hellopro.fr) avec migration hp_consent. Cf. ticket GTM. */}
+        <script dangerouslySetInnerHTML={{ __html: CONSENT_MODE_INIT }} />
         {/* Étape 1 — anti-flicker : cache la page + init dataLayer (avant tout) */}
         <style dangerouslySetInnerHTML={{ __html: '.async-hide{opacity:0!important}' }} />
         <script dangerouslySetInnerHTML={{ __html: ANTI_FLICKER }} />
@@ -51,6 +56,8 @@ export default function RootLayout({
           />
         </noscript>
         {children}
+        {/* Bandeau de consentement RGPD (s'affiche si cookie hp_consent absent) */}
+        <CookieConsent />
       </body>
     </html>
   );
