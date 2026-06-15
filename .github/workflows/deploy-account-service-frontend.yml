@@ -64,23 +64,38 @@ jobs:
         run: |
           set -euo pipefail
           REGION="${{ github.event.inputs.cloud_run_region || 'europe-west1' }}"
-          BACKEND_URL=$(gcloud run services describe account-service-backend \
+
+          # Cloud Run expose 2 URLs par service (depuis 2024) :
+          #   - Legacy hash  : <svc>-<hash>-<region-short>.a.run.app   (status.url souvent)
+          #   - Canonical    : <svc>-<project-number>.<region>.run.app (préférée pour proxy_pass)
+          # On EXTRAIT toutes les URLs *.run.app et on PRIORISE la canonical.
+          # Necessaire car Nginx proxy_pass avec Host=<legacy> est rejeté en 400 par
+          # Google Frontend (F-HP-NGINX-001 - decouverte 2026-06-15).
+          ALL_URLS=$(gcloud run services describe account-service-backend \
             --region="$REGION" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format="value(status.url)" 2>/dev/null || echo "")
+            --format=json 2>/dev/null | grep -oE 'https://[^"\\]*\.run\.app' | sort -u || true)
+
+          # Préférer la canonical (contient .${REGION}.run.app)
+          BACKEND_URL=$(echo "$ALL_URLS" | grep -E "\.${REGION}\.run\.app$" | head -1 || true)
+          if [ -z "$BACKEND_URL" ]; then
+            BACKEND_URL=$(echo "$ALL_URLS" | head -1 || true)
+          fi
 
           if [ -z "$BACKEND_URL" ]; then
             echo "::error::account-service-backend n'est pas déployé sur Cloud Run (région $REGION). Déployer le backend d'abord."
             exit 1
           fi
 
-          # Extraire hostname sans https:// pour BACKEND_HOST (utilisé par nginx.conf.cloudrun.template)
+          # Extraire hostname sans https:// pour BACKEND_HOST
           BACKEND_HOST="${BACKEND_URL#https://}"
           BACKEND_HOST="${BACKEND_HOST#http://}"
 
           echo "backend_url=${BACKEND_URL}" >> "$GITHUB_OUTPUT"
           echo "backend_host=${BACKEND_HOST}" >> "$GITHUB_OUTPUT"
-          echo "Backend URL trouvée : ${BACKEND_URL}"
+          echo "Toutes URLs trouvées :"
+          echo "${ALL_URLS}"
+          echo "Backend URL retenue (canonical priorisée) : ${BACKEND_URL}"
           echo "Backend HOST extrait : ${BACKEND_HOST}"
 
       - name: Construire env_vars_json (avec IS_CLOUD_RUN + BACKEND_HOST injectées)
