@@ -1,0 +1,24 @@
+{
+  "filtre_qualification_domaine_ia": {
+    "database_id": 10,
+    "description": "Filtres atomiques de qualification d'URL par domaine (« FQDI ») pour la détection de fiches produit. Chaque ligne = une règle élémentaire (un critère + sa valeur). Les filtres sont groupés en rule sets par relation_filtre_domaine_ia et rejoués par ProductDetector (stratégie 'saved') pour décider si une URL crawlée est une fiche produit. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_filtre_qualification_domaine_ia",
+    "default_order_by": "date_fqdi DESC",
+    "rows": null,
+    "columns": {
+      "id_filtre_qualification_domaine_ia": { "type": "int", "desc": "PK auto-increment du filtre. Référencé (en CSV) par relation_filtre_domaine_ia.relation_filtre_rfdi pour former les rule sets." },
+      "id_domaine_fqdi": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI) : domaine auquel s'applique le filtre. NOT NULL. ProductDetector charge les filtres par WHERE id_domaine_fqdi = ...." },
+      "search_type_fqdi": { "type": "tinyint", "desc": "Sens de la recherche (défaut 1, indexé) : 1=contains · 2=not-contains. 0 = non applicable (cas sitemap, type_filtre=5)." },
+      "search_value_fqdi": { "type": "varchar(255)", "desc": "Valeur/motif du filtre, NOT NULL — interprété selon type_filtre_fqdi : substring d'URL (type 1), regex PCRE ex /\\/produits\\/.+/i (type 2), sélecteur CSS ex '#product_page_product_id' (type 3), chaîne de contenu ex 'Informations garantie' (type 4). Pour sitemap (type 5) : non significatif." },
+      "type_filtre_fqdi": { "type": "tinyint", "desc": "Nature du critère (défaut 1, indexé) : 1=URL · 2=Regex (URL) · 3=Selector (CSS) · 4=Content · 5=Sitemap · 6=ChatGPT. Distribution prod : 3 (2470) · 4 (1263) · 1 (931) · 2 (845) · 5 (142) ; 6=GPT défini mais 0 ligne." },
+      "mode_qualification_fqdi": { "type": "tinyint", "desc": "Effet du match (défaut 1, indexé) : 1=inclus (match → qualifie en fiche produit) · 2=exclus (match → disqualifie). 0 = non applicable (cas sitemap). Mode homogène au sein d'un rule set (imposé par l'UI)." },
+      "date_fqdi": { "type": "datetime", "desc": "Date de création du filtre, NOT NULL (NOW() à l'insertion)." },
+      "origine_fqdi": { "type": "tinyint", "desc": "Origine du filtre (NOT NULL, indexé) : 0=sans origine (cas sitemap, mode/search aussi à 0) · 1=qualification urls (saisi manuellement / UI) · 2=détection automatique. (3 défini dans le code mais sans libellé et 0 ligne.) Distribution : 1≈2898, 2≈2753." }
+    },
+    "relations": [
+      { "column": "id_domaine_fqdi", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "note": "Domaine concerné (DSPI)." },
+      { "column": "id_filtre_qualification_domaine_ia", "referenced_by": "relation_filtre_domaine_ia.relation_filtre_rfdi (CSV)", "note": "Les IDs de filtres sont groupés en rule sets dans relation_filtre_domaine_ia (AND intra-groupe, OR inter-groupes)." }
+    ],
+    "notes": "Paire avec relation_filtre_domaine_ia (qui groupe ces filtres atomiques en rule sets par domaine). Consommée par ProductDetector::runSavedStrategy() / checkCondition() (ProductDetector.php : search_type L204, type_filtre L206, mode L321). Pour type_filtre=5 (Sitemap), search_type/mode_qualification valent 0 (N/A) et origine=2. type_filtre=6 (ChatGPT) et origine=3 sont définis mais inutilisés en prod (0 ligne). Dédoublonnage à l'insertion sur (id_domaine_fqdi, search_value_fqdi, type_filtre_fqdi, mode_qualification_fqdi, origine_fqdi)."
+  }
+}

@@ -414,8 +414,22 @@ class CrawlerManager:
         # clear it before the resume-on-start unstash runs: unstash_crawl
         # re-validates stashed_at against Redis (TOCTOU) and would 409 NOT_STASHED
         # if it were already gone. unstash_crawl clears it after restoring.
+        # F3 (décision 2026-06-12) : la reprise vaut pour TOUT statut gen-1 (continuer un
+        # crawl finished est courant — ex. traitement post-webhook cassé). Le danger
+        # tar-périmé (incident 06-10, blobs 6430/6690) est fermé par la CONSOMMATION au
+        # start : l'unstash restaure les données, efface stashed_at et supprime le tar
+        # GCS — rien ne survit jusqu'au blob terminal gen-2. Seule exception : dropData
+        # explicite (intention de repartir propre) — unstash-puis-drop gaspillerait un
+        # téléchargement GCS.
         if prior_job_info and prior_job_info.get("stashed_at"):
-            job_data["stashed_at"] = prior_job_info["stashed_at"]
+            if not params.get("dropdata"):
+                job_data["stashed_at"] = prior_job_info["stashed_at"]
+            else:
+                logger.warning(
+                    f"start_crawl '{crawl_id}': dropping gen-1 stashed_at="
+                    f"{prior_job_info['stashed_at']} (explicit dropdata — clean restart); "
+                    f"GCS stash tar deletion will be requested once the start claim commits."
+                )
 
         # --- CAPACITY SHORT-CIRCUITS (Spec 2026-05-22) ---
         # A. LOCAL capacity check — in-memory, ZERO Redis ops.
@@ -525,7 +539,9 @@ class CrawlerManager:
         # fresh (which would orphan the GCS stash + waste local disk). Runs before
         # _cleanup_stale_state_for_relaunch so the restored stale completion marker
         # is stripped. Mirrors the previous_crawl_id restore + /results unstash.
-        if prior_job_info and prior_job_info.get("stashed_at"):
+        # F3 : même prédicat que le carry ci-dessus (not params.get("dropdata")) — un
+        # carry droppé ne doit PAS unstasher (409 NOT_STASHED → rollback → start échoue).
+        if prior_job_info and prior_job_info.get("stashed_at") and not params.get("dropdata"):
             logger.info(f"Crawl '{crawl_id}' is stashed; unstashing from GCS to resume "
                         f"instead of starting fresh.")
             try:
@@ -539,6 +555,27 @@ class CrawlerManager:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail=f"Failed to unstash crawl '{crawl_id}' from GCS: {str(e)}",
+                )
+
+        # F3 follow-up (décision 2026-06-12) : dropData explicite sur un gen-1
+        # stashé = repartir propre PARTOUT — demander aussi la suppression du tar
+        # GCS (fire-and-forget via la primitive 2-phase du daemon). Placé APRÈS
+        # les trois rejets PRÉ-écriture (cap locale 503, probe globale 503,
+        # lock NX 409) : eux n'ont encore rien écrit, le blob gen-1 reste intact
+        # AVEC son stashed_at — supprimer le tar à ce stade casserait un futur
+        # resume. ATTENTION : ce placement ne protège PAS le rejet du backstop
+        # INCR — celui-ci survient APRÈS le set_json du blob frais et son
+        # _rollback_claim SUPPRIME job_key, donc l'état gen-1 est détruit quel
+        # que soit l'emplacement de cette demande (sémantique rollback
+        # pré-existante ; suivi noté dans la spec).
+        # Fail-open : un échec ici ne bloque JAMAIS le start.
+        if prior_job_info and prior_job_info.get("stashed_at") and params.get("dropdata"):
+            try:
+                await self._request_stash_tar_deletion(crawl_id)
+            except Exception as e:
+                logger.warning(
+                    f"start_crawl '{crawl_id}': GCS stash tar deletion request raised "
+                    f"unexpectedly (fail-open, start proceeds): {e}"
                 )
 
         # --- STORAGE SETUP ---
@@ -1207,6 +1244,7 @@ class CrawlerManager:
             _, failure_cause = self._classify_exit_code(exit_code)
             if failure_cause is not None:
                 job_info["failure_cause"] = failure_cause
+            self._persist_final_counters(job_info)
             self._stamp_terminal_fields(job_info)
             await cache_service.set_json(job_key, job_info)
             await self._verify_terminal_status_persisted(job_key, job_info, final_status)
@@ -1467,7 +1505,13 @@ class CrawlerManager:
         urls_crawled = _count_files_in_dir(dataset_path)
         error_urls_crawled = _count_files_in_dir(error_dataset_path)
         nfr_urls_crawled = _count_files_in_dir(nfr_dataset_path)
-        
+
+        # F8 — données locales absentes (stash/archive/cleanup) : servir les compteurs
+        # terminaux persistés au finalize plutôt que des zéros de disque vide.
+        if urls_crawled == 0 and not os.path.isdir(dataset_path) and job_info.get("final_urls_crawled") is not None:
+            urls_crawled = job_info["final_urls_crawled"]
+            error_urls_crawled = job_info.get("final_error_urls_crawled", error_urls_crawled)
+
         last_url_time = None
         if os.path.isdir(dataset_path):
             try:
@@ -1509,7 +1553,31 @@ class CrawlerManager:
         crawl_id = job_info['crawl_id']
 
         if job_info["status"] == "running":
-             raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
+            # F2-B (incident /results 400-running): the blob can read a stale 'running'
+            # right after finalize (lost/raced Redis write). The completion marker is
+            # written by _monitor_process BEFORE the webhook and is the disk source of
+            # truth — a genuinely active crawl never has one. Heal at consumption, to the
+            # MARKER's status (a failed crawl must not flip to finished). Persisting is
+            # deliberate: the BO replay loop needs /status to report terminal.
+            marker = None
+            if job_info.get("storage_path"):
+                marker = await self._load_completion_marker_or_none(job_info["storage_path"])
+            if marker:
+                healed_status = marker.get("final_status", "failed")
+                logger.warning(
+                    f"/results for '{crawl_id}': blob says 'running' but completion marker "
+                    f"says '{healed_status}' — healing the blob (F2-B)."
+                )
+                job_info["status"] = healed_status
+                job_info.pop("last_heartbeat", None)
+                # F8: the healed blob is terminal — persist final counters +
+                # terminal stamps (both fail-open; finished_at only if absent)
+                # or a later stash makes /status report urls_crawled=0.
+                self._persist_final_counters(job_info)
+                self._stamp_terminal_fields(job_info)
+                await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
+            else:
+                raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
 
         # Auto-stash: a stashed crawl's local data is in GCS. Restore it inline,
         # then fall through to the normal serve path. unstash_crawl clears
@@ -1908,6 +1976,36 @@ class CrawlerManager:
         except Exception as e:
             logger.warning(f"Could not estimate required bytes for '{job_storage_path}': {e}")
             return 0
+
+    def _persist_final_counters(self, job_info: dict) -> None:
+        """F8 (incident /results 400-running): /status counters are recomputed
+        from the dataset dirs on every call — a stash deletes the local data, so
+        post-stash /status reported urls_crawled=0 and BO re-triggers downgraded
+        healthy crawls (insufficientData / DSPI=9). Persist the final counts into
+        the blob at finalize so get_status can serve them once the dataset dir is
+        gone. Same path conventions as _send_success_webhook (domain + dot→dash
+        fallback). Fail-open: never blocks finalize."""
+        try:
+            domain = job_info.get("domain")
+            storage_path = job_info.get("storage_path")
+            if not domain or not storage_path:
+                return
+            sanitized_name = domain.replace('.', '-')
+            crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
+
+            dataset_path = os.path.join(crawlee_storage_base, domain)
+            if not os.path.isdir(dataset_path):
+                dataset_path = os.path.join(crawlee_storage_base, sanitized_name)
+
+            error_dataset_path = os.path.join(crawlee_storage_base, f"error-{domain}")
+            if not os.path.isdir(error_dataset_path):
+                error_dataset_path = os.path.join(crawlee_storage_base, f"error-{sanitized_name}")
+
+            job_info["final_urls_crawled"] = _count_files_in_dir(dataset_path)
+            job_info["final_error_urls_crawled"] = _count_files_in_dir(error_dataset_path)
+        except Exception as e:
+            logger.warning(f"_persist_final_counters failed for "
+                           f"'{job_info.get('crawl_id')}': {e}")
 
     def _stamp_terminal_fields(self, job_info: dict) -> None:
         """Stamp finished_at (once) + size_bytes onto job_info before a terminal
@@ -2426,6 +2524,35 @@ class CrawlerManager:
             logger.warning(f"Ownership-safe lock release failed for '{lock_key}': {e}")
             return False
 
+    def _void_stale_deletion_intent(self, crawl_id: str) -> None:
+        """A new stash voids any old GCS deletion intent (hardening post-6227f433).
+
+        A lingering {id}.unstash-confirmed from a prior dropData start (never
+        consumed by the daemon — e.g. the gen-1 tar upload dead-lettered so its
+        `gcloud storage rm` kept failing until the age-janitor would sweep it)
+        would be consumed AFTER a re-stash of the same crawl_id uploads its
+        gen-2 tar to the same gs://.../stash/{id}.tar.gz path: the stale marker
+        deletes the brand-new tar, the blob says stashed_at but the tar is gone,
+        and the next resume 502s. A stale {id}.unstash-cleanup-done is dropped
+        too, so a future deletion request cannot mistake the old daemon ack for
+        its own. Best-effort: failures are logged and never block the stash.
+        """
+        results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
+        for suffix in ("unstash-confirmed", "unstash-cleanup-done"):
+            marker_path = os.path.join(results_dir, f"{crawl_id}.{suffix}")
+            try:
+                if os.path.exists(marker_path):
+                    os.remove(marker_path)
+                    logger.warning(
+                        f"stash_crawl '{crawl_id}': removed stale .{suffix} marker "
+                        f"'{marker_path}' — a new stash voids any old GCS deletion intent."
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"stash_crawl '{crawl_id}': could not remove stale marker "
+                    f"'{marker_path}' (fail-open, stash proceeds): {e}"
+                )
+
     async def stash_crawl(self, job_info: dict) -> dict:
         """
         Stash a terminal crawl's storage dir to GCS (under gs://{bucket}/stash/) to free
@@ -2513,6 +2640,13 @@ class CrawlerManager:
         job_info = fresh_job_info
 
         try:
+            # --- A new stash voids any old GCS deletion intent (post-6227f433) ---
+            # Must run under the stash lock, BEFORE the tar work / stashed_at write:
+            # a lingering {id}.unstash-confirmed from a prior dropData start would be
+            # consumed by the daemon AFTER this re-stash uploads the gen-2 tar to the
+            # same gs://.../stash/{id}.tar.gz path, deleting the brand-new tar.
+            self._void_stale_deletion_intent(crawl_id)
+
             async with _LockHeartbeat(
                 self,
                 stash_lock_key,
@@ -2818,6 +2952,15 @@ class CrawlerManager:
                 )
 
             # --- Phase 2: write .unstash-confirmed; daemon will delete GCS + write cleanup-done ---
+            # Drop a stale daemon ack first (e.g. left by a dropData fire-and-forget
+            # tar deletion, which never polls/cleans it): the polling below would
+            # otherwise mistake it for OUR ack and the cleanup loop would remove the
+            # fresh .unstash-confirmed before the daemon saw it → silent GCS orphan.
+            try:
+                if os.path.exists(cleanup_done_path):
+                    os.remove(cleanup_done_path)
+            except OSError:
+                pass
             async with aiofiles.open(confirm_path, 'w') as f:
                 await f.write(crawl_id)
             logger.info(f"Wrote .unstash-confirmed for '{crawl_id}'. Waiting for daemon GCS cleanup...")
@@ -2865,6 +3008,62 @@ class CrawlerManager:
 
         finally:
             await self._release_ownership_lock(unstash_lock_key, lock_value)
+
+    async def _request_stash_tar_deletion(self, crawl_id: str) -> bool:
+        """
+        Fire-and-forget: ask the host daemon to delete the GCS stash tar
+        (gs://{bucket}/stash/{crawl_id}.tar.gz) WITHOUT downloading it.
+
+        Reuses the unstash phase-2 primitive: the download daemon
+        (DELETE_AFTER_DOWNLOAD=true) scans STASH_DOWNLOAD_RESULTS_PATH for
+        {id}.unstash-confirmed independently of any .request, runs
+        `gcloud storage rm` on the GCS object and writes
+        {id}.unstash-cleanup-done (the rm is retried on every poll until it
+        succeeds — which also covers a stash upload still in flight). We do NOT
+        poll for the ack: callers (dropData start) must never block on GCS
+        cleanup.
+
+        Returns False (skip, tar stays orphan-inert) when a stash/unstash is in
+        flight for this crawl_id (stash_lock/unstash_lock held) — deleting under
+        an in-flight operation would race the daemon. Fail-open: never raises.
+        """
+        try:
+            for lock_key, op in ((f"stash_lock:{crawl_id}", "stash"),
+                                 (f"unstash_lock:{crawl_id}", "unstash")):
+                if await cache_service.redis_client.exists(lock_key):
+                    logger.warning(
+                        f"start_crawl '{crawl_id}': skipping GCS stash tar deletion — "
+                        f"{op} in flight ({lock_key}); tar stays orphan-inert."
+                    )
+                    return False
+
+            # Same guard as unstash_crawl: a non-bind-mounted results dir would
+            # swallow the marker (invisible to the host daemon) while we log success.
+            self._verify_bind_mount(settings.STASH_DOWNLOAD_RESULTS_PATH, "unstash results")
+
+            results_dir = settings.STASH_DOWNLOAD_RESULTS_PATH
+            confirm_path = os.path.join(results_dir, f"{crawl_id}.unstash-confirmed")
+            cleanup_done_path = os.path.join(results_dir, f"{crawl_id}.unstash-cleanup-done")
+            os.makedirs(results_dir, exist_ok=True)
+            # Pre-clean a stale daemon ack: nobody polls/cleans it on this
+            # fire-and-forget path, and a leftover would fool the NEXT unstash
+            # of this crawl_id into taking it for its own phase-2 ack.
+            if os.path.exists(cleanup_done_path):
+                os.remove(cleanup_done_path)
+            async with aiofiles.open(confirm_path, 'w') as f:
+                await f.write(crawl_id)
+            logger.warning(
+                f"start_crawl '{crawl_id}': requested GCS stash tar deletion "
+                f"(wrote .unstash-confirmed; daemon will rm "
+                f"gs://{settings.GCS_BUCKET_NAME}/stash/{crawl_id}.tar.gz)."
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                f"start_crawl '{crawl_id}': GCS stash tar deletion request failed "
+                f"(fail-open, tar stays orphan-inert): {e}"
+            )
+            return False
 
     async def get_pending_callbacks(self) -> list:
         """Returns all failed webhook callbacks stored in Redis."""
@@ -3182,6 +3381,11 @@ class CrawlerManager:
                         job_data["status"] = marker_status
                         if "last_heartbeat" in job_data:
                             del job_data["last_heartbeat"]
+                        # F8: terminal blob — persist final counters + terminal
+                        # stamps (fail-open; finished_at only if absent), same
+                        # contract as the finalize and F2-B heal paths.
+                        self._persist_final_counters(job_data)
+                        self._stamp_terminal_fields(job_data)
                         await cache_service.set_json(all_job_keys[i], job_data)
                         await self._publish_update(crawl_id, marker_status)
                         # Skip remaining stale-detection logic for this job.

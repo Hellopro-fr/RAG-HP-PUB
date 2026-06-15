@@ -1,0 +1,37 @@
+{
+  "scrapping_fiche_produit_ia": {
+    "database_id": 10,
+    "description": "Fiches produit scrapées brutes (« SFPI ») : une ligne par URL de fiche produit et par version de scrape. Stocke le contenu extrait (titre, description, prix, image, livraison, stock, catégorie) + le contenu brut et l'état du scraper. Table volumineuse (~1,1M lignes) car versionnée : chaque re-scrape archive l'ancienne version. Écrite par le scraper (script_scrapping_produit_ia[_V2].php depuis le résultat Cheerio) et BatchProcessor. 1:1 avec produit_scrapping_ia (PSI = produit traité/finalisé). Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_scrapping_fiche_produit_ia",
+    "default_order_by": "date_scrapping_sfpi DESC",
+    "rows": null,
+    "columns": {
+      "id_scrapping_fiche_produit_ia": { "type": "int", "desc": "PK auto-increment de la fiche. Partagé 1:1 avec produit_scrapping_ia.id_produit_scrapping_psi (JOIN dans FicheProduitScrapping/prix). Référencé par tops_fiches_dspi (IDs dans le JSON)." },
+      "id_domaine_scrapping_produit_sfpi": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI), NOT NULL, indexé. Domaine d'origine de la fiche." },
+      "id_upload_scrapping_produit_sfpi": { "type": "int", "desc": "FK → upload_scrapping_produit_ia (lot d'upload), NULLable, indexé." },
+      "url_sfpi": { "type": "varchar(255)", "desc": "URL de la page fiche produit scrapée, NOT NULL, indexé. Clé logique de versionnement avec est_dernier_sfpi (N versions par URL)." },
+      "contenu_scrapping_sfpi": { "type": "longtext", "desc": "Contenu brut extrait de la page (data_cheerio['content_brute'] du scraper Cheerio). NULLable." },
+      "erreur_scrapping_sfpi": { "type": "longtext", "desc": "Message/détail d'erreur de scraping pour cette fiche. NULLable." },
+      "etat_scrapping_sfpi": { "type": "int", "desc": "État du scrape renvoyé par le scraper Cheerio (data_cheerio['etat']). NULLable. ⚠️ Codes entiers non énumérés (la requête de distribution timeoute sur 1,1M lignes) — à confirmer côté scraper Node/Cheerio." },
+      "date_scrapping_sfpi": { "type": "datetime", "desc": "Date du scrape (DEFAULT CURRENT_TIMESTAMP). Bon champ de tri (fiches récentes)." },
+      "titre_produit_sfpi": { "type": "longtext", "desc": "Titre produit extrait (morceaux joints par ' <br> '). NULLable." },
+      "description_produit_sfpi": { "type": "longtext", "desc": "Description produit extraite (brute). NULLable." },
+      "prix_produit_sfpi": { "type": "longtext", "desc": "Prix produit extrait (souvent structuré/sérialisé : valeur, devise, type, indicatif). NULLable. NB : la valeur de prix finale exposée côté API vient de produit_scrapping_ia (prix_produit_psi)." },
+      "image_produit_sfpi": { "type": "longtext", "desc": "Image(s) produit extraite(s) (URLs, souvent structuré). NULLable." },
+      "est_dernier_sfpi": { "type": "int", "desc": "Drapeau de versionnement (défaut 1) : 1 = version COURANTE/active de la fiche pour cette URL, 0 = version historique archivée. À chaque re-scrape, l'ancienne est archivée (passée à 0) et la nouvelle marquée 1 (BatchProcessor). Filtrer est_dernier_sfpi=1 pour l'état courant — sinon on lit l'historique." },
+      "description_produit_apres_verif_sfpi": { "type": "longtext", "desc": "Description produit après vérification/nettoyage (morceaux joints par ' <br> '). NULLable." },
+      "livraison_produit_sfpi": { "type": "longtext", "desc": "Information de livraison extraite. NULLable." },
+      "stock_produit_sfpi": { "type": "longtext", "desc": "Information de stock/disponibilité extraite. NULLable." },
+      "categorie_produit_sfpi": { "type": "longtext", "desc": "Catégorie produit extraite. NULLable." },
+      "nombre_dom_sfpi": { "type": "longtext", "desc": "JSON du décompte des balises/éléments DOM de la page (json_encode($tagsCount)) — pas un entier malgré le nom. Sert au diagnostic d'extraction. NULLable." },
+      "has_content": { "type": "tinyint", "desc": "Colonne GÉNÉRÉE (STORED) : 1 = contenu scrapé présent, 0 = vide/à (re)scraper. Indexée (idx_domain_upload_content) ; utilisée pour cibler les fiches à traiter (WHERE has_content=0 AND est_dernier_sfpi=1). ⚠️ Expression de génération exacte non lue (inférée de la présence de contenu_scrapping_sfpi)." },
+      "updated_at_sfpi": { "type": "datetime", "desc": "Date de dernière modification de la ligne (DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP). À distinguer de date_scrapping_sfpi (date du scrape)." }
+    },
+    "relations": [
+      { "column": "id_domaine_scrapping_produit_sfpi", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "note": "Domaine d'origine (DSPI)." },
+      { "column": "id_scrapping_fiche_produit_ia", "references": "produit_scrapping_ia.id_produit_scrapping_psi", "cardinality": "1:1", "note": "PSI = produit traité/finalisé (titre_produit_psi, prix_produit_psi, nom_categorie_psi…). JOIN dans FicheProduitScrapping/prix.php." },
+      { "column": "id_upload_scrapping_produit_sfpi", "references": "upload_scrapping_produit_ia", "note": "Lot d'upload (NULLable)." }
+    ],
+    "notes": "Table volumineuse (~1,1M lignes) — les GROUP BY pleine table timeoutent via le MCP. Versionnement par (url_sfpi, est_dernier_sfpi) : 1 ligne active (est_dernier=1) + N historiques (0) par URL ; toujours filtrer est_dernier_sfpi=1 pour l'état courant. Écrite par script_scrapping_produit_ia[_V2].php (depuis le scraper Cheerio : etat, content_brute, titre, etc.) et class/BatchProcessor.php (archive→update). produit_scrapping_ia (PSI) porte la version traitée 1:1. NON VÉRIFIÉ : valeurs de etat_scrapping_sfpi (timeout) et expression exacte de la colonne générée has_content."
+  }
+}
