@@ -106,6 +106,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         autres={Object.keys(autresNonVides).length > 0 ? autresNonVides : undefined}
         startFromStep1={startStep1}
         withPrev
+        ownsStep1
         open={modalOpen}
         onClose={handleModalClose}
       />
