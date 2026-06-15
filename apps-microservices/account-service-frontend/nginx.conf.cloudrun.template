@@ -5,7 +5,13 @@
 ## Différences vs nginx.conf (VM) :
 ##  - resolver public (8.8.8.8) au lieu de 127.0.0.11 (DNS Docker absent sur CR)
 ##  - proxy_pass HTTPS vers backend Cloud Run public (au lieu de http://hostname:8600 Docker)
-##  - proxy_set_header Host + proxy_ssl_server_name (SNI requis pour Cloud Run)
+##  - Headers stricts pour HTTPS upstream Google Frontend :
+##      * Host = BACKEND_HOST (canonical URL avec project number)
+##      * Connection vide (keepalive cohérent, évite chunked transfer parasite)
+##      * X-Forwarded-* explicites
+##      * proxy_ssl_server_name + proxy_ssl_name pour SNI
+##  - proxy_http_version 1.1 + Connection "" = pas de chunked transfer
+##    (Google Frontend rejette en 400 "malformed request" si chunked + HTTPS upstream).
 ##
 ## Ticket : 001-INFRA-GCP-ARCHI Sprint S003 T001-S003-000 (F-HP-NGINX-001)
 
@@ -24,16 +30,17 @@ server {
     # SPA fallback
     location / { try_files $uri $uri/ /index.html; }
 
-    # Backend Cloud Run (HTTPS, hostname injecté via envsubst au démarrage)
-    location /api/         { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location /authorize    { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location /token        { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location /token/revoke { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location /introspect   { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location /register     { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location /.well-known/ { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location /internal/    { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
-    location = /logout     { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    # Backend Cloud Run — proxy_pass HTTPS strict (cf. headers ci-dessus pour Google Frontend).
+    # Tous les locations partagent les mêmes directives via le bloc commun ci-dessous.
+    location /api/         { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location /authorize    { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location /token        { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location /token/revoke { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location /introspect   { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location /register     { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location /.well-known/ { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location /internal/    { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
+    location = /logout     { proxy_pass https://${BACKEND_HOST}; proxy_http_version 1.1; proxy_set_header Host ${BACKEND_HOST}; proxy_set_header Connection ""; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_ssl_server_name on; proxy_ssl_name ${BACKEND_HOST}; proxy_read_timeout 60s; proxy_connect_timeout 10s; }
 
     # Static caching for built assets
     location ~* \.(js|css|woff2?|svg|png|jpg|jpeg|webp|ico)$ {

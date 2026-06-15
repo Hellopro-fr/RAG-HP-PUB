@@ -18,6 +18,9 @@ if [ "${IS_CLOUD_RUN:-false}" = "true" ]; then
     echo "[entrypoint] Cloud Run mode: rendering /etc/nginx/conf.d/default.conf from template (BACKEND_HOST=${BACKEND_HOST})"
     export BACKEND_HOST
     envsubst '${BACKEND_HOST}' < /etc/nginx/nginx.conf.cloudrun.template > /etc/nginx/conf.d/default.conf
+    echo "[entrypoint] --- generated /etc/nginx/conf.d/default.conf (extrait location /api/) ---"
+    grep -A 2 "location /api/" /etc/nginx/conf.d/default.conf | head -5 || true
+    echo "[entrypoint] --- end extrait ---"
 else
     echo "[entrypoint] VM/Docker Compose mode: using static default.conf (unchanged)"
 fi
