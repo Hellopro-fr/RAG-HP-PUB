@@ -74,19 +74,26 @@ jobs:
             exit 1
           fi
 
-          echo "backend_url=${BACKEND_URL}" >> "$GITHUB_OUTPUT"
-          echo "Backend URL trouvée : ${BACKEND_URL}"
+          # Extraire hostname sans https:// pour BACKEND_HOST (utilisé par nginx.conf.cloudrun.template)
+          BACKEND_HOST="${BACKEND_URL#https://}"
+          BACKEND_HOST="${BACKEND_HOST#http://}"
 
-      - name: Construire env_vars_json (avec BACKEND_URL injectée)
+          echo "backend_url=${BACKEND_URL}" >> "$GITHUB_OUTPUT"
+          echo "backend_host=${BACKEND_HOST}" >> "$GITHUB_OUTPUT"
+          echo "Backend URL trouvée : ${BACKEND_URL}"
+          echo "Backend HOST extrait : ${BACKEND_HOST}"
+
+      - name: Construire env_vars_json (avec IS_CLOUD_RUN + BACKEND_HOST injectées)
         id: build-json
         run: |
           set -euo pipefail
-          # JSON inline (jq permet la construction propre avec interpolation)
+          # IS_CLOUD_RUN=true → docker-entrypoint.sh regenère default.conf via envsubst (F-HP-NGINX-001)
+          # BACKEND_HOST = hostname Cloud Run du backend (sans https://) pour proxy_pass Nginx
           ENV_JSON=$(jq -nc \
-            --arg backend_url "${{ steps.lookup.outputs.backend_url }}" \
+            --arg backend_host "${{ steps.lookup.outputs.backend_host }}" \
             '{
-              "BACKEND_URL": $backend_url,
-              "NGINX_PORT": "8601"
+              "IS_CLOUD_RUN": "true",
+              "BACKEND_HOST": $backend_host
             }')
           echo "env_vars_json=${ENV_JSON}" >> "$GITHUB_OUTPUT"
           echo "env_vars_json: ${ENV_JSON}"

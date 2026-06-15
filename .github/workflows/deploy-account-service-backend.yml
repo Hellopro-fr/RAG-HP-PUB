@@ -43,8 +43,13 @@ jobs:
       dockerfile_path: apps-microservices/account-service-backend/Dockerfile
       build_context: apps-microservices/account-service-backend
       cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
-      ingress: internal
-      allow_unauthenticated: false
+      # ingress=all + allow_unauthenticated=true depuis 2026-06-12 (F-HP-NGINX-001).
+      # Rationale : permet au frontend Nginx (CR public) de faire proxy_pass HTTPS vers
+      # ce backend. L'authentification est gérée par le JWT applicatif (JWT_SECRET partagé
+      # avec api-gateway prod, validation côté code Go). Trade-off accepté pour le POC ;
+      # à durcir en S004 via Cloud Load Balancer + Cloud Armor devant les 2 services.
+      ingress: all
+      allow_unauthenticated: true
       cpu: '1'
       memory: '512Mi'
       min_instances: 0

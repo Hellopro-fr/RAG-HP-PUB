@@ -8,14 +8,21 @@ RUN npm run build
 
 # Stage 2: Serve
 FROM nginx:1.27-alpine
+# envsubst pour le rendu conditionnel du template Cloud Run via docker-entrypoint.sh
+# (F-HP-NGINX-001 - VM Docker Compose continue d'utiliser default.conf statique)
+RUN apk add --no-cache gettext
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx-limits.conf /etc/nginx/conf.d/00-limits.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf.cloudrun.template /etc/nginx/nginx.conf.cloudrun.template
+COPY docker-entrypoint.sh /docker-entrypoint-app.sh
 RUN printf 'proxy_http_version 1.1;\nproxy_set_header Host $host;\nproxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\nproxy_set_header X-Forwarded-Proto $scheme;\nproxy_set_header X-Real-IP $remote_addr;\nproxy_read_timeout 30s;\n' > /etc/nginx/proxy.inc \
-    && chown -R appuser:appgroup /var/cache/nginx /var/log/nginx /usr/share/nginx/html /etc/nginx/proxy.inc \
+    && chmod +x /docker-entrypoint-app.sh \
+    && chown -R appuser:appgroup /var/cache/nginx /var/log/nginx /usr/share/nginx/html /etc/nginx/proxy.inc /etc/nginx/conf.d/default.conf /etc/nginx/nginx.conf.cloudrun.template \
     && touch /var/run/nginx.pid && chown appuser:appgroup /var/run/nginx.pid
 USER appuser
 EXPOSE 8601
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:8601/ || exit 1
+ENTRYPOINT ["/docker-entrypoint-app.sh"]
 CMD ["nginx", "-g", "daemon off;"]

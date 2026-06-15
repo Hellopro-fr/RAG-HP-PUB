@@ -1,0 +1,43 @@
+## Cloud Run mode — template avec placeholders envsubst (BACKEND_HOST)
+## Utilise UNIQUEMENT si IS_CLOUD_RUN=true (cf. docker-entrypoint.sh).
+## VM Docker Compose continue d'utiliser nginx.conf (statique, intact).
+##
+## Différences vs nginx.conf (VM) :
+##  - resolver public (8.8.8.8) au lieu de 127.0.0.11 (DNS Docker absent sur CR)
+##  - proxy_pass HTTPS vers backend Cloud Run public (au lieu de http://hostname:8600 Docker)
+##  - proxy_set_header Host + proxy_ssl_server_name (SNI requis pour Cloud Run)
+##
+## Ticket : 001-INFRA-GCP-ARCHI Sprint S003 T001-S003-000 (F-HP-NGINX-001)
+
+server {
+    listen 8601;
+    server_name _;
+
+    server_tokens off;
+    client_max_body_size 5m;
+
+    root /usr/share/nginx/html;
+
+    # Resolver public — Cloud Run runtime n'a pas de DNS Docker interne (127.0.0.11).
+    resolver 8.8.8.8 8.8.4.4 valid=300s ipv6=off;
+
+    # SPA fallback
+    location / { try_files $uri $uri/ /index.html; }
+
+    # Backend Cloud Run (HTTPS, hostname injecté via envsubst au démarrage)
+    location /api/         { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location /authorize    { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location /token        { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location /token/revoke { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location /introspect   { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location /register     { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location /.well-known/ { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location /internal/    { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+    location = /logout     { proxy_pass https://${BACKEND_HOST}; include /etc/nginx/proxy.inc; proxy_set_header Host ${BACKEND_HOST}; proxy_ssl_server_name on; }
+
+    # Static caching for built assets
+    location ~* \.(js|css|woff2?|svg|png|jpg|jpeg|webp|ico)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
