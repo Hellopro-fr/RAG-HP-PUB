@@ -1,5 +1,5 @@
-import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne } from '@/types/conseils';
-import type { PhpConseilResponse, PhpBloc, PhpImage } from '@/types/api/page-conseil-php';
+import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne, AuthorInfo, ConseilAssocie } from '@/types/conseils';
+import type { PhpConseilResponse, PhpBloc, PhpImage, PhpAuteur, PhpConseilAssocie } from '@/types/api/page-conseil-php';
 
 const PAGE_TYPE_MAP: Record<number, ConseilPageType> = {
   0: 'autre',
@@ -47,6 +47,61 @@ function tableToHtml(table: string[][]): string {
     .map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`)
     .join('');
   return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function normalizeSchemaGuide(raw: Record<string, unknown>): Record<string, unknown> {
+  const author = raw.author;
+  const authorName =
+    typeof author === 'string' ? author : (author as Record<string, unknown> | undefined)?.name ?? author;
+
+  const ordered: Record<string, unknown> = {};
+  if (raw['@context'] !== undefined) ordered['@context'] = raw['@context'];
+  if (raw['@type'] !== undefined)    ordered['@type']    = raw['@type'];
+  if (raw.about !== undefined)       ordered.about       = raw.about;
+  if (raw.name !== undefined)        ordered.name        = raw.name;
+  if (raw.text !== undefined)        ordered.text        = raw.text;
+  if (authorName !== undefined)      ordered.author      = authorName;
+  if (raw.datePublished !== undefined) ordered.datePublished = raw.datePublished;
+  if (raw.image !== undefined)       ordered.image       = raw.image;
+
+  // Champs supplémentaires éventuels non listés ci-dessus
+  for (const key of Object.keys(raw)) {
+    if (!(key in ordered)) ordered[key] = raw[key];
+  }
+
+  return ordered;
+}
+
+/**
+ * Si un bloc type 11 (estimation prix) est directement suivi d'un bloc type 4 ou 5
+ * sans estimation propre, injecte l'estimation dans le bloc suivant et supprime le type 11.
+ */
+function mergeEstimationIntoNextBloc(blocs: PhpBloc[]): PhpBloc[] {
+  const result: PhpBloc[] = [];
+  let i = 0;
+  while (i < blocs.length) {
+    const cur = blocs[i];
+    const next = blocs[i + 1];
+    if (
+      cur.type === 11 &&
+      next &&
+      (next.type === 4 || next.type === 5) &&
+      !next.contenu.estimation?.valeur
+    ) {
+      result.push({
+        ...next,
+        contenu: {
+          ...next.contenu,
+          estimation: { label: 'Estimation de prix', valeur: cur.contenu.texte ?? '' },
+        },
+      });
+      i += 2;
+    } else {
+      result.push(cur);
+      i++;
+    }
+  }
+  return result;
 }
 
 function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
@@ -103,12 +158,16 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
           image: {
             src: c.image.path,
             alt: c.image.alternatif || c.image.title || '',
+            ...parseTaille(c.image.taille),
           },
           ...(c.estimation?.valeur ? {
             estimate: c.estimation.valeur,
             estimateLabel: c.estimation.label,
           } : {}),
-          ...(c.cta && { ctaLabel: c.cta.wording }),
+          ...(c.cta && {
+            ctaLabel: c.cta.wording,
+            ...(c.cta.url ? { ctaUrl: c.cta.url } : {}),
+          }),
           imagePosition: 'right' as const,
         },
       };
@@ -117,7 +176,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
       return {
         ...base,
         type: 'video',
-        data: { youtubeUrl: c.video ?? '' },
+        data: { url: c.video ?? '' },
       };
 
     case 13: { // Image + Image — contenu.images[0] et contenu.images[1]
@@ -127,6 +186,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         src: img.path,
         alt: img.alternatif || img.title || '',
         ...(img.legende ? { caption: img.legende } : {}),
+        ...parseTaille(img.taille),
       });
       return {
         ...base,
@@ -160,8 +220,16 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         type: 'image-texte',
         data: {
           html: c.texte ?? '',
-          image: { src: c.image.path, alt: c.image.alternatif || c.image.title || '' },
+          image: {
+            src: c.image.path,
+            alt: c.image.alternatif || c.image.title || '',
+            ...parseTaille(c.image.taille),
+          },
           ...(c.estimation?.valeur ? { estimate: c.estimation.valeur, estimateLabel: c.estimation.label } : {}),
+          ...(c.cta && {
+            ctaLabel: c.cta.wording,
+            ...(c.cta.url ? { ctaUrl: c.cta.url } : {}),
+          }),
           imagePosition: 'left' as const,
         },
       };
@@ -185,6 +253,20 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         type: 'produits',
         data: {
           productIds: (c.liste_id_produit ?? []).map(String),
+          ...(c.titre ? { titre: c.titre } : {}),
+          produits: (c.produits ?? []).map((p) => ({
+            id: String(p.id_produit),
+            name: p.nom_produit,
+            image: p.vignette,
+            priceHt: p.prix_ht !== null && p.prix_ht !== undefined
+              ? (Number(p.prix_ht) || null)
+              : null,
+            url: p.url,
+            brand: p.nom_fabricant ?? '',
+            category: String(p.id_rubrique ?? ''),
+            variant: p.variant_gtm ?? '',
+            srcInteg: (Number(p.affichage_dd_rd) === 1 ? 1 : 0) as 0 | 1,
+          })),
         },
       };
 
@@ -208,7 +290,7 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         type: 'texte',
         data: {
           html: '',
-          estimation: { value: c.texte ?? '', label: 'Estimation' },
+          estimation: { value: c.texte ?? '', label: 'Estimation de prix' },
         },
       };
 
@@ -249,6 +331,19 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
   }
 }
 
+function transformConseilAssocie(a: PhpConseilAssocie): ConseilAssocie {
+  return { id: a.id, titre: a.titre, url: a.url, idTag: a.id_tag };
+}
+
+function transformAuteur(auteur: PhpAuteur): AuthorInfo {
+  return {
+    name: auteur.nom_prenom,
+    role: auteur.profession,
+    bio: auteur.description,
+    ...(auteur.url_photo ? { photo: auteur.url_photo } : {}),
+  };
+}
+
 export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
   const r = raw.response;
   const heroImage = extractHeroImage(r.blocs ?? []);
@@ -265,11 +360,17 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
       ...(r.premier_bloc_texte ? { subtitle: r.premier_bloc_texte } : {}),
       ...(heroImage ? { image: heroImage } : {}),
     },
-    blocks: (r.blocs ?? [])
-      .sort((a, b) => a.ordre - b.ordre)
+    blocks: mergeEstimationIntoNextBloc(
+      (r.blocs ?? []).sort((a, b) => a.ordre - b.ordre)
+    )
       .map(transformBloc)
       .filter((b): b is ConseilBlock => b !== null),
-    ...(r.auteur ? { author: r.auteur as ConseilPage['author'] } : {}),
+    ...(r.schema_guide && Object.keys(r.schema_guide).length > 0 ? { schemaGuide: normalizeSchemaGuide(r.schema_guide) } : {}),
+    ...(r.schema_breadcrumb && Object.keys(r.schema_breadcrumb).length > 0 ? { schemaBreadcrumb: r.schema_breadcrumb } : {}),
+    ...(r.auteur ? { author: transformAuteur(r.auteur) } : {}),
+    ...(r.pages_conseils_associees?.length
+      ? { conseilsAssocies: r.pages_conseils_associees.map(transformConseilAssocie) }
+      : {}),
     ...(r.liens_intexts?.length
       ? {
           liensIntexts: r.liens_intexts.map((l): LienInterne => ({

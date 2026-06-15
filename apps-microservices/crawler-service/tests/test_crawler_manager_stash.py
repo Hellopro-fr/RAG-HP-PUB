@@ -656,6 +656,108 @@ async def test_stash_preflight_failopen_on_measurement_exception(cm_instance, ba
 
 
 @pytest.mark.asyncio
+async def test_stash_voids_stale_gcs_deletion_intent(
+    cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path
+):
+    """Hardening post-6227f433: a lingering {id}.unstash-confirmed (fire-and-forget
+    dropData deletion request never consumed by the daemon, e.g. gen-1 tar upload
+    dead-lettered so `gcloud storage rm` kept failing) must be pre-cleaned by a
+    later stash of the same crawl_id — otherwise the daemon would consume the
+    stale marker AFTER the gen-2 tar lands at the same gs://.../stash/{id}.tar.gz
+    path and delete the brand-new tar (blob says stashed_at, tar gone → next
+    resume 502s). A stale {id}.unstash-cleanup-done is dropped too, so a future
+    deletion request cannot mistake the old daemon ack for its own.
+    The pre-clean must run under the stash lock BEFORE the tar work starts."""
+    stash_dir = tmp_path / "stash"
+    res_dir = tmp_path / "stash-res"
+    stash_dir.mkdir()
+    res_dir.mkdir()
+    monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
+    monkeypatch.setattr(cm_module.settings, "STASH_DOWNLOAD_RESULTS_PATH", str(res_dir))
+    monkeypatch.setattr(cm_module.settings, "GCS_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        cm_instance,
+        "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0, "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
+
+    # Stale artifacts left by a prior dropData deletion request
+    stale_marker = res_dir / "test_id.unstash-confirmed"
+    stale_ack = res_dir / "test_id.unstash-cleanup-done"
+    stale_marker.write_text("test_id")
+    stale_ack.touch()
+
+    # Spy on make_archive to prove the pre-clean runs BEFORE the tar work
+    markers_at_tar_time = {}
+    original_make_archive = cm_module.shutil.make_archive
+
+    def spy_make_archive(*args, **kwargs):
+        markers_at_tar_time["confirmed"] = stale_marker.exists()
+        markers_at_tar_time["cleanup_done"] = stale_ack.exists()
+        return original_make_archive(*args, **kwargs)
+
+    monkeypatch.setattr(cm_module.shutil, "make_archive", spy_make_archive)
+
+    result = await cm_instance.stash_crawl(base_job_info)
+
+    assert result["status"] == "stashing"
+    assert not stale_marker.exists(), \
+        "stale .unstash-confirmed must be pre-cleaned by a re-stash"
+    assert not stale_ack.exists(), \
+        "stale .unstash-cleanup-done must be pre-cleaned by a re-stash"
+    assert markers_at_tar_time == {"confirmed": False, "cleanup_done": False}, \
+        "pre-clean must happen before the tar is created/uploaded"
+
+
+@pytest.mark.asyncio
+async def test_stash_proceeds_when_stale_marker_removal_fails(
+    cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path
+):
+    """Fail-open: if removing a stale deletion marker raises (e.g. permission
+    error on the bind-mount), the stash must still complete normally."""
+    stash_dir = tmp_path / "stash"
+    res_dir = tmp_path / "stash-res"
+    stash_dir.mkdir()
+    res_dir.mkdir()
+    monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
+    monkeypatch.setattr(cm_module.settings, "STASH_DOWNLOAD_RESULTS_PATH", str(res_dir))
+    monkeypatch.setattr(cm_module.settings, "GCS_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        cm_instance,
+        "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0, "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(base_job_info))
+
+    stale_marker = res_dir / "test_id.unstash-confirmed"
+    stale_marker.write_text("test_id")
+
+    # os.remove raises ONLY for the stale markers; everything else untouched
+    original_remove = os.remove
+
+    def failing_remove(path, *args, **kwargs):
+        if ".unstash-" in str(path):
+            raise PermissionError(f"simulated EACCES on {path}")
+        return original_remove(path, *args, **kwargs)
+
+    monkeypatch.setattr(cm_module.os, "remove", failing_remove)
+
+    result = await cm_instance.stash_crawl(base_job_info)
+
+    assert result["status"] == "stashing"
+    assert (stash_dir / "test_id.tar.gz").exists(), \
+        "stash must complete even when the marker pre-clean fails"
+    assert stale_marker.exists()  # removal failed, by design of the test
+
+
+@pytest.mark.asyncio
 async def test_stash_toctou_revalidation_blocks_concurrent_winner(cm_instance, base_job_info, mock_cache_service, monkeypatch):
     """Spec follow-up §4.2: 2-replica TOCTOU race.
 

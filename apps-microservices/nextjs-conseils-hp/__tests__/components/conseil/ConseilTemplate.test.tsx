@@ -34,6 +34,8 @@ describe('ConseilTemplate', () => {
       id: 1,
       question: 'Quel est votre projet ?',
       avecImage: false,
+      typeSelection: 1,
+      obligatoire: 0,
       choix: [{ id: 1, label: 'Option A' }],
     };
     const page = { ...mockPagePrix, formulaire_ao: question };

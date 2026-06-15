@@ -141,7 +141,32 @@ export interface PhpAoQuestion {
   ordre: string | number;
   obligatoire: string | number;
   avec_image: 0 | 1;
+  step_number?: number;
   choix: PhpAoChoix[];
+}
+
+export interface PhpAuteur {
+  nom_prenom: string;
+  profession: string;
+  description: string;
+  url_photo?: string;
+}
+
+export interface PhpConseilAssocie {
+  id: string;
+  titre: string;
+  url: string;
+  /** 0 = autre, 1 = prix, 2 = top */
+  id_tag: number;
+}
+
+export interface PhpTopClient {
+  id_societe: string;
+  nom_commercial: string;
+  montant_alloue: number;
+  /** Chemin relatif ex. "images/logo/logo_3002237.jpg" */
+  logo: string;
+  profil_societe_francais?: string;
 }
 
 export interface PhpConseilPage {
@@ -151,7 +176,7 @@ export interface PhpConseilPage {
   url: string;
   seo: PhpSeo;
   fil_ariane: PhpFilAriane[];
-  auteur: unknown;
+  auteur?: PhpAuteur | null;
   date_modification: string;
   /** 0 = autre, 1 = prix, 2 = top */
   id_tag: number;
@@ -162,9 +187,9 @@ export interface PhpConseilPage {
   schema_guide: Record<string, unknown>;
   schema_breadcrumb: Record<string, unknown>;
   liens_intexts?: PhpLienInterne[];
-  pages_conseils_associees?: unknown[];
+  pages_conseils_associees?: PhpConseilAssocie[];
   formulaire_ao?: PhpAoQuestion[];
-  info_rubrique?: { id: number; libelle: string };
+  top_clients?: PhpTopClient[];
   header?: unknown;
   footer?: unknown;
 }

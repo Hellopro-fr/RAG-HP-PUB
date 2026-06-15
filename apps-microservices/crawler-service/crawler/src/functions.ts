@@ -24,6 +24,12 @@ import {
 } from "./interfaces/queue.js";
 import { context } from "./context.js";
 import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
+import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
+import {
+    NAVIGATION_WAIT_UNTIL,
+    TIMEOUT_MAX_RETRIES,
+    shouldCapTimeoutRetry,
+} from "./httpStatusPolicy.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -469,9 +475,13 @@ export const startCrawler = async (
         });
     }
 
-    // Camoufox: resolve launch options BEFORE constructing crawler (async)
+    // Camoufox: resolve launch options BEFORE constructing crawler (async).
+    // Pin the French locale so navigator.language === 'fr': sites with
+    // client-side language negotiation (e.g. Drupal browser_language_detection)
+    // otherwise redirect the seeded /fr URL to the default-language root.
+    // See camoufoxLaunchInput.ts.
     const camoufoxOpts = camoufoxEnabled
-        ? await camoufoxLaunchOptions({ headless: true })
+        ? await camoufoxLaunchOptions(buildCamoufoxLaunchInput(true))
         : null;
 
     let optionsCrawler: PlaywrightCrawlerOptions = {
@@ -530,7 +540,11 @@ export const startCrawler = async (
         useSessionPool: true,
         persistCookiesPerSession: true,
         sessionPoolOptions: {
-            blockedStatusCodes: [401, 403, 429, 404, 410, 423, 502, 500, 503],
+            // Empty: status-based retire/retry is now handled by the single policy
+            // in routes.ts (classifyHttpStatus). Crawlee no longer pre-throws on
+            // status codes, so every status reaches the handler. 403/429 session
+            // rotation is re-implemented there via session.retire().
+            blockedStatusCodes: [],
         },
 
         // V3 Logic: Rich error reporting
@@ -553,6 +567,16 @@ export const startCrawler = async (
             if (isPermanentError) {
                 request.noRetry = true;
                 log.warning(`Permanent error detected for ${request.url} — no retry`);
+            }
+
+            // Navigation-timeout retry cap: a genuinely-unresponsive URL (no HTTP
+            // response at all) would otherwise burn all maxRequestRetries × navigation
+            // timeout. With waitUntil 'domcontentloaded', a real 404 resolves fast and
+            // is handled by the status policy; a true timeout means the server never
+            // responded — cap the retries.
+            if (shouldCapTimeoutRetry(errorStr, request.retryCount, TIMEOUT_MAX_RETRIES)) {
+                request.noRetry = true;
+                log.warning(`Navigation timeout cap reached for ${request.url} (retryCount=${request.retryCount}) — no retry`);
             }
 
             // Accumulate error stats ONLY if the URL is from the previous crawl
@@ -660,6 +684,16 @@ export const startCrawler = async (
         },
 
         preNavigationHooks: [
+            // Resolve navigation as soon as the DOM is parsed (NAVIGATION_WAIT_UNTIL,
+            // default 'domcontentloaded'), NOT when every sub-resource finishes.
+            // Playwright's default 'load' hangs for the full navigationTimeoutSecs on
+            // heavy pages whose trackers/lazy assets never settle — which hides the
+            // HTTP status behind a never-completing navigation. Content completeness
+            // is handled post-navigation by processPage/waitAndScroll (bounded
+            // networkidle + scroll), so this does not reduce extracted content.
+            async (_crawlingContext, gotoOptions) => {
+                gotoOptions.waitUntil = NAVIGATION_WAIT_UNTIL;
+            },
             async ({ page }) => {
                 const isStopped = isStoppedManualy(domain, false);
                 if (isStopped) {
@@ -1214,9 +1248,9 @@ export const generateUpdateReport = async (domain: string) => {
             else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
         } else {
             if (processed >= cb.minSample) {
-                if (errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
-                else if (redirectRate > cb.maxRedirectRate) { status = "CRITICAL"; statusMessage = `Redirect rate too high (${(redirectRate*100).toFixed(1)}%)`; }
-                else if (growthRate > cb.maxGrowthRate) { status = "WARNING"; statusMessage = `Site growth high (${(growthRate*100).toFixed(1)}%)`; }
+                if (cb.maxErrorRate > 0 && errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
+                else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) { status = "CRITICAL"; statusMessage = `Redirect rate too high (${(redirectRate*100).toFixed(1)}%)`; }
+                else if (cb.maxGrowthRate > 0 && growthRate > cb.maxGrowthRate) { status = "WARNING"; statusMessage = `Site growth high (${(growthRate*100).toFixed(1)}%)`; }
             } else {
                 status = "PENDING_SAMPLE";
                 statusMessage = `Waiting for minimum sample (${processed}/${cb.minSample})`;

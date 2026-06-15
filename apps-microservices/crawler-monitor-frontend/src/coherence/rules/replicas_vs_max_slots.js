@@ -1,3 +1,5 @@
+import { isReplicaLive } from '../../lib/replicas';
+
 /** @type {import('../types').Rule} */
 const rule = {
   id: 'replicas_vs_max_slots',
@@ -13,7 +15,7 @@ const rule = {
     if (!capacity?.max_global_jobs) return [];
     const max = capacity.max_global_jobs;
     const alive = Object.values(replicas || {}).filter(
-      (r) => r?.replicaId && Date.now() - (r.timestamp ?? 0) < 30_000,
+      (r) => r?.replicaId && isReplicaLive(r),
     ).length;
     if (alive === 0) return []; // cold start — skip
     if (alive >= max) return []; // OK (over-provisioning is a separate concern)

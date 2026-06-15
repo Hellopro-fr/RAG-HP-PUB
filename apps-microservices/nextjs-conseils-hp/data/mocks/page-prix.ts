@@ -7,6 +7,7 @@ export const mockPagePrix: ConseilPage = {
     id: 2001661,
     question: "Quel type d'élevage souhaitez-vous réaliser dans le bâtiment ?",
     avecImage: true,
+    obligatoire: 1,
     typeSelection: 1, // 1 = choix unique → clic direct ouvre le modal
     choix: [
       { id: 101, label: 'Élevage bovin',    image: 'https://www.hellopro.fr/images/vignettes/vache.png' },
@@ -31,13 +32,7 @@ export const mockPagePrix: ConseilPage = {
     image: 'https://www.hellopro.fr/images/page_conseil/3/9/0/scie-ruban-bois-157520.jpg',
     estimation: { min: 200, max: 13500, unit: '€ / place' },
   },
-  author: {
-    name: 'Myriam Soumah',
-    role: 'Responsable des contenus agricoles',
-    bio: "Diplômée d'une école d'ingénieur agronome, Myriam suit le secteur des bâtiments agricoles depuis plus de 10 ans. Elle accompagne les éleveurs dans leurs projets de construction.",
-    linkedinUrl: 'https://www.linkedin.com/in/myriam-soumah',
-    contactEmail: 'myriam.soumah@hellopro.fr',
-  },
+  updatedAt: 'Mis à jour le 28 avril 2026',
   blocks: [
     {
       id: 'b-resume',
@@ -62,6 +57,14 @@ export const mockPagePrix: ConseilPage = {
             text: 'PCAE, aides régionales et FEADER peuvent couvrir 20 à 40 % de l\'investissement.',
           },
         ],
+      },
+    },
+    {
+      id: 'b-premier-texte',
+      type: 'texte',
+      order: 1,
+      data: {
+        html: "Le prix de construction varie de 200 € à 13 500 € par place, selon le type d'élevage et les équipements.",
       },
     },
     {

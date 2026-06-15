@@ -14,12 +14,6 @@ export const mockPageTop: ConseilPage = {
       "Sélection des 10 fabricants actifs en France, retenus sur leur gamme, leurs caractéristiques techniques et leur capacité de service.",
     image: 'https://cdn.hellopro.fr/conseils/portes-industrielles-hero.jpg',
   },
-  author: {
-    name: 'Myriam Soumah',
-    role: 'Experte équipements industriels',
-    bio: 'Myriam suit le marché des fermetures industrielles depuis 8 ans et coordonne les comparatifs experts HelloPro.',
-    linkedinUrl: 'https://www.linkedin.com/in/myriam-soumah',
-  },
   blocks: [
     {
       id: 'b-resume',
@@ -32,6 +26,14 @@ export const mockPageTop: ConseilPage = {
           { label: 'Norme de référence', text: 'EN 13241 obligatoire pour toutes les portes industrielles sur le marché européen.' },
           { label: 'Budget moyen', text: 'Entre 2 500 € et 15 000 € pose comprise selon la dimension et les options.' },
         ],
+      },
+    },
+    {
+      id: 'b-premier-texte',
+      type: 'texte',
+      order: 1,
+      data: {
+        html: "Sélection des 10 fabricants actifs en France, retenus sur leur gamme, leurs caractéristiques techniques et leur capacité de service.",
       },
     },
     {

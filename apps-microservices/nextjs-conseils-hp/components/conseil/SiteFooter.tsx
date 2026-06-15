@@ -44,7 +44,7 @@ const FOOTER_COLUMNS = [
  */
 export function SiteFooter() {
   return (
-    <footer className="mt-16 border-t border-border bg-primary text-primary-foreground">
+    <footer className="min-[769px]:mt-16 border-t border-border bg-primary text-primary-foreground">
       <div className="mx-auto max-w-[1400px] px-4 py-12 lg:px-6">
         <div className="mb-10">
           <div className="inline-block rounded bg-white px-3 py-2">

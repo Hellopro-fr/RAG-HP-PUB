@@ -7,17 +7,18 @@ interface ImageBlockProps {
 
 export function ImageBlock({ data }: ImageBlockProps) {
   const w = data.width ?? 800;
-  const h = data.height ?? 450;
+  // +9 px : règle héritée du template PHP (getimagesize + 9)
+  const h = (data.height ?? 450) + 9;
 
   return (
-    <figure className="my-6">
+    <figure className="my-6 flex flex-col items-center">
       <div className="overflow-hidden rounded-xl">
         <Image
           src={data.src}
           alt={data.alt}
           width={w}
           height={h}
-          className="h-auto w-full object-cover"
+          className="h-auto max-w-full"
         />
       </div>
       {data.caption && (

@@ -1,4 +1,4 @@
-import type { ConseilBlock } from '@/types/conseils';
+import type { ConseilBlock, AoFormQuestion } from '@/types/conseils';
 import { H2Block } from './blocks/H2Block';
 import { H3Block } from './blocks/H3Block';
 import { TextBlock } from './blocks/TextBlock';
@@ -13,6 +13,8 @@ import { ImageImageBlock } from './blocks/ImageImageBlock';
 import { TypeSectionBlock } from './blocks/TypeSectionBlock';
 import { BrochureBlock } from './blocks/BrochureBlock';
 import { QuoteFormBlock } from './blocks/QuoteFormBlock';
+import { VideoBlock } from './blocks/VideoBlock';
+import { ProduitsBlock } from './blocks/ProduitsBlock';
 
 import type { H2BlockData } from '@/types/blocks/h2';
 import type { H3BlockData } from '@/types/blocks/h3';
@@ -28,6 +30,8 @@ import type { ImageImageBlockData } from '@/types/blocks/image-image';
 import type { TypeSectionBlockData } from '@/types/blocks/type-section';
 import type { BrochureBlockData } from '@/types/blocks/brochure';
 import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
+import type { VideoBlockData } from '@/types/blocks/video';
+import type { ProduitsBlockData } from '@/types/blocks/produits';
 
 /**
  * BlockRenderer — switch central qui mappe un bloc BO vers son composant.
@@ -36,7 +40,13 @@ import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
  * Couverture exhaustive garantie par le `never` dans le default.
  * Blocs Lot B (partenaire) restent en placeholder jusqu'à leur portage.
  */
-export function BlockRenderer({ block }: { block: ConseilBlock }) {
+interface BlockRendererProps {
+  block: ConseilBlock;
+  formulaire_ao?: AoFormQuestion | null;
+  infoRubrique?: { id: number; libelle: string } | null;
+}
+
+export function BlockRenderer({ block, formulaire_ao, infoRubrique }: BlockRendererProps) {
   switch (block.type) {
     // ── Lot A — Erick ──────────────────────────────────────────────────────
     case 'h2':
@@ -67,7 +77,13 @@ export function BlockRenderer({ block }: { block: ConseilBlock }) {
     case 'brochure':
       return <BrochureBlock data={block.data as unknown as BrochureBlockData} />;
     case 'quote-form':
-      return <QuoteFormBlock data={block.data as unknown as QuoteFormBlockData} />;
+      return (
+        <QuoteFormBlock
+          data={block.data as unknown as QuoteFormBlockData}
+          formulaire_ao={formulaire_ao}
+          infoRubrique={infoRubrique}
+        />
+      );
 
     case 'tableau-html':
       return <TableauHtmlBlock data={block.data as unknown as TableauHtmlBlockData} />;
@@ -83,14 +99,11 @@ export function BlockRenderer({ block }: { block: ConseilBlock }) {
     case 'image-image':
       return <ImageImageBlock data={block.data as unknown as ImageImageBlockData} />;
 
-    // ── Lot B — Partenaire (placeholders) ──────────────────────────────────
     case 'video':
+      return <VideoBlock data={block.data as unknown as VideoBlockData} />;
+
     case 'produits':
-      return (
-        <div className="my-4 rounded border border-dashed border-border p-4 text-sm text-muted-foreground">
-          [BlockRenderer] Type <code>{block.type}</code> — à implémenter (Lot B)
-        </div>
-      );
+      return <ProduitsBlock data={block.data as unknown as ProduitsBlockData} />;
 
     default: {
       const exhaustive: never = block.type;

@@ -14,12 +14,6 @@ export const mockPageAutre: ConseilPage = {
       "Autorisation de conduite, CACES, assurance et normes : tout ce qu'un exploitant de balayeuse doit savoir.",
     image: 'https://cdn.hellopro.fr/conseils/balayeuse-voirie-hero.jpg',
   },
-  author: {
-    name: 'Myriam Soumah',
-    role: 'Responsable des contenus agricoles',
-    bio: "Diplômée d'une école d'ingénieur agronome, Myriam suit le secteur des équipements de voirie depuis 10 ans.",
-    linkedinUrl: 'https://www.linkedin.com/in/myriam-soumah',
-  },
   blocks: [
     {
       id: 'b-resume',
@@ -33,6 +27,14 @@ export const mockPageAutre: ConseilPage = {
           { label: 'Assurance RC pro', text: 'Obligatoire pour couvrir les dommages matériels et corporels.' },
           { label: 'Norme NF EN 15429', text: 'Conformité européenne obligatoire pour la filtration, le bruit et les émissions.' },
         ],
+      },
+    },
+    {
+      id: 'b-premier-texte',
+      type: 'texte',
+      order: 1,
+      data: {
+        html: "Autorisation de conduite, CACES, assurance et normes : tout ce qu'un exploitant de balayeuse doit savoir.",
       },
     },
     {

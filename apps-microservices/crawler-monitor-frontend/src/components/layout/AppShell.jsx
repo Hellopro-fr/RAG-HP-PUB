@@ -23,6 +23,7 @@ export function AppShell({
   onLogout,
   onRefresh,
   isRefreshing = false,
+  wsConnected = true,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -72,6 +73,7 @@ export function AppShell({
           onOpenCommandPalette={() => setPaletteOpen(true)}
           onRefresh={onRefresh}
           isRefreshing={isRefreshing}
+          wsConnected={wsConnected}
         />
         {/* pb-16 réserve la hauteur de la BottomTabBar sur mobile */}
         <main className="flex-1 overflow-y-auto p-5 pb-16 sm:pb-5">

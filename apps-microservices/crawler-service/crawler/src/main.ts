@@ -109,6 +109,11 @@ const maxAbsErrors = parseNumericArg('maxAbsErrors', 'npm_config_maxabserrors', 
 const maxAbsRedirects = parseNumericArg('maxAbsRedirects', 'npm_config_maxabsredirects', 10);
 const maxAbsNew = parseNumericArg('maxAbsNew', 'npm_config_maxabsnew', 20);
 
+// External-redirect breaker (update mode) — spec 2026-06-09
+const externalRedirectBreakerEnabled = (getArg('externalRedirectBreaker', 'npm_config_externalredirectbreaker') || 'true').toLowerCase() === 'true';
+const maxExternalRedirectRate = parseNumericArg('maxExternalRedirectRate', 'npm_config_maxexternalredirectrate', 0.90);
+const externalRedirectMinSample = parseNumericArg('externalRedirectMinSample', 'npm_config_externalredirectminsample', 10);
+
 // Setup Context immediately
 context.config = {
     maxErrors,
@@ -136,7 +141,10 @@ context.config = {
         maxGrowthRate: maxGrowthRate,
         maxAbsErrors: maxAbsErrors,
         maxAbsRedirects: maxAbsRedirects,
-        maxAbsNew: maxAbsNew
+        maxAbsNew: maxAbsNew,
+        externalRedirectBreakerEnabled: externalRedirectBreakerEnabled,
+        maxExternalRedirectRate: maxExternalRedirectRate,
+        externalRedirectMinSample: externalRedirectMinSample
     }
 };
 
@@ -737,7 +745,8 @@ if (crawlMode === 'update') {
     const previousTotal = consolidationCounts.dataset;
     context.config.circuitBreaker.enabled = true;
     context.config.circuitBreaker.previousTotal = previousTotal;
-    context.config.circuitBreaker.isMicroMode = previousTotal < 50;
+    // We will not basing the Circuit Breaker using the number of URL anymore
+    // context.config.circuitBreaker.isMicroMode = previousTotal < 50;
     
     console.log(`\n🛡️ Circuit Breaker Configured:`);
     console.log(`   - Previous Total (Dataset): ${previousTotal}`);
@@ -967,6 +976,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const filtered_nonfr = await readStat("filtered_nonfr");
     const filtered_duplicate = await readStat("filtered_duplicate");
     const dropped_cb = await readStat("dropped_cb");
+    const external_redirects = await readStat("external_redirects");
     const timeout_individual = await readStat("timeout_individual");
     const success_extracted = await readStat("success");
 
@@ -991,6 +1001,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         filtered_nonfr,
         filtered_duplicate,
         dropped_cb,
+        external_redirects,
         timeout_individual,
         success_extracted,
         // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
@@ -1338,5 +1349,6 @@ if (typeCrawling == "sitemap") {
     });
 }
 
-// Normal completion
-await gracefulShutdown('COMPLETED', 2);
+// Normal completion. fatalExitCode is set by an in-handler fatal breaker
+// (e.g. domainChanged -> 7) so the run terminates as a failure; otherwise 2 (success).
+await gracefulShutdown('COMPLETED', context.fatalExitCode ?? 2);
