@@ -9,9 +9,26 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-const username = ref('')
+// French messages for the error codes the backend appends when it bounces a
+// failed OAuth2 login back to /login (see redirectLoginErr in the auth server).
+const ERROR_MESSAGES: Record<string, string> = {
+  credentials_error: "Nom d'utilisateur ou mot de passe incorrect.",
+  missing_credentials: 'Tous les champs sont obligatoires.',
+  user_blocked: 'Votre compte est bloqué. Contactez un administrateur.',
+  role_not_allowed: "Vous n'êtes pas autorisé à accéder à ce service.",
+}
+
+function queryParam(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+const username = ref(queryParam(route.query.username))
 const password = ref('')
-const errorMessage = ref('')
+const errorMessage = ref(
+  route.query.error
+    ? (ERROR_MESSAGES[queryParam(route.query.error)] ?? 'Erreur de connexion')
+    : '',
+)
 
 const oauthMode = computed(() =>
   Boolean(route.query.client_id && route.query.redirect_uri && route.query.code_challenge),
