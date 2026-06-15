@@ -32,7 +32,7 @@ const STYLE = `
 #hp-cmp .cookie-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-direction:column}
 #hp-cmp .cookie-logo-title{display:flex;align-items:center;gap:10px;justify-content:space-between;width:100%}
 #hp-cmp .cookie-logo{height:20px}
-#hp-cmp .cookie-header h2{margin:20px 0 0;font-size:18px;color:#FB5607;align-self:flex-start;display:block}
+#hp-cmp .cookie-header h2{margin:20px 0 0;font-size:18px;font-weight:700;color:#FB5607;align-self:flex-start;display:block}
 #hp-cmp .hp-cmp-link{font-size:12px;color:#888;text-decoration:underline;cursor:pointer;margin-left:auto;background:none;border:0;padding:0}
 #hp-cmp .hp-cmp-link:hover{color:#000}
 #hp-cmp .cookie-body p{font-size:14px;color:#333;line-height:1.6;margin:0 0 10px}
@@ -42,21 +42,29 @@ const STYLE = `
 #hp-cmp .cookie-button.accept{background:#FB5607;color:#fff;border:1px solid #FB5607}
 #hp-cmp .cookie-button:hover{background:#f5f5f5}
 #hp-cmp .cookie-button.accept:hover{background:#a83800}
-#hp-cmp .cookie-option{padding:10px 0;border-bottom:1px solid #f0f0f0;position:relative;flex-wrap:wrap}
+#hp-cmp .cookie-option{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;position:relative;flex-wrap:wrap}
 #hp-cmp .title-with-chevron{display:flex;align-items:center;gap:10px}
 #hp-cmp .toggle-description{background:none;border:none;cursor:pointer;padding:5px;display:flex;align-items:center}
-#hp-cmp .trigger-icon{width:15px;font-size:16px;display:inline-block;text-align:center}
+#hp-cmp .trigger-icon{width:15px;font-size:16px;display:inline-block;text-align:center;color:#333}
 #hp-cmp .trigger-icon::before{content:'+'}
 #hp-cmp .trigger-icon.ouvert::before{content:'-'}
-#hp-cmp .cookie-option span{font-size:14px;color:#333}
-#hp-cmp .description{margin-top:10px;font-size:12px;color:#666;line-height:1.4;background:#f5f6f7;padding:15px 10px;border-radius:4px}
-#hp-cmp .cookie_bloc_bouton{margin-top:10px}
-#hp-cmp .cookie_boutons{display:flex;gap:6px;align-items:center}
-#hp-cmp .btn_action_cookie{cursor:pointer;height:25px;box-shadow:1px 1px 0 0 rgba(0,0,0,.1);background:#fff;border:1px solid #eee;padding:0 20px;line-height:12px;font-size:12px;color:#757575;font-weight:700;transition:background-color .2s,border-color .2s;border-radius:4px;display:inline-flex;align-items:center;gap:6px}
+#hp-cmp .cookie-option > span{font-size:14px;color:#333}
+#hp-cmp .description{display:none;width:100%;margin-top:10px;font-size:12px;color:#666;line-height:1.4}
+#hp-cmp .cookie-option.ouvert .description{display:block;background:#f5f6f7;padding:20px 10px 70px;margin-top:0}
+#hp-cmp .cookie-option.requis_ouvert .description{display:inline-block;width:calc(100% - 225px);background:#f5f6f7;padding:20px 10px 10px;margin-top:0}
+#hp-cmp .cookie-option.ouvert .cookie_bloc_bouton{position:absolute;right:10px;bottom:25px}
+#hp-cmp .cookie_consentement{font-size:14px;padding-right:20px;display:none}
+#hp-cmp .cookie-option.ouvert .cookie_consentement{display:block}
+#hp-cmp .cookie_bloc_bouton .d-flex{display:flex;align-items:center;line-height:25px}
+#hp-cmp .cookie_boutons{display:flex;flex-direction:row;align-items:center;gap:5px}
+#hp-cmp .btn_action_cookie{cursor:pointer;height:25px;box-shadow:1px 1px 0 0 rgba(0,0,0,.1);background:#fff;border:1px solid #eee;padding:0 20px;line-height:12px;font-size:12px;color:#757575;font-weight:700;transition:background-color .2s,border-color .2s;border-radius:4px;position:relative;display:inline-flex;align-items:center;gap:6px}
 #hp-cmp .refuser_cookie.choisi{background:#e60000;color:#fff;border:1px solid rgba(0,0,0,.3)}
 #hp-cmp .accepter_cookie.choisi{background:#3d8548;color:#fff;border:1px solid rgba(0,0,0,.3)}
-#hp-cmp .cookie_requis{display:flex;margin:5px 0;text-transform:uppercase;font-size:14px;color:#526e7a}
-#hp-cmp .cookie-footer.params{flex-direction:column;align-items:flex-end;gap:12px}
+#hp-cmp .btn_action_cookie svg{display:none;position:absolute;left:5px}
+#hp-cmp .btn_action_cookie.choisi svg{display:block}
+#hp-cmp .bloc_cookie_requis{width:225px;display:flex;justify-content:flex-end}
+#hp-cmp .cookie_requis{text-transform:uppercase;font-size:14px;line-height:17px;color:#526e7a}
+#hp-cmp .cookie-footer.params{justify-content:flex-end;gap:12px;align-items:center}
 #hp-cmp .bloc_btn_action_cookie_tout{display:flex;gap:15px}
 #hp-cmp .text_param_cookie{margin-right:15px;font-style:italic;color:#757575;font-size:14px}
 #hp-cmp .btn_save_param_cookie:disabled{background:#fff !important;color:#B1B5C0 !important;border:1px solid #ccc;cursor:not-allowed}
@@ -142,21 +150,30 @@ export function CookieConsent() {
   function CatButtons({ value, onChange }: { value: Choice; onChange: (c: Choice) => void }) {
     return (
       <div className="cookie_bloc_bouton">
-        <div className="cookie_boutons">
-          <button
-            type="button"
-            className={`btn_action_cookie refuser_cookie${value === 'refuse' ? ' choisi' : ''}`}
-            onClick={() => onChange('refuse')}
-          >
-            Refuser
-          </button>
-          <button
-            type="button"
-            className={`btn_action_cookie accepter_cookie${value === 'accept' ? ' choisi' : ''}`}
-            onClick={() => onChange('accept')}
-          >
-            Accepter
-          </button>
+        <div className="d-flex">
+          <div className="cookie_consentement">Consentement</div>
+          <div className="cookie_boutons">
+            <button
+              type="button"
+              className={`btn_action_cookie refuser_cookie${value === 'refuse' ? ' choisi' : ''}`}
+              onClick={() => onChange('refuse')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 357 357" aria-hidden="true" focusable="false">
+                <polygon points="357,35.7 321.3,0 178.5,142.8 35.7,0 0,35.7 142.8,178.5 0,321.3 35.7,357 178.5,214.2 321.3,357 357,321.3 214.2,178.5" fill="#ffffff" />
+              </svg>
+              <span>Refuser</span>
+            </button>
+            <button
+              type="button"
+              className={`btn_action_cookie accepter_cookie${value === 'accept' ? ' choisi' : ''}`}
+              onClick={() => onChange('accept')}
+            >
+              <svg fill="none" stroke="#ffffff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>Accepter</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -228,7 +245,7 @@ export function CookieConsent() {
 
             <div className="cookie-body">
               {/* Essentiels — REQUIS */}
-              <div className="cookie-option">
+              <div className={`cookie-option${open.essential ? ' requis_ouvert' : ''}`}>
                 <div className="title-with-chevron">
                   <button
                     type="button"
@@ -238,20 +255,20 @@ export function CookieConsent() {
                     <span className={`trigger-icon${open.essential ? ' ouvert' : ''}`} aria-hidden="true" />
                   </button>
                   <span>Essentiels au fonctionnement du site</span>
-                  <span className="cookie_requis" style={{ marginLeft: 'auto' }}>Requis</span>
                 </div>
-                {open.essential && (
-                  <div className="description">
-                    Ces cookies sont indispensables pour assurer le bon fonctionnement de Hellopro.
-                    Ils permettent, par exemple, de maintenir votre session active lors de votre
-                    navigation ou de garantir l&apos;accès aux fonctionnalités principales du site.
-                    Ces cookies ne peuvent pas être désactivés.
-                  </div>
-                )}
+                <div className="description">
+                  Ces cookies sont indispensables pour assurer le bon fonctionnement de Hellopro.
+                  Ils permettent, par exemple, de maintenir votre session active lors de votre
+                  navigation ou de garantir l&apos;accès aux fonctionnalités principales du site.
+                  Ces cookies ne peuvent pas être désactivés.
+                </div>
+                <div className="bloc_cookie_requis">
+                  <div className="cookie_requis">Requis</div>
+                </div>
               </div>
 
               {/* Statistiques enrichies */}
-              <div className="cookie-option">
+              <div className={`cookie-option${open.stats ? ' ouvert' : ''}`}>
                 <div className="title-with-chevron">
                   <button
                     type="button"
@@ -262,18 +279,16 @@ export function CookieConsent() {
                   </button>
                   <span>Statistiques enrichies</span>
                 </div>
-                {open.stats && (
-                  <div className="description">
-                    Ces cookies nous aident à analyser et améliorer la performance de Hellopro. Ils
-                    permettent de comprendre quelles pages sont les plus consultées et d&apos;optimiser
-                    votre expérience de navigation sur le site.
-                  </div>
-                )}
+                <div className="description">
+                  Ces cookies nous aident à analyser et améliorer la performance de Hellopro. Ils
+                  permettent de comprendre quelles pages sont les plus consultées et d&apos;optimiser
+                  votre expérience de navigation sur le site.
+                </div>
                 <CatButtons value={stat} onChange={setStat} />
               </div>
 
               {/* Personnalisation de contenu */}
-              <div className="cookie-option">
+              <div className={`cookie-option${open.perso ? ' ouvert' : ''}`}>
                 <div className="title-with-chevron">
                   <button
                     type="button"
@@ -284,13 +299,11 @@ export function CookieConsent() {
                   </button>
                   <span>Personnalisation de contenu</span>
                 </div>
-                {open.perso && (
-                  <div className="description">
-                    Ces cookies adaptent les contenus et recommandations en fonction de votre activité
-                    sur le site. Par exemple, ils mettent en avant les solutions ou produits les plus
-                    pertinents pour vos besoins professionnels.
-                  </div>
-                )}
+                <div className="description">
+                  Ces cookies adaptent les contenus et recommandations en fonction de votre activité
+                  sur le site. Par exemple, ils mettent en avant les solutions ou produits les plus
+                  pertinents pour vos besoins professionnels.
+                </div>
                 <CatButtons value={perso} onChange={setPerso} />
               </div>
             </div>

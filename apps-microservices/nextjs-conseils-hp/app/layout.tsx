@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { CONSENT_MODE_INIT } from '@/lib/consent/consentMode';
 import { CookieConsent } from '@/components/conseil/CookieConsent';
+import { GtmUserEnricher } from '@/components/conseil/GtmUserEnricher';
 
 const GTM_ID = 'GTM-PBBSTMC';
 
@@ -51,6 +52,8 @@ export default function RootLayout({
           />
         </noscript>
         {children}
+        {/* Enrichit le dataLayer `user` (type/pays/service/id) pour les visiteurs identifiés */}
+        <GtmUserEnricher />
         {/* Bandeau de consentement RGPD (s'affiche si cookie hp_consent absent) */}
         <CookieConsent />
       </body>

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
+import { handleFormStepMessage } from '@/lib/analytics/formFunnelBridge';
 
 /**
  * Overlay iframe plein écran — Formulaire demande groupée HelloPro
@@ -69,6 +70,8 @@ export function IframeFormModal({
   onClose,
 }: IframeFormModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Étapes funnel déjà poussées (dédup), réinitialisées à chaque ouverture de la modale.
+  const pushedStepsRef = useRef<Set<string>>(new Set());
   const { attempt, formReady, markReady, handleIframeError } = useIframeAutoRetry({
     open,
     onClose,
@@ -94,10 +97,14 @@ export function IframeFormModal({
   /* postMessages */
   useEffect(() => {
     if (!open) return;
+    pushedStepsRef.current = new Set(); // reset dédup funnel à chaque ouverture
 
     function onMessage(e: MessageEvent) {
       if (e.origin !== 'https://www.hellopro.fr') return;
       const data = e.data as Record<string, unknown>;
+
+      /* 0. Étape funnel relayée par l'iframe → URI conseils + push dataLayer parent */
+      if (handleFormStepMessage(data, pushedStepsRef.current)) return;
 
       /* 1. Formulaire prêt → masquer le loader + pré-remplir step 1 */
       if (data?.type === 'hellopro_form_ready_for_minisite' && data?.loaded) {
