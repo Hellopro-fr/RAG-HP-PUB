@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { User, Lock, Loader2 } from 'lucide-vue-next'
+import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/client'
 
@@ -24,6 +24,7 @@ function queryParam(value: unknown): string {
 
 const username = ref(queryParam(route.query.username))
 const password = ref('')
+const showPassword = ref(false)
 const errorMessage = ref(
   route.query.error
     ? (ERROR_MESSAGES[queryParam(route.query.error)] ?? 'Erreur de connexion')
@@ -173,11 +174,21 @@ function ensureFilled(e: Event) {
                   id="p-oauth"
                   name="password"
                   v-model="password"
-                  type="password"
+                  :type="showPassword ? 'text' : 'password'"
                   required
                   placeholder="Entrez votre mot de passe"
-                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent pl-10 pr-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent pl-10 pr-10 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 />
+                <button
+                  type="button"
+                  @click="showPassword = !showPassword"
+                  :aria-label="showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                  :title="showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                >
+                  <EyeOff v-if="showPassword" class="w-4 h-4" />
+                  <Eye v-else class="w-4 h-4" />
+                </button>
               </div>
             </div>
 
@@ -221,11 +232,21 @@ function ensureFilled(e: Event) {
                 <input
                   id="p-admin"
                   v-model="password"
-                  type="password"
+                  :type="showPassword ? 'text' : 'password'"
                   required
                   placeholder="Entrez votre mot de passe"
-                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent pl-10 pr-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent pl-10 pr-10 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
                 />
+                <button
+                  type="button"
+                  @click="showPassword = !showPassword"
+                  :aria-label="showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                  :title="showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                >
+                  <EyeOff v-if="showPassword" class="w-4 h-4" />
+                  <Eye v-else class="w-4 h-4" />
+                </button>
               </div>
             </div>
 
