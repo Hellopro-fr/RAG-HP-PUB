@@ -6,6 +6,7 @@ import type { AoFormQuestion } from '@/types/conseils';
 import { IframeFormModal } from './IframeFormModal';
 import { useAoQuoteForm } from '@/hooks/useAoQuoteForm';
 import { AoChoixGrid } from './AoChoixGrid';
+import { pushQuoteFormFunnel } from '@/lib/analytics/gtm';
 
 interface HeroQuoteFormProps {
   question?: AoFormQuestion | null;
@@ -24,24 +25,8 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
       ([entry]) => {
         if (!entry.isIntersecting) return;
         observer.disconnect();
-
-        type GtmEntry = { product?: { category5?: string } } & Record<string, unknown>;
-        type GtmWindow = Window & { dataLayer?: GtmEntry[] };
-        const dl: GtmEntry[] = (window as GtmWindow).dataLayer ?? [];
-        const category5 = dl.find((d) => d.product?.category5)?.product?.category5 ?? '';
-
-        ((window as GtmWindow).dataLayer ??= []).push({
-          event: 'quote_form_funnel',
-          step_index: 0,
-          step_name: '1ere-question',
-          ...(stepNumber !== undefined ? { step_number: stepNumber } : {}),
-          funnel_devisplus: 'True',
-          funnel_context: 'header pages conseils',
-          user_known_status: 'Unknown',
-          'product.category5': category5,
-          step_type: '1ere-question',
-          page_location_uri: window.location.pathname + window.location.search,
-        });
+        // Funnel "1ere-question" — contexte Hero. Helper partagé (ajoute session_id + product.category5).
+        pushQuoteFormFunnel({ funnelContext: 'header pages conseils', stepNumber });
       },
       { threshold: 0.01 },
     );
