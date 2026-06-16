@@ -505,6 +505,11 @@ router.addDefaultHandler(
                                 proxy_used: maskProxyUrl(proxyUrl ?? undefined),
                                 status_code: response?.status() || 0,
                                 captcha: challengeService,
+                                // Anti-bot challenge = retryable (fresh session/proxy may pass),
+                                // consistent with the non-permanent-challenge "will retry" path in
+                                // functions.ts. Explicit so a same-id restart re-attempts the homepage
+                                // instead of falling into the legacy missing-class default.
+                                failure_class: "transient",
                                 timestamp: new Date().toISOString()
                             });
                         }
