@@ -53,6 +53,14 @@ interface IframeFormModalProps {
   withPrev?: boolean;
   /** Paramètres supplémentaires à ajouter tels quels à l'URL iframe (ex: soc, origine…) */
   extraParams?: Record<string, string>;
+  /**
+   * Le bloc appelant a déjà poussé lui-même l'étape 1 du funnel (`1ere-question`) — cas du
+   * Hero et du bloc QuoteForm, qui affichent la 1re question inline et la mesurent au scroll.
+   * → on déduplique l'étape 1 relayée par l'iframe (sinon double comptage quand la modale
+   * démarre à l'étape 1 sans pré-remplissage). Les blocs qui ne poussent pas (TexteImage, CTA)
+   * laissent l'iframe mesurer l'étape 1.
+   */
+  ownsStep1?: boolean;
   open: boolean;
   onClose: () => void;
 }
@@ -66,6 +74,7 @@ export function IframeFormModal({
   startFromStep1 = false,
   withPrev = false,
   extraParams,
+  ownsStep1 = false,
   open,
   onClose,
 }: IframeFormModalProps) {
@@ -97,7 +106,8 @@ export function IframeFormModal({
   /* postMessages */
   useEffect(() => {
     if (!open) return;
-    pushedStepsRef.current = new Set(); // reset dédup funnel à chaque ouverture
+    // reset dédup funnel à chaque ouverture ; si le bloc possède déjà l'étape 1, on la pré-marque
+    pushedStepsRef.current = new Set(ownsStep1 ? ['1ere-question'] : []);
 
     function onMessage(e: MessageEvent) {
       if (e.origin !== 'https://www.hellopro.fr') return;
