@@ -60,6 +60,11 @@ jobs:
       health_check_path: /health
       # Env vars non-sensibles (valeurs validées depuis VM GPU prod conteneur account-service-backend - 2026-06-09)
       # MYSQL_HOST/API_CATALOG_GRPC : IP interne VM GPU 10.11.0.2. À remplacer par DNS interne (D3 - Phase ultérieure).
+      # API_CATALOG_GRPC port 19100 (et non 9100) : le port 9100 host VM est occupé par node_exporter Prometheus.
+      # Le conteneur api-catalog-service expose 9100/9101 en interne Docker mais bind 10.11.0.2:19100->9100
+      # côté host pour permettre l'appel gRPC depuis Cloud Run via VPC Connector. Firewall GCP dédié :
+      # allow-cr-eu-to-vm-gpu-api-catalog (source=10.0.2.0/28, target_sa=vm-gpu-runtime, tcp:19100,19101).
+      # Réf : T001-S003-000 / F-HP-NGINX-001 résolution gRPC frame error 2026-06-15.
       # JWT_AUDIENCE : URL complète https://www.hellopro.fr (validation JWT cross-service, partagé avec api-gateway).
       # SLACK_ENV_LABEL : dev-cr-poc pour identifier explicitement le POC dans les notifs Slack (vs prod sur VM GPU).
       env_vars_json: |
@@ -83,7 +88,7 @@ jobs:
           "LOGOUT_WEBHOOK_RETRIES": "3",
           "SECURE_COOKIE": "true",
           "SLACK_ENV_LABEL": "dev-cr-poc",
-          "API_CATALOG_GRPC": "10.11.0.2:9100"
+          "API_CATALOG_GRPC": "10.11.0.2:19100"
         }
       # Secrets montés depuis Secret Manager (cf. Phase C.2 - 7 secrets dédiés)
       secret_env_vars_json: |
