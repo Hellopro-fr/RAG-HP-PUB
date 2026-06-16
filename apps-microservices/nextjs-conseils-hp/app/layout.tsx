@@ -12,6 +12,9 @@ export const metadata: Metadata = {
     template: '%s | HelloPro',
   },
   description: 'Guides, conseils et comparatifs pour vos achats professionnels.',
+  // Favicon servi depuis /images/ (déjà routé vers le Next par le reverse proxy),
+  // au lieu du /icon.svg racine (non routé). app/icon.svg est supprimé (voir ci-dessous).
+  icons: { icon: '/images/favicon.svg' },
   // <meta name="author" content="Hellopro">
   authors: [{ name: 'Hellopro' }],
   // <meta name="robots" content="index, follow">
