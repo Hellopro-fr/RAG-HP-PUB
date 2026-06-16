@@ -31,6 +31,7 @@ import {
     shouldCapTimeoutRetry,
     PERMANENT_ERROR_MARKERS,
     classifyFailure,
+    selectReclaimableIds,
     type FailureClass,
 } from "./httpStatusPolicy.js";
 
@@ -1632,10 +1633,12 @@ export const reclaimFailedRequest = async (name: string) => {
     const requestQueue = await RequestQueue.open(name);
     let reclaimedCount = 0;
 
-    await dataset.forEach(async (item) => {
-        const requestID = item["id"];
-        if (!requestID) return;
+    const { items } = await dataset.getData();
+    const { reclaim, skippedPermanent } = selectReclaimableIds(
+        items as Array<{ id?: string; failure_class?: string }>,
+    );
 
+    for (const requestID of reclaim) {
         try {
             const request = await requestQueue.getRequest(requestID);
             if (request) {
@@ -1648,14 +1651,14 @@ export const reclaimFailedRequest = async (name: string) => {
         } catch (e) {
             console.error(`Failed to reclaim request ${requestID}: ${e}`);
         }
-    });
+    }
 
-    console.log(`Successfully reclaimed ${reclaimedCount} requests.`);
+    console.log(`Reclaimed ${reclaimedCount} recoverable requests, skipped ${skippedPermanent} permanent.`);
     if (reclaimedCount > 0) {
         await dropDataset(errorDatasetName);
         console.log(`Reclaimed ${reclaimedCount} items, dropped error dataset.`);
     } else {
-        console.warn(`No items reclaimed — keeping error dataset '${errorDatasetName}' for debugging.`);
+        console.warn(`No recoverable items — keeping error dataset '${errorDatasetName}' for debugging.`);
     }
 };
 

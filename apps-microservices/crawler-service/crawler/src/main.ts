@@ -4,6 +4,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import os from 'os';
 import { router } from "./routes.js";
+import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery } from "./httpStatusPolicy.js";
 import {
     getPathAfterDomain,
     getScrapingData,
@@ -792,6 +793,18 @@ if (crawlMode === 'update') {
     console.log("RequestQueueNotEmpty");
 }
 
+// Auto-recover recoverable (infra/transient) failures from a prior run BEFORE the
+// queue-health early-exit, so a same-id restart re-crawls proxy/network victims
+// instead of exiting "already completed". Default-on; RECOVER_FAILED_ON_RESTART=false
+// reverts to the prior behavior. Spec: 2026-06-16-crawler-failure-recovery-design.md
+if (shouldRunRecovery(RECOVER_FAILED_ON_RESTART, typeCrawling ?? "")) {
+    try {
+        await reclaimFailedRequest(domain);
+    } catch (e) {
+        console.warn(`⚠️ auto-recovery skipped for ${domain}: ${e}`);
+    }
+}
+
 // --- QUEUE HEALTH CHECK ---
 // Intelligent queue state detection using handled/pending/total counts
 const queueInfo = await requestQueue.getInfo();
@@ -1126,12 +1139,8 @@ if (typeCrawling == "sitemap") {
 } else if (typeCrawling == "generate_data") {
     // ... logic for generate data ...
 } else {
-    // Reclaim failed request
-    try {
-        await reclaimFailedRequest(domain);
-    } catch (error) {
-        console.warn(`⚠️ Warning: Failed to reclaim failed requests for ${domain}. The crawler will continue without them. Error: ${error}`);
-    }
+    // Failed-request recovery now runs earlier (before the queue-health check) so it
+    // is reachable for completed crawls — see the RECOVER_FAILED_ON_RESTART block above.
 
     // Pre-flight: Configure Global Crawlee Memory Limit
     // This ensures AutoscaledPool sees the REAL container limit, not host memory
