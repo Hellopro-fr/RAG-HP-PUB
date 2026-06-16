@@ -10,5 +10,7 @@
   {"in": "https://wwww.x.fr/p", "out": "wwww.x.fr/p"},
   {"in": "https://x.fr/p%2Fa", "out": "x.fr/p%2Fa"},
   {"in": "https://X.FR/Path/Mixed", "out": "x.fr/Path/Mixed"},
-  {"in": "https://x.fr/p?", "out": "x.fr/p"}
+  {"in": "https://x.fr/p?", "out": "x.fr/p"},
+  {"in": "https://x.fr/références/", "out": "x.fr/références"},
+  {"in": "https://www.x.fr/catégorie/œuf", "out": "x.fr/catégorie/œuf"}
 ]

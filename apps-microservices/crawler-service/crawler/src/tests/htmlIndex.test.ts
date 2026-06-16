@@ -23,7 +23,7 @@ const fixtureUrl = new URL('./fixtures/url_normalization_cases.json', import.met
 const cases: NormalizationCase[] = JSON.parse(fs.readFileSync(fixtureUrl, 'utf-8'));
 
 test('normalizeUrl: matches the PHP contract for all fixture cases (byte-identical)', () => {
-    assert.equal(cases.length, 12, 'fixture must contain exactly 12 contract cases');
+    assert.equal(cases.length, 14, 'fixture case count must match (keep in sync with the PHP fixture url_normalization_cases.json)');
     for (const c of cases) {
         assert.equal(normalizeUrl(c.in), c.out, `normalizeUrl(${JSON.stringify(c.in)})`);
     }
@@ -69,6 +69,38 @@ test('buildHtmlIndex: fail-open — missing dataset dir does not throw', () => {
         });
         const out = path.join(tmp, 'storage', 'datasets', 'nonexistent.fr', 'html_index.json');
         assert.ok(!fs.existsSync(out), 'no index should be written for a missing domain dir');
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('buildHtmlIndex: two-dir — indexes both {domain} and update-{domain}', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'htmlindex-twodir-'));
+    try {
+        const mainDir = path.join(tmp, 'storage', 'datasets', 'y.fr');
+        const updateDir = path.join(tmp, 'storage', 'datasets', 'update-y.fr');
+        fs.mkdirSync(mainDir, { recursive: true });
+        fs.mkdirSync(updateDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(mainDir, '000000001.json'),
+            JSON.stringify({ url: 'https://y.fr/a', content: '<html>A</html>' }),
+        );
+        fs.writeFileSync(
+            path.join(updateDir, '000000001.json'),
+            JSON.stringify({ url: 'https://y.fr/b', content: '<html>B</html>' }),
+        );
+
+        buildHtmlIndex(tmp, 'y.fr');
+
+        const mainOut = path.join(mainDir, 'html_index.json');
+        const updateOut = path.join(updateDir, 'html_index.json');
+        assert.ok(fs.existsSync(mainOut), 'html_index.json should be written in y.fr');
+        assert.ok(fs.existsSync(updateOut), 'html_index.json should be written in update-y.fr');
+
+        const mainWritten = JSON.parse(fs.readFileSync(mainOut, 'utf-8'));
+        const updateWritten = JSON.parse(fs.readFileSync(updateOut, 'utf-8'));
+        assert.equal(mainWritten.index['y.fr/a'], '000000001.json');
+        assert.equal(updateWritten.index['y.fr/b'], '000000001.json');
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
