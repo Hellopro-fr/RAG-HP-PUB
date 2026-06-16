@@ -741,8 +741,8 @@ services:
       - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
       # ── API Catalog (route source) ───────────────────────────────────────
       - GATEWAY_USE_CATALOG=${GATEWAY_USE_CATALOG:-true}
-      # - API_CATALOG_GRPC=${API_CATALOG_GRPC:-api-catalog-service:9100}
-      - API_CATALOG_GRPC=${API_CATALOG_GRPC:-${GKE_HOST}:19100}
+      - API_CATALOG_GRPC=${API_CATALOG_GRPC:-api-catalog-service:9100}
+      # - API_CATALOG_GRPC=${API_CATALOG_GRPC:-${GKE_HOST}:19100}
       - CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL:-5s}
       - CATALOG_DIAL_TIMEOUT=${CATALOG_DIAL_TIMEOUT:-3s}
     # depends_on:
@@ -2564,8 +2564,8 @@ services:
       # the backend pushes users to the gateway with the same shared secret)
       MCP_GATEWAY_INTERNAL_URL: ${MCP_GATEWAY_INTERNAL_URL:-http://mcp-gateway-service:8592}
       # API Catalog (broker)
-      # API_CATALOG_GRPC: ${API_CATALOG_GRPC:-api-catalog-service:9100}
-      API_CATALOG_GRPC: ${API_CATALOG_GRPC:-${GKE_HOST}:19100}
+      API_CATALOG_GRPC: ${API_CATALOG_GRPC:-api-catalog-service:9100}
+      # API_CATALOG_GRPC: ${API_CATALOG_GRPC:-${GKE_HOST}:19100}
       CATALOG_ADMIN_KEY: ${CATALOG_ADMIN_KEY:-dev-catalog-key}
     restart: unless-stopped
     networks:
