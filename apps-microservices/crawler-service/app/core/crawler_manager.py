@@ -546,6 +546,13 @@ class CrawlerManager:
                         f"instead of starting fresh.")
             try:
                 await self.unstash_crawl(prior_job_info)
+                # unstash_crawl cleared stashed_at in Redis, but it operates on a re-fetched
+                # blob — NOT this in-memory job_data (which still carries the stashed_at copied
+                # in above for the unstash TOCTOU). Pop it here so the pid/status patch below
+                # (set_json) and the monitor's later terminal write do not re-persist a phantom
+                # stashed_at into the gen-2 blob. Left in place, /results on a sibling replica
+                # would re-unstash an already-deleted GCS stash tar and return 502.
+                job_data.pop("stashed_at", None)
             except HTTPException:
                 await _rollback_claim(decrement_counter=True)
                 raise
