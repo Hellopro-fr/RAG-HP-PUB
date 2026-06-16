@@ -362,6 +362,24 @@ async def download_crawl_results(
         logger.error(f"Error generating results for crawl '{job_info.get('crawl_id')}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate results archive.")
 
+@router.get("/html/{crawl_id}")
+async def get_single_html(
+    url: str = Query(..., description="Full URL whose HTML to extract from the crawl dataset."),
+    job_info: dict = Depends(get_job_or_recover)
+):
+    """
+    Returns ONE URL's HTML from a crawl as JSON (not a tar), serving the cold tier
+    transparently: hot local data, a stashed crawl (inline-unstashed from GCS), or an
+    archived crawl (retrieved + extracted from GCS). Lets the PHP side — which has no
+    GCS access — fetch cold-tier HTML over REST. 404 if the URL is not in the crawl.
+    """
+    crawl_id = job_info['crawl_id']
+    content = await crawler_manager.get_single_url_html(job_info, url)
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"URL not found in crawl '{crawl_id}'.")
+    return {"url": url, "content": content}
+
 @router.post("/archive/{crawl_id}", response_model=ArchiveResponse)
 async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
