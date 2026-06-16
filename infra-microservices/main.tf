@@ -71,6 +71,35 @@ resource "google_compute_firewall" "allow-intra-lan" {
 }
 
 # -----------------------------------------------------------------------------
+# F-HP-NGINX-001 / T001-S003-000 - Cloud Run -> VM GPU api-catalog gRPC
+# Cree manuellement le 2026-06-15 pour debloquer la route /admin/api du POC #1.
+# Importer dans le state via :
+#   terraform import google_compute_firewall.allow_cr_eu_to_vm_gpu_api_catalog \
+#     projects/hellopro-rag-project/global/firewalls/allow-cr-eu-to-vm-gpu-api-catalog
+# Source : VPC Connector eu-west1 (range 10.0.2.0/28).
+# Target : SA de la VM GPU vm-gpu-runtime@ (cible precise sans tags).
+# Ports : 19100/19101 = mapping hote dedie pour api-catalog-service
+#         (9100 hote = node_exporter, conserver ; conteneur ecoute 9100/9101 en interne Docker).
+# -----------------------------------------------------------------------------
+resource "google_compute_firewall" "allow_cr_eu_to_vm_gpu_api_catalog" {
+  name        = "allow-cr-eu-to-vm-gpu-api-catalog"
+  network     = module.vpc.vpc_name
+  direction   = "INGRESS"
+  priority    = 1000
+  description = "POC#1 Sprint S003: Allow Cloud Run eu-west1 VPC Connector to reach api-catalog gRPC on VM GPU (T001-S003-000)"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["19100", "19101"]
+  }
+
+  source_ranges = ["10.0.2.0/28"]
+  target_service_accounts = [
+    "vm-gpu-runtime@${var.project_id}.iam.gserviceaccount.com"
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # GKE Cluster
 # -----------------------------------------------------------------------------
 module "gke_cluster" {
@@ -312,6 +341,21 @@ resource "google_project_iam_member" "devops_infra_sa_viewer" {
 resource "google_project_iam_member" "devops_infra_sa_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
+  member  = "serviceAccount:devops-infra-sa@${var.project_id}.iam.gserviceaccount.com"
+}
+
+# -----------------------------------------------------------------------------
+# F-HP-IAM-004 remediation - Sprint 003 (2026-06-15)
+# devops-infra-sa doit pouvoir creer/manage les regles firewall GCP (compute.firewalls.*).
+# Decouvert lors de la creation de allow-cr-eu-to-vm-gpu-api-catalog pour debloquer
+# l'appel gRPC CR -> VM GPU api-catalog-service (POC #1 route /admin/api).
+# Importer dans le state via :
+#   terraform import google_project_iam_member.devops_infra_sa_compute_security_admin \
+#     "hellopro-rag-project roles/compute.securityAdmin serviceAccount:devops-infra-sa@hellopro-rag-project.iam.gserviceaccount.com"
+# -----------------------------------------------------------------------------
+resource "google_project_iam_member" "devops_infra_sa_compute_security_admin" {
+  project = var.project_id
+  role    = "roles/compute.securityAdmin"
   member  = "serviceAccount:devops-infra-sa@${var.project_id}.iam.gserviceaccount.com"
 }
 
