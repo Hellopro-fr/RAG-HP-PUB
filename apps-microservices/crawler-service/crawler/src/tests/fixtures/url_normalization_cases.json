@@ -1,0 +1,14 @@
+[
+  {"in": "http://www.x.fr/p/a/", "out": "x.fr/p/a"},
+  {"in": "https://x.fr/p/a", "out": "x.fr/p/a"},
+  {"in": "https://X.FR/P/a#frag", "out": "x.fr/P/a"},
+  {"in": "http://x.fr/p?q=1", "out": "x.fr/p?q=1"},
+  {"in": "  http://x.fr/p/  ", "out": "x.fr/p"},
+  {"in": "not a url", "out": "not a url"},
+  {"in": "https://x.fr:8443/p/a", "out": "x.fr/p/a"},
+  {"in": "https://www2.x.fr/p", "out": "www2.x.fr/p"},
+  {"in": "https://wwww.x.fr/p", "out": "wwww.x.fr/p"},
+  {"in": "https://x.fr/p%2Fa", "out": "x.fr/p%2Fa"},
+  {"in": "https://X.FR/Path/Mixed", "out": "x.fr/Path/Mixed"},
+  {"in": "https://x.fr/p?", "out": "x.fr/p"}
+]
