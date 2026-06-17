@@ -1,0 +1,78 @@
+name: 'Deploy — content-extractor-api-service'
+
+# Wrapper minimal qui appelle deploy-cloud-run.yml avec les inputs spécifiques
+# au service content-extractor-api-service (Python FastAPI, port 8600).
+#
+# Ticket : 001-INFRA-GCP-ARCHI — Sprint S003 Batch 1 (#1 du Top 7 CR-ready)
+# Mode : POC étendu — ingress=all + allow_unauthenticated=true, JWT applicatif
+#        absent (le service est utilitaire pur HTML cleaning + extraction).
+#        Trade-off accepté : durcissement S004 via Cloud Armor + Internal LB.
+# Référence : Docs/DevSecOps/TICKETS/001-MIGRATION-ARCHI/sprint_003_artifacts/cloud-run-readiness-matrix.md
+
+on:
+  push:
+    branches:
+      # Phase POC étendu (Sprint S003) : uniquement les branches migration déclenchent un deploy auto.
+      # main + features/poc à réactiver en S006 (CI/CD consolidation + branch protection).
+      - 'feat/migration-**'
+      # - main                       # TODO S006 : réactiver pour CD prod
+      # - features/poc               # TODO S006 : réactiver après validation POC
+      # - features/infra-gcp-prod    # TODO : réactiver si push de la branche infra centralisée
+    paths:
+      - 'apps-microservices/content-extractor-api-service/**'
+      - 'libs/common-utils/**'   # HeaderFooterExtractor dépendance directe
+      - '.github/workflows/deploy-content-extractor-api-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+# Permissions requises par le workflow réutilisable deploy-cloud-run.yml
+# (sinon GHA refuse l'appel : "is requesting 'id-token: write', but is only allowed 'id-token: none'")
+permissions:
+  id-token: write   # Pour WIF OIDC vers GCP
+  contents: read    # Pour checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy content-extractor-api-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: content-extractor-api-service
+      dockerfile_path: apps-microservices/content-extractor-api-service/Dockerfile
+      # Build context = racine du repo car le Dockerfile fait `COPY libs/common-utils`.
+      # Sans .dockerignore, le build envoie tout le repo au daemon — acceptable POC.
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      # POC étendu : ingress=all + allow_unauthenticated=true
+      # Justification : service utilitaire pur (clean HTML, extract header/footer), AUCUN JWT
+      # applicatif dans le code. Pour la migration, on garde ce comportement (api-gateway VM
+      # appelle l'URL CR publique directement). Durcissement S004 via Cloud Armor + LB interne.
+      # Mitigations financières : max_instances=3, cpu=1, memory=512Mi (borne DoS/abus compute).
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      container_port: 8600
+      # Pas de VPC Connector : aucune dépendance interne (Redis, MySQL, Milvus, RabbitMQ).
+      health_check_path: /health
+      # Env vars : valeurs identiques au docker-compose.yml ligne 607-610 (PORT 8600,
+      # LOG_LEVEL info, MAX_PAYLOAD_SIZE_MB 10).
+      env_vars_json: |
+        {
+          "PORT": "8600",
+          "LOG_LEVEL": "info",
+          "MAX_PAYLOAD_SIZE_MB": "10"
+        }
+      # Aucun secret Secret Manager : 0 secret confirmé par audit CR-readiness matrix.
+      secret_env_vars_json: '{}'
+    secrets:
+      # Slack webhook pour notif post-deploy (anticipation F-HP-ARCH-001 - platform-migration-slack-webhook-url)
+      # À configurer en repo secret SLACK_WEBHOOK_URL (skip si absent).
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
