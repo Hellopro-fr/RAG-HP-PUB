@@ -51,7 +51,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
           <span className="font-semibold text-foreground">Recevez jusqu&apos;à 3 devis gratuits</span>
         </div>
         <p className="mb-3 text-xs text-muted-foreground">
-          En 30 secondes, sans engagement. Comparez les meilleurs constructeurs de France.
+          En 30 secondes, sans engagement. Comparez les meilleurs fournisseurs.
         </p>
         <h3 className="mb-3 text-sm font-bold text-foreground">
           {questionLabel}
@@ -95,7 +95,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
             <Star className="h-3.5 w-3.5 fill-rating/40 text-rating" />
           </div>
           <span className="font-semibold text-foreground">4,2/5</span>
-          <span className="text-muted-foreground">&nbsp;· 9 697 avis vérifiés</span>
+          <span className="text-muted-foreground">&nbsp;· 222 avis vérifiés</span>
         </div>
       </div>
 
