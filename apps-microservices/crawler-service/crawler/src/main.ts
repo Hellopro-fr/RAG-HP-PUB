@@ -684,8 +684,7 @@ if (crawlMode === 'update') {
     // --- URL CONSOLIDATION (Epic 1) ---
     // Load URLs from 3 sources and deduplicate with strict priority:
     // Dataset > Request_queue > Request_url
-    const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-    const consolidator = new UrlConsolidator(redisUrl, id, previousCrawlId, domain);
+    const consolidator = new UrlConsolidator(sharedRedis, id, previousCrawlId, domain);
     await consolidator.connect();
     context.urlConsolidator = consolidator;
 
