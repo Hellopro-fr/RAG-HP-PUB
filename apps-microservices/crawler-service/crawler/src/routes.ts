@@ -24,7 +24,7 @@ import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypass
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
-import { classifyHttpStatus } from "./httpStatusPolicy.js";
+import { classifyHttpStatus, pdfDatasetName } from "./httpStatusPolicy.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -313,6 +313,23 @@ router.addDefaultHandler(
         if (response) {
             const contentType = (response.headers()['content-type'] || '').toLowerCase();
             if (contentType && !contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/xhtml')) {
+                // Unified PDF/download accounting (mirrors functions.ts failedRequestHandler):
+                // count under filtered_pdf + record in the pdf-{domain} dataset so inline
+                // (rendered) PDFs are tracked the same as download-triggering ones. This guard
+                // already skips inline non-HTML today, so accounting is independent of SKIP_DOWNLOADS.
+                if (context.statsManager) {
+                    await context.statsManager.increment("filtered_pdf");
+                }
+                const pdfDataset = await Dataset.open(
+                    pdfDatasetName(context.config.crawleeStorageName, targetDomain),
+                );
+                await pdfDataset.pushData({
+                    url,
+                    source: request.userData.source ?? "",
+                    status: response.status(),
+                    content_type: contentType,
+                    timestamp: new Date().toISOString(),
+                });
                 log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
                 return;
             }
