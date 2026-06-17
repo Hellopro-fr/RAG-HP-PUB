@@ -29,6 +29,10 @@ import {
     NAVIGATION_WAIT_UNTIL,
     TIMEOUT_MAX_RETRIES,
     shouldCapTimeoutRetry,
+    PERMANENT_ERROR_MARKERS,
+    classifyFailure,
+    selectReclaimableIds,
+    type FailureClass,
 } from "./httpStatusPolicy.js";
 
 /**
@@ -551,19 +555,11 @@ export const startCrawler = async (
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
-            // Détection des erreurs permanentes — inutile de réessayer
-            // Aligné avec api-detection-langue-fr (redirect_tracker.py _NON_RETRYABLE_ERRORS)
-            const NON_RETRYABLE_ERRORS = [
-                'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
-                'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
-                'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
-                'ERR_TOO_MANY_REDIRECTS',    // Boucle de redirection infinie
-                'Download is starting',      // Playwright binary download trigger
-                'net::ERR_ABORTED',          // Navigation aborted (often binary content)
-                'Execution context was destroyed', // Page destroyed during download
-            ];
+            // Détection des erreurs permanentes — inutile de réessayer.
+            // Markers live in httpStatusPolicy.ts (PERMANENT_ERROR_MARKERS) so the
+            // handler and classifyFailure share one source of truth (DRY).
             const errorStr = String(request.errorMessages);
-            const isPermanentError = NON_RETRYABLE_ERRORS.some(err => errorStr.includes(err));
+            const isPermanentError = PERMANENT_ERROR_MARKERS.some((err) => errorStr.includes(err));
             if (isPermanentError) {
                 request.noRetry = true;
                 log.warning(`Permanent error detected for ${request.url} — no retry`);
@@ -669,7 +665,15 @@ export const startCrawler = async (
                 context.crawlErrorMessage = `Page d'accueil inaccessible après ${request.retryCount} tentatives: ${errorSummary}`;
             }
 
-            // Save rich error info
+            // Save rich error info. failure_class drives auto-recovery on restart:
+            // request.noRetry is the authoritative "permanent" signal (set by routes.ts
+            // permanent status, PERMANENT_ERROR_MARKERS, the timeout cap, or a permanent
+            // WAF block); only the retried-but-exhausted bucket is refined by classifyFailure.
+            // Spec: docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md
+            const status = response?.status() || 0;
+            const failureClass: FailureClass = request.noRetry
+                ? "permanent"
+                : classifyFailure(errorStr, status);
             let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${domain}`;
             let dataset = await Dataset.open(datasetName);
             await dataset.pushData({
@@ -677,8 +681,9 @@ export const startCrawler = async (
                 url: request.url,
                 errors: request.errorMessages,
                 proxy_used: maskProxyUrl(proxyInfo?.url),
-                status_code: response?.status() || 0,
+                status_code: status,
                 captcha: captchaDetected,
+                failure_class: failureClass,
                 timestamp: new Date().toISOString()
             });
         },
@@ -1628,10 +1633,12 @@ export const reclaimFailedRequest = async (name: string) => {
     const requestQueue = await RequestQueue.open(name);
     let reclaimedCount = 0;
 
-    await dataset.forEach(async (item) => {
-        const requestID = item["id"];
-        if (!requestID) return;
+    const { items } = await dataset.getData();
+    const { reclaim, skippedPermanent } = selectReclaimableIds(
+        items as Array<{ id?: string; failure_class?: string }>,
+    );
 
+    for (const requestID of reclaim) {
         try {
             const request = await requestQueue.getRequest(requestID);
             if (request) {
@@ -1644,14 +1651,14 @@ export const reclaimFailedRequest = async (name: string) => {
         } catch (e) {
             console.error(`Failed to reclaim request ${requestID}: ${e}`);
         }
-    });
+    }
 
-    console.log(`Successfully reclaimed ${reclaimedCount} requests.`);
+    console.log(`Reclaimed ${reclaimedCount} recoverable requests, skipped ${skippedPermanent} permanent.`);
     if (reclaimedCount > 0) {
         await dropDataset(errorDatasetName);
         console.log(`Reclaimed ${reclaimedCount} items, dropped error dataset.`);
     } else {
-        console.warn(`No items reclaimed — keeping error dataset '${errorDatasetName}' for debugging.`);
+        console.warn(`No recoverable items — keeping error dataset '${errorDatasetName}' for debugging.`);
     }
 };
 

@@ -66,3 +66,101 @@ export const NAVIGATION_WAIT_UNTIL: NavigationWaitUntil =
     resolveNavigationWaitUntil(process.env.NAVIGATION_WAIT_UNTIL);
 export const TIMEOUT_MAX_RETRIES: number =
     resolveTimeoutMaxRetries(process.env.TIMEOUT_MAX_RETRIES);
+
+// ---------------------------------------------------------------------------
+// Failure classification & auto-recovery on restart
+// Spec: docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md
+// ---------------------------------------------------------------------------
+
+export type FailureClass = "permanent" | "transient" | "infra" | "unknown";
+
+/**
+ * Transport-layer error markers that mean "retrying yields the same result".
+ * Single source of truth — also consumed by functions.ts failedRequestHandler
+ * (DRY; replaces the inline NON_RETRYABLE_ERRORS list).
+ */
+export const PERMANENT_ERROR_MARKERS: readonly string[] = [
+    "ERR_NAME_NOT_RESOLVED",      // domain does not exist
+    "ERR_CERT_DATE_INVALID",      // expired TLS cert
+    "ERR_SSL_PROTOCOL_ERROR",     // incompatible TLS
+    "ERR_TOO_MANY_REDIRECTS",     // redirect loop
+    "Download is starting",       // Playwright binary-download trigger
+    "net::ERR_ABORTED",           // navigation aborted (often binary content)
+    "Execution context was destroyed", // page destroyed during download
+];
+
+/**
+ * Transport/connection faults on OUR side (proxy gateway, network) — recoverable.
+ * NOTE: NS_ERROR_ABORT and "browserController.newPage() failed" are intentionally
+ * excluded (ambiguous: binary-download abort / poison URL) → classified "unknown"
+ * → not auto-recovered. Deferred infra-marker candidates.
+ */
+const INFRA_ERROR_MARKERS: readonly string[] = [
+    "NS_ERROR_PROXY_CONNECTION_REFUSED",
+    "NS_ERROR_PROXY_",
+    "NS_ERROR_CONNECTION_REFUSED",
+    "NS_ERROR_NET_",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "socket hang up",
+];
+
+/**
+ * Classifies a failed request from its error string (and optional HTTP status).
+ * Precedence: permanent marker > infra marker > HTTP status > navigation-timeout > unknown.
+ */
+export function classifyFailure(errorStr: string, status?: number): FailureClass {
+    if (PERMANENT_ERROR_MARKERS.some((m) => errorStr.includes(m))) return "permanent";
+    if (INFRA_ERROR_MARKERS.some((m) => errorStr.includes(m))) return "infra";
+    if (typeof status === "number" && status > 0) {
+        const c = classifyHttpStatus(status);
+        if (c === "permanent") return "permanent";
+        if (c === "transient" || c === "block") return "transient";
+    }
+    if (errorStr.includes("Navigation timed out") || errorStr.includes("TimeoutError")) {
+        return "transient";
+    }
+    return "unknown";
+}
+
+/** Recoverable on restart = infra (our transport) or transient (server-side hiccup). */
+export function isRecoverableFailureClass(cls: FailureClass): boolean {
+    return cls === "infra" || cls === "transient";
+}
+
+/**
+ * Pure filter for reclaimFailedRequest: given error-dataset items, returns the
+ * request ids to re-queue plus the count of skipped permanent/unknown items.
+ * A missing failure_class (legacy, pre-feature crawls) is treated as recoverable
+ * so old proxy victims are not lost (bounded — permanent ones fail-fast on re-crawl).
+ */
+export function selectReclaimableIds(
+    items: ReadonlyArray<{ id?: string; failure_class?: string }>,
+): { reclaim: string[]; skippedPermanent: number } {
+    const reclaim: string[] = [];
+    let skippedPermanent = 0;
+    for (const item of items) {
+        if (!item.id) continue;
+        const cls = item.failure_class as FailureClass | undefined;
+        if (cls !== undefined && !isRecoverableFailureClass(cls)) {
+            skippedPermanent++;
+            continue;
+        }
+        reclaim.push(item.id);
+    }
+    return { reclaim, skippedPermanent };
+}
+
+/** Resolves the auto-recovery kill-switch. Default true; only "false" disables. */
+export function resolveRecoverFailedOnRestart(raw: string | undefined): boolean {
+    return (raw ?? "true").trim().toLowerCase() !== "false";
+}
+
+/** Auto-recovery runs only for the default crawl flow (not sitemap/generate_data). */
+export function shouldRunRecovery(flag: boolean, typeCrawling: string): boolean {
+    return flag && typeCrawling !== "sitemap" && typeCrawling !== "generate_data";
+}
+
+export const RECOVER_FAILED_ON_RESTART: boolean =
+    resolveRecoverFailedOnRestart(process.env.RECOVER_FAILED_ON_RESTART);

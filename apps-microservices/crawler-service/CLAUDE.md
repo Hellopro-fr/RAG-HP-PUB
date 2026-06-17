@@ -485,6 +485,44 @@ after `TIMEOUT_MAX_RETRIES`, `request.noRetry` is set.
 
 Spec: `docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md`.
 
+See also "Failure Classification & Auto-Recovery on Restart" below — `classifyFailure`
+extends this module to transport errors and drives restart recovery.
+
+## Failure Classification & Auto-Recovery on Restart
+
+A failed request is classified so a same-id restart can recover the *recoverable*
+ones without re-crawling genuine permanent failures. The authoritative "permanent"
+signal is `request.noRetry` (set by the status policy, `PERMANENT_ERROR_MARKERS`, the
+navigation-timeout cap, or a permanent WAF block); only the retried-but-exhausted
+bucket is refined by `classifyFailure` (`crawler/src/httpStatusPolicy.ts`).
+
+| Class | Source | Auto-recovered on restart? |
+|-------|--------|----------------------------|
+| permanent | `noRetry` set, or DNS/SSL/redirect markers, or permanent HTTP status | No |
+| infra | transport faults — `NS_ERROR_PROXY_*`, `NS_ERROR_CONNECTION_REFUSED`, `NS_ERROR_NET_*`, `ECONNREFUSED/RESET`, `ETIMEDOUT`, `socket hang up` | Yes |
+| transient | transient/block HTTP status (5xx/429/408/…) or navigation timeout | Yes |
+| unknown | anything else (incl. `NS_ERROR_ABORT`, `browserController.newPage() failed` — ambiguous) | No |
+
+Each permanently-failed request is written to the `error-{domain}` Crawlee dataset
+with a `failure_class` field. On the next launch, `reclaimFailedRequest` runs **before**
+the queue-health early-exit in `main.ts` and re-queues only the recoverable records
+(resets `retryCount`/`handledAt`), then drops the error dataset. Legacy records with no
+`failure_class` (pre-feature crawls) are treated as recoverable so old proxy victims are
+not lost (bounded — permanent ones fail-fast on re-crawl).
+
+**Why this exists:** a temporary proxy-gateway outage produced
+`NS_ERROR_PROXY_CONNECTION_REFUSED` on valid URLs; without classification they burned the
+full retry budget and were permanently lost, and `reclaimFailedRequest` was unreachable
+for completed crawls (the queue-health `exit(0)` ran before it).
+
+**Env var:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `RECOVER_FAILED_ON_RESTART` | `true` | Auto-recover recoverable failures on a same-id restart. Set `false` to disable (revert to instant "already completed" exit). Node-only, inherited by the subprocess. |
+
+Spec: `docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md`.
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.
