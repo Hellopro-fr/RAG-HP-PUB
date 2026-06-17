@@ -57,7 +57,11 @@ jobs:
       allow_unauthenticated: true
       cpu: '1'
       memory: '512Mi'
-      min_instances: 0
+      # min_instances=1 temporaire pour la phase pilot Phase 1 (Sprint S003) :
+      # évite cold start sur la 1ère requête BO PHP après idle.
+      # À remettre à 0 après validation E2E pilot (~24h) pour retrouver le
+      # bénéfice scale-to-zero. Coût temporaire ~5 USD/mois pendant pilot.
+      min_instances: 1
       max_instances: 3
       container_port: 8600
       # Pas de VPC Connector : aucune dépendance interne (Redis, MySQL, Milvus, RabbitMQ).
