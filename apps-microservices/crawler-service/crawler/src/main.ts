@@ -989,6 +989,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const filtered_ext = await readStat("filtered_ext");
     const filtered_nonfr = await readStat("filtered_nonfr");
     const filtered_duplicate = await readStat("filtered_duplicate");
+    const filtered_pdf = await readStat("filtered_pdf");
     const dropped_cb = await readStat("dropped_cb");
     const external_redirects = await readStat("external_redirects");
     const timeout_individual = await readStat("timeout_individual");
@@ -1014,6 +1015,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         filtered_ext,
         filtered_nonfr,
         filtered_duplicate,
+        filtered_pdf,
         dropped_cb,
         external_redirects,
         timeout_individual,
