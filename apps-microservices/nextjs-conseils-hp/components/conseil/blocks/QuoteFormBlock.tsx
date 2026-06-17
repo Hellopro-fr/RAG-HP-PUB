@@ -1,11 +1,13 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Star, Check, ArrowRight } from 'lucide-react';
 import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
 import type { AoFormQuestion } from '@/types/conseils';
 import { IframeFormModal } from '@/components/conseil/IframeFormModal';
 import { AoChoixGrid } from '@/components/conseil/AoChoixGrid';
 import { useAoQuoteForm } from '@/hooks/useAoQuoteForm';
+import { pushQuoteFormFunnel } from '@/lib/analytics/gtm';
 
 interface QuoteFormBlockProps {
   data: QuoteFormBlockData;
@@ -29,9 +31,31 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
     handleChoixClick, handleAutreChange, handleCtaClick, handleModalClose,
   } = useAoQuoteForm(formulaire_ao, infoRubrique);
 
+  const sectionRef = useRef<HTMLElement>(null);
+  const stepNumber = formulaire_ao?.stepNumber;
+
+  /* Funnel "1ere-question" — contexte CTA milieu d'article, déclenché à la 1re vue du bloc. */
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        observer.disconnect();
+        pushQuoteFormFunnel({ funnelContext: 'cta devis pages conseils', stepNumber });
+      },
+      { threshold: 0.01 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [stepNumber]);
+
   return (
     <>
-      <section className="not-prose my-12 overflow-hidden rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-xl">
+      <section
+        ref={sectionRef}
+        className="not-prose my-12 overflow-hidden rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-xl"
+      >
         <div className="grid gap-0 lg:grid-cols-[1fr_1.1fr]">
 
           {/* ── Colonne gauche — pitch ── */}
@@ -106,6 +130,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
         autres={Object.keys(autresNonVides).length > 0 ? autresNonVides : undefined}
         startFromStep1={startStep1}
         withPrev
+        ownsStep1
         open={modalOpen}
         onClose={handleModalClose}
       />
