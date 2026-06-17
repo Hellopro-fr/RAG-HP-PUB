@@ -1759,16 +1759,71 @@ class CrawlerManager:
         # downloaded .tar.gz path (it does NOT extract), so we extract here, mirroring
         # unstash_crawl's extract-into-{storage_path} step.
         if job_info.get("status") == "archived" and not dataset_dir:
-            archive_tar = await self._retrieve_from_gcs_daemon(crawl_id)
-            target_storage = job_info.get("storage_path") or os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
+            # Serialize concurrent archived extracts on the SAME ownership lock
+            # unstash_crawl uses (key 'unstash_lock:{crawl_id}', TTL
+            # UNSTASH_LOCK_TTL_SECONDS). tarfile.extractall is not atomic; two
+            # concurrent GET /html for the same archived crawl would extract into
+            # the same tree -> truncated/corrupt JSON. Mirrors unstash_crawl
+            # (lock ~L2937, preflight ~L3029-3047, extract+cleanup ~L3050-3069).
+            unstash_lock_key = f"unstash_lock:{crawl_id}"
+            lock_value = await self._acquire_ownership_lock(
+                unstash_lock_key, settings.UNSTASH_LOCK_TTL_SECONDS
+            )
+            if lock_value is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"},
+                )
+            try:
+                # Double-checked locking: another caller may have extracted while
+                # we waited on the lock. Re-check; if the dataset now exists, skip.
+                dataset_dir = self._dataset_dir_for_job(job_info)
+                if not dataset_dir:
+                    archive_tar = await self._retrieve_from_gcs_daemon(crawl_id)
+                    target_storage = job_info.get("storage_path") or os.path.join(
+                        settings.CRAWLER_STORAGE_PATH, crawl_id
+                    )
 
-            def _extract():
-                os.makedirs(target_storage, exist_ok=True)
-                with tarfile.open(archive_tar, 'r:gz') as tar:
-                    tar.extractall(path=target_storage, filter="data")
+                    # --- Disk pre-flight (size of tar × 2 + 500MB floor) ---
+                    try:
+                        tar_size = os.path.getsize(archive_tar)
+                        required_bytes = max(int(tar_size * 2), 500 * 1024 * 1024)
+                        baseline_state = self._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH)
+                        if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                            raise HTTPException(
+                                status_code=503,
+                                detail={
+                                    "error_code": "INSUFFICIENT_DISK_SPACE",
+                                    "required_bytes": required_bytes,
+                                    "available_bytes": baseline_state["free_bytes"],
+                                    "disk_state": baseline_state,
+                                },
+                            )
+                    except HTTPException:
+                        raise
+                    except Exception as e:
+                        logger.warning(f"Disk pre-flight skipped for archived /html '{crawl_id}': {e}")
 
-            await anyio.to_thread.run_sync(_extract)
-            dataset_dir = self._dataset_dir_for_job(job_info)
+                    # --- Extract archive (failure cleans the partial dataset) ---
+                    try:
+                        def _extract():
+                            os.makedirs(target_storage, exist_ok=True)
+                            with tarfile.open(archive_tar, 'r:gz') as tar:
+                                tar.extractall(path=target_storage, filter="data")
+                        await anyio.to_thread.run_sync(_extract)
+                        logger.info(f"Extracted archived /html archive for '{crawl_id}' to '{target_storage}'.")
+                    except Exception as e:
+                        logger.error(f"Extract failed for archived /html '{crawl_id}': {e}", exc_info=True)
+                        # Remove the partial dataset so a later call doesn't see it
+                        # as "present" and serve incomplete data.
+                        shutil.rmtree(target_storage, ignore_errors=True)
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail={"error_code": "EXTRACT_FAILED", "exception": str(e)},
+                        )
+                    dataset_dir = self._dataset_dir_for_job(job_info)
+            finally:
+                await self._release_ownership_lock(unstash_lock_key, lock_value)
 
         if not dataset_dir or not os.path.isdir(dataset_dir):
             return None
