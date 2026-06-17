@@ -381,7 +381,7 @@ Heartbeat publishes and `DedupManager` operations now multiplex on a single shar
 
 Client name: `crawler-node-{crawlId}`. Monitor attached as `'shared'`.
 
-`StatsManager` now consumes the injected shared client (`ownsClient=false`) alongside the heartbeat/dedup/pushed/checked multiplex, eliminating its own separate idle-reaped connection — it was silently dropping stat writes when the server reaped its idle socket (`CONFIG timeout 300`) during quiet crawl gaps. The legacy URL constructor is retained for tests. See `docs/superpowers/specs/2026-06-17-statsmanager-redis-resilience-design.md`. (Remaining separate client: `UrlConsolidator` still opens its own Redis connection — deferred.)
+`StatsManager` now consumes the injected shared client (`ownsClient=false`) alongside the heartbeat/dedup/pushed/checked multiplex, eliminating its own separate idle-reaped connection — it was silently dropping stat writes when the server reaped its idle socket (`CONFIG timeout 300`) during quiet crawl gaps. The legacy URL constructor is retained for tests. See `docs/superpowers/specs/2026-06-17-statsmanager-redis-resilience-design.md`. `UrlConsolidator` likewise consumes the injected shared client (update mode, `ownsClient=false`) — no separate per-crawl Redis client remains. See `docs/superpowers/specs/2026-06-17-urlconsolidator-shared-client-design.md`.
 
 ### Server-side idle reap
 
