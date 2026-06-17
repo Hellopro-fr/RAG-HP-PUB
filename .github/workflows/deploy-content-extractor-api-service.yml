@@ -62,11 +62,11 @@ jobs:
       container_port: 8600
       # Pas de VPC Connector : aucune dépendance interne (Redis, MySQL, Milvus, RabbitMQ).
       health_check_path: /health
-      # Env vars : valeurs identiques au docker-compose.yml ligne 607-610 (PORT 8600,
-      # LOG_LEVEL info, MAX_PAYLOAD_SIZE_MB 10).
+      # Env vars : valeurs identiques au docker-compose.yml ligne 607-610.
+      # PORT EXCLU : Cloud Run injecte automatiquement PORT=container_port (réservé).
+      # Le Dockerfile CMD hardcode `--port 8600` qui correspond bien à container_port.
       env_vars_json: |
         {
-          "PORT": "8600",
           "LOG_LEVEL": "info",
           "MAX_PAYLOAD_SIZE_MB": "10"
         }
