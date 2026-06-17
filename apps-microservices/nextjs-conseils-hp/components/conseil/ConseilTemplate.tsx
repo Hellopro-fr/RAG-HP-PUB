@@ -230,6 +230,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
             <Suppliers
               suppliers={page.suppliers}
               infoRubriqueId={page.infoRubrique?.id}
+              categoryLabel={page.infoRubrique?.libelle}
             />
           )}
           <Crossell liensIntexts={page.liensIntexts} conseilsAssocies={page.conseilsAssocies} />

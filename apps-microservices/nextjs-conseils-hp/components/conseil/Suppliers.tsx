@@ -8,6 +8,17 @@ import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
 
 const FALLBACK_DESC = 'Fournisseur référencé sur HelloPro — demandez votre devis gratuitement.';
 
+/**
+ * Construit « de {libellé} » avec élision devant voyelle / h muet : « d'{libellé} ».
+ * normalize('NFD') gère les voyelles accentuées (É, À…). Limite connue : le h aspiré
+ * (« de hangar ») est rare dans les libellés catégories et reste élidé ici.
+ */
+function avecDe(label: string): string {
+  const t = label.trim();
+  const first = t.normalize('NFD').charAt(0).toLowerCase();
+  return 'aeiouhyœæ'.includes(first) ? `d'${t}` : `de ${t}`;
+}
+
 function sanitizeHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
@@ -20,9 +31,11 @@ interface SuppliersProps {
   suppliers?: Supplier[];
   /** id de la rubrique — utilisé comme paramètre f dans contact_info.php */
   infoRubriqueId?: number;
+  /** Libellé de la catégorie (info_rubrique.libelle de l'API) — titre dynamique du bloc. */
+  categoryLabel?: string;
 }
 
-export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
+export function Suppliers({ suppliers = [], infoRubriqueId, categoryLabel }: SuppliersProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -51,11 +64,8 @@ export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-extrabold text-foreground">
-            Nos fournisseurs de bâtiments d&apos;élevage
+            {categoryLabel ? `Nos fournisseurs ${avecDe(categoryLabel)}` : 'Nos fournisseurs'}
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Sélection de constructeurs référencés sur HelloPro.
-          </p>
         </div>
         {showArrows && (
           <div className="flex shrink-0 gap-2">
@@ -125,7 +135,7 @@ export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
               onClick={() => setOpenSocId(String(s.id))}
               className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
             >
-              Demander un devis
+              Envoyer un message
             </button>
           </article>
         ))}
