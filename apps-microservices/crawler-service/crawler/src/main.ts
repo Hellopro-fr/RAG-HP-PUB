@@ -718,9 +718,10 @@ if (crawlMode === 'update') {
         url: site,
         userData: { source: 'seed' }
     });
-    if (context.dedupManager) {
-        await context.dedupManager.addUrl(site);
-    }
+    // Do NOT pre-add the homepage to Redis dedup here (same rule as the standard
+    // seed below). The handler claims it on first processing; pre-adding makes the
+    // handler see it as a "Doublon" and skip extraction — which also skips homepage
+    // detection (regional-path exclusion) in update mode.
 
     // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
     for await (const { url: consolidatedUrl, source } of allUrls) {
@@ -1180,9 +1181,10 @@ if (typeCrawling == "sitemap") {
                     continue;
                 }
 
-                if (context.dedupManager) {
-                    await context.dedupManager.addUrl(url);
-                }
+                // Do NOT pre-add to Redis dedup before queueing. The page handler
+                // claims each URL on first processing (routes.ts). Pre-adding here
+                // made every non-dataset seed (request_queue / request_url) self-mark
+                // as "Doublon" and get skipped before reaching UpdateChecker.
                 await requestQueue.addRequest({
                     url: url,
                     userData: { source: source }
