@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { ArrowRight, Calendar, Clock, ChevronDown, Lightbulb, Home } from 'lucide-react';
+import { Calendar, Clock, ChevronDown, Lightbulb, Home } from 'lucide-react';
 import type { HeroData, ConseilPageType } from '@/types/conseils';
 import type { ResumeItem } from '@/types/blocks/resume';
 
@@ -41,18 +41,6 @@ export function Hero({
 }: HeroProps) {
   return (
     <section className="relative overflow-hidden bg-primary text-primary-foreground">
-      {data.image && (
-        <div
-          className="absolute inset-0 opacity-25"
-          style={{
-            backgroundImage: `linear-gradient(135deg, oklch(0.36 0.18 265 / 0.85), oklch(0.2 0.1 270 / 0.95)), url(${data.image})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-          aria-hidden="true"
-        />
-      )}
-
       <div className="relative mx-auto max-w-[1400px] px-4 py-4 lg:px-6 lg:py-5">
         {/* Breadcrumb */}
         {breadcrumb.length > 0 && (
@@ -84,21 +72,6 @@ export function Hero({
             <h1 className="text-2xl font-extrabold leading-[1.1] tracking-tight sm:text-3xl lg:text-[2rem]">
               {data.title}
             </h1>
-
-            {data.subtitle && (
-              <div className="mt-2 max-w-xl">
-                <div
-                  className="line-clamp-2 text-sm leading-relaxed text-primary-foreground/90 [&_a]:underline [&_a]:decoration-primary-foreground/60 [&_a:hover]:decoration-primary-foreground"
-                  dangerouslySetInnerHTML={{ __html: highlightPrices(data.subtitle) }}
-                />
-                <a
-                  href="#premier-bloc-texte"
-                  className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
-                >
-                  Lire la suite <ArrowRight className="h-3 w-3" />
-                </a>
-              </div>
-            )}
 
             {(resumeHtml || resume.length > 0) && (
               <KeyTakeaways items={resume} html={resumeHtml} title={resumeTitle} />
@@ -154,14 +127,6 @@ export function Hero({
         </div>
       </div>
     </section>
-  );
-}
-
-/** Entoure les prix (nombre + €) d'un <span> orange dans une chaîne HTML. */
-function highlightPrices(html: string): string {
-  return html.replace(
-    /(\d[\d  ]*€(?:\/[a-zA-ZÀ-ÿ²³]+)*)/g,
-    '<span class="font-bold text-cta">$1</span>',
   );
 }
 
