@@ -542,7 +542,7 @@ context.pushedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor });
 // d'écriture dataset, donc routerDefaultHandler peut de nouveau pousser les pages
 // « confirmed » en mode update (cf. régression PushedSet du 2026-05-24).
 context.checkedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor, keyPrefix: 'checked' });
-context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
+context.statsManager = new StatsManager(sharedRedis, id, storagePath || ".");
 // No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
 
@@ -561,8 +561,10 @@ if (dropData) {
     if (context.pushedSet) await context.pushedSet.cleanup();
     if (context.checkedSet) await context.checkedSet.cleanup();
     await context.statsManager.cleanup();
-    // Shared client survives dedup.cleanup (ownsClient=false), so no reconnect
-    // needed for dedupManager. StatsManager still owns its own client.
+    // Shared client survives all manager cleanups (ownsClient=false on dedup,
+    // pushed, checked AND now stats), so no reconnect is needed. The
+    // statsManager.connect() below is a no-op on the injected path (kept for
+    // symmetry with the legacy URL constructor).
     await context.statsManager.connect();
 
     isHistorised = true;
