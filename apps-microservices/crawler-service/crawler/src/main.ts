@@ -44,6 +44,7 @@ import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
+import { buildHtmlIndex } from "./htmlIndex.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -1055,6 +1056,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // per-param frequency without URL replay. Self-contained: own try/catch in the
     // helper, never throws. See questionMarkDecision.ts persistObservations().
     persistQuestionMarkObservations(storagePath);
+
+    // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
+    buildHtmlIndex(storagePath, domain);
 
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
