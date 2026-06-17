@@ -32,6 +32,9 @@ import {
     PERMANENT_ERROR_MARKERS,
     classifyFailure,
     selectReclaimableIds,
+    shouldSkipAsDownload,
+    SKIP_DOWNLOADS,
+    pdfDatasetName,
     type FailureClass,
 } from "./httpStatusPolicy.js";
 
@@ -551,6 +554,16 @@ export const startCrawler = async (
             blockedStatusCodes: [],
         },
 
+        // Fast-fail download/PDF skip: stop retries the moment a download trigger
+        // is seen. errorHandler runs after each failed attempt and BEFORE the retry
+        // decision — failedRequestHandler is terminal and cannot prevent retries.
+        // Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
+        errorHandler: async ({ request }, error) => {
+            if (shouldSkipAsDownload(SKIP_DOWNLOADS, String(error))) {
+                request.noRetry = true;
+            }
+        },
+
         // V3 Logic: Rich error reporting
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
@@ -559,6 +572,29 @@ export const startCrawler = async (
             // Markers live in httpStatusPolicy.ts (PERMANENT_ERROR_MARKERS) so the
             // handler and classifyFailure share one source of truth (DRY).
             const errorStr = String(request.errorMessages);
+
+            // Download/PDF skip: a download-triggering URL (e.g. extension-less PDF)
+            // is recorded under filtered_pdf + the pdf-{domain} dataset and returns
+            // early — NOT counted as an error (no circuit-breaker trip) and NOT
+            // written to error-{domain} (so reclaimFailedRequest never re-crawls it).
+            // Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
+            if (shouldSkipAsDownload(SKIP_DOWNLOADS, errorStr)) {
+                if (context.statsManager) {
+                    await context.statsManager.increment("filtered_pdf");
+                }
+                const pdfDataset = await Dataset.open(
+                    pdfDatasetName(context.config.crawleeStorageName, domain),
+                );
+                await pdfDataset.pushData({
+                    url: request.url,
+                    source: request.userData.source ?? "",
+                    status: response?.status() ?? 0,
+                    timestamp: new Date().toISOString(),
+                });
+                log.info(`Skipped download/PDF (no retry): ${request.url}`);
+                return;
+            }
+
             const isPermanentError = PERMANENT_ERROR_MARKERS.some((err) => errorStr.includes(err));
             if (isPermanentError) {
                 request.noRetry = true;
@@ -698,6 +734,15 @@ export const startCrawler = async (
             // networkidle + scroll), so this does not reduce extracted content.
             async (_crawlingContext, gotoOptions) => {
                 gotoOptions.waitUntil = NAVIGATION_WAIT_UNTIL;
+            },
+            // Cancel any download the navigation triggers so the browser context
+            // never holds a partial download (prevents the crawl stalling on
+            // download/PDF URLs). The download error itself is fast-failed via
+            // errorHandler above. Gated by SKIP_DOWNLOADS.
+            async ({ page }) => {
+                if (SKIP_DOWNLOADS) {
+                    page.on('download', (d) => { d.cancel().catch(() => {}); });
+                }
             },
             async ({ page }) => {
                 const isStopped = isStoppedManualy(domain, false);
