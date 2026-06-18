@@ -4,8 +4,8 @@ import json
 import asyncio
 from typing import Optional, List, Union
 from datetime import datetime
-import redis.asyncio as redis
 import anyio
+from common_utils.redis import cache_service
 
 from app.core.config import settings
 from app.schemas.comparator import ComparisonResult, SimilarityPair, JobStatus, CapacityResponse
@@ -18,18 +18,9 @@ GLOBAL_RUNNING_COUNT_KEY = "comparator:running_count"
 
 class JobManager:
     def __init__(self):
-        self.redis: Optional[redis.Redis] = None
         self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_JOBS)
         # Track local active jobs manually since semaphore._value is internal/implementation specific
         self.local_active_jobs = 0
-
-    async def connect_redis(self):
-        self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        logger.info(f"Connected to Redis at {settings.REDIS_URL}")
-
-    async def close_redis(self):
-        if self.redis:
-            await self.redis.close()
 
     def is_local_full(self) -> bool:
         """Check if this specific instance has reached max concurrency."""
@@ -54,8 +45,8 @@ class JobManager:
     async def get_capacity(self) -> CapacityResponse:
         """Get current capacity metrics."""
         global_count = 0
-        if self.redis:
-            val = await self.redis.get(GLOBAL_RUNNING_COUNT_KEY)
+        if cache_service.redis_client:
+            val = await cache_service.redis_client.get(GLOBAL_RUNNING_COUNT_KEY)
             global_count = int(val) if val else 0
 
         return CapacityResponse(
@@ -66,24 +57,23 @@ class JobManager:
         )
 
     async def get_job_status(self, job_id: str) -> Optional[JobStatus]:
-        if not self.redis: return None
-        data = await self.redis.get(f"job:{job_id}:status")
+        if not cache_service.redis_client: return None
+        data = await cache_service.redis_client.get(f"job:{job_id}:status")
         if not data: return None
         return JobStatus(**json.loads(data))
 
     async def get_job_result(self, job_id: str) -> Optional[ComparisonResult]:
-        if not self.redis: return None
-        data = await self.redis.get(f"job:{job_id}:result")
+        if not cache_service.redis_client: return None
+        data = await cache_service.redis_client.get(f"job:{job_id}:result")
         if not data: return None
         return ComparisonResult(**json.loads(data))
 
     async def list_jobs(self, limit: int = 100) -> List[JobStatus]:
         """Scans Redis for all job statuses."""
-        if not self.redis: return []
+        if not cache_service.redis_client: return []
 
         job_keys = []
-        # Use SCAN to find keys to avoid blocking Redis on large datasets
-        async for key in self.redis.scan_iter("job:*:status", count=limit):
+        async for key in cache_service.redis_client.scan_iter("job:*:status", count=limit):
             job_keys.append(key)
             if len(job_keys) >= limit:
                 break
@@ -91,8 +81,7 @@ class JobManager:
         if not job_keys:
             return []
 
-        # Batch get values
-        jobs_data = await self.redis.mget(job_keys)
+        jobs_data = await cache_service.redis_client.mget(job_keys)
 
         results = []
         for data in jobs_data:
@@ -117,14 +106,14 @@ class JobManager:
         )
 
         # Increment Global Counter
-        if self.redis:
-            await self.redis.incr(GLOBAL_RUNNING_COUNT_KEY)
+        if cache_service.redis_client:
+            await cache_service.redis_client.incr(GLOBAL_RUNNING_COUNT_KEY)
 
         try:
             async with self.semaphore:
                 try:
                     # Update status to processing
-                    await self.redis.set(
+                    await cache_service.redis_client.set(
                         f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="processing", progress=10.0).json(),
                         ex=settings.JOB_RESULT_TTL
@@ -137,7 +126,7 @@ class JobManager:
                     if not images_map:
                         raise Exception("No valid images could be loaded/downloaded.")
 
-                    await self.redis.set(
+                    await cache_service.redis_client.set(
                         f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="processing", progress=40.0).json(),
                         ex=settings.JOB_RESULT_TTL
@@ -168,8 +157,8 @@ class JobManager:
                     )
 
                     ttl = settings.JOB_RESULT_TTL
-                    await self.redis.set(f"job:{job_id}:result", result.json(), ex=ttl)
-                    await self.redis.set(
+                    await cache_service.redis_client.set(f"job:{job_id}:result", result.json(), ex=ttl)
+                    await cache_service.redis_client.set(
                         f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="finished", progress=100.0).json(),
                         ex=ttl
@@ -187,11 +176,11 @@ class JobManager:
                         error=str(e),
                         progress=0.0
                     )
-                    await self.redis.set(f"job:{job_id}:status", error_status.json(), ex=settings.JOB_RESULT_TTL)
+                    await cache_service.redis_client.set(f"job:{job_id}:status", error_status.json(), ex=settings.JOB_RESULT_TTL)
                     raise e
         finally:
-            if self.redis:
-                await self.redis.decr(GLOBAL_RUNNING_COUNT_KEY)
+            if cache_service.redis_client:
+                await cache_service.safe_decrement_key(GLOBAL_RUNNING_COUNT_KEY)
 
     async def submit_job_async(self, job_id: str, images: list, threshold: float):
         """
@@ -199,7 +188,7 @@ class JobManager:
         which is released in the wrapper's finally.
         """
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
-        await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
+        await cache_service.redis_client.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
 
         # Async submissions are never rejected — they queue past MAX via the semaphore
         # inside process_job_logic. Reserve the slot here so capacity reporting is accurate.
@@ -219,7 +208,7 @@ class JobManager:
         Caller (router) owns the local slot lifecycle.
         """
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
-        await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
+        await cache_service.redis_client.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
 
         return await self.process_job_logic(job_id, images, threshold)
 
