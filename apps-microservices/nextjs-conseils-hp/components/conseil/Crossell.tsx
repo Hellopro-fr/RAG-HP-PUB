@@ -23,7 +23,7 @@ export function Crossell({ liensIntexts, conseilsAssocies }: CrossellProps) {
 
       {conseilsAssocies && conseilsAssocies.length > 0 && (
         <div>
-          <h2 className="text-2xl font-extrabold text-foreground">Pour aller plus loin</h2>
+          <h2 className="text-3xl font-extrabold text-foreground">Pour aller plus loin</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {conseilsAssocies.map((a) => {
               const { label, style, icon: Icon } = TAG_CONFIG[a.idTag] ?? DEFAULT_TAG;
@@ -38,10 +38,10 @@ export function Crossell({ liensIntexts, conseilsAssocies }: CrossellProps) {
                       <Icon className="h-4 w-4" />
                     </span>
                     <div>
-                      <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${style}`}>
+                      <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide ${style}`}>
                         {label}
                       </span>
-                      <p className="mt-1 text-sm font-semibold text-foreground group-hover:text-primary">
+                      <p className="mt-1 text-base font-semibold text-foreground group-hover:text-primary">
                         {a.titre}
                       </p>
                     </div>
