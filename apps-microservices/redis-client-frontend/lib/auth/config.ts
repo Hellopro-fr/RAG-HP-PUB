@@ -50,6 +50,10 @@ export interface AuthConfig {
 
 export function getAuthConfig(env: Env = process.env): AuthConfig {
   const { clientId, clientSecret } = resolveClientCredentials(env)
+  const ttl = Number(env.SESSION_TTL || "28800")
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    throw new Error(`[redis-client] SESSION_TTL must be a positive integer, got: ${env.SESSION_TTL}`)
+  }
   return {
     accountPublicUrl: req("ACCOUNT_PUBLIC_URL", env).replace(/\/+$/, ""),
     accountBaseUrl: req("ACCOUNT_BASE_URL", env).replace(/\/+$/, ""),
@@ -59,7 +63,7 @@ export function getAuthConfig(env: Env = process.env): AuthConfig {
     jwtSecret: req("JWT_SECRET", env),
     adminEmails: parseAdminEmails(env.ADMIN_EMAILS),
     secureCookie: (env.SECURE_COOKIE || "false").toLowerCase() === "true",
-    sessionTtlSeconds: Number(env.SESSION_TTL || "28800"),
+    sessionTtlSeconds: ttl,
     centralLogout: (env.SSO_CENTRAL_LOGOUT || "false").toLowerCase() === "true",
   }
 }
