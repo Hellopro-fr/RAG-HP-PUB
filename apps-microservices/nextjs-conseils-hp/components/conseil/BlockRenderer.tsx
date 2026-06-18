@@ -7,6 +7,7 @@ import { CTABlock } from './blocks/CTABlock';
 import { FaqBlock } from './blocks/FaqBlock';
 import { TableauPrixBlock } from './blocks/TableauPrixBlock';
 import { TableauHtmlBlock } from './blocks/TableauHtmlBlock';
+import { EstimationPrixBlock } from './blocks/EstimationPrixBlock';
 import { ImageBlock } from './blocks/ImageBlock';
 import { TexteImageBlock } from './blocks/TexteImageBlock';
 import { ImageImageBlock } from './blocks/ImageImageBlock';
@@ -24,6 +25,7 @@ import type { CTABlockData } from '@/types/blocks/cta';
 import type { FaqBlockData } from '@/types/blocks/faq';
 import type { TableauPrixBlockData } from '@/types/blocks/tableau-prix';
 import type { TableauHtmlBlockData } from '@/types/blocks/tableau-html';
+import type { EstimationPrixBlockData } from '@/types/blocks/estimation-prix';
 import type { ImageBlockData } from '@/types/blocks/image';
 import type { TexteImageBlockData } from '@/types/blocks/texte-image';
 import type { ImageImageBlockData } from '@/types/blocks/image-image';
@@ -63,6 +65,8 @@ export function BlockRenderer({ block, formulaire_ao, infoRubrique }: BlockRende
       return <FaqBlock data={block.data as unknown as FaqBlockData} />;
     case 'tableau-prix':
       return <TableauPrixBlock data={block.data as unknown as TableauPrixBlockData} />;
+    case 'estimation-prix':
+      return <EstimationPrixBlock data={block.data as unknown as EstimationPrixBlockData} />;
 
     // ── Lot A — blocs à porter (resume) ────────────────────────────────────
     case 'resume':
