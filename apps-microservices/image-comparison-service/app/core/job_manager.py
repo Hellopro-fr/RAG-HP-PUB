@@ -21,6 +21,9 @@ class JobManager:
         self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_JOBS)
         # Track local active jobs manually since semaphore._value is internal/implementation specific
         self.local_active_jobs = 0
+        # Strong refs to fire-and-forget tasks — without this the event loop only keeps
+        # a weak ref and a job can be garbage-collected mid-flight.
+        self._background_tasks: set = set()
 
     def is_local_full(self) -> bool:
         """Check if this specific instance has reached max concurrency."""
@@ -182,6 +185,18 @@ class JobManager:
             if cache_service.redis_client:
                 await cache_service.safe_decrement_key(GLOBAL_RUNNING_COUNT_KEY)
 
+    async def _mark_failed_timeout(self, job_id: str) -> None:
+        """Write a terminal 'failed' status for a job that exceeded PROCESSING_DEADLINE_S."""
+        logger.error(f"Job {job_id}: exceeded PROCESSING_DEADLINE_S={settings.PROCESSING_DEADLINE_S}s — marking failed")
+        if cache_service.redis_client:
+            st = JobStatus(
+                job_id=job_id,
+                status="failed",
+                error=f"timeout: exceeded {settings.PROCESSING_DEADLINE_S}s",
+                progress=0.0,
+            )
+            await cache_service.redis_client.set(f"job:{job_id}:status", st.json(), ex=settings.JOB_RESULT_TTL)
+
     async def submit_job_async(self, job_id: str, images: list, threshold: float):
         """
         Fire-and-forget execution. Acquires a local slot before queuing the task,
@@ -196,11 +211,20 @@ class JobManager:
 
         async def _run_and_release():
             try:
-                await self.process_job_logic(job_id, images, threshold)
+                await asyncio.wait_for(
+                    self.process_job_logic(job_id, images, threshold),
+                    timeout=settings.PROCESSING_DEADLINE_S,
+                )
+            except asyncio.TimeoutError:
+                # process_job_logic got CancelledError -> its semaphore + finally
+                # (safe_decrement_key) already ran; here we record the terminal failure.
+                await self._mark_failed_timeout(job_id)
             finally:
                 self.release_local_slot()
 
-        asyncio.create_task(_run_and_release())
+        task = asyncio.create_task(_run_and_release())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     async def submit_job_sync(self, job_id: str, images: list, threshold: float) -> ComparisonResult:
         """
@@ -210,6 +234,13 @@ class JobManager:
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
         await cache_service.redis_client.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
 
-        return await self.process_job_logic(job_id, images, threshold)
+        try:
+            return await asyncio.wait_for(
+                self.process_job_logic(job_id, images, threshold),
+                timeout=settings.PROCESSING_DEADLINE_S,
+            )
+        except asyncio.TimeoutError:
+            await self._mark_failed_timeout(job_id)
+            raise
 
 job_manager = JobManager()
