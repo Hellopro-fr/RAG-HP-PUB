@@ -138,7 +138,12 @@ class ImageProcessor:
                 logger.info("Using APIFY_PROXY for image downloads.")
 
             async with httpx.AsyncClient(
-                timeout=30.0,
+                timeout=httpx.Timeout(
+                    connect=settings.IMG_DOWNLOAD_CONNECT_TIMEOUT_S,
+                    read=settings.IMG_DOWNLOAD_READ_TIMEOUT_S,
+                    write=settings.IMG_DOWNLOAD_READ_TIMEOUT_S,
+                    pool=settings.IMG_DOWNLOAD_CONNECT_TIMEOUT_S,
+                ),
                 follow_redirects=True,
                 headers=ImageProcessor.DOWNLOAD_HEADERS,
                 verify=False,
@@ -151,6 +156,10 @@ class ImageProcessor:
                         try:
                             resp = await client.get(str(inp.url))
                             if resp.status_code == 200:
+                                return resp
+                            # 4xx is terminal (404/403 won't change) — don't waste a retry.
+                            if 400 <= resp.status_code < 500:
+                                logger.warning(f"HTTP {resp.status_code} for {inp.id} ({inp.url}) — no retry (4xx)")
                                 return resp
                             if attempt == 0:
                                 await asyncio.sleep(2)
@@ -165,9 +174,11 @@ class ImageProcessor:
                             return e
                     return None  # Should not reach here
 
-                # Execute concurrently with retry
+                # Execute concurrently with retry, each download hard-capped so one
+                # slow/dead URL fails fast (-> failed_images) without gating the others.
                 responses = await asyncio.gather(
-                    *[download_with_retry(inp) for inp in download_tasks],
+                    *[asyncio.wait_for(download_with_retry(inp), settings.IMG_DOWNLOAD_CAP_S)
+                      for inp in download_tasks],
                     return_exceptions=True
                 )
 
