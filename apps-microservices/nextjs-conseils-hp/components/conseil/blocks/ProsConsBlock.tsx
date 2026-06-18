@@ -15,7 +15,7 @@ export function ProsConsBlock({ data }: ProsConsBlockProps) {
           </span>
           {data.labelPros ?? 'Avantages'}
         </h3>
-        <ul className="space-y-2 text-sm text-foreground">
+        <ul className="space-y-2 text-base text-foreground">
           {data.pros.map((p) => (
             <li key={p} className="flex gap-2">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
@@ -32,7 +32,7 @@ export function ProsConsBlock({ data }: ProsConsBlockProps) {
           </span>
           {data.labelCons ?? 'Inconvénients'}
         </h3>
-        <ul className="space-y-2 text-sm text-foreground">
+        <ul className="space-y-2 text-base text-foreground">
           {data.cons.map((c) => (
             <li key={c} className="flex gap-2">
               <X className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />

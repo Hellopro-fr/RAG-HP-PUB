@@ -119,21 +119,21 @@ export function Suppliers({ suppliers = [], infoRubriqueId, categoryLabel }: Sup
             </div>
             <h3 className="text-lg font-extrabold text-foreground">{s.name}</h3>
             {s.description ? (
-              <div className="relative mt-3 max-h-[10rem] overflow-hidden text-sm text-foreground/90 [&_*]:!text-sm">
+              <div className="relative mt-3 max-h-[10rem] overflow-hidden text-base text-foreground/90 [&_*]:!text-base">
                 <div
-                  className="[&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-normal [&_b]:font-normal [&_u]:no-underline [&_h1]:text-sm [&_h1]:font-normal [&_h2]:text-sm [&_h2]:font-normal [&_h3]:text-sm [&_h3]:font-normal [&_h4]:text-sm [&_h4]:font-normal [&_a]:text-primary [&_a]:underline"
+                  className="[&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-normal [&_b]:font-normal [&_u]:no-underline [&_h1]:text-base [&_h1]:font-normal [&_h2]:text-base [&_h2]:font-normal [&_h3]:text-base [&_h3]:font-normal [&_h4]:text-base [&_h4]:font-normal [&_a]:text-primary [&_a]:underline"
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(s.description) }}
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
                 <span className="absolute bottom-0.5 right-1 text-xs text-foreground/50">…</span>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-foreground/90">{FALLBACK_DESC}</p>
+              <p className="mt-3 text-base text-foreground/90">{FALLBACK_DESC}</p>
             )}
             <button
               type="button"
               onClick={() => setOpenSocId(String(s.id))}
-              className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
+              className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-base font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
             >
               Envoyer un message
             </button>

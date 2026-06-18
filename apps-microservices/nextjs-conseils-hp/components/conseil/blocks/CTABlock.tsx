@@ -69,7 +69,7 @@ export function CTABlock({ data }: CTABlockProps) {
             <ArrowRight className="h-6 w-6" aria-hidden="true" />
           </div>
           <div>
-            <p className="font-bold text-foreground">{data.title}</p>
+            <p className="text-base font-bold text-foreground">{data.title}</p>
             {data.subtitle && (
               <p className="text-sm text-muted-foreground">{data.subtitle}</p>
             )}
