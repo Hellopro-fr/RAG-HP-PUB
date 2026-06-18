@@ -14,9 +14,10 @@ interface CacheHeaderProps {
   totalSize: number
   lastRefreshed: Date
   onRefresh?: () => void
+  userEmail?: string
 }
 
-export function CacheHeader({ totalKeys, totalSize, lastRefreshed, onRefresh }: CacheHeaderProps) {
+export function CacheHeader({ totalKeys, totalSize, lastRefreshed, onRefresh, userEmail }: CacheHeaderProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const { toast } = useToast()
@@ -75,9 +76,19 @@ export function CacheHeader({ totalKeys, totalSize, lastRefreshed, onRefresh }: 
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold">Redis Cache Manager</h1>
-        <p className="text-muted-foreground">Monitor and manage your cached data</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Redis Cache Manager</h1>
+          <p className="text-muted-foreground">Monitor and manage your cached data</p>
+        </div>
+        {userEmail && (
+          <div className="text-right text-sm">
+            <p className="text-muted-foreground">{userEmail}</p>
+            <a href="/auth/logout" className="underline">
+              Sign out
+            </a>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
