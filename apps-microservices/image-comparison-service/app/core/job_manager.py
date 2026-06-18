@@ -10,6 +10,7 @@ from common_utils.redis import cache_service
 from app.core.config import settings
 from app.schemas.comparator import ComparisonResult, SimilarityPair, JobStatus, CapacityResponse
 from app.core.image_processor import ImageProcessor
+from app.core import feature_cache
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +125,42 @@ class JobManager:
 
                     logger.info(f"Job {job_id}: Loading {len(inputs)} images...")
 
-                    images_map, failed_ids = await ImageProcessor.load_images(inputs)
+                    # Cache-aside: read cached per-URL features first; only download+extract misses.
+                    # Cacheable = pure URL inputs. Base64 `content` inputs (and any input with
+                    # neither url nor content) are never cached and always go to load_images.
+                    url_inputs = [inp for inp in inputs if inp.url and not inp.content]
+                    other_inputs = [inp for inp in inputs if not (inp.url and not inp.content)]
 
-                    if not images_map:
+                    cached_by_url = await feature_cache.get_features([str(inp.url) for inp in url_inputs])
+                    cached_features = {
+                        inp.id: cached_by_url[str(inp.url)]
+                        for inp in url_inputs if str(inp.url) in cached_by_url
+                    }
+                    miss_url_inputs = [inp for inp in url_inputs if str(inp.url) not in cached_by_url]
+
+                    # Download only the misses + the uncacheable inputs.
+                    to_load = miss_url_inputs + other_inputs
+                    images_map, failed_ids = await ImageProcessor.load_images(to_load)
+
+                    # Extract features for the freshly downloaded images (off the event loop).
+                    fresh_features = await anyio.to_thread.run_sync(
+                        ImageProcessor.extract_features_for,
+                        images_map
+                    )
+
+                    # Cache the freshly extracted URL-miss features (content inputs are not cached).
+                    await feature_cache.set_features({
+                        str(inp.url): fresh_features[inp.id]
+                        for inp in miss_url_inputs if inp.id in fresh_features
+                    })
+
+                    all_features = {**cached_features, **fresh_features}
+                    logger.info(
+                        f"Job {job_id}: features ready | cached={len(cached_features)} "
+                        f"fresh={len(fresh_features)} failed={len(failed_ids)}"
+                    )
+
+                    if not all_features:
                         raise Exception("No valid images could be loaded/downloaded.")
 
                     await cache_service.redis_client.set(
@@ -138,8 +172,8 @@ class JobManager:
                     logger.info(f"Job {job_id}: Processing comparisons...")
 
                     raw_results = await anyio.to_thread.run_sync(
-                        ImageProcessor.compare_batch,
-                        images_map,
+                        ImageProcessor.compare_features,
+                        all_features,
                         inputs
                     )
 

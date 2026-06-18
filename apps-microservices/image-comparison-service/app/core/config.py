@@ -34,4 +34,15 @@ class Settings:
     # Async-submit backlog cap = MAX_CONCURRENT_JOBS * ASYNC_BACKLOG_FACTOR (per replica).
     ASYNC_BACKLOG_FACTOR: int = int(os.getenv("ASYNC_BACKLOG_FACTOR", "4"))
 
+    # --- Per-URL feature cache (Design C) ---
+    # Cache-aside store of the extracted feature {phash, hist} keyed by image URL, on the
+    # shared Redis. A hit skips download+decode+extract. Eviction is safe (miss -> recompute);
+    # TTL is the SOLE staleness guardrail against a URL whose bytes change in place.
+    FEATURE_CACHE_ENABLED: bool = os.getenv("FEATURE_CACHE_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+    # 7 days. Bounds the wrongful-exclusion window; expires before a weeks-later algo re-run.
+    FEATURE_CACHE_TTL_S: int = int(os.getenv("FEATURE_CACHE_TTL_S", "604800"))
+    # Algorithm version tag in the cache key. Bump when trim_borders / extract_features change
+    # so old (incompatible) cached features are ignored rather than mixed in.
+    FEATURE_CACHE_VERSION: str = os.getenv("FEATURE_CACHE_VERSION", "v1")
+
 settings = Settings()
