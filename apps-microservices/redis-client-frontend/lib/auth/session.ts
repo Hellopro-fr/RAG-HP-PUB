@@ -24,8 +24,9 @@ export async function createSessionToken(claims: SessionClaims, ttlSeconds: numb
 
 export async function readSession(token: string | undefined): Promise<SessionClaims | null> {
   if (!token) return null
+  const key = sessionKey() // throws loudly on misconfiguration — intentional
   try {
-    const { payload } = await jwtVerify(token, sessionKey(), { algorithms: ["HS256"] })
+    const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"] })
     const email = payload.sub
     if (!email) return null
     return { email, name: payload.name as string | undefined }
