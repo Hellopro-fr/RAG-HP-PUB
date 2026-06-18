@@ -6,6 +6,7 @@ import { ArrowRight } from 'lucide-react';
 import type { TexteImageBlockData } from '@/types/blocks/texte-image';
 import { IframeFormModal } from '@/components/conseil/IframeFormModal';
 import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
+import { EstimationBox } from './EstimationBox';
 
 interface TexteImageBlockProps {
   data: TexteImageBlockData;
@@ -127,14 +128,12 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
   const textCol = (
     <div className="flex flex-col gap-3">
       {data.estimate && (
-        <div className="inline-flex items-baseline gap-2 self-start rounded-md bg-primary-soft px-3 py-2">
-          {data.estimateLabel && (
-            <span className="text-sm font-semibold tracking-wide text-primary">
-              {data.estimateLabel}
-            </span>
-          )}
-          <span className="text-lg font-extrabold text-primary">{data.estimate}</span>
-        </div>
+        <EstimationBox
+          label={data.estimateLabel ?? 'Estimation de prix'}
+          value={data.estimate}
+          className="not-prose"
+          labelWidthClass="sm:w-[35%]"
+        />
       )}
       <div
         className="text-base leading-relaxed text-foreground/90

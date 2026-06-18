@@ -88,7 +88,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
                 <Star className="h-4 w-4 fill-rating/40 text-rating" />
               </div>
               <span className="font-semibold text-primary-foreground">4,2/5</span>
-              <span>· 9 697 avis vérifiés</span>
+              <span>· 222 avis vérifiés</span>
             </div>
           </div>
 

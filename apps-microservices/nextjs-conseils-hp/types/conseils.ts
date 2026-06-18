@@ -20,6 +20,7 @@ export type ConseilBlockType =
   | 'produits'
   | 'tableau-html'
   | 'tableau-prix'
+  | 'estimation-prix' // Tableau prix "single" (type 11 BO non fusionné) — box estimation
   | 'faq'
   | 'type-section'  // Section par type (animal, produit…) avec image, estimation, bullets
   | 'brochure'      // Bloc guide/brochure téléchargeable avec form email
