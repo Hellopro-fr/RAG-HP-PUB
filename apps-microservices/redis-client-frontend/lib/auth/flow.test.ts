@@ -65,4 +65,10 @@ describe("completeCallback", () => {
     const r = await completeCallback({ code: "c", state: "a", stateCookie: "a", verifierCookie: "v" })
     expect(r).toEqual({ status: "error", reason: "exchange_failed" })
   })
+  it("errors when token verification throws", async () => {
+    vi.spyOn(oauth, "exchangeCode").mockResolvedValue({ access_token: "tok" })
+    vi.spyOn(oauth, "verifyAndExtract").mockRejectedValue(new Error("bad sig"))
+    const r = await completeCallback({ code: "c", state: "a", stateCookie: "a", verifierCookie: "v" })
+    expect(r).toEqual({ status: "error", reason: "token_invalid" })
+  })
 })
