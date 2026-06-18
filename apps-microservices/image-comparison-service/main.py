@@ -4,7 +4,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.router.comparator import router as ComparatorRouter
-from app.core.job_manager import job_manager
 from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
 
 # Configure logging
