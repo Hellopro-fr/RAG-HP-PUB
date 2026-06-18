@@ -44,6 +44,7 @@ import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
+import { buildHtmlIndex } from "./htmlIndex.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -542,7 +543,7 @@ context.pushedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor });
 // d'écriture dataset, donc routerDefaultHandler peut de nouveau pousser les pages
 // « confirmed » en mode update (cf. régression PushedSet du 2026-05-24).
 context.checkedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor, keyPrefix: 'checked' });
-context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
+context.statsManager = new StatsManager(sharedRedis, id, storagePath || ".");
 // No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
 
@@ -561,8 +562,10 @@ if (dropData) {
     if (context.pushedSet) await context.pushedSet.cleanup();
     if (context.checkedSet) await context.checkedSet.cleanup();
     await context.statsManager.cleanup();
-    // Shared client survives dedup.cleanup (ownsClient=false), so no reconnect
-    // needed for dedupManager. StatsManager still owns its own client.
+    // Shared client survives all manager cleanups (ownsClient=false on dedup,
+    // pushed, checked AND now stats), so no reconnect is needed. The
+    // statsManager.connect() below is a no-op on the injected path (kept for
+    // symmetry with the legacy URL constructor).
     await context.statsManager.connect();
 
     isHistorised = true;
@@ -682,8 +685,7 @@ if (crawlMode === 'update') {
     // --- URL CONSOLIDATION (Epic 1) ---
     // Load URLs from 3 sources and deduplicate with strict priority:
     // Dataset > Request_queue > Request_url
-    const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-    const consolidator = new UrlConsolidator(redisUrl, id, previousCrawlId, domain);
+    const consolidator = new UrlConsolidator(sharedRedis, id, previousCrawlId, domain);
     await consolidator.connect();
     context.urlConsolidator = consolidator;
 
@@ -718,9 +720,10 @@ if (crawlMode === 'update') {
         url: site,
         userData: { source: 'seed' }
     });
-    if (context.dedupManager) {
-        await context.dedupManager.addUrl(site);
-    }
+    // Do NOT pre-add the homepage to Redis dedup here (same rule as the standard
+    // seed below). The handler claims it on first processing; pre-adding makes the
+    // handler see it as a "Doublon" and skip extraction — which also skips homepage
+    // detection (regional-path exclusion) in update mode.
 
     // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
     for await (const { url: consolidatedUrl, source } of allUrls) {
@@ -988,6 +991,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const filtered_ext = await readStat("filtered_ext");
     const filtered_nonfr = await readStat("filtered_nonfr");
     const filtered_duplicate = await readStat("filtered_duplicate");
+    const filtered_pdf = await readStat("filtered_pdf");
     const dropped_cb = await readStat("dropped_cb");
     const external_redirects = await readStat("external_redirects");
     const timeout_individual = await readStat("timeout_individual");
@@ -1013,6 +1017,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         filtered_ext,
         filtered_nonfr,
         filtered_duplicate,
+        filtered_pdf,
         dropped_cb,
         external_redirects,
         timeout_individual,
@@ -1051,6 +1056,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // per-param frequency without URL replay. Self-contained: own try/catch in the
     // helper, never throws. See questionMarkDecision.ts persistObservations().
     persistQuestionMarkObservations(storagePath);
+
+    // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
+    buildHtmlIndex(storagePath, domain);
 
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
@@ -1180,9 +1188,10 @@ if (typeCrawling == "sitemap") {
                     continue;
                 }
 
-                if (context.dedupManager) {
-                    await context.dedupManager.addUrl(url);
-                }
+                // Do NOT pre-add to Redis dedup before queueing. The page handler
+                // claims each URL on first processing (routes.ts). Pre-adding here
+                // made every non-dataset seed (request_queue / request_url) self-mark
+                // as "Doublon" and get skipped before reaching UpdateChecker.
                 await requestQueue.addRequest({
                     url: url,
                     userData: { source: source }

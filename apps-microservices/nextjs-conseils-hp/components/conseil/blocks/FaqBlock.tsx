@@ -39,7 +39,7 @@ export function FaqBlock({ data }: FaqBlockProps) {
               className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
               aria-expanded={openIndex === i}
             >
-              <span className="font-semibold text-foreground">{item.q}</span>
+              <span className="text-base font-semibold text-foreground">{item.q}</span>
               <ChevronDown
                 className={`h-5 w-5 shrink-0 text-primary transition-transform ${
                   openIndex === i ? 'rotate-180' : ''
@@ -48,7 +48,7 @@ export function FaqBlock({ data }: FaqBlockProps) {
               />
             </button>
             {openIndex === i && (
-              <div className="border-t border-border px-5 py-4 text-sm text-foreground/90">
+              <div className="border-t border-border px-5 py-4 text-base text-foreground/90">
                 <div
                   className="[&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-semibold [&_a]:text-primary [&_a]:underline"
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.a) }}

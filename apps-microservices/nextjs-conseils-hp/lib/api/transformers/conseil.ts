@@ -474,6 +474,7 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
     ...(r.schema_guide && Object.keys(r.schema_guide).length > 0 ? { schemaGuide: normalizeSchemaGuide(r.schema_guide) } : {}),
     ...(r.schema_breadcrumb && Object.keys(r.schema_breadcrumb).length > 0 ? { schemaBreadcrumb: r.schema_breadcrumb } : {}),
     ...(r.auteur ? { author: transformAuteur(r.auteur) } : {}),
+    ...(r.temps_lecture ? { tempsLecture: r.temps_lecture } : {}),
     ...(r.pages_conseils_associees?.length
       ? { conseilsAssocies: r.pages_conseils_associees.map(transformConseilAssocie) }
       : {}),

@@ -1690,6 +1690,178 @@ class CrawlerManager:
             detail=f"GCS download timed out after {settings.GCS_DOWNLOAD_TIMEOUT_SECONDS}s for '{crawl_id}'. Ensure the download daemon is running."
         )
 
+    def _normalize_url_key(self, raw_url: str) -> str:
+        """Canonical URL key — MUST match PHP normalize_sfpi_url() and crawler TS
+        normalizeUrl() byte-for-byte. Keeps path+query RAW (no percent re-encoding),
+        drops scheme/port/userinfo, lowercases host, strips leading www., drops empty
+        query and #fragment, strips trailing slash(es). Inputs without an authority
+        (no 'scheme://' and no leading '//') are returned verbatim minus trailing
+        slash (PHP's no-host branch).
+        Note: rstrip('/') strips ALL trailing slashes (matches PHP rtrim); the TS side
+        strips one — divergence only on pathological multi-trailing-slash URLs, which
+        do not occur in clean crawl URLs."""
+        s0 = (raw_url or "").strip()
+        s0 = re.sub(r"#.*$", "", s0)                                  # drop fragment
+        had_authority = bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", s0)) or s0.startswith("//")
+        if not had_authority:
+            return s0.rstrip("/")
+        s = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", "", s0)
+        s = re.sub(r"^//", "", s)
+        slash = s.find("/")
+        authority = s if slash == -1 else s[:slash]
+        rest = "" if slash == -1 else s[slash:]                       # raw path(+query)
+        authority = re.sub(r"^[^@]*@", "", authority)                 # drop userinfo
+        authority = re.sub(r":\d+$", "", authority)                  # drop port
+        host = authority.lower()
+        host = re.sub(r"^www\.", "", host)
+        qi = rest.find("?")
+        path_part = rest if qi == -1 else rest[:qi]
+        query_part = "" if qi == -1 else rest[qi + 1:]
+        query = ("?" + query_part) if query_part != "" else ""
+        return (host + path_part + query).rstrip("/")
+
+    def _dataset_dir_for_job(self, job_info: dict) -> Optional[str]:
+        """Resolve the local dataset directory for a crawl, mirroring the path
+        construction used by get_status() / _generate_archive_sync():
+        {storage_path}/storage/datasets/{domain} with a {domain}->{sanitized} fallback.
+        Returns the existing directory, or None if neither variant is present on disk."""
+        storage_path = job_info.get("storage_path")
+        domain = job_info.get("domain")
+        if not storage_path or not domain:
+            return None
+        crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
+        dataset_path = os.path.join(crawlee_storage_base, domain)
+        if os.path.isdir(dataset_path):
+            return dataset_path
+        sanitized_path = os.path.join(crawlee_storage_base, domain.replace('.', '-'))
+        if os.path.isdir(sanitized_path):
+            return sanitized_path
+        return None
+
+    async def get_single_url_html(self, job_info: dict, url: str) -> Optional[str]:
+        """Return one URL's HTML from a crawl (hot local / stashed / archived).
+        None if the URL is absent from the crawl's dataset.
+
+        Cold-tier path so PHP (no GCS access) can fetch HTML over REST:
+        - stashed crawl  -> inline unstash (mirrors get_results_archive's stashed_at branch)
+        - archived crawl with purged local data -> retrieve the GCS archive via the
+          download daemon and extract it into the crawl's storage_path so the dataset
+          reappears at {storage_path}/storage/datasets/{domain} (same layout the
+          archive was written with by _generate_archive_sync).
+        Lookup uses the Task-2 html_index.json when present, else scans the dataset."""
+        crawl_id = job_info["crawl_id"]
+
+        # Inline-unstash a stashed crawl (mirror get_results_archive's stashed_at branch).
+        if job_info.get("stashed_at"):
+            await self.unstash_crawl(job_info)
+            job_info = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+            if job_info is None:
+                return None
+
+        dataset_dir = self._dataset_dir_for_job(job_info)
+
+        # Archived crawl whose local data was purged: pull the archive from GCS and
+        # extract it into storage_path (the archive stores 'storage/datasets/...'),
+        # then recompute the dataset dir. _retrieve_from_gcs_daemon returns the
+        # downloaded .tar.gz path (it does NOT extract), so we extract here, mirroring
+        # unstash_crawl's extract-into-{storage_path} step.
+        if job_info.get("status") == "archived" and not dataset_dir:
+            # Serialize concurrent archived extracts on the SAME ownership lock
+            # unstash_crawl uses (key 'unstash_lock:{crawl_id}', TTL
+            # UNSTASH_LOCK_TTL_SECONDS). tarfile.extractall is not atomic; two
+            # concurrent GET /html for the same archived crawl would extract into
+            # the same tree -> truncated/corrupt JSON. Mirrors unstash_crawl
+            # (lock ~L2937, preflight ~L3029-3047, extract+cleanup ~L3050-3069).
+            unstash_lock_key = f"unstash_lock:{crawl_id}"
+            lock_value = await self._acquire_ownership_lock(
+                unstash_lock_key, settings.UNSTASH_LOCK_TTL_SECONDS
+            )
+            if lock_value is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"},
+                )
+            try:
+                # Double-checked locking: another caller may have extracted while
+                # we waited on the lock. Re-check; if the dataset now exists, skip.
+                dataset_dir = self._dataset_dir_for_job(job_info)
+                if not dataset_dir:
+                    archive_tar = await self._retrieve_from_gcs_daemon(crawl_id)
+                    target_storage = job_info.get("storage_path") or os.path.join(
+                        settings.CRAWLER_STORAGE_PATH, crawl_id
+                    )
+
+                    # --- Disk pre-flight (size of tar × 2 + 500MB floor) ---
+                    try:
+                        tar_size = os.path.getsize(archive_tar)
+                        required_bytes = max(int(tar_size * 2), 500 * 1024 * 1024)
+                        baseline_state = self._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH)
+                        if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                            raise HTTPException(
+                                status_code=503,
+                                detail={
+                                    "error_code": "INSUFFICIENT_DISK_SPACE",
+                                    "required_bytes": required_bytes,
+                                    "available_bytes": baseline_state["free_bytes"],
+                                    "disk_state": baseline_state,
+                                },
+                            )
+                    except HTTPException:
+                        raise
+                    except Exception as e:
+                        logger.warning(f"Disk pre-flight skipped for archived /html '{crawl_id}': {e}")
+
+                    # --- Extract archive (failure cleans the partial dataset) ---
+                    try:
+                        def _extract():
+                            os.makedirs(target_storage, exist_ok=True)
+                            with tarfile.open(archive_tar, 'r:gz') as tar:
+                                tar.extractall(path=target_storage, filter="data")
+                        await anyio.to_thread.run_sync(_extract)
+                        logger.info(f"Extracted archived /html archive for '{crawl_id}' to '{target_storage}'.")
+                    except Exception as e:
+                        logger.error(f"Extract failed for archived /html '{crawl_id}': {e}", exc_info=True)
+                        # Remove the partial dataset so a later call doesn't see it
+                        # as "present" and serve incomplete data.
+                        shutil.rmtree(target_storage, ignore_errors=True)
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail={"error_code": "EXTRACT_FAILED", "exception": str(e)},
+                        )
+                    dataset_dir = self._dataset_dir_for_job(job_info)
+            finally:
+                await self._release_ownership_lock(unstash_lock_key, lock_value)
+
+        if not dataset_dir or not os.path.isdir(dataset_dir):
+            return None
+
+        target = self._normalize_url_key(url)
+
+        # Prefer the html_index.json the crawler now writes (Task 2); fall back to scan.
+        index_path = os.path.join(dataset_dir, "html_index.json")
+        if os.path.exists(index_path):
+            try:
+                with open(index_path, encoding="utf-8") as f:
+                    idx = json.load(f).get("index", {})
+                fname = idx.get(target)
+                if fname:
+                    with open(os.path.join(dataset_dir, fname), encoding="utf-8") as f:
+                        return json.load(f).get("content")
+            except Exception:
+                pass  # fall through to scan
+
+        for fname in os.listdir(dataset_dir):
+            if not fname.endswith(".json") or fname == "html_index.json":
+                continue
+            try:
+                with open(os.path.join(dataset_dir, fname), encoding="utf-8") as f:
+                    rec = json.load(f)
+                if self._normalize_url_key(rec.get("url", "")) == target:
+                    return rec.get("content")
+            except Exception:
+                continue
+        return None
+
     def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive]) -> str:
         """
         Synchronous helper function to generate the archive.

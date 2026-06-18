@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QuoteFormBlock } from '@/components/conseil/blocks/QuoteFormBlock';
 import type { AoFormQuestion } from '@/types/conseils';
+
+// QuoteFormBlock uses IntersectionObserver in its useEffect
+beforeAll(() => {
+  vi.stubGlobal('IntersectionObserver', vi.fn(() => ({ observe: vi.fn(), disconnect: vi.fn() })));
+});
 
 const mockQuestion: AoFormQuestion = {
   id: 1,
@@ -17,31 +22,31 @@ const mockQuestion: AoFormQuestion = {
 };
 
 describe('QuoteFormBlock', () => {
-  it('renders static fallback text when no question in data', () => {
+  it('renders static fallback text when no question provided', () => {
     render(<QuoteFormBlock data={{}} />);
     expect(screen.getByText(/passez à l'action/i)).toBeDefined();
   });
 
-  it('renders question label from data.question', () => {
-    render(<QuoteFormBlock data={{ question: mockQuestion }} />);
+  it('renders question label from formulaire_ao', () => {
+    render(<QuoteFormBlock data={{}} formulaire_ao={mockQuestion} />);
     expect(screen.getByText('Quel type de projet ?')).toBeDefined();
   });
 
-  it('renders all choices from data.question.choix', () => {
-    render(<QuoteFormBlock data={{ question: mockQuestion }} />);
+  it('renders all choices from formulaire_ao.choix', () => {
+    render(<QuoteFormBlock data={{}} formulaire_ao={mockQuestion} />);
     expect(screen.getByText('Construction neuve')).toBeDefined();
     expect(screen.getByText('Rénovation')).toBeDefined();
     expect(screen.getByText('Extension')).toBeDefined();
   });
 
   it('renders image when choice has image', () => {
-    render(<QuoteFormBlock data={{ question: mockQuestion }} />);
+    render(<QuoteFormBlock data={{}} formulaire_ao={mockQuestion} />);
     const img = screen.getByAltText('Construction neuve') as HTMLImageElement;
     expect(img.src).toContain('construction.jpg');
   });
 
   it('highlights selected choice on click', () => {
-    render(<QuoteFormBlock data={{ question: mockQuestion }} />);
+    render(<QuoteFormBlock data={{}} formulaire_ao={mockQuestion} />);
     const btn = screen.getByText('Construction neuve').closest('button')!;
     fireEvent.click(btn);
     expect(btn.className).toContain('ring-2');

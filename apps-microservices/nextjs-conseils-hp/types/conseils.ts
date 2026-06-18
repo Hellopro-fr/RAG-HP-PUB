@@ -116,6 +116,8 @@ export interface ConseilPage {
   author?: AuthorInfo;
   /** Date de dernière mise à jour, formatée en français (ex: "Mis à jour le 28 avril 2026") */
   updatedAt?: string;
+  /** Temps de lecture estimé en minutes (issu du champ temps_lecture de l'API) */
+  tempsLecture?: number;
   breadcrumb?: Array<{ label: string; href?: string }>;
   formulaire_ao?: AoFormQuestion | null;
   /** Rubrique principale de la page — source de l'id_rubrique et du libellé pour l'iframe */

@@ -164,3 +164,36 @@ export function shouldRunRecovery(flag: boolean, typeCrawling: string): boolean 
 
 export const RECOVER_FAILED_ON_RESTART: boolean =
     resolveRecoverFailedOnRestart(process.env.RECOVER_FAILED_ON_RESTART);
+
+// ---------------------------------------------------------------------------
+// Download / PDF skip (fast-fail)
+// Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a navigation error is Playwright's download trigger — the response
+ * is a downloadable file (e.g. an extension-less PDF path) rather than a page.
+ * "Download is starting" is also a PERMANENT_ERROR_MARKER; this named predicate
+ * is the reusable form consumed by the errorHandler + failedRequestHandler.
+ */
+export function isDownloadError(errorStr: string): boolean {
+    return errorStr.includes("Download is starting");
+}
+
+/** Resolves the download-skip kill-switch. Default true; only "false" disables. */
+export function resolveSkipDownloads(raw: string | undefined): boolean {
+    return (raw ?? "true").trim().toLowerCase() !== "false";
+}
+
+/** Pure skip decision: skipping is enabled AND the error is a download trigger. */
+export function shouldSkipAsDownload(skipDownloads: boolean, errorStr: string): boolean {
+    return skipDownloads && isDownloadError(errorStr);
+}
+
+/** Crawlee dataset name for skipped downloads/PDFs (mirrors error-/nfr- naming). */
+export function pdfDatasetName(crawleeStorageName: string | undefined, domain: string): string {
+    return crawleeStorageName ? `pdf-${crawleeStorageName}` : `pdf-${domain}`;
+}
+
+/** Resolved once at module load. Node-only, inherited by the crawler subprocess. */
+export const SKIP_DOWNLOADS: boolean = resolveSkipDownloads(process.env.SKIP_DOWNLOADS);

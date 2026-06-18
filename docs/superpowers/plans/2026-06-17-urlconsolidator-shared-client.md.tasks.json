@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-17-urlconsolidator-shared-client.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "UC-T1: UrlConsolidator injected-client constructor + ownsClient guards + tests",
+      "status": "completed",
+      "description": "**Goal:** UrlConsolidator accepts RedisClientType | string; injected path makes connect/disconnect no-ops via an ownsClient guard (mandatory — else cleanup closes the shared client); string path keeps legacy create-and-own. cleanup/fullCleanup/isInDataset/consolidate/ensureTtl/loadRequestQueueUrls bodies unchanged. Create UrlConsolidator.test.ts: injected no-op lifecycle, cleanup dels rq+ru and KEEPS dataset + no disconnect, fullCleanup dels all three + no disconnect, isInDataset->sIsMember delegation, error-path (reject->false), legacy construct.\n\n**Files:** src/class/UrlConsolidator.ts, src/class/UrlConsolidator.test.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/class/UrlConsolidator.ts\", \"apps-microservices/crawler-service/crawler/src/class/UrlConsolidator.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm run build && npm test\", \"acceptanceCriteria\": [\"ctor accepts RedisClientType | string\", \"connect/disconnect guarded by ownsClient\", \"cleanup dels rq+ru keeps dataset no disconnect\", \"fullCleanup dels all three no disconnect\", \"isInDataset->sIsMember delegation\", \"error-path reject->false\", \"legacy construct-without-connect\", \"existing 157 tests stay green\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "UC-T2: wire sharedRedis into UrlConsolidator at main.ts:688 + drop dead redisUrl",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** main.ts:688 constructs new UrlConsolidator(sharedRedis, id, previousCrawlId, domain). If tsc flags the local const redisUrl (main.ts:687) as unused, remove that line; else leave it. tsc clean, no other line changes.\n\n**Files:** src/main.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/main.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm run build\", \"acceptanceCriteria\": [\"main.ts:688 passes sharedRedis\", \"dead local redisUrl removed only if tsc flags unused\", \"tsc 0 errors\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "UC-T3: crawler-service CLAUDE.md docs (replace UrlConsolidator deferred caveat)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Replace the '(Remaining separate client: UrlConsolidator still opens its own Redis connection — deferred.)' caveat (CLAUDE.md ~line 384, added by the StatsManager work) with text stating UrlConsolidator now also consumes the injected shared client (update mode, ownsClient=false), no separate per-crawl client remains, spec link.\n\n**Files:** apps-microservices/crawler-service/CLAUDE.md\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -n 'no separate per-crawl' apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"caveat replaced\", \"no 'UrlConsolidator still opens its own' text remains\", \"spec link present\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-18T00:00:00Z"
+}
