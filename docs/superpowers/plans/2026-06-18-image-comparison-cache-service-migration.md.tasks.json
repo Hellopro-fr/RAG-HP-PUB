@@ -1,17 +1,17 @@
 {
   "planPath": "docs/superpowers/plans/2026-06-18-image-comparison-cache-service-migration.md",
-  "lastUpdated": "2026-06-18T12:00:00Z",
+  "lastUpdated": "2026-06-18T18:00:00Z",
   "tasks": [
     {
       "id": 1,
       "subject": "cachemig-T1: build infra (Dockerfile common_utils + SERVICE_NAME)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Make common_utils importable in the image-comparison-service image + set Redis client_name, ZERO behavior change.\n\n**Files (RAG-HP-PUB):**\n- Modify apps-microservices/image-comparison-service/Dockerfile (insert `COPY libs/common-utils /app/libs/common-utils` + `RUN pip install -e /app/libs/common-utils` after apt-get, before requirements copy)\n- Modify docker-compose.yml (image-comparison-service.environment += SERVICE_NAME=image-comparison-service)\n\n**Verify:** (remote/VM) docker build from repo root succeeds + import common_utils.redis.cache_service works. Local: visual diff.\n\n**Commit:** both EN+FR. Branch features/poc. Do NOT push. Full code in plan T1.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/Dockerfile\",\"docker-compose.yml\"],\"verifyCommand\":\"docker build -f apps-microservices/image-comparison-service/Dockerfile . (remote/VM)\",\"acceptanceCriteria\":[\"common_utils COPY+pip install -e before requirements\",\"SERVICE_NAME in compose\",\"no python code changed\"]}\n```"
     },
     {
       "id": 2,
       "subject": "cachemig-T2: code migrate JobManager + main.py to cache_service",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Replace inline redis client with shared cache_service ; counter DECR via safe_decrement_key. Behavior byte-identical.\n\n**Files (RAG-HP-PUB):**\n- Modify apps-microservices/image-comparison-service/main.py (init_redis_pool/close_redis_pool startup/shutdown ; drop job_manager.connect_redis/close_redis)\n- Modify apps-microservices/image-comparison-service/app/core/job_manager.py (remove import redis.asyncio + self.redis + connect_redis/close_redis ; add `from common_utils.redis import cache_service` ; every self.redis.<op> -> cache_service.redis_client.<op> keeping .json() ; INCR raw, finally DECR -> await cache_service.safe_decrement_key ; semaphore/local_active_jobs/keys/TTL unchanged)\n\n**GOTCHA:** access cache_service.redis_client as module attribute at call time ; never `from ...cache_service import redis_client`.\n\n**Verify:** python -m py_compile main.py app/core/job_manager.py (or grep no self.redis/import redis) ; (remote) docker build + smoke (/capacity + compare job -> Successfully connected to Redis, client_name in CLIENT LIST, counter >=0).\n\n**Commit:** both EN+FR. Branch features/poc. Do NOT push. Full surgical edits in plan T2.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/main.py\",\"apps-microservices/image-comparison-service/app/core/job_manager.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/main.py apps-microservices/image-comparison-service/app/core/job_manager.py\",\"acceptanceCriteria\":[\"init/close_redis_pool wired\",\"no self.redis/import redis remain\",\"ops via cache_service.redis_client (.json() preserved)\",\"finally DECR via safe_decrement_key\",\"keys/TTL/contract unchanged\",\"redis_client accessed at call time\",\"py_compile clean\"]}\n```"
     }
