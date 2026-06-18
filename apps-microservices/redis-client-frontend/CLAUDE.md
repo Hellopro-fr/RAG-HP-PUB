@@ -89,6 +89,8 @@ public/
 | `SESSION_TTL` | No | Session lifetime in seconds (default: `28800` = 8h) |
 | `SSO_CENTRAL_LOGOUT` | No | `true` to also RP-logout at account-service on sign-out (default: `false`) |
 
+> When running via root `docker-compose`, several of these vars are sourced from namespaced host keys (`REDIS_CLIENT_*` / `ACCOUNT_SECURE_COOKIE`). See `.env.example` for the exact mapping.
+
 ## account-service client registration
 
 Before the SSO flow works, register `redis-client-frontend` as an OAuth client on the account-service.
