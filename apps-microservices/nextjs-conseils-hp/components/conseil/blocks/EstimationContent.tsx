@@ -8,7 +8,13 @@ function sanitizeEstimationHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/\s+on\w+="[^"]*"/gi, '')
-    .replace(/\s+style="[^"]*"/gi, '');
+    .replace(/\s+style="[^"]*"/gi, '')
+    // <br>/espaces/&nbsp; superflus en tête et en queue
+    .replace(/^(?:\s| |&nbsp;|<br\s*\/?>)+/i, '')
+    .replace(/(?:\s| |&nbsp;|<br\s*\/?>)+$/i, '')
+    // <br> juste avant une liste (espace vide) ou juste après
+    .replace(/(?:<br\s*\/?>\s*)+(?=<(?:ul|ol)\b)/gi, '')
+    .replace(/(<\/(?:ul|ol)>)(?:\s| |&nbsp;|<br\s*\/?>)+/gi, '$1');
 }
 
 interface EstimationContentProps {
