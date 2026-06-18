@@ -32,9 +32,9 @@ app/
   layout.tsx
   globals.css
   auth/
-    login/page.tsx            # Initiates OAuth PKCE flow → redirect to account-service
-    callback/page.tsx         # Receives authorization code, exchanges for token, sets session
-    logout/page.tsx           # Clears session cookie (+ optional RP-logout at account-service)
+    login/route.ts            # GET — initiates OAuth PKCE flow → redirect to account-service
+    callback/route.ts         # GET — receives authorization code, exchanges for token, sets session
+    logout/route.ts           # GET — clears session cookie (+ optional RP-logout at account-service)
     denied/page.tsx           # Shown when email is not in ADMIN_EMAILS allow-list
   actions/
     cache-actions.ts          # Server actions for Redis mutations
@@ -43,10 +43,10 @@ components/                   # UI components (cache-header, cache-table, confir
 hooks/
 lib/
   auth/
-    pkce.ts                   # PKCE code_verifier/code_challenge (S256)
-    session.ts                # Sign/verify rcf_session cookie (HS256 via SESSION_SECRET)
-    token-exchange.ts         # POST {ACCOUNT_BASE_URL}/oauth/token + HS256 JWT verify
     config.ts                 # Reads and validates all SSO env vars
+    oauth.ts                  # PKCE S256 gen, authorize URL, token exchange, HS256 token verify
+    session.ts                # Sign/verify rcf_session cookie (HS256 via SESSION_SECRET)
+    flow.ts                   # startLogin/completeCallback orchestration (framework-free)
   domain/cache-entry.ts      # CacheEntry + CacheMetadata interfaces
   infrastructure/             # Redis repository (Singleton + SCAN)
   application/                # getCachedData use case (parallel fetches)
@@ -62,7 +62,7 @@ public/
 - **Authentication via account-service SSO (OAuth 2.1 + PKCE S256):**
   - `middleware.ts` gates every route on a signed `rcf_session` cookie (HS256, `SESSION_SECRET`).
   - Unauthenticated GET → `/auth/login` → account-service `/authorize` (PKCE S256, `code_challenge_method=S256`).
-  - account-service redirects to `/auth/callback` with the authorization code; the app exchanges it for a JWT at `{ACCOUNT_BASE_URL}/oauth/token`, verifies the JWT with `JWT_SECRET` (HS256), then sets the 8h `rcf_session` cookie.
+  - account-service redirects to `/auth/callback` with the authorization code; the app exchanges it for a JWT at `{ACCOUNT_BASE_URL}/token` (HTTP Basic client auth), verifies the JWT with `JWT_SECRET` (HS256), then sets the 8h `rcf_session` cookie.
   - Authorization: signed-in email must be in the `ADMIN_EMAILS` allow-list; non-allow-listed emails are redirected to `/auth/denied`.
   - Sign out via `/auth/logout` — clears the `rcf_session` cookie; if `SSO_CENTRAL_LOGOUT=true`, also calls account-service RP-logout endpoint.
   - **The old `ADMIN_TOKEN` paste-login page (`app/login/`) has been removed.**
