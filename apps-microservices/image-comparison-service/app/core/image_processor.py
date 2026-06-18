@@ -187,6 +187,10 @@ class ImageProcessor:
                     img_id = img_input.id
 
                     if isinstance(response, Exception):
+                        if isinstance(response, asyncio.TimeoutError):
+                            logger.warning(
+                                f"Download cap ({settings.IMG_DOWNLOAD_CAP_S}s) hit for {img_id} ({img_input.url})"
+                            )
                         failed.append(FailedImage(id=img_id, url=img_input.url))
                         continue
 
