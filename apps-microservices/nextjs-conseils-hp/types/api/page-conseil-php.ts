@@ -190,6 +190,8 @@ export interface PhpConseilPage {
   pages_conseils_associees?: PhpConseilAssocie[];
   formulaire_ao?: PhpAoQuestion[];
   top_clients?: PhpTopClient[];
+  /** Temps de lecture estimé en minutes */
+  temps_lecture?: number;
   header?: unknown;
   footer?: unknown;
 }

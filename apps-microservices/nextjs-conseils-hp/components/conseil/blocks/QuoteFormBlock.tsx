@@ -23,6 +23,10 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
     ctaLabel = 'Faire une demande groupée (1 min)',
   } = data;
 
+  const parenIdx = ctaLabel.indexOf(' (');
+  const ctaMain = parenIdx !== -1 ? ctaLabel.slice(0, parenIdx) : ctaLabel;
+  const ctaSub  = parenIdx !== -1 ? ctaLabel.slice(parenIdx + 1) : '';
+
   const {
     modalOpen, startStep1, showError,
     questionLabel, isObligatoire,
@@ -68,7 +72,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
               <br />
               <span className="text-cta">{subtitle}</span>
             </h3>
-            <p className="text-sm text-primary-foreground/85 lg:text-base">
+            <p className="text-base text-primary-foreground/85">
               Décrivez votre projet en 30 secondes et recevez{' '}
               <strong className="text-primary-foreground">jusqu&apos;à 3 devis gratuits</strong> de
               fournisseurs vérifiés près de chez vous.
@@ -80,7 +84,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
                 </li>
               ))}
             </ul>
-            <div className="mt-2 flex items-center gap-2 text-xs text-primary-foreground/80">
+            <div className="mt-2 flex items-center gap-2 text-sm text-primary-foreground/80">
               <div className="flex" aria-label="4,2 sur 5">
                 {[1, 2, 3, 4].map((i) => (
                   <Star key={i} className="h-4 w-4 fill-rating text-rating" />
@@ -88,13 +92,13 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
                 <Star className="h-4 w-4 fill-rating/40 text-rating" />
               </div>
               <span className="font-semibold text-primary-foreground">4,2/5</span>
-              <span>· 9 697 avis vérifiés</span>
+              <span>· 222 avis vérifiés</span>
             </div>
           </div>
 
           {/* ── Colonne droite — formulaire ── */}
           <div className="bg-card p-5 text-card-foreground lg:p-6">
-            <h4 className="mb-3 text-sm font-bold text-foreground">
+            <h4 className="mb-3 text-lg font-bold text-foreground">
               {questionLabel}
               {isObligatoire && <span className="text-cta"> *</span>}
             </h4>
@@ -115,9 +119,12 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
             <button
               type="button"
               onClick={handleCtaClick}
-              className="mt-4 inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-cta px-4 text-sm font-bold uppercase tracking-wide text-cta-foreground shadow-lg transition hover:bg-cta-hover"
+              className="mt-4 flex w-full cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md bg-cta px-4 py-2.5 text-base font-bold uppercase tracking-wide text-cta-foreground shadow-lg transition hover:bg-cta-hover sm:h-12 sm:flex-row sm:gap-2 sm:py-0"
             >
-              {ctaLabel} <ArrowRight className="h-4 w-4" />
+              <span>{ctaMain}</span>
+              <span className="flex items-center gap-1.5">
+                {ctaSub && `${ctaSub} `}<ArrowRight className="h-4 w-4" />
+              </span>
             </button>
           </div>
         </div>

@@ -69,7 +69,7 @@ export function Hero({
               Conseil d&apos;expert
             </span>
 
-            <h1 className="text-2xl font-extrabold leading-[1.1] tracking-tight sm:text-3xl lg:text-[2rem]">
+            <h1 className="text-3xl font-extrabold leading-[1.1] tracking-tight sm:text-4xl lg:text-[2.75rem]">
               {data.title}
             </h1>
 
@@ -77,8 +77,11 @@ export function Hero({
               <KeyTakeaways items={resume} html={resumeHtml} title={resumeTitle} />
             )}
 
+            {/* Slot mobile — juste avant les métas auteur */}
+            {slot && <div className="mt-4 lg:hidden">{slot}</div>}
+
             {/* Meta auteur / date */}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-primary-foreground/80">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-base text-primary-foreground/80">
               {author && (
                 <a href="#author" className="flex items-center gap-2 hover:text-primary-foreground">
                   {author.photo ? (
@@ -122,8 +125,8 @@ export function Hero({
             )}
           </div>
 
-          {/* Slot droit (QuoteForm ou SuppliersCarousel) */}
-          {slot && <div>{slot}</div>}
+          {/* Slot desktop — colonne droite */}
+          {slot && <div className="hidden lg:block">{slot}</div>}
         </div>
       </div>
     </section>
@@ -139,9 +142,9 @@ function KeyTakeaways({ items, html, title: _title }: { items: ResumeItem[]; htm
   return (
     <aside className="mt-3 max-w-xl rounded-xl border border-primary-foreground/20 bg-primary-foreground/10 p-3 backdrop-blur-sm">
       <div className="flex gap-2">
-        <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cta" />
+        <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-cta" />
         <div
-          className="min-w-0 flex-1 text-[13px] leading-snug text-primary-foreground/90
+          className="min-w-0 flex-1 text-base leading-snug text-primary-foreground/90
             [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-4
             [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-4
             [&_li]:mb-0.5
@@ -163,7 +166,7 @@ function KeyTakeaways({ items, html, title: _title }: { items: ResumeItem[]; htm
                   <button
                     type="button"
                     onClick={() => setOpen(v => !v)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+                    className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-cta hover:underline"
                   >
                     {open ? 'Voir moins' : `Voir plus (+${allLis.length - 2})`}
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />

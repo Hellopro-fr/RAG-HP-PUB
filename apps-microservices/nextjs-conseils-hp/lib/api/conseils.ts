@@ -172,6 +172,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
       ...(canonicalUrl ? { canonicalUrl } : {}),
       breadcrumb,
       ...(updatedAt ? { updatedAt } : {}),
+      ...(transformed.tempsLecture ? { tempsLecture: transformed.tempsLecture } : {}),
       hero: {
         ...base.hero,
         title: raw.titre,

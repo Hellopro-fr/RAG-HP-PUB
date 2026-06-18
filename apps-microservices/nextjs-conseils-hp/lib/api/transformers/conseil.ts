@@ -1,5 +1,5 @@
 import type { ConseilPage, ConseilBlock, ConseilPageType, LienInterne, AuthorInfo, ConseilAssocie } from '@/types/conseils';
-import type { PhpConseilResponse, PhpBloc, PhpImage, PhpAuteur, PhpConseilAssocie } from '@/types/api/page-conseil-php';
+import type { PhpConseilResponse, PhpBloc, PhpImage, PhpCta, PhpAuteur, PhpConseilAssocie } from '@/types/api/page-conseil-php';
 
 const PAGE_TYPE_MAP: Record<number, ConseilPageType> = {
   0: 'autre',
@@ -100,6 +100,109 @@ function mergeEstimationIntoNextBloc(blocs: PhpBloc[]): PhpBloc[] {
       result.push(cur);
       i++;
     }
+  }
+  return result;
+}
+
+/**
+ * Mappe un bloc PHP (par `type` numérique du BO) vers un bloc Next.
+ *
+ * Référence des types BO (contenu.type) :
+ *   1  : Titre secondaire / H2
+ *   12 : Titre paragraphe / H3
+ *   2  : Texte
+ *   15 : Bloc résumé
+ *   3  : Image
+ *   4  : Texte + Image
+ *   5  : Image + Texte
+ *   13 : Image + Image
+ *   6  : Vidéo (lien vidéo)
+ *   7  : CTA
+ *   8  : Bloc produit
+ *   9  : Tableau HTML
+ *   11 : Tableau prix (fusionné dans le 4/5 suivant via mergeEstimationIntoNextBloc)
+ *   16 : Bloc pour / contre (pros & cons)
+ *
+ * Tout type non géré ici retourne `null` (bloc ignoré au rendu).
+ */
+/**
+ * Fusionne, UNIQUEMENT juste après un H3 (type 12), une séquence tableau prix (11)
+ * + texte (2) + image (3) — dans l'un ou l'autre ordre texte/image — en un seul bloc
+ * texte-image (type 4 si texte avant image, type 5 si image avant texte) :
+ *
+ *   H3 + [11, 2, 3] | [11, 3, 2] → estimation (= texte du 11) + texte-image
+ *   + CTA « Demander un devis » vers demande_info.php (form groupée préfiltrée sur la rubrique).
+ *
+ * On ne fusionne QUE lorsque le tableau prix (11) est présent : un CTA sans estimation
+ * de prix ne serait pas cohérent. Le H3 reste affiché ; les blocs après la séquence sont
+ * conservés tels quels. CTA omis si la catégorie (info_rubrique.id) est absente.
+ */
+function isTexteImagePair(x: PhpBloc, y: PhpBloc): boolean {
+  return (x.type === 2 && y.type === 3) || (x.type === 3 && y.type === 2);
+}
+
+function orderTexteImagePair(
+  x: PhpBloc,
+  y: PhpBloc,
+): { textBloc: PhpBloc; imageBloc: PhpBloc; imageFirst: boolean } {
+  return x.type === 3
+    ? { imageBloc: x, textBloc: y, imageFirst: true } // image puis texte → type 5
+    : { textBloc: x, imageBloc: y, imageFirst: false }; // texte puis image → type 4
+}
+
+function buildTexteImageBloc(
+  textBloc: PhpBloc,
+  imageBloc: PhpBloc,
+  imageFirst: boolean,
+  priceBloc: PhpBloc | null,
+  catId?: string | number,
+): PhpBloc {
+  const cta: PhpCta | undefined = catId
+    ? {
+        wording: 'Demander un devis',
+        color: '',
+        wording_color: '',
+        formulaire_popup: 1,
+        feuille_associe: '',
+        url: `https://www.hellopro.fr/demande_info.php?soc=1&origine=46&f=${catId}`,
+      }
+    : undefined;
+
+  return {
+    ...textBloc, // conserve id/ordre (position préservée)
+    type: imageFirst ? 5 : 4, // 3,2 → image+texte ; 2,3 → texte+image
+    contenu: {
+      texte: textBloc.contenu.texte,
+      image: imageBloc.contenu.image,
+      ...(priceBloc
+        ? { estimation: { label: 'Estimation de prix', valeur: priceBloc.contenu.texte ?? '' } }
+        : {}),
+      ...(cta ? { cta } : {}),
+    },
+  };
+}
+
+function mergeTexteImageRunsAfterH3(blocs: PhpBloc[], catId?: string | number): PhpBloc[] {
+  const result: PhpBloc[] = [];
+  let i = 0;
+  while (i < blocs.length) {
+    const cur = blocs[i];
+    result.push(cur);
+
+    if (cur.type === 12) {
+      const a = blocs[i + 1];
+      const b = blocs[i + 2];
+      const c = blocs[i + 3];
+
+      // H3 + tableau prix (11) + (texte/image) — uniquement avec le bloc 11
+      if (a?.type === 11 && b && c && isTexteImagePair(b, c)) {
+        const { textBloc, imageBloc, imageFirst } = orderTexteImagePair(b, c);
+        result.push(buildTexteImageBloc(textBloc, imageBloc, imageFirst, a, catId));
+        i += 4;
+        continue;
+      }
+    }
+    i++;
   }
   return result;
 }
@@ -284,13 +387,13 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
       };
     }
 
-    case 11: // Estimation prix (texte avec badge)
+    case 11: // Tableau prix "single" (non fusionné dans un texte-image) → box estimation
       return {
         ...base,
-        type: 'texte',
+        type: 'estimation-prix',
         data: {
-          html: '',
-          estimation: { value: c.texte ?? '', label: 'Estimation de prix' },
+          label: 'Estimation de prix',
+          value: c.texte ?? '',
         },
       };
 
@@ -361,13 +464,17 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
       ...(heroImage ? { image: heroImage } : {}),
     },
     blocks: mergeEstimationIntoNextBloc(
-      (r.blocs ?? []).sort((a, b) => a.ordre - b.ordre)
+      mergeTexteImageRunsAfterH3(
+        (r.blocs ?? []).sort((a, b) => a.ordre - b.ordre),
+        (r as { info_rubrique?: { id?: number | string } }).info_rubrique?.id,
+      ),
     )
       .map(transformBloc)
       .filter((b): b is ConseilBlock => b !== null),
     ...(r.schema_guide && Object.keys(r.schema_guide).length > 0 ? { schemaGuide: normalizeSchemaGuide(r.schema_guide) } : {}),
     ...(r.schema_breadcrumb && Object.keys(r.schema_breadcrumb).length > 0 ? { schemaBreadcrumb: r.schema_breadcrumb } : {}),
     ...(r.auteur ? { author: transformAuteur(r.auteur) } : {}),
+    ...(r.temps_lecture ? { tempsLecture: r.temps_lecture } : {}),
     ...(r.pages_conseils_associees?.length
       ? { conseilsAssocies: r.pages_conseils_associees.map(transformConseilAssocie) }
       : {}),

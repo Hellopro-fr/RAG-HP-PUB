@@ -116,17 +116,23 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const hasQuoteForm = contentBlocks.some((b) => b.type === 'quote-form');
   const showQuoteForm = !hasQuoteForm && !!page.formulaire_ao && page.pageType !== 'top';
 
-  // Mid-point insertion: advance if block before is a heading or block after is an image
+  // Mid-point insertion: place just before the first h2 at or after the mid-point.
+  // If no h2 exists after mid-point, fall back to skipping heading-preceded / image-starting positions.
   const IMAGE_TYPES = ['image', 'texte-image', 'image-texte', 'image-image'];
   let quoteFormAt = Math.floor(blocksBeforeBrochure.length / 2);
-  while (
-    quoteFormAt < blocksBeforeBrochure.length &&
-    (
-      ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '') ||
-      IMAGE_TYPES.includes(blocksBeforeBrochure[quoteFormAt]?.type ?? '')
-    )
-  ) {
-    quoteFormAt++;
+  const nextH2FromMid = blocksBeforeBrochure.findIndex((b, i) => i >= quoteFormAt && b.type === 'h2');
+  if (nextH2FromMid !== -1) {
+    quoteFormAt = nextH2FromMid;
+  } else {
+    while (
+      quoteFormAt < blocksBeforeBrochure.length &&
+      (
+        ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '') ||
+        IMAGE_TYPES.includes(blocksBeforeBrochure[quoteFormAt]?.type ?? '')
+      )
+    ) {
+      quoteFormAt++;
+    }
   }
   const blocksBeforeQuoteForm = showQuoteForm
     ? blocksBeforeBrochure.slice(0, quoteFormAt)
@@ -144,6 +150,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         pageType={page.pageType}
         author={page.author}
         publishedAt={page.updatedAt}
+        readTime={page.tempsLecture !== undefined ? `${page.tempsLecture} min de lecture` : undefined}
         resume={resumeItems}
         resumeTitle={resumeTitle}
         resumeHtml={resumeHtml}
