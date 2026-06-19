@@ -1,4 +1,6 @@
 import Image from 'next/image';
+import { MapPin } from 'lucide-react';
+import { ScrollToTopButton } from './ScrollToTopButton';
 
 const FOOTER_COLUMNS = [
   {
@@ -56,19 +58,20 @@ export function SiteFooter() {
               className="h-8 w-auto"
             />
           </div>
-          <p className="mt-3 text-sm text-primary-foreground/70">
-            Le 1er marketplace BtoB français. Plus d&apos;1 million de produits pros et 1 200
-            constructeurs de bâtiments référencés.
+          <p className="mt-3 text-base text-primary-foreground/70">
+            <strong className="font-semibold text-primary-foreground">Hellopro</strong> est la
+            première place de marché professionnelle en France. Cherchez, obtenez et comparez des
+            devis pour du matériel dans plus de 10 000 catégories différentes.
           </p>
         </div>
 
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
           {FOOTER_COLUMNS.map((col) => (
             <div key={col.title}>
-              <div className="mb-3 text-sm font-bold uppercase tracking-wide text-primary-foreground/90">
+              <div className="mb-3 text-base font-bold uppercase tracking-wide text-primary-foreground/90">
                 {col.title}
               </div>
-              <ul className="space-y-2 text-sm text-primary-foreground/70">
+              <ul className="space-y-2 text-base text-primary-foreground/70">
                 {col.links.map((link) => (
                   <li key={link.href}>
                     <a
@@ -83,10 +86,23 @@ export function SiteFooter() {
             </div>
           ))}
         </div>
+
+        {/* Adresse (avec picto) à gauche + bouton remonter à droite */}
+        <div className="mt-10 flex items-end justify-between gap-4">
+          <p className="flex items-start gap-2 text-base text-primary-foreground/70">
+            <MapPin className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <span>
+              5 avenue de la République
+              <br />
+              75011 PARIS
+            </span>
+          </p>
+          <ScrollToTopButton />
+        </div>
       </div>
 
       <div className="border-t border-primary-foreground/15 py-4 text-center text-xs text-primary-foreground/60">
-        5 avenue de la République 75011 PARIS &nbsp;·&nbsp; ©{new Date().getFullYear()} Hellopro - Tous droits réservés
+        ©{new Date().getFullYear()} Hellopro - Tous droits réservés
       </div>
     </footer>
   );
