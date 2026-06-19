@@ -22,6 +22,12 @@ export function EstimationBox({
 }: EstimationBoxProps) {
   if (!value) return null;
 
+  // Valeur « single line » = pas de <br> et moins de 2 <li> → centrée en mobile.
+  // Sinon (liste à puces multiple / sauts de ligne) → alignée à gauche. Desktop : toujours à gauche.
+  const liCount = (value.match(/<li\b/gi) ?? []).length;
+  const isSingleLine = liCount < 2 && !/<br\s*\/?>/i.test(value);
+  const valueAlign = isSingleLine ? 'text-center sm:text-left' : 'text-left';
+
   return (
     <div className={`overflow-hidden rounded-xl border border-primary ${className}`}>
       <div className="flex flex-col sm:flex-row sm:items-stretch">
@@ -30,8 +36,8 @@ export function EstimationBox({
             {label}
           </span>
         </div>
-        <div className="flex flex-1 items-center px-6 py-4 text-left">
-          <EstimationContent value={value} className="font-semibold text-foreground" />
+        <div className={`flex flex-1 items-center px-6 py-4 ${valueAlign}`}>
+          <EstimationContent value={value} className="w-full font-semibold text-foreground" />
         </div>
       </div>
     </div>

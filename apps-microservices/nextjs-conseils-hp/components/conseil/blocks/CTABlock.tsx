@@ -10,6 +10,15 @@ interface CTABlockProps {
   data: CTABlockData;
 }
 
+/** Accroches par défaut quand le BO n'en fournit pas. */
+const DEFAULT_CTA_TITLE = 'Estimez le prix de votre projet en 30 secondes';
+const DEFAULT_CTA_SUBTITLE = 'Recevez jusqu’à 3 devis gratuits de fournisseurs locaux';
+
+/** Remplace « constructeur(s) » par « fournisseur(s) » (BO ou défaut), casse conservée. */
+function constructeurToFournisseur(s: string): string {
+  return s.replace(/Constructeur/g, 'Fournisseur').replace(/constructeur/g, 'fournisseur');
+}
+
 /**
  * demande_info.php → TOUJOURS IframeFormModal (formulaire groupée).
  * Extrait f (= id_rubrique) + tous les autres params à transmettre à l'iframe.
@@ -56,6 +65,9 @@ export function CTABlock({ data }: CTABlockProps) {
   const [groupeeModalOpen, setGroupeeModalOpen] = useState(false);
   const [produitModalOpen, setProduitModalOpen] = useState(false);
 
+  const title = constructeurToFournisseur(data.title || DEFAULT_CTA_TITLE);
+  const subtitle = constructeurToFournisseur(data.subtitle || DEFAULT_CTA_SUBTITLE);
+
   const demandeInfo  = data.ctaUrl ? parseDemandeInfo(data.ctaUrl) : null;
   const contactInfo  = data.ctaUrl ? parseContactInfo(data.ctaUrl) : null;
   const isDemandeInfo = demandeInfo !== null;
@@ -69,10 +81,8 @@ export function CTABlock({ data }: CTABlockProps) {
             <ArrowRight className="h-6 w-6" aria-hidden="true" />
           </div>
           <div>
-            <p className="text-base font-bold text-foreground">{data.title}</p>
-            {data.subtitle && (
-              <p className="text-sm text-muted-foreground">{data.subtitle}</p>
-            )}
+            <p className="text-base font-bold text-foreground">{title}</p>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
         </div>
 

@@ -75,8 +75,16 @@ function normalizeSchemaGuide(raw: Record<string, unknown>): Record<string, unkn
 /**
  * Si un bloc type 11 (estimation prix) est directement suivi d'un bloc type 4 ou 5
  * sans estimation propre, injecte l'estimation dans le bloc suivant et supprime le type 11.
+ *
+ * En plus, on injecte un CTA « Demander un devis » (form groupée) — MAIS uniquement si le
+ * bloc 4/5 n'a PAS déjà de CTA du BO (le BO reste master) et si la catégorie est connue.
+ *
+ * Scénarios (le merge ne se déclenche que si le bloc 4/5 n'a pas d'estimation propre — BO master) :
+ *   - 4/5 sans estimation ni CTA  → estimation (type 11) + CTA injecté.
+ *   - 4/5 sans estimation, CTA BO  → estimation (type 11), CTA du BO conservé.
+ *   - 4/5 avec estimation propre   → pas de merge : le type 11 reste isolé (box estimation).
  */
-function mergeEstimationIntoNextBloc(blocs: PhpBloc[]): PhpBloc[] {
+function mergeEstimationIntoNextBloc(blocs: PhpBloc[], catId?: string | number): PhpBloc[] {
   const result: PhpBloc[] = [];
   let i = 0;
   while (i < blocs.length) {
@@ -88,11 +96,14 @@ function mergeEstimationIntoNextBloc(blocs: PhpBloc[]): PhpBloc[] {
       (next.type === 4 || next.type === 5) &&
       !next.contenu.estimation?.valeur
     ) {
+      // CTA injecté seulement si pas de CTA du BO (master) et catégorie connue.
+      const injectedCta = !next.contenu.cta && catId ? makeDevisCta(catId) : undefined;
       result.push({
         ...next,
         contenu: {
           ...next.contenu,
           estimation: { label: 'Estimation de prix', valeur: cur.contenu.texte ?? '' },
+          ...(injectedCta ? { cta: injectedCta } : {}),
         },
       });
       i += 2;
@@ -150,6 +161,22 @@ function orderTexteImagePair(
     : { textBloc: x, imageBloc: y, imageFirst: false }; // texte puis image → type 4
 }
 
+/**
+ * CTA « Demander un devis » synthétique → form groupée préfiltrée sur la rubrique
+ * (demande_info.php, ouvre l'IframeFormModal côté Next). Utilisé quand on injecte un CTA
+ * sur un bloc texte-image issu d'une estimation prix (type 11) sans CTA propre.
+ */
+function makeDevisCta(catId: string | number): PhpCta {
+  return {
+    wording: 'Demander un devis',
+    color: '',
+    wording_color: '',
+    formulaire_popup: 1,
+    feuille_associe: '',
+    url: `https://www.hellopro.fr/demande_info.php?soc=1&origine=46&f=${catId}`,
+  };
+}
+
 function buildTexteImageBloc(
   textBloc: PhpBloc,
   imageBloc: PhpBloc,
@@ -157,16 +184,7 @@ function buildTexteImageBloc(
   priceBloc: PhpBloc | null,
   catId?: string | number,
 ): PhpBloc {
-  const cta: PhpCta | undefined = catId
-    ? {
-        wording: 'Demander un devis',
-        color: '',
-        wording_color: '',
-        formulaire_popup: 1,
-        feuille_associe: '',
-        url: `https://www.hellopro.fr/demande_info.php?soc=1&origine=46&f=${catId}`,
-      }
-    : undefined;
+  const cta = catId ? makeDevisCta(catId) : undefined;
 
   return {
     ...textBloc, // conserve id/ordre (position préservée)
@@ -205,6 +223,57 @@ function mergeTexteImageRunsAfterH3(blocs: PhpBloc[], catId?: string | number): 
     i++;
   }
   return result;
+}
+
+/**
+ * Gère les CTA (type 7) situés AVANT le premier titre H2 (type 1) — zone intro/hero :
+ *   - on retire (n'affiche pas) tous les CTA type 7 de cette zone,
+ *   - SAUF le CTA dont l'URL contient « demande_info.php » : on le conserve et on le place
+ *     juste avant le premier H2 (CTA d'intro).
+ *   - s'il n'existe pas de tel CTA demande_info en intro, on en crée un :
+ *     wording « DEVIS GRATUIT POUR {nom_accorde} », URL demande_info.php (form groupée).
+ *
+ * Les blocs après le premier H2 ne sont pas touchés. CTA synthétique omis si catégorie inconnue.
+ */
+function prepareIntroCta(
+  blocs: PhpBloc[],
+  catId?: string | number,
+  nomAccorde?: string,
+): PhpBloc[] {
+  const firstH2 = blocs.findIndex((b) => b.type === 1);
+  const cut = firstH2 === -1 ? blocs.length : firstH2;
+  const before = blocs.slice(0, cut);
+  const after = blocs.slice(cut);
+
+  let introCta: PhpBloc | null = null;
+  const beforeFiltered = before.filter((b) => {
+    if (b.type !== 7) return true; // on garde les non-CTA de l'intro (résumé, etc.)
+    const url = b.contenu.cta?.url ?? '';
+    if (/demande_info\.php/i.test(url) && !introCta) {
+      introCta = b; // CTA demande_info conservé → replacé juste avant le 1er H2
+    }
+    return false; // tous les CTA type 7 d'intro sont retirés de leur position
+  });
+
+  // Aucun CTA demande_info en intro → on en synthétise un (si catégorie connue).
+  if (!introCta && catId) {
+    introCta = {
+      type: 7,
+      ordre: 0,
+      contenu: {
+        cta: {
+          wording: `DEVIS GRATUIT POUR ${nomAccorde ?? ''}`.trim(),
+          color: '',
+          wording_color: '',
+          formulaire_popup: 1,
+          feuille_associe: '',
+          url: `https://www.hellopro.fr/demande_info.php?soc=1&origine=46&f=${catId}`,
+        },
+      },
+    };
+  }
+
+  return introCta ? [...beforeFiltered, introCta, ...after] : [...beforeFiltered, ...after];
 }
 
 function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
@@ -450,6 +519,10 @@ function transformAuteur(auteur: PhpAuteur): AuthorInfo {
 export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
   const r = raw.response;
   const heroImage = extractHeroImage(r.blocs ?? []);
+  // Catégorie : id (pour les CTA demande_info.php?f=...) + nom accordé (wording du CTA d'intro).
+  const infoRub = (r as { info_rubrique?: { id?: number | string; nom_accorde?: string } }).info_rubrique;
+  const catId = infoRub?.id;
+  const nomAccorde = infoRub?.nom_accorde;
 
   return {
     slug: extractSlugFromUrl(r.url),
@@ -465,9 +538,14 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
     },
     blocks: mergeEstimationIntoNextBloc(
       mergeTexteImageRunsAfterH3(
-        (r.blocs ?? []).sort((a, b) => a.ordre - b.ordre),
-        (r as { info_rubrique?: { id?: number | string } }).info_rubrique?.id,
+        prepareIntroCta(
+          (r.blocs ?? []).sort((a, b) => a.ordre - b.ordre),
+          catId,
+          nomAccorde,
+        ),
+        catId,
       ),
+      catId,
     )
       .map(transformBloc)
       .filter((b): b is ConseilBlock => b !== null),
