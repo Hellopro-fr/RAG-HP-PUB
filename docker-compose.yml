@@ -1383,6 +1383,7 @@ services:
     environment:
       - MAX_CONCURRENT_JOBS=4
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - SERVICE_NAME=image-comparison-service
     deploy:
       replicas: 1
       resources:
@@ -1432,6 +1433,20 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_SECRET=${REDIS_SECRET}
+      - SERVICE_NAME=redis-client-frontend
+      - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
+      - ACCOUNT_PUBLIC_URL=${ACCOUNT_PUBLIC_URL:-http://localhost:8601}
+      - ACCOUNT_REDIRECT_URI=${REDIS_CLIENT_REDIRECT_URI:-http://localhost:3551/auth/callback}
+      - ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND=${ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND:-}
+      - ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND=${ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND:-}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${REDIS_CLIENT_SESSION_SECRET}
+      - ADMIN_EMAILS=${REDIS_CLIENT_ADMIN_EMAILS}
+      - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
+      - SESSION_TTL=${REDIS_CLIENT_SESSION_TTL:-28800}
+      - SSO_CENTRAL_LOGOUT=${REDIS_CLIENT_CENTRAL_LOGOUT:-false}
+    networks:
+      - services-net
     logging: *logging_defaults
 
   crawler-monitor-backend:

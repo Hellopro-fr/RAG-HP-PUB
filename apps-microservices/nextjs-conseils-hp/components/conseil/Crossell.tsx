@@ -23,7 +23,7 @@ export function Crossell({ liensIntexts, conseilsAssocies }: CrossellProps) {
 
       {conseilsAssocies && conseilsAssocies.length > 0 && (
         <div>
-          <h2 className="text-3xl font-extrabold text-foreground">Pour aller plus loin</h2>
+          <h3 className="text-2xl font-extrabold text-foreground">Pour aller plus loin</h3>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {conseilsAssocies.map((a) => {
               const { label, style, icon: Icon } = TAG_CONFIG[a.idTag] ?? DEFAULT_TAG;

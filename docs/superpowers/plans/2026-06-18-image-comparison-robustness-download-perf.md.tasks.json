@@ -1,0 +1,33 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-18-image-comparison-robustness-download-perf.md",
+  "lastUpdated": "2026-06-18T22:00:00Z",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "imgD1-T1: config knobs",
+      "status": "completed",
+      "description": "**Goal:** 5 env-tunable settings (conservative defaults) in app/core/config.py: IMG_DOWNLOAD_CONNECT_TIMEOUT_S=3, IMG_DOWNLOAD_READ_TIMEOUT_S=15, IMG_DOWNLOAD_CAP_S=20, PROCESSING_DEADLINE_S=120, ASYNC_BACKLOG_FACTOR=4 (os.getenv w/ default). No behavior change.\n\n**Verify:** python -m py_compile apps-microservices/image-comparison-service/app/core/config.py. Commit both EN+FR, branch features/poc, no push. Full code in plan T1.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/core/config.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/core/config.py\",\"acceptanceCriteria\":[\"5 settings via os.getenv w/ defaults\",\"py_compile clean\",\"no behavior change\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "imgD1-T2: bounded downloads (image_processor B)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** load_images: granular httpx.Timeout(connect/read/write/pool from settings) ; skip retry on 4xx ; wrap each download in asyncio.wait_for(download_with_retry(inp), settings.IMG_DOWNLOAD_CAP_S) -> per-image TimeoutError -> failed_images via existing return_exceptions=True, no gating.\n\n**Files:** app/core/image_processor.py. **blockedBy:** T1.\n\n**Verify:** python -m py_compile image_processor.py ; smoke (VM) dead-image job <= ~cap. Commit both EN+FR, no push. Full before/after in plan T2.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/core/image_processor.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/core/image_processor.py\",\"acceptanceCriteria\":[\"httpx.Timeout granular from settings (not 30.0)\",\"skip retry on 4xx\",\"per-image wait_for(IMG_DOWNLOAD_CAP_S) -> failed_images, no gating\",\"py_compile clean\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "imgD1-T3: per-job timeout + task-ref (job_manager A2+A3)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Wrap process_job_logic in asyncio.wait_for(settings.PROCESSING_DEADLINE_S) in submit_job_async (_run_and_release) + submit_job_sync ; on asyncio.TimeoutError -> _mark_failed_timeout (status=failed via cache_service.redis_client.set, guarded) ; sync re-raises (router 500). __init__ self._background_tasks=set() ; create_task stored + add_done_callback(discard). process_job_logic UNCHANGED.\n\n**Files:** app/core/job_manager.py. **blockedBy:** T1.\n\n**Verify:** python -m py_compile job_manager.py ; smoke (VM) hung job -> failed at ~deadline, counter >=0. Commit both EN+FR, no push. Full code in plan T3.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/core/job_manager.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/core/job_manager.py\",\"acceptanceCriteria\":[\"wait_for(PROCESSING_DEADLINE_S) both submit paths\",\"_mark_failed_timeout helper (guarded set)\",\"sync re-raises\",\"_background_tasks set + add_done_callback\",\"process_job_logic unchanged\",\"py_compile clean\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "imgD1-T4: async-submit backpressure (comparator D)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** /start sync:false branch: before submit_job_async, if job_manager.local_active_jobs >= settings.MAX_CONCURRENT_JOBS*settings.ASYNC_BACKLOG_FACTOR -> raise HTTPException(503) (mirror sync path). Else unchanged. Docstring updated. settings+status already imported.\n\n**Files:** app/router/comparator.py. **blockedBy:** T1.\n\n**Verify:** python -m py_compile comparator.py ; smoke (VM) flood -> some 503s. Commit both EN+FR, no push. Full before/after in plan T4.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/router/comparator.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/router/comparator.py\",\"acceptanceCriteria\":[\"503 when local_active_jobs >= MAX_CONCURRENT_JOBS*ASYNC_BACKLOG_FACTOR\",\"else unchanged 202\",\"py_compile clean\"]}\n```"
+    }
+  ]
+}

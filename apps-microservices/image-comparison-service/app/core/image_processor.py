@@ -138,7 +138,12 @@ class ImageProcessor:
                 logger.info("Using APIFY_PROXY for image downloads.")
 
             async with httpx.AsyncClient(
-                timeout=30.0,
+                timeout=httpx.Timeout(
+                    connect=settings.IMG_DOWNLOAD_CONNECT_TIMEOUT_S,
+                    read=settings.IMG_DOWNLOAD_READ_TIMEOUT_S,
+                    write=settings.IMG_DOWNLOAD_READ_TIMEOUT_S,
+                    pool=settings.IMG_DOWNLOAD_CONNECT_TIMEOUT_S,
+                ),
                 follow_redirects=True,
                 headers=ImageProcessor.DOWNLOAD_HEADERS,
                 verify=False,
@@ -151,6 +156,10 @@ class ImageProcessor:
                         try:
                             resp = await client.get(str(inp.url))
                             if resp.status_code == 200:
+                                return resp
+                            # 4xx is terminal (404/403 won't change) — don't waste a retry.
+                            if 400 <= resp.status_code < 500:
+                                logger.warning(f"HTTP {resp.status_code} for {inp.id} ({inp.url}) — no retry (4xx)")
                                 return resp
                             if attempt == 0:
                                 await asyncio.sleep(2)
@@ -165,9 +174,11 @@ class ImageProcessor:
                             return e
                     return None  # Should not reach here
 
-                # Execute concurrently with retry
+                # Execute concurrently with retry, each download hard-capped so one
+                # slow/dead URL fails fast (-> failed_images) without gating the others.
                 responses = await asyncio.gather(
-                    *[download_with_retry(inp) for inp in download_tasks],
+                    *[asyncio.wait_for(download_with_retry(inp), settings.IMG_DOWNLOAD_CAP_S)
+                      for inp in download_tasks],
                     return_exceptions=True
                 )
 
@@ -176,6 +187,10 @@ class ImageProcessor:
                     img_id = img_input.id
 
                     if isinstance(response, Exception):
+                        if isinstance(response, asyncio.TimeoutError):
+                            logger.warning(
+                                f"Download cap ({settings.IMG_DOWNLOAD_CAP_S}s) hit for {img_id} ({img_input.url})"
+                            )
                         failed.append(FailedImage(id=img_id, url=img_input.url))
                         continue
 
@@ -270,32 +285,31 @@ class ImageProcessor:
         return final_score, {"phash": phash_score, "hist": hist_score}
 
     @staticmethod
-    def compare_batch(images: Dict[str, Image.Image], inputs: List[ImageInput]) -> List[Dict]:
-        """
-        Compares images and maps IDs back to URLs if available.
-        """
-        ids = list(images.keys())
+    def extract_features_for(images: Dict[str, Image.Image]) -> Dict[str, Dict]:
+        """Extract features for a map of {id: PIL.Image} (O(N)). Used for the
+        cache-miss images; cached features are merged in by the caller."""
+        return {img_id: ImageProcessor.extract_features(img) for img_id, img in images.items()}
+
+    @staticmethod
+    def compare_features(features_map: Dict[str, Dict], inputs: List[ImageInput]) -> List[Dict]:
+        """Pairwise comparison (O(N^2)) over a ready feature-map (cached + fresh),
+        mapping ids back to URLs. Scoring math is unchanged from compare_batch."""
+        ids = list(features_map.keys())
         n = len(ids)
         if n < 2:
             return []
-            
+
         # Create map for ID -> URL for quick lookup
         url_map = {inp.id: inp.url for inp in inputs}
 
-        # 1. Feature Extraction (O(N))
-        features_map = {}
-        for img_id in ids:
-            features_map[img_id] = ImageProcessor.extract_features(images[img_id])
-            
-        # 2. Comparison Matrix (O(N^2))
         results = []
         for i in range(n):
             for j in range(i + 1, n):
                 id_a = ids[i]
                 id_b = ids[j]
-                
+
                 score, details = ImageProcessor.calculate_similarity(features_map[id_a], features_map[id_b])
-                
+
                 results.append({
                     "image_a_id": id_a,
                     "image_a_url": url_map.get(id_a),
@@ -304,5 +318,16 @@ class ImageProcessor:
                     "score": round(score, 2),
                     "method_details": details
                 })
-                
+
         return results
+
+    @staticmethod
+    def compare_batch(images: Dict[str, Image.Image], inputs: List[ImageInput]) -> List[Dict]:
+        """
+        Compares images and maps IDs back to URLs if available.
+        Thin pipeline: extract features for all images, then compare the map.
+        """
+        if len(images) < 2:
+            return []
+        features_map = ImageProcessor.extract_features_for(images)
+        return ImageProcessor.compare_features(features_map, inputs)

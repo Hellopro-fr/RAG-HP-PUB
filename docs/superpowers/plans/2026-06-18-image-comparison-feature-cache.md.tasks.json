@@ -1,0 +1,32 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-18-image-comparison-feature-cache.md",
+  "lastUpdated": "2026-06-19T01:30:00Z",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "imgC-T1: feature-cache config knobs",
+      "status": "completed",
+      "description": "**Goal:** 3 env-tunable settings in app/core/config.py (no behavior change): FEATURE_CACHE_ENABLED (bool, default True; parses truthy/falsy strings), FEATURE_CACHE_TTL_S (int, 604800=7d), FEATURE_CACHE_VERSION (str, 'v1'). Add after the Design-1 ASYNC_BACKLOG_FACTOR block, before settings=Settings().\n\n**Verify:** python -m py_compile config.py. Commit EN+FR, no push. Full code in plan T1.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/core/config.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/core/config.py\",\"acceptanceCriteria\":[\"3 settings via os.getenv w/ defaults\",\"FEATURE_CACHE_ENABLED parses truthy/falsy strings\",\"py_compile clean\",\"no behavior change\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "imgC-T2: feature_cache.py module (cache-aside, guarded)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** New app/core/feature_cache.py. feature_key(url)->f'imgfeat:{settings.FEATURE_CACHE_VERSION}:{uuid5(NAMESPACE_URL,url)}'; serialize_feature(dict)->JSON {phash:str(h), hist:hist.tolist()}; deserialize_feature(raw)->{phash:imagehash.hex_to_hash, hist:np.array(...,float32)} (None on ANY error); async get_features(urls)->dict[url,feature] (kill-switch->{}, guarded cache_service.redis_client, ONE MGET, hits only, RedisError->{}); async set_features(url_to_feature) (kill-switch no-op, guarded, ONE pipelined SET EX FEATURE_CACHE_TTL_S, swallow errors). Never raises. redis_client at call time only. + optional tests/test_feature_cache.py (round-trip preserves Hamming + compareHist; corrupt->None) run on VM.\n\n**Files:** app/core/feature_cache.py (+ tests/test_feature_cache.py). **blockedBy:** T1.\n\n**Verify:** python -m py_compile feature_cache.py (+ test). Commit EN+FR, no push. Full code in plan T2.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/core/feature_cache.py\",\"apps-microservices/image-comparison-service/tests/test_feature_cache.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/core/feature_cache.py apps-microservices/image-comparison-service/tests/test_feature_cache.py\",\"acceptanceCriteria\":[\"feature_key imgfeat:<version>:uuid5(url)\",\"serialize/deserialize round-trip preserves Hamming + compareHist; corrupt->None\",\"get_features: kill-switch/no-client/RedisError/empty -> {}; one MGET; hits only\",\"set_features: kill-switch/no-client/empty -> no-op; one pipelined SET EX TTL; swallow errors\",\"redis_client accessed at call time only\",\"never raises\",\"py_compile clean\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "imgC-T3: split image_processor (extract_features_for + compare_features)",
+      "status": "completed",
+      "description": "**Goal:** In app/core/image_processor.py replace compare_batch (L287-323): add extract_features_for(images:{id:PIL})->{id:feature}; add compare_features(features_map, inputs)->pairwise (EXACT current pairwise loop + n<2 guard, math UNCHANGED: calculate_similarity/smart-identity/weighting/rounding/keys); compare_batch keeps signature, delegates (extract_features_for then compare_features) -> byte-identical. calculate_similarity/extract_features/trim_borders/load_images UNCHANGED.\n\n**Files:** app/core/image_processor.py. **blockedBy:** none (sequence after T2).\n\n**Verify:** python -m py_compile image_processor.py. Commit EN+FR, no push. Full before/after in plan T3.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/core/image_processor.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/core/image_processor.py\",\"acceptanceCriteria\":[\"extract_features_for(images)->{id:feature}\",\"compare_features(features_map,inputs) = exact current pairwise loop + n<2 guard\",\"compare_batch delegates, byte-identical output\",\"calculate_similarity/extract_features/load_images unchanged\",\"py_compile clean\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "imgC-T4: process_job_logic cache-aside orchestration",
+      "status": "completed",
+      "blockedBy": [2, 3],
+      "description": "**Goal:** job_manager.process_job_logic: import feature_cache; partition url_inputs (inp.url and not inp.content) vs other_inputs (content/neither); cached_by_url=get_features([str(url)...]) -> cached_features by inp.id; miss_url_inputs=url not in cache; to_load=miss_url_inputs+other_inputs; load_images(to_load); fresh_features=to_thread(extract_features_for, images_map); set_features({str(url):fresh[id] for url-misses}); all_features={**cached,**fresh}; guard 'No valid images' on all_features (NOT images_map); compare via to_thread(compare_features, all_features, inputs). failed_images/threshold/result-shape/status/semaphore/wait_for/finally-counter UNCHANGED. similar_pairs byte-identical.\n\n**Files:** app/core/job_manager.py. **blockedBy:** T2, T3.\n\n**Verify:** python -m py_compile job_manager.py. Commit EN+FR, no push. Full before/after in plan T4.\n\n```json:metadata\n{\"files\":[\"apps-microservices/image-comparison-service/app/core/job_manager.py\"],\"verifyCommand\":\"python -m py_compile apps-microservices/image-comparison-service/app/core/job_manager.py\",\"acceptanceCriteria\":[\"partition url vs content/other inputs\",\"get_features mapped to id; misses+other downloaded\",\"extract_features_for in thread; set_features for url-misses only\",\"compare_features on {cached,fresh} in thread with full inputs\",\"No-valid-images guard on merged map (all-hit not mis-failed)\",\"failed_images/threshold/result/semaphore/wait_for/counter unchanged\",\"py_compile clean\"]}\n```"
+    }
+  ]
+}
