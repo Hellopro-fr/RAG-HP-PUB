@@ -37,9 +37,9 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
     <section className="my-8">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-extrabold leading-snug text-foreground">
+          <h3 className="text-2xl font-extrabold leading-snug text-foreground">
             {titre ?? 'Les produits les plus populaires sur hellopro.fr'}
-          </h2>
+          </h3>
           <div className="mt-1 h-0.5 w-10 rounded-full bg-primary" />
         </div>
 

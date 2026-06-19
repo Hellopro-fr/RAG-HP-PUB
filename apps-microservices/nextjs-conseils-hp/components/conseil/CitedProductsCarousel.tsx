@@ -45,9 +45,9 @@ export function CitedProductsCarousel({ items }: CitedProductsCarouselProps) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-extrabold text-foreground">
+        <h3 className="text-2xl font-extrabold text-foreground">
           Nos solutions, matériels &amp; services cités dans cet article
-        </h2>
+        </h3>
 
         {showArrows && (
           <div className="flex shrink-0 gap-2">

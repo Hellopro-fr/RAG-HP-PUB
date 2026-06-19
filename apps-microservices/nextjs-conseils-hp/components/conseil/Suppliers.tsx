@@ -63,9 +63,9 @@ export function Suppliers({ suppliers = [], infoRubriqueId, categoryLabel }: Sup
     <section id="constructeurs" className="not-prose my-12 scroll-mt-32">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-extrabold text-foreground">
+          <h3 className="text-2xl font-extrabold text-foreground">
             {categoryLabel ? `Nos fournisseurs ${avecDe(categoryLabel)}` : 'Nos fournisseurs'}
-          </h2>
+          </h3>
         </div>
         {showArrows && (
           <div className="flex shrink-0 gap-2">
