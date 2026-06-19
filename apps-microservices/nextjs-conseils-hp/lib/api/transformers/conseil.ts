@@ -245,12 +245,18 @@ function prepareIntroCta(
   const before = blocs.slice(0, cut);
   const after = blocs.slice(cut);
 
+  // ordre cible : juste avant le 1er H2 (ConseilTemplate re-trie les blocs par `order`,
+  // donc la position dans le tableau ne suffit pas — il faut imposer l'ordre).
+  const firstH2Ordre =
+    firstH2 === -1 ? Math.max(0, ...blocs.map((b) => b.ordre)) + 1 : blocs[firstH2].ordre;
+  const introOrdre = firstH2Ordre - 0.5;
+
   let introCta: PhpBloc | null = null;
   const beforeFiltered = before.filter((b) => {
     if (b.type !== 7) return true; // on garde les non-CTA de l'intro (résumé, etc.)
     const url = b.contenu.cta?.url ?? '';
     if (/demande_info\.php/i.test(url) && !introCta) {
-      introCta = b; // CTA demande_info conservé → replacé juste avant le 1er H2
+      introCta = { ...b, ordre: introOrdre }; // CTA demande_info conservé, ordre forcé avant le 1er H2
     }
     return false; // tous les CTA type 7 d'intro sont retirés de leur position
   });
@@ -259,7 +265,7 @@ function prepareIntroCta(
   if (!introCta && catId) {
     introCta = {
       type: 7,
-      ordre: 0,
+      ordre: introOrdre,
       contenu: {
         cta: {
           wording: `DEVIS GRATUIT POUR ${nomAccorde ?? ''}`.trim(),
