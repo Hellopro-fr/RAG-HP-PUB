@@ -141,7 +141,8 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
           [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1
           [&_ol]:list-decimal [&_ol]:pl-5
           [&_li]:mb-1
-          [&_strong]:font-bold [&_b]:font-bold"
+          [&_strong]:font-bold [&_b]:font-bold
+          [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80"
         dangerouslySetInnerHTML={{ __html: data.html }}
       />
       {data.ctaLabel && ctaButton}

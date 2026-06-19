@@ -63,12 +63,13 @@ export function Hero({
           </nav>
         )}
 
+        {/* Badge hors grille → les 2 colonnes démarrent au niveau du H1 (form aligné sur le H1) */}
+        <span className="mb-2 inline-flex items-center rounded-full bg-cta px-3 py-1 text-xs font-bold uppercase tracking-wide text-cta-foreground">
+          Conseil d&apos;expert
+        </span>
+
         <div className="grid gap-5 lg:grid-cols-[1.1fr_1fr] lg:items-start">
           <div>
-            <span className="mb-2 inline-flex items-center rounded-full bg-cta px-3 py-1 text-xs font-bold uppercase tracking-wide text-cta-foreground">
-              Conseil d&apos;expert
-            </span>
-
             <h1 className="text-3xl font-extrabold leading-[1.1] tracking-tight sm:text-4xl lg:text-[2.75rem]">
               {data.title}
             </h1>
