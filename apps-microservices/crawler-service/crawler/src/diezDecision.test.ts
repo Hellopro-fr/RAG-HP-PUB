@@ -47,7 +47,7 @@ test("classifyFragment: rule 6 — short alphanumeric is anchor", () => {
 });
 
 test("classifyFragment: rule 7 — long random string is ambiguous", () => {
-    assert.equal(classifyFragment("xkc9f8h2kj34lmn7pqr5stuvwxyz"), "ambiguous");
+    assert.equal(classifyFragment("foo.bar.baz.qux.lorem.ipsum.dolor"), "ambiguous"); // 33 chars, dots → not a valid HTML id
 });
 
 test("classifyFragment: rule 7 — non-ASCII is ambiguous", () => {
@@ -77,6 +77,11 @@ test("classifyFragment: rule precedence — fragment with / and short length is 
     assert.equal(classifyFragment("a/b"), "spa");
 });
 
+test("classifyFragment: rule 5 — id with digits is anchor (digit fix)", () => {
+    assert.equal(classifyFragment("section2"), "anchor");
+    assert.equal(classifyFragment("product12345section67890abcdef"), "anchor"); // 30 chars
+});
+
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision } from "./diezDecision.js";
 
@@ -94,7 +99,7 @@ test("recordClassification: increments correct counter", () => {
 
 test("recordClassification: ambiguous URL is appended to samplesForTier2", () => {
     resetContextState();
-    const url = "https://example.com/page#xkc9f8h2kj34lmn7pqr5stuvwxyz";
+    const url = "https://example.com/page#foo.bar.baz.qux.lorem.ipsum.dolor";
     recordClassification(url);
     assert.equal(context.diezClassification.ambiguous, 1);
     assert.deepEqual(context.diezClassification.samplesForTier2, [url]);
@@ -103,7 +108,7 @@ test("recordClassification: ambiguous URL is appended to samplesForTier2", () =>
 test("recordClassification: samplesForTier2 capped at 50", () => {
     resetContextState();
     for (let i = 0; i < 60; i++) {
-        recordClassification(`https://example.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+        recordClassification(`https://example.com/p#foo.bar.baz.qux${i}`);
     }
     assert.equal(context.diezClassification.samplesForTier2.length, 50);
     assert.equal(context.diezClassification.ambiguous, 60);
@@ -156,7 +161,7 @@ test("maybeCommitDecision: 80/20 split below 90% threshold returns null", () => 
 test("maybeCommitDecision: ambiguous ≥ 40% at total ≥ 20 returns promoteTier2", () => {
     resetContextState();
     for (let i = 0; i < 10; i++) {
-        recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+        recordClassification(`https://e.com/p#foo.bar.baz.qux${i}`);
     }
     for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#top${i}`);
     for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#/r${i}`);
@@ -167,7 +172,7 @@ test("maybeCommitDecision: 100 samples mixed below confidence returns escalate",
     resetContextState();
     for (let i = 0; i < 40; i++) recordClassification(`https://e.com/p#top${i}`);
     for (let i = 0; i < 40; i++) recordClassification(`https://e.com/p#/r${i}`);
-    for (let i = 0; i < 20; i++) recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    for (let i = 0; i < 20; i++) recordClassification(`https://e.com/p#foo.bar.baz.qux${i}`); // ambiguous (dots): 20% < 40% → no promoteTier2
     assert.equal(maybeCommitDecision(), "escalate");
 });
 
@@ -235,8 +240,8 @@ test("commit flag stops further recording", () => {
 test("persistence file does not include samplesForTier2", () => {
     resetContextState();
     const storage = makeTmpStorage();
-    // Add some ambiguous samples
-    for (let i = 0; i < 3; i++) recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    // Add some ambiguous samples (dots → ambiguous, so samplesForTier2 is populated)
+    for (let i = 0; i < 3; i++) recordClassification(`https://e.com/p#foo.bar.baz.qux${i}`);
     for (let i = 0; i < 4; i++) recordClassification(`https://e.com/p#top${i}`);
     commitSkipDiez(storage);
 

@@ -18,7 +18,7 @@ export type Classification = "anchor" | "spa" | "ambiguous";
  *   2. Starts with `/` → spa
  *   3. Contains `/` anywhere → spa
  *   4. Has `&` + `=` or starts with `?` → spa
- *   5. HTML id convention (length ≤ 50, ^[a-zA-Z][a-zA-Z_-]*$) → anchor
+ *   5. HTML id convention (length ≤ 50, ^[a-zA-Z][-a-zA-Z0-9_]*$) → anchor
  *   6. Short alphanumeric (length ≤ 20, ^[a-zA-Z0-9_-]+$) → anchor
  *   7. Anything else → ambiguous
  *
@@ -38,7 +38,7 @@ export const classifyFragment = (fragment: string): Classification => {
     if (frag.startsWith("/")) return "spa";
     if (frag.includes("/")) return "spa";
     if ((frag.includes("&") && frag.includes("=")) || frag.startsWith("?")) return "spa";
-    if (frag.length <= 50 && /^[a-zA-Z][a-zA-Z_-]*$/.test(frag)) return "anchor";
+    if (frag.length <= 50 && /^[a-zA-Z][-a-zA-Z0-9_]*$/.test(frag)) return "anchor";
     if (frag.length <= 20 && /^[a-zA-Z0-9_-]+$/.test(frag)) return "anchor";
     return "ambiguous";
 };
