@@ -154,3 +154,49 @@ def test_unavailable_when_no_client(monkeypatch):
         assert False
     except _JobsUnavailable:
         pass
+
+
+import time
+from fastapi.testclient import TestClient
+
+
+def test_router_submit_poll_complete(monkeypatch):
+    monkeypatch.setattr(cache_service, "redis_client", FakeRedis(), raising=False)
+    import main
+    monkeypatch.setattr(main, "init_redis_pool", lambda: asyncio.sleep(0))
+    monkeypatch.setattr(main, "close_redis_pool", lambda: asyncio.sleep(0))
+    with TestClient(main.app) as client:
+        r = client.post("/clean-async", json={"items": [{"html": "<p>x</p>", "format": "text"}]})
+        assert r.status_code == 202
+        job_id = r.json()["job_id"]
+        for _ in range(50):
+            p = client.get(f"/jobs/{job_id}")
+            if p.json()["status"] == "completed":
+                break
+            time.sleep(0.02)
+        body = client.get(f"/jobs/{job_id}").json()
+        assert body["status"] == "completed"
+        assert body["job_type"] == "clean"
+        assert len(body["results"]) == 1
+
+
+def test_router_disabled_503_no_retry_after(monkeypatch):
+    monkeypatch.setattr(cache_service, "redis_client", FakeRedis(), raising=False)
+    from app.core.config import settings as cfg
+    monkeypatch.setattr(cfg, "ASYNC_JOBS_ENABLED", False, raising=False)
+    import main
+    monkeypatch.setattr(main, "init_redis_pool", lambda: asyncio.sleep(0))
+    monkeypatch.setattr(main, "close_redis_pool", lambda: asyncio.sleep(0))
+    with TestClient(main.app) as client:
+        r = client.post("/clean-async", json={"items": [{"html": "<p>x</p>", "format": "text"}]})
+        assert r.status_code == 503
+        assert "Retry-After" not in r.headers
+
+
+def test_router_unknown_job_404(monkeypatch):
+    monkeypatch.setattr(cache_service, "redis_client", FakeRedis(), raising=False)
+    import main
+    monkeypatch.setattr(main, "init_redis_pool", lambda: asyncio.sleep(0))
+    monkeypatch.setattr(main, "close_redis_pool", lambda: asyncio.sleep(0))
+    with TestClient(main.app) as client:
+        assert client.get("/jobs/does-not-exist").status_code == 404
