@@ -28,6 +28,7 @@ func BuildServiceMap() map[string]string {
 func BuildDownstreamTimeouts() map[string]float64 {
 	return map[string]float64{
 		"api-detection-langue-fr-service": 180,
+		"extractor-service":               60,
 	}
 }
 
