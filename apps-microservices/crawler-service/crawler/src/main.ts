@@ -718,6 +718,7 @@ if (crawlMode === 'update') {
     // Phase 1: Seed only the homepage
     await requestQueue.addRequest({
         url: site,
+        uniqueKey: site,
         userData: { source: 'seed' }
     });
     // Do NOT pre-add the homepage to Redis dedup here (same rule as the standard
@@ -788,9 +789,10 @@ if (crawlMode === 'update') {
     // The handler will add it when processing the page.
     // Pre-adding it causes the homepage to be treated as "Doublon" and skipped entirely.
 
-    await requestQueue.addRequest({ 
-        url: cleanSite, 
-        userData: { is_existing: false } 
+    await requestQueue.addRequest({
+        url: cleanSite,
+        uniqueKey: cleanSite,
+        userData: { is_existing: false }
     });
 } else {
     console.log("RequestQueueNotEmpty");

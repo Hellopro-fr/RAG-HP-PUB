@@ -21,6 +21,7 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { fragmentAwareUniqueKey } from "./diezKeepFragment.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
@@ -957,6 +958,10 @@ router.addDefaultHandler(
                         }
 
                         request.userData = { source: 'discovered' };
+                        // Phase-2: pin the dedup identity to the fragment-bearing URL so
+                        // base#a / base#b do not collapse to base. No-op once skipDiez
+                        // has stripped '#' from request.url.
+                        request.uniqueKey = fragmentAwareUniqueKey(request.url);
                         return request;
                     },
                 });
