@@ -1,4 +1,4 @@
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 REQUEST_COUNT = Counter(
     "http_requests_total",
@@ -29,4 +29,21 @@ CACHE_HITS = Counter(
 )
 CACHE_MISSES = Counter(
     "extract_cache_misses_total", "Result cache misses", ["job_type"],
+)
+
+ASYNC_JOBS_SUBMITTED = Counter(
+    "extract_async_jobs_submitted_total", "Async batch jobs accepted (202)",
+)
+ASYNC_JOBS_ACTIVE = Gauge(
+    "extract_async_jobs_active", "Currently reserved/in-flight async jobs",
+)
+ASYNC_JOBS_TERMINAL = Counter(
+    "extract_async_jobs_terminal_total", "Async jobs reaching a terminal status", ["status"],
+)
+ASYNC_JOB_DURATION = Histogram(
+    "extract_async_job_duration_seconds", "Async job wall-clock from running to terminal",
+    buckets=(1, 5, 15, 30, 60, 120, 300, 600, 1800),
+)
+ASYNC_JOB_CAPACITY_REJECTED = Counter(
+    "extract_async_job_capacity_rejected_total", "Submits rejected because MAX_ACTIVE_JOBS reached",
 )
