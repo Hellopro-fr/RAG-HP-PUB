@@ -34,3 +34,38 @@ def test_run_clean_does_not_block_event_loop():
         return ticked["n"]
 
     assert asyncio.run(scenario()) == 5
+
+
+def test_run_clean_uses_cache(monkeypatch):
+    calls = {"n": 0}
+
+    async def fake_get(key):
+        return {"content": "CACHED", "format": "text", "content_length": 6} if calls["n"] else None
+
+    async def fake_set(key, body):
+        calls["n"] += 1
+
+    monkeypatch.setattr(extractor_service.result_cache, "get", fake_get)
+    monkeypatch.setattr(extractor_service.result_cache, "set", fake_set)
+
+    first = asyncio.run(extractor_service.run_clean(MAIN, OutputFormat.TEXT))   # miss -> compute + set
+    second = asyncio.run(extractor_service.run_clean(MAIN, OutputFormat.TEXT))  # hit
+    assert second["content"] == "CACHED"
+    assert first["content"] != "CACHED"
+
+
+def test_force_refresh_skips_read(monkeypatch):
+    seen = {"get": 0}
+
+    async def fake_get(key):
+        seen["get"] += 1
+        return {"content": "CACHED", "format": "text", "content_length": 6}
+
+    async def fake_set(key, body):
+        pass
+
+    monkeypatch.setattr(extractor_service.result_cache, "get", fake_get)
+    monkeypatch.setattr(extractor_service.result_cache, "set", fake_set)
+    body = asyncio.run(extractor_service.run_clean(MAIN, OutputFormat.TEXT, force_refresh=True))
+    assert seen["get"] == 0
+    assert body["content"] != "CACHED"
