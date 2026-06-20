@@ -204,18 +204,25 @@ export const readPersistedDecision = (storagePath: string): boolean => {
 
     try {
         const raw = fs.readFileSync(filePath, "utf-8");
-        const payload = JSON.parse(raw) as { decision?: string; tier?: number };
+        const payload = JSON.parse(raw) as { decision?: string; tier?: number; source?: string };
+        // Restore the committed source so getDiezDecisionMode reports the true mode
+        // (tier2-*/defaulted-*) after an OOM relaunch, not the "tier1" default.
+        // Legacy files (pre-phase-2, no source field) fall back to "tier1".
+        const source: "tier1" | "tier2" | "default" =
+            payload.source === "tier2" || payload.source === "default" ? payload.source : "tier1";
 
         if (payload.decision === "skipDiez") {
             context.config.skipDiez = true;
             context.diezDecisionCommitted = true;
-            console.log(`[diez] Loaded persisted decision: skipDiez (tier ${payload.tier ?? "?"})`);
+            _committedSource = source;
+            console.log(`[diez] Loaded persisted decision: skipDiez (tier ${payload.tier ?? "?"}, source ${source})`);
             return true;
         }
         if (payload.decision === "bypassDiez") {
             context.config.bypassDiez = true;
             context.diezDecisionCommitted = true;
-            console.log(`[diez] Loaded persisted decision: bypassDiez (tier ${payload.tier ?? "?"})`);
+            _committedSource = source;
+            console.log(`[diez] Loaded persisted decision: bypassDiez (tier ${payload.tier ?? "?"}, source ${source})`);
             return true;
         }
 

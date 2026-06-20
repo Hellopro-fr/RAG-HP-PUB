@@ -336,3 +336,43 @@ test("getDiezDecisionMode reports defaulted-bypassdiez for a default-source comm
     assert.equal(getDiezDecisionMode(undefined), "defaulted-bypassdiez");
     fs.rmSync(storage, { recursive: true, force: true });
 });
+
+test("readPersistedDecision restores tier-2 source → getDiezDecisionMode reports tier2-skipdiez (OOM relaunch)", () => {
+    // Force _committedSource to a non-tier2 value first (a fresh process defaults to "tier1").
+    resetContextState();
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+    const seed = makeTmpStorage();
+    commitBypassDiez(seed, { source: "tier1" }); // sets _committedSource = "tier1"
+    fs.rmSync(seed, { recursive: true, force: true });
+
+    // Simulate relaunch: a prior run persisted a tier-2 skipDiez decision.
+    resetContextState();
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+    const storage = makeTmpStorage();
+    fs.writeFileSync(
+        path.join(storage, "_diez_decision.json"),
+        JSON.stringify({ decision: "skipDiez", tier: 2, source: "tier2", evidence: { compared: 3, matches: 3, mismatches: 0, unusable: 0 } })
+    );
+
+    assert.equal(readPersistedDecision(storage), true);
+    assert.equal(context.config.skipDiez, true);
+    assert.equal(getDiezDecisionMode(undefined), "tier2-skipdiez");
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("readPersistedDecision: legacy file without source reports tier1 (backward compat)", () => {
+    resetContextState();
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+    const storage = makeTmpStorage();
+    fs.writeFileSync(
+        path.join(storage, "_diez_decision.json"),
+        JSON.stringify({ decision: "bypassDiez", tier: 1, committedAt: "2026-04-17T00:00:00Z", counts: { anchor: 0, spa: 5, ambiguous: 0, total: 5 } })
+    );
+    assert.equal(readPersistedDecision(storage), true);
+    assert.equal(getDiezDecisionMode(undefined), "tier1-bypassdiez");
+    fs.rmSync(storage, { recursive: true, force: true });
+});
