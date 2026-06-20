@@ -1080,6 +1080,17 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         }
     }
 
+    // Phase-2: clean '#' from stored rows only on a clean COMPLETED skip-commit.
+    // Future rows were already stripped at enqueue; this fixes pre-commit rows.
+    if (reason === 'COMPLETED' && context.config.skipDiez) {
+        try {
+            const { cleanDatasetFragments } = await import("./functions.js");
+            cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
+        } catch (e) {
+            console.error("Dataset fragment cleanup failed:", e);
+        }
+    }
+
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
     // Wait for any in-flight persistence to complete before final write

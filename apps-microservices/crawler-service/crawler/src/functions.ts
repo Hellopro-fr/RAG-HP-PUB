@@ -1778,6 +1778,41 @@ export const getAllRequestQueues = (queueName: string): string[] => {
 };
 
 /**
+ * Phase-2: after a skipDiez decision, strip '#' from stored dataset rows and
+ * drop exact-duplicate URLs (keep first). Operates on flat {url,content,title}
+ * dataset files (NOT request queues — parseJsonFiles handles those). Missing
+ * dirs are a no-op. See spec §8.
+ */
+export const cleanDatasetFragments = (datasetNames: string[]): { rewritten: number; removed: number } => {
+    let rewritten = 0;
+    let removed = 0;
+    for (const name of datasetNames) {
+        const dir = `storage/datasets/${name}`;
+        if (!fs.existsSync(dir)) continue;
+        const seen = new Set<string>();
+        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("__"));
+        for (const f of files) {
+            const full = `${dir}/${f}`;
+            let row: { url?: string };
+            try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
+            if (!row.url) continue;
+            const cleaned = processUrl(row.url, false, true);
+            if (seen.has(cleaned)) {
+                try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ }
+                continue;
+            }
+            seen.add(cleaned);
+            if (cleaned !== row.url) {
+                (row as any).url = cleaned;
+                try { fs.writeFileSync(full, JSON.stringify(row)); rewritten++; } catch { /* best-effort */ }
+            }
+        }
+    }
+    console.log(`[diez] Dataset cleanup: rewrote ${rewritten}, removed ${removed} duplicate row file(s).`);
+    return { rewritten, removed };
+};
+
+/**
  * Process a URL to filter query parameters and remove hash fragments
  *
  * @param {string} url - URL to process
