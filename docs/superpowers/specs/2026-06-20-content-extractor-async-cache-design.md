@@ -282,6 +282,8 @@ throughput ≈ cores / (p · (1 − h))
 
 ## 14. Gateway + BO
 
+> **Correction (2026-06-21):** the gateway **actually serving traffic is `api-gateway-go`** (Go), not the Python `api-gateway` referenced below — the live change is `"extractor-service": 60` in `api-gateway-go/internal/config/service_map.go` `BuildDownstreamTimeouts()` (commit `d6120318`); the Python entry is kept only for 1:1-port parity. Same proven route key `"extractor-service"`.
+
 - **Gateway:** add one entry to `DOWNSTREAM_TIMEOUTS_S` in `apps-microservices/api-gateway/app/core/settings.py:80-82` (the new line goes at `:82`, inside the closing brace):
   ```python
   DOWNSTREAM_TIMEOUTS_S: Dict[str, float] = {

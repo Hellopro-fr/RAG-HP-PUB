@@ -1893,6 +1893,8 @@ def test_app_starts_and_health_ok(monkeypatch):
 
 ### Task 10: api-gateway downstream timeout for `extractor-service`
 
+> **Correction (2026-06-21):** the serving gateway is `api-gateway-go` (Go), not the Python `api-gateway` below — the effective change landed in `api-gateway-go/internal/config/service_map.go` `BuildDownstreamTimeouts()` (`"extractor-service": 60`, commit `d6120318`); the Python edit is kept for 1:1-port parity only.
+
 **Goal:** Give the extractor route a finite downstream timeout (resolves the BO call's exposure to gateway defaults). Route key proven `"extractor-service"`.
 
 **Files:**
