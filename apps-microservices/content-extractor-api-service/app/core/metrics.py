@@ -17,3 +17,8 @@ EXTRACTION_METHOD = Counter(
     "Header/footer extraction method used",
     ["method"],
 )
+
+SYNC_ADMISSION_REJECTED = Counter(
+    "extract_sync_admission_rejected_total",
+    "Sync requests shed by the admission guard (SYNC_MAX_INFLIGHT)",
+)
