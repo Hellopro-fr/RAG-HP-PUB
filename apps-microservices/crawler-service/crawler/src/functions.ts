@@ -37,6 +37,7 @@ import {
     pdfDatasetName,
     type FailureClass,
 } from "./httpStatusPolicy.js";
+import { shouldStopForDiez } from "./diezLimitStop.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -448,9 +449,9 @@ export const startCrawler = async (
     apifyProxyPassword?: string,
     breakLimit?: boolean,
     bypassQuestionMark?: boolean,
-    bypassDiez?: boolean,
+    _bypassDiez?: boolean,
     skipquestionmark?: boolean,
-    skipdiez?: boolean,
+    _skipdiez?: boolean,
     containerMemoryMb?: number,
     camoufoxEnabled?: boolean
 ) => {
@@ -801,7 +802,7 @@ export const startCrawler = async (
                     context.stopReason = "limitQuestionMark";
                     await stopCrawler(crawler, "Limit of 100 question marks reached.");
                 }
-                if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
+                if (shouldStopForDiez(context.countDiez, context.config.bypassDiez, context.config.skipDiez, limitQuestionMarkDiez)) {
                     context.stopReason = "limitDiez";
                     await stopCrawler(crawler, "Limit of 100 hashes reached.");
                 }
