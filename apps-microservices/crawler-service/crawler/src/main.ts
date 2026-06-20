@@ -35,6 +35,7 @@ import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
+import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
 import { TimingRecorder } from "./class/TimingRecorder.js";
 import type { PoolSample, TimingSummary } from "./timing/types.js";
 import { context } from "./context.js";
@@ -1230,6 +1231,9 @@ if (typeCrawling == "sitemap") {
     // observed an empty queue while the real workload ran on the routes
     // instance — masking detect-API saturation.
     context.detectionClient = new DetectionLangueClient();
+    // Phase-2 tier-2 content comparison. Constructed unconditionally; only used
+    // when DIEZ_TIER2_ENABLED and the diez engine activates.
+    context.contentExtractorClient = new ContentExtractorClient();
 
     // --- TIMING INSTRUMENTATION ---
     // When TIMING_ENABLED=false (the default), this entire block is a no-op:

@@ -179,7 +179,7 @@ test("maybeCommitDecision: 100 samples mixed below confidence returns escalate",
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { commitSkipDiez, commitBypassDiez, getDiezDecisionMode } from "./diezDecision.js";
 
 const makeTmpStorage = (): string => {
     return fs.mkdtempSync(path.join(os.tmpdir(), "diez-test-"));
@@ -314,5 +314,25 @@ test("readPersistedDecision: malformed file returns false, no crash", () => {
     assert.equal(loaded, false);
     assert.equal(context.diezDecisionCommitted, false);
 
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("commitSkipDiez tier-2 meta writes source + evidence to the decision file", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    const evidence = { compared: 3, matches: 3, mismatches: 0, unusable: 0 };
+    commitSkipDiez(storage, { tier: 2, source: "tier2", evidence });
+    const payload = JSON.parse(fs.readFileSync(path.join(storage, "_diez_decision.json"), "utf-8"));
+    assert.equal(payload.source, "tier2");
+    assert.equal(payload.tier, 2);
+    assert.deepEqual(payload.evidence, evidence);
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("getDiezDecisionMode reports defaulted-bypassdiez for a default-source commit", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    commitBypassDiez(storage, { tier: 2, source: "default" });
+    assert.equal(getDiezDecisionMode(undefined), "defaulted-bypassdiez");
     fs.rmSync(storage, { recursive: true, force: true });
 });
