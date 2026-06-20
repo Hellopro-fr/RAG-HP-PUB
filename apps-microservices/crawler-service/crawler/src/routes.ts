@@ -22,6 +22,8 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { fragmentAwareUniqueKey } from "./diezKeepFragment.js";
+import { recordTier2Sample, maybeCommitTier2, tier2Evidence } from "./diezTier2.js";
+import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
@@ -195,6 +197,8 @@ const ALWAYS_REMOVE_PARAMS = [
     // are intentionally NOT listed here — they belong in FORBIDDEN_PARAMS (reject the URL entirely).
     "timestamp", "random", "nocache",
 ];
+
+const DIEZ_TIER2_ENABLED = (process.env.DIEZ_TIER2_ENABLED ?? "false").toLowerCase() === "true";
 
 router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response, session }) => {
@@ -790,18 +794,31 @@ router.addDefaultHandler(
                 }
                 if (url.includes('#')) {
                     context.countDiez++;
-                    // Tier-1 auto-decision engine (spec 2026-04-17).
-                    // No-op when context.diezDecisionCommitted is true (persisted decision, CLI flag, or prior commit).
+                    // Tier-1 auto-decision (spec 2026-04-17). No-op once committed.
                     recordClassification(url);
                     const outcome = maybeCommitDecision();
-                    if (outcome === "skipDiez" && storagePath) {
-                        commitSkipDiez(storagePath);
-                    } else if (outcome === "bypassDiez" && storagePath) {
-                        commitBypassDiez(storagePath);
-                    } else if (outcome === "promoteTier2") {
-                        console.log(`[diez] Tier 2 promotion triggered (phase 1 no-op). Escalation will fire at MAX_SAMPLES.`);
-                    } else if (outcome === "escalate") {
-                        console.log(`[diez] Tier 1 inconclusive at ${context.diezClassification.total} samples — existing limitDiez path will fire.`);
+                    const route = routeDiezOutcome(outcome, DIEZ_TIER2_ENABLED);
+
+                    if (route.action === "commit" && storagePath) {
+                        const meta = { source: route.source } as const;
+                        if (route.decision === "skipDiez") commitSkipDiez(storagePath, meta);
+                        else commitBypassDiez(storagePath, meta);
+                    } else if (route.action === "activate") {
+                        if (!context.diezTier2.active) {
+                            context.diezTier2.active = true;
+                            console.log(`[diez] Tier 2 engine activated (tier-1 outcome=${outcome}).`);
+                        }
+                    }
+
+                    // Tier-2 verification (engine active, not yet committed).
+                    if (DIEZ_TIER2_ENABLED && context.diezTier2.active && !context.diezDecisionCommitted && content) {
+                        await recordTier2Sample(url, content, context.contentExtractorClient);
+                        const t2 = maybeCommitTier2();
+                        if (t2 && storagePath) {
+                            const meta = { tier: 2 as const, source: "tier2" as const, evidence: tier2Evidence() };
+                            if (t2 === "skipDiez") commitSkipDiez(storagePath, meta);
+                            else commitBypassDiez(storagePath, meta);
+                        }
                     }
                 }
 
