@@ -41,3 +41,35 @@ async def run_header_footer(main_html: str, reference_htmls: list[str],
     EXTRACTION_METHOD.labels(method=body.get("footer_method", "none")).inc()
     await result_cache.set(key, body)
     return body
+
+
+async def run_batch(job_type, items, max_concurrency, force_refresh, progress_cb=None) -> list[dict]:
+    """Batch runner injected into JobManager. Processes items concurrently under a
+    semaphore and writes each result into a FIXED-SIZE list indexed by submit
+    position (order-aligned even under concurrency). Per-item failure is isolated:
+    the failing slot gets {"error": str(e)}; the job does not fail as a whole."""
+    results: list = [None] * len(items)
+    sem = asyncio.Semaphore(max_concurrency)
+    done = 0
+    lock = asyncio.Lock()
+
+    async def _one(i, item):
+        nonlocal done
+        async with sem:
+            try:
+                if job_type == "clean":
+                    results[i] = await run_clean(item.html, item.format, force_refresh)
+                else:
+                    results[i] = await run_header_footer(
+                        item.main_html, item.reference_htmls, item.debug, force_refresh
+                    )
+            except Exception as e:
+                logger.warning("batch item %d (%s) failed: %s", i, job_type, e)
+                results[i] = {"error": str(e)}
+            async with lock:
+                done += 1
+                if progress_cb is not None:
+                    progress_cb(done)
+
+    await asyncio.gather(*(_one(i, it) for i, it in enumerate(items)))
+    return results

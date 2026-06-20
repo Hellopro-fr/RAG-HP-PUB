@@ -69,3 +69,28 @@ def test_force_refresh_skips_read(monkeypatch):
     body = asyncio.run(extractor_service.run_clean(MAIN, OutputFormat.TEXT, force_refresh=True))
     assert seen["get"] == 0
     assert body["content"] != "CACHED"
+
+
+import types
+
+
+def test_run_batch_order_and_failure_isolation(monkeypatch):
+    async def fake_run_clean(html, fmt, force_refresh=False):
+        if html == "BOOM":
+            raise RuntimeError("kaboom")
+        return {"content": html, "format": fmt.value, "content_length": len(html)}
+
+    monkeypatch.setattr(extractor_service, "run_clean", fake_run_clean)
+
+    items = [
+        types.SimpleNamespace(html="A", format=OutputFormat.TEXT),
+        types.SimpleNamespace(html="BOOM", format=OutputFormat.TEXT),
+        types.SimpleNamespace(html="C", format=OutputFormat.TEXT),
+    ]
+    seen = {"max": 0}
+    results = asyncio.run(extractor_service.run_batch(
+        "clean", items, max_concurrency=2, force_refresh=False,
+        progress_cb=lambda d: seen.__setitem__("max", d),
+    ))
+    assert [r.get("content", r.get("error")) for r in results] == ["A", "kaboom", "C"]
+    assert seen["max"] == 3
