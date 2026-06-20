@@ -22,3 +22,11 @@ SYNC_ADMISSION_REJECTED = Counter(
     "extract_sync_admission_rejected_total",
     "Sync requests shed by the admission guard (SYNC_MAX_INFLIGHT)",
 )
+
+
+CACHE_HITS = Counter(
+    "extract_cache_hits_total", "Result cache hits", ["job_type"],
+)
+CACHE_MISSES = Counter(
+    "extract_cache_misses_total", "Result cache misses", ["job_type"],
+)
