@@ -18,7 +18,7 @@ export type Classification = "anchor" | "spa" | "ambiguous";
  *   2. Starts with `/` → spa
  *   3. Contains `/` anywhere → spa
  *   4. Has `&` + `=` or starts with `?` → spa
- *   5. HTML id convention (length ≤ 50, ^[a-zA-Z][a-zA-Z_-]*$) → anchor
+ *   5. HTML id convention (length ≤ 50, ^[a-zA-Z][-a-zA-Z0-9_]*$) → anchor
  *   6. Short alphanumeric (length ≤ 20, ^[a-zA-Z0-9_-]+$) → anchor
  *   7. Anything else → ambiguous
  *
@@ -38,7 +38,7 @@ export const classifyFragment = (fragment: string): Classification => {
     if (frag.startsWith("/")) return "spa";
     if (frag.includes("/")) return "spa";
     if ((frag.includes("&") && frag.includes("=")) || frag.startsWith("?")) return "spa";
-    if (frag.length <= 50 && /^[a-zA-Z][a-zA-Z_-]*$/.test(frag)) return "anchor";
+    if (frag.length <= 50 && /^[a-zA-Z][-a-zA-Z0-9_]*$/.test(frag)) return "anchor";
     if (frag.length <= 20 && /^[a-zA-Z0-9_-]+$/.test(frag)) return "anchor";
     return "ambiguous";
 };
@@ -113,6 +113,15 @@ const _require = createRequire(import.meta.url);
 
 const DECISION_FILE = "_diez_decision.json";
 
+interface DecisionMeta {
+    tier?: 1 | 2;
+    source?: "tier1" | "tier2" | "default";
+    evidence?: { compared: number; matches: number; mismatches: number; unusable: number };
+}
+
+// Last committed source, for getDiezDecisionMode. In-memory; the durable record is _diez_decision.json.
+let _committedSource: "tier1" | "tier2" | "default" = "tier1";
+
 /**
  * Write the decision marker atomically (tmp → rename) with fsync before rename.
  * Ensures durability on power-loss / OOM-triggered restart.
@@ -120,24 +129,19 @@ const DECISION_FILE = "_diez_decision.json";
 const writeDecisionFile = (
     storagePath: string,
     decision: "skipDiez" | "bypassDiez",
-    tier: 1 | 2
+    meta: DecisionMeta = {},
 ): void => {
     const c = context.diezClassification;
     const payload = {
         decision,
-        tier,
+        tier: meta.tier ?? 1,
+        source: meta.source ?? "tier1",
         committedAt: new Date().toISOString(),
-        counts: {
-            anchor: c.anchor,
-            spa: c.spa,
-            ambiguous: c.ambiguous,
-            total: c.total,
-        },
+        counts: { anchor: c.anchor, spa: c.spa, ambiguous: c.ambiguous, total: c.total },
+        evidence: meta.evidence ?? null,
     };
-
     const finalPath = path.join(storagePath, DECISION_FILE);
     const tmpPath = `${finalPath}.tmp`;
-
     fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
     // Open with "r+" (read-write) so fsyncSync has a writable fd on all platforms.
     const fd = fs.openSync(tmpPath, "r+");
@@ -151,29 +155,21 @@ const writeDecisionFile = (
  *
  * Idempotent: no-op when diezDecisionCommitted is already true.
  */
-export const commitSkipDiez = (storagePath: string): void => {
+export const commitSkipDiez = (storagePath: string, meta: DecisionMeta = {}): void => {
     if (context.diezDecisionCommitted) return;
-
     const c = context.diezClassification;
     context.config.skipDiez = true;
     context.diezDecisionCommitted = true;
-
-    writeDecisionFile(storagePath, "skipDiez", 1);
-
-    console.log(
-        `[diez] Tier 1 decision: skipDiez (anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`
-    );
-
+    _committedSource = meta.source ?? "tier1";
+    writeDecisionFile(storagePath, "skipDiez", { tier: meta.tier ?? 1, source: meta.source ?? "tier1", evidence: meta.evidence });
+    console.log(`[diez] Decision: skipDiez (source=${meta.source ?? "tier1"} anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`);
     // Rewrite already-queued URLs to strip '#'. Lazy require avoids ESM circular dep at load time.
     try {
         const { parseJsonFiles, getAllRequestQueues } = _require("./functions.js");
         const queueName = context.config.crawleeStorageName;
         const queues: string[] = getAllRequestQueues(queueName);
         if (Array.isArray(queues) && queues.length > 0) {
-            parseJsonFiles(queues, context.config.skipQuestionMark, true, {
-                toKeep: context.config.toKeep,
-                toRemove: context.config.toRemove,
-            });
+            parseJsonFiles(queues, context.config.skipQuestionMark, true, { toKeep: context.config.toKeep, toRemove: context.config.toRemove });
             console.log(`[diez] Rewrote ${queues.length} queued request file(s) to strip '#'.`);
         }
     } catch (e) {
@@ -187,18 +183,14 @@ export const commitSkipDiez = (storagePath: string): void => {
  *
  * Idempotent: no-op when diezDecisionCommitted is already true.
  */
-export const commitBypassDiez = (storagePath: string): void => {
+export const commitBypassDiez = (storagePath: string, meta: DecisionMeta = {}): void => {
     if (context.diezDecisionCommitted) return;
-
     const c = context.diezClassification;
     context.config.bypassDiez = true;
     context.diezDecisionCommitted = true;
-
-    writeDecisionFile(storagePath, "bypassDiez", 1);
-
-    console.log(
-        `[diez] Tier 1 decision: bypassDiez (anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`
-    );
+    _committedSource = meta.source ?? "tier1";
+    writeDecisionFile(storagePath, "bypassDiez", { tier: meta.tier ?? 1, source: meta.source ?? "tier1", evidence: meta.evidence });
+    console.log(`[diez] Decision: bypassDiez (source=${meta.source ?? "tier1"} anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`);
 };
 
 /**
@@ -212,18 +204,25 @@ export const readPersistedDecision = (storagePath: string): boolean => {
 
     try {
         const raw = fs.readFileSync(filePath, "utf-8");
-        const payload = JSON.parse(raw) as { decision?: string; tier?: number };
+        const payload = JSON.parse(raw) as { decision?: string; tier?: number; source?: string };
+        // Restore the committed source so getDiezDecisionMode reports the true mode
+        // (tier2-*/defaulted-*) after an OOM relaunch, not the "tier1" default.
+        // Legacy files (pre-phase-2, no source field) fall back to "tier1".
+        const source: "tier1" | "tier2" | "default" =
+            payload.source === "tier2" || payload.source === "default" ? payload.source : "tier1";
 
         if (payload.decision === "skipDiez") {
             context.config.skipDiez = true;
             context.diezDecisionCommitted = true;
-            console.log(`[diez] Loaded persisted decision: skipDiez (tier ${payload.tier ?? "?"})`);
+            _committedSource = source;
+            console.log(`[diez] Loaded persisted decision: skipDiez (tier ${payload.tier ?? "?"}, source ${source})`);
             return true;
         }
         if (payload.decision === "bypassDiez") {
             context.config.bypassDiez = true;
             context.diezDecisionCommitted = true;
-            console.log(`[diez] Loaded persisted decision: bypassDiez (tier ${payload.tier ?? "?"})`);
+            _committedSource = source;
+            console.log(`[diez] Loaded persisted decision: bypassDiez (tier ${payload.tier ?? "?"}, source ${source})`);
             return true;
         }
 
@@ -254,15 +253,20 @@ export const applyCliFlagGuard = (): void => {
  * Called at crawl end, after isError is finalized.
  *
  * Returns:
- *   "escalated"       — isError === "limitDiez" (Tier 3 fired, today's email path)
- *   "tier1-skipdiez"  — Tier 1 committed skipDiez during the crawl
- *   "tier1-bypassdiez" — Tier 1 committed bypassDiez during the crawl
- *   "unused"          — crawl completed without needing a tier-1 decision
+ *   "escalated"            — isError === "limitDiez" (Tier 3 fired, today's email path)
+ *   "tier1-skipdiez"       — Tier 1 committed skipDiez during the crawl
+ *   "tier1-bypassdiez"     — Tier 1 committed bypassDiez during the crawl
+ *   "tier2-skipdiez"       — Tier 2 committed skipDiez during the crawl
+ *   "tier2-bypassdiez"     — Tier 2 committed bypassDiez during the crawl
+ *   "defaulted-bypassdiez" — default fallback committed bypassDiez
+ *   "unused"               — crawl completed without needing a decision
  */
 export const getDiezDecisionMode = (isError: string | undefined): string => {
     if (isError === "limitDiez") return "escalated";
     if (!context.diezDecisionCommitted) return "unused";
-    if (context.config.skipDiez) return "tier1-skipdiez";
-    if (context.config.bypassDiez) return "tier1-bypassdiez";
-    return "unused";
+    const verb = context.config.skipDiez ? "skipdiez" : context.config.bypassDiez ? "bypassdiez" : "unused";
+    if (verb === "unused") return "unused";
+    if (_committedSource === "default") return "defaulted-bypassdiez";
+    if (_committedSource === "tier2") return `tier2-${verb}`;
+    return `tier1-${verb}`;
 };

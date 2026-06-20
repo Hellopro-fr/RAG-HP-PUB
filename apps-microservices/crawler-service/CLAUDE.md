@@ -523,6 +523,32 @@ for completed crawls (the queue-health `exit(0)` ran before it).
 
 Spec: `docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md`.
 
+## Phase-2 limitDiez (zero-touch)
+
+Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limitDiez to a human. Tier-1 (URL heuristic) produces a *hypothesis*; tier-2 verifies it with real content.
+
+**How it works:**
+- URL fragments are kept as distinct request identities (`base`, `base#a`, `base#b` crawl separately), giving tier-2 real material to compare.
+- A confident tier-1 outcome (skip/bypass/promoteTier2) does NOT commit directly — it ACTIVATES the tier-2 engine, which then has the final say.
+- The engine buffers one `{fragment, content}` per fragment-stripped base; when a 2nd distinct `#`-variant of that base arrives, it cleans both pages via the content-extractor `/clean` (text mode) and classifies the pair by Jaccard similarity (match / mismatch / unusable). `/clean` failures or empty results count as unusable (no false vote).
+- It commits `skipDiez` only on positive match-evidence (≥3 comparisons AND ≥80% match ratio) and `bypassDiez` on a mismatch-majority; otherwise it keeps sampling.
+- If tier-1 escalates (≥100 hashes with no confident decision) the engine commits the **default** `bypassDiez` — the zero-touch floor, so the crawl never dies at 100 hashes. This floor is active even with the engine disabled (`DIEZ_TIER2_ENABLED=false`), so the crawl is safe without deploying the content-extractor.
+- The committed decision is persisted to `_diez_decision.json` (with `source` ∈ {tier1, tier2, default} + comparison `evidence`); on a `skipDiez` that completes, stored dataset rows are stripped of `#` and exact duplicates dropped at shutdown.
+
+**Env vars:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DIEZ_TIER2_ENABLED` | `false` | Gates the tier-2 verification engine. Off = zero-touch floor only (bypassDiez). |
+| `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Base URL for the content-extractor `/clean` endpoint. |
+| `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Per-call HTTP timeout (seconds). |
+| `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Max concurrent `/clean` calls per crawl. |
+| `CONTENT_EXTRACTOR_MAX_RETRIES` | `1` | Retries on transient errors. |
+
+**Co-deploy rule:** when `DIEZ_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It now shares the `crawling` compose profile and the `services-net` network, so it starts alongside the crawler automatically. No extra compose override is needed.
+
+Spec: `docs/superpowers/specs/2026-06-12-limitdiez-phase2-zero-touch` (Hellopro planning repo).
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.

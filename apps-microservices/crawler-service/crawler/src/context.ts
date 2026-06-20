@@ -6,6 +6,7 @@ import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { TimingRecorder } from "./class/TimingRecorder.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
+import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
 import { PlaywrightCrawler } from "crawlee";
 
 export const context = {
@@ -25,6 +26,7 @@ export const context = {
     // pendingCount/activeCount). Module-level instantiation in routes.ts
     // would have given the sampler a separate, idle queue.
     detectionClient: null as DetectionLangueClient | null,
+    contentExtractorClient: null as ContentExtractorClient | null,
     // Store detected method in memory to avoid race conditions/disk IO
     frenchDetectionMethod: null as string | null,
     config: {
@@ -92,6 +94,18 @@ export const context = {
     // Set to true once a tier-1 commit has happened OR a persisted decision was loaded at startup.
     // When true, recordClassification is a no-op — we already decided.
     diezDecisionCommitted: false,
+    // Phase-2 tier-2 content-comparison engine state (see diezTier2.ts + spec §5).
+    // In-memory only (lost on OOM relaunch, like diezClassification). buffer holds
+    // ONE {frag, content} per fragment-stripped base until its 2nd '#'-variant
+    // arrives and adjudicates (then the entry is freed).
+    diezTier2: {
+        active: false,
+        buffer: new Map<string, { frag: string; content: string }>(),
+        compared: 0,
+        matches: 0,
+        mismatches: 0,
+        unusable: 0,
+    },
     // Tier-1 observer for limitQuestionMark (see questionMarkDecision.ts + spec 2026-04-17).
     // Records the domain-specific params that survived Tier-0 stripping. No decisions yet.
     questionMarkObservations: {

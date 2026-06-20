@@ -37,6 +37,7 @@ import {
     pdfDatasetName,
     type FailureClass,
 } from "./httpStatusPolicy.js";
+import { shouldStopForDiez } from "./diezLimitStop.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -448,9 +449,9 @@ export const startCrawler = async (
     apifyProxyPassword?: string,
     breakLimit?: boolean,
     bypassQuestionMark?: boolean,
-    bypassDiez?: boolean,
+    _bypassDiez?: boolean,
     skipquestionmark?: boolean,
-    skipdiez?: boolean,
+    _skipdiez?: boolean,
     containerMemoryMb?: number,
     camoufoxEnabled?: boolean
 ) => {
@@ -801,7 +802,7 @@ export const startCrawler = async (
                     context.stopReason = "limitQuestionMark";
                     await stopCrawler(crawler, "Limit of 100 question marks reached.");
                 }
-                if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
+                if (shouldStopForDiez(context.countDiez, context.config.bypassDiez, context.config.skipDiez, limitQuestionMarkDiez)) {
                     context.stopReason = "limitDiez";
                     await stopCrawler(crawler, "Limit of 100 hashes reached.");
                 }
@@ -1774,6 +1775,41 @@ export const getAllRequestQueues = (queueName: string): string[] => {
     } catch (error) {
         throw new Error(`Error getAllRequestQueues for queue ${queueName}: ${error}`);
     }
+};
+
+/**
+ * Phase-2: after a skipDiez decision, strip '#' from stored dataset rows and
+ * drop exact-duplicate URLs (keep first). Operates on flat {url,content,title}
+ * dataset files (NOT request queues — parseJsonFiles handles those). Missing
+ * dirs are a no-op. See spec §8.
+ */
+export const cleanDatasetFragments = (datasetNames: string[]): { rewritten: number; removed: number } => {
+    let rewritten = 0;
+    let removed = 0;
+    for (const name of datasetNames) {
+        const dir = `storage/datasets/${name}`;
+        if (!fs.existsSync(dir)) continue;
+        const seen = new Set<string>();
+        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("__"));
+        for (const f of files) {
+            const full = `${dir}/${f}`;
+            let row: { url?: string };
+            try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
+            if (!row.url) continue;
+            const cleaned = processUrl(row.url, false, true);
+            if (seen.has(cleaned)) {
+                try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ }
+                continue;
+            }
+            seen.add(cleaned);
+            if (cleaned !== row.url) {
+                (row as any).url = cleaned;
+                try { fs.writeFileSync(full, JSON.stringify(row)); rewritten++; } catch { /* best-effort */ }
+            }
+        }
+    }
+    console.log(`[diez] Dataset cleanup: rewrote ${rewritten}, removed ${removed} duplicate row file(s).`);
+    return { rewritten, removed };
 };
 
 /**
