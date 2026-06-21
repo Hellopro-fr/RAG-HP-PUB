@@ -1,0 +1,33 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-21-crawler-concurrency-autoadjust.md",
+  "tasks": [
+    {
+      "id": 115,
+      "subject": "AA-T1: Pure logic — gate predicate + resolvers + page-closed predicate (+tests)",
+      "status": "completed",
+      "description": "**Goal:** shouldAcceptNewPage + resolveBackpressureMaxPending (+BACKPRESSURE_MAX_PENDING) + isPageClosedError; resolveMaxConcurrency default 10→20; unit-test all.\n\n**Files:** crawler/src/httpStatusPolicy.ts; crawler/src/tests/httpStatusPolicy.limits.test.ts\n\n**Verify:** npm test --prefix crawler && npm run build --prefix crawler\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/httpStatusPolicy.ts\",\"apps-microservices/crawler-service/crawler/src/tests/httpStatusPolicy.limits.test.ts\"],\"verifyCommand\":\"npm test --prefix apps-microservices/crawler-service/crawler && npm run build --prefix apps-microservices/crawler-service/crawler\",\"acceptanceCriteria\":[\"shouldAcceptNewPage predicate\",\"resolveBackpressureMaxPending default 5 / 0 valid\",\"isPageClosedError predicate\",\"resolveMaxConcurrency default 20\"]}\n```"
+    },
+    {
+      "id": 116,
+      "subject": "AA-T2: Wire detection-backpressure gate into AutoscaledPool",
+      "status": "completed",
+      "blockedBy": [115],
+      "description": "**Goal:** isTaskReadyFunction in autoscaledPoolOptions gating on detection pendingCount ≤ BACKPRESSURE_MAX_PENDING; refresh maxConcurrency comment.\n\n**Files:** crawler/src/functions.ts\n\n**Verify:** npm run build --prefix crawler\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/functions.ts\"],\"verifyCommand\":\"npm run build --prefix apps-microservices/crawler-service/crawler\",\"acceptanceCriteria\":[\"imports gate predicate + const\",\"isTaskReadyFunction wired\",\"fails open if detectionClient absent\"]}\n```"
+    },
+    {
+      "id": 117,
+      "subject": "AA-T3: Quiet-guard pre-batch page.$$eval",
+      "status": "completed",
+      "blockedBy": [115],
+      "description": "**Goal:** skip pre-batch extraction when page.isClosed(); page-closed catch → log.debug.\n\n**Files:** crawler/src/routes.ts (import L31; block ~L838-856)\n\n**Verify:** npm run build --prefix crawler && npm test --prefix crawler\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/routes.ts\"],\"verifyCommand\":\"npm run build --prefix apps-microservices/crawler-service/crawler && npm test --prefix apps-microservices/crawler-service/crawler\",\"acceptanceCriteria\":[\"isPageClosedError imported\",\"!page.isClosed() guard\",\"page-closed catch → log.debug\"]}\n```"
+    },
+    {
+      "id": 118,
+      "subject": "AA-T4: Docs — CLAUDE.md section + supersede prior spec",
+      "status": "completed",
+      "blockedBy": [115, 116, 117],
+      "description": "**Goal:** rewrite CLAUDE.md Detection Backpressure section (gate throttle, ceiling 20, threshold 5, quiet-guard); supersede note on prior spec.\n\n**Files:** apps-microservices/crawler-service/CLAUDE.md; docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md\n\n**Verify:** manual read\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/CLAUDE.md\",\"docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md\"],\"verifyCommand\":\"manual read\",\"acceptanceCriteria\":[\"CLAUDE.md gate section + env table\",\"prior spec supersede note\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-21"
+}
