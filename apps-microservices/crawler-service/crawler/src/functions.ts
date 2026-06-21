@@ -28,6 +28,8 @@ import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
 import {
     NAVIGATION_WAIT_UNTIL,
     TIMEOUT_MAX_RETRIES,
+    MAX_CONCURRENCY,
+    REQUEST_HANDLER_TIMEOUT_S,
     shouldCapTimeoutRetry,
     PERMANENT_ERROR_MARKERS,
     classifyFailure,
@@ -540,9 +542,14 @@ export const startCrawler = async (
             ],
         },
 
-        // maxConcurrency: 1, // V3 default
+        // maxConcurrency is capped via autoscaledPoolOptions below (env CRAWLER_MAX_CONCURRENCY).
         navigationTimeoutSecs: 90,
-        requestHandlerTimeoutSecs: 120,
+        // Raised from 120 → default 200, must exceed one nav (≤90) + one detect
+        // (DETECTION_REQUEST_TIMEOUT_S 180) so a slow-but-progressing page is not killed
+        // mid-detect (the 120<180 inversion orphaned handlers onto page.$$eval).
+        // Env REQUEST_HANDLER_TIMEOUT_S.
+        // Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+        requestHandlerTimeoutSecs: REQUEST_HANDLER_TIMEOUT_S,
         maxRequestRetries: 5, // V3 resilience
 
         useSessionPool: true,
@@ -823,8 +830,17 @@ export const startCrawler = async (
 
     // Prevent premature shutdown while Phase 2 is seeding URLs in update mode.
     // In standard mode, phase2SeedingComplete is true by default → no effect.
+    //
+    // maxConcurrency caps the pool so it cannot over-subscribe the 5-wide detection
+    // p-limit. The pool scales on local CPU/event-loop/memory — all idle while handlers
+    // await the detection HTTP call — so left uncapped it ramps to 25+ handlers against
+    // 5 detect slots, inflating per-page detect latency past requestHandlerTimeoutSecs →
+    // mass handler timeouts + progress-stall death spiral. Set here (not top-level) to
+    // avoid Crawlee's top-level/pool dual-specification error. Env CRAWLER_MAX_CONCURRENCY.
+    // Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
     optionsCrawler.autoscaledPoolOptions = {
         ...optionsCrawler.autoscaledPoolOptions,
+        maxConcurrency: MAX_CONCURRENCY,
         isFinishedFunction: async () => {
             const isEmpty = await requestQueue.isEmpty();
             return isEmpty && context.phase2SeedingComplete;

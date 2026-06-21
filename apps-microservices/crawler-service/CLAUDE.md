@@ -453,6 +453,34 @@ Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense
 
 **Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
 
+## Detection Backpressure (Concurrency Cap + Handler-Timeout Alignment)
+
+The default handler awaits a per-page detection call (the dominant phase — ~94% of
+handler time on detection-gated sites). Crawlee's `AutoscaledPool` scales on **local**
+CPU/event-loop/memory, all of which look idle while handlers `await` that HTTP call —
+so left uncapped it ramps to 25+ concurrent handlers against only `DETECTION_MAX_CONCURRENCY`
+(5) detect slots. The surplus handlers pile into the detection `p-limit` queue, inflating
+per-page detect latency past `requestHandlerTimeoutSecs`. Crawlee then kills the handler
+mid-detect and closes the page; the orphaned handler later hits `page.$$eval` (routes.ts
+pre-batch dedup) on the dead page → `Pre-batch link extraction failed: ... Target page,
+context or browser has been closed` (a swallowed symptom, surfaced via stderr as
+`Erreur crawling`). With almost nothing finishing, `ProgressMonitor` fires (exit 6) and
+relaunch loops — a death spiral. Incident: crawl 7033 (carflo.fr), 2026-06-19.
+
+Two env-tunable levers (resolved in `httpStatusPolicy.ts`, wired in `functions.ts`):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `CRAWLER_MAX_CONCURRENCY` | `10` | `autoscaledPoolOptions.maxConcurrency`. ≈2× `DETECTION_MAX_CONCURRENCY`: overlaps nav/extract with the in-flight detects without growing the detect queue. Set inside `autoscaledPoolOptions` (not top-level) to avoid Crawlee's dual-specification error. |
+| `REQUEST_HANDLER_TIMEOUT_S` | `200` | `requestHandlerTimeoutSecs`. Raised from 120 to exceed one nav (≤90) + one detect (`DETECTION_REQUEST_TIMEOUT_S` 180) so a slow-but-progressing page is not killed mid-detect (the prior 120<180 inversion). |
+
+Tune both together: raising `DETECTION_MAX_CONCURRENCY` should be paired with a higher
+`CRAWLER_MAX_CONCURRENCY`; detection-light deployments can raise the cap for throughput.
+The upstream root (api-detection-langue-fr latency under load) is separate — this only
+stops the crawler from amplifying it and tolerates the common slow case.
+
+Spec: `docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md`.
+
 ## HTTP Status & Navigation Retry Policy
 
 `page.goto` resolves on `domcontentloaded` (not Playwright's default `load`), so the

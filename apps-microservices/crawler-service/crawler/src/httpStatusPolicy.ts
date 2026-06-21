@@ -52,6 +52,35 @@ export function resolveTimeoutMaxRetries(raw: string | undefined): number {
 }
 
 /**
+ * Resolves the crawl-level max concurrency from an env value (positive int, default 10).
+ * Caps the AutoscaledPool — which scales on local CPU/event-loop/memory, all idle while
+ * handlers await the detection HTTP call — so it cannot over-subscribe the
+ * DETECTION_MAX_CONCURRENCY-wide (5) detect p-limit. Without a cap the pool ramps to 25+
+ * handlers against 5 detect slots, inflating per-page detect latency past
+ * requestHandlerTimeoutSecs → mass handler timeouts + progress-stall death spiral.
+ * Default 10 ≈ 2× DETECTION_MAX_CONCURRENCY: overlaps nav/extract with the in-flight
+ * detects without growing the detect queue. Invalid/empty/non-positive → 10.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+ */
+export function resolveMaxConcurrency(raw: string | undefined): number {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 10;
+}
+
+/**
+ * Resolves the request-handler timeout in seconds from an env value (positive int, default 200).
+ * Must exceed one navigation (≤ navigationTimeoutSecs 90) plus one detection call
+ * (DETECTION_REQUEST_TIMEOUT_S 180) so a slow-but-progressing page is not killed mid-detect.
+ * The prior 120s budget sat BELOW the 180s detect timeout → orphaned handlers hit
+ * page.$$eval on a torn-down page. Invalid/empty/non-positive → 200.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+ */
+export function resolveRequestHandlerTimeoutSecs(raw: string | undefined): number {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 200;
+}
+
+/**
  * True when a failed request is a navigation timeout that has reached the retry
  * cap — bounds wasted retries on genuinely-unresponsive URLs.
  */
@@ -66,6 +95,10 @@ export const NAVIGATION_WAIT_UNTIL: NavigationWaitUntil =
     resolveNavigationWaitUntil(process.env.NAVIGATION_WAIT_UNTIL);
 export const TIMEOUT_MAX_RETRIES: number =
     resolveTimeoutMaxRetries(process.env.TIMEOUT_MAX_RETRIES);
+export const MAX_CONCURRENCY: number =
+    resolveMaxConcurrency(process.env.CRAWLER_MAX_CONCURRENCY);
+export const REQUEST_HANDLER_TIMEOUT_S: number =
+    resolveRequestHandlerTimeoutSecs(process.env.REQUEST_HANDLER_TIMEOUT_S);
 
 // ---------------------------------------------------------------------------
 // Failure classification & auto-recovery on restart
