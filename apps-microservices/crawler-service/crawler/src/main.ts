@@ -40,7 +40,7 @@ import { TimingRecorder } from "./class/TimingRecorder.js";
 import type { PoolSample, TimingSummary } from "./timing/types.js";
 import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
-import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations } from "./questionMarkDecision.js";
+import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations, readQmPersistedDecision } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
@@ -179,6 +179,8 @@ if (storagePath) {
 // Tier-1 observer guard: disable observation if CLI already set skipQuestionMark / bypassQuestionMark.
 // Human choice wins — spec §9.3.
 applyQuestionMarkGuard();
+// Phase-2: restore previously committed toRemove params (OOM_RELAUNCH).
+if (storagePath) readQmPersistedDecision(storagePath);
 
 const nameLogs = `${domain}-logs-${now}.log`;
 attachFSLogger(nameLogs);

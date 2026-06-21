@@ -26,6 +26,7 @@ import { recordTier2Sample, maybeCommitTier2, tier2Evidence } from "./diezTier2.
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
+import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import { classifyHttpStatus, pdfDatasetName } from "./httpStatusPolicy.js";
 import type { PageTimingEntry } from "./timing/types.js";
@@ -199,6 +200,7 @@ const ALWAYS_REMOVE_PARAMS = [
 ];
 
 const DIEZ_TIER2_ENABLED = (process.env.DIEZ_TIER2_ENABLED ?? "false").toLowerCase() === "true";
+const QM_TIER2_ENABLED = (process.env.QM_TIER2_ENABLED ?? "false").toLowerCase() === "true";
 
 router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response, session }) => {
@@ -788,9 +790,25 @@ router.addDefaultHandler(
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
                 if (url.includes('?')) {
                     context.countQuestionMark++;
-                    // Tier-1 observer (spec 2026-04-17). Records domain-specific params that survived Tier-0.
-                    // No-op when observation disabled (human CLI flag set).
+                    // Tier-1 observer (spec 2026-04-17). No-op when observation disabled.
                     recordQuestionMarkObservation(url);
+
+                    // Phase-2 tier-2 per-param engine (spec 2026-06-16). Off unless QM_TIER2_ENABLED.
+                    if (QM_TIER2_ENABLED && context.questionMarkObservationEnabled && storagePath) {
+                        if (!context.qmTier2.active && context.questionMarkObservations.domainSpecificCount >= QM_TIER2_TRIGGER) {
+                            context.qmTier2.active = true;
+                            console.log(`[questionmark] Tier 2 activated at ${context.questionMarkObservations.domainSpecificCount} domain-specific ? URLs.`);
+                        }
+                        if (context.qmTier2.active && content) {
+                            await recordQmTier2Sample(url, content, context.contentExtractorClient);
+                            for (const p of Array.from(context.qmTier2.tally.keys())) {
+                                if (!context.qmTier2.decided.has(p) && maybeCommitParam(p)) {
+                                    commitToRemoveParam(p, storagePath);
+                                }
+                            }
+                        }
+                        maybeDefaultAtCeiling(storagePath);
+                    }
                 }
                 if (url.includes('#')) {
                     context.countDiez++;

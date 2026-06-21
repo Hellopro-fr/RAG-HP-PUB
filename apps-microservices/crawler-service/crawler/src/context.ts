@@ -120,6 +120,19 @@ export const context = {
     // Becomes false when the human's skipQuestionMark or bypassQuestionMark is set at crawl start.
     // When false, recordQuestionMarkObservation is a no-op (human choice wins).
     questionMarkObservationEnabled: true,
+    // Phase-2 tier-2 per-param engine state (see questionMarkTier2.ts + spec §5).
+    // In-memory only (lost on OOM relaunch, like the Tier-1 observer counters).
+    // contentByUrl stores page content ONCE per URL (capped); groups reference it.
+    qmTier2: {
+        active: false,
+        contentByUrl: new Map<string, string>(),
+        groups: new Map<string, Map<string, Array<{ pval: string | null; url: string }>>>(),
+        tally: new Map<string, { same: number; different: number; unusable: number }>(),
+        decided: new Set<string>(),
+        addedToRemove: [] as string[],
+        contentShaping: [] as string[],
+        defaulted: false,
+    },
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null,
