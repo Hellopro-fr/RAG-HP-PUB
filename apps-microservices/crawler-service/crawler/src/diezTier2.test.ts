@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { context } from "./context.js";
 import { baseUrlKey, recordTier2Sample, maybeCommitTier2, tier2Evidence } from "./diezTier2.js";
+import { ContentExtractorError } from "./class/ContentExtractorClient.js";
 
 const resetT2 = () => {
     context.diezTier2 = { active: true, buffer: new Map(), compared: 0, matches: 0, mismatches: 0, unusable: 0 };
@@ -67,4 +68,24 @@ test("/clean throw → unusable, no false vote", async () => {
     assert.equal(context.diezTier2.matches, 0);
     assert.equal(context.diezTier2.mismatches, 0);
     assert.deepEqual(tier2Evidence(), { compared: 1, matches: 0, mismatches: 0, unusable: 1 });
+});
+
+test("transient /clean error does not consume a comparison; buffer retained for retry", async () => {
+    resetT2();
+    const SAME = "same long page content ".repeat(10);
+    const flakyClient = { clean: async () => { throw new ContentExtractorError(503, true); } } as any;
+
+    await recordTier2Sample("https://x.fr/p#a", SAME, flakyClient);
+    assert.equal(context.diezTier2.buffer.size, 1);
+
+    // 2nd variant while the service is saturated (503) → no tally, buffer kept
+    await recordTier2Sample("https://x.fr/p#b", SAME, flakyClient);
+    assert.equal(context.diezTier2.compared, 0);
+    assert.equal(context.diezTier2.buffer.size, 1);
+
+    // service recovers; a later variant adjudicates against the retained buffer
+    await recordTier2Sample("https://x.fr/p#c", SAME, echoClient);
+    assert.equal(context.diezTier2.compared, 1);
+    assert.equal(context.diezTier2.matches, 1);
+    assert.equal(context.diezTier2.buffer.size, 0);
 });
