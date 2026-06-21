@@ -544,6 +544,9 @@ Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limit
 | `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Per-call HTTP timeout (seconds). |
 | `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Max concurrent `/clean` calls per crawl. |
 | `CONTENT_EXTRACTOR_MAX_RETRIES` | `1` | Retries on transient errors. |
+| `CONTENT_EXTRACTOR_RETRY_AFTER_CAP_S` | `5` | Max seconds the client waits on a 503 `Retry-After` before its single retry (caps server-suggested backoff so it can't stall the page handler). |
+
+- Under content-extractor admission pressure the client honours `Retry-After` (capped) and classifies 503/timeout/network as **transient**; tier-2 does not count a transient failure as a comparison — it keeps the buffered page and retries on the base's next `#`-variant (organic backoff), so a service outage biases to the safe default (bypassDiez) rather than corrupting the match ratio.
 
 **Co-deploy rule:** when `DIEZ_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It now shares the `crawling` compose profile and the `services-net` network, so it starts alongside the crawler automatically. No extra compose override is needed.
 

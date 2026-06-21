@@ -6,7 +6,7 @@
  * match-evidence; mismatch-majority → bypassDiez. See spec §5.
  */
 import { context } from "./context.js";
-import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
+import { ContentExtractorClient, ContentExtractorError } from "./class/ContentExtractorClient.js";
 import { normalizeForCompare, shingleSet, jaccard, classifyPair } from "./contentSimilarity.js";
 import type { PairVerdict } from "./contentSimilarity.js";
 
@@ -30,14 +30,20 @@ const fragOf = (url: string): string => {
     return i === -1 ? "" : url.slice(i + 1);
 };
 
-const adjudicate = async (a: string, b: string, client: ContentExtractorClient): Promise<PairVerdict> => {
+type AdjudicateResult = PairVerdict | "error";
+
+const adjudicate = async (a: string, b: string, client: ContentExtractorClient): Promise<AdjudicateResult> => {
     try {
         const [ca, cb] = await Promise.all([client.clean(a), client.clean(b)]);
-        if (!ca || !cb) return "unusable"; // empty-or-empty is non-comparable
+        if (!ca || !cb) return "unusable"; // genuinely non-comparable content (empty after clean)
         const sim = jaccard(shingleSet(normalizeForCompare(ca)), shingleSet(normalizeForCompare(cb)));
         return classifyPair(sim);
-    } catch {
-        return "unusable"; // 413/422/500/timeout/network → cannot decide
+    } catch (e) {
+        // Transient infra failure (503 admission / timeout / network): cannot measure now.
+        // Signal "error" so the caller skips it (no tally, retry on a later variant). Terminal
+        // failures (413/422/500) and unknown throws count as "unusable" (a real can't-compare).
+        if (e instanceof ContentExtractorError && e.transient) return "error";
+        return "unusable";
     }
 };
 
@@ -59,6 +65,7 @@ export const recordTier2Sample = async (
     if (existing) {
         if (existing.frag === frag) return; // same variant seen again — no signal
         const verdict = await adjudicate(existing.content, content, client);
+        if (verdict === "error") return; // transient infra failure — keep buffer, retry on the next '#'-variant
         t.compared++;
         if (verdict === "match") t.matches++;
         else if (verdict === "mismatch") t.mismatches++;
