@@ -38,6 +38,7 @@ import {
     type FailureClass,
 } from "./httpStatusPolicy.js";
 import { shouldStopForDiez } from "./diezLimitStop.js";
+import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -448,9 +449,9 @@ export const startCrawler = async (
     paramPerMinute: number,
     apifyProxyPassword?: string,
     breakLimit?: boolean,
-    bypassQuestionMark?: boolean,
+    _bypassQuestionMark?: boolean,
     _bypassDiez?: boolean,
-    skipquestionmark?: boolean,
+    _skipquestionmark?: boolean,
     _skipdiez?: boolean,
     containerMemoryMb?: number,
     camoufoxEnabled?: boolean
@@ -798,7 +799,7 @@ export const startCrawler = async (
                 // when URLs are pushed to the dataset (O(1) instead of O(n²) dataset scan).
                 const limitQuestionMarkDiez = 100;
 
-                if (!bypassQuestionMark && !skipquestionmark && context.countQuestionMark >= limitQuestionMarkDiez) {
+                if (shouldStopForQuestionMark(context.countQuestionMark, context.config.bypassQuestionMark, context.config.skipQuestionMark, limitQuestionMarkDiez)) {
                     context.stopReason = "limitQuestionMark";
                     await stopCrawler(crawler, "Limit of 100 question marks reached.");
                 }
