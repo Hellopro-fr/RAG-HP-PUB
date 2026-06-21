@@ -30,6 +30,8 @@ import {
     TIMEOUT_MAX_RETRIES,
     MAX_CONCURRENCY,
     REQUEST_HANDLER_TIMEOUT_S,
+    BACKPRESSURE_MAX_PENDING,
+    shouldAcceptNewPage,
     shouldCapTimeoutRetry,
     PERMANENT_ERROR_MARKERS,
     classifyFailure,
@@ -832,16 +834,27 @@ export const startCrawler = async (
     // Prevent premature shutdown while Phase 2 is seeding URLs in update mode.
     // In standard mode, phase2SeedingComplete is true by default → no effect.
     //
-    // maxConcurrency caps the pool so it cannot over-subscribe the 5-wide detection
-    // p-limit. The pool scales on local CPU/event-loop/memory — all idle while handlers
-    // await the detection HTTP call — so left uncapped it ramps to 25+ handlers against
-    // 5 detect slots, inflating per-page detect latency past requestHandlerTimeoutSecs →
-    // mass handler timeouts + progress-stall death spiral. Set here (not top-level) to
-    // avoid Crawlee's top-level/pool dual-specification error. Env CRAWLER_MAX_CONCURRENCY.
-    // Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+    // maxConcurrency is now a memory/browser SAFETY CEILING (env CRAWLER_MAX_CONCURRENCY,
+    // default 20). The primary throttle is the detection-backpressure gate below.
+    //
+    // isTaskReadyFunction: accept a new page only while the detection p-limit queue is
+    // within DETECTION_BACKPRESSURE_MAX_PENDING. The pool scales on local
+    // CPU/event-loop/memory — all idle while handlers await the detection HTTP call — so
+    // without this gate it over-subscribes the 5-wide detect p-limit, inflating per-page
+    // detect latency past requestHandlerTimeoutSecs (the 7033 death-spiral). With it,
+    // fast detection (pendingCount≈0) ramps freely to the ceiling; slow detection holds
+    // concurrency where detection keeps up. Only delays STARTS (running detects drain →
+    // gate reopens); isFinishedFunction still terminates the crawl. Fails open if the
+    // client is somehow absent (?? 0) — never blocks the crawl.
+    // Spec: docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md
     optionsCrawler.autoscaledPoolOptions = {
         ...optionsCrawler.autoscaledPoolOptions,
         maxConcurrency: MAX_CONCURRENCY,
+        isTaskReadyFunction: async () =>
+            shouldAcceptNewPage(
+                context.detectionClient?.limiter.pendingCount ?? 0,
+                BACKPRESSURE_MAX_PENDING,
+            ),
         isFinishedFunction: async () => {
             const isEmpty = await requestQueue.isEmpty();
             return isEmpty && context.phase2SeedingComplete;
