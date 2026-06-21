@@ -552,6 +552,32 @@ Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limit
 
 Spec: `docs/superpowers/specs/2026-06-12-limitdiez-phase2-zero-touch` (Hellopro planning repo).
 
+## Phase-2 limitQuestionMark (zero-touch)
+
+Auto-resolves domain-specific `?`-params per-parameter and never escalates `limitQuestionMark` to a human. On top of the shipped Tier-1 observer, a Tier-2 engine buffers each `?`-page's content, groups by "URL with param `p` removed", and when two members differ in `p` (value-vs-value, or value-vs-absent) it cleans both via the content-extractor `/clean` and compares (Jaccard). A param is committed to `toRemove` ONLY on same-majority (compared≥3, same/compared≥0.8) — the single destructive action; different-majority is ruled content-shaping and kept.
+
+**How it works:**
+- The engine buffers one `{param_value, content}` entry per (base-URL, param) pair; when a 2nd distinct value of that param arrives for the same base, it cleans both pages via `/clean` (text mode) and classifies the pair as same/different/unusable. `/clean` failures or empty results count as unusable (no false vote).
+- A param is committed to `toRemove` only on same-majority evidence (≥3 comparisons AND same/compared≥0.8). Different-majority means the param shapes content — it is kept and never removed.
+- **Bounded zero-touch default:** near the 100-`?` ceiling (≥95 `?`-pages), once, the engine sets `bypassQuestionMark=true` + `breakLimit=false` (enables the 5000-dataset-item backstop). This disables the `limitQuestionMark` stop but bounds the crawl, so a facet-explosion trap cannot run away. The engine NEVER applies `skipQuestionMark`. Any already-committed `toRemove` strips remain in effect.
+- Committed decisions are persisted to `_questionmark_decision.json` (`addedToRemove` list merged back into `toRemove` on OOM relaunch).
+- `getQuestionMarkDecisionMode` reports the current state: `tier2-resolved` / `defaulted-bypassed` / `escalated` / `observed` / `unused`.
+
+**Env vars:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `QM_TIER2_ENABLED` | `false` | Gates the Tier-2 per-param engine. Off = Tier-1 observer only (no behaviour change). |
+| `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Shared with limitDiez phase-2. Base URL for the content-extractor `/clean` endpoint. |
+| `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Shared with limitDiez phase-2. Per-call HTTP timeout (seconds). |
+| `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Shared with limitDiez phase-2. Max concurrent `/clean` calls per crawl. |
+| `CONTENT_EXTRACTOR_MAX_RETRIES` | `1` | Shared with limitDiez phase-2. Retries on transient errors. |
+| `CONTENT_EXTRACTOR_RETRY_AFTER_CAP_S` | `5` | Shared with limitDiez phase-2. Max seconds the client waits on a 503 `Retry-After` before its single retry. |
+
+**Co-deploy rule:** when `QM_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It shares the `crawling` compose profile and the `services-net` network (already configured for limitDiez) — no extra compose override is needed.
+
+Spec: `docs/superpowers/specs/2026-06-16-limitquestionmark-phase2-zero-touch` (Hellopro planning repo).
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.
