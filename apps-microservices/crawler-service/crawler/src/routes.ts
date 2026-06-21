@@ -28,7 +28,7 @@ import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js"
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
-import { classifyHttpStatus, pdfDatasetName } from "./httpStatusPolicy.js";
+import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -855,7 +855,7 @@ router.addDefaultHandler(
                 // crashing with "Cannot read properties of undefined (reading 'split')".
                 let knownUrlsOnPage = new Set<string>();
 
-                if (context.dedupManager) {
+                if (context.dedupManager && !page.isClosed()) {
                     try {
                         // 1. Extract all <a href> links from the page
                         const rawLinks = await page.$$eval('a[href]', (anchors: HTMLAnchorElement[]) =>
@@ -867,9 +867,15 @@ router.addDefaultHandler(
                             knownUrlsOnPage = await context.dedupManager.isKnownBatch(rawLinks);
                         }
                     } catch (e) {
-                        // Non-fatal: if link extraction fails, we proceed without pre-filtering
-                        // The handler-level dedup (line ~176) will still catch duplicates
-                        console.warn(`Pre-batch link extraction failed: ${e}`);
+                        // Non-fatal: proceed without pre-filtering; the handler-level dedup
+                        // (line ~176) still catches duplicates. A torn-down page (a concurrent
+                        // /stop or shutdown closed the pool mid-handler) is benign — log it
+                        // quietly, not as a warning that surfaces in Python as "Erreur crawling".
+                        if (isPageClosedError(String(e))) {
+                            log.debug(`Pre-batch link extraction skipped (page closed): ${e}`);
+                        } else {
+                            console.warn(`Pre-batch link extraction failed: ${e}`);
+                        }
                     }
                 }
 
