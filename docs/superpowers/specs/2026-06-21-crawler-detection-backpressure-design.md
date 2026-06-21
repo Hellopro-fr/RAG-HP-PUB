@@ -2,8 +2,13 @@
 
 **Date:** 2026-06-21
 **Service:** `crawler-service` (Node engine)
-**Status:** design + fix
+**Status:** design + fix (static-cap mechanism superseded — see below)
 **Trigger incident:** crawl `7033` (carflo.fr), 2026-06-19 — death-spiral, exit 6 ×3, never completed.
+
+> **Superseded (2026-06-21):** the static `CRAWLER_MAX_CONCURRENCY=10` cap described
+> here is replaced by an auto-adjusting detection-backpressure gate (cap → ceiling,
+> default 20). See `docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md`.
+> The `REQUEST_HANDLER_TIMEOUT_S` lever from this spec is retained unchanged.
 
 ## Symptom reported
 

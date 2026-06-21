@@ -453,33 +453,53 @@ Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense
 
 **Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
 
-## Detection Backpressure (Concurrency Cap + Handler-Timeout Alignment)
+## Detection Backpressure (Auto-Adjusting Concurrency + Handler-Timeout Alignment)
 
-The default handler awaits a per-page detection call (the dominant phase — ~94% of
-handler time on detection-gated sites). Crawlee's `AutoscaledPool` scales on **local**
-CPU/event-loop/memory, all of which look idle while handlers `await` that HTTP call —
-so left uncapped it ramps to 25+ concurrent handlers against only `DETECTION_MAX_CONCURRENCY`
-(5) detect slots. The surplus handlers pile into the detection `p-limit` queue, inflating
-per-page detect latency past `requestHandlerTimeoutSecs`. Crawlee then kills the handler
-mid-detect and closes the page; the orphaned handler later hits `page.$$eval` (routes.ts
-pre-batch dedup) on the dead page → `Pre-batch link extraction failed: ... Target page,
-context or browser has been closed` (a swallowed symptom, surfaced via stderr as
-`Erreur crawling`). With almost nothing finishing, `ProgressMonitor` fires (exit 6) and
-relaunch loops — a death spiral. Incident: crawl 7033 (carflo.fr), 2026-06-19.
+The default handler awaits a per-page detection call (~94% of handler time on
+detection-gated sites). Crawlee's `AutoscaledPool` scales on **local**
+CPU/event-loop/memory — all idle while handlers `await` that HTTP call — so left
+unchecked it ramps to 25+ concurrent handlers against only `DETECTION_MAX_CONCURRENCY`
+(5) detect slots. The surplus piles into the detection `p-limit` queue, inflating
+per-page detect latency past `requestHandlerTimeoutSecs`; Crawlee then kills the
+handler mid-detect and closes the page, the orphaned handler hits `page.$$eval` on the
+dead page (`Pre-batch link extraction failed: ... Target page ... has been closed`),
+the request retries, and with nothing finishing the crawl loops on `progress_stalled`
+(exit 6) — a death spiral. Incident: crawl 7033 (carflo.fr), 2026-06-19.
 
-Two env-tunable levers (resolved in `httpStatusPolicy.ts`, wired in `functions.ts`):
+**Auto-adjusting gate (primary throttle).** `autoscaledPoolOptions.isTaskReadyFunction`
+accepts a new page only while the detection p-limit queue
+(`detectionClient.limiter.pendingCount`) is within `DETECTION_BACKPRESSURE_MAX_PENDING`.
+Fast detection → `pendingCount≈0` → the pool ramps freely to the ceiling; slow
+detection → the gate vetoes new starts → concurrency self-settles where detection keeps
+up. It only delays *starts* (running detects drain → gate reopens; `isFinishedFunction`
+still ends the crawl), so no deadlock, and it fails open if the client is absent.
+Concurrency thus auto-adjusts per crawl instead of a one-size cap.
+
+**Safety ceiling + timeout (defense-in-depth).** `CRAWLER_MAX_CONCURRENCY` (default 20)
+is a memory/browser backstop (the incident hit ~95-100% memory at ~25 concurrent), no
+longer the primary throttle. `REQUEST_HANDLER_TIMEOUT_S` (default 200, raised from 120)
+exceeds one nav (≤90) + one detect (`DETECTION_REQUEST_TIMEOUT_S` 180) so a
+slow-but-progressing detect is not killed mid-flight. Three independent limiters: gate
+(detection), Crawlee memory snapshotter, hard ceiling.
+
+**Quiet-guard.** The `routes.ts` pre-batch block skips when `page.isClosed()` and
+downgrades the page-closed catch (`isPageClosedError`) to `log.debug`, so a benign
+`/stop`/shutdown teardown stops surfacing in Python as `Erreur crawling`.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `CRAWLER_MAX_CONCURRENCY` | `10` | `autoscaledPoolOptions.maxConcurrency`. ≈2× `DETECTION_MAX_CONCURRENCY`: overlaps nav/extract with the in-flight detects without growing the detect queue. Set inside `autoscaledPoolOptions` (not top-level) to avoid Crawlee's dual-specification error. |
-| `REQUEST_HANDLER_TIMEOUT_S` | `200` | `requestHandlerTimeoutSecs`. Raised from 120 to exceed one nav (≤90) + one detect (`DETECTION_REQUEST_TIMEOUT_S` 180) so a slow-but-progressing page is not killed mid-detect (the prior 120<180 inversion). |
+| `DETECTION_BACKPRESSURE_MAX_PENDING` | `5` | Gate threshold: pause new page starts while detection `pendingCount` exceeds this. ≈ `DETECTION_MAX_CONCURRENCY`; raise in step if you raise detection concurrency. `0` = tolerate no queue. |
+| `CRAWLER_MAX_CONCURRENCY` | `20` | Hard ceiling on `autoscaledPoolOptions.maxConcurrency` (memory/browser backstop). |
+| `REQUEST_HANDLER_TIMEOUT_S` | `200` | `requestHandlerTimeoutSecs` — covers one nav + one detect. |
 
-Tune both together: raising `DETECTION_MAX_CONCURRENCY` should be paired with a higher
-`CRAWLER_MAX_CONCURRENCY`; detection-light deployments can raise the cap for throughput.
-The upstream root (api-detection-langue-fr latency under load) is separate — this only
-stops the crawler from amplifying it and tolerates the common slow case.
+Gate is detection-only (tier2 `/clean` excluded — flag-gated off by default; the
+predicate is generic so a second source folds in via `Math.max(...)` later). The
+upstream root (api-detection-langue-fr latency under load) is separate — this stops the
+crawler amplifying it and auto-adjusts to whatever throughput detection sustains.
 
-Spec: `docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md`.
+Spec: `docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md`
+(supersedes the static-cap mechanism of
+`docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md`).
 
 ## HTTP Status & Navigation Retry Policy
 
