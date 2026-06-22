@@ -22,7 +22,7 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { fragmentAwareUniqueKey } from "./diezKeepFragment.js";
-import { recordTier2Sample, maybeCommitTier2, tier2Evidence } from "./diezTier2.js";
+import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
@@ -838,6 +838,12 @@ router.addDefaultHandler(
                             else commitBypassDiez(storagePath, meta);
                         }
                     }
+
+                    // Zero-touch floor (mirrors questionMark maybeDefaultAtCeiling): near the
+                    // ceiling with no decision yet, default to bypassDiez + arm the 5000-item
+                    // backstop so the crawl never dies at limitDiez. Runs in BOTH flag modes,
+                    // whatever blocked a decision (tier-2 no comparable pairs, ambiguous-heavy…).
+                    if (storagePath) maybeDefaultDiezAtCeiling(storagePath);
                 }
 
                 await routerDefaultHandler(

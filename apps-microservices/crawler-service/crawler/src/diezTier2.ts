@@ -6,6 +6,7 @@
  * match-evidence; mismatch-majority → bypassDiez. See spec §5.
  */
 import { context } from "./context.js";
+import { commitBypassDiez } from "./diezDecision.js";
 import { ContentExtractorClient, ContentExtractorError } from "./class/ContentExtractorClient.js";
 import { normalizeForCompare, shingleSet, jaccard, classifyPair } from "./contentSimilarity.js";
 import type { PairVerdict } from "./contentSimilarity.js";
@@ -13,6 +14,7 @@ import type { PairVerdict } from "./contentSimilarity.js";
 const MIN_COMPARED = 3;
 const DECIDE_RATIO = 0.8;
 const BUFFER_CAP = 50;
+const DEFAULT_AT = 95; // countDiez margin before the 100 postNav stop
 
 export const baseUrlKey = (url: string): string => {
     try {
@@ -90,4 +92,23 @@ export const maybeCommitTier2 = (): "skipDiez" | "bypassDiez" | null => {
 export const tier2Evidence = () => {
     const t = context.diezTier2;
     return { compared: t.compared, matches: t.matches, mismatches: t.mismatches, unusable: t.unusable };
+};
+
+/**
+ * Zero-touch floor. Near the 100-hash ceiling with no decision committed yet,
+ * commit the safe default bypassDiez (keep '#', stop counting) and arm the
+ * 5000-item backstop, so the crawl NEVER dies at limitDiez — whatever blocked a
+ * decision (tier-1 confident but tier-2 had no comparable pairs, ambiguous-heavy,
+ * extractor down…). Runs in both flag modes. Idempotent via commitBypassDiez.
+ * Mirrors questionMarkTier2.maybeDefaultAtCeiling.
+ *
+ * ponytail: hook-fired floor. A relaunch that rehydrates countDiez>=100 before
+ * any '#' handler runs can still trip the postNav stop first; add a post-rehydrate
+ * check in main.ts only if that case shows up.
+ */
+export const maybeDefaultAtCeiling = (storagePath: string): void => {
+    if (context.diezDecisionCommitted) return;
+    if (context.countDiez < DEFAULT_AT) return;
+    context.config.breakLimit = false; // enable the 5000-dataset-item backstop
+    commitBypassDiez(storagePath, { source: "default" });
 };
