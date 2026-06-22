@@ -8,7 +8,7 @@ import anyio
 from common_utils.redis import cache_service
 
 from app.core.config import settings
-from app.schemas.comparator import ComparisonResult, SimilarityPair, JobStatus, CapacityResponse
+from app.schemas.comparator import ComparisonResult, SimilarityPair, JobStatus, CapacityResponse, JobInput
 from app.core.image_processor import ImageProcessor
 from app.core import feature_cache
 
@@ -60,17 +60,45 @@ class JobManager:
             is_local_full=self.is_local_full()
         )
 
+    async def _write_inputs(self, job_id: str, images: list, source_by_id: Optional[dict] = None) -> None:
+        """Persist submitted inputs (id, url, feature source) so /status and /results
+        can echo them. Written at submit (source='pending') and overwritten after the
+        cache-aside resolution with cached | fresh | failed."""
+        if not cache_service.redis_client:
+            return
+        src = source_by_id or {}
+        payload = [
+            {"id": inp.id, "url": str(inp.url) if inp.url else None, "source": src.get(inp.id, "pending")}
+            for inp in images
+        ]
+        await cache_service.redis_client.set(
+            f"job:{job_id}:inputs", json.dumps(payload), ex=settings.JOB_RESULT_TTL
+        )
+
+    async def _read_inputs(self, job_id: str) -> Optional[List[JobInput]]:
+        data = await cache_service.redis_client.get(f"job:{job_id}:inputs")
+        if not data:
+            return None
+        try:
+            return [JobInput(**x) for x in json.loads(data)]
+        except Exception:
+            return None
+
     async def get_job_status(self, job_id: str) -> Optional[JobStatus]:
         if not cache_service.redis_client: return None
         data = await cache_service.redis_client.get(f"job:{job_id}:status")
         if not data: return None
-        return JobStatus(**json.loads(data))
+        status_obj = JobStatus(**json.loads(data))
+        status_obj.inputs = await self._read_inputs(job_id)
+        return status_obj
 
     async def get_job_result(self, job_id: str) -> Optional[ComparisonResult]:
         if not cache_service.redis_client: return None
         data = await cache_service.redis_client.get(f"job:{job_id}:result")
         if not data: return None
-        return ComparisonResult(**json.loads(data))
+        result_obj = ComparisonResult(**json.loads(data))
+        result_obj.inputs = await self._read_inputs(job_id)
+        return result_obj
 
     async def list_jobs(self, limit: int = 100) -> List[JobStatus]:
         """Scans Redis for all job statuses."""
@@ -160,6 +188,12 @@ class JobManager:
                         f"fresh={len(fresh_features)} failed={len(failed_ids)}"
                     )
 
+                    # Persist per-input feature source (cached|fresh|failed) for /status + /results.
+                    source_by_id = {iid: "cached" for iid in cached_features}
+                    source_by_id.update({iid: "fresh" for iid in fresh_features})
+                    source_by_id.update({f.id: "failed" for f in failed_ids})
+                    await self._write_inputs(job_id, inputs, source_by_id)
+
                     if not all_features:
                         raise Exception("No valid images could be loaded/downloaded.")
 
@@ -238,6 +272,7 @@ class JobManager:
         """
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
         await cache_service.redis_client.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
+        await self._write_inputs(job_id, images)
 
         # Async submissions are never rejected — they queue past MAX via the semaphore
         # inside process_job_logic. Reserve the slot here so capacity reporting is accurate.
@@ -267,6 +302,7 @@ class JobManager:
         """
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
         await cache_service.redis_client.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
+        await self._write_inputs(job_id, images)
 
         try:
             return await asyncio.wait_for(

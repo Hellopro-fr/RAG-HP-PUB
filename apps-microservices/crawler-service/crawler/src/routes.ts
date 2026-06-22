@@ -21,10 +21,14 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { fragmentAwareUniqueKey } from "./diezKeepFragment.js";
+import { recordTier2Sample, maybeCommitTier2, tier2Evidence } from "./diezTier2.js";
+import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
+import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
-import { classifyHttpStatus, pdfDatasetName } from "./httpStatusPolicy.js";
+import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -194,6 +198,9 @@ const ALWAYS_REMOVE_PARAMS = [
     // are intentionally NOT listed here — they belong in FORBIDDEN_PARAMS (reject the URL entirely).
     "timestamp", "random", "nocache",
 ];
+
+const DIEZ_TIER2_ENABLED = (process.env.DIEZ_TIER2_ENABLED ?? "false").toLowerCase() === "true";
+const QM_TIER2_ENABLED = (process.env.QM_TIER2_ENABLED ?? "false").toLowerCase() === "true";
 
 router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response, session }) => {
@@ -783,24 +790,53 @@ router.addDefaultHandler(
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
                 if (url.includes('?')) {
                     context.countQuestionMark++;
-                    // Tier-1 observer (spec 2026-04-17). Records domain-specific params that survived Tier-0.
-                    // No-op when observation disabled (human CLI flag set).
+                    // Tier-1 observer (spec 2026-04-17). No-op when observation disabled.
                     recordQuestionMarkObservation(url);
+
+                    // Phase-2 tier-2 per-param engine (spec 2026-06-16). Off unless QM_TIER2_ENABLED.
+                    if (QM_TIER2_ENABLED && context.questionMarkObservationEnabled && storagePath) {
+                        if (!context.qmTier2.active && context.questionMarkObservations.domainSpecificCount >= QM_TIER2_TRIGGER) {
+                            context.qmTier2.active = true;
+                            console.log(`[questionmark] Tier 2 activated at ${context.questionMarkObservations.domainSpecificCount} domain-specific ? URLs.`);
+                        }
+                        if (context.qmTier2.active && content) {
+                            await recordQmTier2Sample(url, content, context.contentExtractorClient);
+                            for (const p of Array.from(context.qmTier2.tally.keys())) {
+                                if (!context.qmTier2.decided.has(p) && maybeCommitParam(p)) {
+                                    commitToRemoveParam(p, storagePath);
+                                }
+                            }
+                        }
+                        maybeDefaultAtCeiling(storagePath);
+                    }
                 }
                 if (url.includes('#')) {
                     context.countDiez++;
-                    // Tier-1 auto-decision engine (spec 2026-04-17).
-                    // No-op when context.diezDecisionCommitted is true (persisted decision, CLI flag, or prior commit).
+                    // Tier-1 auto-decision (spec 2026-04-17). No-op once committed.
                     recordClassification(url);
                     const outcome = maybeCommitDecision();
-                    if (outcome === "skipDiez" && storagePath) {
-                        commitSkipDiez(storagePath);
-                    } else if (outcome === "bypassDiez" && storagePath) {
-                        commitBypassDiez(storagePath);
-                    } else if (outcome === "promoteTier2") {
-                        console.log(`[diez] Tier 2 promotion triggered (phase 1 no-op). Escalation will fire at MAX_SAMPLES.`);
-                    } else if (outcome === "escalate") {
-                        console.log(`[diez] Tier 1 inconclusive at ${context.diezClassification.total} samples — existing limitDiez path will fire.`);
+                    const route = routeDiezOutcome(outcome, DIEZ_TIER2_ENABLED);
+
+                    if (route.action === "commit" && storagePath) {
+                        const meta = { source: route.source } as const;
+                        if (route.decision === "skipDiez") commitSkipDiez(storagePath, meta);
+                        else commitBypassDiez(storagePath, meta);
+                    } else if (route.action === "activate") {
+                        if (!context.diezTier2.active) {
+                            context.diezTier2.active = true;
+                            console.log(`[diez] Tier 2 engine activated (tier-1 outcome=${outcome}).`);
+                        }
+                    }
+
+                    // Tier-2 verification (engine active, not yet committed).
+                    if (DIEZ_TIER2_ENABLED && context.diezTier2.active && !context.diezDecisionCommitted && content) {
+                        await recordTier2Sample(url, content, context.contentExtractorClient);
+                        const t2 = maybeCommitTier2();
+                        if (t2 && storagePath) {
+                            const meta = { tier: 2 as const, source: "tier2" as const, evidence: tier2Evidence() };
+                            if (t2 === "skipDiez") commitSkipDiez(storagePath, meta);
+                            else commitBypassDiez(storagePath, meta);
+                        }
                     }
                 }
 
@@ -819,7 +855,7 @@ router.addDefaultHandler(
                 // crashing with "Cannot read properties of undefined (reading 'split')".
                 let knownUrlsOnPage = new Set<string>();
 
-                if (context.dedupManager) {
+                if (context.dedupManager && !page.isClosed()) {
                     try {
                         // 1. Extract all <a href> links from the page
                         const rawLinks = await page.$$eval('a[href]', (anchors: HTMLAnchorElement[]) =>
@@ -831,9 +867,15 @@ router.addDefaultHandler(
                             knownUrlsOnPage = await context.dedupManager.isKnownBatch(rawLinks);
                         }
                     } catch (e) {
-                        // Non-fatal: if link extraction fails, we proceed without pre-filtering
-                        // The handler-level dedup (line ~176) will still catch duplicates
-                        console.warn(`Pre-batch link extraction failed: ${e}`);
+                        // Non-fatal: proceed without pre-filtering; the handler-level dedup
+                        // (line ~176) still catches duplicates. A torn-down page (a concurrent
+                        // /stop or shutdown closed the pool mid-handler) is benign — log it
+                        // quietly, not as a warning that surfaces in Python as "Erreur crawling".
+                        if (isPageClosedError(String(e))) {
+                            log.debug(`Pre-batch link extraction skipped (page closed): ${e}`);
+                        } else {
+                            console.warn(`Pre-batch link extraction failed: ${e}`);
+                        }
                     }
                 }
 
@@ -957,6 +999,10 @@ router.addDefaultHandler(
                         }
 
                         request.userData = { source: 'discovered' };
+                        // Phase-2: pin the dedup identity to the fragment-bearing URL so
+                        // base#a / base#b do not collapse to base. No-op once skipDiez
+                        // has stripped '#' from request.url.
+                        request.uniqueKey = fragmentAwareUniqueKey(request.url);
                         return request;
                     },
                 });

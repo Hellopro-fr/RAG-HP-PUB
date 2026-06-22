@@ -23,6 +23,10 @@ func TestDownstreamTimeouts(t *testing.T) {
 	v, ok := to["api-detection-langue-fr-service"]
 	require.True(t, ok)
 	require.Equal(t, 180.0, v)
+
+	ev, eok := to["extractor-service"]
+	require.True(t, eok)
+	require.Equal(t, 60.0, ev)
 }
 
 func TestExcludedServices(t *testing.T) {

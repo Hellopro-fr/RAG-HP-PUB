@@ -28,6 +28,10 @@ import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
 import {
     NAVIGATION_WAIT_UNTIL,
     TIMEOUT_MAX_RETRIES,
+    MAX_CONCURRENCY,
+    REQUEST_HANDLER_TIMEOUT_S,
+    BACKPRESSURE_MAX_PENDING,
+    shouldAcceptNewPage,
     shouldCapTimeoutRetry,
     PERMANENT_ERROR_MARKERS,
     classifyFailure,
@@ -37,6 +41,8 @@ import {
     pdfDatasetName,
     type FailureClass,
 } from "./httpStatusPolicy.js";
+import { shouldStopForDiez } from "./diezLimitStop.js";
+import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -447,10 +453,10 @@ export const startCrawler = async (
     paramPerMinute: number,
     apifyProxyPassword?: string,
     breakLimit?: boolean,
-    bypassQuestionMark?: boolean,
-    bypassDiez?: boolean,
-    skipquestionmark?: boolean,
-    skipdiez?: boolean,
+    _bypassQuestionMark?: boolean,
+    _bypassDiez?: boolean,
+    _skipquestionmark?: boolean,
+    _skipdiez?: boolean,
     containerMemoryMb?: number,
     camoufoxEnabled?: boolean
 ) => {
@@ -539,9 +545,14 @@ export const startCrawler = async (
             ],
         },
 
-        // maxConcurrency: 1, // V3 default
+        // maxConcurrency is capped via autoscaledPoolOptions below (env CRAWLER_MAX_CONCURRENCY).
         navigationTimeoutSecs: 90,
-        requestHandlerTimeoutSecs: 120,
+        // Raised from 120 → default 200, must exceed one nav (≤90) + one detect
+        // (DETECTION_REQUEST_TIMEOUT_S 180) so a slow-but-progressing page is not killed
+        // mid-detect (the 120<180 inversion orphaned handlers onto page.$$eval).
+        // Env REQUEST_HANDLER_TIMEOUT_S.
+        // Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+        requestHandlerTimeoutSecs: REQUEST_HANDLER_TIMEOUT_S,
         maxRequestRetries: 5, // V3 resilience
 
         useSessionPool: true,
@@ -797,11 +808,11 @@ export const startCrawler = async (
                 // when URLs are pushed to the dataset (O(1) instead of O(n²) dataset scan).
                 const limitQuestionMarkDiez = 100;
 
-                if (!bypassQuestionMark && !skipquestionmark && context.countQuestionMark >= limitQuestionMarkDiez) {
+                if (shouldStopForQuestionMark(context.countQuestionMark, context.config.bypassQuestionMark, context.config.skipQuestionMark, limitQuestionMarkDiez)) {
                     context.stopReason = "limitQuestionMark";
                     await stopCrawler(crawler, "Limit of 100 question marks reached.");
                 }
-                if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
+                if (shouldStopForDiez(context.countDiez, context.config.bypassDiez, context.config.skipDiez, limitQuestionMarkDiez)) {
                     context.stopReason = "limitDiez";
                     await stopCrawler(crawler, "Limit of 100 hashes reached.");
                 }
@@ -822,8 +833,28 @@ export const startCrawler = async (
 
     // Prevent premature shutdown while Phase 2 is seeding URLs in update mode.
     // In standard mode, phase2SeedingComplete is true by default → no effect.
+    //
+    // maxConcurrency is now a memory/browser SAFETY CEILING (env CRAWLER_MAX_CONCURRENCY,
+    // default 20). The primary throttle is the detection-backpressure gate below.
+    //
+    // isTaskReadyFunction: accept a new page only while the detection p-limit queue is
+    // within DETECTION_BACKPRESSURE_MAX_PENDING. The pool scales on local
+    // CPU/event-loop/memory — all idle while handlers await the detection HTTP call — so
+    // without this gate it over-subscribes the 5-wide detect p-limit, inflating per-page
+    // detect latency past requestHandlerTimeoutSecs (the 7033 death-spiral). With it,
+    // fast detection (pendingCount≈0) ramps freely to the ceiling; slow detection holds
+    // concurrency where detection keeps up. Only delays STARTS (running detects drain →
+    // gate reopens); isFinishedFunction still terminates the crawl. Fails open if the
+    // client is somehow absent (?? 0) — never blocks the crawl.
+    // Spec: docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md
     optionsCrawler.autoscaledPoolOptions = {
         ...optionsCrawler.autoscaledPoolOptions,
+        maxConcurrency: MAX_CONCURRENCY,
+        isTaskReadyFunction: async () =>
+            shouldAcceptNewPage(
+                context.detectionClient?.limiter.pendingCount ?? 0,
+                BACKPRESSURE_MAX_PENDING,
+            ),
         isFinishedFunction: async () => {
             const isEmpty = await requestQueue.isEmpty();
             return isEmpty && context.phase2SeedingComplete;
@@ -1774,6 +1805,41 @@ export const getAllRequestQueues = (queueName: string): string[] => {
     } catch (error) {
         throw new Error(`Error getAllRequestQueues for queue ${queueName}: ${error}`);
     }
+};
+
+/**
+ * Phase-2: after a skipDiez decision, strip '#' from stored dataset rows and
+ * drop exact-duplicate URLs (keep first). Operates on flat {url,content,title}
+ * dataset files (NOT request queues — parseJsonFiles handles those). Missing
+ * dirs are a no-op. See spec §8.
+ */
+export const cleanDatasetFragments = (datasetNames: string[]): { rewritten: number; removed: number } => {
+    let rewritten = 0;
+    let removed = 0;
+    for (const name of datasetNames) {
+        const dir = `storage/datasets/${name}`;
+        if (!fs.existsSync(dir)) continue;
+        const seen = new Set<string>();
+        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("__"));
+        for (const f of files) {
+            const full = `${dir}/${f}`;
+            let row: { url?: string };
+            try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
+            if (!row.url) continue;
+            const cleaned = processUrl(row.url, false, true);
+            if (seen.has(cleaned)) {
+                try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ }
+                continue;
+            }
+            seen.add(cleaned);
+            if (cleaned !== row.url) {
+                (row as any).url = cleaned;
+                try { fs.writeFileSync(full, JSON.stringify(row)); rewritten++; } catch { /* best-effort */ }
+            }
+        }
+    }
+    console.log(`[diez] Dataset cleanup: rewrote ${rewritten}, removed ${removed} duplicate row file(s).`);
+    return { rewritten, removed };
 };
 
 /**

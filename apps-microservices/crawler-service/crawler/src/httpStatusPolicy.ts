@@ -52,6 +52,56 @@ export function resolveTimeoutMaxRetries(raw: string | undefined): number {
 }
 
 /**
+ * Resolves the crawl-level max concurrency from an env value (positive int, default 20).
+ * This is now a memory/browser SAFETY CEILING — the detection-backpressure gate
+ * (isTaskReadyFunction in functions.ts) is the primary throttle. Left uncapped the pool
+ * could overshoot into memory pressure (the incident hit ~95-100% at ~25 concurrent).
+ * Invalid/empty/non-positive → 20.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md
+ */
+export function resolveMaxConcurrency(raw: string | undefined): number {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 20;
+}
+
+/**
+ * Resolves the request-handler timeout in seconds from an env value (positive int, default 200).
+ * Must exceed one navigation (≤ navigationTimeoutSecs 90) plus one detection call
+ * (DETECTION_REQUEST_TIMEOUT_S 180) so a slow-but-progressing page is not killed mid-detect.
+ * The prior 120s budget sat BELOW the 180s detect timeout → orphaned handlers hit
+ * page.$$eval on a torn-down page. Invalid/empty/non-positive → 200.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+ */
+export function resolveRequestHandlerTimeoutSecs(raw: string | undefined): number {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 200;
+}
+
+/**
+ * Resolves the detection-backpressure threshold from an env value (non-negative int,
+ * default 5). The pool pauses launching new pages while the detection p-limit queue
+ * (pendingCount) exceeds this, so concurrency auto-adjusts to detection throughput.
+ * 0 is valid ("tolerate no queue"). ≈ DETECTION_MAX_CONCURRENCY; raise in step if you
+ * raise detection concurrency. Invalid/empty/negative/Infinity → 5.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md
+ */
+export function resolveBackpressureMaxPending(raw: string | undefined): number {
+    const trimmed = (raw ?? "").trim();
+    if (!trimmed) return 5;
+    const n = Number(trimmed);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 5;
+}
+
+/**
+ * Backpressure gate predicate: accept a new page only when the observed backpressure
+ * depth is within the threshold. `pending` is the detection p-limit pendingCount today;
+ * generic so a second source can fold in via Math.max(...) at the call site.
+ */
+export function shouldAcceptNewPage(pending: number, threshold: number): boolean {
+    return pending <= threshold;
+}
+
+/**
  * True when a failed request is a navigation timeout that has reached the retry
  * cap — bounds wasted retries on genuinely-unresponsive URLs.
  */
@@ -66,6 +116,12 @@ export const NAVIGATION_WAIT_UNTIL: NavigationWaitUntil =
     resolveNavigationWaitUntil(process.env.NAVIGATION_WAIT_UNTIL);
 export const TIMEOUT_MAX_RETRIES: number =
     resolveTimeoutMaxRetries(process.env.TIMEOUT_MAX_RETRIES);
+export const MAX_CONCURRENCY: number =
+    resolveMaxConcurrency(process.env.CRAWLER_MAX_CONCURRENCY);
+export const REQUEST_HANDLER_TIMEOUT_S: number =
+    resolveRequestHandlerTimeoutSecs(process.env.REQUEST_HANDLER_TIMEOUT_S);
+export const BACKPRESSURE_MAX_PENDING: number =
+    resolveBackpressureMaxPending(process.env.DETECTION_BACKPRESSURE_MAX_PENDING);
 
 // ---------------------------------------------------------------------------
 // Failure classification & auto-recovery on restart
@@ -178,6 +234,15 @@ export const RECOVER_FAILED_ON_RESTART: boolean =
  */
 export function isDownloadError(errorStr: string): boolean {
     return errorStr.includes("Download is starting");
+}
+
+/**
+ * True when a Playwright error means the page/context/browser was already torn down
+ * (e.g. a concurrent /stop or shutdown closed the pool mid-handler). Used to downgrade
+ * the benign pre-batch link-extraction failure from a warning to a debug log.
+ */
+export function isPageClosedError(errStr: string): boolean {
+    return errStr.includes("Target page, context or browser has been closed");
 }
 
 /** Resolves the download-skip kill-switch. Default true; only "false" disables. */
