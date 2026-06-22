@@ -9,14 +9,18 @@ interface StickyCtaBarProps {
 }
 
 export function StickyCtaBar({ ctaSticky }: StickyCtaBarProps) {
-  const { wording, sous_titre, label_bouton } = ctaSticky;
+  const { wording, sous_titre, label_bouton, eligible_ao, lien_redirection } = ctaSticky;
   const [heroGone, setHeroGone] = useState(false);
   const [footerVisible, setFooterVisible] = useState(false);
-  const visible = heroGone && !footerVisible;
+  // Bloc « Trouvez les fournisseurs » (QuoteFormBlock) visible à l'écran :
+  // on masque la barre tant qu'il est affiché (doublon de CTA), réaffichage à sa sortie.
+  const [quoteFormVisible, setQuoteFormVisible] = useState(false);
+  const visible = heroGone && !footerVisible && !quoteFormVisible;
 
   useEffect(() => {
     const hero = document.getElementById('hero-trigger');
     const footer = document.getElementById('site-footer');
+    const quoteForm = document.getElementById('quote-form-trigger');
 
     const observers: IntersectionObserver[] = [];
 
@@ -38,11 +42,26 @@ export function StickyCtaBar({ ctaSticky }: StickyCtaBarProps) {
       observers.push(footerObs);
     }
 
+    if (quoteForm) {
+      const quoteFormObs = new IntersectionObserver(
+        ([entry]) => setQuoteFormVisible(entry.isIntersecting),
+        { threshold: 0 },
+      );
+      quoteFormObs.observe(quoteForm);
+      observers.push(quoteFormObs);
+    }
+
     return () => observers.forEach((o) => o.disconnect());
   }, []);
 
   function handleClick() {
-    window.dispatchEvent(new CustomEvent('hellopro:open-ao-form'));
+    // Page éligible AO → ouvrir le formulaire groupée (écouté par HeroQuoteForm).
+    // Sinon → simple redirection vers le lien fourni par l'API (pas de formulaire AO).
+    if (eligible_ao) {
+      window.dispatchEvent(new CustomEvent('hellopro:open-ao-form'));
+    } else if (lien_redirection) {
+      location.assign(lien_redirection);
+    }
   }
 
   return (
@@ -58,8 +77,8 @@ export function StickyCtaBar({ ctaSticky }: StickyCtaBarProps) {
         visible ? 'translate-y-0' : 'translate-y-[120%]',
       ].join(' ')}
     >
-      {/* Inner card : centrée, max-width, bordure orange — arrondie en haut sur mobile */}
-      <div className="mx-auto w-full max-w-[1208px] rounded-t-lg border-2 border-cta bg-background shadow-sm sm:mb-4 sm:rounded-lg">
+      {/* Inner card : centrée, max-width, bordure orange — détachée du bas (marge) sur mobile et desktop */}
+      <div className="mx-3 mb-3 w-auto max-w-[1208px] rounded-lg border-2 border-cta bg-background shadow-sm sm:mx-auto sm:mb-4 sm:w-full">
         <div className="flex items-center gap-4 px-6 py-3 sm:justify-between sm:px-8 sm:py-4">
 
           {/* Titre + sous-titre — masqués sur mobile (directive: bandeau-sticky-tarification hidden) */}

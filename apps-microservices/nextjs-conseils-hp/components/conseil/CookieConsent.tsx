@@ -27,8 +27,9 @@ const LOGO = 'https://www.hellopro.fr/hellopro_fr/images/logo-hellopro-logo.jpg'
 type Choice = 'none' | 'accept' | 'refuse';
 
 const STYLE = `
-#hp-cmp .cookie-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;justify-content:center;align-items:center;z-index:3001}
-#hp-cmp .cookie-popup{width:720px;max-width:720px;background:#fff;padding:30px;box-shadow:0 4px 6px rgba(0,0,0,.1);max-height:400px;overflow:auto;border-radius:4px}
+#hp-cmp *,#hp-cmp *::before,#hp-cmp *::after{box-sizing:border-box}
+#hp-cmp .cookie-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;justify-content:center;align-items:center;z-index:3001;padding:16px}
+#hp-cmp .cookie-popup{width:min(720px,100%);max-width:100%;background:#fff;padding:30px;box-shadow:0 4px 6px rgba(0,0,0,.1);max-height:min(85vh,640px);overflow:auto;border-radius:4px}
 #hp-cmp .cookie-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-direction:column}
 #hp-cmp .cookie-logo-title{display:flex;align-items:center;gap:10px;justify-content:space-between;width:100%}
 #hp-cmp .cookie-logo{height:20px}
@@ -70,7 +71,7 @@ const STYLE = `
 #hp-cmp .btn_save_param_cookie:disabled{background:#fff !important;color:#B1B5C0 !important;border:1px solid #ccc;cursor:not-allowed}
 #hp-cmp .close_param_cookie{opacity:.5;font-size:30px;line-height:30px;color:#000;cursor:pointer;background:none;border:0}
 #hp-cmp .close_param_cookie:hover{opacity:.7}
-@media (max-width:768px){#hp-cmp .cookie-popup{width:99%;max-width:99%;padding:14px;max-height:95vh}#hp-cmp .cookie-footer{flex-direction:column}#hp-cmp .cookie-button{width:100%}#hp-cmp .bloc_btn_action_cookie_tout{flex-direction:column;width:100%}}
+@media (max-width:768px){#hp-cmp .cookie-popup{padding:16px;max-height:90vh}#hp-cmp .cookie-footer{flex-direction:column}#hp-cmp .cookie-button{width:100%}#hp-cmp .bloc_btn_action_cookie_tout{flex-direction:column;width:100%}#hp-cmp .cookie-option.requis_ouvert .description{width:100%}#hp-cmp .bloc_cookie_requis{width:auto}#hp-cmp .cookie-option.ouvert .cookie_bloc_bouton{position:static;right:auto;bottom:auto;margin-top:12px}#hp-cmp .cookie-option.ouvert .description{padding-bottom:20px}#hp-cmp .cookie-footer.params{flex-direction:column;align-items:stretch}#hp-cmp .text_param_cookie{margin-right:0;margin-bottom:8px}}
 `;
 
 const D = { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' } as const;

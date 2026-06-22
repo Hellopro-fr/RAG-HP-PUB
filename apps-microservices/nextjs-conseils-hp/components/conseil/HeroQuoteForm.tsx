@@ -46,6 +46,11 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
   /* Sticky bar — ref fraîche à chaque render, listener stable (enregistré une seule fois) */
   const stickyHandlerRef = useRef<() => void>(() => {});
   stickyHandlerRef.current = () => {
+    // Le slot Hero est monté 2× (mobile `lg:hidden` + desktop `hidden lg:block`) → 2 instances
+    // écoutent l'événement sticky. Seule l'instance réellement visible au breakpoint courant
+    // doit ouvrir la modale ; l'autre (ancêtre display:none → offsetParent null) est ignorée,
+    // sinon 2 iframes plein écran se chargent en concurrence et échouent (retry max).
+    if (formRef.current && formRef.current.offsetParent === null) return;
     // Même comportement que le bouton du formulaire hero
     handleCtaClick();
     // En plus : si aucun choix + obligatoire, scroll vers le formulaire pour que l'erreur soit visible
