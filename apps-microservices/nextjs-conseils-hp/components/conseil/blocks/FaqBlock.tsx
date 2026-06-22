@@ -16,8 +16,11 @@ interface FaqBlockProps {
 
 export function FaqBlock({ data }: FaqBlockProps) {
   const [openIndex, setOpenIndex] = useState<number>(0);
-  // Titre tel quel (le préfixe « FAQ : » de l'API est conservé), fallback descriptif si vide.
-  const faqTitle = (data.title ?? '').trim() || 'Vos questions les plus fréquentes';
+  // Titre tel quel (le préfixe « FAQ : » de l'API est conservé).
+  // Cas où le BO ne renvoie qu'un « FAQ » générique (ou vide) → titre par défaut complet.
+  const rawTitle = (data.title ?? '').trim();
+  const isGeneric = rawTitle === '' || /^faq\s*:?\s*$/i.test(rawTitle);
+  const faqTitle = isGeneric ? 'FAQ : Vos questions les plus fréquentes' : rawTitle;
   return (
     <section id="faq" className="not-prose my-12 scroll-mt-32">
       <div className="mb-6">
