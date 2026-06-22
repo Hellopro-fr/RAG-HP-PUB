@@ -16,16 +16,12 @@ interface FaqBlockProps {
 
 export function FaqBlock({ data }: FaqBlockProps) {
   const [openIndex, setOpenIndex] = useState<number>(0);
-  // Le kicker orange affiche déjà « FAQ » : on retire un éventuel préfixe « FAQ » du titre API
-  // (suivi de : – -) pour éviter le doublon, et on retombe sur un titre descriptif si vide.
-  const faqTitle =
-    (data.title ?? '').replace(/^\s*FAQ\s*[:–-]?\s*/i, '').trim() ||
-    'Vos questions les plus fréquentes';
+  // Titre tel quel (le préfixe « FAQ : » de l'API est conservé), fallback descriptif si vide.
+  const faqTitle = (data.title ?? '').trim() || 'Vos questions les plus fréquentes';
   return (
     <section id="faq" className="not-prose my-12 scroll-mt-32">
       <div className="mb-6">
-        <span className="text-xs font-semibold uppercase tracking-wide text-cta">FAQ</span>
-        <h2 className="mt-1 text-3xl font-extrabold text-foreground">{faqTitle}</h2>
+        <h2 className="text-3xl font-extrabold text-foreground">{faqTitle}</h2>
       </div>
 
       <div className="space-y-3">

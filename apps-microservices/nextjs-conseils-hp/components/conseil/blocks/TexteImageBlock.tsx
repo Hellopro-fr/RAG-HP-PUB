@@ -86,7 +86,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
 
   const imageColAlign = data.imagePosition === 'left' ? 'md:items-start' : 'md:items-end';
   const imageCol = (
-    <figure className={`flex flex-col items-center ${imageColAlign}`}>
+    <figure className={`flex min-w-0 flex-col items-center ${imageColAlign}`}>
       <div className="w-fit max-w-full overflow-hidden rounded-xl">
         {imageEl}
       </div>
@@ -126,7 +126,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
   );
 
   const textCol = (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {data.estimate && (
         <EstimationBox
           label={data.estimateLabel ?? 'Estimation de prix'}
