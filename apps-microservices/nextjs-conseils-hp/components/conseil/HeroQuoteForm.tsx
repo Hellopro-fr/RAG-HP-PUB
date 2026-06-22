@@ -43,6 +43,23 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
     handleChoixClick, handleAutreChange, handleCtaClick, handleModalClose,
   } = useAoQuoteForm(question, infoRubrique);
 
+  /* Sticky bar — ref fraîche à chaque render, listener stable (enregistré une seule fois) */
+  const stickyHandlerRef = useRef<() => void>(() => {});
+  stickyHandlerRef.current = () => {
+    // Même comportement que le bouton du formulaire hero
+    handleCtaClick();
+    // En plus : si aucun choix + obligatoire, scroll vers le formulaire pour que l'erreur soit visible
+    if (selectedChoixIds.length === 0 && isObligatoire) {
+      document.getElementById('hero-trigger')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  useEffect(() => {
+    const handler = () => stickyHandlerRef.current();
+    window.addEventListener('hellopro:open-ao-form', handler);
+    return () => window.removeEventListener('hellopro:open-ao-form', handler);
+  }, []);
+
   return (
     <>
       <div ref={formRef} className="rounded-2xl bg-card p-5 text-card-foreground shadow-2xl ring-1 ring-black/5">
