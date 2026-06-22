@@ -82,6 +82,8 @@ export interface Supplier {
   /** URL complète du logo, construite par le fetcher (ex. https://www.hellopro.fr/images/logo/...) */
   logoPath: string;
   description?: string;
+  /** URL de la fiche société (champ url_fiche de l'API) — cible du bouton « Voir la fiche ». */
+  urlFiche?: string;
 }
 
 /** Page conseil associée — "Pour aller plus loin" */
