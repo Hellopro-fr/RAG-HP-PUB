@@ -608,6 +608,8 @@ services:
       - PORT=8600
       - LOG_LEVEL=info
       - MAX_PAYLOAD_SIZE_MB=10
+      - SERVICE_NAME=content-extractor-api-service
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     env_file:
       - .env
     networks:
