@@ -58,6 +58,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
     <>
       <section
         ref={sectionRef}
+        id="quote-form-trigger"
         className="not-prose my-12 overflow-hidden rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-xl"
       >
         <div className="grid gap-0 lg:grid-cols-[1fr_1.1fr]">
