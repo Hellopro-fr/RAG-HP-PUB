@@ -475,6 +475,20 @@ export function transformPhpConseilPage(raw: PhpConseilResponse): ConseilPage {
     ...(r.schema_breadcrumb && Object.keys(r.schema_breadcrumb).length > 0 ? { schemaBreadcrumb: r.schema_breadcrumb } : {}),
     ...(r.auteur ? { author: transformAuteur(r.auteur) } : {}),
     ...(r.temps_lecture ? { tempsLecture: r.temps_lecture } : {}),
+    ...('cta_sticky' in r
+      ? {
+          ctaSticky: r.cta_sticky
+            ? {
+                wording: r.cta_sticky.wording,
+                ...(r.cta_sticky.sous_titre ? { sous_titre: r.cta_sticky.sous_titre } : {}),
+                label_bouton: r.cta_sticky.label_bouton,
+                eligible_ao: Boolean(r.cta_sticky.eligible_ao),
+                ...(r.cta_sticky.id_rubrique ? { id_rubrique: r.cta_sticky.id_rubrique } : {}),
+                lien_redirection: r.cta_sticky.lien_redirection ?? null,
+              }
+            : null,
+        }
+      : {}),
     ...(r.pages_conseils_associees?.length
       ? { conseilsAssocies: r.pages_conseils_associees.map(transformConseilAssocie) }
       : {}),

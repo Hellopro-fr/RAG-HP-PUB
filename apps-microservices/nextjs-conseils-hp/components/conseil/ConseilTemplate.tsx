@@ -15,6 +15,7 @@ import { QuoteFormBlock } from './blocks/QuoteFormBlock';
 import type { FaqBlockData } from '@/types/blocks/faq';
 import { extractTOC } from '@/lib/blocks/extractTOC';
 import type { ConseilPage } from '@/types/conseils';
+import { StickyCtaBar } from './StickyCtaBar';
 import type { ResumeBlockData } from '@/types/blocks/resume';
 import type { ProduitsBlockData } from '@/types/blocks/produits';
 
@@ -276,6 +277,8 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       )}
 
       <SiteFooter />
+
+      {page.ctaSticky && <StickyCtaBar ctaSticky={page.ctaSticky} />}
     </>
   );
 }

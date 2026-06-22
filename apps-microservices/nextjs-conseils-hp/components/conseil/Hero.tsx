@@ -40,7 +40,7 @@ export function Hero({
   slot,
 }: HeroProps) {
   return (
-    <section className="relative overflow-hidden bg-primary text-primary-foreground">
+    <section id="hero-trigger" className="relative overflow-hidden bg-primary text-primary-foreground">
       <div className="relative mx-auto max-w-[1400px] px-4 py-4 lg:px-6 lg:py-5">
         {/* Breadcrumb */}
         {breadcrumb.length > 0 && (
@@ -244,7 +244,7 @@ function PriceRangeVisual({
           strokeLinecap="round"
         />
       </svg>
-      <div className="relative mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-primary-foreground">
+      <div className="relative mb-2 text-sm font-bold uppercase tracking-[0.2em] text-primary-foreground">
         Estimation de prix
       </div>
       <div className="relative grid grid-cols-3 gap-1">

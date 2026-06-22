@@ -173,6 +173,7 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
       breadcrumb,
       ...(updatedAt ? { updatedAt } : {}),
       ...(transformed.tempsLecture ? { tempsLecture: transformed.tempsLecture } : {}),
+      ...('ctaSticky' in transformed ? { ctaSticky: transformed.ctaSticky } : {}),
       hero: {
         ...base.hero,
         title: raw.titre,
