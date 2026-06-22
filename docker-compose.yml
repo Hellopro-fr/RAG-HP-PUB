@@ -600,7 +600,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/content-extractor-api-service/Dockerfile
     container_name: content-extractor-api-service
-    profiles: [ "app" ]
+    profiles: [ "app", "crawling" ]
     restart: unless-stopped
     ports:
       - "${CONTENT_EXTRACTOR_API_PORT:-8600}:8600"
@@ -608,6 +608,8 @@ services:
       - PORT=8600
       - LOG_LEVEL=info
       - MAX_PAYLOAD_SIZE_MB=10
+      - SERVICE_NAME=content-extractor-api-service
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     env_file:
       - .env
     networks:
@@ -1346,6 +1348,9 @@ services:
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - DETECTION_LANGUE_API_URL=http://api-detection-langue-fr-service:8999
+      - CONTENT_EXTRACTOR_API_URL=http://content-extractor-api-service:8600
+      - DIEZ_TIER2_ENABLED=${DIEZ_TIER2_ENABLED:-false}
+      - QM_TIER2_ENABLED=${QM_TIER2_ENABLED:-false}
       - REDIS_LOSS_THRESHOLD_MS=${REDIS_LOSS_THRESHOLD_MS:-60000}
       - PROGRESS_STALL_THRESHOLD_MS=${PROGRESS_STALL_THRESHOLD_MS:-600000}
       - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-20}

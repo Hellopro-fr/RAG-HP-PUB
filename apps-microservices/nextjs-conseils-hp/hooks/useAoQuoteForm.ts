@@ -102,6 +102,12 @@ export function useAoQuoteForm(
     setStartStep1(false);
   }
 
+  /** Ouvre le modal directement à l'étape 1 (utilisé par StickyCtaBar) */
+  function openAtStep1() {
+    setStartStep1(true);
+    setModalOpen(true);
+  }
+
   /* ── Données pour le modal ── */
 
   const selectedChoixIds = isMultiple
@@ -123,6 +129,6 @@ export function useAoQuoteForm(
     /* helpers */
     isNeSaisPas,
     /* handlers */
-    handleChoixClick, handleAutreChange, handleCtaClick, handleModalClose,
+    handleChoixClick, handleAutreChange, handleCtaClick, handleModalClose, openAtStep1,
   };
 }

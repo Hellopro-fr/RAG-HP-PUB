@@ -1,0 +1,45 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-21-comparaison-texte-contract-fix-hardening.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: BO contract fix (Hellopro)",
+      "status": "pending",
+      "description": "**Goal:** BO reads decision/similarity_ratio (real contract) — restores titre/desc change-detection.\n\n```json:metadata\n{\"files\": [\"Hellopro/BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_maj_crawling.php\"], \"verifyCommand\": \"php -l (if available) else diff inspection\", \"acceptanceCriteria\": [\"reads decision===SKIP + similarity_ratio\", \"rest unchanged\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: config.py new settings",
+      "status": "pending",
+      "description": "**Goal:** UVICORN_WORKERS=2, SYNC_MAX_INFLIGHT=0, ADMISSION_RETRY_AFTER_S=15.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-comparaison-texte/app/core/config.py\", \"apps-microservices/api-comparaison-texte/tests/test_config.py\"], \"verifyCommand\": \"cd apps-microservices/api-comparaison-texte && python -m pytest tests/test_config.py -v\", \"acceptanceCriteria\": [\"new settings\", \"existing unchanged\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: metrics.py + /metrics endpoint + dep",
+      "status": "pending",
+      "description": "**Goal:** prometheus-client metrics + /metrics (generate_latest); add prometheus-client dep.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-comparaison-texte/app/core/metrics.py\", \"apps-microservices/api-comparaison-texte/main.py\", \"apps-microservices/api-comparaison-texte/requirements.txt\", \"apps-microservices/api-comparaison-texte/tests/test_metrics.py\", \"apps-microservices/api-comparaison-texte/tests/test_main.py\"], \"verifyCommand\": \"cd apps-microservices/api-comparaison-texte && python -m pytest tests/test_metrics.py tests/test_main.py -v\", \"acceptanceCriteria\": [\"5 metrics\", \"/metrics 200\", \"health+root 200\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: admission.py sync guard",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** SyncAdmission (off by default), 503+Retry-After.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-comparaison-texte/app/core/admission.py\", \"apps-microservices/api-comparaison-texte/tests/test_admission.py\"], \"verifyCommand\": \"cd apps-microservices/api-comparaison-texte && python -m pytest tests/test_admission.py -v\", \"acceptanceCriteria\": [\"0 always admits\", \"caps+releases+floor0\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: routes.py offload + admission + metrics",
+      "status": "pending",
+      "blockedBy": [3, 4],
+      "description": "**Goal:** offload whole-batch via asyncio.to_thread (NOT per-item gather) + admission + metrics; behaviour preserved.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-comparaison-texte/app/api/routes.py\", \"apps-microservices/api-comparaison-texte/tests/test_routes.py\"], \"verifyCommand\": \"cd apps-microservices/api-comparaison-texte && python -m pytest tests/test_routes.py tests/test_api.py -v\", \"acceptanceCriteria\": [\"to_thread whole-batch\", \"test_api green\", \"admission 503\", \"offload non-block\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Dockerfile multi-worker",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** uvicorn --workers ${UVICORN_WORKERS:-2}. non-root/HEALTHCHECK deferred.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-comparaison-texte/Dockerfile\"], \"verifyCommand\": \"cat apps-microservices/api-comparaison-texte/Dockerfile\", \"acceptanceCriteria\": [\"CMD --workers ${UVICORN_WORKERS:-2}\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-21"
+}

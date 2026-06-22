@@ -35,11 +35,12 @@ import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
+import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
 import { TimingRecorder } from "./class/TimingRecorder.js";
 import type { PoolSample, TimingSummary } from "./timing/types.js";
 import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
-import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations } from "./questionMarkDecision.js";
+import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations, readQmPersistedDecision } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
@@ -178,6 +179,8 @@ if (storagePath) {
 // Tier-1 observer guard: disable observation if CLI already set skipQuestionMark / bypassQuestionMark.
 // Human choice wins — spec §9.3.
 applyQuestionMarkGuard();
+// Phase-2: restore previously committed toRemove params (OOM_RELAUNCH).
+if (storagePath) readQmPersistedDecision(storagePath);
 
 const nameLogs = `${domain}-logs-${now}.log`;
 attachFSLogger(nameLogs);
@@ -718,6 +721,7 @@ if (crawlMode === 'update') {
     // Phase 1: Seed only the homepage
     await requestQueue.addRequest({
         url: site,
+        uniqueKey: site,
         userData: { source: 'seed' }
     });
     // Do NOT pre-add the homepage to Redis dedup here (same rule as the standard
@@ -788,9 +792,10 @@ if (crawlMode === 'update') {
     // The handler will add it when processing the page.
     // Pre-adding it causes the homepage to be treated as "Doublon" and skipped entirely.
 
-    await requestQueue.addRequest({ 
-        url: cleanSite, 
-        userData: { is_existing: false } 
+    await requestQueue.addRequest({
+        url: cleanSite,
+        uniqueKey: cleanSite,
+        userData: { is_existing: false }
     });
 } else {
     console.log("RequestQueueNotEmpty");
@@ -1077,6 +1082,17 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         }
     }
 
+    // Phase-2: clean '#' from stored rows only on a clean COMPLETED skip-commit.
+    // Future rows were already stripped at enqueue; this fixes pre-commit rows.
+    if (reason === 'COMPLETED' && context.config.skipDiez) {
+        try {
+            const { cleanDatasetFragments } = await import("./functions.js");
+            cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
+        } catch (e) {
+            console.error("Dataset fragment cleanup failed:", e);
+        }
+    }
+
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
     // Wait for any in-flight persistence to complete before final write
@@ -1228,6 +1244,9 @@ if (typeCrawling == "sitemap") {
     // observed an empty queue while the real workload ran on the routes
     // instance — masking detect-API saturation.
     context.detectionClient = new DetectionLangueClient();
+    // Phase-2 tier-2 content comparison. Constructed unconditionally; only used
+    // when DIEZ_TIER2_ENABLED and the diez engine activates.
+    context.contentExtractorClient = new ContentExtractorClient();
 
     // --- TIMING INSTRUMENTATION ---
     // When TIMING_ENABLED=false (the default), this entire block is a no-op:

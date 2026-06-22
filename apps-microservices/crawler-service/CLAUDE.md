@@ -453,6 +453,54 @@ Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense
 
 **Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
 
+## Detection Backpressure (Auto-Adjusting Concurrency + Handler-Timeout Alignment)
+
+The default handler awaits a per-page detection call (~94% of handler time on
+detection-gated sites). Crawlee's `AutoscaledPool` scales on **local**
+CPU/event-loop/memory — all idle while handlers `await` that HTTP call — so left
+unchecked it ramps to 25+ concurrent handlers against only `DETECTION_MAX_CONCURRENCY`
+(5) detect slots. The surplus piles into the detection `p-limit` queue, inflating
+per-page detect latency past `requestHandlerTimeoutSecs`; Crawlee then kills the
+handler mid-detect and closes the page, the orphaned handler hits `page.$$eval` on the
+dead page (`Pre-batch link extraction failed: ... Target page ... has been closed`),
+the request retries, and with nothing finishing the crawl loops on `progress_stalled`
+(exit 6) — a death spiral. Incident: crawl 7033 (carflo.fr), 2026-06-19.
+
+**Auto-adjusting gate (primary throttle).** `autoscaledPoolOptions.isTaskReadyFunction`
+accepts a new page only while the detection p-limit queue
+(`detectionClient.limiter.pendingCount`) is within `DETECTION_BACKPRESSURE_MAX_PENDING`.
+Fast detection → `pendingCount≈0` → the pool ramps freely to the ceiling; slow
+detection → the gate vetoes new starts → concurrency self-settles where detection keeps
+up. It only delays *starts* (running detects drain → gate reopens; `isFinishedFunction`
+still ends the crawl), so no deadlock, and it fails open if the client is absent.
+Concurrency thus auto-adjusts per crawl instead of a one-size cap.
+
+**Safety ceiling + timeout (defense-in-depth).** `CRAWLER_MAX_CONCURRENCY` (default 20)
+is a memory/browser backstop (the incident hit ~95-100% memory at ~25 concurrent), no
+longer the primary throttle. `REQUEST_HANDLER_TIMEOUT_S` (default 200, raised from 120)
+exceeds one nav (≤90) + one detect (`DETECTION_REQUEST_TIMEOUT_S` 180) so a
+slow-but-progressing detect is not killed mid-flight. Three independent limiters: gate
+(detection), Crawlee memory snapshotter, hard ceiling.
+
+**Quiet-guard.** The `routes.ts` pre-batch block skips when `page.isClosed()` and
+downgrades the page-closed catch (`isPageClosedError`) to `log.debug`, so a benign
+`/stop`/shutdown teardown stops surfacing in Python as `Erreur crawling`.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DETECTION_BACKPRESSURE_MAX_PENDING` | `5` | Gate threshold: pause new page starts while detection `pendingCount` exceeds this. ≈ `DETECTION_MAX_CONCURRENCY`; raise in step if you raise detection concurrency. `0` = tolerate no queue. |
+| `CRAWLER_MAX_CONCURRENCY` | `20` | Hard ceiling on `autoscaledPoolOptions.maxConcurrency` (memory/browser backstop). |
+| `REQUEST_HANDLER_TIMEOUT_S` | `200` | `requestHandlerTimeoutSecs` — covers one nav + one detect. |
+
+Gate is detection-only (tier2 `/clean` excluded — flag-gated off by default; the
+predicate is generic so a second source folds in via `Math.max(...)` later). The
+upstream root (api-detection-langue-fr latency under load) is separate — this stops the
+crawler amplifying it and auto-adjusts to whatever throughput detection sustains.
+
+Spec: `docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md`
+(supersedes the static-cap mechanism of
+`docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md`).
+
 ## HTTP Status & Navigation Retry Policy
 
 `page.goto` resolves on `domcontentloaded` (not Playwright's default `load`), so the
@@ -522,6 +570,61 @@ for completed crawls (the queue-health `exit(0)` ran before it).
 | `RECOVER_FAILED_ON_RESTART` | `true` | Auto-recover recoverable failures on a same-id restart. Set `false` to disable (revert to instant "already completed" exit). Node-only, inherited by the subprocess. |
 
 Spec: `docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md`.
+
+## Phase-2 limitDiez (zero-touch)
+
+Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limitDiez to a human. Tier-1 (URL heuristic) produces a *hypothesis*; tier-2 verifies it with real content.
+
+**How it works:**
+- URL fragments are kept as distinct request identities (`base`, `base#a`, `base#b` crawl separately), giving tier-2 real material to compare.
+- A confident tier-1 outcome (skip/bypass/promoteTier2) does NOT commit directly — it ACTIVATES the tier-2 engine, which then has the final say.
+- The engine buffers one `{fragment, content}` per fragment-stripped base; when a 2nd distinct `#`-variant of that base arrives, it cleans both pages via the content-extractor `/clean` (text mode) and classifies the pair by Jaccard similarity (match / mismatch / unusable). `/clean` failures or empty results count as unusable (no false vote).
+- It commits `skipDiez` only on positive match-evidence (≥3 comparisons AND ≥80% match ratio) and `bypassDiez` on a mismatch-majority; otherwise it keeps sampling.
+- If tier-1 escalates (≥100 hashes with no confident decision) the engine commits the **default** `bypassDiez` — the zero-touch floor, so the crawl never dies at 100 hashes. This floor is active even with the engine disabled (`DIEZ_TIER2_ENABLED=false`), so the crawl is safe without deploying the content-extractor.
+- The committed decision is persisted to `_diez_decision.json` (with `source` ∈ {tier1, tier2, default} + comparison `evidence`); on a `skipDiez` that completes, stored dataset rows are stripped of `#` and exact duplicates dropped at shutdown.
+
+**Env vars:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DIEZ_TIER2_ENABLED` | `false` | Gates the tier-2 verification engine. Off = zero-touch floor only (bypassDiez). |
+| `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Base URL for the content-extractor `/clean` endpoint. |
+| `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Per-call HTTP timeout (seconds). |
+| `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Max concurrent `/clean` calls per crawl. |
+| `CONTENT_EXTRACTOR_MAX_RETRIES` | `1` | Retries on transient errors. |
+| `CONTENT_EXTRACTOR_RETRY_AFTER_CAP_S` | `5` | Max seconds the client waits on a 503 `Retry-After` before its single retry (caps server-suggested backoff so it can't stall the page handler). |
+
+- Under content-extractor admission pressure the client honours `Retry-After` (capped) and classifies 503/timeout/network as **transient**; tier-2 does not count a transient failure as a comparison — it keeps the buffered page and retries on the base's next `#`-variant (organic backoff), so a service outage biases to the safe default (bypassDiez) rather than corrupting the match ratio.
+
+**Co-deploy rule:** when `DIEZ_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It now shares the `crawling` compose profile and the `services-net` network, so it starts alongside the crawler automatically. No extra compose override is needed.
+
+Spec: `docs/superpowers/specs/2026-06-12-limitdiez-phase2-zero-touch` (Hellopro planning repo).
+
+## Phase-2 limitQuestionMark (zero-touch)
+
+Auto-resolves domain-specific `?`-params per-parameter and never escalates `limitQuestionMark` to a human. On top of the shipped Tier-1 observer, a Tier-2 engine buffers each `?`-page's content, groups by "URL with param `p` removed", and when two members differ in `p` (value-vs-value, or value-vs-absent) it cleans both via the content-extractor `/clean` and compares (Jaccard). A param is committed to `toRemove` ONLY on same-majority (compared≥3, same/compared≥0.8) — the single destructive action; different-majority is ruled content-shaping and kept.
+
+**How it works:**
+- The engine buffers one `{param_value, content}` entry per (base-URL, param) pair; when a 2nd distinct value of that param arrives for the same base, it cleans both pages via `/clean` (text mode) and classifies the pair as same/different/unusable. `/clean` failures or empty results count as unusable (no false vote).
+- A param is committed to `toRemove` only on same-majority evidence (≥3 comparisons AND same/compared≥0.8). Different-majority means the param shapes content — it is kept and never removed.
+- **Bounded zero-touch default:** near the 100-`?` ceiling (≥95 `?`-pages), once, the engine sets `bypassQuestionMark=true` + `breakLimit=false` (enables the 5000-dataset-item backstop). This disables the `limitQuestionMark` stop but bounds the crawl, so a facet-explosion trap cannot run away. The engine NEVER applies `skipQuestionMark`. Any already-committed `toRemove` strips remain in effect.
+- Committed decisions are persisted to `_questionmark_decision.json` (`addedToRemove` list merged back into `toRemove` on OOM relaunch).
+- `getQuestionMarkDecisionMode` reports the current state: `tier2-resolved` / `defaulted-bypassed` / `escalated` / `observed` / `unused`.
+
+**Env vars:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `QM_TIER2_ENABLED` | `false` | Gates the Tier-2 per-param engine. Off = Tier-1 observer only (no behaviour change). |
+| `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Shared with limitDiez phase-2. Base URL for the content-extractor `/clean` endpoint. |
+| `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Shared with limitDiez phase-2. Per-call HTTP timeout (seconds). |
+| `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Shared with limitDiez phase-2. Max concurrent `/clean` calls per crawl. |
+| `CONTENT_EXTRACTOR_MAX_RETRIES` | `1` | Shared with limitDiez phase-2. Retries on transient errors. |
+| `CONTENT_EXTRACTOR_RETRY_AFTER_CAP_S` | `5` | Shared with limitDiez phase-2. Max seconds the client waits on a 503 `Retry-After` before its single retry. |
+
+**Co-deploy rule:** when `QM_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It shares the `crawling` compose profile and the `services-net` network (already configured for limitDiez) — no extra compose override is needed.
+
+Spec: `docs/superpowers/specs/2026-06-16-limitquestionmark-phase2-zero-touch` (Hellopro planning repo).
 
 ## Conventions
 

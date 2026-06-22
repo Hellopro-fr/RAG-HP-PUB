@@ -105,6 +105,15 @@ export interface LienInterne {
   prix?: string;
 }
 
+export interface CtaSticky {
+  wording: string;
+  sous_titre?: string;
+  label_bouton: string;
+  eligible_ao: boolean;
+  id_rubrique?: string;
+  lien_redirection?: string | null;
+}
+
 export interface ConseilPage {
   slug: string;
   pageType: ConseilPageType;
@@ -118,6 +127,8 @@ export interface ConseilPage {
   updatedAt?: string;
   /** Temps de lecture estimé en minutes (issu du champ temps_lecture de l'API) */
   tempsLecture?: number;
+  /** Barre CTA sticky — null si non éligible, absent si non renvoyé par l'API */
+  ctaSticky?: CtaSticky | null;
   breadcrumb?: Array<{ label: string; href?: string }>;
   formulaire_ao?: AoFormQuestion | null;
   /** Rubrique principale de la page — source de l'id_rubrique et du libellé pour l'iframe */
