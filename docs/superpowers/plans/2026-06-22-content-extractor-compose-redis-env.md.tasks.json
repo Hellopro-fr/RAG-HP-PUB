@@ -1,0 +1,12 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-22-content-extractor-compose-redis-env.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Add REDIS_URL + SERVICE_NAME to content-extractor compose entry",
+      "status": "pending",
+      "description": "**Goal:** The content-extractor-api-service `environment:` block carries SERVICE_NAME and the composed REDIS_URL, nothing else changed.\n\n**Files:**\n- Modify: docker-compose.yml (service content-extractor-api-service, environment: block ~L607-610, before env_file: at L611)\n\n**Acceptance Criteria:**\n- SERVICE_NAME=content-extractor-api-service added\n- REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT} added (byte-identical to other services)\n- PORT/LOG_LEVEL/MAX_PAYLOAD_SIZE_MB unchanged; env_file: .env preserved\n- No other service / app code / Dockerfile change\n- docker-compose.yml still valid YAML\n\n**Verify (local):** python -c \"import yaml; yaml.safe_load(open('docker-compose.yml')); print('YAML OK')\"; git diff docker-compose.yml -> exactly 2 added lines.\n\n**Verify (deploy, operator):** startup logs lack 'REDIS_URL environment variable not set'; /health 200; /clean twice -> cache hit; /clean-async -> 202 -> poll completed.\n\n**Steps:** (1) confirm current block; (2) Edit replace block adding the 2 lines (old_string unique: MAX_PAYLOAD_SIZE_MB=10 followed by env_file:.env); (3) yaml parse + git diff; (4) commit fix(content-extractor): wire REDIS_URL + SERVICE_NAME in compose (bilingual EN/FR body).\n\n```json:metadata\n{\"files\": [\"docker-compose.yml\"], \"verifyCommand\": \"python -c \\\"import yaml; yaml.safe_load(open('docker-compose.yml')); print('YAML OK')\\\" && git diff docker-compose.yml\", \"acceptanceCriteria\": [\"SERVICE_NAME added\", \"composed REDIS_URL added\", \"no other line changed\", \"valid YAML\", \"no app/Dockerfile change\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-22"
+}
