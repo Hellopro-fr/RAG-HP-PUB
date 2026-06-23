@@ -68,11 +68,11 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
             <span className="inline-flex w-fit items-center rounded-full bg-cta px-3 py-1 text-xs font-bold uppercase tracking-wide text-cta-foreground">
               Étape suivante
             </span>
-            <h3 className="text-2xl font-extrabold leading-tight lg:text-[1.75rem]">
+            <p className="text-2xl font-extrabold leading-tight lg:text-[1.75rem]">
               {title}
               <br />
               <span className="text-cta">{subtitle}</span>
-            </h3>
+            </p>
             <p className="text-base text-primary-foreground/85">
               Décrivez votre projet en 30 secondes et recevez{' '}
               <strong className="text-primary-foreground">jusqu&apos;à 3 devis gratuits</strong> de
