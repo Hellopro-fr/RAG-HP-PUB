@@ -16,6 +16,7 @@ breaking the entire cache-hit fast path — the whole point of Design-C.
 The all-hit test pins exactly that, and also that the cached features
 (keyed by inp.id) still flow into compare_features.
 """
+import json
 import pytest
 from unittest.mock import AsyncMock, Mock
 
@@ -113,6 +114,36 @@ async def test_no_valid_images_raises(patched):
     a = ImageInput(url="https://x/a.jpg")
     with pytest.raises(Exception, match="No valid images"):
         await jm.process_job_logic("job4", [a], 90.0)
+
+
+@pytest.mark.asyncio
+async def test_processing_status_uses_short_ttl_terminal_uses_long(patched):
+    # Regression for the stuck-'processing'-after-restart bug. A 'processing' status write must
+    # expire after PROCESSING_STATUS_TTL_S (worker max runtime + grace), NOT the 24h JOB_RESULT_TTL,
+    # so an orphaned job (worker restarted mid-job, nothing flips it terminal) self-heals to 404.
+    # Terminal 'finished' status + the result payload keep the long TTL.
+    jm = jm_mod.JobManager()
+    a = ImageInput(url="https://x/a.jpg")
+    feature_cache.get_features.return_value = {str(a.url): _feat()}
+
+    await jm.process_job_logic("jobttl", [a], 90.0)
+
+    status_ttls = {}   # status string -> ex applied
+    result_ttl = None
+    for call in cache_service.redis_client.set.call_args_list:
+        key, val = call.args[0], call.args[1]
+        ex = call.kwargs.get("ex")
+        if key == "job:jobttl:status":
+            status_ttls[json.loads(val)["status"]] = ex
+        elif key == "job:jobttl:result":
+            result_ttl = ex
+
+    assert status_ttls["processing"] == settings.PROCESSING_STATUS_TTL_S   # non-terminal -> short
+    assert status_ttls["finished"] == settings.JOB_RESULT_TTL              # terminal -> long
+    assert result_ttl == settings.JOB_RESULT_TTL                          # result payload -> long
+    # Safety invariant: TTL must exceed the deadline (a live job refreshes on each write, gaps
+    # <= deadline) or a real in-flight job would expire mid-flight; and stay under the 24h floor.
+    assert settings.PROCESSING_DEADLINE_S < settings.PROCESSING_STATUS_TTL_S < settings.JOB_RESULT_TTL
 
 
 @pytest.mark.asyncio
