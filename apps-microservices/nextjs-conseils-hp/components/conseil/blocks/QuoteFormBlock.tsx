@@ -86,7 +86,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
               ))}
             </ul>
             <div className="mt-2 flex items-center gap-2 text-sm text-primary-foreground/80">
-              <div className="flex" aria-label="4,2 sur 5">
+              <div className="flex" role="img" aria-label="4,2 sur 5">
                 {[1, 2, 3, 4].map((i) => (
                   <Star key={i} className="h-4 w-4 fill-rating text-rating" />
                 ))}
@@ -99,10 +99,11 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
 
           {/* ── Colonne droite — formulaire ── */}
           <div className="bg-card p-5 text-card-foreground lg:p-6">
-            <h4 className="mb-3 text-lg font-bold text-foreground">
+            {/* Invite de formulaire (pas un titre de structure) → <p> pour ne pas casser la hiérarchie des titres. */}
+            <p className="mb-3 text-lg font-bold text-foreground">
               {questionLabel}
               {isObligatoire && <span className="text-cta"> *</span>}
-            </h4>
+            </p>
 
             {showError && (
               <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-destructive">

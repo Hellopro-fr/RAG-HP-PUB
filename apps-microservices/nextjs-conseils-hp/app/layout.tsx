@@ -3,6 +3,7 @@ import './globals.css';
 import { CONSENT_MODE_INIT } from '@/lib/consent/consentMode';
 import { CookieConsent } from '@/components/conseil/CookieConsent';
 import { GtmUserEnricher } from '@/components/conseil/GtmUserEnricher';
+import { PageViewTracker } from '@/components/conseil/PageViewTracker';
 
 const GTM_ID = 'GTM-PBBSTMC';
 
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
   description: 'Guides, conseils et comparatifs pour vos achats professionnels.',
   // Favicon servi depuis /images/ (déjà routé vers le Next par le reverse proxy),
   // au lieu du /icon.svg racine (non routé). app/icon.svg est supprimé (voir ci-dessous).
-  icons: { icon: '/images/favicon.svg' },
+  icons: { icon: '/images/favicon.ico' },
   // <meta name="author" content="Hellopro">
   authors: [{ name: 'Hellopro' }],
   // <meta name="robots" content="index, follow">
@@ -57,6 +58,8 @@ export default function RootLayout({
         {children}
         {/* Enrichit le dataLayer `user` (type/pays/service/id) pour les visiteurs identifiés */}
         <GtmUserEnricher />
+        {/* Tracking DB « page vue » — émis à chaque page conseil affichée (SPA → usePathname) */}
+        <PageViewTracker />
         {/* Bandeau de consentement RGPD (s'affiche si cookie hp_consent absent) */}
         <CookieConsent />
       </body>
