@@ -3,6 +3,7 @@ import './globals.css';
 import { CONSENT_MODE_INIT } from '@/lib/consent/consentMode';
 import { CookieConsent } from '@/components/conseil/CookieConsent';
 import { GtmUserEnricher } from '@/components/conseil/GtmUserEnricher';
+import { PageViewTracker } from '@/components/conseil/PageViewTracker';
 
 const GTM_ID = 'GTM-PBBSTMC';
 
@@ -57,6 +58,8 @@ export default function RootLayout({
         {children}
         {/* Enrichit le dataLayer `user` (type/pays/service/id) pour les visiteurs identifiés */}
         <GtmUserEnricher />
+        {/* Tracking DB « page vue » — émis à chaque page conseil affichée (SPA → usePathname) */}
+        <PageViewTracker />
         {/* Bandeau de consentement RGPD (s'affiche si cookie hp_consent absent) */}
         <CookieConsent />
       </body>
