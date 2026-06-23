@@ -31,6 +31,13 @@ class Settings:
     IMG_DOWNLOAD_CAP_S: float = float(os.getenv("IMG_DOWNLOAD_CAP_S", "20"))
     # Per-job deadline (s): above a real ~40s job, below the BO client's 300s.
     PROCESSING_DEADLINE_S: float = float(os.getenv("PROCESSING_DEADLINE_S", "120"))
+    # TTL for NON-terminal status keys ('processing'). Derived to stay > PROCESSING_DEADLINE_S:
+    # a live job refreshes its status TTL on every write (inter-write gaps <= the deadline), so a
+    # real in-flight job never expires mid-flight, while an orphaned 'processing' (worker restarted
+    # or killed mid-job — nothing flips it terminal) self-heals in ~minutes instead of lingering the
+    # full JOB_RESULT_TTL (24h). On expiry: /status & /results -> 404 -> BO poll treats it as
+    # terminal -> keep-all (no false dedup). Grace tunable via STALE_STATUS_GRACE_S.
+    PROCESSING_STATUS_TTL_S: int = int(PROCESSING_DEADLINE_S) + int(os.getenv("STALE_STATUS_GRACE_S", "60"))
     # Async-submit backlog cap = MAX_CONCURRENT_JOBS * ASYNC_BACKLOG_FACTOR (per replica).
     ASYNC_BACKLOG_FACTOR: int = int(os.getenv("ASYNC_BACKLOG_FACTOR", "4"))
 
