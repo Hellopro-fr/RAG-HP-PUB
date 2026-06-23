@@ -32,7 +32,7 @@ const STYLE = `
 #hp-cmp .cookie-popup{width:min(720px,100%);max-width:100%;background:#fff;padding:30px;box-shadow:0 4px 6px rgba(0,0,0,.1);max-height:min(85vh,640px);overflow:auto;border-radius:4px}
 #hp-cmp .cookie-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-direction:column}
 #hp-cmp .cookie-logo-title{display:flex;align-items:center;gap:10px;justify-content:space-between;width:100%}
-#hp-cmp .cookie-logo{height:20px}
+#hp-cmp .cookie-logo{height:20px;width:auto}
 #hp-cmp .cookie-header h2{margin:20px 0 0;font-size:18px;font-weight:700;color:#FB5607;align-self:flex-start;display:block}
 #hp-cmp .hp-cmp-link{font-size:12px;color:#888;text-decoration:underline;cursor:pointer;margin-left:auto;background:none;border:0;padding:0}
 #hp-cmp .hp-cmp-link:hover{color:#000}
@@ -191,7 +191,7 @@ export function CookieConsent() {
             <div className="cookie-header">
               <div className="cookie-logo-title">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={LOGO} alt="HelloPro" className="cookie-logo" />
+                <img src={LOGO} alt="HelloPro" className="cookie-logo" width={140} height={31} />
                 <button type="button" className="hp-cmp-link" onClick={refuseAll}>
                   Continuer sans accepter
                 </button>
@@ -231,7 +231,7 @@ export function CookieConsent() {
             <div className="cookie-header">
               <div className="cookie-logo-title">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={LOGO} alt="HelloPro" className="cookie-logo" />
+                <img src={LOGO} alt="HelloPro" className="cookie-logo" width={140} height={31} />
                 <button
                   type="button"
                   className="close_param_cookie"
