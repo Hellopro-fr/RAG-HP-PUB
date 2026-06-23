@@ -43,9 +43,9 @@ export function AuthorBlock({ author }: AuthorBlockProps) {
           <span className="text-sm font-semibold uppercase tracking-wide text-cta">
             Guide écrit par
           </span>
-          <h3 className="text-xl font-extrabold text-foreground">
+          <p className="text-xl font-extrabold text-foreground">
             {author.name} · {author.role}
-          </h3>
+          </p>
           <p className="mt-2 text-base text-foreground/85">{author.bio}</p>
           <div className="mt-3 flex items-center justify-center gap-3 sm:justify-start">
             {author.linkedinUrl && (

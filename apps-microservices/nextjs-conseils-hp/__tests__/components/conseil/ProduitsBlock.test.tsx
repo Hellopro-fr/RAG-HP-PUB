@@ -25,7 +25,8 @@ describe('ProduitsBlock', () => {
 
   it('uses fallback title when titre is absent', () => {
     render(<ProduitsBlock data={{ productIds: [], produits: PRODUITS }} />);
-    expect(screen.getByRole('heading')).toBeDefined();
+    // Titre rendu en <p> (balise simple, pas un heading) → on vérifie le texte de repli.
+    expect(screen.getByText(/Les produits les plus populaires/i)).toBeDefined();
   });
 
 

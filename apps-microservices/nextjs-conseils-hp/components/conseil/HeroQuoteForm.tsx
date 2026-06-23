@@ -75,11 +75,10 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         <p className="mb-3 text-base text-muted-foreground">
           En 30 secondes, sans engagement. Comparez les meilleurs fournisseurs.
         </p>
-        {/* Invite de formulaire (pas un titre de structure) → <p> pour ne pas casser la hiérarchie des titres. */}
-        <p className="mb-3 text-lg font-bold text-foreground">
+        <h2 className="mb-3 text-lg font-bold text-foreground">
           {questionLabel}
           {isObligatoire && <span className="text-cta"> *</span>}
-        </p>
+        </h2>
 
         {showError && (
           <p className="mb-3 flex items-center gap-1.5 text-base font-medium text-destructive">
