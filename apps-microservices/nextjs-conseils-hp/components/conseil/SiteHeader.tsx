@@ -43,10 +43,10 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur">
+      <header className="sticky top-0 z-40 w-full border-b border-border bg-background">
 
         {/* ── Ligne 1 : Logo + boutons ── */}
-        <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3 lg:px-6">
+        <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3 md:py-5 lg:px-6">
           <Link href="/" className="flex flex-col leading-none">
             <Image
               src="/images/hp-logo.svg"
@@ -56,7 +56,7 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
               className="h-8 w-auto"
               priority
             />
-            <span className="mt-0.5 hidden text-[10px] uppercase tracking-wide text-muted-foreground sm:block">
+            <span className="mt-0.5 block text-[11px] font-bold text-foreground">
               Partenaire de vos achats pros
             </span>
           </Link>
@@ -136,11 +136,19 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
               <ChevronDown className={`h-3 w-3 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            <a href="https://www.hellopro.fr/qui-sommes-nous" className="text-muted-foreground hover:text-foreground">
+            <a
+              href="https://www.hellopro.fr/qui-sommes-nous"
+              className="font-semibold text-foreground transition hover:text-primary"
+            >
               Qui sommes-nous ?
             </a>
-            <a href="https://www.hellopro.fr/mhp/buyer/login?utm=mca" className="ml-auto flex items-center gap-2 text-muted-foreground hover:text-foreground">
-              <User className="h-4 w-4" />
+            <a
+              href="https://www.hellopro.fr/mhp/buyer/login?utm=mca"
+              className="ml-auto flex items-center gap-2 font-semibold text-foreground transition hover:text-primary"
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+                <User className="h-3.5 w-3.5" strokeWidth={2.25} />
+              </span>
               <span className="hidden sm:inline">Mes demandes</span>
             </a>
           </div>
