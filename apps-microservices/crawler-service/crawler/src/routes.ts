@@ -21,8 +21,8 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
-import { fragmentAwareUniqueKey } from "./diezKeepFragment.js";
-import { recordTier2Sample, maybeCommitTier2, tier2Evidence } from "./diezTier2.js";
+import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
+import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
@@ -227,7 +227,10 @@ router.addDefaultHandler(
         let _detectOk: boolean | undefined;
 
         const proxyUrl = proxyInfo?.url || null;
+        // loadedUrl is the stored + counted identity; drop a cosmetic empty '#'
+        // (JS/browser may keep a bare hash) so it can't inflate diez or pollute the dataset.
         let url = request.loadedUrl;
+        if (url) url = stripEmptyFragment(url);
         try {
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
@@ -838,6 +841,12 @@ router.addDefaultHandler(
                             else commitBypassDiez(storagePath, meta);
                         }
                     }
+
+                    // Zero-touch floor (mirrors questionMark maybeDefaultAtCeiling): near the
+                    // ceiling with no decision yet, default to bypassDiez + arm the 5000-item
+                    // backstop so the crawl never dies at limitDiez. Runs in BOTH flag modes,
+                    // whatever blocked a decision (tier-2 no comparable pairs, ambiguous-heavy…).
+                    if (storagePath) maybeDefaultDiezAtCeiling(storagePath);
                 }
 
                 await routerDefaultHandler(
@@ -897,9 +906,7 @@ router.addDefaultHandler(
                         // re-instantiation on every discovered link.
 
                         // Strip empty fragment (#) — "page#" and "page" are identical content
-                        if (request.url.endsWith('#')) {
-                            request.url = request.url.slice(0, -1);
-                        }
+                        request.url = stripEmptyFragment(request.url);
 
                         // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
                         request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });

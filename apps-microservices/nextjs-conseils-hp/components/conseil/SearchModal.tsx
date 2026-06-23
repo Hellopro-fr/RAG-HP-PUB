@@ -136,33 +136,47 @@ export function SearchModal({ open, onClose, initialQuery = '' }: SearchModalPro
   const [results, setResults] = useState<SearchResults>({ categories: [], products: [] });
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Détecte la transition fermé→ouvert (pour n'appliquer initialQuery qu'à l'ouverture réelle).
+  const wasOpenRef = useRef(false);
+  // Dernière requête réellement chargée → évite un refetch (et le flash "Recherche en cours…")
+  // à la réouverture quand la saisie n'a pas changé.
+  const lastFetchedRef = useRef('');
   const debouncedQuery = useDebounce(query, 250);
   const hasResults = results.categories.length > 0 || results.products.length > 0;
 
   useEffect(() => {
-    if (open) {
-      setQuery(initialQuery);
+    if (open && !wasOpenRef.current) {
+      // Ouverture réelle : on n'écrase la saisie conservée que si une requête initiale
+      // explicite est fournie (ex. ouverture depuis un terme pré-rempli). Sinon on garde
+      // la dernière recherche.
+      if (initialQuery) setQuery(initialQuery);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
+    wasOpenRef.current = open;
   }, [open, initialQuery]);
 
   useEffect(() => {
     if (!open) return;
-    if (debouncedQuery.trim().length < 2) {
+    const q = debouncedQuery.trim();
+    if (q.length < 2) {
       setResults({ categories: [], products: [] });
+      lastFetchedRef.current = '';
       return;
     }
+    // Réouverture avec la même requête → résultats déjà en place, pas de refetch ni de loader.
+    if (q === lastFetchedRef.current) return;
     let cancelled = false;
     setLoading(true);
     fetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chaine: debouncedQuery.trim() }),
+      body: JSON.stringify({ chaine: q }),
     })
       .then((r) => r.json())
       .then((data: { html: string }) => {
         if (!cancelled) {
           setResults(parseSearchResults(data.html ?? ''));
+          lastFetchedRef.current = q;
           setLoading(false);
         }
       })
@@ -212,13 +226,13 @@ export function SearchModal({ open, onClose, initialQuery = '' }: SearchModalPro
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Rechercher du matériel parmi 1 million de produits"
-                className="h-12 w-full rounded-lg border border-primary bg-background pl-11 pr-4 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="h-12 w-full rounded-lg border border-primary bg-background pl-11 pr-4 text-base shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 autoComplete="off"
               />
             </div>
             <button
               type="submit"
-              className="h-12 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              className="h-12 rounded-lg bg-primary px-5 text-base font-semibold text-primary-foreground hover:opacity-90"
             >
               Rechercher
             </button>
@@ -237,10 +251,10 @@ export function SearchModal({ open, onClose, initialQuery = '' }: SearchModalPro
         {(loading || hasResults || (query.length >= 2 && !loading)) && (
           <div className="overflow-y-auto">
           <div className="mx-auto max-w-[1400px] border-t border-border px-4 pb-5 pt-3 lg:px-6">
-            {loading && <p className="text-sm text-muted-foreground">Recherche en cours…</p>}
+            {loading && <p className="text-base text-muted-foreground">Recherche en cours…</p>}
 
             {!loading && !hasResults && query.trim().length >= 2 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 Aucun résultat pour «&nbsp;{query}&nbsp;»
               </p>
             )}
@@ -316,7 +330,7 @@ function CategoryItem({ item, onClose }: { item: CategoryResult; onClose: () => 
       type="button"
       onClick={handleClick}
       disabled={navigating}
-      className="group flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-primary-soft disabled:cursor-wait disabled:opacity-60"
+      className="group flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left text-base text-foreground hover:bg-primary-soft disabled:cursor-wait disabled:opacity-60"
     >
       {navigating
         ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
@@ -356,7 +370,7 @@ function ProductItem({ item, onClose }: { item: ProductResult; onClose: () => vo
       type="button"
       onClick={handleClick}
       disabled={navigating}
-      className="group flex w-full cursor-pointer items-center gap-3 rounded-md border border-transparent p-2 text-left text-sm text-foreground hover:border-border hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
+      className="group flex w-full cursor-pointer items-center gap-3 rounded-md border border-transparent p-2 text-left text-base text-foreground hover:border-border hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
     >
       {/* Miniature */}
       {item.imageUrl ? (

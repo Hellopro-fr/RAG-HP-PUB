@@ -2,9 +2,28 @@ import Image from 'next/image';
 import { MapPin } from 'lucide-react';
 import { ScrollToTopButton } from './ScrollToTopButton';
 
-const FOOTER_COLUMNS = [
+interface FooterLink {
+  label: string;
+  href: string;
+  /** Classe d'accent optionnelle (override la couleur par défaut du lien). */
+  accentClass?: string;
+}
+
+interface FooterColumn {
+  title: string;
+  /** Classe d'accent appliquée au dernier mot du titre (ex. « acheteurs », « vendeurs »). */
+  accentClass?: string;
+  links: FooterLink[];
+}
+
+// Accents footer sur fond bleu : ambre (acheteurs) + corail (vendeurs).
+const ACCENT_ACHETEURS = 'text-[#ffc861]';
+const ACCENT_VENDEURS = 'text-[#ff9e7a]';
+
+const FOOTER_COLUMNS: FooterColumn[] = [
   {
     title: 'Pour les acheteurs',
+    accentClass: ACCENT_ACHETEURS,
     links: [
       { label: 'Connexion à mon espace', href: 'https://www.hellopro.fr/mhp/buyer/login?utm=mca' },
       { label: 'Liste produits', href: 'https://www.hellopro.fr/liste-produit.html' },
@@ -13,9 +32,10 @@ const FOOTER_COLUMNS = [
   },
   {
     title: 'Pour les vendeurs',
+    accentClass: ACCENT_VENDEURS,
     links: [
       { label: 'Connexion à mon espace vendeur', href: 'https://www.hellopro.fr/redirection_interne.php?v=mc' },
-      { label: 'Devenir vendeur sur Hellopro.fr', href: 'https://www.hellopro.fr/online/page_fournisseur.php?utm_source=www.hellopro.fr' },
+      { label: 'Devenir vendeur sur Hellopro.fr', href: 'https://www.hellopro.fr/online/page_fournisseur.php?utm_source=www.hellopro.fr', accentClass: `${ACCENT_VENDEURS} font-medium` },
     ],
   },
   {
@@ -41,12 +61,25 @@ const FOOTER_COLUMNS = [
   },
 ];
 
+/** Colore le dernier mot du titre (ex. « acheteurs », « vendeurs ») avec la classe d'accent. */
+function renderColumnTitle(col: FooterColumn) {
+  if (!col.accentClass) return col.title;
+  const idx = col.title.lastIndexOf(' ');
+  if (idx === -1) return <span className={col.accentClass}>{col.title}</span>;
+  return (
+    <>
+      {col.title.slice(0, idx + 1)}
+      <span className={col.accentClass}>{col.title.slice(idx + 1)}</span>
+    </>
+  );
+}
+
 /**
  * Footer global du site conseils.hellopro.fr
  */
 export function SiteFooter() {
   return (
-    <footer id="site-footer" className="min-[769px]:mt-16 border-t border-border bg-primary text-primary-foreground">
+    <footer id="site-footer" className="min-[769px]:mt-8 border-t border-border bg-primary text-primary-foreground">
       <div className="mx-auto max-w-[1400px] px-4 py-12 lg:px-6">
         <div className="mb-10">
           <div className="inline-block rounded bg-white px-3 py-2">
@@ -69,14 +102,18 @@ export function SiteFooter() {
           {FOOTER_COLUMNS.map((col) => (
             <div key={col.title}>
               <div className="mb-3 text-base font-bold uppercase tracking-wide text-primary-foreground/90">
-                {col.title}
+                {renderColumnTitle(col)}
               </div>
               <ul className="space-y-2 text-base text-primary-foreground/70">
                 {col.links.map((link) => (
                   <li key={link.href}>
                     <a
                       href={link.href}
-                      className="hover:text-primary-foreground hover:underline"
+                      className={
+                        link.accentClass
+                          ? `${link.accentClass} hover:underline`
+                          : 'hover:text-primary-foreground hover:underline'
+                      }
                     >
                       {link.label}
                     </a>

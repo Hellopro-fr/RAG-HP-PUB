@@ -130,13 +130,22 @@ export function Suppliers({ suppliers = [], infoRubriqueId, categoryLabel }: Sup
             ) : (
               <p className="mt-3 text-base text-foreground/90">{FALLBACK_DESC}</p>
             )}
-            <button
-              type="button"
-              onClick={() => setOpenSocId(String(s.id))}
-              className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-base font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
-            >
-              Envoyer un message
-            </button>
+            {s.urlFiche ? (
+              <a
+                href={s.urlFiche}
+                className="mt-auto block w-full rounded-md border border-primary bg-primary/5 py-2 text-center text-base font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
+              >
+                Voir la fiche
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setOpenSocId(String(s.id))}
+                className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-base font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
+              >
+                Envoyer un message
+              </button>
+            )}
           </article>
         ))}
       </div>
