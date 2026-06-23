@@ -1,13 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { context } from "./context.js";
-import { baseUrlKey, recordTier2Sample, maybeCommitTier2, tier2Evidence } from "./diezTier2.js";
+import { baseUrlKey, recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling } from "./diezTier2.js";
 import { ContentExtractorError } from "./class/ContentExtractorClient.js";
 
 const resetT2 = () => {
     context.diezTier2 = { active: true, buffer: new Map(), compared: 0, matches: 0, mismatches: 0, unusable: 0 };
     context.diezDecisionCommitted = false;
 };
+
+const resetCeiling = () => {
+    context.diezDecisionCommitted = false;
+    context.countDiez = 0;
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+    context.config.breakLimit = true;
+    context.diezClassification = { anchor: 0, spa: 0, ambiguous: 0, total: 0, samplesForTier2: [] };
+};
+const tmpStorage = () => fs.mkdtempSync(path.join(os.tmpdir(), "diez-ceiling-"));
 
 // Fake client: returns the html verbatim as "cleaned text" so identical html → match.
 const echoClient = { clean: async (h: string) => h } as any;
@@ -88,4 +101,41 @@ test("transient /clean error does not consume a comparison; buffer retained for 
     assert.equal(context.diezTier2.compared, 1);
     assert.equal(context.diezTier2.matches, 1);
     assert.equal(context.diezTier2.buffer.size, 0);
+});
+
+test("maybeDefaultAtCeiling: below 95, no commit", () => {
+    resetCeiling();
+    context.countDiez = 94;
+    const s = tmpStorage();
+    maybeDefaultAtCeiling(s);
+    assert.equal(context.diezDecisionCommitted, false);
+    assert.equal(context.config.bypassDiez, false);
+    assert.equal(context.config.breakLimit, true);
+    fs.rmSync(s, { recursive: true, force: true });
+});
+
+test("maybeDefaultAtCeiling: at 95 with no decision, commits default bypassDiez + arms 5000 backstop", () => {
+    resetCeiling();
+    context.countDiez = 95;
+    const s = tmpStorage();
+    maybeDefaultAtCeiling(s);
+    assert.equal(context.config.bypassDiez, true);
+    assert.equal(context.config.breakLimit, false);
+    assert.equal(context.diezDecisionCommitted, true);
+    // durable record written with the default source
+    const decision = JSON.parse(fs.readFileSync(path.join(s, "_diez_decision.json"), "utf-8"));
+    assert.equal(decision.decision, "bypassDiez");
+    assert.equal(decision.source, "default");
+    fs.rmSync(s, { recursive: true, force: true });
+});
+
+test("maybeDefaultAtCeiling: no-op once a decision is already committed", () => {
+    resetCeiling();
+    context.countDiez = 150;
+    context.diezDecisionCommitted = true; // e.g. tier-1 already committed skipDiez
+    const s = tmpStorage();
+    maybeDefaultAtCeiling(s);
+    assert.equal(context.config.bypassDiez, false); // not flipped
+    assert.equal(context.config.breakLimit, true);  // backstop not touched
+    fs.rmSync(s, { recursive: true, force: true });
 });
