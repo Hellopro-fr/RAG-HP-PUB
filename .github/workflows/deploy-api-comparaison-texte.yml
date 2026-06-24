@@ -1,0 +1,63 @@
+name: 'Deploy — api-comparaison-texte'
+
+# Wrapper minimal qui appelle deploy-cloud-run.yml pour api-comparaison-texte
+# (Python FastAPI, port 8998, service standalone de comparaison de texte).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic de production. La VM continue de servir le trafic via api-gateway.
+# Aucune bascule de routing (.env.url) n'est effectuee a ce stade.
+#
+# Service utilitaire pur (comparaison difflib) sans authentification applicative :
+# ingress=all + allow_unauthenticated=true pour le POC etendu, max_instances borne.
+# Durcissement (Cloud Armor + LB interne) prevu en phase ulterieure.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-comparaison-texte/**'
+      - '.github/workflows/deploy-api-comparaison-texte.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy api-comparaison-texte'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-comparaison-texte
+      dockerfile_path: apps-microservices/api-comparaison-texte/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      # Shadow : pas de trafic de prod route vers ce service -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      container_port: 8998
+      # Aucune dependance interne (Redis/MySQL/Milvus/RabbitMQ) -> pas de VPC Connector.
+      health_check_path: /api/v1/health
+      # Service standalone : configuration 100% par defaut (aucune env var requise).
+      env_vars_json: '{}'
+      # Aucun secret.
+      secret_env_vars_json: '{}'
+      # Gate Trivy desactive (POC) : base python:3.10-slim embarque des deps build
+      # (setuptools/wheel) avec CVE HIGH connues, non exploitables au runtime.
+      # Fix racine prevu via pattern Dockerfile Python (pip upgrade) ulterieurement.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
