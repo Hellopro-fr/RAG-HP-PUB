@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
 import { handleFormStepMessage } from '@/lib/analytics/formFunnelBridge';
-import { sendPageView } from '@/lib/analytics/sessionTracking';
+import { sendPageView, resolveTrackingSessionId } from '@/lib/analytics/sessionTracking';
 
 /**
  * Overlay iframe plein écran — Formulaire demande groupée HelloPro
@@ -99,6 +99,7 @@ export function IframeFormModal({
     `&category=${encodeURIComponent(category)}` +
     `&referer=${encodeURIComponent(referer)}` +
     `&ctx=next` +
+    `&tracking_session_id=${encodeURIComponent(resolveTrackingSessionId())}` +
     (startFromStep1 ? '&start=1' : '') +
     (withPrev ? '&prev=1' : '') +
     extraParamsStr +
