@@ -132,7 +132,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
           label={data.estimateLabel ?? 'Estimation de prix'}
           value={data.estimate}
           className="not-prose"
-          labelWidthClass="sm:w-[35%]"
+          labelWidthClass="sm:w-[40%]"
         />
       )}
       <div

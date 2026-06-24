@@ -144,6 +144,7 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
             </a>
             <a
               href="https://www.hellopro.fr/mhp/buyer/login?utm=mca"
+              aria-label="Mes demandes"
               className="ml-auto flex items-center gap-2 font-semibold text-foreground transition hover:text-primary"
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background">

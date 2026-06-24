@@ -75,10 +75,10 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         <p className="mb-3 text-base text-muted-foreground">
           En 30 secondes, sans engagement. Comparez les meilleurs fournisseurs.
         </p>
-        <h3 className="mb-3 text-lg font-bold text-foreground">
+        <h2 className="mb-3 text-lg font-bold text-foreground">
           {questionLabel}
           {isObligatoire && <span className="text-cta"> *</span>}
-        </h3>
+        </h2>
 
         {showError && (
           <p className="mb-3 flex items-center gap-1.5 text-base font-medium text-destructive">
@@ -111,7 +111,7 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         </ul>
 
         <div className="mt-3 flex items-center justify-center gap-1 border-t border-border pt-2 text-sm">
-          <div className="flex" aria-label="4,2 sur 5">
+          <div className="flex" role="img" aria-label="4,2 sur 5">
             {[1, 2, 3, 4].map((i) => (
               <Star key={i} className="h-3.5 w-3.5 fill-rating text-rating" />
             ))}

@@ -68,11 +68,11 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
             <span className="inline-flex w-fit items-center rounded-full bg-cta px-3 py-1 text-xs font-bold uppercase tracking-wide text-cta-foreground">
               Étape suivante
             </span>
-            <h3 className="text-2xl font-extrabold leading-tight lg:text-[1.75rem]">
+            <p className="text-2xl font-extrabold leading-tight lg:text-[1.75rem]">
               {title}
               <br />
               <span className="text-cta">{subtitle}</span>
-            </h3>
+            </p>
             <p className="text-base text-primary-foreground/85">
               Décrivez votre projet en 30 secondes et recevez{' '}
               <strong className="text-primary-foreground">jusqu&apos;à 3 devis gratuits</strong> de
@@ -86,7 +86,7 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
               ))}
             </ul>
             <div className="mt-2 flex items-center gap-2 text-sm text-primary-foreground/80">
-              <div className="flex" aria-label="4,2 sur 5">
+              <div className="flex" role="img" aria-label="4,2 sur 5">
                 {[1, 2, 3, 4].map((i) => (
                   <Star key={i} className="h-4 w-4 fill-rating text-rating" />
                 ))}
@@ -99,10 +99,11 @@ export function QuoteFormBlock({ data, formulaire_ao, infoRubrique }: QuoteFormB
 
           {/* ── Colonne droite — formulaire ── */}
           <div className="bg-card p-5 text-card-foreground lg:p-6">
-            <h4 className="mb-3 text-lg font-bold text-foreground">
+            {/* Invite de formulaire (pas un titre de structure) → <p> pour ne pas casser la hiérarchie des titres. */}
+            <p className="mb-3 text-lg font-bold text-foreground">
               {questionLabel}
               {isObligatoire && <span className="text-cta"> *</span>}
-            </h4>
+            </p>
 
             {showError && (
               <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-destructive">

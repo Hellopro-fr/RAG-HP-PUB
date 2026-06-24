@@ -148,7 +148,7 @@ class JobManager:
                     await cache_service.redis_client.set(
                         f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="processing", progress=10.0).json(),
-                        ex=settings.JOB_RESULT_TTL
+                        ex=settings.PROCESSING_STATUS_TTL_S
                     )
 
                     logger.info(f"Job {job_id}: Loading {len(inputs)} images...")
@@ -200,7 +200,7 @@ class JobManager:
                     await cache_service.redis_client.set(
                         f"job:{job_id}:status",
                         JobStatus(job_id=job_id, status="processing", progress=40.0).json(),
-                        ex=settings.JOB_RESULT_TTL
+                        ex=settings.PROCESSING_STATUS_TTL_S
                     )
 
                     logger.info(f"Job {job_id}: Processing comparisons...")

@@ -68,9 +68,9 @@ export function Sidebar({ items }: SidebarProps) {
   return (
     <aside className="lg:sticky lg:top-32 lg:self-start">
       <nav aria-label="Sommaire" className="rounded-xl border border-border bg-card p-5 shadow-sm">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+        <p className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
           Sommaire
-        </h2>
+        </p>
         <ul className="space-y-2 text-base">
           {items.map((item, i) => {
             const fill = fills[i] ?? 0;

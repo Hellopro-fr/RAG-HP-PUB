@@ -63,9 +63,9 @@ export function Suppliers({ suppliers = [], infoRubriqueId, categoryLabel }: Sup
     <section id="constructeurs" className="not-prose my-12 scroll-mt-32">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-2xl font-extrabold text-foreground">
+          <p className="text-2xl font-extrabold text-foreground">
             {categoryLabel ? `Nos fournisseurs ${avecDe(categoryLabel)}` : 'Nos fournisseurs'}
-          </h3>
+          </p>
         </div>
         {showArrows && (
           <div className="flex shrink-0 gap-2">
@@ -117,7 +117,7 @@ export function Suppliers({ suppliers = [], infoRubriqueId, categoryLabel }: Sup
                 <Building2 className="h-7 w-7" />
               )}
             </div>
-            <h3 className="text-lg font-extrabold text-foreground">{s.name}</h3>
+            <p className="text-lg font-extrabold text-foreground">{s.name}</p>
             {s.description ? (
               <div className="relative mt-3 max-h-[10rem] overflow-hidden text-base text-foreground/90 [&_*]:!text-base">
                 <div
