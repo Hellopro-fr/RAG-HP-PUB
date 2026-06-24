@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { Linkedin, Mail } from 'lucide-react';
+import { LinkedinIcon, Mail } from 'lucide-react';
 
 export interface AuthorData {
   name: string;
@@ -40,13 +40,13 @@ export function AuthorBlock({ author }: AuthorBlockProps) {
         )}
 
         <div className="flex-1">
-          <span className="text-xs font-semibold uppercase tracking-wide text-cta">
+          <span className="text-sm font-semibold uppercase tracking-wide text-cta">
             Guide écrit par
           </span>
-          <h3 className="text-xl font-extrabold text-foreground">
+          <p className="text-xl font-extrabold text-foreground">
             {author.name} · {author.role}
-          </h3>
-          <p className="mt-2 text-sm text-foreground/85">{author.bio}</p>
+          </p>
+          <p className="mt-2 text-base text-foreground/85">{author.bio}</p>
           <div className="mt-3 flex items-center justify-center gap-3 sm:justify-start">
             {author.linkedinUrl && (
               <a
@@ -55,7 +55,7 @@ export function AuthorBlock({ author }: AuthorBlockProps) {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
               >
-                <Linkedin className="h-3.5 w-3.5" /> LinkedIn
+                <LinkedinIcon className="h-3.5 w-3.5" /> LinkedIn
               </a>
             )}
             {author.contactEmail && (

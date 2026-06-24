@@ -6,6 +6,7 @@ import { ArrowRight } from 'lucide-react';
 import type { TexteImageBlockData } from '@/types/blocks/texte-image';
 import { IframeFormModal } from '@/components/conseil/IframeFormModal';
 import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
+import { EstimationBox } from './EstimationBox';
 
 interface TexteImageBlockProps {
   data: TexteImageBlockData;
@@ -85,7 +86,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
 
   const imageColAlign = data.imagePosition === 'left' ? 'md:items-start' : 'md:items-end';
   const imageCol = (
-    <figure className={`flex flex-col items-center ${imageColAlign}`}>
+    <figure className={`flex min-w-0 flex-col items-center ${imageColAlign}`}>
       <div className="w-fit max-w-full overflow-hidden rounded-xl">
         {imageEl}
       </div>
@@ -125,16 +126,14 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
   );
 
   const textCol = (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {data.estimate && (
-        <div className="inline-flex items-baseline gap-2 self-start rounded-md bg-primary-soft px-3 py-2">
-          {data.estimateLabel && (
-            <span className="text-sm font-semibold tracking-wide text-primary">
-              {data.estimateLabel}
-            </span>
-          )}
-          <span className="text-lg font-extrabold text-primary">{data.estimate}</span>
-        </div>
+        <EstimationBox
+          label={data.estimateLabel ?? 'Estimation de prix'}
+          value={data.estimate}
+          className="not-prose"
+          labelWidthClass="sm:w-[40%]"
+        />
       )}
       <div
         className="text-base leading-relaxed text-foreground/90
@@ -142,7 +141,8 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
           [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1
           [&_ol]:list-decimal [&_ol]:pl-5
           [&_li]:mb-1
-          [&_strong]:font-bold [&_b]:font-bold"
+          [&_strong]:font-bold [&_b]:font-bold
+          [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80"
         dangerouslySetInnerHTML={{ __html: data.html }}
       />
       {data.ctaLabel && ctaButton}

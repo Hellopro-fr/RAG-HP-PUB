@@ -15,8 +15,14 @@ describe('SiteFooter', () => {
 
   it('contains all 5 column headings', () => {
     render(<SiteFooter />);
-    expect(screen.getByText(/pour les acheteurs/i)).toBeDefined();
-    expect(screen.getByText(/pour les vendeurs/i)).toBeDefined();
+    // Titres « acheteurs » / « vendeurs » : dernier mot coloré dans un <span> → on matche
+    // le textContent complet du <div> titre (le matcher par défaut ne concatène pas les enfants).
+    expect(
+      screen.getByText((_, el) => el?.tagName === 'DIV' && el.textContent === 'Pour les acheteurs'),
+    ).toBeDefined();
+    expect(
+      screen.getByText((_, el) => el?.tagName === 'DIV' && el.textContent === 'Pour les vendeurs'),
+    ).toBeDefined();
     expect(screen.getByText(/à propos/i)).toBeDefined();
     expect(screen.getByText(/besoin d'aide/i)).toBeDefined();
     expect(screen.getByText(/informations légales/i)).toBeDefined();

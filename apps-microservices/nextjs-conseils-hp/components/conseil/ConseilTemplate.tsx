@@ -15,6 +15,7 @@ import { QuoteFormBlock } from './blocks/QuoteFormBlock';
 import type { FaqBlockData } from '@/types/blocks/faq';
 import { extractTOC } from '@/lib/blocks/extractTOC';
 import type { ConseilPage } from '@/types/conseils';
+import { StickyCtaBar } from './StickyCtaBar';
 import type { ResumeBlockData } from '@/types/blocks/resume';
 import type { ProduitsBlockData } from '@/types/blocks/produits';
 
@@ -96,6 +97,14 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       ? (contentBlocks[faqIndex - 1].data as { title: string }).title
       : undefined;
 
+  // Id du H2 repris pour la section FAQ → cohérence avec le sommaire (ancre + scroll-spy).
+  // Le sommaire (extractTOC) indexe ce H2 par son id ; la section FAQ doit donc porter cet id,
+  // sinon getElementById échoue et la progression du sommaire est faussée.
+  const h2BeforeFaqId =
+    faqIndex > 0 && contentBlocks[faqIndex - 1]?.type === 'h2'
+      ? (contentBlocks[faqIndex - 1].data as { id?: string }).id
+      : undefined;
+
   const renderBlocks = h2BeforeFaq
     ? contentBlocks.filter((_, i) => i !== faqIndex - 1)
     : contentBlocks;
@@ -116,17 +125,23 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
   const hasQuoteForm = contentBlocks.some((b) => b.type === 'quote-form');
   const showQuoteForm = !hasQuoteForm && !!page.formulaire_ao && page.pageType !== 'top';
 
-  // Mid-point insertion: advance if block before is a heading or block after is an image
+  // Mid-point insertion: place just before the first h2 at or after the mid-point.
+  // If no h2 exists after mid-point, fall back to skipping heading-preceded / image-starting positions.
   const IMAGE_TYPES = ['image', 'texte-image', 'image-texte', 'image-image'];
   let quoteFormAt = Math.floor(blocksBeforeBrochure.length / 2);
-  while (
-    quoteFormAt < blocksBeforeBrochure.length &&
-    (
-      ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '') ||
-      IMAGE_TYPES.includes(blocksBeforeBrochure[quoteFormAt]?.type ?? '')
-    )
-  ) {
-    quoteFormAt++;
+  const nextH2FromMid = blocksBeforeBrochure.findIndex((b, i) => i >= quoteFormAt && b.type === 'h2');
+  if (nextH2FromMid !== -1) {
+    quoteFormAt = nextH2FromMid;
+  } else {
+    while (
+      quoteFormAt < blocksBeforeBrochure.length &&
+      (
+        ['h2', 'h3'].includes(blocksBeforeBrochure[quoteFormAt - 1]?.type ?? '') ||
+        IMAGE_TYPES.includes(blocksBeforeBrochure[quoteFormAt]?.type ?? '')
+      )
+    ) {
+      quoteFormAt++;
+    }
   }
   const blocksBeforeQuoteForm = showQuoteForm
     ? blocksBeforeBrochure.slice(0, quoteFormAt)
@@ -144,14 +159,23 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         pageType={page.pageType}
         author={page.author}
         publishedAt={page.updatedAt}
+        readTime={page.tempsLecture !== undefined ? `${page.tempsLecture} min de lecture` : undefined}
         resume={resumeItems}
         resumeTitle={resumeTitle}
         resumeHtml={resumeHtml}
         breadcrumb={breadcrumb}
-        slot={page.pageType !== 'top' ? (
+        slotMobile={page.pageType !== 'top' ? (
           <HeroQuoteForm
             question={page.formulaire_ao ?? null}
             infoRubrique={page.infoRubrique ?? null}
+            labelAs="h2"
+          />
+        ) : undefined}
+        slotDesktop={page.pageType !== 'top' ? (
+          <HeroQuoteForm
+            question={page.formulaire_ao ?? null}
+            infoRubrique={page.infoRubrique ?? null}
+            labelAs="p"
           />
         ) : undefined}
       />
@@ -215,6 +239,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
               <FaqBlock
                 key={block.id}
                 data={{ ...(block.data as unknown as FaqBlockData), title: h2BeforeFaq }}
+                sectionId={h2BeforeFaqId}
               />
             ) : block.id === firstTextBlockId ? (
               <div key={block.id} id={FIRST_BLOCK_ANCHOR} className="scroll-mt-28">
@@ -230,6 +255,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
             <Suppliers
               suppliers={page.suppliers}
               infoRubriqueId={page.infoRubrique?.id}
+              categoryLabel={page.infoRubrique?.libelle}
             />
           )}
           <Crossell liensIntexts={page.liensIntexts} conseilsAssocies={page.conseilsAssocies} />
@@ -268,6 +294,8 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       )}
 
       <SiteFooter />
+
+      {page.ctaSticky && <StickyCtaBar ctaSticky={page.ctaSticky} />}
     </>
   );
 }

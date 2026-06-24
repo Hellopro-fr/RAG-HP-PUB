@@ -75,7 +75,7 @@ export function AoChoixGrid({ question, onChoixClick, onAutreChange }: AoChoixGr
             )}
 
             {/* Label */}
-            <div className={`text-[11px] font-medium leading-tight group-hover:text-primary ${
+            <div className={`text-base font-medium leading-tight group-hover:text-primary ${
               isActive ? 'text-primary' : 'text-foreground'
             }`}>
               {c.label}

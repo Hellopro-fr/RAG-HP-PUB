@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
+import { handleFormStepMessage } from '@/lib/analytics/formFunnelBridge';
+import { sendPageView, resolveTrackingSessionId } from '@/lib/analytics/sessionTracking';
 
 /**
  * Overlay iframe plein écran — Formulaire demande groupée HelloPro
@@ -52,6 +54,14 @@ interface IframeFormModalProps {
   withPrev?: boolean;
   /** Paramètres supplémentaires à ajouter tels quels à l'URL iframe (ex: soc, origine…) */
   extraParams?: Record<string, string>;
+  /**
+   * Le bloc appelant a déjà poussé lui-même l'étape 1 du funnel (`1ere-question`) — cas du
+   * Hero et du bloc QuoteForm, qui affichent la 1re question inline et la mesurent au scroll.
+   * → on déduplique l'étape 1 relayée par l'iframe (sinon double comptage quand la modale
+   * démarre à l'étape 1 sans pré-remplissage). Les blocs qui ne poussent pas (TexteImage, CTA)
+   * laissent l'iframe mesurer l'étape 1.
+   */
+  ownsStep1?: boolean;
   open: boolean;
   onClose: () => void;
 }
@@ -65,10 +75,13 @@ export function IframeFormModal({
   startFromStep1 = false,
   withPrev = false,
   extraParams,
+  ownsStep1 = false,
   open,
   onClose,
 }: IframeFormModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Étapes funnel déjà poussées (dédup), réinitialisées à chaque ouverture de la modale.
+  const pushedStepsRef = useRef<Set<string>>(new Set());
   const { attempt, formReady, markReady, handleIframeError } = useIframeAutoRetry({
     open,
     onClose,
@@ -86,6 +99,7 @@ export function IframeFormModal({
     `&category=${encodeURIComponent(category)}` +
     `&referer=${encodeURIComponent(referer)}` +
     `&ctx=next` +
+    `&tracking_session_id=${encodeURIComponent(resolveTrackingSessionId())}` +
     (startFromStep1 ? '&start=1' : '') +
     (withPrev ? '&prev=1' : '') +
     extraParamsStr +
@@ -95,9 +109,22 @@ export function IframeFormModal({
   useEffect(() => {
     if (!open) return;
 
+    // Re-envoie un page_view à l'ouverture du formulaire avec le cookie courant.
+    // Raison : ajax_trace_session.php (www.hellopro.fr) écrase notre cookie avec le
+    // PHPSESSID lors du premier appel. Si l'utilisateur ouvre le formulaire sans avoir
+    // navigué (SPA) entre-temps, il n'y a pas encore de page_vue sous la nouvelle session
+    // → tracer_lead_conversion_php ne trouve rien. Ce page_view garantit qu'il en existe un.
+    sendPageView();
+
+    // reset dédup funnel à chaque ouverture ; si le bloc possède déjà l'étape 1, on la pré-marque
+    pushedStepsRef.current = new Set(ownsStep1 ? ['1ere-question'] : []);
+
     function onMessage(e: MessageEvent) {
       if (e.origin !== 'https://www.hellopro.fr') return;
       const data = e.data as Record<string, unknown>;
+
+      /* 0. Étape funnel relayée par l'iframe → URI conseils + push dataLayer parent */
+      if (handleFormStepMessage(data, pushedStepsRef.current)) return;
 
       /* 1. Formulaire prêt → masquer le loader + pré-remplir step 1 */
       if (data?.type === 'hellopro_form_ready_for_minisite' && data?.loaded) {

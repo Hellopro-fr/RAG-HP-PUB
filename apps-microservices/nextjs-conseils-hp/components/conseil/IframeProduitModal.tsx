@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
+import { handleFormStepMessage } from '@/lib/analytics/formFunnelBridge';
+import { sendPageView, resolveTrackingSessionId } from '@/lib/analytics/sessionTracking';
 
 /**
  * Overlay iframe plein écran — Formulaire demande produit HelloPro
@@ -39,6 +41,8 @@ export function IframeProduitModal({
   onClose,
 }: IframeProduitModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Étapes funnel déjà poussées (dédup), réinitialisées à chaque ouverture de la modale.
+  const pushedStepsRef = useRef<Set<string>>(new Set());
   const { attempt, formReady, markReady, handleIframeError } = useIframeAutoRetry({
     open,
     onClose,
@@ -56,17 +60,23 @@ export function IframeProduitModal({
     `&src_integ=${srcInteg}` +
     `&referer=conseilsnextjs` +
     `&ctx=next` +
+    `&tracking_session_id=${encodeURIComponent(resolveTrackingSessionId())}` +
     extraParamsStr +
     `&_retry=${attempt}`;
 
   /* postMessages */
   useEffect(() => {
     if (!open) return;
+    sendPageView(); // synchronise la session avant soumission (même logique que IframeFormModal)
+    pushedStepsRef.current = new Set(); // reset dédup funnel à chaque ouverture
 
     function onMessage(e: MessageEvent) {
       console.log('[produit msg reçu]', e.origin, e.data);
       if (e.origin !== 'https://www.hellopro.fr') return;
       const data = e.data as Record<string, unknown>;
+
+      /* 0. Étape funnel relayée par l'iframe → URI conseils + push dataLayer parent */
+      if (handleFormStepMessage(data, pushedStepsRef.current)) return;
 
       /* 1. Formulaire prêt → masquer le loader */
       if (data?.type === 'hellopro_form_ready_for_minisite' && data?.loaded) {

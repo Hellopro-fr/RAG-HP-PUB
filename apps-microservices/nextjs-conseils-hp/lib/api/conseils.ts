@@ -172,6 +172,8 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
       ...(canonicalUrl ? { canonicalUrl } : {}),
       breadcrumb,
       ...(updatedAt ? { updatedAt } : {}),
+      ...(transformed.tempsLecture ? { tempsLecture: transformed.tempsLecture } : {}),
+      ...('ctaSticky' in transformed ? { ctaSticky: transformed.ctaSticky } : {}),
       hero: {
         ...base.hero,
         title: raw.titre,
@@ -197,12 +199,13 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
         : {}),
       // Fournisseurs issus de top_clients — undefined si absent/vide (masque le mock)
       suppliers: Array.isArray(raw.top_clients) && raw.top_clients.length > 0
-        ? (raw.top_clients as Array<{ id_societe: string; nom_commercial: string; logo: string; profil_societe_francais?: string }>)
+        ? (raw.top_clients as Array<{ id_societe: string; nom_commercial: string; logo: string; profil_societe_francais?: string; url_fiche?: string }>)
             .map((c) => ({
               id: String(c.id_societe),
               name: c.nom_commercial,
               logoPath: c.logo ? `https://www.hellopro.fr/${c.logo}` : '',
               ...(c.profil_societe_francais ? { description: c.profil_societe_francais } : {}),
+              ...(c.url_fiche ? { urlFiche: c.url_fiche } : {}),
             }))
         : undefined,
     };

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { ArrowRight, Calendar, Clock, ChevronDown, Lightbulb, Home } from 'lucide-react';
+import { Calendar, Clock, ChevronDown, Lightbulb, Home } from 'lucide-react';
 import type { HeroData, ConseilPageType } from '@/types/conseils';
 import type { ResumeItem } from '@/types/blocks/resume';
 
@@ -23,8 +23,12 @@ interface HeroProps {
   resumeTitle?: string;
   /** HTML brut du bloc type 15 de l'API — prioritaire sur resume si présent */
   resumeHtml?: string;
-  /** Slot droit : QuoteForm (prix/autre) ou SuppliersCarousel (top) */
-  slot?: React.ReactNode;
+  /**
+   * Formulaire devis hero. Deux copies pour le responsive : `slotMobile` (visible < lg,
+   * porte le vrai h2) et `slotDesktop` (visible ≥ lg, libellé en p) → un seul h2 dans le DOM.
+   */
+  slotMobile?: React.ReactNode;
+  slotDesktop?: React.ReactNode;
 }
 
 export function Hero({
@@ -37,22 +41,11 @@ export function Hero({
   resume = [],
   resumeTitle,
   resumeHtml,
-  slot,
+  slotMobile,
+  slotDesktop,
 }: HeroProps) {
   return (
-    <section className="relative overflow-hidden bg-primary text-primary-foreground">
-      {data.image && (
-        <div
-          className="absolute inset-0 opacity-25"
-          style={{
-            backgroundImage: `linear-gradient(135deg, oklch(0.36 0.18 265 / 0.85), oklch(0.2 0.1 270 / 0.95)), url(${data.image})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-          aria-hidden="true"
-        />
-      )}
-
+    <section id="hero-trigger" className="relative overflow-hidden bg-primary text-primary-foreground">
       <div className="relative mx-auto max-w-[1400px] px-4 py-4 lg:px-6 lg:py-5">
         {/* Breadcrumb */}
         {breadcrumb.length > 0 && (
@@ -75,37 +68,26 @@ export function Hero({
           </nav>
         )}
 
+        {/* Badge hors grille → les 2 colonnes démarrent au niveau du H1 (form aligné sur le H1) */}
+        <span className="mb-2 inline-flex items-center rounded-full bg-cta px-3 py-1 text-xs font-bold uppercase tracking-wide text-cta-foreground">
+          Conseil d&apos;expert
+        </span>
+
         <div className="grid gap-5 lg:grid-cols-[1.1fr_1fr] lg:items-start">
           <div>
-            <span className="mb-2 inline-flex items-center rounded-full bg-cta px-3 py-1 text-xs font-bold uppercase tracking-wide text-cta-foreground">
-              Conseil d&apos;expert
-            </span>
-
-            <h1 className="text-2xl font-extrabold leading-[1.1] tracking-tight sm:text-3xl lg:text-[2rem]">
+            <h1 className="text-3xl font-extrabold leading-[1.1] tracking-tight sm:text-4xl lg:text-[2.75rem]">
               {data.title}
             </h1>
-
-            {data.subtitle && (
-              <div className="mt-2 max-w-xl">
-                <div
-                  className="line-clamp-2 text-sm leading-relaxed text-primary-foreground/90 [&_a]:underline [&_a]:decoration-primary-foreground/60 [&_a:hover]:decoration-primary-foreground"
-                  dangerouslySetInnerHTML={{ __html: highlightPrices(data.subtitle) }}
-                />
-                <a
-                  href="#premier-bloc-texte"
-                  className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
-                >
-                  Lire la suite <ArrowRight className="h-3 w-3" />
-                </a>
-              </div>
-            )}
 
             {(resumeHtml || resume.length > 0) && (
               <KeyTakeaways items={resume} html={resumeHtml} title={resumeTitle} />
             )}
 
+            {/* Formulaire — copie mobile (entre résumé et métas). Porte le vrai h2. Masquée en desktop. */}
+            {slotMobile && <div className="mt-4 lg:hidden">{slotMobile}</div>}
+
             {/* Meta auteur / date */}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-primary-foreground/80">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-base text-primary-foreground/80">
               {author && (
                 <a href="#author" className="flex items-center gap-2 hover:text-primary-foreground">
                   {author.photo ? (
@@ -149,19 +131,11 @@ export function Hero({
             )}
           </div>
 
-          {/* Slot droit (QuoteForm ou SuppliersCarousel) */}
-          {slot && <div>{slot}</div>}
+          {/* Formulaire — copie desktop (colonne droite). Libellé en <p> → pas de h2 dupliqué. */}
+          {slotDesktop && <div className="hidden lg:block">{slotDesktop}</div>}
         </div>
       </div>
     </section>
-  );
-}
-
-/** Entoure les prix (nombre + €) d'un <span> orange dans une chaîne HTML. */
-function highlightPrices(html: string): string {
-  return html.replace(
-    /(\d[\d  ]*€(?:\/[a-zA-ZÀ-ÿ²³]+)*)/g,
-    '<span class="font-bold text-cta">$1</span>',
   );
 }
 
@@ -174,9 +148,9 @@ function KeyTakeaways({ items, html, title: _title }: { items: ResumeItem[]; htm
   return (
     <aside className="mt-3 max-w-xl rounded-xl border border-primary-foreground/20 bg-primary-foreground/10 p-3 backdrop-blur-sm">
       <div className="flex gap-2">
-        <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cta" />
+        <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-cta" />
         <div
-          className="min-w-0 flex-1 text-[13px] leading-snug text-primary-foreground/90
+          className="min-w-0 flex-1 text-base leading-snug text-primary-foreground/90
             [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-4
             [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-4
             [&_li]:mb-0.5
@@ -198,7 +172,7 @@ function KeyTakeaways({ items, html, title: _title }: { items: ResumeItem[]; htm
                   <button
                     type="button"
                     onClick={() => setOpen(v => !v)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-cta hover:underline"
+                    className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-cta hover:underline"
                   >
                     {open ? 'Voir moins' : `Voir plus (+${allLis.length - 2})`}
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -243,69 +217,42 @@ function PriceRangeVisual({
 }: {
   estimation: NonNullable<HeroData['estimation']>;
 }) {
-  const mid = Math.round((estimation.min + estimation.max) / 2).toLocaleString('fr-FR');
   const min = estimation.min.toLocaleString('fr-FR');
   const max = estimation.max.toLocaleString('fr-FR');
 
   return (
-    <div className="relative mt-3 max-w-xl overflow-hidden rounded-xl bg-primary-foreground/[0.06] px-4 pb-3 pt-3 ring-1 ring-primary-foreground/10 backdrop-blur-sm">
-      {/* Courbe décorative en fond */}
-      <svg
-        viewBox="0 0 400 100"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-full w-full"
-      >
-        <defs>
-          <linearGradient id="priceCurveStroke" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0%" stopColor="white" stopOpacity="0" />
-            <stop offset="50%" stopColor="hsl(27 90% 60%)" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="white" stopOpacity="0" />
-          </linearGradient>
-          <radialGradient id="priceCurveGlow" cx="0.5" cy="1" r="0.6">
-            <stop offset="0%" stopColor="hsl(27 90% 60%)" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="hsl(27 90% 60%)" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <ellipse cx="200" cy="100" rx="140" ry="70" fill="url(#priceCurveGlow)" />
-        <path
-          d="M 0 95 C 90 95, 140 30, 200 30 C 260 30, 310 95, 400 95"
-          fill="none"
-          stroke="url(#priceCurveStroke)"
-          strokeWidth="1.25"
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="relative mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-primary-foreground">
+    <div className="relative mt-3 max-w-xl rounded-xl bg-primary-foreground/[0.06] px-4 pb-4 pt-3 ring-1 ring-primary-foreground/10 backdrop-blur-sm">
+      <div className="mb-5 text-sm font-bold uppercase tracking-[0.2em] text-primary-foreground">
         Estimation de prix
       </div>
-      <div className="relative grid grid-cols-3 gap-1">
-        <div className="rounded-lg px-3 py-2 text-left">
+
+      {/*
+        Curseur de prix purement décoratif (statique, non interactif) :
+        piste pleine largeur, portion orange entre deux poignées fixes.
+        Les poignées ne bougent pas — elles bornent visuellement la fourchette min/max.
+      */}
+      <div className="relative h-2 rounded-full bg-primary-foreground/20" aria-hidden="true">
+        <span className="absolute inset-y-0 left-[6%] right-[6%] rounded-full bg-cta" />
+        <span className="absolute left-[6%] top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-4 ring-primary-foreground/25" />
+        <span className="absolute right-[6%] top-1/2 h-[18px] w-[18px] translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-4 ring-primary-foreground/25" />
+      </div>
+
+      <div className="mt-4 flex items-end justify-between">
+        <div className="text-left">
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-foreground/85">
-            Bas
-          </div>
-          <div className="mt-1 text-xl font-extrabold text-primary-foreground">
-            {min} {estimation.unit}
-          </div>
-          <div className="mt-2 h-[3px] w-8 rounded-full bg-primary-foreground/30" />
-        </div>
-        <div className="rounded-lg bg-primary-foreground/[0.09] px-3 py-2 text-left ring-1 ring-primary-foreground/10">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cta">
-            Moyen
+            Mini
           </div>
           <div className="mt-1 text-2xl font-extrabold text-primary-foreground">
-            {mid} {estimation.unit}
+            {min} {estimation.unit}
           </div>
-          <div className="mt-2 h-[3px] w-12 rounded-full bg-cta" />
         </div>
-        <div className="rounded-lg px-3 py-2 text-left">
+        <div className="text-right">
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-foreground/85">
-            Haut
+            Maxi
           </div>
-          <div className="mt-1 text-xl font-extrabold text-primary-foreground">
+          <div className="mt-1 text-2xl font-extrabold text-primary-foreground">
             {max} {estimation.unit}
           </div>
-          <div className="mt-2 h-[3px] w-8 rounded-full bg-primary-foreground/30" />
         </div>
       </div>
     </div>

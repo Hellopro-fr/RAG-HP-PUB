@@ -37,9 +37,9 @@ export function ProduitsBlock({ data }: { data: ProduitsBlockData }) {
     <section className="my-8">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold leading-snug text-foreground">
+          <p className="text-2xl font-extrabold leading-snug text-foreground">
             {titre ?? 'Les produits les plus populaires sur hellopro.fr'}
-          </h2>
+          </p>
           <div className="mt-1 h-0.5 w-10 rounded-full bg-primary" />
         </div>
 
@@ -120,12 +120,12 @@ function ProductCard({ product, onContact }: ProductCardProps) {
             sizes="240px"
           />
         </div>
-        <p className="line-clamp-2 text-sm font-bold leading-tight text-foreground">
+        <p className="line-clamp-2 text-base font-bold leading-tight text-foreground">
           {product.name}
         </p>
       </a>
 
-      <p className={`mt-auto pt-2 text-sm ${product.priceHt ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+      <p className={`mt-auto pt-2 text-base ${product.priceHt ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
         {priceLabel}
       </p>
 
@@ -133,7 +133,7 @@ function ProductCard({ product, onContact }: ProductCardProps) {
       <button
         type="button"
         onClick={onContact}
-        className="mt-3 cursor-pointer rounded border border-primary px-3 py-1.5 text-center text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+        className="mt-3 cursor-pointer rounded border border-primary px-3 py-1.5 text-center text-base font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
       >
         Envoyer un message
       </button>

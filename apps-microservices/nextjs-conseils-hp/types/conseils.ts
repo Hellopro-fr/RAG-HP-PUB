@@ -20,6 +20,7 @@ export type ConseilBlockType =
   | 'produits'
   | 'tableau-html'
   | 'tableau-prix'
+  | 'estimation-prix' // Tableau prix "single" (type 11 BO non fusionné) — box estimation
   | 'faq'
   | 'type-section'  // Section par type (animal, produit…) avec image, estimation, bullets
   | 'brochure'      // Bloc guide/brochure téléchargeable avec form email
@@ -81,6 +82,8 @@ export interface Supplier {
   /** URL complète du logo, construite par le fetcher (ex. https://www.hellopro.fr/images/logo/...) */
   logoPath: string;
   description?: string;
+  /** URL de la fiche société (champ url_fiche de l'API) — cible du bouton « Voir la fiche ». */
+  urlFiche?: string;
 }
 
 /** Page conseil associée — "Pour aller plus loin" */
@@ -104,6 +107,15 @@ export interface LienInterne {
   prix?: string;
 }
 
+export interface CtaSticky {
+  wording: string;
+  sous_titre?: string;
+  label_bouton: string;
+  eligible_ao: boolean;
+  id_rubrique?: string;
+  lien_redirection?: string | null;
+}
+
 export interface ConseilPage {
   slug: string;
   pageType: ConseilPageType;
@@ -115,6 +127,10 @@ export interface ConseilPage {
   author?: AuthorInfo;
   /** Date de dernière mise à jour, formatée en français (ex: "Mis à jour le 28 avril 2026") */
   updatedAt?: string;
+  /** Temps de lecture estimé en minutes (issu du champ temps_lecture de l'API) */
+  tempsLecture?: number;
+  /** Barre CTA sticky — null si non éligible, absent si non renvoyé par l'API */
+  ctaSticky?: CtaSticky | null;
   breadcrumb?: Array<{ label: string; href?: string }>;
   formulaire_ao?: AoFormQuestion | null;
   /** Rubrique principale de la page — source de l'id_rubrique et du libellé pour l'iframe */

@@ -169,6 +169,16 @@ export interface PhpTopClient {
   profil_societe_francais?: string;
 }
 
+export interface PhpCtaSticky {
+  wording: string;
+  sous_titre?: string;
+  label_bouton: string;
+  /** 1 = ouvre le formulaire AO / 0 = redirige vers lien_redirection */
+  eligible_ao: 0 | 1 | boolean;
+  id_rubrique?: string;
+  lien_redirection?: string | null;
+}
+
 export interface PhpConseilPage {
   id: number;
   titre: string;
@@ -190,6 +200,10 @@ export interface PhpConseilPage {
   pages_conseils_associees?: PhpConseilAssocie[];
   formulaire_ao?: PhpAoQuestion[];
   top_clients?: PhpTopClient[];
+  /** Temps de lecture estimé en minutes */
+  temps_lecture?: number;
+  /** Barre CTA sticky — null si la page n'est pas éligible */
+  cta_sticky?: PhpCtaSticky | null;
   header?: unknown;
   footer?: unknown;
 }

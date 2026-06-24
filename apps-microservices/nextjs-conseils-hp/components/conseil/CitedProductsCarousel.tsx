@@ -13,7 +13,17 @@ export function CitedProductsCarousel({ items }: CitedProductsCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const showArrows = items.length > 4;
+
+  // Dédup des liens (l'API peut renvoyer des doublons) — par URL, fallback id.
+  const seen = new Set<string>();
+  const uniqueItems = items.filter((lien) => {
+    const key = lien.url || String(lien.id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const showArrows = uniqueItems.length > 4;
 
   const updateScrollState = () => {
     const el = scrollRef.current;
@@ -33,10 +43,10 @@ export function CitedProductsCarousel({ items }: CitedProductsCarouselProps) {
   };
 
   return (
-    <div>
+    <div id="produits-cites">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-extrabold text-foreground">
-          Matériels &amp; bâtiments cités dans cet article
+          Nos solutions, matériels &amp; services cités dans cet article
         </h2>
 
         {showArrows && (
@@ -70,7 +80,7 @@ export function CitedProductsCarousel({ items }: CitedProductsCarouselProps) {
             : 'mt-5 grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4'
         }
       >
-        {items.map((lien) => (
+        {uniqueItems.map((lien) => (
           <a
             key={lien.id}
             href={lien.url}
@@ -95,13 +105,13 @@ export function CitedProductsCarousel({ items }: CitedProductsCarouselProps) {
             </div>
 
             <div className="flex flex-1 flex-col gap-2 p-3">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-accent">
+              <span className="text-sm font-bold uppercase tracking-wide text-accent">
                 {lien.titre}
               </span>
-              <p className="line-clamp-2 text-sm font-bold leading-snug text-foreground">
+              <p className="line-clamp-2 text-base font-bold leading-snug text-foreground">
                 {lien.description}
               </p>
-              <span className="mt-auto text-sm font-semibold text-primary">
+              <span className="mt-auto text-base font-semibold text-primary">
                 {lien.prix ?? 'Sur devis'}
               </span>
             </div>

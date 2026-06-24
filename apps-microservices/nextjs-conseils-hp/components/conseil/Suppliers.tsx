@@ -8,6 +8,17 @@ import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
 
 const FALLBACK_DESC = 'Fournisseur référencé sur HelloPro — demandez votre devis gratuitement.';
 
+/**
+ * Construit « de {libellé} » avec élision devant voyelle / h muet : « d'{libellé} ».
+ * normalize('NFD') gère les voyelles accentuées (É, À…). Limite connue : le h aspiré
+ * (« de hangar ») est rare dans les libellés catégories et reste élidé ici.
+ */
+function avecDe(label: string): string {
+  const t = label.trim();
+  const first = t.normalize('NFD').charAt(0).toLowerCase();
+  return 'aeiouhyœæ'.includes(first) ? `d'${t}` : `de ${t}`;
+}
+
 function sanitizeHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
@@ -20,9 +31,11 @@ interface SuppliersProps {
   suppliers?: Supplier[];
   /** id de la rubrique — utilisé comme paramètre f dans contact_info.php */
   infoRubriqueId?: number;
+  /** Libellé de la catégorie (info_rubrique.libelle de l'API) — titre dynamique du bloc. */
+  categoryLabel?: string;
 }
 
-export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
+export function Suppliers({ suppliers = [], infoRubriqueId, categoryLabel }: SuppliersProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -50,11 +63,8 @@ export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
     <section id="constructeurs" className="not-prose my-12 scroll-mt-32">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-extrabold text-foreground">
-            Nos fournisseurs de bâtiments d&apos;élevage
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Sélection de constructeurs référencés sur HelloPro.
+          <p className="text-2xl font-extrabold text-foreground">
+            {categoryLabel ? `Nos fournisseurs ${avecDe(categoryLabel)}` : 'Nos fournisseurs'}
           </p>
         </div>
         {showArrows && (
@@ -107,26 +117,35 @@ export function Suppliers({ suppliers = [], infoRubriqueId }: SuppliersProps) {
                 <Building2 className="h-7 w-7" />
               )}
             </div>
-            <h3 className="text-lg font-extrabold text-foreground">{s.name}</h3>
+            <p className="text-lg font-extrabold text-foreground">{s.name}</p>
             {s.description ? (
-              <div className="relative mt-3 max-h-[10rem] overflow-hidden text-sm text-foreground/90 [&_*]:!text-sm">
+              <div className="relative mt-3 max-h-[10rem] overflow-hidden text-base text-foreground/90 [&_*]:!text-base">
                 <div
-                  className="[&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-normal [&_b]:font-normal [&_u]:no-underline [&_h1]:text-sm [&_h1]:font-normal [&_h2]:text-sm [&_h2]:font-normal [&_h3]:text-sm [&_h3]:font-normal [&_h4]:text-sm [&_h4]:font-normal [&_a]:text-primary [&_a]:underline"
+                  className="[&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1 [&_strong]:font-normal [&_b]:font-normal [&_u]:no-underline [&_h1]:text-base [&_h1]:font-normal [&_h2]:text-base [&_h2]:font-normal [&_h3]:text-base [&_h3]:font-normal [&_h4]:text-base [&_h4]:font-normal [&_a]:text-primary [&_a]:underline"
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(s.description) }}
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
                 <span className="absolute bottom-0.5 right-1 text-xs text-foreground/50">…</span>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-foreground/90">{FALLBACK_DESC}</p>
+              <p className="mt-3 text-base text-foreground/90">{FALLBACK_DESC}</p>
             )}
-            <button
-              type="button"
-              onClick={() => setOpenSocId(String(s.id))}
-              className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
-            >
-              Demander un devis
-            </button>
+            {s.urlFiche ? (
+              <a
+                href={s.urlFiche}
+                className="mt-auto block w-full rounded-md border border-primary bg-primary/5 py-2 text-center text-base font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
+              >
+                Voir la fiche
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setOpenSocId(String(s.id))}
+                className="mt-auto w-full cursor-pointer rounded-md border border-primary bg-primary/5 py-2 text-base font-bold text-primary transition hover:bg-primary hover:text-primary-foreground"
+              >
+                Envoyer un message
+              </button>
+            )}
           </article>
         ))}
       </div>
