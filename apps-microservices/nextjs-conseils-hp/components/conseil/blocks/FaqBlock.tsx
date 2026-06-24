@@ -12,9 +12,14 @@ function sanitizeHtml(html: string): string {
 
 interface FaqBlockProps {
   data: FaqBlockData;
+  /**
+   * Id de la section — doit correspondre à l'id du H2 indexé par le sommaire
+   * (ancre + scroll-spy). Repli `"faq"` si absent.
+   */
+  sectionId?: string;
 }
 
-export function FaqBlock({ data }: FaqBlockProps) {
+export function FaqBlock({ data, sectionId }: FaqBlockProps) {
   const [openIndex, setOpenIndex] = useState<number>(0);
   // Titre tel quel (le préfixe « FAQ : » de l'API est conservé).
   // Cas où le BO ne renvoie qu'un « FAQ » générique (ou vide) → titre par défaut complet.
@@ -22,7 +27,7 @@ export function FaqBlock({ data }: FaqBlockProps) {
   const isGeneric = rawTitle === '' || /^faq\s*:?\s*$/i.test(rawTitle);
   const faqTitle = isGeneric ? 'FAQ : Vos questions les plus fréquentes' : rawTitle;
   return (
-    <section id="faq" className="not-prose my-12 scroll-mt-32">
+    <section id={sectionId || 'faq'} className="not-prose my-12 scroll-mt-32">
       <div className="mb-6">
         <h2 className="text-3xl font-extrabold text-foreground">{faqTitle}</h2>
       </div>

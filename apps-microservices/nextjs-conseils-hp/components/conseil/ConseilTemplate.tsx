@@ -97,6 +97,14 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
       ? (contentBlocks[faqIndex - 1].data as { title: string }).title
       : undefined;
 
+  // Id du H2 repris pour la section FAQ → cohérence avec le sommaire (ancre + scroll-spy).
+  // Le sommaire (extractTOC) indexe ce H2 par son id ; la section FAQ doit donc porter cet id,
+  // sinon getElementById échoue et la progression du sommaire est faussée.
+  const h2BeforeFaqId =
+    faqIndex > 0 && contentBlocks[faqIndex - 1]?.type === 'h2'
+      ? (contentBlocks[faqIndex - 1].data as { id?: string }).id
+      : undefined;
+
   const renderBlocks = h2BeforeFaq
     ? contentBlocks.filter((_, i) => i !== faqIndex - 1)
     : contentBlocks;
@@ -156,10 +164,18 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
         resumeTitle={resumeTitle}
         resumeHtml={resumeHtml}
         breadcrumb={breadcrumb}
-        slot={page.pageType !== 'top' ? (
+        slotMobile={page.pageType !== 'top' ? (
           <HeroQuoteForm
             question={page.formulaire_ao ?? null}
             infoRubrique={page.infoRubrique ?? null}
+            labelAs="h2"
+          />
+        ) : undefined}
+        slotDesktop={page.pageType !== 'top' ? (
+          <HeroQuoteForm
+            question={page.formulaire_ao ?? null}
+            infoRubrique={page.infoRubrique ?? null}
+            labelAs="p"
           />
         ) : undefined}
       />
@@ -223,6 +239,7 @@ export function ConseilTemplate({ page }: ConseilTemplateProps) {
               <FaqBlock
                 key={block.id}
                 data={{ ...(block.data as unknown as FaqBlockData), title: h2BeforeFaq }}
+                sectionId={h2BeforeFaqId}
               />
             ) : block.id === firstTextBlockId ? (
               <div key={block.id} id={FIRST_BLOCK_ANCHOR} className="scroll-mt-28">
