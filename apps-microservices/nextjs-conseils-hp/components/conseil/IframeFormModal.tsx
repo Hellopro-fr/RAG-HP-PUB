@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
 import { handleFormStepMessage } from '@/lib/analytics/formFunnelBridge';
+import { sendPageView } from '@/lib/analytics/sessionTracking';
 
 /**
  * Overlay iframe plein écran — Formulaire demande groupée HelloPro
@@ -106,6 +107,14 @@ export function IframeFormModal({
   /* postMessages */
   useEffect(() => {
     if (!open) return;
+
+    // Re-envoie un page_view à l'ouverture du formulaire avec le cookie courant.
+    // Raison : ajax_trace_session.php (www.hellopro.fr) écrase notre cookie avec le
+    // PHPSESSID lors du premier appel. Si l'utilisateur ouvre le formulaire sans avoir
+    // navigué (SPA) entre-temps, il n'y a pas encore de page_vue sous la nouvelle session
+    // → tracer_lead_conversion_php ne trouve rien. Ce page_view garantit qu'il en existe un.
+    sendPageView();
+
     // reset dédup funnel à chaque ouverture ; si le bloc possède déjà l'étape 1, on la pré-marque
     pushedStepsRef.current = new Set(ownsStep1 ? ['1ere-question'] : []);
 
