@@ -11,9 +11,16 @@ import { pushQuoteFormFunnel } from '@/lib/analytics/gtm';
 interface HeroQuoteFormProps {
   question?: AoFormQuestion | null;
   infoRubrique?: { id: number; libelle: string } | null;
+  /**
+   * Balise du libellé de question. Le slot hero est rendu 2× (mobile + desktop) pour le
+   * responsive : une seule copie porte le vrai `h2` (mobile, vue par l'indexation mobile-first),
+   * l'autre rend un `<p>` visuellement identique → un seul `h2` dans le DOM.
+   */
+  labelAs?: 'h2' | 'p';
 }
 
-export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
+export function HeroQuoteForm({ question, infoRubrique, labelAs = 'h2' }: HeroQuoteFormProps) {
+  const LabelTag = labelAs;
   const formRef = useRef<HTMLDivElement>(null);
   const stepNumber = question?.stepNumber;
 
@@ -75,10 +82,10 @@ export function HeroQuoteForm({ question, infoRubrique }: HeroQuoteFormProps) {
         <p className="mb-3 text-base text-muted-foreground">
           En 30 secondes, sans engagement. Comparez les meilleurs fournisseurs.
         </p>
-        <h2 className="mb-3 text-lg font-bold text-foreground">
+        <LabelTag className="mb-3 text-lg font-bold text-foreground">
           {questionLabel}
           {isObligatoire && <span className="text-cta"> *</span>}
-        </h2>
+        </LabelTag>
 
         {showError && (
           <p className="mb-3 flex items-center gap-1.5 text-base font-medium text-destructive">
