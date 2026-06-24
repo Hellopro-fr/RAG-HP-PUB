@@ -1,0 +1,72 @@
+name: 'Deploy — nextjs-formulaire-hp'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour nextjs-formulaire-hp
+# (Next.js 14 standalone, Node 20, port 3000, basePath /formulaire, formulaire multi-etapes).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic de production. Le routing prod passe par Imperva -> Apache (Ecritel)
+# -> DNS dedie -> nginx VM -> nginx LB -> container, et N'EST PAS modifie ici.
+#
+# Service public sans authentification applicative au niveau service
+# (la validation des tokens categorie se fait dans le middleware Next.js) :
+# ingress=all + allow_unauthenticated=true, max_instances borne.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/nextjs-formulaire-hp/**'
+      - '.github/workflows/deploy-nextjs-formulaire-hp.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy nextjs-formulaire-hp'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: nextjs-formulaire-hp
+      dockerfile_path: apps-microservices/nextjs-formulaire-hp/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '1Gi'
+      # Shadow : pas de trafic de prod route vers ce service -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      # Next.js standalone ecoute sur PORT (injecte par Cloud Run = container_port).
+      container_port: 3000
+      # basePath '/formulaire' est hardcode dans next.config.js -> l'app repond sur /formulaire.
+      # La racine /formulaire n'est PAS protegee par le middleware (token requis seulement
+      # sur /questionnaire|/selection|/formulaire|/something-to-add avec TOKEN dans le path).
+      health_check_path: /formulaire
+      # HELLOPRO_API_URL defaut https://api.hellopro.fr. NODE_ENV deja dans le Dockerfile.
+      # IMAGE_CDN_INTERNAL_URL pointe vers le service VM (defaut) -> images KO en shadow (non critique).
+      # NEXT_PUBLIC_* (GTM/GA) build-time : analytics off en shadow (acceptable).
+      env_vars_json: '{}'
+      # Secrets server-side (depuis .env.next-formulaire, crees en Secret Manager dedies).
+      secret_env_vars_json: |
+        {
+          "CATEGORY_TOKEN_SECRET": "nextjs-formulaire-hp-category-token-secret:latest",
+          "NEXT_TOKEN_API_QUESTION": "nextjs-formulaire-hp-token-api-question:latest",
+          "TOKEN_INFO_PRODUIT": "nextjs-formulaire-hp-token-info-produit:latest"
+        }
+      # Gate Trivy desactive (POC) : base node:20-alpine, CVE OS/deps possibles
+      # non exploitables au runtime. Durcissement ulterieur.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

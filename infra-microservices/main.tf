@@ -314,6 +314,10 @@ module "secret_manager" {
     # -------------------------------------------------------------------------
     # nextjs-conseils-hp : token API HelloPro (server-side, fetch pages conseils)
     "nextjs-conseils-hp-api-token" = { service = "nextjs-conseils-hp" }
+    # nextjs-formulaire-hp : 3 secrets server-side (middleware token + routes API)
+    "nextjs-formulaire-hp-category-token-secret" = { service = "nextjs-formulaire-hp" }
+    "nextjs-formulaire-hp-token-api-question"    = { service = "nextjs-formulaire-hp" }
+    "nextjs-formulaire-hp-token-info-produit"    = { service = "nextjs-formulaire-hp" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {
