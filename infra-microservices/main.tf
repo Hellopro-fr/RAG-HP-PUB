@@ -71,11 +71,8 @@ resource "google_compute_firewall" "allow-intra-lan" {
 }
 
 # -----------------------------------------------------------------------------
-# F-HP-NGINX-001 / T001-S003-000 - Cloud Run -> VM GPU api-catalog gRPC
-# Cree manuellement le 2026-06-15 pour debloquer la route /admin/api du POC #1.
-# Importer dans le state via :
-#   terraform import google_compute_firewall.allow_cr_eu_to_vm_gpu_api_catalog \
-#     projects/hellopro-rag-project/global/firewalls/allow-cr-eu-to-vm-gpu-api-catalog
+# Cloud Run (eu-west1) -> VM GPU api-catalog gRPC
+# Autorise le VPC Connector serverless eu-west1 a joindre api-catalog-service.
 # Source : VPC Connector eu-west1 (range 10.0.2.0/28).
 # Target : SA de la VM GPU vm-gpu-runtime@ (cible precise sans tags).
 # Ports : 19100/19101 = mapping hote dedie pour api-catalog-service
@@ -86,7 +83,7 @@ resource "google_compute_firewall" "allow_cr_eu_to_vm_gpu_api_catalog" {
   network     = module.vpc.vpc_name
   direction   = "INGRESS"
   priority    = 1000
-  description = "POC#1 Sprint S003: Allow Cloud Run eu-west1 VPC Connector to reach api-catalog gRPC on VM GPU (T001-S003-000)"
+  description = "Allow Cloud Run eu-west1 VPC Connector to reach api-catalog gRPC on VM GPU"
 
   allow {
     protocol = "tcp"
@@ -252,25 +249,20 @@ module "ilb" {
 # }
 
 # -----------------------------------------------------------------------------
-# Secret Manager (Ticket 001-INFRA-GCP-ARCHI Sprint 002)
-# Active uniquement avec les secrets POC #1 (account-service-backend).
-# Les autres secrets seront ajoutes service par service lors de leur migration.
-# Les VALEURS sont injectees hors Terraform via gcloud secrets versions add
-# (eviter d'avoir les secrets dans le state Terraform).
+# Secret Manager
+# Secrets dedies par service (<service>-<key>) + secrets plateforme partages
+# (platform-<key>). Les VALEURS sont injectees hors Terraform via
+# 'gcloud secrets versions add' (eviter d'avoir les secrets dans le state TF).
 # -----------------------------------------------------------------------------
 module "secret_manager" {
   source = "./modules/secret_manager"
-  # Perimetre POC #1 (account-service-backend) - revision Sprint 002 apres lecture
-  # du .env reel et docker-compose.yml lignes 2522-2570.
-  # Mapping :
-  #   mysql-pass            <- GATEWAY_MYSQL_PASS (partage api-gateway)
-  #   encryption-key        <- ACCOUNT_ENCRYPTION_KEY (chiffrement donnees users)
-  #   jwt-secret            <- JWT_SECRET (partage plateforme)
-  #   fallback-pass         <- MCP_FALLBACK_PASS (break-glass)
-  #   internal-admin-token  <- ACCOUNT_INTERNAL_TOKEN (token interne MCP)
-  #   catalog-admin-key     <- CATALOG_ADMIN_KEY (API Catalog)
-  #   slack-webhook-url     <- SLACK_WEBHOOK_URL (URL contient le token)
   secrets = {
+    # -------------------------------------------------------------------------
+    # Secrets DEDIES account-service-backend
+    # NB : 6/7 sont en realite des secrets PARTAGES -> migration retroactive
+    # vers platform-* prevue ulterieurement (hors scope actuel).
+    # Conserves tels quels pour l'instant (account-service-backend les consomme).
+    # -------------------------------------------------------------------------
     "account-service-backend-mysql-pass"           = { service = "account-service-backend" }
     "account-service-backend-encryption-key"       = { service = "account-service-backend" }
     "account-service-backend-jwt-secret"           = { service = "account-service-backend" }
@@ -278,6 +270,44 @@ module "secret_manager" {
     "account-service-backend-internal-admin-token" = { service = "account-service-backend" }
     "account-service-backend-catalog-admin-key"    = { service = "account-service-backend" }
     "account-service-backend-slack-webhook-url"    = { service = "account-service-backend" }
+
+    # -------------------------------------------------------------------------
+    # Secrets PLATEFORME partages (consommes par >=2 services).
+    # Une entree = rotation atomique cross-services (1 valeur = 1 secret).
+    # VALEURS injectees hors TF via 'gcloud secrets versions add' depuis .env.
+    # -------------------------------------------------------------------------
+    # Auth / plateforme
+    "platform-jwt-secret"             = { service = "platform" }
+    "platform-account-internal-token" = { service = "platform" }
+    "platform-catalog-admin-key"      = { service = "platform" }
+    "platform-gateway-admin-key"      = { service = "platform" }
+    "platform-mcp-encryption-key"     = { service = "platform" }
+    "platform-mcp-fallback-pass"      = { service = "platform" }
+    # DB / cache / broker / graph
+    "platform-gateway-mysql-pass"      = { service = "platform" }
+    "platform-gateway-mysql-root-pass" = { service = "platform" }
+    "platform-redis-secret"            = { service = "platform" }
+    "platform-rabbitmq-url"            = { service = "platform" }
+    "platform-neo4j-password"          = { service = "platform" }
+    # Zilliz/Milvus : auth user+password (ZILLIZ_API_KEY=none dans .env, non utilise).
+    "platform-zilliz-user"     = { service = "platform" }
+    "platform-zilliz-password" = { service = "platform" }
+    # LLM providers
+    "platform-openai-api-key"     = { service = "platform" }
+    "platform-gemini-api-key"     = { service = "platform" }
+    "platform-deepseek-api-key"   = { service = "platform" }
+    "platform-openrouter-api-key" = { service = "platform" }
+    "platform-embedding-api-key"  = { service = "platform" }
+    # API HelloPro
+    "platform-hp-token"                  = { service = "platform" }
+    "platform-hellopro-api-bearer-token" = { service = "platform" }
+    # Notif
+    "platform-slack-webhook-url" = { service = "platform" }
+    # MCP gateway <-> backends (tokens de liaison partages par paire)
+    "platform-mcp-ringover-admin-token"         = { service = "platform" }
+    "platform-mcp-leexi-admin-token"            = { service = "platform" }
+    "platform-mcp-templates-runner-admin-token" = { service = "platform" }
+    "platform-zoho-gateway-token"               = { service = "platform" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {
@@ -289,7 +319,7 @@ module "secret_manager" {
 }
 
 # -----------------------------------------------------------------------------
-# Service Accounts CI/CD + Workload Identity Federation (Sprint 002 Action 2.2)
+# Service Accounts CI/CD + Workload Identity Federation
 # Cree :
 #   - cloud-build-deployer (CI/CD legacy Cloud Build)
 #   - cloudrun-services (SA runtime des services Cloud Run)
@@ -305,7 +335,7 @@ module "service_accounts" {
 
 # -----------------------------------------------------------------------------
 # IAM hors-module : bindings sur SAs existants geres manuellement
-# F-HP-IAM-001 remediation - Sprint 002 (2026-06-09)
+# devops-infra-sa : Secret Manager admin
 # Le SA devops-infra-sa (cree hors TF) doit pouvoir gerer les versions Secret
 # Manager pour eviter le contournement via compte humain CTO lors des pushes
 # de valeurs (audit + gouvernance + autonomie equipe).
@@ -317,7 +347,7 @@ resource "google_project_iam_member" "devops_infra_sa_secretmanager_admin" {
 }
 
 # -----------------------------------------------------------------------------
-# F-HP-IAM-002 remediation - Sprint 002 (2026-06-09)
+# devops-infra-sa : viewer projet (lectures .list/.get uniformes)
 # Pattern recurrent : devops-infra-sa peut creer/destruire des ressources mais
 # n'a pas les .list/.get sur les divers services GCP (vpcaccess, dns, compute,
 # run, etc.). Ajout de roles/viewer projet pour couvrir TOUTES les lectures
@@ -333,7 +363,7 @@ resource "google_project_iam_member" "devops_infra_sa_viewer" {
 }
 
 # -----------------------------------------------------------------------------
-# F-HP-IAM-003 remediation - Sprint 002 (2026-06-10)
+# devops-infra-sa : Cloud Run admin
 # devops-infra-sa doit pouvoir manage Cloud Run y compris setIamPolicy
 # (allUsers binding via --allow-unauthenticated). Sans cela, un deploy CR
 # avec allow_unauthenticated=true rend le service inaccessible (403).
@@ -345,13 +375,9 @@ resource "google_project_iam_member" "devops_infra_sa_run_admin" {
 }
 
 # -----------------------------------------------------------------------------
-# F-HP-IAM-004 remediation - Sprint 003 (2026-06-15)
-# devops-infra-sa doit pouvoir creer/manage les regles firewall GCP (compute.firewalls.*).
-# Decouvert lors de la creation de allow-cr-eu-to-vm-gpu-api-catalog pour debloquer
-# l'appel gRPC CR -> VM GPU api-catalog-service (POC #1 route /admin/api).
-# Importer dans le state via :
-#   terraform import google_project_iam_member.devops_infra_sa_compute_security_admin \
-#     "hellopro-rag-project roles/compute.securityAdmin serviceAccount:devops-infra-sa@hellopro-rag-project.iam.gserviceaccount.com"
+# devops-infra-sa : compute security admin (gestion des regles firewall)
+# Necessaire pour creer/manage les regles firewall GCP (compute.firewalls.*),
+# ex. la regle d'acces Cloud Run eu-west1 -> api-catalog gRPC sur la VM GPU.
 # -----------------------------------------------------------------------------
 resource "google_project_iam_member" "devops_infra_sa_compute_security_admin" {
   project = var.project_id
