@@ -82,7 +82,7 @@ export function SiteFooter() {
     <footer id="site-footer" className="min-[769px]:mt-8 border-t border-border bg-primary text-primary-foreground">
       <div className="mx-auto max-w-[1400px] px-4 py-12 lg:px-6">
         <div className="mb-10">
-          <div className="inline-block rounded bg-white px-3 py-2">
+          <a href="https://www.hellopro.fr/" className="inline-block rounded bg-white px-3 py-2">
             <Image
               src="/images/hp-logo.svg"
               alt="HelloPro"
@@ -90,7 +90,7 @@ export function SiteFooter() {
               height={31}
               className="h-8 w-auto"
             />
-          </div>
+          </a>
           <p className="mt-3 text-base text-primary-foreground/70">
             <strong className="font-semibold text-primary-foreground">Hellopro</strong> est la
             première place de marché professionnelle en France. Cherchez, obtenez et comparez des
