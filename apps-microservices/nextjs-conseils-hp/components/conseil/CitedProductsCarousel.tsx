@@ -43,7 +43,7 @@ export function CitedProductsCarousel({ items }: CitedProductsCarouselProps) {
   };
 
   return (
-    <div>
+    <div id="produits-cites">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-extrabold text-foreground">
           Nos solutions, matériels &amp; services cités dans cet article
