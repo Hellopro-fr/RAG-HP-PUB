@@ -47,7 +47,7 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
 
         {/* ── Ligne 1 : Logo + boutons ── */}
         <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3 md:py-5 lg:px-6">
-          <Link href="/" className="flex flex-col leading-none">
+          <Link href="https://www.hellopro.fr/" className="flex flex-col leading-none">
             <Image
               src="/images/hp-logo.svg"
               alt="HelloPro"
