@@ -22,7 +22,7 @@ export function Crossell({ liensIntexts, conseilsAssocies }: CrossellProps) {
       )}
 
       {conseilsAssocies && conseilsAssocies.length > 0 && (
-        <div>
+        <div id="pour-aller-plus-loin">
           <h2 className="text-2xl font-extrabold text-foreground">Pour aller plus loin</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {conseilsAssocies.map((a) => {

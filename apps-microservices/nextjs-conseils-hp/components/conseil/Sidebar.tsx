@@ -25,6 +25,10 @@ export function Sidebar({ items }: SidebarProps) {
   useEffect(() => {
     if (items.length === 0) return;
 
+    // Marqueurs de « fin de contenu » : la dernière section ne doit pas se remplir jusqu'au bas
+    // de page (fournisseurs, crossell, auteur, footer), mais s'arrêter au 1er de ces blocs présent.
+    const END_MARKER_IDS = ['constructeurs', 'produits-cites', 'pour-aller-plus-loin'];
+
     let raf = 0;
     const compute = () => {
       raf = 0;
@@ -36,13 +40,20 @@ export function Sidebar({ items }: SidebarProps) {
       });
       const docEnd = document.documentElement.scrollHeight;
 
+      // Borne de fin du contenu = le plus haut des marqueurs post-contenu présents, sinon docEnd.
+      const markerTops = END_MARKER_IDS
+        .map((id) => document.getElementById(id))
+        .filter((el): el is HTMLElement => el !== null)
+        .map((el) => el.getBoundingClientRect().top + window.scrollY);
+      const contentEnd = markerTops.length > 0 ? Math.min(...markerTops) : docEnd;
+
       setFills(
         items.map((_, i) => {
           const top = tops[i];
           if (!Number.isFinite(top)) return 0;
-          // Fin de la section = début de la suivante, sinon fin du document.
+          // Fin de la section = début de la suivante ; pour la dernière, début du bloc post-contenu.
           const end =
-            i + 1 < tops.length && Number.isFinite(tops[i + 1]) ? tops[i + 1] : docEnd;
+            i + 1 < tops.length && Number.isFinite(tops[i + 1]) ? tops[i + 1] : contentEnd;
           if (end <= top) return readingLine >= top ? 1 : 0;
           return Math.max(0, Math.min(1, (readingLine - top) / (end - top)));
         }),

@@ -23,8 +23,12 @@ interface HeroProps {
   resumeTitle?: string;
   /** HTML brut du bloc type 15 de l'API — prioritaire sur resume si présent */
   resumeHtml?: string;
-  /** Slot droit : QuoteForm (prix/autre) ou SuppliersCarousel (top) */
-  slot?: React.ReactNode;
+  /**
+   * Formulaire devis hero. Deux copies pour le responsive : `slotMobile` (visible < lg,
+   * porte le vrai h2) et `slotDesktop` (visible ≥ lg, libellé en p) → un seul h2 dans le DOM.
+   */
+  slotMobile?: React.ReactNode;
+  slotDesktop?: React.ReactNode;
 }
 
 export function Hero({
@@ -37,7 +41,8 @@ export function Hero({
   resume = [],
   resumeTitle,
   resumeHtml,
-  slot,
+  slotMobile,
+  slotDesktop,
 }: HeroProps) {
   return (
     <section id="hero-trigger" className="relative overflow-hidden bg-primary text-primary-foreground">
@@ -78,8 +83,8 @@ export function Hero({
               <KeyTakeaways items={resume} html={resumeHtml} title={resumeTitle} />
             )}
 
-            {/* Slot mobile — juste avant les métas auteur */}
-            {slot && <div className="mt-4 lg:hidden">{slot}</div>}
+            {/* Formulaire — copie mobile (entre résumé et métas). Porte le vrai h2. Masquée en desktop. */}
+            {slotMobile && <div className="mt-4 lg:hidden">{slotMobile}</div>}
 
             {/* Meta auteur / date */}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-base text-primary-foreground/80">
@@ -126,8 +131,8 @@ export function Hero({
             )}
           </div>
 
-          {/* Slot desktop — colonne droite */}
-          {slot && <div className="hidden lg:block">{slot}</div>}
+          {/* Formulaire — copie desktop (colonne droite). Libellé en <p> → pas de h2 dupliqué. */}
+          {slotDesktop && <div className="hidden lg:block">{slotDesktop}</div>}
         </div>
       </div>
     </section>
