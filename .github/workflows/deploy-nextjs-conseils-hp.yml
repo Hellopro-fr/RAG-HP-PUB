@@ -1,0 +1,68 @@
+name: 'Deploy — nextjs-conseils-hp'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour nextjs-conseils-hp
+# (Next.js 15 standalone, Node 22, port 3003, pages conseils SEO).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic de production. Le routing prod de ce service passe par
+# Imperva -> Apache (infra Ecritel) -> DNS dedie -> nginx VM -> nginx LB -> container,
+# et N'EST PAS modifie ici. La bascule eventuelle se fera cote DNS/Apache (infogerance).
+#
+# Service public (pages SEO) sans authentification applicative :
+# ingress=all + allow_unauthenticated=true, max_instances borne.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/nextjs-conseils-hp/**'
+      - '.github/workflows/deploy-nextjs-conseils-hp.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy nextjs-conseils-hp'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: nextjs-conseils-hp
+      dockerfile_path: apps-microservices/nextjs-conseils-hp/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '1Gi'
+      # Shadow : pas de trafic de prod route vers ce service -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      # Next.js standalone ecoute sur PORT (injecte par Cloud Run = container_port).
+      container_port: 3003
+      # Pas de health endpoint dedie (en cours de dev) -> page d'accueil.
+      health_check_path: /
+      # Aucune dependance interne VPC : le backend est l'API HelloPro publique
+      # (HELLOPRO_API_URL, defaut https://api.hellopro.fr). NODE_ENV deja dans le Dockerfile.
+      # NEXT_PUBLIC_* non requis (defauts dans le code ; inlines au build s'ils existent).
+      env_vars_json: '{}'
+      # Secret server-side : token API HelloPro pour le fetch des pages conseils.
+      secret_env_vars_json: |
+        {
+          "CONSEILS_API_TOKEN": "nextjs-conseils-hp-api-token:latest"
+        }
+      # Gate Trivy desactive (POC) : base node:22-alpine, CVE OS/deps possibles
+      # non exploitables au runtime. Durcissement ulterieur.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

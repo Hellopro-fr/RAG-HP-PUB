@@ -308,6 +308,12 @@ module "secret_manager" {
     "platform-mcp-leexi-admin-token"            = { service = "platform" }
     "platform-mcp-templates-runner-admin-token" = { service = "platform" }
     "platform-zoho-gateway-token"               = { service = "platform" }
+
+    # -------------------------------------------------------------------------
+    # Secrets DEDIES autres services (propres a 1 seul service)
+    # -------------------------------------------------------------------------
+    # nextjs-conseils-hp : token API HelloPro (server-side, fetch pages conseils)
+    "nextjs-conseils-hp-api-token" = { service = "nextjs-conseils-hp" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {
