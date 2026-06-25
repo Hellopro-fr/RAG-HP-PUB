@@ -1,0 +1,64 @@
+name: 'Deploy — mcp-leexi-service'
+
+# Wrapper minimal qui appelle deploy-cloud-run.yml pour mcp-leexi-service
+# (Go 1.24, stdlib only, serveur MCP exposant les tools Leexi sur SSE + HTTP, port 8589).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. mcp-gateway-service (sur la VM) continue de pointer le container VM
+# via LEEXI_INTERNAL_URL=http://mcp-leexi-service:8589. Aucune bascule de routing.
+#
+# Dependances externes : appels HTTPS sortants vers public-api.leexi.ai uniquement
+# (egress internet par defaut sur Cloud Run) -> AUCUN VPC Connector requis.
+# Pas de DB, pas de volume, pas de RabbitMQ.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-leexi-service/**'
+      - '.github/workflows/deploy-mcp-leexi-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-leexi-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-leexi-service
+      dockerfile_path: apps-microservices/mcp-leexi-service/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      # Go stdlib : empreinte memoire tres faible -> 256Mi suffisant (FinOps).
+      cpu: '1'
+      memory: '256Mi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      container_port: 8589
+      # L'app lit MCP_PORT (defaut 8589) et non PORT -> on l'aligne sur container_port.
+      health_check_path: /health
+      env_vars_json: '{"MCP_PORT":"8589"}'
+      # 3 secrets : 2 dedies (credentials API Leexi) + 1 partage (token admin gateway<->leexi).
+      secret_env_vars_json: |
+        {
+          "LEEXI_API_KEY_ID": "mcp-leexi-api-key-id:latest",
+          "LEEXI_API_KEY_SECRET": "mcp-leexi-api-key-secret:latest",
+          "MCP_LEEXI_ADMIN_TOKEN": "platform-mcp-leexi-admin-token:latest"
+        }
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
