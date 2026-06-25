@@ -43,6 +43,7 @@ import {
 } from "./httpStatusPolicy.js";
 import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
+import { applyPerClassStrip, perClassEnabled } from "./diezClassify.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -1873,8 +1874,10 @@ export const processUrl = (
         // Fix: Use native URL API for robust parsing
         const urlObj = new URL(url);
         
-        // 1. Always remove hash if skipDiez is true
-        if (skipDiez) {
+        // 1. Hash: legacy wholesale strip only when per-class is OFF.
+        //    Per-class strip (anchor -> strip, spa/ambiguous -> keep) is applied to
+        //    the final string below, independent of the global skipDiez flag.
+        if (!perClassEnabled() && skipDiez) {
             urlObj.hash = '';
         }
 
@@ -1916,7 +1919,8 @@ export const processUrl = (
             }
         }
 
-        return urlObj.toString();
+        const result = urlObj.toString();
+        return perClassEnabled() ? applyPerClassStrip(result) : result;
 
     } catch (e) {
         // Fallback for invalid URLs
