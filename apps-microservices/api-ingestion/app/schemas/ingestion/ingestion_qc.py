@@ -15,6 +15,8 @@ class QCServiceStep(str, Enum):
     CARACTERISATION = "caracterisation"          # Step 7
     # Hors pipeline QC 1-7 — routing & exchange distincts
     CARACTERISATION_PRIX = "caracterisation_prix"
+    # Façade équivalence sur questionnaire BO (étape 14) — terminal, pas de step 7
+    EQUIVALENCE_BO = "equivalence_bo"
 
 
 # Mapping des services vers leurs routing keys
@@ -27,6 +29,7 @@ QC_ROUTING_KEYS = {
     QCServiceStep.EQUIVALENCE: "qc.step6.start",
     QCServiceStep.CARACTERISATION: "qc.step7.start",
     QCServiceStep.CARACTERISATION_PRIX: "prix.caracterisation.start",
+    QCServiceStep.EQUIVALENCE_BO: "qc.equivalence_bo.start",
 }
 
 # Exchange distinct pour la caractérisation prix (indépendante du pipeline QC)
