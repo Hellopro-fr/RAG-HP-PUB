@@ -67,17 +67,29 @@ function setNextTrackingCookie(value: string): void {
 /**
  * Résout l'id de session à utiliser pour le tracking :
  *
- * 1. next_tracking_id existe → session 2 déjà initiée sur Next.js → on l'utilise
- * 2. tracking_landing_session_id existe → session 1 venue de PHP → on l'utilise
- * 3. Aucun → nouvelle session sur Next.js → on génère et pose next_tracking_id
+ * 1. tracking_landing_session_id existe → source PHP, la plus autoritaire → on l'utilise
+ * 2. next_tracking_id existe → déjà créé lors d'un appel précédent → on le réutilise
+ * 3. Aucun des deux → on crée next_tracking_id :
+ *    - avec la valeur de PHPSESSID si disponible (même session PHP)
+ *    - sinon on génère un id 32 hex
  */
 export function resolveTrackingSessionId(): string {
-  const nextId = sanitizeSessionId(getCookie(NEXT_TRACKING_COOKIE));
-  if (nextId) return nextId;
-
   const landingId = sanitizeSessionId(getCookie('tracking_landing_session_id'));
   if (landingId) return landingId;
 
+  const nextId = sanitizeSessionId(getCookie(NEXT_TRACKING_COOKIE));
+  const phpId  = sanitizeSessionId(getCookie('PHPSESSID'));
+
+  // PHPSESSID présent et différent de next_tracking_id → synchroniser next_tracking_id
+  if (phpId && phpId !== nextId) {
+    setNextTrackingCookie(phpId);
+    return phpId;
+  }
+
+  // next_tracking_id déjà en place (en sync avec PHPSESSID ou pas de PHPSESSID) → garder
+  if (nextId) return nextId;
+
+  // Aucun cookie disponible → générer et persister
   const generated = generateSessionId();
   setNextTrackingCookie(generated);
   return generated;
