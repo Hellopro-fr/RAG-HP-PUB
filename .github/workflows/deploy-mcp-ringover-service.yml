@@ -1,0 +1,63 @@
+name: 'Deploy — mcp-ringover-service'
+
+# Wrapper minimal qui appelle deploy-cloud-run.yml pour mcp-ringover-service
+# (Go 1.24, stdlib only, serveur MCP exposant les tools Ringover sur SSE + HTTP, port 8586).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. mcp-gateway-service (sur la VM) continue de pointer le container VM
+# via RINGOVER_INTERNAL_URL=http://mcp-ringover-service:8586. Aucune bascule de routing.
+#
+# Dependances externes : appels HTTPS sortants vers public-api.ringover.com uniquement
+# (egress internet par defaut sur Cloud Run) -> AUCUN VPC Connector requis.
+# Pas de DB, pas de volume, pas de RabbitMQ. Pattern symetrique a mcp-leexi-service.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-ringover-service/**'
+      - '.github/workflows/deploy-mcp-ringover-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-ringover-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-ringover-service
+      dockerfile_path: apps-microservices/mcp-ringover-service/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      # Go stdlib : empreinte memoire tres faible -> 256Mi suffisant (FinOps).
+      cpu: '1'
+      memory: '256Mi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      container_port: 8586
+      # L'app lit MCP_PORT (defaut 8586) et non PORT -> on l'aligne sur container_port.
+      health_check_path: /health
+      env_vars_json: '{"MCP_PORT":"8586"}'
+      # 2 secrets : 1 dedie (cle API Ringover) + 1 partage (token admin gateway<->ringover).
+      secret_env_vars_json: |
+        {
+          "RINGOVER_API_KEY": "mcp-ringover-api-key:latest",
+          "MCP_RINGOVER_ADMIN_TOKEN": "platform-mcp-ringover-admin-token:latest"
+        }
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

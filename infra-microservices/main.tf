@@ -321,6 +321,8 @@ module "secret_manager" {
     # mcp-leexi-service : credentials API Leexi (Basic Auth ID + Secret, propres au service)
     "mcp-leexi-api-key-id"     = { service = "mcp-leexi-service" }
     "mcp-leexi-api-key-secret" = { service = "mcp-leexi-service" }
+    # mcp-ringover-service : cle API Ringover (single key, propre au service)
+    "mcp-ringover-api-key" = { service = "mcp-ringover-service" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {
