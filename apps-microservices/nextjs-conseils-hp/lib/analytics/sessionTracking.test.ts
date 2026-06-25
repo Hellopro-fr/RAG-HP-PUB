@@ -26,27 +26,22 @@ afterEach(() => {
 });
 
 describe('resolveTrackingSessionId', () => {
-  it('tracking_landing_session_id existe → utilisé en priorité', () => {
-    setCookies('tracking_landing_session_id=ef0e67b538397890b818dcd17fa6c059; next_tracking_id=aabbccdd11223344aabbccdd11223344');
+  it('priorité 1 — tracking_landing_session_id (même si PHPSESSID et next_tracking_id présents)', () => {
+    setCookies('tracking_landing_session_id=ef0e67b538397890b818dcd17fa6c059; PHPSESSID=1111; next_tracking_id=aabbccdd11223344aabbccdd11223344');
     expect(resolveTrackingSessionId()).toBe('ef0e67b538397890b818dcd17fa6c059');
   });
 
-  it('PHPSESSID diff de next_tracking_id (vide) → next_tracking_id = PHPSESSID', () => {
-    setCookies('PHPSESSID=ef0e67b538397890b818dcd17fa6c059');
+  it('priorité 2 — PHPSESSID écrase next_tracking_id si tracking_landing absent', () => {
+    setCookies('PHPSESSID=ef0e67b538397890b818dcd17fa6c059; next_tracking_id=aabbccdd11223344aabbccdd11223344');
     expect(resolveTrackingSessionId()).toBe('ef0e67b538397890b818dcd17fa6c059');
   });
 
-  it('PHPSESSID == next_tracking_id → garder tel quel', () => {
-    setCookies('PHPSESSID=aabbccdd11223344aabbccdd11223344; next_tracking_id=aabbccdd11223344aabbccdd11223344');
-    expect(resolveTrackingSessionId()).toBe('aabbccdd11223344aabbccdd11223344');
-  });
-
-  it('next_tracking_id existe sans PHPSESSID → garder tel quel', () => {
+  it('priorité 3 — next_tracking_id réutilisé si ni landing ni PHPSESSID', () => {
     setCookies('next_tracking_id=aabbccdd11223344aabbccdd11223344');
     expect(resolveTrackingSessionId()).toBe('aabbccdd11223344aabbccdd11223344');
   });
 
-  it('aucun cookie → génère next_tracking_id 32 hex', () => {
+  it('priorité 4 — aucun cookie → génère 32 hex', () => {
     setCookies('');
     expect(resolveTrackingSessionId()).toMatch(/^[0-9a-f]{32}$/);
   });

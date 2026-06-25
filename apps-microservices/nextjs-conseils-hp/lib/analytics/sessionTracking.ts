@@ -67,29 +67,30 @@ function setNextTrackingCookie(value: string): void {
 /**
  * Résout l'id de session à utiliser pour le tracking :
  *
- * 1. tracking_landing_session_id existe → source PHP, la plus autoritaire → on l'utilise
- * 2. next_tracking_id existe → déjà créé lors d'un appel précédent → on le réutilise
- * 3. Aucun des deux → on crée next_tracking_id :
- *    - avec la valeur de PHPSESSID si disponible (même session PHP)
- *    - sinon on génère un id 32 hex
+ * 1. tracking_landing_session_id existe → source PHP autoritaire → on l'utilise.
+ * 2. sinon PHPSESSID visible → on (ré)écrit next_tracking_id avec sa valeur → on l'utilise.
+ *    PHPSESSID étant quasi toujours présent sur la page Next, next_tracking_id reste aligné
+ *    sur la session PHP courante → session unifiée Next ↔ PHP.
+ * 3. sinon next_tracking_id existant (cas sans PHPSESSID) → on le réutilise.
+ * 4. sinon → on génère un id 32 hex et on le persiste.
  */
 export function resolveTrackingSessionId(): string {
+  // 1. tracking_landing_session_id → source PHP autoritaire
   const landingId = sanitizeSessionId(getCookie('tracking_landing_session_id'));
   if (landingId) return landingId;
 
-  const nextId = sanitizeSessionId(getCookie(NEXT_TRACKING_COOKIE));
-  const phpId  = sanitizeSessionId(getCookie('PHPSESSID'));
-
-  // PHPSESSID présent et différent de next_tracking_id → synchroniser next_tracking_id
-  if (phpId && phpId !== nextId) {
+  // 2. PHPSESSID → (ré)écrit next_tracking_id avec sa valeur (prioritaire)
+  const phpId = sanitizeSessionId(getCookie('PHPSESSID'));
+  if (phpId) {
     setNextTrackingCookie(phpId);
     return phpId;
   }
 
-  // next_tracking_id déjà en place (en sync avec PHPSESSID ou pas de PHPSESSID) → garder
+  // 3. next_tracking_id déjà créé (aucun PHPSESSID) → réutiliser
+  const nextId = sanitizeSessionId(getCookie(NEXT_TRACKING_COOKIE));
   if (nextId) return nextId;
 
-  // Aucun cookie disponible → générer et persister
+  // 4. Aucun cookie → générer et persister
   const generated = generateSessionId();
   setNextTrackingCookie(generated);
   return generated;
