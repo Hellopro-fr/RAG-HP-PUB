@@ -32,7 +32,7 @@ class DeepSeek:
         config = config or {}
         self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
         self.BASE_URL = "https://api.deepseek.com"
-        self.MODEL = "deepseek-v4-flash"
+        self.MODEL = "deepseek-v4-pro"
         self.TEMPERATURE = temperature
         self.max_retries = max_retries
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
