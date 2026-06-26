@@ -5,7 +5,7 @@ MCP server exposing Semrush SEO and competitive intelligence data as MCP tools o
 ## Tech Stack
 
 - Node.js 20
-- `semrush-mcp` (community MCP server for Semrush API, stdio-only)
+- `server.js` (custom stdio MCP server for the Semrush API, Node stdlib only — no npm deps)
 - `mcp-proxy` (Python, wraps stdio transport into SSE + streamable HTTP)
 - Docker
 
@@ -18,7 +18,7 @@ docker compose --profile mcp up mcp-semrush-service
 
 ## Architecture
 
-`mcp-proxy` spawns `npx semrush-mcp` as a child process (stdio) and exposes it over HTTP on port 8585. No custom code — the entire service is the proxy wrapping the upstream npm package.
+`mcp-proxy` spawns `node /app/server.js` as a child process (stdio) and exposes it over HTTP on port 8588. `server.js` is a self-contained custom MCP server (Node `https`/`http`/`readline` stdlib only) calling the Semrush REST API directly — it does NOT wrap the `semrush-mcp` npm package. mcp-proxy exposes `/sse`, `/mcp`, and `/status` (no `/health`).
 
 ## Environment Variables
 
@@ -54,7 +54,7 @@ Host-side (in `.env`):
 
 ## Port
 
-8585 (follows MCP port sequence: gateway=8581, recherche=8582, analytics=8583, gsc=8584, semrush=8585)
+8588 (per docker-compose.yml and Dockerfile EXPOSE/CMD). MCP gateway=8581, recherche=8582, analytics=8583, gsc=8584.
 
 ## Optional: Gateway Registration
 
