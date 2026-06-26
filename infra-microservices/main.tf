@@ -323,6 +323,8 @@ module "secret_manager" {
     "mcp-leexi-api-key-secret" = { service = "mcp-leexi-service" }
     # mcp-ringover-service : cle API Ringover (single key, propre au service)
     "mcp-ringover-api-key" = { service = "mcp-ringover-service" }
+    # mcp-semrush-service : cle API Semrush (single key, propre au service)
+    "mcp-semrush-api-key" = { service = "mcp-semrush-service" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {

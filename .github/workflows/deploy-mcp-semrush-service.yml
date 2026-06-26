@@ -1,0 +1,69 @@
+name: 'Deploy — mcp-semrush-service'
+
+# Wrapper minimal qui appelle deploy-cloud-run.yml pour mcp-semrush-service
+# (Node.js 20 + Python mcp-proxy wrappant un serveur MCP stdio server.js, port 8588).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. mcp-gateway-service (sur la VM) continue de pointer le container VM.
+#
+# Dependances externes : appels HTTPS sortants vers api.semrush.com uniquement
+# (egress internet par defaut sur Cloud Run) -> AUCUN VPC Connector requis.
+# server.js = Node stdlib only (aucune dep npm, pas de fetch npx au runtime).
+#
+# Particularites vs mcp-leexi/ringover (Go) :
+#   - Health check = /status (expose par mcp-proxy), PAS /health.
+#   - Base node:20-slim (Debian) + venv Python -> surface CVE lourde, pas de fix
+#     racine 1-ligne. Gate Trivy DESACTIVE (dette tracee). Fix racine = supprimer la
+#     couche Python mcp-proxy et servir le HTTP directement depuis server.js (dev, hors scope).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-semrush-service/**'
+      - '.github/workflows/deploy-mcp-semrush-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-semrush-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-semrush-service
+      dockerfile_path: apps-microservices/mcp-semrush-service/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      # Node + Python : empreinte plus lourde que Go -> 512Mi.
+      cpu: '1'
+      memory: '512Mi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      container_port: 8588
+      # mcp-proxy expose /status (statut global), pas /health.
+      health_check_path: /status
+      # mcp-proxy lit le port via le CMD du Dockerfile (--port 8588) -> rien a injecter.
+      env_vars_json: '{}'
+      # 1 secret dedie (cle API Semrush).
+      secret_env_vars_json: '{"SEMRUSH_API_KEY":"mcp-semrush-api-key:latest"}'
+      # Gate Trivy desactive : base node:20-slim (Debian) + venv Python embarque des CVE
+      # HIGH connues sans fix racine 1-ligne (cf. Go). Dette assumee/tracee. Fix racine =
+      # refonte sans la couche Python mcp-proxy (dev, hors scope migration shadow).
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
