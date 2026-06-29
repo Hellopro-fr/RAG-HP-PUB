@@ -8,7 +8,7 @@ test("clearDecisionSidecars: removes diez/QM sidecars, keeps others, idempotent"
     const dir = path.join("storage", "test-clear-sidecars");
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
-    const sidecars = ["_diez_decision.json", "_diez_audit.json", "_questionmark_decision.json", "_questionmark_observations.json"];
+    const sidecars = ["_diez_decision.json", "_diez_audit.json", "_questionmark_decision.json", "_questionmark_observations.json", "_questionmark_audit.json"];
     for (const f of sidecars) fs.writeFileSync(path.join(dir, f), "{}");
     // unrelated files that MUST survive
     fs.writeFileSync(path.join(dir, "_callback_payload.json"), "{}");

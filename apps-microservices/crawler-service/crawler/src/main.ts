@@ -1152,6 +1152,28 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         }
     }
 
+    // Phase-2 QM audit sidecar (spec 2026-06-29): committed params + their pair stats +
+    // collapsed-param route-loss candidates. Mirrors _diez_audit.json.
+    if (storagePath && (context.qmTier2.addedToRemove.length > 0 || context.qmCollapsed.length > 0)) {
+        try {
+            const pairStats: Record<string, { same: number; different: number; unusable: number }> = {};
+            for (const [p, s] of context.qmTier2.tally) pairStats[p] = s;
+            fs.writeFileSync(
+                `${storagePath}/_questionmark_audit.json`,
+                JSON.stringify({
+                    collapsed_candidates: context.qmCollapsed,
+                    committed: context.qmTier2.addedToRemove,
+                    pair_stats: pairStats,
+                }, null, 2),
+            );
+            if (context.qmCollapsed.length > 0) {
+                console.warn(`[questionmark] route-loss candidates: ${context.qmCollapsed.length} ?param= page(s) collapsed onto an existing base — see _questionmark_audit.json (re-crawl to confirm).`);
+            }
+        } catch (e) {
+            console.error("QM audit sidecar write failed:", e);
+        }
+    }
+
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
     // Wait for any in-flight persistence to complete before final write
