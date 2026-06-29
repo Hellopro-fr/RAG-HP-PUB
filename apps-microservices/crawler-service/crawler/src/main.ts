@@ -654,24 +654,34 @@ persistenceInterval = setInterval(async () => {
         if (crawlMode === 'update') {
             await generateUpdateReport(domain);
         }
-
-        // Queue-pause gate: stop early when the pending queue predicts an oversized site
-        // (machine-time protection). bypassqueue=1 is the operator "crawl fully" override;
-        // queuelimit<=0 disables it.
-        if (!bypassQueue && queueLimit > 0) {
-            const liveQueueInfo = await requestQueue.getInfo();
-            if (liveQueueInfo && liveQueueInfo.pendingRequestCount > queueLimit) {
-                console.warn(`⚠️ Queue-pause gate triggered: pending=${liveQueueInfo.pendingRequestCount} > limit=${queueLimit} (limitQueue).`);
-                context.stopReason = "limitQueue";
-                if (context.crawlerInstance) {
-                    await stopCrawler(context.crawlerInstance, `Pending queue (${liveQueueInfo.pendingRequestCount}) exceeded limit ${queueLimit} (limitQueue).`);
-                }
-            }
-        }
     } catch (e) {
         console.error("Periodic persistence failed:", e);
     }
 }, PERSIST_INTERVAL_MS);
+
+// --- QUEUE-PAUSE GATE (Machine-time protection) ---
+// Dedicated SHORT interval (30s) — NOT the 10-min persistence timer — so a runaway
+// oversized site is stopped EARLY (~30-60s latency) rather than after ~1000 pages.
+// Stop when pendingRequestCount predicts an oversized site. bypassqueue=1 is the
+// operator "crawl fully" override; queuelimit<=0 disables the gate entirely.
+const QUEUE_PAUSE_INTERVAL_MS = 30 * 1000;
+const queuePauseInterval: ReturnType<typeof setInterval> | undefined =
+    (!bypassQueue && queueLimit > 0)
+        ? setInterval(async () => {
+            try {
+                const liveQueueInfo = await requestQueue.getInfo();
+                if (liveQueueInfo && liveQueueInfo.pendingRequestCount > queueLimit) {
+                    console.warn(`⚠️ Queue-pause gate triggered: pending=${liveQueueInfo.pendingRequestCount} > limit=${queueLimit} (limitQueue).`);
+                    context.stopReason = "limitQueue";
+                    if (context.crawlerInstance) {
+                        await stopCrawler(context.crawlerInstance, `Pending queue (${liveQueueInfo.pendingRequestCount}) exceeded limit ${queueLimit} (limitQueue).`);
+                    }
+                }
+            } catch (e) {
+                console.error("Queue-pause gate check failed:", e);
+            }
+        }, QUEUE_PAUSE_INTERVAL_MS)
+        : undefined;
 
 
 if (skipquestionmark || skipdiez) {
@@ -940,8 +950,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         await finalizeTimingOnce();
     }
 
-    // Stop periodic task
+    // Stop periodic tasks
     if (persistenceInterval) clearInterval(persistenceInterval);
+    if (queuePauseInterval) clearInterval(queuePauseInterval);
 
     console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
