@@ -1142,7 +1142,8 @@ class CrawlerManager:
         async def log_stream(stream, prefix):
             try:
                 async for line in stream:
-                    await log_file_handle.write(f"[{prefix}] {line.decode('utf-8', errors='ignore')}")
+                    ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                    await log_file_handle.write(f"[{ts}] [{prefix}] {line.decode('utf-8', errors='ignore')}")
             except Exception as e:
                 logger.error(f"Error in log stream for crawl '{crawl_id}': {e}")
 
