@@ -209,6 +209,8 @@ async def start_new_crawl(payload: CrawlRequest):
             "bypassquestionmark": payload.bypass_question_mark,
             "bypassdiez": payload.bypass_diez,
             "breaklimit": payload.break_limit,
+            "queuelimit": payload.queue_limit,
+            "bypassqueue": payload.bypass_queue,
             "percrawl": payload.per_crawl,
             "perminute": payload.per_minute,
             "camoufox": payload.camoufox, # Pass Camoufox flag

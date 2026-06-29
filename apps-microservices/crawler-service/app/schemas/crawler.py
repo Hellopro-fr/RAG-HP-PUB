@@ -79,6 +79,8 @@ class CrawlRequest(BaseModel):
     bypass_question_mark: Optional[bool] = Field(False, description="Bypass filtering of URLs with '?'", alias="bypassquestionmark")
     bypass_diez: Optional[bool] = Field(False, description="Bypass filtering of URLs with '#'", alias="bypassdiez")
     break_limit: Optional[bool] = Field(True, description="Bypass the 5000 URLs crawl limit.", alias="breaklimit")
+    queue_limit: Optional[int] = Field(None, description="Maximum number of URLs allowed in the request queue before stopping.", alias="queuelimit")
+    bypass_queue: Optional[bool] = Field(False, description="Bypass the queue size limit set by queuelimit.", alias="bypassqueue")
     per_crawl: Optional[int] = Field(0, description="Number of URLs to crawl per job. 0 means unlimited.", example=1000, alias="percrawl")
     per_minute: Optional[int] = Field(100, description="Crawling speed in URLs per minute. 0 means unlimited.", example=100, alias="perminute")
     
