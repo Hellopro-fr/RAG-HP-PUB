@@ -1,11 +1,11 @@
-# Graph Report - scoped --update (diezClassify + content-collision + crawler core, code-only)  (2026-06-29)
+# Graph Report - scoped --update (clearDecisionSidecars + functions/main, code-only)  (2026-06-29)
 
 ## Corpus Check
 - 0 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7270 nodes · 15900 edges · 160 communities detected
+- 7272 nodes · 15902 edges · 160 communities detected
 - Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 5586 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
@@ -235,39 +235,39 @@
 
 ### Community 0 - "Milvus CRUD Layer"
 Cohesion: 0.01
-Nodes (462): WHY: AutoscaledPool scales on local CPU/mem, idle during detect await -> over-subscribes 5-wide detect p-limit, Backpressure gate predicate (shouldAcceptNewPage: pending <= threshold), killBrowserProcesses(), Budget inversion: handler timeout 120s < single detect timeout 180s, kills slow detect mid-flight, Per-replica Docker PID-namespace isolation guarantee, BROWSER_KILL_PATTERN constant, Infinite OOM_RELAUNCH loop on shop.monlabofermier.fr (crawl 6334), killBrowserProcesses() helper (+454 more)
+Nodes (451): WHY: AutoscaledPool scales on local CPU/mem, idle during detect await -> over-subscribes 5-wide detect p-limit, Backpressure gate predicate (shouldAcceptNewPage: pending <= threshold), killBrowserProcesses(), Budget inversion: handler timeout 120s < single detect timeout 180s, kills slow detect mid-flight, Per-replica Docker PID-namespace isolation guarantee, BROWSER_KILL_PATTERN constant, Infinite OOM_RELAUNCH loop on shop.monlabofermier.fr (crawl 6334), killBrowserProcesses() helper (+443 more)
 
 ### Community 1 - "Node.js Crawler Core"
 Cohesion: 0.01
-Nodes (662): Fix B: status visibility (4 optional fields on CrawlStatus / get_status), test_status_autostash_fields.py (Fix B tests), Gets all keys matching a given prefix using SCAN., Gets all keys matching a given prefix using SCAN., scan_keys_by_prefix(), Archiving — GCS fallback (3-location check: local archives, GCS via download daemon, fresh tar.gz), Pre-flight disk space check (size*1.5 estimate, 503 INSUFFICIENT_DISK_SPACE, fail-open), Failure webhook idempotency (request_id UUID per failure persisted in job_data; PHP dedupes; 6 callsites) (+654 more)
+Nodes (616): Fix B: status visibility (4 optional fields on CrawlStatus / get_status), test_status_autostash_fields.py (Fix B tests), delete_key(), get_json(), Deletes a key from Redis., Sets a dictionary for a key, serializing it to JSON., Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis. (+608 more)
 
 ### Community 2 - "CrawlerManager Python + DLQ"
 Cohesion: 0.01
-Nodes (454): Atomically decrements a key's value by 1, with a floor of 0 (never goes negative, safe_decrement_key(), Success/Stop Webhook Idempotency (PW-A): shared terminal_webhook_request_id reused by success+stop senders, CrawlerManager, Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis. (+446 more)
+Nodes (443): Atomically decrements a key's value by 1, with a floor of 0 (never goes negative, safe_decrement_key(), Success/Stop Webhook Idempotency (PW-A): shared terminal_webhook_request_id reused by success+stop senders, CrawlerManager, Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis. (+435 more)
 
 ### Community 3 - "Rust Service Clients"
-Cohesion: 0.02
-Nodes (393): async-job-API work exonerated; html_content bypass intact, complete-mode + html_content still opens browser for alternatives, Option A (crawler mode=simple) REJECTED: breaks Regional Path Exclusion, Option C (BROWSER_SEMAPHORE_SIZE 6->4 / mem_limit) deferred lever, socket hang up = OOM SIGKILL (6 browsers x 600MB + heap vs mem_limit 4500m), Investigation: detection opens browser on html_content alt-URL fetch -> socket hang up, lifespan(), metrics_endpoint() (+385 more)
+Cohesion: 0.0
+Nodes (519): Auto-Stash/Unstash Follow-Up Design (2 code fixes + 2 doc notes), Existing-data drain: one-time tools/stash_crawls_batch.py run (no backfill code), Fix A: unstash-on-start (resume-on-start the retrieve bug), Root cause: start_crawl checked stashed_at only on previous_crawl_id, never on own crawl_id, is_restart (OOM relaunch) guard: never resume-on-start unstash (crawl was running, not terminal), Auto-Stash Follow-Up Implementation Plan, Capture prior Redis record before fresh job_data write (prior_job_info), Unstash failure -> _rollback_claim(decrement_counter=True) + propagate (HTTPException as-is, generic->503) (+511 more)
 
 ### Community 4 - "Milvus Concurrency Guard"
-Cohesion: 0.01
-Nodes (372): Any, bool, _classify_exit_code(), _count_files_in_dir(), _flatten_params_for_php(), _LockHeartbeat, _map_error_to_message(), _parse_iso_naive_utc() (+364 more)
+Cohesion: 0.02
+Nodes (397): async-job-API work exonerated; html_content bypass intact, complete-mode + html_content still opens browser for alternatives, Option A (crawler mode=simple) REJECTED: breaks Regional Path Exclusion, Option C (BROWSER_SEMAPHORE_SIZE 6->4 / mem_limit) deferred lever, socket hang up = OOM SIGKILL (6 browsers x 600MB + heap vs mem_limit 4500m), Investigation: detection opens browser on html_content alt-URL fetch -> socket hang up, _JobCapacityExceeded, _JobsDisabled (+389 more)
 
 ### Community 5 - "Redis Cache Rationale"
 Cohesion: 0.01
-Nodes (404): Auto-Stash/Unstash Follow-Up Design (2 code fixes + 2 doc notes), Existing-data drain: one-time tools/stash_crawls_batch.py run (no backfill code), Fix A: unstash-on-start (resume-on-start the retrieve bug), Root cause: start_crawl checked stashed_at only on previous_crawl_id, never on own crawl_id, is_restart (OOM relaunch) guard: never resume-on-start unstash (crawl was running, not terminal), Auto-Stash Follow-Up Implementation Plan, Capture prior Redis record before fresh job_data write (prior_job_info), Unstash failure -> _rollback_claim(decrement_counter=True) + propagate (HTTPException as-is, generic->503) (+396 more)
+Nodes (379): Any, lifespan(), metrics_endpoint(), Prometheus metrics exposition endpoint., bool, _classify_exit_code(), _count_files_in_dir(), _flatten_params_for_php() (+371 more)
 
 ### Community 6 - "Pydantic Request Schemas"
 Cohesion: 0.01
-Nodes (290): 'admission_rejected' DetectionResponse method, AlternativeUrl schema (url, method, reliability, validated, region_priority?), api-gateway per-service downstream timeout map (detection=180s), API hreflang/data-lang same-host validation gate, DomainFR._is_valid_language_alternative static helper (Python), Apify proxy (APIFY_PROXY), Go vs Express benchmark — crawler-monitor-backend (2026-04), queue.Analyze CPU + JSON parsing benchmark (Go) (+282 more)
+Nodes (324): 'admission_rejected' DetectionResponse method, AlternativeUrl schema (url, method, reliability, validated, region_priority?), api-gateway per-service downstream timeout map (detection=180s), API hreflang/data-lang same-host validation gate, DomainFR._is_valid_language_alternative static helper (Python), Apify proxy (APIFY_PROXY), Go vs Express benchmark — crawler-monitor-backend (2026-04), queue.Analyze CPU + JSON parsing benchmark (Go) (+316 more)
 
 ### Community 7 - "GCS Archive Classifier"
 Cohesion: 0.02
 Nodes (89): get_elasticsearch_client(), get_rabbitmq_connection(), Shared connection factories for RabbitMQ and Elasticsearch., Fail fast if required environment variables are missing., Connects to RabbitMQ with exponential backoff retries., Connects to Elasticsearch with exponential backoff retries., _validate_env(), DLQArchiver (+81 more)
 
 ### Community 8 - "LLM Provider Clients"
-Cohesion: 0.02
-Nodes (170): JobManager, JobStore, test_auto_stash_resume_on_start.py (Fix A tests, manager_with_mocks fixture), delete_key(), get_json(), Deletes a key from Redis., Sets a dictionary for a key, serializing it to JSON., Gets a dictionary for a key, deserializing it from JSON. (+162 more)
+Cohesion: 0.01
+Nodes (237): Lock heartbeat (stash+archive): _LockHeartbeat re-EXPIREs Redis lock via Lua CAS so TTL never lapses mid-op, Lock heartbeat tunables (STASH/ARCHIVE/UNSTASH_LOCK_TTL, LOCK_HEARTBEAT_INTERVAL/MAX_DURATION), nginx proxy_next_upstream off on /crawler/(stash|unstash|archive)/ to prevent POST retry fan-out across replicas, nginx proxy_next_upstream off on /crawler/(stash|unstash|archive)/ — prevents POST retry fan-out across replicas, Ownership-safe lock pair (_acquire/_release_ownership_lock: replica-id-tagged value + Lua CAS DEL), Stash conflict matrix (409 CRAWL_IS_ACTIVE/ALREADY_ARCHIVED/ALREADY_STASHED/OPERATION_IN_PROGRESS; 503 INSUFFICIENT_DISK_SPACE), Stash daemons (separate upload/download_daemon.sh instances via UPLOAD_GCS_PREFIX=stash, DELETE_AFTER_DOWNLOAD=true), Stash — free-disk investigation workflow (stashed_at field, gs://bucket/stash/, orthogonal to status) (+229 more)
 
 ### Community 9 - "LLM gRPC Client"
 Cohesion: 0.03
@@ -283,19 +283,19 @@ Nodes (56): execute_cypher(), get_categories_count(), ServiceClients, CypherBuil
 
 ### Community 12 - "Enums and Collection Types"
 Cohesion: 0.02
-Nodes (97): ABC, main(), common_utils.grpc_clients (client wrappers), _clean_text(), chunk_text(), detokenize(), get_embedding(), get_embeddings() (+89 more)
+Nodes (146): POST /archive/{crawl_id}, Dependencies (Redis state/counters, GCS archive+restore, common-utils, api-detection-langue-fr), Tmp file isolation via .staging/ (atomic move after integrity checks), Stash->archive move (.move-request marker, move-flow daemon gcloud storage mv stash->crawls, _move_stash_to_archive), Two-phase commit for unstash (download→extract→.unstash-confirmed→GCS rm→.unstash-cleanup-done; cleaned/deferred status), cleanup_archives background task, crawler_archives/ -> /app/archives, POST /archive (GCS fallback) (+138 more)
 
 ### Community 13 - "Update-Mode Queue Builder"
-Cohesion: 0.03
-Nodes (91): _detect_soft_404(), _is_redirect_to_home(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult agai, Lightweight visible-text length for the thin-content threshold., Classify a ScrapeResult against the requested URL.      Order of checks:       1, validate(), ValidationVerdict, _visible_text_length() (+83 more)
+Cohesion: 0.02
+Nodes (97): ABC, main(), common_utils.grpc_clients (client wrappers), _clean_text(), chunk_text(), detokenize(), get_embedding(), get_embeddings() (+89 more)
 
 ### Community 14 - "Rust Service Request Models"
-Cohesion: 0.02
-Nodes (121): POST /archive/{crawl_id}, Tmp file isolation via .staging/ (atomic move after integrity checks), Stash->archive move (.move-request marker, move-flow daemon gcloud storage mv stash->crawls, _move_stash_to_archive), Two-phase commit for unstash (download→extract→.unstash-confirmed→GCS rm→.unstash-cleanup-done; cleaned/deferred status), cleanup_archives background task, crawler_archives/ -> /app/archives, POST /archive (GCS fallback), Auto-Stash Workflow (+113 more)
+Cohesion: 0.03
+Nodes (94): _detect_soft_404(), _is_redirect_to_home(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult agai, Lightweight visible-text length for the thin-content threshold., Classify a ScrapeResult against the requested URL.      Order of checks:       1, validate(), ValidationVerdict, _visible_text_length() (+86 more)
 
 ### Community 15 - "Trafilatura HTML Cleaning"
-Cohesion: 0.02
-Nodes (111): Auto-stash follow-up 2026-06-02: resume-on-start unstash (own id), status visibility, failed/never-downloaded stash via 48h timeout, Auto-stash sweep (_reconcile_locked collects terminal non-stashed crawls, stashes via create_task; _is_stash_eligible), Auto-stash tunables (AUTO_STASH_ENABLED, STASH_GRACE/SAFETY_TIMEOUT/DISK_HIGH_WATER/MAX_PER_SWEEP, MOVE_* prefixes), Auto-Stash Workflow (folds stash/unstash into crawl lifecycle; AUTO_STASH_ENABLED-gated, transparency always on), Auto-stash job_data fields: finished_at, downloaded_at, size_bytes, stashed_at (orthogonal, cached on write, read from Redis), Stash eligibility: grace (STASH_GRACE_SECONDS) / safety-timeout (172800) / disk-pressure (STASH_DISK_HIGH_WATER_PCT), Capacity Counter (crawl_jobs:running_count), _is_stash_eligible (+103 more)
+Cohesion: 0.03
+Nodes (114): UNSTASH_GCS_ORPHAN log line (cleanup grace expired, operator grep, no Prometheus counter), DELETE_AFTER_DOWNLOAD=true daemon flag, GCS Archive/Stash Daemon Flow, Stash workflow (free disk), Two-phase commit unstash protocol, .unstash-cleanup-done marker, UNSTASH_CLEANUP_GRACE_SECONDS (30s), UNSTASH_GCS_ORPHAN log prefix (+106 more)
 
 ### Community 16 - "GCS Quarantine Restore"
 Cohesion: 0.03
@@ -314,124 +314,124 @@ Cohesion: 0.05
 Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyGuard.      Uses module-level singleto, Record a successful slot acquisition., Record a slot release., Record an acquire timeout., Set the configuration gauges (typically called once at startup)., Set fallback mode indicator (1 = Redis unavailable, 0 = normal). (+55 more)
 
 ### Community 20 - "Embedding gRPC Client"
-Cohesion: 0.04
-Nodes (93): Settings, BaseSettings, Config, env_or(), env_or_opt(), Configuration de l'application, Settings, Config (+85 more)
-
-### Community 21 - "DeepSeek OCR Extractor"
 Cohesion: 0.03
 Nodes (64): Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, verify_api_key(), Exit codes Node->Python (0/2 finished, 3 OOM relaunch, 4 update-no-data, 5 redis-lost, 6 progress-stall, 7 domain-changed), failure_cause vocabulary (cross-lang Python<->BO PHP contract: oom_max_restarts, redis_lost, progress_stalled, domain_changed, ...), Node shared Redis client (createSharedRedisClient multiplexes heartbeat+dedup, 2→1 conns, halves orphan blast radius), Node shared Redis client (createSharedRedisClient multiplexes heartbeat+dedup+stats+consolidator, 2->1 conn, halves orphan blast), GET /admin/redis-debug (per-replica pool stats + CLIENT LIST aggregation, verify_api_key, whitelisted field projection), Redis Connection Leak Prevention (bounded pool + Node shared client + server idle reap + diagnostics) (+56 more)
 
-### Community 22 - "Header Footer Extractor"
+### Community 21 - "DeepSeek OCR Extractor"
 Cohesion: 0.04
 Nodes (86): Audit logs (login, token_issue, token_reuse_attack, webhook_fired, etc.), account-service-backend, Per-client branding endpoint /authorize/branding/{client_id}.json (logo, name, brand_color), claim_mapper applies client.claim_mappings to JWT (e.g. is_admin -> role_admin), Account-service client integration guide (Go + FastAPI examples for OAuth2 PKCE downstream wiring), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs, account-service-frontend, AuthenticateHellopro proxy (lifted from mcp-gateway) - delegates password check to hellopro.fr (+78 more)
 
-### Community 23 - "Graph Database gRPC Client"
+### Community 22 - "Header Footer Extractor"
 Cohesion: 0.03
 Nodes (82): Build-new-then-atomic-swap concurrency rule, Auto-proposal flow (Phase 3, manual-DLQ collector), B-index explosion (token+aliases -> flat 200-key dict), Shared catalog_db target (D9), Dynamic Unit Normalization Design Spec, disambiguation_rules table (Layer E3 nm/t-min), Five dynamic layers A-E, G1 pint-parse forced eval (+74 more)
 
+### Community 23 - "Graph Database gRPC Client"
+Cohesion: 0.07
+Nodes (39): JobManager, JobStore, Shared prod admission pool; crawler-service immune via html_content bypass, BatchCounts dataclass (authoritative success/failed/error tallies), BatchOpts dataclass (per-call batch options), client_job_id idempotency (SET NX claim → existing job returns 200), _heartbeat wall-clock ticker (refreshes last_activity + active TTL), JobManager (in-process asyncio worker, Approach A) (+31 more)
+
 ### Community 24 - "Claude Config Audit"
-Cohesion: 0.03
-Nodes (69): Final review 6 blockers (commits 21bf809f..7ebbb0c8), UNSTASH_GCS_ORPHAN log line (cleanup grace expired, operator grep, no Prometheus counter), archive_crawl._cleanup_local_data, mock_bind_mounts_present autouse fixture, 503 BIND_MOUNT_MISSING error code, _cleanup_data_keep_logs (stash cleanup mirroring archive), Crawl 1958 silent-data-loss incident (2026-05-20), DELETE_AFTER_DOWNLOAD=true daemon flag (+61 more)
+Cohesion: 0.05
+Nodes (48): Settings, api-gateway-go nginx.conf, api-gateway nginx.conf, BaseSettings, archive_lock:{id} Redis lock, Crawl 6250 incident (2026-05-20), Exit Code 3 (OOM relaunch), Exit Code 5 (redis_lost) (+40 more)
 
 ### Community 25 - "Archive Disk Preflight Rationale"
-Cohesion: 0.03
-Nodes (65): Returns (archive_path, is_temporary).         is_temporary=True means the file, Returns (archive_path, is_temporary).         is_temporary=True means the file, Returns (archive_path, is_temporary).         is_temporary=True means the file, Returns (archive_path, is_temporary).         is_temporary=True means the file, Returns (archive_path, is_temporary).         is_temporary=True means the file, Returns (archive_path, is_temporary).         is_temporary=True means the file, Returns (archive_path, is_temporary).         is_temporary=True means the file, Returns (archive_path, is_temporary).         is_temporary=True means the file (+57 more)
-
-### Community 26 - "Dead Services Cleanup"
 Cohesion: 0.04
 Nodes (57): SyncAdmission guard: SYNC_MAX_INFLIGHT (0=disabled), 503 + Retry-After on overload, BO fix: decision==='SKIP'->similar, similarity_ratio (fonctions_maj_crawling.php:1116-1117), Effect: title/description changes never detected -> stale products + missed Milvus re-ingest, Bug: BO reads is_similar/similarity (absent) instead of decision/similarity_ratio, api-comparaison-texte Contract Fix + Lean Hardening Design, api-comparaison-texte Contract Fix + Lean Hardening Plan, comparison_decision_total{decision} would have surfaced the bug (high SKIP, zero updates), Fail-safe: missing/error decision defaults to UPDATE (assume changed) vs old unsafe assume-similar (+49 more)
 
-### Community 27 - "GCS Archive Audit Tool Rationale"
+### Community 26 - "Dead Services Cleanup"
 Cohesion: 0.07
 Nodes (27): BaseTrafilatura, BaseTrafilaturaReponse, TrafilaturaReponseHtml, HeaderFooterExtractor, Analyzes a BeautifulSoup object to robustly find and extract the text content of, Original signature strategy: Tag + Sorted Class Names., ZONE A Improvement: Structural signature based on DOM path.         Example: bo, Helper to get 'tag:nth-of-type(i)' string. (+19 more)
 
-### Community 28 - "CleanHTML Module"
-Cohesion: 0.05
-Nodes (49): GCS server-side move stash/{id} → crawls/{id} (gcloud storage mv), Move-flow daemon (download_daemon.sh ENABLE_MOVE=true, third loop), .move-request / .move-done / .move-error markers, Move-flow settings (MOVE_REQUESTS/RESULTS_PATH, MOVE_SOURCE/TARGET_PREFIX, MOVE_TIMEOUT_SECONDS), _move_stash_to_archive (.move-request + poll .move-done), archive_status='pending_upload' (reused known string, zero BO change), Phase 1 — Transparency Layer, Phase 2 — Auto-Stash Sweep (+41 more)
-
-### Community 29 - "Crawler Monitor Rationale"
+### Community 27 - "GCS Archive Audit Tool Rationale"
 Cohesion: 0.06
 Nodes (48): BDD doc-enrichment runbook, Application Voie 1: drag-drop import (default), Application Voie 2: operator-run curl POST, columns map (name -> {type, desc}), Correction loop (re-emit on dropped column, re-import), Curated registry (bdd_used_tables / bdd_used_fields / bdd_meta), Vue dashboard BDDTablesView.vue (import-doc UI), database_id mapping (1=edgb2b/BO, 5=hpdata, 10=hellopro_ia) (+40 more)
 
-### Community 30 - "Community 30"
+### Community 28 - "CleanHTML Module"
 Cohesion: 0.08
 Nodes (23): DocumentTextExtractor, Télécharge un fichier depuis une URL                  Args:             url: URL, Résout un chemin ou URL vers un chemin local                  Args:, Convertit une image vers un format supporté par l'OCR                  Args:, Ajoute un fichier à la liste de nettoyage                  Args:             fil, Supprime tous les fichiers marqués pour le nettoyage, Extrait le texte d'une image ou d'un PDF avec OCRExtractor.         - Si un PDF, Vérifie si un document contient des images non extractibles                  Arg (+15 more)
 
-### Community 31 - "Community 31"
-Cohesion: 0.09
-Nodes (39): api-gateway-go nginx.conf, api-gateway nginx.conf, Camoufox OOM Restart Loop Plan, Camoufox OOM Restart Loop Design Spec, archive_lock:{id} Redis lock, BROWSER_KILL_PATTERN constant, Crawl 6250 incident (2026-05-20), Crawl 6334 (shop.monlabofermier.fr) (+31 more)
-
-### Community 32 - "Community 32"
+### Community 29 - "Crawler Monitor Rationale"
 Cohesion: 0.12
 Nodes (25): addPage(), addPoolSample(), buildSummary(), createAggregator(), median(), percentile(), phaseStats(), round1() (+17 more)
 
-### Community 33 - "Community 33"
+### Community 30 - "Community 30"
 Cohesion: 0.08
 Nodes (23): build_queue(), classify_entry(), _has_tmp_sibling(), load_exclude_ids(), load_report(), main(), parse_args(), Build the update-mode re-ingestion queue from a gcs_archive_audit report.  Reads (+15 more)
 
-### Community 34 - "Community 34"
+### Community 31 - "Community 31"
 Cohesion: 0.07
 Nodes (30): alternative_urls Exclusion List, robots.txt Blanket Block, running_count Drift Bug, Cross-Service Milvus Coordination, Inflight Request Deduplication, Multi-Path robots Probe, Multilingual Regional Path Duplicates, Playwright TargetClosedError flood (+22 more)
 
-### Community 35 - "Community 35"
+### Community 32 - "Community 32"
 Cohesion: 0.08
 Nodes (26): check_entities_exist(), check_labels_exist(), Check which entity IDs already exist in Milvus.          Args:         ids: L, Search result from Milvus., Upsert a single canonical label.          Args:         label: The canonical, Upsert multiple labels in a batch.          Args:         labels: List of dic, Search for similar labels.          Args:         embedding: Query vector emb, Check which labels already exist in Milvus.          Args:         labels: Li (+18 more)
 
-### Community 36 - "Community 36"
+### Community 33 - "Community 33"
 Cohesion: 0.09
 Nodes (27): image-comparison cache_service migration (S2), Load-bearing gotcha: access cache_service.redis_client as module attribute at call time, common_utils.redis.cache_service (bounded pool, socket timeouts, client_name), Byte-identical keys/TTL/JSON/HTTP contract preserved, crawler-service main.py is the reference wiring pattern, Dockerfile installs libs/common-utils editable (build context repo root), init_redis_pool / close_redis_pool wiring in main.py, Migration plan: image-comparison -> common_utils cache_service (+19 more)
 
-### Community 37 - "Community 37"
+### Community 34 - "Community 34"
 Cohesion: 0.08
 Nodes (24): 503 discriminator: capacity -> Retry-After (retry); disabled/Redis-down -> no Retry-After (fail fast), content-extractor Hardening + Async + Result Cache (design spec), content-extractor Async + Cache + Sync Hardening (implementation plan), async_jobs.py: JobStore + JobManager + poll_status (Redis job store, in-process asyncio worker), Axis 1: asyncio.to_thread offload + UVICORN_WORKERS (processes, not threads, give CPU parallelism), Axis 2: hybrid request shape (hardened sync + batched async submit/poll), Load-bearing: guard on cache_service.redis_client truthy before bare helpers (they raise ConnectionError when None), Capacity model: throughput ~= cores/(p*(1-h)); serves 7 crawler replicas via async + cache + workers (+16 more)
 
-### Community 38 - "Community 38"
+### Community 35 - "Community 35"
 Cohesion: 0.13
 Nodes (20): BatchResult, _dict_to_struct(), execute_batch_cypher(), execute_cypher(), get_graph_schema(), GraphSchema, NodeLabel, PropertyInfo (+12 more)
 
-### Community 39 - "Community 39"
+### Community 36 - "Community 36"
 Cohesion: 0.12
 Nodes (21): 28 deleted workflow files (9 ci + 9 cd + 9 pipeline + 1 orphan), Bilingual EN+FR conventional commit via temp file + git commit --file=, Risk: deleted CI workflow listed as required status check hangs future PRs, Dead Workflows Cleanup Design Spec, Goal: delete 28 dead-service GitHub Actions workflows from .github/workflows/, Dead Workflows Cleanup Implementation Plan, Scope: workflow files only; service directories in apps-microservices/ untouched, Dead criterion: workflow references a retired service no longer active (+13 more)
 
-### Community 40 - "Community 40"
+### Community 37 - "Community 37"
 Cohesion: 0.15
 Nodes (13): DetectionClient, Shared HTTP client enforcing the api-detection-langue-fr call contract.  Contr, HTTP client wrapper for api-detection-langue-fr enforcing the caller contract., _isolate_env(), Tests for common_utils.detection_client.DetectionClient., Reset contract env vars to known defaults so tests are hermetic., With DETECTION_MAX_CONCURRENCY=2, at most 2 requests are in flight at once., test_concurrency_semaphore_caps_inflight() (+5 more)
 
-### Community 41 - "Community 41"
+### Community 38 - "Community 38"
+Cohesion: 0.11
+Nodes (18): GCS server-side move stash/{id} → crawls/{id} (gcloud storage mv), Move-flow daemon (download_daemon.sh ENABLE_MOVE=true, third loop), .move-request / .move-done / .move-error markers, Move-flow settings (MOVE_REQUESTS/RESULTS_PATH, MOVE_SOURCE/TARGET_PREFIX, MOVE_TIMEOUT_SECONDS), _move_stash_to_archive (.move-request + poll .move-done), archive_status='pending_upload' (reused known string, zero BO change), Phase 1 — Transparency Layer, Phase 2 — Auto-Stash Sweep (+10 more)
+
+### Community 39 - "Community 39"
 Cohesion: 0.16
 Nodes (17): rabbitmq-reviewer agent (proposed), security-auditor agent (proposed), test-writer agent (proposed), /pre-push command (proposed), prix-traitement port discrepancy (8595 vs 8591), 47.5/100 maturity score rationale, Claude Code Audit Report 2026-03-25, security.md rule (proposed) (+9 more)
 
-### Community 42 - "Community 42"
+### Community 40 - "Community 40"
 Cohesion: 0.15
 Nodes (16): Audit Classifications (OK/WRONG_NAME/CORRUPTED/...), Missing 'domain' field in callback_payload, --restore-from-quarantine command, ./ Prefix Tar Member Bug, tmp.tar.gz Glob Race with Upload Daemon, Update-Mode Re-ingestion, Rationale: Diagnostic-first defense over silent producer/consumer fix, Rationale: Use gcloud CLI to avoid new PyPI dependency (+8 more)
 
-### Community 43 - "Community 43"
+### Community 41 - "Community 41"
 Cohesion: 0.17
 Nodes (15): redis-client-frontend account-service SSO login (OAuth 2.1 + PKCE), account-service OAuth contract: split PUBLIC/BASE URLs, HS256 JWT access token, ~60s TTL, exact redirect_uri, D1: native Next.js BFF OAuth client (hand-rolled PKCE + jose), not Auth.js, Register OAuth client via POST /api/v1/admin/services (client_id/secret shown once), D3: email allow-list (ADMIN_EMAILS) — authenticated != authorized, protects FLUSHDB, lib/auth/flow.ts: framework-free startLogin / completeCallback orchestration, D5: local session clear + optional RP-initiated central logout (SSO_CENTRAL_LOGOUT), middleware.ts rewrite: verify rcf_session, POST->401, GET->302 /auth/login (+7 more)
 
-### Community 44 - "Community 44"
+### Community 42 - "Community 42"
 Cohesion: 0.17
 Nodes (12): api-classification-v2 (test variant), api-rest-milvus-bkp (superseded), Archive Branch Strategy, Dead Services Cleanup Plan, database-service (superseded), categories-processor-service (dormant), Dormant Services Cleanup Phase 2, fournisseurs-processor-service (dormant) (+4 more)
 
-### Community 45 - "Community 45"
+### Community 43 - "Community 43"
 Cohesion: 0.17
 Nodes (12): GCS Archive Audit Tool Plan, Archive Classifications (OK/CORRUPTED/WRONG_NAME/...), GCS Audit Multi-Source Domain Resolution, gcloud Storage CLI Shell Wrappers (no Python GCS lib), _normalize_member_name (handles ./ prefix), GCS Audit Prefix Fix + Quarantine Restore, _resolve_domain_name Multi-Source Helper, --restore-from-quarantine Flag (+4 more)
 
-### Community 46 - "Community 46"
+### Community 44 - "Community 44"
 Cohesion: 0.24
 Nodes (10): Register GET /api-info on the given FastAPI app with the catalog convention., register_api_info(), Register GET /api-info on the given FastAPI app with the catalog convention., register_api_info(), test_custom_openapi_url(), test_full_payload(), test_minimal_payload(), test_custom_openapi_url() (+2 more)
 
-### Community 47 - "Community 47"
+### Community 45 - "Community 45"
 Cohesion: 0.18
 Nodes (12): _auto_stash_one (background stash dispatch, swallows 409), _disk_used_pct (storage filesystem used %, fail-open 0.0), downloaded_at job_data field (/results stream-start), Disk-pressure eligibility (STASH_DISK_HIGH_WATER_PCT, top-N by size), Grace eligibility (downloaded_at + STASH_GRACE_SECONDS), Safety-timeout eligibility (finished_at + STASH_SAFETY_TIMEOUT_SECONDS), finished_at job_data field (terminal transition stamp), _is_stash_eligible predicate (grace/timeout, pure, fail-open) (+4 more)
 
-### Community 48 - "Community 48"
+### Community 46 - "Community 46"
 Cohesion: 0.22
 Nodes (5): CleanHTML, Class base to clean data., Convert HTML content to BeautifulSoup object., Steps:         1. Convert HTML to BeautifulSoup object.         2. Keep only tag, Strip HTML tags and return cleaned text.         Remove all tags except tags rel
 
-### Community 49 - "Community 49"
+### Community 47 - "Community 47"
+Cohesion: 0.33
+Nodes (10): buildChecker(), makeMockConsolidator(), makeMockJsonlWriter(), makeMockRedisClient(), makeMockStatsManager(), buildChecker(), makeMockConsolidator(), makeMockJsonlWriter() (+2 more)
+
+### Community 48 - "Community 48"
 Cohesion: 0.2
 Nodes (10): Crawler Monitor Alignment Plan, Monitor/Crawler Data Contract Mismatch, Crawler Monitor Dataset Browser & Queue Insights, Fail-Fast Security Defaults (admin/JWT), supertest Backend Test Harness, 3-Category URL Browser (succès/erreurs/non-FR), Container-Level cgroup Metrics, React Rules of Hooks Violation Fix (+2 more)
+
+### Community 49 - "Community 49"
+Cohesion: 0.2
+Nodes (10): CLAUDE.md: failure_cause vocabulary domain_changed row, CLAUDE.md: exit code 7 -> failed / domain_changed, _classify_exit_code shared helper (maps exit code → failure_cause), Redis Loss / Progress Stall Detection doc section, Manual smoke-test playbook for redis_lost / progress_stalled, Spec 2026-05-21 redis-loss-progress-stall-detection-design, _classify_exit_code(7) -> domain_changed contract, failure_cause = domain_changed (+2 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.28
@@ -1044,9 +1044,9 @@ Nodes (1): Camoufox default browser (stealth Firefox C++ anti-detection; headles
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CrawlerManager` connect `CrawlerManager Python + DLQ` to `Node.js Crawler Core`, `Milvus Concurrency Guard`, `Redis Cache Rationale`, `LLM Provider Clients`, `Trafilatura HTML Cleaning`, `Embedding gRPC Client`, `Archive Disk Preflight Rationale`, `CleanHTML Module`, `Community 31`?**
-  _High betweenness centrality (0.108) - this node is a cross-community bridge._
-- **Why does `cache_service.py (Redis lock helper)` connect `Pydantic Request Schemas` to `LLM Provider Clients`, `Node.js Crawler Core`, `CrawlerManager Python + DLQ`?**
+- **Why does `CrawlerManager` connect `CrawlerManager Python + DLQ` to `Node.js Crawler Core`, `Rust Service Clients`, `Redis Cache Rationale`, `LLM Provider Clients`, `Enums and Collection Types`, `Graph Database gRPC Client`, `Claude Config Audit`?**
+  _High betweenness centrality (0.109) - this node is a cross-community bridge._
+- **Why does `cache_service.py (Redis lock helper)` connect `Pydantic Request Schemas` to `Node.js Crawler Core`, `CrawlerManager Python + DLQ`, `Rust Service Clients`?**
   _High betweenness centrality (0.076) - this node is a cross-community bridge._
 - **Are the 323 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 323 INFERRED edges - model-reasoned connections that need verification._
