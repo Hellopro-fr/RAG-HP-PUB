@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyFragment, applyPerClassStrip, perClassEnabled } from "./diezClassify.js";
+import { classifyFragment, applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
 
 test("classifyFragment unchanged after move (spot-check)", () => {
     assert.equal(classifyFragment(""), "anchor");
@@ -26,4 +26,14 @@ test("perClassEnabled reads env at call time", () => {
     process.env.DIEZ_PERCLASS_ENABLED = "true";
     assert.equal(perClassEnabled(), true);
     delete process.env.DIEZ_PERCLASS_ENABLED;
+});
+
+test("fingerprint: identical content equal, whitespace-normalized", () => {
+    assert.equal(fingerprint("hello world"), fingerprint("  hello   world\n"));
+});
+test("fingerprint: differing content differs", () => {
+    assert.notEqual(fingerprint("product A specs 500w"), fingerprint("product B specs 800w"));
+});
+test("fingerprint: empty is stable", () => {
+    assert.equal(fingerprint(""), fingerprint("   "));
 });

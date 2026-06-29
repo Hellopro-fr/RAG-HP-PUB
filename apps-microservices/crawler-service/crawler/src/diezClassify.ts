@@ -57,3 +57,18 @@ export const applyPerClassStrip = (url: string): string => {
 /** Kill-switch, read at call time (testable). */
 export const perClassEnabled = (): boolean =>
     (process.env.DIEZ_PERCLASS_ENABLED ?? "false").toLowerCase() === "true";
+
+/**
+ * Cheap, stable content fingerprint for collision detection — FNV-1a over the
+ * whitespace-normalized text, plus a length suffix to cut accidental collisions.
+ * Used by the end-of-crawl content-collision pass to decide "same page?".
+ */
+export const fingerprint = (content: string): string => {
+    const s = content.replace(/\s+/g, " ").trim();
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16) + ":" + s.length;
+};
