@@ -627,6 +627,13 @@ Auto-resolves domain-specific `?`-params per-parameter and never escalates `limi
 
 Spec: `docs/superpowers/specs/2026-06-16-limitquestionmark-phase2-zero-touch` (Hellopro planning repo).
 
+#### QM tier-2 live strip-propagation + loss-proofing (spec 2026-06-29)
+
+- A committed `toRemove` param now strips **newly-discovered links** (enqueue, ungated) and **already-queued variants** (consumption-time skip: the queued variant is fetched once, then the handler returns early — Crawlee can't cancel navigation pre-fetch from a hook), not just the one-shot queue snapshot.
+- `QM_RAW_SAME_SIM` (default `0.97`, read at call time): a tier-2 pair counts as "same" only if `/clean` text matches AND raw page HTML jaccard ≥ this threshold. Guards the `/clean` search-grid blind spot (a high value errs toward KEEP = no route loss). Tune down only if genuine cosmetics are under-committed (bloat).
+- `_questionmark_audit.json` (per crawl, in `storagePath`): `{ collapsed_candidates, committed, pair_stats }` — collapsed `?param=` route-loss candidates to re-crawl-audit. Cleared on dropData restart (`clearDecisionSidecars`).
+- All effective only when a `toRemove` is set (QM tier-2 commit, behind `QM_TIER2_ENABLED`, or human `--toremove`); with none set the paths are no-ops (flag-off byte-identical).
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.
