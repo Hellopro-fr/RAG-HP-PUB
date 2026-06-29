@@ -1876,6 +1876,22 @@ export const cleanDatasetFragments = (
 };
 
 /**
+ * Clean-restart (dropData) helper: delete the diez/questionMark decision sidecars
+ * that live in the storagePath ROOT. storagePath is deterministic per crawl_id and
+ * is NOT cleared by the Python relaunch path, so on a dropData restart these stale
+ * files would otherwise be re-inherited by readPersistedDecision/readQmPersistedDecision
+ * at Node startup. Missing files are a no-op. Returns the basenames actually removed.
+ */
+export const clearDecisionSidecars = (storagePath: string): string[] => {
+    const removed: string[] = [];
+    const files = ['_diez_decision.json', '_diez_audit.json', '_questionmark_decision.json', '_questionmark_observations.json'];
+    for (const f of files) {
+        try { fs.unlinkSync(`${storagePath}/${f}`); removed.push(f); } catch { /* absent = fine */ }
+    }
+    return removed;
+};
+
+/**
  * Process a URL to filter query parameters and remove hash fragments
  *
  * @param {string} url - URL to process

@@ -14,6 +14,7 @@ import {
     reclaimFailedRequest,
     stats as statsFromFunctions,
     dropDataset,
+    clearDecisionSidecars,
     isStoppedManualy,
     getUrlsCrawledStreaming,
     updateUrlsCrawledStreaming,
@@ -171,6 +172,16 @@ if (storagePath) {
     } catch (err) {
         console.error("Failed to change CWD:", err);
     }
+}
+
+// Clean restart (dropData): delete prior diez/QM decision sidecars from storagePath
+// root BEFORE the reads below. storagePath is reused per crawl_id and is NOT cleared
+// by the Python relaunch path, and Node's own dataset drop (~L560) runs AFTER these
+// reads — so without this, readPersistedDecision/readQmPersistedDecision would inherit
+// stale skip/bypass decisions on a "clean" restart. OOM_RELAUNCH (non-dropData) keeps them.
+if (storagePath && dropData) {
+    const cleared = clearDecisionSidecars(storagePath);
+    if (cleared.length) console.log(`[dropData] cleared stale decision sidecars: ${cleared.join(', ')}`);
 }
 
 // Tier-1 diez auto-decision bootstrap: load persisted decision (OOM_RELAUNCH) or
