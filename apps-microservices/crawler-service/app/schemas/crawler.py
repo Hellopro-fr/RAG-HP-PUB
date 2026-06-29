@@ -162,3 +162,5 @@ class CrawlStatus(BaseModel):
     downloaded_at: Optional[str] = Field(None, description="ISO ts of the last successful /results download (auto-stash grace start).")
     finished_at: Optional[str] = Field(None, description="ISO ts of the terminal transition (auto-stash safety-timeout start).")
     size_bytes: Optional[int] = Field(None, description="Estimated archive size in bytes (auto-stash disk-pressure ordering).")
+    queue_total: Optional[int] = Field(None, description="Total URLs enqueued (Crawlee totalRequestCount); running/stopping jobs only, else null.")
+    queue_remaining: Optional[int] = Field(None, description="URLs still pending in the queue (Crawlee pendingRequestCount); running/stopping jobs only, else null.")

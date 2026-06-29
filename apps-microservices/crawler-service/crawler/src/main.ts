@@ -709,6 +709,26 @@ if (skipquestionmark || skipdiez) {
 // Open requestQueue FIRST (before any operations)
 export const requestQueue = await RequestQueue.open(domain);
 
+// --- QUEUE STATS PUBLISHER (live observability) ---
+// Always-on (unlike the conditional queue-pause gate): every 30s, snapshot the
+// request-queue depth to {storagePath}/_queue_stats.json so the Python /status
+// handler can surface total/remaining URL counts to the BO live panel.
+const QUEUE_STATS_INTERVAL_MS = 30 * 1000;
+const queueStatsInterval = setInterval(async () => {
+    try {
+        const info = await requestQueue.getInfo();
+        if (!info) return;
+        const payload = JSON.stringify({
+            total_request_count: info.totalRequestCount,
+            pending_request_count: info.pendingRequestCount,
+            updated_at: new Date().toISOString(),
+        });
+        await fs.promises.writeFile(path.join(storagePath, '_queue_stats.json'), payload);
+    } catch (e) {
+        console.error("Queue-stats publisher failed:", e);
+    }
+}, QUEUE_STATS_INTERVAL_MS);
+
 // --- SEEDING LOGIC (Update Mode Support) ---
 // Declared at outer scope so Phase 2 seeding (before startCrawler) can access it
 let remainingUrls: { url: string; source: string }[] = [];
@@ -965,6 +985,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // Stop periodic tasks
     if (persistenceInterval) clearInterval(persistenceInterval);
     if (queuePauseInterval) clearInterval(queuePauseInterval);
+    clearInterval(queueStatsInterval);
 
     console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
