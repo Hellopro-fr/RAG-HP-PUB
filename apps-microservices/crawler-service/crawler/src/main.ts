@@ -1112,14 +1112,32 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         }
     }
 
-    // Phase-2: clean '#' from stored rows only on a clean COMPLETED skip-commit.
-    // Future rows were already stripped at enqueue; this fixes pre-commit rows.
+    // Phase-2: shutdown dataset cleanup — legacy skipDiez blind strip, or content-collision
+    // when DIEZ_PERCLASS_ENABLED. Stats captured for the _diez_audit.json sidecar below.
     if (reason === 'COMPLETED' && (context.config.skipDiez || perClassEnabled())) {
         try {
             const { cleanDatasetFragments } = await import("./functions.js");
             context.diezContentCollision = cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
         } catch (e) {
             console.error("Dataset fragment cleanup failed:", e);
+        }
+    }
+
+    // Phase-2: per-crawl audit sidecar (collapsed-fragment candidates + content-collision stats).
+    if (storagePath && perClassEnabled()) {
+        try {
+            fs.writeFileSync(
+                `${storagePath}/_diez_audit.json`,
+                JSON.stringify({
+                    collapsed_candidates: context.diezCollapsed,
+                    content_collision: context.diezContentCollision,
+                }, null, 2),
+            );
+            if (context.diezCollapsed.length > 0) {
+                console.warn(`[diez] route-loss candidates: ${context.diezCollapsed.length} fragment page(s) collapsed onto an existing base — see _diez_audit.json (re-crawl to confirm).`);
+            }
+        } catch (e) {
+            console.error("Diez audit sidecar write failed:", e);
         }
     }
 
