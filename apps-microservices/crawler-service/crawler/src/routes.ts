@@ -23,6 +23,7 @@ import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
 import { applyPerClassStrip, perClassEnabled } from "./diezClassify.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
@@ -236,6 +237,21 @@ router.addDefaultHandler(
         if (url) url = perClassEnabled() ? applyPerClassStrip(url) : stripEmptyFragment(url);
         const diezStripped = !!url && url !== request.loadedUrl; // a '#' was per-class-stripped from the loaded URL
         try {
+
+        // Part C (C2, spec 2026-06-29): re-apply the LIVE query/diez strip to this dequeued
+        // page. If it collapses onto an already-seen base, this queued variant is a duplicate
+        // that the commit-time queue rewrite didn't catch — skip processing (no store, no link
+        // enqueue). The page was fetched once (bounded); Crawlee marks it handled on this return.
+        // Placed INSIDE the try so the early return still runs the L1087 finally (timing
+        // record + per-attempt marker cleanup that must run for EVERY request path).
+        const qmStripped = qmConsumptionStrip(url);
+        if (qmStripped !== url && context.dedupManager) {
+            const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
+            if (shouldSkipDequeued(url, qmStripped, known)) {
+                recordQmCollapsed(url, qmStripped);
+                return;
+            }
+        }
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
         // Uses ignoredExtensions as single source of truth for blocked file types
