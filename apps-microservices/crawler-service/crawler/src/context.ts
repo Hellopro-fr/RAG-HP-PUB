@@ -136,6 +136,10 @@ export const context = {
         contentShaping: [] as string[],
         defaulted: false,
     },
+    // Phase-2 QM collapsed-param audit (spec 2026-06-29). In-memory, per-crawl.
+    // Populated by the consumption skip (Part C): a queued ?param= variant that
+    // collapsed onto an already-seen base = a route-loss candidate to re-crawl-audit.
+    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string }>,
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null,

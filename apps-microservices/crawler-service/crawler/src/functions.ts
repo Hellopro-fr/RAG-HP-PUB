@@ -1891,7 +1891,7 @@ export const cleanDatasetFragments = (
  */
 export const clearDecisionSidecars = (storagePath: string): string[] => {
     const removed: string[] = [];
-    const files = ['_diez_decision.json', '_diez_audit.json', '_questionmark_decision.json', '_questionmark_observations.json'];
+    const files = ['_diez_decision.json', '_diez_audit.json', '_questionmark_decision.json', '_questionmark_observations.json', '_questionmark_audit.json'];
     for (const f of files) {
         try { fs.unlinkSync(`${storagePath}/${f}`); removed.push(f); } catch { /* absent = fine */ }
     }
