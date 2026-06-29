@@ -325,6 +325,8 @@ module "secret_manager" {
     "mcp-ringover-api-key" = { service = "mcp-ringover-service" }
     # mcp-semrush-service : cle API Semrush (single key, propre au service)
     "mcp-semrush-api-key" = { service = "mcp-semrush-service" }
+    # api-rest-milvus : cle d'acces webhook (propre au service)
+    "api-rest-milvus-key-webhook" = { service = "api-rest-milvus" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {

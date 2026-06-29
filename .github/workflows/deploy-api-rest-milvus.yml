@@ -1,0 +1,93 @@
+name: 'Deploy — api-rest-milvus'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-rest-milvus
+# (Python FastAPI, CRUD REST sur Milvus, port 8517).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. La VM continue de servir via l'api-rest-milvus-lb (nginx) + api-gateway.
+#
+# *** PREMIER service migre qui depend de l'INFRA INTERNE (Milvus prod) ***
+# Joint Milvus via DNS prive milvus-prod.hello.dev.private.com (10.0.1.51:19530)
+# -> VPC Connector vpc-access-connector + egress private-ranges-only OBLIGATOIRES.
+# La zone Cloud DNS privee hellopro-private (attachee a hellopro-dev-vpc) resout le nom ;
+# la regle firewall allow-intra-lan (10.0.0.0/8, tous ports) autorise le connector -> Milvus.
+#
+# ATTENTION : le shadow se connecte a la MEME base Milvus PROD (10.0.1.51).
+# Tests E2E en LECTURE SEULE uniquement (/health, GET, stats). Jamais de write/delete.
+#
+# Le lifespan etablit la connexion Milvus au startup (asyncio.gather leve si echec)
+# -> un deploy reussi + /health 200 prouve que le chemin VPC->Milvus fonctionne.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-rest-milvus/**'
+      - '.github/workflows/deploy-api-rest-milvus.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy api-rest-milvus'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-rest-milvus
+      dockerfile_path: apps-microservices/api-rest-milvus/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY libs/common-utils + apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8517 (hardcode dans le Dockerfile).
+      container_port: 8517
+      health_check_path: /health
+      # *** VPC Connector requis : Milvus est sur une IP interne (10.0.1.51) ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # Config non-sensible (URIs/ports/params Milvus+Qdrant). REDIS_URL volontairement
+      # omis au 1er deploy (optionnel cote app, fallback local) pour isoler la variable Milvus.
+      env_vars_json: |
+        {
+          "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
+          "ZILLIZ_URI_DEV": "milvus.hello.dev.private.com",
+          "ZILLIZ_PORT": "19530",
+          "ZILLIZ_API_KEY": "none",
+          "QDRANT_HOST_URL": "10.0.1.237",
+          "QDRANT_PORT": "6333",
+          "QDRANT_API_KEY": "none",
+          "M_PARAMS": "32",
+          "EF_PARAMS": "300"
+        }
+      # 7 secrets : 6 platform partages + 1 dedie (KEY_WEBHOOK).
+      secret_env_vars_json: |
+        {
+          "ZILLIZ_USER": "platform-zilliz-user:latest",
+          "ZILLIZ_PASSWORD": "platform-zilliz-password:latest",
+          "RABBITMQ_URL": "platform-rabbitmq-url:latest",
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "OPENROUTER_API_KEY": "platform-openrouter-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
+          "KEY_WEBHOOK": "api-rest-milvus-key-webhook:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues),
+      # comme les autres services Python. Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
