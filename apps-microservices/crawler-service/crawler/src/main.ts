@@ -25,6 +25,7 @@ import {
     generateUpdateReport,
     processUrl,
     getApifyProxyUrl,
+    stopCrawler,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { PushedSet } from "./class/PushedSet.js";
@@ -90,6 +91,8 @@ const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmar
 const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
 const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
 const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
+const bypassQueue = (getArg('bypassqueue', 'npm_config_bypassqueue') || 'false').toLowerCase() === 'true';
+const queueLimit = parseNumericArg('queuelimit', 'npm_config_queuelimit', 2000);
 
 let paramPerCrawl = parseNumericArg('percrawl', 'npm_config_percrawl', 0);
 let paramPerMinute = parseNumericArg('perminute', 'npm_config_perminute', 100);
@@ -651,6 +654,20 @@ persistenceInterval = setInterval(async () => {
         if (crawlMode === 'update') {
             await generateUpdateReport(domain);
         }
+
+        // Queue-pause gate: stop early when the pending queue predicts an oversized site
+        // (machine-time protection). bypassqueue=1 is the operator "crawl fully" override;
+        // queuelimit<=0 disables it.
+        if (!bypassQueue && queueLimit > 0) {
+            const liveQueueInfo = await requestQueue.getInfo();
+            if (liveQueueInfo && liveQueueInfo.pendingRequestCount > queueLimit) {
+                console.warn(`⚠️ Queue-pause gate triggered: pending=${liveQueueInfo.pendingRequestCount} > limit=${queueLimit} (limitQueue).`);
+                context.stopReason = "limitQueue";
+                if (context.crawlerInstance) {
+                    await stopCrawler(context.crawlerInstance, `Pending queue (${liveQueueInfo.pendingRequestCount}) exceeded limit ${queueLimit} (limitQueue).`);
+                }
+            }
+        }
     } catch (e) {
         console.error("Periodic persistence failed:", e);
     }
@@ -889,6 +906,7 @@ const mapStopReasonToMessage = (errorCode: string): string => {
         "insufficientData": "Données insuffisantes",
         "PAYLOAD_READ_ERROR": "Erreur lecture payload",
         "interruptedShutdown": "Crawl interrompu lors de l'arrêt du service",
+        "limitQueue": "File d'attente d'URLs trop volumineuse",
     };
 
     if (!errorCode) return "";
