@@ -106,6 +106,9 @@ export const context = {
         mismatches: 0,
         unusable: 0,
     },
+    // Phase-2 content-collision audit (see spec 2026-06-26). In-memory, per-crawl.
+    diezContentCollision: { rewritten: 0, removed: 0, collisionsKept: 0 },
+    diezCollapsed: [] as Array<{ collapsed: string; base: string }>,
     // Tier-1 observer for limitQuestionMark (see questionMarkDecision.ts + spec 2026-04-17).
     // Records the domain-specific params that survived Tier-0 stripping. No decisions yet.
     questionMarkObservations: {

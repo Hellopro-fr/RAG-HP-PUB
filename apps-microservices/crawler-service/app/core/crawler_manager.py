@@ -289,6 +289,7 @@ class CrawlerManager:
         "circuitBreaker": "Circuit breaker déclenché",
         "limitErrors": "Trop d'erreurs HTTP rencontrées",
         "limitCrawl": "Limite de 5000 URLs atteinte",
+        "limitQueue": "File d'attente d'URLs trop volumineuse",
         "limitNewUrls": "Trop de nouvelles URLs détectées",
         "stoppedManually": "Arrêté manuellement",
         "insufficientData": "Données insuffisantes",

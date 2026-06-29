@@ -43,6 +43,7 @@ import {
 } from "./httpStatusPolicy.js";
 import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
+import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -1813,33 +1814,81 @@ export const getAllRequestQueues = (queueName: string): string[] => {
  * dataset files (NOT request queues — parseJsonFiles handles those). Missing
  * dirs are a no-op. See spec §8.
  */
-export const cleanDatasetFragments = (datasetNames: string[]): { rewritten: number; removed: number } => {
-    let rewritten = 0;
-    let removed = 0;
+export const cleanDatasetFragments = (
+    datasetNames: string[],
+): { rewritten: number; removed: number; collisionsKept: number } => {
+    let rewritten = 0, removed = 0, collisionsKept = 0;
+    const perClass = perClassEnabled();
     for (const name of datasetNames) {
         const dir = `storage/datasets/${name}`;
         if (!fs.existsSync(dir)) continue;
-        const seen = new Set<string>();
         const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("__"));
+
+        if (!perClass) {
+            // Legacy blind branch — unchanged behavior (skipDiez path).
+            const seen = new Set<string>();
+            for (const f of files) {
+                const full = `${dir}/${f}`;
+                let row: { url?: string };
+                try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
+                if (!row.url) continue;
+                const cleaned = processUrl(row.url, false, true);
+                if (seen.has(cleaned)) { try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ } continue; }
+                seen.add(cleaned);
+                if (cleaned !== row.url) { (row as any).url = cleaned; try { fs.writeFileSync(full, JSON.stringify(row)); rewritten++; } catch { /* best-effort */ } }
+            }
+            continue;
+        }
+
+        // Content-collision branch: group by base, collapse only content-identical siblings.
+        type Entry = { file: string; url: string; fp: string; row: any };
+        const groups = new Map<string, Entry[]>();
         for (const f of files) {
             const full = `${dir}/${f}`;
-            let row: { url?: string };
+            let row: { url?: string; content?: string };
             try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
             if (!row.url) continue;
-            const cleaned = processUrl(row.url, false, true);
-            if (seen.has(cleaned)) {
-                try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ }
-                continue;
+            const i = row.url.indexOf("#");
+            const base = i === -1 ? row.url : row.url.slice(0, i);
+            const fp = fingerprint(row.content ?? "");
+            const arr = groups.get(base) ?? [];
+            arr.push({ file: full, url: row.url, fp, row });
+            groups.set(base, arr);
+        }
+        for (const [base, entries] of groups) {
+            if (entries.length < 2) continue; // lone row → no collision evidence → keep as-is
+            const allIdentical = entries.every((e) => e.fp === entries[0].fp);
+            if (!allIdentical) { collisionsKept += entries.length; continue; } // distinct routes → keep all
+            // Cosmetic: keep one (prefer the row already at base), rewrite to base, drop the rest.
+            entries.sort((a, b) => (a.url === base ? -1 : b.url === base ? 1 : 0));
+            const keep = entries[0];
+            if (keep.url !== base) {
+                keep.row.url = base;
+                try { fs.writeFileSync(keep.file, JSON.stringify(keep.row)); rewritten++; } catch { /* best-effort */ }
             }
-            seen.add(cleaned);
-            if (cleaned !== row.url) {
-                (row as any).url = cleaned;
-                try { fs.writeFileSync(full, JSON.stringify(row)); rewritten++; } catch { /* best-effort */ }
+            for (const e of entries.slice(1)) {
+                try { fs.unlinkSync(e.file); removed++; } catch { /* best-effort */ }
             }
         }
     }
-    console.log(`[diez] Dataset cleanup: rewrote ${rewritten}, removed ${removed} duplicate row file(s).`);
-    return { rewritten, removed };
+    console.log(`[diez] Dataset cleanup (perClass=${perClass}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s).`);
+    return { rewritten, removed, collisionsKept };
+};
+
+/**
+ * Clean-restart (dropData) helper: delete the diez/questionMark decision sidecars
+ * that live in the storagePath ROOT. storagePath is deterministic per crawl_id and
+ * is NOT cleared by the Python relaunch path, so on a dropData restart these stale
+ * files would otherwise be re-inherited by readPersistedDecision/readQmPersistedDecision
+ * at Node startup. Missing files are a no-op. Returns the basenames actually removed.
+ */
+export const clearDecisionSidecars = (storagePath: string): string[] => {
+    const removed: string[] = [];
+    const files = ['_diez_decision.json', '_diez_audit.json', '_questionmark_decision.json', '_questionmark_observations.json'];
+    for (const f of files) {
+        try { fs.unlinkSync(`${storagePath}/${f}`); removed.push(f); } catch { /* absent = fine */ }
+    }
+    return removed;
 };
 
 /**
@@ -1873,8 +1922,10 @@ export const processUrl = (
         // Fix: Use native URL API for robust parsing
         const urlObj = new URL(url);
         
-        // 1. Always remove hash if skipDiez is true
-        if (skipDiez) {
+        // 1. Hash: legacy wholesale strip only when per-class is OFF.
+        //    Per-class strip (anchor -> strip, spa/ambiguous -> keep) is applied to
+        //    the final string below, independent of the global skipDiez flag.
+        if (!perClassEnabled() && skipDiez) {
             urlObj.hash = '';
         }
 
@@ -1916,7 +1967,8 @@ export const processUrl = (
             }
         }
 
-        return urlObj.toString();
+        const result = urlObj.toString();
+        return perClassEnabled() ? applyPerClassStrip(result) : result;
 
     } catch (e) {
         // Fallback for invalid URLs

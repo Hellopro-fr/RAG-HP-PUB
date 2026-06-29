@@ -22,6 +22,7 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
+import { applyPerClassStrip, perClassEnabled } from "./diezClassify.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
@@ -230,7 +231,10 @@ router.addDefaultHandler(
         // loadedUrl is the stored + counted identity; drop a cosmetic empty '#'
         // (JS/browser may keep a bare hash) so it can't inflate diez or pollute the dataset.
         let url = request.loadedUrl;
-        if (url) url = stripEmptyFragment(url);
+        // Per-class: strip cosmetic anchors from the stored+counted identity; keep spa
+        // routes. Flag off -> unchanged empty-'#' strip only (stripEmptyFragment).
+        if (url) url = perClassEnabled() ? applyPerClassStrip(url) : stripEmptyFragment(url);
+        const diezStripped = !!url && url !== request.loadedUrl; // a '#' was per-class-stripped from the loaded URL
         try {
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
@@ -454,7 +458,13 @@ router.addDefaultHandler(
             const isNew = await context.dedupManager.addUrl(url);
             isDoublon = !isNew;
         }
-        
+
+        // Phase-2 audit: a per-class-stripped fragment page that collapsed onto an
+        // already-seen base — a route-loss candidate (its content is never crawled).
+        if (isDoublon && diezStripped && perClassEnabled() && context.diezCollapsed.length < 200) {
+            context.diezCollapsed.push({ collapsed: request.loadedUrl as string, base: url });
+        }
+
         // Removed early increment of "new_urls" here.
         // It is now handled inside the success block (isEnqueuingLinks) to ensure validity.
 

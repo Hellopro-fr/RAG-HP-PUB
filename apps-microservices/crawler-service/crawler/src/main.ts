@@ -14,6 +14,7 @@ import {
     reclaimFailedRequest,
     stats as statsFromFunctions,
     dropDataset,
+    clearDecisionSidecars,
     isStoppedManualy,
     getUrlsCrawledStreaming,
     updateUrlsCrawledStreaming,
@@ -25,6 +26,7 @@ import {
     generateUpdateReport,
     processUrl,
     getApifyProxyUrl,
+    stopCrawler,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { PushedSet } from "./class/PushedSet.js";
@@ -42,6 +44,7 @@ import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations, readQmPersistedDecision } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
+import { perClassEnabled } from "./diezClassify.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
@@ -90,6 +93,8 @@ const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmar
 const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
 const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
 const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
+const bypassQueue = (getArg('bypassqueue', 'npm_config_bypassqueue') || 'false').toLowerCase() === 'true';
+const queueLimit = parseNumericArg('queuelimit', 'npm_config_queuelimit', 2000);
 
 let paramPerCrawl = parseNumericArg('percrawl', 'npm_config_percrawl', 0);
 let paramPerMinute = parseNumericArg('perminute', 'npm_config_perminute', 100);
@@ -167,6 +172,16 @@ if (storagePath) {
     } catch (err) {
         console.error("Failed to change CWD:", err);
     }
+}
+
+// Clean restart (dropData): delete prior diez/QM decision sidecars from storagePath
+// root BEFORE the reads below. storagePath is reused per crawl_id and is NOT cleared
+// by the Python relaunch path, and Node's own dataset drop (~L560) runs AFTER these
+// reads — so without this, readPersistedDecision/readQmPersistedDecision would inherit
+// stale skip/bypass decisions on a "clean" restart. OOM_RELAUNCH (non-dropData) keeps them.
+if (storagePath && dropData) {
+    const cleared = clearDecisionSidecars(storagePath);
+    if (cleared.length) console.log(`[dropData] cleared stale decision sidecars: ${cleared.join(', ')}`);
 }
 
 // Tier-1 diez auto-decision bootstrap: load persisted decision (OOM_RELAUNCH) or
@@ -656,6 +671,30 @@ persistenceInterval = setInterval(async () => {
     }
 }, PERSIST_INTERVAL_MS);
 
+// --- QUEUE-PAUSE GATE (Machine-time protection) ---
+// Dedicated SHORT interval (30s) — NOT the 10-min persistence timer — so a runaway
+// oversized site is stopped EARLY (~30-60s latency) rather than after ~1000 pages.
+// Stop when pendingRequestCount predicts an oversized site. bypassqueue=1 is the
+// operator "crawl fully" override; queuelimit<=0 disables the gate entirely.
+const QUEUE_PAUSE_INTERVAL_MS = 30 * 1000;
+const queuePauseInterval: ReturnType<typeof setInterval> | undefined =
+    (!bypassQueue && queueLimit > 0)
+        ? setInterval(async () => {
+            try {
+                const liveQueueInfo = await requestQueue.getInfo();
+                if (liveQueueInfo && liveQueueInfo.pendingRequestCount > queueLimit) {
+                    console.warn(`⚠️ Queue-pause gate triggered: pending=${liveQueueInfo.pendingRequestCount} > limit=${queueLimit} (limitQueue).`);
+                    context.stopReason = "limitQueue";
+                    if (context.crawlerInstance) {
+                        await stopCrawler(context.crawlerInstance, `Pending queue (${liveQueueInfo.pendingRequestCount}) exceeded limit ${queueLimit} (limitQueue).`);
+                    }
+                }
+            } catch (e) {
+                console.error("Queue-pause gate check failed:", e);
+            }
+        }, QUEUE_PAUSE_INTERVAL_MS)
+        : undefined;
+
 
 if (skipquestionmark || skipdiez) {
     const requestQueueList = getAllRequestQueues(domain);
@@ -889,6 +928,7 @@ const mapStopReasonToMessage = (errorCode: string): string => {
         "insufficientData": "Données insuffisantes",
         "PAYLOAD_READ_ERROR": "Erreur lecture payload",
         "interruptedShutdown": "Crawl interrompu lors de l'arrêt du service",
+        "limitQueue": "File d'attente d'URLs trop volumineuse",
     };
 
     if (!errorCode) return "";
@@ -922,8 +962,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         await finalizeTimingOnce();
     }
 
-    // Stop periodic task
+    // Stop periodic tasks
     if (persistenceInterval) clearInterval(persistenceInterval);
+    if (queuePauseInterval) clearInterval(queuePauseInterval);
 
     console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
@@ -1082,14 +1123,32 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         }
     }
 
-    // Phase-2: clean '#' from stored rows only on a clean COMPLETED skip-commit.
-    // Future rows were already stripped at enqueue; this fixes pre-commit rows.
-    if (reason === 'COMPLETED' && context.config.skipDiez) {
+    // Phase-2: shutdown dataset cleanup — legacy skipDiez blind strip, or content-collision
+    // when DIEZ_PERCLASS_ENABLED. Stats captured for the _diez_audit.json sidecar below.
+    if (reason === 'COMPLETED' && (context.config.skipDiez || perClassEnabled())) {
         try {
             const { cleanDatasetFragments } = await import("./functions.js");
-            cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
+            context.diezContentCollision = cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
         } catch (e) {
             console.error("Dataset fragment cleanup failed:", e);
+        }
+    }
+
+    // Phase-2: per-crawl audit sidecar (collapsed-fragment candidates + content-collision stats).
+    if (storagePath && perClassEnabled()) {
+        try {
+            fs.writeFileSync(
+                `${storagePath}/_diez_audit.json`,
+                JSON.stringify({
+                    collapsed_candidates: context.diezCollapsed,
+                    content_collision: context.diezContentCollision,
+                }, null, 2),
+            );
+            if (context.diezCollapsed.length > 0) {
+                console.warn(`[diez] route-loss candidates: ${context.diezCollapsed.length} fragment page(s) collapsed onto an existing base — see _diez_audit.json (re-crawl to confirm).`);
+            }
+        } catch (e) {
+            console.error("Diez audit sidecar write failed:", e);
         }
     }
 
