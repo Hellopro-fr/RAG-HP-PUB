@@ -146,6 +146,7 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
     """
     found_urls: Set[str] = set()
     found_urls_page_type: Dict[str, str] = {}
+    found_urls_exact: Dict[str, bool] = {}
     has_header = False
     has_footer = False
 
@@ -197,8 +198,16 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
                     originals = variant_to_originals.get(url_found, set())
                     found_urls.update(originals)
                     for orig in originals:
-                        if orig not in found_urls_page_type or not found_urls_page_type[orig]:
+                        is_exact = (url_found == orig)
+                        current = found_urls_page_type.get(orig, "")
+                        current_exact = found_urls_exact.get(orig, False)
+                        # Priorite : le page_type d'un match EXACT (url_found == url demandee)
+                        # prime sur celui d'une variante (ex. /x/=fiche_produit doit gagner
+                        # sur /x=article). On (re)affecte si rien trouve, ou si on obtient un
+                        # match exact alors que la valeur courante venait d'une variante.
+                        if current == "" or (is_exact and not current_exact):
                             found_urls_page_type[orig] = page_type
+                            found_urls_exact[orig] = is_exact
 
         except Exception as e:
             logger.error(f"Erreur lors de la requête Milvus: {e}")

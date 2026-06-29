@@ -127,7 +127,8 @@ async def questionnaire_prix_v2(request: QuestionnaireV2Request = Body(...)):
             texte_prompt=request.texte_prompt,
             model=request.model,
             id_reponse_q1=request.id_reponse_q1,
-            nom_reponse_q1=request.nom_reponse_q1
+            nom_reponse_q1=request.nom_reponse_q1,
+            source=request.source
         )
 
         response = QuestionnaireV2Response(

@@ -62,8 +62,9 @@ class QuestionnaireV2Request(BaseModel):
     nom_categorie: str = Field(..., description="Nom de la catégorie cible")
     texte_prompt: str = Field(..., description="Texte à injecter comme {requete_rag} dans le prompt LLM")
     model: Optional[str] = Field(None, description="Modèle LLM à utiliser (remplace le modèle par défaut si fourni)")
-    id_reponse_q1: Optional[str] = Field(None, description="ID de la réponse Q1")
-    nom_reponse_q1: Optional[str] = Field(None, description="Nom de la réponse Q1")
+    id_reponse_q1: Optional[str] = Field(None, description="ID de la réponse à la 1re question (IA ou BO)")
+    nom_reponse_q1: Optional[str] = Field(None, description="Nom de la réponse à la 1re question")
+    source: Optional[str] = Field("ia", description='Origine des équivalences/caracs : "ia" (_eqci) ou "bo" (questionnaire BO, _eqcbo). id_reponse_q1 s\'applique aux deux.')
 
     @field_validator('id_categorie')
     @classmethod
