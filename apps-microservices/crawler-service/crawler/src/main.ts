@@ -43,6 +43,7 @@ import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations, readQmPersistedDecision } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
+import { perClassEnabled } from "./diezClassify.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
@@ -1113,10 +1114,10 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
 
     // Phase-2: clean '#' from stored rows only on a clean COMPLETED skip-commit.
     // Future rows were already stripped at enqueue; this fixes pre-commit rows.
-    if (reason === 'COMPLETED' && context.config.skipDiez) {
+    if (reason === 'COMPLETED' && (context.config.skipDiez || perClassEnabled())) {
         try {
             const { cleanDatasetFragments } = await import("./functions.js");
-            cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
+            context.diezContentCollision = cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
         } catch (e) {
             console.error("Dataset fragment cleanup failed:", e);
         }
