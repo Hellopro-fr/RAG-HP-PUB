@@ -921,6 +921,14 @@ router.addDefaultHandler(
                         // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
                         request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });
 
+                        // Per-domain toRemove (tier-2 commits + human --toremove) must apply to EVERY
+                        // discovered link, not only under the skip sledgehammers. Without this a tier-2
+                        // commit ('q' -> toRemove) never strips newly-discovered ?q= links (gate bug,
+                        // spec 2026-06-29 Part A). Mirrors the unconditional ALWAYS_REMOVE_PARAMS call above.
+                        if (toRemove && toRemove.length > 0) {
+                            request.url = processUrl(request.url, false, false, { toRemove });
+                        }
+
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
                             let parameters = {};
