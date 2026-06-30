@@ -672,21 +672,22 @@ persistenceInterval = setInterval(async () => {
 }, PERSIST_INTERVAL_MS);
 
 // --- QUEUE-PAUSE GATE (Machine-time protection) ---
-// Dedicated SHORT interval (30s) — NOT the 10-min persistence timer — so a runaway
-// oversized site is stopped EARLY (~30-60s latency) rather than after ~1000 pages.
-// Stop when pendingRequestCount predicts an oversized site. bypassqueue=1 is the
-// operator "crawl fully" override; queuelimit<=0 disables the gate entirely.
+// Dedicated SHORT interval (30s) — NOT the 10-min persistence timer — so an
+// oversized site is stopped EARLY (~30-60s after crossing the cap) rather than
+// after ~1000 pages. Stop when totalRequestCount (cumulative URLs enqueued)
+// exceeds the cap — a hard size limit, NOT the live pending backlog. bypassqueue=1
+// is the operator "crawl fully" override; queuelimit<=0 disables the gate entirely.
 const QUEUE_PAUSE_INTERVAL_MS = 30 * 1000;
 const queuePauseInterval: ReturnType<typeof setInterval> | undefined =
     (!bypassQueue && queueLimit > 0)
         ? setInterval(async () => {
             try {
                 const liveQueueInfo = await requestQueue.getInfo();
-                if (liveQueueInfo && liveQueueInfo.pendingRequestCount > queueLimit) {
-                    console.warn(`⚠️ Queue-pause gate triggered: pending=${liveQueueInfo.pendingRequestCount} > limit=${queueLimit} (limitQueue).`);
+                if (liveQueueInfo && liveQueueInfo.totalRequestCount > queueLimit) {
+                    console.warn(`⚠️ Queue-pause gate triggered: total=${liveQueueInfo.totalRequestCount} > limit=${queueLimit} (limitQueue).`);
                     context.stopReason = "limitQueue";
                     if (context.crawlerInstance) {
-                        await stopCrawler(context.crawlerInstance, `Pending queue (${liveQueueInfo.pendingRequestCount}) exceeded limit ${queueLimit} (limitQueue).`);
+                        await stopCrawler(context.crawlerInstance, `Total enqueued URLs (${liveQueueInfo.totalRequestCount}) exceeded limit ${queueLimit} (limitQueue).`);
                     }
                 }
             } catch (e) {
