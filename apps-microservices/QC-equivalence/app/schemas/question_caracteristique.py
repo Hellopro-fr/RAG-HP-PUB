@@ -26,6 +26,12 @@ class RequestProcessus(BaseModel):
     id_categorie: str = Field(..., description="ID de la catégorie")
     is_reset: bool = Field(default=False, description="Indique si on reset les questions")
 
+class RequestEquivalenceBO(BaseModel):
+    """Requête pour la façade BO : équivalence sur le questionnaire BO (ANNUAIRE_BO)"""
+    id_categorie: str = Field(..., description="ID de la catégorie")
+    source: str = Field(default="BO", description="Source du questionnaire alternatif")
+    is_reset: bool = Field(default=False, description="Vide la table BO avant régénération")
+
 class PromptConfig(BaseModel):
     """Configuration d'un prompt"""
     id_action_prompt_chatgpt: str
@@ -81,6 +87,14 @@ class EquivalenceGenerationResult(BaseModel):
     """Résultat de la génération des équivalences"""
     id_categorie: str
     nom_rubrique: str
+    total_processed: int = 0
+    status: str = "completed"  # completed, error, stopped
+
+class EquivalenceBOResult(BaseModel):
+    """Résultat de la génération des équivalences sur le questionnaire BO"""
+    id_categorie: str
+    nom_rubrique: str
+    source: str = "BO"
     total_processed: int = 0
     status: str = "completed"  # completed, error, stopped
 

@@ -1429,7 +1429,7 @@ def _generate_budget_choices(
     return _build_options(bi, bornes_intermediaires, borne_sup, devise_str)
 
 
-async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
+async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None, source: Optional[str] = "ia") -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
     via l'endpoint BO matching_prix.php (correspondance équivalences × _cppi).
@@ -1480,6 +1480,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     write_log(tracking_file, f"model: {model or default_model_name} (model_pardefaut={model_pardefaut})")
     write_log(tracking_file, "")
     write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
+    write_log(tracking_file, f"source: {source}")
     write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
     write_log(tracking_file, f"nom_reponse_q1: {nom_reponse_q1}")
     write_log(tracking_file, json.dumps(equivalences, ensure_ascii=False, indent=2))
@@ -1494,7 +1495,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         matching_response, prompt_config = await asyncio.gather(
             api_client.post(
                 "matching_prix", "matching", "get",
-                {"id_categorie": id_categorie, "equivalences": equivalences, "id_reponse_q1": id_reponse_q1}
+                {"id_categorie": id_categorie, "equivalences": equivalences, "id_reponse_q1": id_reponse_q1, "source": source}
             ),
             get_prompt_cached(prompt_id)
         )
@@ -1660,7 +1661,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
-        final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
+        final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1 or "")
 
         # `model_pardefaut` / `default_model_name` définis en tête de fonction.
         # Routage : si `model` fourni → détection par préfixe ; sinon → `model_pardefaut`.
@@ -1712,7 +1713,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
             final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
             final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
-            final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
+            final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1 or "")
 
 
             logger.warning(

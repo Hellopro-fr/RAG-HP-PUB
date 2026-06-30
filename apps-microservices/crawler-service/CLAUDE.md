@@ -588,6 +588,7 @@ Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limit
 | Variable | Default | Effect |
 |---|---|---|
 | `DIEZ_TIER2_ENABLED` | `false` | Gates the tier-2 verification engine. Off = zero-touch floor only (bypassDiez). |
+| `DIEZ_PERCLASS_ENABLED` | `false` | Per-fragment-class `#` strip: anchor → strip, spa/ambiguous → keep (resolves mixed domains: cosmetic anchors dropped, real SPA routes kept). Applied at enqueue (`processUrl`) and on the loaded URL (`routes.ts`). Kill-switch; off = legacy global skip/bypass. Read at call time (not memoized). See spec `docs/superpowers/specs/2026-06-25-limitdiez-perclass-strip-design.md`. |
 | `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Base URL for the content-extractor `/clean` endpoint. |
 | `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Per-call HTTP timeout (seconds). |
 | `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Max concurrent `/clean` calls per crawl. |
@@ -625,6 +626,13 @@ Auto-resolves domain-specific `?`-params per-parameter and never escalates `limi
 **Co-deploy rule:** when `QM_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It shares the `crawling` compose profile and the `services-net` network (already configured for limitDiez) — no extra compose override is needed.
 
 Spec: `docs/superpowers/specs/2026-06-16-limitquestionmark-phase2-zero-touch` (Hellopro planning repo).
+
+#### QM tier-2 live strip-propagation + loss-proofing (spec 2026-06-29)
+
+- A committed `toRemove` param now strips **newly-discovered links** (enqueue, ungated) and **already-queued variants** (consumption-time skip: the queued variant is fetched once, then the handler returns early — Crawlee can't cancel navigation pre-fetch from a hook), not just the one-shot queue snapshot.
+- `QM_RAW_SAME_SIM` (default `0.97`, read at call time): a tier-2 pair counts as "same" only if `/clean` text matches AND raw page HTML jaccard ≥ this threshold. Guards the `/clean` search-grid blind spot (a high value errs toward KEEP = no route loss). Tune down only if genuine cosmetics are under-committed (bloat).
+- `_questionmark_audit.json` (per crawl, in `storagePath`): `{ collapsed_candidates, committed, pair_stats }` — collapsed `?param=` route-loss candidates to re-crawl-audit. Cleared on dropData restart (`clearDecisionSidecars`).
+- All effective only when a `toRemove` is set (QM tier-2 commit, behind `QM_TIER2_ENABLED`, or human `--toremove`); with none set the paths are no-ops (flag-off byte-identical).
 
 ## Conventions
 

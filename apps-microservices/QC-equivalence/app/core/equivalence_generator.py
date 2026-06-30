@@ -8,7 +8,9 @@ from app.core.api_client import HelloProAPIClient, GeminiProvider
 from app.core import utils
 from app.schemas.question_caracteristique import (
     RequestProcessus,
-    EquivalenceGenerationResult
+    EquivalenceGenerationResult,
+    RequestEquivalenceBO,
+    EquivalenceBOResult
 )
 from app.core.credentials import settings
 
@@ -30,7 +32,12 @@ class EquivalenceGenerator:
 
     # ID process
     ID_PROCESS = "30"
-    
+
+    # Façade BO (équivalence sur questionnaire BO ANNUAIRE_BO) — indépendante du step 6
+    # Étape 14 = entrée suivante de $all_step (envoie_mail) côté backend
+    ETAPE_BO = "14"
+    ORIGINE_BO = "qc-equivalence-bo"
+
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
@@ -791,6 +798,417 @@ class EquivalenceGenerator:
             status="completed"
         )
     
+    # ==================================================================
+    # FAÇADE BO — équivalence indépendante sur le questionnaire BO
+    # (ANNUAIRE_BO). Orchestrateur distinct du step 6 : pas de gating
+    # can_start, pas de tracking process, pas de publication aval.
+    # ==================================================================
+
+    def _create_bo_question_prompt(
+        self,
+        question_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Transforme une question au format BO (ANNUAIRE_BO) pour le prompt.
+
+        Format BO distinct du format IA : `question` (intitulé), `description`,
+        et `choix` (liste de réponses, chacune avec `id` et `choix`).
+
+        Returns:
+            Dict avec json_question et corres_reponse (clé "reponse-N" -> id BO)
+        """
+        data_final = {
+            "intitule-question": question_data.get("question", ""),
+            "bulle-aide": question_data.get("description", "") or question_data.get("libelle_info", ""),
+        }
+
+        corres_reponse = {}
+        index = 0
+        for choix in question_data.get("choix", []):
+            index += 1
+            num_reponse = str(choix.get("id", "")).strip()
+            valeur_reponse = choix.get("choix", "")
+
+            key = f"reponse-{index}"
+            data_final[key] = valeur_reponse
+            corres_reponse[key] = num_reponse
+
+        return {
+            "json_question": utils.to_json_string(data_final),
+            "corres_reponse": corres_reponse
+        }
+
+    async def _generate_equivalence_bo(
+        self,
+        id_categorie: str,
+        nom_rubrique: str,
+        question_data: Dict[str, Any],
+        jeu_caracteristique: List[Dict[str, Any]],
+        exclude_carac_ids: List = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Génère et sauvegarde l'équivalence BO d'une question (format liste plate
+        ANNUAIRE_BO) dans la table dédiée equivalence_question_caracteristique_bo.
+
+        Fonction unique : build prompt -> Gemini -> extract -> reverse mapping ->
+        save (reponse_bo/save). Retourne {result, equivalences}.
+        """
+        id_question = str(question_data.get('id', '')).strip()
+        self._log(f"\n--- Génération équivalence BO: question {id_question} ---")
+
+        if not id_question:
+            self._log("ERREUR: Impossible de récupérer l'ID de la question BO")
+            await self.api_client.post(
+                "equivalence",
+                "mail",
+                "error",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE_BO,
+                    "error_message": "Impossible de récupérer l'ID de la question BO",
+                    "tracking_file": self.tracking_file
+                }
+            )
+            raise Exception("Impossible d'extraire l'ID de la question BO")
+
+        if exclude_carac_ids:
+            jeu_caracteristique = self._filter_jeu_caracteristique(jeu_caracteristique, exclude_carac_ids)
+
+        prompt_config = self.prompt_equivalence.copy()
+        jeu_carac_clean = self._clean_jeu_caracteristique(jeu_caracteristique)
+
+        json_prompt_data = self._create_bo_question_prompt(question_data)
+        json_question = json_prompt_data["json_question"]
+        corres_reponse = json_prompt_data["corres_reponse"]
+
+        json_caracteristique = utils.to_json_string(jeu_carac_clean)
+
+        self._log(f"JSON Question BO: {json_question}")
+        self._log(f"Corres Reponse BO: {corres_reponse}")
+        self._log(f"Exclude Carac Ids BO: {exclude_carac_ids}")
+
+        prompt_text = prompt_config["contenu_prompt"]
+        prompt_text = prompt_text.replace("{CATEGORIE}", nom_rubrique)
+        prompt_text = prompt_text.replace("{CATEGORIE_REPONSE}", nom_rubrique)
+        prompt_text = prompt_text.replace("{INFO_QUESTION_REPONSE}", json_question)
+        prompt_text = prompt_text.replace("{JEU_CARACTERISTIQUE}", json_caracteristique)
+
+        gemini = GeminiProvider(
+            model=self.GEMINI_MODEL,
+            thinking_level="high",
+            max_retries=10
+        )
+        result = await asyncio.to_thread(gemini.chat, prompt_text)
+
+        usage_metadata = result.get("api_response", {}).get("usage_metadata", {})
+        await self.api_client.log_llm_usage(
+            type_ia=3,  # Gemini
+            model=self.GEMINI_MODEL,
+            input_token=usage_metadata.get("prompt_token_count", 0),
+            output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+            id_process=self.ID_PROCESS,
+            origine=self.ORIGINE_BO,
+            etat=1 if "code" not in result else 2,
+            retour_erreur=str(result.get("error", "")) if "code" in result else ""
+        )
+
+        if "code" in result:
+            self._log(f"ERREUR API BO: {result}")
+            await self.api_client.post(
+                "equivalence",
+                "mail",
+                "error",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE_BO,
+                    "error_message": f"Erreur API: {result}",
+                    "tracking_file": self.tracking_file
+                }
+            )
+            raise Exception(f"Erreur API Gemini (BO): {result.get('error')}")
+
+        response_text = result.get("message", "").strip()
+        self._log(f"Réponse LLM BO: {response_text}")
+
+        json_data = utils.extract_json_from_text(response_text)
+        if not json_data:
+            self._log("ERREUR: Impossible d'extraire le JSON (BO)")
+            await self.api_client.post(
+                "equivalence",
+                "mail",
+                "error",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE_BO,
+                    "error_message": "Erreur extraction JSON",
+                    "error_detail": result,
+                    "tracking_file": self.tracking_file
+                }
+            )
+            raise Exception("Impossible d'extraire le JSON de la réponse (BO)")
+
+        self._log(f"Équivalences BO extraites: {len(json_data)} réponses")
+
+        # Reverse mapping: clés "reponse-1"... -> vrais IDs de réponses BO
+        if corres_reponse:
+            equivalences_mapped = {}
+            for key, value in json_data.items():
+                real_id = corres_reponse.get(key)
+
+                if not real_id:
+                    for key_mapped, id_reponse in corres_reponse.items():
+                        if self._normalize_string(key) == self._normalize_string(key_mapped):
+                            real_id = id_reponse
+                            break
+
+                if real_id:
+                    equivalences_mapped[real_id] = self._normalize_equivalence(value)
+                else:
+                    raise Exception(f"Pas de mapping trouvé pour la clé {key}")
+
+            self._log(f"Reverse mapping BO appliqué: {equivalences_mapped}")
+            json_data = equivalences_mapped
+
+        res_insert = await self.api_client.post(
+            "equivalence",
+            "reponse_bo",
+            "save",
+            {
+                "id_categorie": id_categorie,
+                "id_question": id_question,
+                "equivalences": json_data
+            }
+        )
+
+        if not res_insert:
+            raise Exception("Échec de la sauvegarde de l'équivalence BO")
+
+        self._log(f"Résultat BO sauvegardé: {res_insert}")
+
+        id_equivalences = res_insert.get("id_equivalence", None)
+        if id_equivalences is not None:
+            self._log(f"✅ Équivalence(s) BO créée(s) avec ID(s): {id_equivalences}")
+        else:
+            self._log("⚠️ Aucun ID d'équivalence BO retourné par l'API")
+            raise Exception("Erreur lors de la génération des équivalences BO")
+
+        return {
+            "result": res_insert,
+            "equivalences": json_data
+        }
+
+    async def generate_equivalences_bo(
+        self,
+        request: RequestEquivalenceBO
+    ) -> EquivalenceBOResult:
+        """
+        Processus complet de génération des équivalences sur le questionnaire BO.
+
+        Indépendant du pipeline QC step 6 :
+        - questionnaire récupéré via question/all_bo/get (source BO) sous son
+          format propre : une liste plate de questions (q1..n), pas de Q1/Q2..N,
+        - mappé sur le MÊME jeu de caractéristiques final de la catégorie,
+        - exclusion cumulative des caractéristiques le long de la liste (même
+          logique que l'équivalence IA d'origine),
+        - sauvegardé dans equivalence_question_caracteristique_bo,
+        - AUCUNE publication vers un service aval.
+        """
+        id_categorie = request.id_categorie
+        source = request.source
+
+        # Récupérer les infos de la catégorie
+        category_info = await self.api_client.post(
+            "category",
+            "info",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+
+        if not category_info:
+            await self.api_client.post(
+                "equivalence",
+                "mail",
+                "error",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE_BO,
+                    "error_message": f"Catégorie {id_categorie} non trouvée",
+                    "tracking_file": self.tracking_file
+                }
+            )
+            raise ValueError(f"Catégorie {id_categorie} non trouvée")
+
+        nom_rubrique = category_info.get("nom_rubrique", "")
+
+        # Initialiser le fichier de tracking (préfixe dédié BO)
+        self.tracking_file = utils.get_tracking_filepath(
+            id_categorie,
+            prefix="equivalence_bo"
+        )
+
+        # Vérifier le stopper manuel
+        if utils.check_stopper(id_categorie):
+            self._log("ARRÊT MANUEL DÉTECTÉ (BO)")
+            await self.api_client.post(
+                "equivalence",
+                "mail",
+                "error",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE_BO,
+                    "error_message": "Le processus a été arrêté manuellement",
+                    "tracking_file": self.tracking_file
+                }
+            )
+            raise Exception("Processus arrêté manuellement")
+
+        self._log("=" * 50)
+        self._log("Génération des équivalences BO Question/Caractéristique")
+        self._log(f"Rubrique: {id_categorie} - {nom_rubrique} | source={source}")
+        self._log(f"Requête: {request}")
+        self._log("=" * 50)
+
+        # Charger le prompt (même prompt d'équivalence que le step 6)
+        await self._load_prompts(id_categorie)
+
+        # Récupérer ou initialiser le processus BO (tracking dédié à l'étape BO,
+        # indépendant du step 6 qui utilise self.ETAPE)
+        process_data = await self.api_client.post(
+            "equivalence",
+            "process",
+            "get",
+            {"id_categorie": id_categorie, "etape": self.ETAPE_BO}
+        ) or {}
+
+        # Reset si demandé : vider la table BO ET le processus pour cette catégorie
+        if request.is_reset:
+            self._log("RESET DES ÉQUIVALENCES BO")
+            await self.api_client.post(
+                "equivalence",
+                "reponse_bo",
+                "reset",
+                {"id_categorie": id_categorie}
+            )
+            await self.api_client.post(
+                "equivalence",
+                "process",
+                "reset",
+                {"id_categorie": id_categorie, "etape": self.ETAPE_BO}
+            )
+            process_data = {}
+
+        # Initialiser done (questions traitées) et data (caracs trouvées par question)
+        if "done" not in process_data:
+            process_data["done"] = []
+        if "data" not in process_data:
+            process_data["data"] = {}
+
+        self._log(f"Process data BO: {process_data}")
+
+        # Récupérer le questionnaire BO : liste plate de questions (q1..n)
+        questionnaire = await self.api_client.post(
+            "question",
+            "all_bo",
+            "get",
+            {"id_categorie": id_categorie, "source": source}
+        )
+
+        if not questionnaire:
+            raise Exception("Impossible de récupérer le questionnaire BO")
+
+        # Même jeu de caractéristiques final que la catégorie
+        jeu_caracteristique = await self.api_client.post(
+            "caracteristique",
+            "final",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+
+        if not jeu_caracteristique:
+            self._log("ERREUR: Jeu de caractéristiques manquant")
+            raise Exception("Données d'entrée manquantes (jeu de caractéristiques)")
+
+        self._log(f"Questionnaire BO chargé: {len(questionnaire)} questions")
+        self._log(f"Jeu caractéristiques: {len(jeu_caracteristique)}")
+
+        processed_count = 0
+
+        # Exclusion cumulative des caractéristiques le long de la liste de questions
+        cumulative_exclude_ids = []
+
+        for question in questionnaire:
+            if utils.check_stopper(id_categorie):
+                raise Exception("Processus arrêté manuellement")
+
+            question_id = f"BO_{question.get('id')}"
+
+            # Reprise après coupure : question déjà traitée → réinjecter ses
+            # caractéristiques dans le cumul pour les questions suivantes, puis sauter.
+            if question_id in process_data["done"]:
+                previously_found = process_data["data"].get(question_id, [])
+                cumulative_exclude_ids.extend(previously_found)
+                self._log(f"Question {question_id} déjà traitée → {previously_found}, cumul exclu: {cumulative_exclude_ids}")
+                continue
+
+            self._log(f"Question BO {question_id}: exclusion de {len(cumulative_exclude_ids)} caractéristiques")
+
+            result = await self._generate_equivalence_bo(
+                id_categorie=id_categorie,
+                nom_rubrique=nom_rubrique,
+                question_data=question,
+                jeu_caracteristique=jeu_caracteristique,
+                exclude_carac_ids=cumulative_exclude_ids,
+            )
+
+            if result:
+                processed_count += 1
+                carac_ids_found = self._extract_carac_ids_from_equivalences(result.get("equivalences", {}))
+                # Stocker dans process_data['data'] + cumuler pour les questions suivantes
+                process_data["data"][question_id] = carac_ids_found
+                cumulative_exclude_ids.extend(carac_ids_found)
+                self._log(f"Question {question_id} → {carac_ids_found} nouvelles caractéristiques, cumul: {cumulative_exclude_ids}")
+
+            # Marquer la question comme traitée
+            if question_id not in process_data["done"]:
+                process_data["done"].append(question_id)
+
+            # Mettre à jour le processus (étape BO dédiée)
+            await self.api_client.post(
+                "equivalence",
+                "process",
+                "update",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE_BO,
+                    "process_data": process_data
+                }
+            )
+
+        self._log("\n" + "=" * 50)
+        self._log("GÉNÉRATION ÉQUIVALENCES BO TERMINÉE")
+        self._log(f"Total traité: {processed_count}")
+        self._log("=" * 50)
+
+        await self.api_client.post(
+            "equivalence",
+            "mail",
+            "success",
+            {
+                "id_categorie": id_categorie,
+                "tracking_file": self.tracking_file,
+                "etape": self.ETAPE_BO,
+                "total_processed": processed_count
+            }
+        )
+
+        return EquivalenceBOResult(
+            id_categorie=id_categorie,
+            nom_rubrique=nom_rubrique,
+            source=source,
+            total_processed=processed_count,
+            status="completed"
+        )
+
     async def close(self):
         """Ferme les connexions"""
         await self.api_client.close()

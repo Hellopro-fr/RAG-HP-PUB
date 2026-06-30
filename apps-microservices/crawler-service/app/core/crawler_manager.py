@@ -178,6 +178,17 @@ async def _read_callback_isError(storage_path: str) -> Optional[str]:
         logger.debug(f"Failed to read isError from {payload_path}: {e}")
         return None
 
+async def _read_queue_stats(storage_path: str) -> Tuple[Optional[int], Optional[int]]:
+    """Read {storage_path}/_queue_stats.json written by the Node queue-stats publisher.
+    Returns (total, remaining); (None, None) if absent or unreadable."""
+    stats_path = os.path.join(storage_path, '_queue_stats.json')
+    try:
+        async with aiofiles.open(stats_path, 'r') as f:
+            data = json.loads(await f.read())
+        return data.get('total_request_count'), data.get('pending_request_count')
+    except Exception:
+        return None, None
+
 class _LockHeartbeat:
     """
     Async context manager that renews a Redis lock TTL while a long-running
@@ -289,6 +300,7 @@ class CrawlerManager:
         "circuitBreaker": "Circuit breaker déclenché",
         "limitErrors": "Trop d'erreurs HTTP rencontrées",
         "limitCrawl": "Limite de 5000 URLs atteinte",
+        "limitQueue": "File d'attente d'URLs trop volumineuse",
         "limitNewUrls": "Trop de nouvelles URLs détectées",
         "stoppedManually": "Arrêté manuellement",
         "insufficientData": "Données insuffisantes",
@@ -1141,7 +1153,8 @@ class CrawlerManager:
         async def log_stream(stream, prefix):
             try:
                 async for line in stream:
-                    await log_file_handle.write(f"[{prefix}] {line.decode('utf-8', errors='ignore')}")
+                    ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                    await log_file_handle.write(f"[{ts}] [{prefix}] {line.decode('utf-8', errors='ignore')}")
             except Exception as e:
                 logger.error(f"Error in log stream for crawl '{crawl_id}': {e}")
 
@@ -1531,6 +1544,10 @@ class CrawlerManager:
         
         is_error = await _read_callback_isError(storage_path)
 
+        queue_total = queue_remaining = None
+        if job_info["status"] in ("running", "stopping"):
+            queue_total, queue_remaining = await _read_queue_stats(storage_path)
+
         return CrawlStatus(
             crawl_id=crawl_id,
             id_domaine=crawl_id, # Legacy alias
@@ -1548,6 +1565,8 @@ class CrawlerManager:
             downloaded_at=job_info.get("downloaded_at"),
             finished_at=job_info.get("finished_at"),
             size_bytes=job_info.get("size_bytes"),
+            queue_total=queue_total,
+            queue_remaining=queue_remaining,
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
