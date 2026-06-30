@@ -1604,13 +1604,20 @@ export const attachFSLogger = (fileName: string) => {
         flags: "a", // 'a' means appending
     });
 
+    // Prefix every persisted line with an ISO-8601 UTC timestamp.
+    // Stamp the FILE write only — the raw message is still teed to real stdout
+    // (oldLog.apply below), where the Python capture stamps it for crawler.log,
+    // so no line is ever double-stamped.
+    const writeLine = (messages: any[]) =>
+        fsLog.write(`[${new Date().toISOString()}] ${stripAnsi(messages.join("\n"))}\n`);
+
     // override console.log
     console.log = (...messages) => {
         // log the console message immediately as usual
         oldLog.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.error
@@ -1619,7 +1626,7 @@ export const attachFSLogger = (fileName: string) => {
         oldError.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.info
@@ -1628,7 +1635,7 @@ export const attachFSLogger = (fileName: string) => {
         oldInfo.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.warn
@@ -1637,7 +1644,7 @@ export const attachFSLogger = (fileName: string) => {
         oldWarn.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.debug
@@ -1646,7 +1653,7 @@ export const attachFSLogger = (fileName: string) => {
         oldDebug.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 };
 
@@ -1884,7 +1891,7 @@ export const cleanDatasetFragments = (
  */
 export const clearDecisionSidecars = (storagePath: string): string[] => {
     const removed: string[] = [];
-    const files = ['_diez_decision.json', '_diez_audit.json', '_questionmark_decision.json', '_questionmark_observations.json'];
+    const files = ['_diez_decision.json', '_diez_audit.json', '_questionmark_decision.json', '_questionmark_observations.json', '_questionmark_audit.json'];
     for (const f of files) {
         try { fs.unlinkSync(`${storagePath}/${f}`); removed.push(f); } catch { /* absent = fine */ }
     }

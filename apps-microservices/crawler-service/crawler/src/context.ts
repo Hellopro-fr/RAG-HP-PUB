@@ -109,6 +109,8 @@ export const context = {
     // Phase-2 content-collision audit (see spec 2026-06-26). In-memory, per-crawl.
     diezContentCollision: { rewritten: 0, removed: 0, collisionsKept: 0 },
     diezCollapsed: [] as Array<{ collapsed: string; base: string }>,
+    // Count of action-anchor fragments stripped at enqueue/seed (observability only).
+    actionAnchorsStripped: 0,
     // Tier-1 observer for limitQuestionMark (see questionMarkDecision.ts + spec 2026-04-17).
     // Records the domain-specific params that survived Tier-0 stripping. No decisions yet.
     questionMarkObservations: {
@@ -136,6 +138,10 @@ export const context = {
         contentShaping: [] as string[],
         defaulted: false,
     },
+    // Phase-2 QM collapsed-param audit (spec 2026-06-29). In-memory, per-crawl.
+    // Populated by the consumption skip (Part C): a queued ?param= variant that
+    // collapsed onto an already-seen base = a route-loss candidate to re-crawl-audit.
+    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string }>,
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null,

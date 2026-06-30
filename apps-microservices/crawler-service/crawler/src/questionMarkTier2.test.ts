@@ -80,3 +80,42 @@ test("default at ceiling: bypass + 5000 backstop, once", () => {
     assert.equal(context.qmTier2.defaulted, true);
     fs.rmSync(s, { recursive: true, force: true });
 });
+
+// B1 raw-HTML veto tests.
+// /clean returns the SAME chrome text for every page -> /clean always "matches".
+const chromeClient = { clean: async () => "shared site chrome menu footer legal notice cart" } as any;
+// MODERATE raw similarity: a large non-repeating shared body (-> many distinct trigrams)
+// + a small unique tail per variant. Raw jaccard lands ~0.81 — strictly between the two
+// thresholds the tests drive (0.99 vs 0.30), so they probe the CALL-TIME env on opposite
+// sides. With the old const-at-import bug these two could not both pass: a regression guard.
+const RAW_COMMON =
+    "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty";
+const RAW_A = RAW_COMMON + " uniquealphapayload red green blue yellow";
+const RAW_B = RAW_COMMON + " uniquebetapayload purple orange pink cyan";
+
+test("B1 veto: /clean-match but raw HTML differs -> NOT counted same", async () => {
+    process.env.QM_RAW_SAME_SIM = "0.99"; // raw ~0.81 < 0.99 -> vetoed
+    resetQm();
+    context.questionMarkObservations.paramFrequency = new Map([["q", 10]]);
+    for (const b of ["a", "b", "c"]) {
+        await recordQmTier2Sample(`https://x.fr/${b}?q=AAA`, RAW_A, chromeClient);
+        await recordQmTier2Sample(`https://x.fr/${b}?q=BBB`, RAW_B, chromeClient);
+    }
+    const tally = context.qmTier2.tally.get("q");
+    assert.ok(tally && tally.same === 0, `expected 0 same (vetoed), got ${JSON.stringify(tally)}`);
+    assert.equal(maybeCommitParam("q"), false); // not committed -> q kept
+    delete process.env.QM_RAW_SAME_SIM;
+});
+
+test("B1 pass: /clean-match AND raw similar -> same (commits)", async () => {
+    process.env.QM_RAW_SAME_SIM = "0.30"; // SAME fixtures, raw ~0.81 >= 0.30 -> NOT vetoed
+    resetQm();
+    context.questionMarkObservations.paramFrequency = new Map([["ref", 10]]);
+    for (const b of ["a", "b", "c"]) {
+        await recordQmTier2Sample(`https://x.fr/${b}?ref=1`, RAW_A, chromeClient);
+        await recordQmTier2Sample(`https://x.fr/${b}?ref=9`, RAW_B, chromeClient);
+    }
+    assert.equal(context.qmTier2.tally.get("ref")!.same, 3);
+    assert.equal(maybeCommitParam("ref"), true);
+    delete process.env.QM_RAW_SAME_SIM;
+});

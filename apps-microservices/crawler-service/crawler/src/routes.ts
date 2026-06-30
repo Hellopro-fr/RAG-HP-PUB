@@ -22,7 +22,8 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
-import { applyPerClassStrip, perClassEnabled } from "./diezClassify.js";
+import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
@@ -236,6 +237,21 @@ router.addDefaultHandler(
         if (url) url = perClassEnabled() ? applyPerClassStrip(url) : stripEmptyFragment(url);
         const diezStripped = !!url && url !== request.loadedUrl; // a '#' was per-class-stripped from the loaded URL
         try {
+
+        // Part C (C2, spec 2026-06-29): re-apply the LIVE query/diez strip to this dequeued
+        // page. If it collapses onto an already-seen base, this queued variant is a duplicate
+        // that the commit-time queue rewrite didn't catch — skip processing (no store, no link
+        // enqueue). The page was fetched once (bounded); Crawlee marks it handled on this return.
+        // Placed INSIDE the try so the early return still runs the L1087 finally (timing
+        // record + per-attempt marker cleanup that must run for EVERY request path).
+        const qmStripped = qmConsumptionStrip(url);
+        if (qmStripped !== url && context.dedupManager) {
+            const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
+            if (shouldSkipDequeued(url, qmStripped, known)) {
+                recordQmCollapsed(url, qmStripped);
+                return;
+            }
+        }
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
         // Uses ignoredExtensions as single source of truth for blocked file types
@@ -908,6 +924,17 @@ router.addDefaultHandler(
                             return false;
                         }
 
+                        // Action-anchor strip (root fix for the #elementor-action
+                        // duplicate-fetch overload). Runs before skip/remove so the
+                        // '#' is gone and fragmentAwareUniqueKey collapses variants.
+                        if (actionAnchorStripEnabled()) {
+                            const strippedAa = stripActionAnchor(request.url);
+                            if (strippedAa !== request.url) {
+                                request.url = strippedAa;
+                                context.actionAnchorsStripped++;
+                            }
+                        }
+
                         // 2. Initial CLEANING of the URL (Moved to TOP)
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
@@ -920,6 +947,14 @@ router.addDefaultHandler(
 
                         // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
                         request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });
+
+                        // Per-domain toRemove (tier-2 commits + human --toremove) must apply to EVERY
+                        // discovered link, not only under the skip sledgehammers. Without this a tier-2
+                        // commit ('q' -> toRemove) never strips newly-discovered ?q= links (gate bug,
+                        // spec 2026-06-29 Part A). Mirrors the unconditional ALWAYS_REMOVE_PARAMS call above.
+                        if (toRemove && toRemove.length > 0) {
+                            request.url = processUrl(request.url, false, false, { toRemove });
+                        }
 
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
